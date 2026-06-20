@@ -5,19 +5,19 @@
       "parameters": {
         "inputSource": "passthrough"
       },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
       "position": [
-        -880,
-        -240
-      ],
-      "id": "subworkflow-trigger-01",
-      "name": "Execute Sub-workflow Trigger"
+        192,
+        928
+      ]
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ 'Tin nhắn người dùng: ' + ($('Execute Sub-workflow Trigger').first().json.user_text ?? '') + '\\n\\nPhản hồi của bot: ' + ($('Execute Sub-workflow Trigger').first().json.bot_output ?? '') }}",
+        "text": "={{ 'Tin nhắn người dùng: ' + ($('When Executed by Another Workflow').first().json.user_text ?? '') + '\\n\\nPhản hồi của bot: ' + ($('When Executed by Another Workflow').first().json.bot_output ?? '') }}",
         "messages": {
           "messageValues": [
             {
@@ -27,13 +27,13 @@
         },
         "batching": {}
       },
-      "id": "wr-extract-01",
+      "id": "d139cf06-2f67-4a4f-a64f-c63af0a6bc7f",
       "name": "Extract Memories",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        -560,
-        -240
+        448,
+        928
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -51,13 +51,13 @@
           "temperature": 0
         }
       },
-      "id": "wr-llm-01",
+      "id": "8d51aebb-8070-4637-bd16-93b36e222dfd",
       "name": "ExtractLLM",
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -560,
-        -32
+        448,
+        1136
       ],
       "credentials": {
         "minimaxApi": {
@@ -70,13 +70,13 @@
       "parameters": {
         "jsCode": "const raw = ($input.first()?.json?.text ?? $input.first()?.json?.output ?? '').toString();\nlet facts = [];\n\nconst stripOuterQuotes = (value) => String(value ?? '')\n  .replace(/^['\"“”]+|['\"“”]+$/g, '')\n  .trim();\n\nconst removeVietnameseMarks = (value) => value\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/đ/g, 'd')\n  .replace(/Đ/g, 'D');\n\nconst normalizePhone = (value) => {\n  const raw = String(value ?? '').replace(/[^\\d+]/g, '');\n  let phone = raw;\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst canonicalize = (value) => {\n  const stripped = stripOuterQuotes(value);\n  const phone = normalizePhone(stripped);\n  if (phone) return `phone:${phone}`;\n\n  return removeVietnameseMarks(stripped)\n    .toLowerCase()\n    .replace(/^(nguoi dung|ung vien|ban ay|ban)\\s+/i, '')\n    .replace(/^(sdt|so dien thoai|dien thoai|khu vuc|nghe mong muon|muon|muon tim viec|ten la)[:\\s-]*/i, '')\n    .replace(/[^a-z0-9]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n};\n\nconst normalizeFact = (value) => stripOuterQuotes(value)\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst isUsefulFact = (fact) => {\n  if (!fact) return false;\n  if (fact.length < 6 || fact.length > 240) return false;\n  if (/^(xin chào|chào bạn|cảm ơn|tôi có thể|bạn đang muốn|bạn có muốn)/i.test(fact)) return false;\n  if (/^(tên công việc|công ty\\/?đối tác|địa điểm|mức lương|yêu cầu cơ bản|quyền lợi):/i.test(fact)) return false;\n  return true;\n};\n\ntry {\n  let text = raw.trim()\n    .replace(/^\\x60\\x60\\x60(?:json)?/i, '')\n    .replace(/\\x60\\x60\\x60$/i, '')\n    .trim();\n  const start = text.indexOf('[');\n  const end = text.lastIndexOf(']');\n  if (start !== -1 && end !== -1 && end > start) text = text.slice(start, end + 1);\n\n  const parsed = JSON.parse(text);\n  if (Array.isArray(parsed)) {\n    const seen = new Set();\n    facts = parsed\n      .map(normalizeFact)\n      .filter(isUsefulFact)\n      .map((content) => ({ content, canonical_key: canonicalize(content) }))\n      .filter((fact) => fact.canonical_key)\n      .filter((fact) => {\n        if (seen.has(fact.canonical_key)) return false;\n        seen.add(fact.canonical_key);\n        return true;\n      });\n  }\n} catch (error) {\n  facts = [];\n}\n\nreturn facts.slice(0, 10).map((fact) => ({ json: { ...fact, source: 'candidate' } }));"
       },
-      "id": "wr-split-01",
+      "id": "b2fd4ee0-55cb-4d6d-87a5-9ea09a124407",
       "name": "Split Memories",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -192,
-        -352
+        816,
+        816
       ],
       "retryOnFail": true,
       "maxTries": 2,
@@ -92,17 +92,17 @@
         "operation": "executeQuery",
         "query": "SELECT content, metadata, 'existing' AS source\nFROM public.memories\nWHERE metadata->>'chat_id' = $1::text\n   OR metadata->>'zalo_id' = $1::text",
         "options": {
-          "queryReplacement": "={{ [$('Execute Sub-workflow Trigger').first().json.chat_id] }}",
-          "queryBatching": "independently"
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$('When Executed by Another Workflow').first().json.chat_id] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -192,
-        -128
+        816,
+        1040
       ],
-      "id": "wr-getmem-01",
+      "id": "62ad93e8-ad61-4792-aa79-8894c9fd178a",
       "name": "Get Memories",
       "retryOnFail": true,
       "maxTries": 2,
@@ -110,26 +110,26 @@
       "settings": {
         "onError": "continueRegularOutput"
       },
+      "notesInFlow": true,
       "credentials": {
         "postgres": {
           "id": "8m7DPa6v6XXKKZKZ",
           "name": "Postgres account"
         }
       },
-      "notesInFlow": true,
       "notes": "Lists existing memory content for the active chat so Dedup Facts can drop repeats. Assumes the Supabase vector store and the Postgres leads DB share the same Postgres instance; if not, swap to the Supabase node or HTTP request to /rest/v1/memories."
     },
     {
       "parameters": {
-        "jsCode": "const stripOuterQuotes = (value) => String(value ?? '')\n  .replace(/^['\"“”]+|['\"“”]+$/g, '')\n  .trim();\n\nconst removeVietnameseMarks = (value) => value\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/đ/g, 'd')\n  .replace(/Đ/g, 'D');\n\nconst normalizePhone = (value) => {\n  const raw = String(value ?? '').replace(/[^\\d+]/g, '');\n  let phone = raw;\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst canonicalize = (value) => {\n  const stripped = stripOuterQuotes(value);\n  const phone = normalizePhone(stripped);\n  if (phone) return 'phone:' + phone;\n\n  return removeVietnameseMarks(stripped)\n    .toLowerCase()\n    .replace(/^(nguoi dung|ung vien|ban ay|ban)\\s+/i, '')\n    .replace(/^(sdt|so dien thoai|dien thoai|khu vuc|nghe mong muon|muon|muon tim viec|ten la)[:\\s-]*/i, '')\n    .replace(/[^a-z0-9]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n};\n\nconst all = $input.all();\n\nconst candidates = all\n  .filter((item) => item.json.source === 'candidate')\n  .map((item) => ({\n    content: stripOuterQuotes(item.json.content),\n    canonical_key: item.json.canonical_key || canonicalize(item.json.content),\n  }))\n  .filter((item) => item.content.length >= 6 && item.content.length <= 240 && item.canonical_key);\n\nconst existing = new Set(\n  all\n    .filter((item) => item.json.source === 'existing')\n    .flatMap((item) => [\n      item.json.metadata?.canonical_key,\n      canonicalize(item.json.content),\n    ])\n    .filter(Boolean)\n);\n\nconst seen = new Set();\nconst novel = [];\nfor (const item of candidates) {\n  if (existing.has(item.canonical_key) || seen.has(item.canonical_key)) continue;\n  seen.add(item.canonical_key);\n  novel.push(item);\n}\n\nconst chatId = $('Execute Sub-workflow Trigger').first()?.json?.chat_id ?? null;\nreturn novel.map((item) => ({\n  json: {\n    content: item.content,\n    canonical_key: item.canonical_key,\n    chat_id: chatId,\n    zalo_id: chatId,\n  },\n}));"
+        "jsCode": "const stripOuterQuotes = (value) => String(value ?? '')\n  .replace(/^['\"“”]+|['\"“”]+$/g, '')\n  .trim();\n\nconst removeVietnameseMarks = (value) => value\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/đ/g, 'd')\n  .replace(/Đ/g, 'D');\n\nconst normalizePhone = (value) => {\n  const raw = String(value ?? '').replace(/[^\\d+]/g, '');\n  let phone = raw;\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst canonicalize = (value) => {\n  const stripped = stripOuterQuotes(value);\n  const phone = normalizePhone(stripped);\n  if (phone) return 'phone:' + phone;\n\n  return removeVietnameseMarks(stripped)\n    .toLowerCase()\n    .replace(/^(nguoi dung|ung vien|ban ay|ban)\\s+/i, '')\n    .replace(/^(sdt|so dien thoai|dien thoai|khu vuc|nghe mong muon|muon|muon tim viec|ten la)[:\\s-]*/i, '')\n    .replace(/[^a-z0-9]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n};\n\nconst all = $input.all();\n\nconst candidates = all\n  .filter((item) => item.json.source === 'candidate')\n  .map((item) => ({\n    content: stripOuterQuotes(item.json.content),\n    canonical_key: item.json.canonical_key || canonicalize(item.json.content),\n  }))\n  .filter((item) => item.content.length >= 6 && item.content.length <= 240 && item.canonical_key);\n\nconst existing = new Set(\n  all\n    .filter((item) => item.json.source === 'existing')\n    .flatMap((item) => [\n      item.json.metadata?.canonical_key,\n      canonicalize(item.json.content),\n    ])\n    .filter(Boolean)\n);\n\nconst seen = new Set();\nconst novel = [];\nfor (const item of candidates) {\n  if (existing.has(item.canonical_key) || seen.has(item.canonical_key)) continue;\n  seen.add(item.canonical_key);\n  novel.push(item);\n}\n\nconst chatId = $('When Executed by Another Workflow').first()?.json?.chat_id ?? null;\nreturn novel.map((item) => ({\n  json: {\n    content: item.content,\n    canonical_key: item.canonical_key,\n    chat_id: chatId,\n    zalo_id: chatId,\n  },\n}));"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        144,
-        -240
+        1168,
+        880
       ],
-      "id": "wr-dedup-01",
+      "id": "f0960327-508f-42aa-931f-927ca014fd8e",
       "name": "Dedup Facts",
       "notesInFlow": true,
       "notes": "Cross-turn dedup: drops facts that already exist in the chat's stored memory and de-duplicates within the same turn. Output items are unique Vietnamese candidate facts; empty list is a no-op for Save Memories."
@@ -147,20 +147,14 @@
           "queryName": "match_memories"
         }
       },
-      "id": "wr-save-01",
+      "id": "3f122ba3-9c81-4c19-9368-bb7bd62e3579",
       "name": "Save Memories",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        480,
-        -240
+        1408,
+        928
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "mi2PJt3fTISbLnsB",
-          "name": "Supabase account"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
@@ -168,6 +162,12 @@
         "onError": "continueRegularOutput"
       },
       "notesInFlow": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mi2PJt3fTISbLnsB",
+          "name": "Supabase account"
+        }
+      },
       "notes": "Writes only deduplicated memories. Metadata includes chat_id, zalo_id, and canonical_key so retrieval and future dedupe are user-scoped."
     },
     {
@@ -197,26 +197,26 @@
           }
         }
       },
-      "id": "wr-data-01",
+      "id": "d7793622-c812-4602-a0a9-77774fafe172",
       "name": "MemoryData",
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1.1,
       "position": [
-        560,
-        -32
+        1568,
+        1136
       ]
     },
     {
       "parameters": {
         "modelName": "models/gemini-embedding-2"
       },
-      "id": "wr-emb-01",
+      "id": "2300b3bb-6c72-40da-99e5-1d561de4181a",
       "name": "Embeddings Write",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        368,
-        -32
+        1376,
+        1136
       ],
       "credentials": {
         "googlePalmApi": {
@@ -232,15 +232,16 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        736,
-        -240
+        1744,
+        928
       ],
-      "id": "memory-result-01",
+      "id": "f3896fb8-47de-4d2f-a718-234919beee31",
       "name": "Memory Result"
     }
   ],
+  "pinData": {},
   "connections": {
-    "Execute Sub-workflow Trigger": {
+    "When Executed by Another Workflow": {
       "main": [
         [
           {
@@ -345,22 +346,17 @@
       ]
     }
   },
+  "active": false,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "staticData": null,
-  "pinData": {},
-  "active": false,
-  "versionId": "62a68e78-c8a7-4f44-8e1f-2b5f6be2e5a3",
-  "id": "vficPersistMemories01",
+  "versionId": "08d85811-5080-433e-b5d4-17f7f1eaccaf",
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "aiBuilderAssisted": true,
-    "builderVariant": "mcp",
     "instanceId": "c84bcc898daaa57109bc9fb5491b846480cbc722b97f195dcd3b8e23390f5edd"
   },
-  "tags": [],
-  "nodeGroups": []
+  "nodeGroups": [],
+  "id": "aqW02ebGGw2YHunR",
+  "tags": []
 }

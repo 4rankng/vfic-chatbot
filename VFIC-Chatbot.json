@@ -8,10 +8,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBotTrigger",
       "typeVersion": 1,
       "position": [
-        -1296,
-        -448
+        -2544,
+        1520
       ],
-      "id": "0bb5e94b-7dc5-4e7c-ab05-1883bb892939",
+      "id": "8e332645-8a4a-44cc-bb14-ecc67feaaf40",
       "name": "Zalo Bot Trigger",
       "webhookId": "9af2dae3-daeb-4340-aba6-a80cf40b346c",
       "alwaysOutputData": false,
@@ -26,13 +26,13 @@
       "parameters": {
         "jsCode": "const message = $('Zalo Bot Trigger').first()?.json?.message ?? {};\nconst chat = message.chat ?? {};\n\nconst pick = (value) => {\n  if (value === null || value === undefined) return null;\n  const text = String(value).trim();\n  return text === '' ? null : text;\n};\n\nconst chatId = pick(chat.id ?? message.chatId ?? message.from?.id ?? message.sender?.id);\nif (!chatId) {\n  throw new Error('Missing Zalo chat ID');\n}\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    user_text: pick(message.text) ?? '',\n    user_name: pick(chat.name ?? message.from?.name ?? message.sender?.name),\n    event_name: pick($('Zalo Bot Trigger').first()?.json?.event_name ?? $('Zalo Bot Trigger').first()?.json?.event),\n    received_at: new Date().toISOString(),\n  },\n}];"
       },
-      "id": "normalize-message-01",
+      "id": "70c79c57-58f3-4ae4-860e-9b5428fa30db",
       "name": "Normalize Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -768,
-        -960
+        -2368,
+        1520
       ],
       "retryOnFail": false,
       "notesInFlow": true,
@@ -46,10 +46,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -560,
-        -960
+        -2176,
+        1520
       ],
-      "id": "ad0db60b-b41f-4726-8e26-271fb5f74935",
+      "id": "180181fa-ff37-47ee-a47f-2ed0f75eb3d8",
       "name": "Typing...",
       "retryOnFail": true,
       "maxTries": 2,
@@ -72,10 +72,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -352,
-        -960
+        -1856,
+        1520
       ],
-      "id": "1f1e3ff0-06f4-47cf-9b59-cc88bbd315aa",
+      "id": "ff848080-2a53-4ed7-a133-5ed18c18817e",
       "name": "AI Agent",
       "retryOnFail": true,
       "maxTries": 2,
@@ -94,10 +94,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -128,
-        -960
+        -1232,
+        1472
       ],
-      "id": "bfb2e9dc-ec12-4560-93ab-915770fc32e6",
+      "id": "ffec19c4-6dae-4266-8aa8-b194da0d914f",
       "name": "Zalo Bot",
       "retryOnFail": true,
       "maxTries": 2,
@@ -117,21 +117,21 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -128,
-        -768
+        -1296,
+        1616
       ],
-      "id": "bf-error-reply-01",
+      "id": "b1a891b9-b7d6-4688-80ee-f0512c4bdeb6",
       "name": "Error Reply",
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
+      "notesInFlow": true,
       "credentials": {
         "zaloBotApi": {
           "id": "Byy17zfaXnI7gnsm",
           "name": "Zalo Bot account"
         }
       },
-      "notesInFlow": true,
       "notes": "Sends a static Vietnamese apology when the main AI Agent fails after retries. Prevents silent user-facing failures."
     },
     {
@@ -142,10 +142,10 @@
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1.1,
       "position": [
-        0,
-        -176
+        -1456,
+        1984
       ],
-      "id": "df8a7fa3-c913-4989-859d-61870933d5d0",
+      "id": "6ebc477d-3908-46db-b875-eaca33957a6b",
       "name": "Việc làm"
     },
     {
@@ -158,13 +158,13 @@
         },
         "options": {}
       },
-      "id": "a4bb9ccf-2052-495d-8348-37d8d727342d",
+      "id": "c69c4ff0-0831-42c1-aaa4-816093dabff6",
       "name": "RetrievalMode",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        -64,
-        16
+        -1488,
+        2176
       ],
       "credentials": {
         "supabaseApi": {
@@ -180,10 +180,10 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        80,
-        160
+        -1408,
+        2416
       ],
-      "id": "3950da93-85d1-4170-95ab-98b827f6ea9d",
+      "id": "3162b28c-5ea5-40e8-8fc2-e89d0187938e",
       "name": "Embeddings Việc Làm",
       "credentials": {
         "googlePalmApi": {
@@ -194,16 +194,15 @@
     },
     {
       "parameters": {
-        "model": "MiniMax-M2.7",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -976,
-        -224
+        -2032,
+        1888
       ],
-      "id": "d726d3db-b23a-4807-b590-de615d9c2c46",
+      "id": "df773ea0-cbb1-4c77-9bc7-7805b3cf36b4",
       "name": "ChatAgent",
       "credentials": {
         "minimaxApi": {
@@ -220,10 +219,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        240,
-        -16
+        -1232,
+        2208
       ],
-      "id": "d39a92e7-1142-455b-92a1-82c5cca795bd",
+      "id": "fab73aa4-1340-46c3-a049-fd9f800c4ea0",
       "name": "LookupAgent",
       "credentials": {
         "minimaxApi": {
@@ -242,18 +241,18 @@
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.4,
       "position": [
-        -752,
-        -208
+        -1808,
+        1888
       ],
-      "id": "72667d5a-a4f0-46b7-8b81-4f3d0d29c20c",
+      "id": "2df6c16b-40e0-4f91-a401-c719e0e5d0f9",
       "name": "PostgresMem",
+      "notesInFlow": true,
       "credentials": {
         "postgres": {
           "id": "8m7DPa6v6XXKKZKZ",
           "name": "Postgres account"
         }
       },
-      "notesInFlow": true,
       "notes": "Short rolling chat history for the active Zalo chat. Separate from semantic candidate memories."
     },
     {
@@ -261,13 +260,13 @@
         "description": "Tìm kiếm thông tin ĐÃ GHI NHỚ về đúng người dùng Zalo hiện tại: tên, số điện thoại, khu vực, nghề mong muốn, kinh nghiệm, sở thích, ràng buộc, lịch sử tư vấn và quyết định đã chốt. Luôn dùng công cụ này khi cần nhớ lại, xác nhận hoặc cá nhân hóa theo thông tin cá nhân của người dùng. Truyền vào một câu hỏi cụ thể, ví dụ: \"người này tên gì và muốn làm việc ở đâu\", \"số điện thoại của người dùng là gì\". Chỉ trả về thông tin thực sự đã lưu, tuyệt đối không bịa ra.",
         "topK": 5
       },
-      "id": "mem-tool-01",
+      "id": "e14972d8-101c-4c4b-8381-8b0526306d42",
       "name": "Thông tin người dùng",
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1.1,
       "position": [
-        -48,
-        448
+        -1712,
+        2608
       ],
       "notesInFlow": true,
       "notes": "Semantic long-term candidate memory filtered by normalized chat_id metadata."
@@ -292,13 +291,13 @@
           }
         }
       },
-      "id": "mem-store-01",
+      "id": "90cdf012-39bb-4457-b33b-bfaa71ed28a2",
       "name": "MemoryStore",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        -304,
-        592
+        -1968,
+        2816
       ],
       "credentials": {
         "supabaseApi": {
@@ -311,13 +310,13 @@
       "parameters": {
         "modelName": "models/gemini-embedding-2"
       },
-      "id": "mem-emb-01",
+      "id": "1998aad5-aaca-4b37-96cc-8832ce2d1b0d",
       "name": "Embeddings Memories",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -224,
-        816
+        -2128,
+        2928
       ],
       "credentials": {
         "googlePalmApi": {
@@ -331,13 +330,13 @@
         "model": "MiniMax-M2.7-highspeed",
         "options": {}
       },
-      "id": "mem-llm-01",
+      "id": "6142037d-959b-4fa0-b73e-cfee796597c3",
       "name": "LookupMem",
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        112,
-        576
+        -1536,
+        2800
       ],
       "credentials": {
         "minimaxApi": {
@@ -353,54 +352,56 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        112,
-        -1072
+        -1056,
+        1312
       ],
-      "id": "build-persistence-payload-01",
+      "id": "a174bb31-a452-4b4a-8502-a2fbf13831ce",
       "name": "Build Persistence Payload"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "vficPersistLead01",
+          "value": "KLkmNoNNEIPoumEA",
           "mode": "list",
+          "cachedResultUrl": "/workflow/KLkmNoNNEIPoumEA",
           "cachedResultName": "VFIC Persist Lead"
         },
+        "mode": "each",
         "options": {
           "waitForSubWorkflow": false
-        },
-        "mode": "each"
+        }
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        368,
-        -1168
+        -800,
+        1216
       ],
-      "id": "execute-persist-lead-01",
+      "id": "2b14e3dd-3605-4775-818a-b5eeb5aaa7fd",
       "name": "Execute VFIC Persist Lead"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "vficPersistMemories01",
+          "value": "aqW02ebGGw2YHunR",
           "mode": "list",
+          "cachedResultUrl": "/workflow/aqW02ebGGw2YHunR",
           "cachedResultName": "VFIC Persist Memories"
         },
+        "mode": "each",
         "options": {
           "waitForSubWorkflow": false
-        },
-        "mode": "each"
+        }
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        368,
-        -976
+        -784,
+        1440
       ],
-      "id": "execute-persist-memories-01",
+      "id": "7934514d-3107-4e41-b732-760e932d44a4",
       "name": "Execute VFIC Persist Memories"
     }
   ],
@@ -595,7 +596,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "7032eb8d-96f9-421f-b80f-e4308cce2788",
+  "versionId": "b9a2376b-772e-4ad9-b010-90899a36f27f",
   "meta": {
     "templateCredsSetupCompleted": true,
     "aiBuilderAssisted": true,
