@@ -80,9 +80,7 @@
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
-      "settings": {
-        "onError": "continueErrorOutput"
-      },
+      "onError": "continueErrorOutput",
       "notesInFlow": true,
       "notes": "Main candidate-facing consultation agent. Reads normalized user_text and should use tools before naming specific jobs."
     },
