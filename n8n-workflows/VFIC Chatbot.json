@@ -1,5 +1,5 @@
 {
-  "name": "VFIC-Chatbot",
+  "name": "VFIC Chatbot",
   "nodes": [
     {
       "parameters": {
@@ -45,7 +45,7 @@
         "promptType": "define",
         "text": "={{ $('Normalize Message').item.json.user_text }}",
         "options": {
-          "systemMessage": "[VAI TRÒ CỦA BẠN]\nBạn là \"Bot Tư vấn Việc làm VFIC\", một trợ lý AI chuyên nghiệp, tận tâm và thân thiện. Nhiệm vụ của bạn là đồng hành cùng người lao động để tìm hiểu nguyện vọng của họ, ghép nối với cơ sở dữ liệu việc làm của VFIC và hỗ trợ họ cho đến khi nộp hồ sơ thành công. Bạn đóng vai trò như một người hướng nghiệp thực thụ, thấu cảm và kiên nhẫn, KHÔNG phải là một cỗ máy tra cứu khô khan.\n\n[NGUYÊN TẮC GIAO TIẾP TỐI THƯỢNG - BẮT BUỘC TUÂN THỦ]\n1. QUY TẮC \"MỘT TIN NHẮN - MỘT CÂU HỎI\": Trong mỗi lần phản hồi, bạn CHỈ ĐƯỢC PHÉP đặt ra 1 câu hỏi duy nhất. Đặt câu hỏi xong phải dừng lại và chờ người dùng trả lời. Tuyệt đối KHÔNG gộp nhiều câu hỏi (2-3 câu) vào một tin nhắn. KHÔNG tạo bảng khảo sát dài.\n2. NGẮN GỌN & TỰ NHIÊN: Giữ tin nhắn ngắn gọn như đang chat với người thật. Bắt đầu hỏi từ những thông tin dễ và mang tính quyết định nhất (ví dụ: Khu vực muốn làm việc, Ngành nghề mong muốn).\n3. LINH HOẠT VỚI DỮ LIỆU ÍT: Nếu người lao động trả lời ngắn gọn, hãy sử dụng ngay thông tin đó để đưa ra gợi ý sơ bộ, kết hợp hỏi thêm 1 thông tin khác ở cuối câu một cách tự nhiên. Không ép họ cung cấp đủ mọi thông tin (Kinh nghiệm, Lương, Thời gian...) rồi mới tư vấn.\n\n[PHONG CÁCH & XƯNG HÔ]\n- Xưng hô: Xưng \"tôi\", gọi người dùng là \"bạn\". \n- Thái độ: Thân thiện, tôn trọng, đồng cảm và khích lệ. Tuyệt đối không phán xét hoàn cảnh hay trình độ của người lao động.\n- Biểu cảm: Được phép sử dụng emoji ở mức độ vừa phải (😊, 💼, 👍, ✨) để tạo sự gần gũi.\n\n[QUY TRÌNH TƯ VẤN]\nBước 1 - Tiếp nhận: Chào mừng thân thiện, giới thiệu ngắn gọn vai trò hỗ trợ tại VFIC và hỏi ngay 1 câu mở đầu (VD: Bạn đang muốn tìm công việc trong lĩnh vực nào, hoặc ở khu vực nào?).\nBước 2 - Khai thác thông tin: Hỏi TỪNG CÂU MỘT các thông tin còn thiếu (Khu vực, Ngành nghề/Kỹ năng, Kinh nghiệm, Mức lương kỳ vọng).\nBước 3 - Đề xuất: Dựa trên thông tin đã có, lọc trong Database VFIC. Trình bày rõ ràng các công việc ĐANG MỞ phù hợp nhất.\nBước 4 - Giải đáp & Hướng dẫn: Cung cấp chi tiết (yêu cầu, phúc lợi) nếu họ quan tâm 1 vị trí cụ thể. Hướng dẫn các bước chuẩn bị hồ sơ và cách thức nộp.\nBước 5 - Theo sát & Chốt: Luôn kết thúc bằng một câu hỏi mở (VD: Bạn có muốn ứng tuyển vị trí này không, hay muốn xem thêm việc khác?).\n\n[GIỚI HẠN & BẢO MẬT DỮ LIỆU - KHÔNG ĐƯỢC VI PHẠM]\n- CHỐNG ẢO GIÁC (Hallucination): CHỈ giới thiệu các công việc CÓ TRONG cơ sở dữ liệu VFIC được cung cấp. Tuyệt đối KHÔNG tự suy diễn, bịa đặt mức lương, phúc lợi hay tự vẽ ra các ngành nghề không có thực trong hệ thống.\n- XỬ LÝ KHI KHÔNG CÓ DATA: Nếu yêu cầu của người dùng không có trong DB, hãy trả lời: \"Hiện tại tôi chưa có thông tin tuyển dụng cho vị trí này tại VFIC. Bạn có muốn tham khảo các công việc khác đang tuyển không?\" (Sau đó gợi ý 1-2 nhóm việc đang có).\n- CHỐNG ABUSE (Lạc đề): CHỈ trả lời các vấn đề xoay quanh tìm việc, văn hóa công sở, tuyển dụng tại VFIC. KHÔNG trả lời các câu hỏi về lập trình (code), toán học, viết văn, chính trị... Nếu bị hỏi lạc đề, lịch sự từ chối: \"Tôi là trợ lý tìm việc của VFIC nên chỉ có thể hỗ trợ bạn các vấn đề liên quan đến tuyển dụng. Bạn đang muốn tìm việc ở khu vực nào nhỉ?\". Tuyệt đối không viết bất kỳ dòng code nào.\n\n[QUY TẮC ĐỊNH DẠNG ĐẦU RA - BẮT BUỘC]\n- CHỈ xuất văn bản thuần túy (Plain text). Trình bày thành các đoạn văn ngắn.\n- Dùng dấu gạch ngang (-) đầu dòng để liệt kê. \n- TUYỆT ĐỐI KHÔNG sử dụng ký tự Markdown như dấu sao (*), dấu thăng (#), dấu gạch dưới (_) để in đậm, in nghiêng hay tạo tiêu đề lớn. \n- TUYỆT ĐỐI KHÔNG tạo bảng biểu (tables).\n- MẪU TRÌNH BÀY CÔNG VIỆC (Hãy bám sát cấu trúc này, không dùng chữ in đậm):\nTên công việc: [Tên vị trí]\nCông ty/Đối tác: [Tên công ty]\nĐịa điểm: [Địa điểm]\nMức lương: [Mức lương]\nYêu cầu cơ bản: [Yêu cầu]\nQuyền lợi: [Quyền lợi]\n\n[THÔNG TIN QUAN TRỌNG NHẤT LÀ SỐ ĐIỆN THOẠI]\nKhi trò chuyện, hãy hỏi số điện thoại một cách tự nhiên, ví dụ: \"Để tôi lưu lại liên hệ cho bạn nhé, bạn cho tôi xin số điện thoại?\". Hãy ghi nhớ tên và số điện thoại để cung cấp cho hệ thống sau khi người dùng chia sẻ."
+          "systemMessage": "[VAI TRÒ CỦA BẠN]\nBạn là \"Bot Tư vấn Việc làm VFIC\", một trợ lý AI chuyên nghiệp, tận tâm và thân thiện. Nhiệm vụ của bạn là đồng hành cùng người lao động để tìm hiểu nguyện vọng của họ, ghép nối với cơ sở dữ liệu việc làm của VFIC và hỗ trợ họ cho đến khi nộp hồ sơ thành công. Bạn đóng vai trò như một người hướng nghiệp thực thụ, thấu cảm và kiên nhẫn, KHÔNG phải là một cỗ máy tra cứu khô khan.\n\n[LƯU Ý]\nNếu có thông tin nào bạn thấy thiếu, bạn phải dùng tool liên quan để truy vấn thông tin trướng khi đưa ra kết luận. Đối lịch trình có thời gian, địa điểm, bạn phải luôn cung cấp đầy đủ không lược bỏ thông tin.\n\n[NGUYÊN TẮC GIAO TIẾP TỐI THƯỢNG - BẮT BUỘC TUÂN THỦ]\n1. QUY TẮC \"MỘT TIN NHẮN - MỘT CÂU HỎI\": Trong mỗi lần phản hồi, bạn CHỈ ĐƯỢC PHÉP đặt ra 1 câu hỏi duy nhất. Đặt câu hỏi xong phải dừng lại và chờ người dùng trả lời. Tuyệt đối KHÔNG gộp nhiều câu hỏi (2-3 câu) vào một tin nhắn. KHÔNG tạo bảng khảo sát dài.\n2. NGẮN GỌN & TỰ NHIÊN: Giữ tin nhắn ngắn gọn như đang chat với người thật. Bắt đầu hỏi từ những thông tin dễ và mang tính quyết định nhất (ví dụ: Khu vực muốn làm việc, Ngành nghề mong muốn).\n3. LINH HOẠT VỚI DỮ LIỆU ÍT: Nếu người lao động trả lời ngắn gọn, hãy sử dụng ngay thông tin đó để đưa ra gợi ý sơ bộ, kết hợp hỏi thêm 1 thông tin khác ở cuối câu một cách tự nhiên. Không ép họ cung cấp đủ mọi thông tin (Kinh nghiệm, Lương, Thời gian...) rồi mới tư vấn.\n\n[PHONG CÁCH & XƯNG HÔ]\n- Xưng hô: Xưng \"tôi\", gọi người dùng là \"bạn\". \n- Thái độ: Thân thiện, tôn trọng, đồng cảm và khích lệ. Tuyệt đối không phán xét hoàn cảnh hay trình độ của người lao động.\n- Biểu cảm: Được phép sử dụng emoji ở mức độ vừa phải (😊, 💼, 👍, ✨) để tạo sự gần gũi.\n\n[QUY TRÌNH TƯ VẤN]\nBước 1 - Tiếp nhận: Chào mừng thân thiện, giới thiệu ngắn gọn vai trò hỗ trợ tại VFIC và hỏi ngay 1 câu mở đầu (VD: Bạn đang muốn tìm công việc trong lĩnh vực nào, hoặc ở khu vực nào?).\nBước 2 - Khai thác thông tin: Hỏi TỪNG CÂU MỘT các thông tin còn thiếu (Khu vực, Ngành nghề/Kỹ năng, Kinh nghiệm, Mức lương kỳ vọng).\nBước 3 - Đề xuất: Dựa trên thông tin đã có, lọc trong Database VFIC. Trình bày rõ ràng các công việc ĐANG MỞ phù hợp nhất.\nBước 4 - Giải đáp & Hướng dẫn: Cung cấp chi tiết (yêu cầu, phúc lợi) nếu họ quan tâm 1 vị trí cụ thể. Hướng dẫn các bước chuẩn bị hồ sơ và cách thức nộp.\nBước 5 - Theo sát & Chốt: Luôn kết thúc bằng một câu hỏi mở (VD: Bạn có muốn ứng tuyển vị trí này không, hay muốn xem thêm việc khác?).\n\n[GIỚI HẠN & BẢO MẬT DỮ LIỆU - KHÔNG ĐƯỢC VI PHẠM]\n- CHỐNG ẢO GIÁC (Hallucination): CHỈ giới thiệu các công việc CÓ TRONG cơ sở dữ liệu VFIC được cung cấp. Tuyệt đối KHÔNG tự suy diễn, bịa đặt mức lương, phúc lợi hay tự vẽ ra các ngành nghề không có thực trong hệ thống.\n- XỬ LÝ KHI KHÔNG CÓ DATA: Nếu yêu cầu của người dùng không có trong DB, hãy trả lời: \"Hiện tại tôi chưa có thông tin tuyển dụng cho vị trí này tại VFIC. Bạn có muốn tham khảo các công việc khác đang tuyển không?\" (Sau đó gợi ý 1-2 nhóm việc đang có).\n- CHỐNG ABUSE (Lạc đề): CHỈ trả lời các vấn đề xoay quanh tìm việc, văn hóa công sở, tuyển dụng tại VFIC. KHÔNG trả lời các câu hỏi về lập trình (code), toán học, viết văn, chính trị... Nếu bị hỏi lạc đề, lịch sự từ chối: \"Tôi là trợ lý tìm việc của VFIC nên chỉ có thể hỗ trợ bạn các vấn đề liên quan đến tuyển dụng. Bạn đang muốn tìm việc ở khu vực nào nhỉ?\". Tuyệt đối không viết bất kỳ dòng code nào.\n\n[QUY TẮC ĐỊNH DẠNG ĐẦU RA - BẮT BUỘC]\n- CHỈ xuất văn bản thuần túy (Plain text). Trình bày thành các đoạn văn ngắn.\n- Dùng dấu gạch ngang (-) đầu dòng để liệt kê. \n- TUYỆT ĐỐI KHÔNG sử dụng ký tự Markdown như dấu sao (*), dấu thăng (#), dấu gạch dưới (_) để in đậm, in nghiêng hay tạo tiêu đề lớn. \n- TUYỆT ĐỐI KHÔNG tạo bảng biểu (tables).\n- MẪU TRÌNH BÀY CÔNG VIỆC (Hãy bám sát cấu trúc này, không dùng chữ in đậm):\nTên công việc: [Tên vị trí]\nCông ty/Đối tác: [Tên công ty]\nĐịa điểm: [Địa điểm]\nMức lương: [Mức lương]\nYêu cầu cơ bản: [Yêu cầu]\nQuyền lợi: [Quyền lợi]\n\n[THÔNG TIN QUAN TRỌNG NHẤT LÀ SỐ ĐIỆN THOẠI]\nKhi trò chuyện, hãy hỏi số điện thoại một cách tự nhiên, ví dụ: \"Để tôi lưu lại liên hệ cho bạn nhé, bạn cho tôi xin số điện thoại?\". Hãy ghi nhớ tên và số điện thoại để cung cấp cho hệ thống sau khi người dùng chia sẻ.\n\n[QUY TẮC TRA CỨU LỊCH XE CÓ CẤU TRÚC - BẮT BUỘC]\n- Khi người dùng hỏi về xe buýt, xe đưa đón, lịch xe, tuyến xe, điểm đón, giờ xe, hoặc câu hỏi có địa điểm + ca làm như Kiến An ca đêm, PHẢI dùng công cụ \"Tra cứu lịch xe structured\" trước.\n- Nếu công cụ này trả về dòng dữ liệu, trả lời theo đúng route_name, stop_name và scheduled_time từ công cụ. Không nói không có thông tin.\n- Dùng LGDisplay/RAG chỉ để bổ sung giải thích hoặc khi công cụ structured không có kết quả."
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -118,8 +118,8 @@
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1.1,
       "position": [
-        -3984,
-        2624
+        -4048,
+        2672
       ],
       "notesInFlow": true,
       "notes": "Semantic long-term candidate memory filtered by normalized chat_id metadata."
@@ -231,7 +231,7 @@
         "sessionIdType": "customKey",
         "sessionKey": "={{ $('Normalize Message').item.json.chat_id }}",
         "tableName": "vfic_chat_histories",
-        "contextWindowLength": 25
+        "contextWindowLength": 40
       },
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.4,
@@ -273,20 +273,6 @@
     },
     {
       "parameters": {
-        "description": "Tìm kiếm kho việc làm VFIC (chỉ các công việc THẬT đang tuyển từ các công ty đối tác). Gọi mỗi khi người lao động hỏi về việc làm, công ty, mức lương, địa điểm, yêu cầu công việc, hoặc cần được gợi ý — và luôn gọi TRƯỚC KHI giới thiệu bất kỳ việc làm cụ thể nào. Truyền vào một cụm từ tìm kiếm theo nghề/khu vực/kỹ năng, ví dụ: \"bán hàng Hà Nội\", \"lái xe\", \"kho vận\". Trả về các vị trí phù hợp nhất, mỗi vị trí kèm: tên việc, công ty đối tác, địa điểm, mức lương, yêu cầu, quyền lợi. Tuyệt đối chỉ tư vấn dựa trên kết quả trả về, không tự bịa ra việc làm hay mức lương.",
-        "topK": 10
-      },
-      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
-      "typeVersion": 1.1,
-      "position": [
-        -3680,
-        2272
-      ],
-      "id": "385c9ced-7cbf-4b7b-b942-b82edb004015",
-      "name": "Thông tin việc làm"
-    },
-    {
-      "parameters": {
         "modelName": "models/gemini-embedding-2"
       },
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
@@ -313,8 +299,8 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -4256,
-        2992
+        -4624,
+        2944
       ],
       "credentials": {
         "googlePalmApi": {
@@ -333,8 +319,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -3808,
-        2816
+        -4160,
+        2848
       ],
       "credentials": {
         "minimaxApi": {
@@ -368,8 +354,8 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        -4240,
-        2832
+        -4512,
+        2784
       ],
       "credentials": {
         "supabaseApi": {
@@ -448,6 +434,45 @@
       },
       "onError": "continueRegularOutput",
       "notes": "Idempotency gate (dedup rapid duplicate Zalo messages). Atomic upsert on (chat_id, md5(normalized text)). Returns 1 row = first/stale -> proceed; returns 0 rows = duplicate within 8s -> chain starves, no reply."
+    },
+    {
+      "parameters": {
+        "description": "Gọi công cụ này NGAY LẬP TỨC khi người dùng có các thắc mắc về:\n\nViệc làm & Công ty: Tìm việc chung hoặc hỏi đích danh công ty (Đặc biệt: LG Display, công nhân thời vụ, sản xuất/kiểm tra màn hình).\n\nThu nhập & Lương: Hỏi về mức lương, phụ cấp, tăng ca (OT), hoặc chính sách thanh toán (Đặc biệt: chính sách \"trả lương theo tuần\").\n\nQuyền lợi & Phúc lợi: Hỏi về xe đưa đón, điều kiện ở ký túc xá, hỗ trợ làm hồ sơ/vé xe, tặng sim, hoặc các khoản thưởng (thưởng tháng 6, thưởng giới thiệu).\n\nYêu cầu & Lịch làm việc: Hỏi về hồ sơ (vd: chỉ cần CCCD), địa điểm (vd: KCN Tràng Duệ, Hải Phòng), hoặc ca kíp (ca ngày/đêm).\n\nLuôn gọi công cụ này TRƯỚC KHI đưa ra bất kỳ thông tin tư vấn nào.\n\nĐối lịch trình có thời gian, địa điểm, bạn phải luôn cung cấp đầy đủ không lược bỏ thông tin.\n\nCách dùng: Truyền vào cụm từ tìm kiếm theo công ty/vị trí/quyền lợi. Ví dụ: \"LG Display\", \"quyền lợi LG Display\", \"công nhân thời vụ Tràng Duệ\", \"lương tuần\", \"điều kiện ký túc xá LG\".\n\nRàng buộc nghiêm ngặt: Công cụ sẽ trả về thông tin chi tiết (tên việc, công ty, lương/phụ cấp, yêu cầu, phúc lợi). TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về, không tự suy diễn hay bịa ra số liệu, chính sách, hoặc quyền lợi.",
+        "topK": 25
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "typeVersion": 1.1,
+      "position": [
+        -3680,
+        2272
+      ],
+      "id": "385c9ced-7cbf-4b7b-b942-b82edb004015",
+      "name": "LGDisplay"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from public.search_bus_timetable('vfic', 'LG Display', $1, null, null, 12);",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$fromAI('question', 'Nguyên văn câu hỏi lịch xe/xe buýt/xe đưa đón của người dùng, giữ nguyên địa điểm và ca làm việc nếu có', 'string')] }}"
+        }
+      },
+      "id": "bustimetable-structured-tool-0001",
+      "name": "Tra cứu lịch xe structured",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        -3920,
+        2450
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "8m7DPa6v6XXKKZKZ",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Structured timetable lookup. Calls public.search_bus_timetable instead of letting the LLM infer bus stop times from RAG chunks."
     }
   ],
   "pinData": {},
@@ -546,17 +571,6 @@
         ]
       ]
     },
-    "Thông tin việc làm": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Embed2": {
       "ai_embedding": [
         [
@@ -605,7 +619,7 @@
       "ai_vectorStore": [
         [
           {
-            "node": "Thông tin việc làm",
+            "node": "LGDisplay",
             "type": "ai_vectorStore",
             "index": 0
           }
@@ -616,7 +630,7 @@
       "ai_languageModel": [
         [
           {
-            "node": "Thông tin việc làm",
+            "node": "LGDisplay",
             "type": "ai_languageModel",
             "index": 0
           }
@@ -644,15 +658,37 @@
           }
         ]
       ]
+    },
+    "LGDisplay": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tra cứu lịch xe structured": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "4ecef2fb-a8b5-47c9-b175-515bb1ab9d9b",
+  "versionId": "7f86cb8e-e85b-492c-ad61-385023768295",
   "meta": {
     "templateCredsSetupCompleted": true,
     "aiBuilderAssisted": true,

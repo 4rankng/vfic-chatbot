@@ -1,0 +1,458 @@
+# LG Display — Tuyển công nhân thời vụ (LƯƠNG TUẦN)
+
+## Tóm tắt nhanh
+- Vị trí: Công nhân thời vụ (sản xuất + kiểm tra màn hình)
+- Địa điểm: Hải Phòng (KCN Tràng Duệ, An Dương)
+- Yêu cầu: Chỉ cần CCCD (VFIC hỗ trợ hồ sơ miễn phí)
+- Thu nhập: 10 – 13 triệu VNĐ/tháng (có tăng ca)
+- Điểm nổi bật của VFIC: Trả lương THEO TUẦN
+
+## 1. Thông tin chung
+- Vị trí tuyển: Công nhân thời vụ
+- Công việc: Sản xuất và kiểm tra màn hình của tivi, máy tính, điện thoại
+- Địa điểm làm việc: Công ty LG Display, Khu công nghiệp Tràng Duệ, An Dương, Hải Phòng
+- Yêu cầu hồ sơ: Chỉ cần CCCD. VFIC hỗ trợ làm hồ sơ miễn phí.
+
+## 2. Thời gian làm việc
+- Ca ngày: 8h00 – 20h00
+- Ca đêm: 20h00 – 8h00
+- Lịch kíp (luân phiên): 4 ngày ca ngày → nghỉ 2 ngày → 4 ngày ca đêm → nghỉ 2 ngày → lặp lại.
+
+## 3. Lương và phụ cấp
+### Lương cơ bản
+- Lương cơ bản: 6.030.000 VNĐ/tháng
+
+### Các khoản phụ cấp
+- Phụ cấp công việc: 500.000 VNĐ
+- Phụ cấp điều chỉnh: 250.000 – 500.000 VNĐ
+- Phụ cấp xăng xe: 400.000 VNĐ
+- Phụ cấp chuyên cần: 250.000 VNĐ
+- Phụ cấp kiểm hàng: 250.000 VNĐ
+  - Điều kiện: Chỉ áp dụng nếu làm vị trí kiểm tra hàng
+
+### Tăng ca (OT)
+- Ngày thường: 150%
+- Ngày nghỉ: 200%
+- Lễ Tết: 300%
+
+### Thu nhập thực tế ước tính
+- Khoảng 10 – 13 triệu VNĐ/tháng (đã bao gồm lương + phụ cấp + tăng ca)
+
+## 4. Phúc lợi của LG Display
+- Xe đưa đón: Có cho ứng viên tại Hải Phòng, Quảng Ninh, Thái Bình
+- Ký túc xá: Có cho người ở xa
+  - Điều kiện vào ở: Nơi thường trú cách LG Display từ 50 km trở lên VÀ cách điểm đón xe gần nhất từ 15 km trở lên
+- Thưởng đi làm tháng 6: 8 triệu VNĐ (trả trong 4 tháng, mỗi tháng 2 triệu)
+  - Điều kiện nhận: (a) Nhân viên cũ quay lại sau 3 tháng; (b) vẫn còn làm việc đến thời điểm chi trả
+
+## 5. Chương trình riêng của VFIC
+- Trả lương theo tuần
+- Hỗ trợ làm hồ sơ miễn phí cho ứng viên
+- Hỗ trợ vé xe lên đến 500.000 VNĐ
+  - Điều kiện: Ứng viên ở xa từ 100 km trở lên VÀ làm đủ 7 ngày trở lên
+- Tặng 1 sim Mobifone kèm gói cước 100.000 VNĐ — ngay buổi đầu đi làm
+- Thưởng giới thiệu (người thân/bạn bè vào làm cùng):
+  - Làm đủ 15 ngày: thưởng 500.000 VNĐ
+  - Làm đủ 1 tháng: thưởng 1.000.000 VNĐ
+
+# LỊCH XE BUÝT
+
+## Quy ước dữ liệu
+
+- A = có xe hoạt động.
+- M = có xe hoạt động theo lộ trình gộp điểm đón/trả nội thành.
+- X = không có xe hoạt động.
+- Thứ tự điểm dừng trong “lượt đi” là hướng đến LGD.
+- `@HH:MM` là giờ xe đi qua điểm đón ngay trước ký hiệu đó; LGD không có giờ đến trong nguồn.
+- CBCNV phải có mặt tại điểm đón trước giờ xe chạy qua 05 phút.
+
+## 1. Bảng hoạt động theo tuần (trang 1)
+
+Thứ tự 5 trường mỗi ngày: `đi_HC_ca_ngày, về_ca_đêm, về_HC, đi_ca_đêm, về_ca_ngày`.
+Giờ “về HC”: Thứ Hai-Thứ Năm 18:30; Thứ Sáu-Thứ Bảy-Chủ Nhật 17:30.
+
+01. TD Plaza
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=M, return_night=M, return_admin=M, outbound_night=M, return_day=M
+    - Chủ Nhật: outbound_admin_and_day=M, return_night=M, return_admin=M, outbound_night=M, return_day=M
+02. Cầu Rào
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+    - Chủ Nhật: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+03. Hồ Sen
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+    - Chủ Nhật: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+04. An Dương
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+    - Chủ Nhật: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+05. Cát Bi Plaza
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+    - Chủ Nhật: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+06. Lạch Tray
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=M, return_admin=A, outbound_night=M, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+    - Chủ Nhật: outbound_admin_and_day=M, return_night=M, return_admin=X, outbound_night=M, return_day=M
+07. Minh Đức
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+08. TL Cầu Đầm
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+09. TL Hùng Thắng
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+10. An Lão
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+11. Đồ Sơn
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+12. Kiến Thụy
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+13. Thanh Hà
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+14. Hải Dương
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+15. Đông Triều
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+16. Uông Bí
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+17. Quảng Yên
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+18. Hà Nội
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=X, return_admin=A, outbound_night=X, return_day=X
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=X, return_admin=A, outbound_night=X, return_day=X
+    - Thứ Bảy: outbound_admin_and_day=X, return_night=X, return_admin=X, outbound_night=X, return_day=X
+    - Chủ Nhật: outbound_admin_and_day=X, return_night=X, return_admin=X, outbound_night=X, return_day=X
+19. Nam Am
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+20. Nam Am - B16
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+21. Bến xe Vĩnh Bảo
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+22. Hà Phương
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+23. Thái Bình
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+24. Quỳnh Côi - An Đồng
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+25. Ngã Ba Đợi
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+26. Thái Thụy
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+27. Hưng Hà
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+28. Ninh Giang (45s)
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+29. Tứ Kỳ (45s)
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+30. KTX VMU
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+31. KTX Thủy Sản
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=A, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+32. KTX CĐ Bắc Bộ
+    - Thứ Hai đến Thứ Năm: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Sáu: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Thứ Bảy: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+    - Chủ Nhật: outbound_admin_and_day=A, return_night=A, return_admin=X, outbound_night=A, return_day=A
+
+Lưu ý: trường `đi_HC_ca_ngày` gộp hai loại lượt đi trong một cột; bảng không tách riêng ca hành chính và ca ngày ở cột này.
+
+## 2. Ca ngày (08:00-20:00)
+
+Lượt về: xuất phát 20:35 tại bãi đỗ xe LGDVH, theo lộ trình tương ứng với lượt đi.
+
+### Tuyến 1: TD Plaza | Khu vực: Nội thành Hải Phòng | Chế độ: normal_inner_city | Trang 2
+- Lộ trình 1: TD Plaza@06:55 -> Vinhomes@07:10 -> LGD
+
+### Tuyến 2: Cầu Rào 1 | Khu vực: Nội thành Hải Phòng | Chế độ: normal_inner_city | Trang 2
+- Lộ trình 1: 386 Văn Cao@06:55 -> LGD
+
+### Tuyến 3: Hồ Sen | Khu vực: Nội thành Hải Phòng | Chế độ: normal_inner_city | Trang 2
+- Lộ trình 1: Hồ Sen@06:55 -> Bệnh viện Phụ sản@07:00 -> Điện máy Trần Anh@07:10 -> LGD
+
+### Tuyến 4: Cát Bi Plaza | Khu vực: Nội thành Hải Phòng | Chế độ: normal_inner_city | Trang 2
+- Lộ trình 1: Cát Bi Plaza@07:00 -> Cổng Cảng@07:05 -> LGD
+
+### Tuyến 5: Lạch Tray | Khu vực: Nội thành Hải Phòng | Chế độ: normal_inner_city | Trang 2
+- Lộ trình 1: Cầu vượt Lạch Tray@06:55 -> Siêu thị Hà Cường@07:00 -> LGD
+
+### Tuyến 6: An Dương | Khu vực: Nội thành Hải Phòng | Chế độ: normal_inner_city | Trang 2
+- Lộ trình 1: Chợ An Dương@07:05 -> Ngã tư Cơ Điện@07:10 -> Khu đô thị Pruksa@07:15 -> Cầu Rế@07:20 -> LGD
+
+### Tuyến 1: TD Plaza | Khu vực: Nội thành Hải Phòng | Chế độ: merged_inner_city | Trang 2
+- Lộ trình 1: TD Plaza@06:55 -> Cát Bi Plaza@07:00 -> Cổng Cảng@07:05 -> Vinhomes@07:10 -> LGD
+
+### Tuyến 2: Cầu Rào | Khu vực: Nội thành Hải Phòng | Chế độ: merged_inner_city | Trang 2
+- Lộ trình 1: 386 Văn Cao@06:50 -> Cầu vượt Lạch Tray@06:55 -> Siêu thị Hà Cường@07:00 -> Điện máy Trần Anh@07:10 -> LGD
+
+### Tuyến 3: Hồ Sen | Khu vực: Nội thành Hải Phòng | Chế độ: merged_inner_city | Trang 2
+- Lộ trình 1: Hồ Sen@06:55 -> Chợ An Dương@07:05 -> Ngã tư Cơ Điện@07:10 -> Khu đô thị Pruksa@07:15 -> Cầu Rế@07:20 -> LGD
+
+### Tuyến 7: Tiên Lãng - Cầu Đầm | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1 (Cầu Đầm origin): Cầu Đầm@06:40 -> LGD
+- Lộ trình 2 (Quyết Tiến origin): Quyết Tiến@06:40 -> LGD
+
+### Tuyến 8: Tiên Lãng - Hùng Thắng | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: THPT Hùng Thắng@06:30 -> Quán Cháy@06:35 -> THPT Toàn Thắng@06:40 -> Cầu Đen@06:50 -> LGD
+
+### Tuyến 9: An Lão | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: Cty TNHH Hào Quang@06:35 -> BV An Lão 2@06:50 -> Trung tâm giống cây trồng@06:55 -> Ngã 5 Kiến An@07:00 -> Cống Đôi Kiến An@07:05 -> Quân đoàn 679@07:10 -> LGD
+
+### Tuyến 10: Đồ Sơn | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: SVĐ Đồ Sơn@06:25 -> Chợ Đồn Riêng@06:35 -> Ngã 3 Ninh Hải@06:45 -> Ngã 3 Đa Phúc@06:55 -> Ngã 5 Kiến An@07:00 -> Cống Đôi Kiến An@07:05 -> LGD
+
+### Tuyến 11: Kiến Thụy | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: Ngã tư Đại Hà@06:35 -> Ngã ba Thanh Sơn@06:40 -> Thị trấn Núi Đối@06:45 -> Cầu Đức Phong@06:50 -> Ngã 5 Kiến An@07:00 -> LGD
+
+### Tuyến 12: Minh Đức | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: BVĐK Minh Đức@06:30 -> Cây xăng Minh Đức@06:35 -> Cổng chào làng Kinh Triều@06:40 -> Thị trấn Núi Đèo@06:50 -> Ngã 4 Quán Toan@07:15 -> LGD
+
+### Tuyến 13: Nam Am | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: Cầu xóm 16@06:20 -> Cầu Trạng@06:30 -> Vinh Quang (Cầu Rùa)@06:40 -> LGD
+
+### Tuyến 14: Bến xe Vĩnh Bảo | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: Bến xe Vĩnh Bảo@06:45 -> Cây xăng Vĩnh An@06:50 -> Trạm xăng Quý Cao@07:00 -> Chợ Hòa Bình@07:05 -> LGD
+
+### Tuyến 15: Hà Phương | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 3
+- Lộ trình 1: Trường Hoa Lan@06:35 -> Cổng trường Đảng@06:40 -> LGD
+
+### Tuyến 16: Thái Bình | Khu vực: Thái Bình | Chế độ: standard | Trang 4
+- Lộ trình 1: Vincom Thái Bình@06:00 -> Ngã 4 Gia Lễ@06:10 -> Ngã Ba Đợi@06:25 -> Đại lý gạch Hồng Huyền@06:40 -> LGD
+
+### Tuyến 17: Ngã ba Đợi | Khu vực: Thái Bình | Chế độ: standard | Trang 4
+Ghi chú: Không có xe về lượt hành chính.
+- Lộ trình 1: Ngã ba Đợi@06:25 -> Đại lý gạch Hồng Huyền@06:40 -> Bến xe Vĩnh Bảo@06:45 -> LGD
+
+### Tuyến 18: Quỳnh Côi | Khu vực: Thái Bình | Chế độ: standard | Trang 4
+- Lộ trình 1: Cây xăng Hoàng Trọng@06:10 -> Cầu Mỹ Hà@06:15 -> Ngã ba Chợ Quỳnh Minh@06:25 -> Đền A Sào@06:30 -> Cây xăng An Ninh@06:35 -> LGD
+
+### Tuyến 19: Thái Thụy | Khu vực: Thái Bình | Chế độ: standard | Trang 4
+- Lộ trình 1: Chợ Tây@05:55 -> Chợ Lục@06:00 -> Cây xăng Thái Thượng@06:05 -> Bệnh viện đa khoa huyện Thái Thụy@06:10 -> Cầu An Bái@06:15 -> LGD
+
+### Tuyến 20: Hưng Hà | Khu vực: Thái Bình | Chế độ: standard | Trang 4
+Ghi chú: Không có xe về lượt hành chính.
+- Lộ trình 1: Cây xăng Phú Sơn@06:00 -> Cây xăng Hải Trình@06:05 -> Vòng xuyến Đồng Tu@06:10 -> Ngã tư Đa Phú@06:15 -> Ngã tư Đông Đô@06:25 -> LGD
+
+### Tuyến 21: Hải Dương | Khu vực: Hải Dương | Chế độ: standard | Trang 4
+- Lộ trình 1: CV Bạch Đằng@06:30 -> ga Tiền Trung@06:40 -> ga Lai Khê@06:45 -> ga Phạm Xá@06:50 -> ga Phú Thái@07:00 -> LGD
+
+### Tuyến 22: Thanh Hà | Khu vực: Hải Dương | Chế độ: standard | Trang 4
+- Lộ trình 1: Cty TNHH Hải Hà@06:30 -> THPT Thanh Hà@06:35 -> Bãi xe chợ Lại@06:40 -> Ngã tư Hợp Đức@06:45 -> THPT Hà Đông@06:50 -> LGD
+
+### Tuyến 23: Ninh Giang | Khu vực: Hải Dương | Chế độ: standard | Trang 4
+- Lộ trình 1: Ngã ba Hưng Thái@06:20 -> Cây xăng Hồng Phong@06:25 -> Cây xăng xã Hồng Thái@06:30 -> Cổng Đền Tranh@06:40 -> Chợ Gạch@06:45 -> Cổng làng An Thổ@06:50 -> LGD
+
+### Tuyến 24: Tứ Kỳ | Khu vực: Hải Dương | Chế độ: standard | Trang 4
+- Lộ trình 1: Cầu Di Linh@06:20 -> Hội trường xã Hồng Đức@06:25 -> Trạm Y tế xã Nghĩa An@06:35 -> Đền liệt sĩ Tứ Kỳ@06:40 -> Đập Đống@06:50 -> Cầu Xe@06:55 -> LGD
+
+### Tuyến 25: Đông Triều | Khu vực: Quảng Ninh | Chế độ: standard | Trang 5
+- Lộ trình 1: Cổng tỉnh@06:10 -> Quán Cát@06:15 -> Ngã 6@06:20 -> Cây xăng Hải Tân@06:25 -> Ngã 4 Đường mới@06:30 -> Đông Đô@06:35 -> Lan Chi Mart Kinh Môn@06:50 -> Cây xăng Hải Huệ@06:55 -> LGD
+
+### Tuyến 26: Uông Bí | Khu vực: Quảng Ninh | Chế độ: standard | Trang 5
+- Lộ trình 1: Ngã 3 Quảng Yên (Km11)@06:20 -> Bưu điện Nam Khê@06:25 -> Chân cầu vượt đường sắt@06:30 -> Ngã ba đường 10@06:40 -> Chợ Phương Nam@06:45 -> Bến xe phía Bắc@07:00 -> Nhà hàng Phố Trịnh@07:05 -> Ngã tư Quán Toan@07:15 -> LGD
+
+### Tuyến 27: Quảng Yên | Khu vực: Quảng Ninh | Chế độ: standard | Trang 5
+Ghi chú: Không có xe về lượt hành chính.
+- Lộ trình 1: Cái Re@06:20 -> Chân cầu vượt đường sắt@06:30 -> Ngã ba đường 10@06:40 -> Chợ Phương Nam@06:45 -> Bến xe phía Bắc@07:00 -> Nhà hàng Phố Trịnh@07:05 -> Ngã tư Quán Toan@07:15 -> LGD
+
+### Tuyến 28: KTX VMU | Khu vực: Ký túc xá bên ngoài | Chế độ: standard | Trang 5
+Điều kiện: Dành riêng cho thực tập sinh.
+- Lộ trình 1: KTX VMU@07:05 -> LGD
+
+### Tuyến 29: KTX Thủy Sản | Khu vực: Ký túc xá bên ngoài | Chế độ: standard | Trang 5
+Điều kiện: Dành riêng cho thực tập sinh.
+- Lộ trình 1: KTX Thủy Sản@06:55 -> LGD
+
+### Tuyến 30: KTX Cao Đẳng Bắc Bộ | Khu vực: Ký túc xá bên ngoài | Chế độ: standard | Trang 5
+Điều kiện: Dành riêng cho thực tập sinh.
+- Lộ trình 1: KTX CĐ Bắc Bộ@07:00 -> LGD
+
+## 3. Ca hành chính (08:00-17:00 hoặc 08:00-18:00)
+
+### Lượt đi tuyến Hà Nội (trang 6)
+- Keangnam@05:25 -> Ngã 3 Duy Tân@05:35 -> Đầu đường Hoàng Quốc Việt@05:42 -> Chân cầu Cầu Nhật Tân@05:52 -> Ngã 4 Vạn Lộc (Đông Anh)@06:00 -> Cầu Chui Gia Lâm@06:10 -> Sài Đồng@06:15 -> Cầu Thanh Trì@06:20 -> LGD
+- Ghi chú trong nguồn: “chính thức chạy lại từ 04/04/2022”.
+- Lượt đi các tuyến còn lại: dùng lịch trình lượt đi của ca ngày.
+
+### Lượt về
+- Thứ Hai-Thứ Năm: 18:30 từ bãi đỗ xe LGDVH, theo lộ trình tương ứng với lượt đi.
+- Thứ Sáu: 17:30 từ bãi đỗ xe LGDVH, theo lộ trình tương ứng với lượt đi.
+- Thứ Bảy-Chủ Nhật: chỉ có tuyến nội thành gộp, 17:30: LGD -> Tượng đài liệt sỹ Hồng Bàng -> Chợ An Dương -> Cầu vượt Lạch Tray -> TD Plaza.
+
+## 4. Ca đêm (20:00-08:00)
+
+Lượt về: xuất phát 08:35 tại bãi đỗ xe LGDVH, theo lộ trình tương ứng với lượt đi.
+
+### Tuyến 1: TD Plaza | Khu vực: Nội thành Hải Phòng | Chế độ: merged_inner_city | Trang 7
+- Lộ trình 1: TD Plaza@18:50 -> Cát Bi Plaza@18:55 -> Cổng Cảng@19:00 -> Vinhomes@19:10 -> LGD
+
+### Tuyến 2: Cầu Rào | Khu vực: Nội thành Hải Phòng | Chế độ: merged_inner_city | Trang 7
+- Lộ trình 1: 386 Văn Cao@18:50 -> Cầu vượt Lạch Tray@18:55 -> Siêu thị Hà Cường@19:00 -> Điện máy Trần Anh@19:10 -> LGD
+
+### Tuyến 3: Hồ Sen | Khu vực: Nội thành Hải Phòng | Chế độ: merged_inner_city | Trang 7
+- Lộ trình 1: Hồ Sen@18:55 -> Chợ An Dương@19:05 -> Ngã tư Cơ Điện@19:10 -> Khu đô thị Pruksa@19:15 -> Cầu Rế@19:20 -> LGD
+
+### Tuyến 4: Tiên Lãng - Cầu Đầm | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1 (Cầu Đầm origin): Cầu Đầm@18:40 -> LGD
+- Lộ trình 2 (Quyết Tiến origin): Quyết Tiến@18:40 -> LGD
+
+### Tuyến 5: Tiên Lãng - Hùng Thắng | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: THPT Hùng Thắng@18:30 -> Quán Cháy@18:35 -> THPT Toàn Thắng@18:40 -> Cầu Đen@18:50 -> LGD
+
+### Tuyến 6: An Lão | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: Cty TNHH Hào Quang@18:35 -> BV An Lão 2@18:50 -> Trung tâm giống cây trồng@18:55 -> Ngã 5 Kiến An@19:00 -> Cống Đôi Kiến An@19:05 -> Quân đoàn 679@19:10 -> LGD
+
+### Tuyến 7: Đồ Sơn | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: SVĐ Đồ Sơn@18:25 -> Chợ Đồn Riêng@18:35 -> Ngã 3 Ninh Hải@18:45 -> Ngã 3 Đa Phúc@18:55 -> Ngã 5 Kiến An@19:00 -> Cống Đôi Kiến An@19:05 -> LGD
+
+### Tuyến 8: Kiến Thụy | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: Ngã tư Đại Hà@18:35 -> Ngã ba Thanh Sơn@18:40 -> Thị trấn Núi Đối@18:45 -> Cầu Đức Phong@18:50 -> Ngã 5 Kiến An@19:00 -> LGD
+
+### Tuyến 9: Minh Đức | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: BVĐK Minh Đức@18:30 -> Cây xăng Minh Đức@18:35 -> Cổng chào làng Kinh Triều@18:40 -> Thị trấn Núi Đèo@18:50 -> Ngã 4 Quán Toan@19:15 -> LGD
+
+### Tuyến 10: Nam Am | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: Cầu xóm 16@18:20 -> Cầu Trạng@18:30 -> Vinh Quang (Cầu Rùa)@18:40 -> LGD
+
+### Tuyến 11: Bến xe Vĩnh Bảo | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: Bến xe Vĩnh Bảo@18:45 -> Cây xăng Vĩnh An@18:50 -> Trạm xăng Quý Cao@19:00 -> Chợ Hòa Bình@19:05 -> LGD
+
+### Tuyến 12: Hà Phương | Khu vực: Ngoại thành Hải Phòng | Chế độ: standard | Trang 8
+- Lộ trình 1: Trường Hoa Lan@18:35 -> Cổng trường Đảng@18:40 -> LGD
+
+### Tuyến 13: Thái Bình | Khu vực: Thái Bình | Chế độ: standard | Trang 9
+- Lộ trình 1: Vincom Thái Bình@18:00 -> Ngã 4 Gia Lễ@18:10 -> Ngã Ba Đợi@18:25 -> Đại lý gạch Hồng Huyền@18:40 -> LGD
+
+### Tuyến 14: Ngã ba Đợi | Khu vực: Thái Bình | Chế độ: standard | Trang 9
+- Lộ trình 1: Ngã ba Đợi@18:25 -> Đại lý gạch Hồng Huyền@18:40 -> Bến xe Vĩnh Bảo@18:45 -> LGD
+
+### Tuyến 15: Quỳnh Côi | Khu vực: Thái Bình | Chế độ: standard | Trang 9
+- Lộ trình 1: Cây xăng Hoàng Trọng@18:10 -> Cầu Mỹ Hà@18:15 -> Ngã ba Chợ Quỳnh Minh@18:25 -> Đền A Sào@18:30 -> Cây xăng An Ninh@18:35 -> LGD
+
+### Tuyến 16: Thái Thụy | Khu vực: Thái Bình | Chế độ: standard | Trang 9
+- Lộ trình 1: Chợ Tây@17:55 -> Chợ Lục@18:00 -> Cây xăng Thái Thượng@18:05 -> Bệnh viện đa khoa huyện Thái Thụy@18:10 -> Cầu An Bái@18:15 -> LGD
+
+### Tuyến 17: Hưng Hà | Khu vực: Thái Bình | Chế độ: standard | Trang 9
+- Lộ trình 1: Cây xăng Phú Sơn@18:00 -> Cây xăng Hải Trình@18:05 -> Vòng xuyến Đồng Tu@18:10 -> Ngã tư Đa Phú@18:20 -> Ngã tư Đông Đô@18:25 -> LGD
+
+### Tuyến 18: Hải Dương | Khu vực: Hải Dương | Chế độ: standard | Trang 9
+- Lộ trình 1: CV Bạch Đằng@18:30 -> ga Tiền Trung@18:40 -> ga Lai Khê@18:45 -> ga Phạm Xá@18:50 -> ga Phú Thái@19:00 -> LGD
+
+### Tuyến 19: Thanh Hà | Khu vực: Hải Dương | Chế độ: standard | Trang 9
+- Lộ trình 1: Cty TNHH Hải Hà@18:30 -> THPT Thanh Hà@18:35 -> Bãi xe chợ Lại@18:40 -> Ngã tư Hợp Đức@18:45 -> THPT Hà Đông@18:50 -> LGD
+
+### Tuyến 20: Ninh Giang | Khu vực: Hải Dương | Chế độ: standard | Trang 9
+- Lộ trình 1: Ngã ba Hưng Thái@18:20 -> Cây xăng Hồng Phong@18:25 -> Cây xăng xã Hồng Thái@18:30 -> Cổng Đền Tranh@18:40 -> Chợ Gạch@18:45 -> Cổng làng An Thổ@18:50 -> LGD
+
+### Tuyến 21: Tứ Kỳ | Khu vực: Hải Dương | Chế độ: standard | Trang 9
+- Lộ trình 1: Cầu Di Linh@18:20 -> Hội trường xã Hồng Đức@18:25 -> Trạm Y tế xã Nghĩa An@18:35 -> Đền liệt sĩ Tứ Kỳ@18:40 -> Đập Đống@18:50 -> Cầu Xe@18:55 -> LGD
+
+### Tuyến 22: Đông Triều | Khu vực: Quảng Ninh | Chế độ: standard | Trang 10
+- Lộ trình 1: Cổng tỉnh@18:10 -> Quán Cát@18:15 -> Ngã 6@18:20 -> Cây xăng Hải Tân@18:25 -> Ngã 4 Đường mới@18:30 -> Đông Đô@18:35 -> Lan Chi Mart Kinh Môn@18:50 -> Cây xăng Hải Huệ@18:55 -> LGD
+
+### Tuyến 23: Uông Bí | Khu vực: Quảng Ninh | Chế độ: standard | Trang 10
+- Lộ trình 1: Ngã 3 Quảng Yên (Km11)@18:20 -> Bưu điện Nam Khê@18:25 -> Chân cầu vượt đường sắt@18:30 -> Ngã ba đường 10@18:40 -> Chợ Phương Nam@18:45 -> Bến xe phía Bắc@19:00 -> Nhà hàng Phố Trịnh@19:05 -> Ngã tư Quán Toan@19:15 -> LGD
+
+### Tuyến 24: Quảng Yên | Khu vực: Quảng Ninh | Chế độ: standard | Trang 10
+- Lộ trình 1: Cái Re@18:20 -> Chân cầu vượt đường sắt@18:30 -> Ngã ba đường 10@18:40 -> Chợ Phương Nam@18:45 -> Bến xe phía Bắc@19:00 -> Nhà hàng Phố Trịnh@19:05 -> Ngã tư Quán Toan@19:15 -> LGD
+
+### Tuyến 25: KTX VMU | Khu vực: Ký túc xá bên ngoài | Chế độ: standard | Trang 10
+Điều kiện: Dành riêng cho thực tập sinh.
+- Lộ trình 1: KTX VMU@19:05 -> LGD
+
+### Tuyến 26: KTX Thủy Sản | Khu vực: Ký túc xá bên ngoài | Chế độ: standard | Trang 10
+Điều kiện: Dành riêng cho thực tập sinh.
+- Lộ trình 1: KTX Thủy Sản@18:55 -> LGD
+
+### Tuyến 27: KTX Cao Đẳng Bắc Bộ | Khu vực: Ký túc xá bên ngoài | Chế độ: standard | Trang 10
+Điều kiện: Dành riêng cho thực tập sinh.
+- Lộ trình 1: KTX CĐ Bắc Bộ@19:00 -> LGD
+
+## 5. Mục cần giữ nguyên, không suy diễn
+
+- Nam Am - B16: Có trong bảng hoạt động theo tuần (trang 1) nhưng không có lộ trình chi tiết riêng ở các trang 2-10.
+- Quỳnh Côi - An Đồng: Nhãn này xuất hiện trong bảng tuần; phần lộ trình chi tiết chỉ ghi “Quỳnh Côi”. Không tự suy diễn phần “An Đồng”.
+- Ninh Giang (45s) / Tứ Kỳ (45s): Hậu tố “(45s)” chỉ xuất hiện trong bảng tuần; tài liệu không giải thích ý nghĩa.
+
+## 6. Gợi ý truy vấn cho agent
+
+- Lọc theo `shift`, `route name`, `area`, hoặc tên điểm đón.
+- Khi hỏi xe có chạy vào ngày nào, dùng bảng tuần trước; nếu trạng thái là M, chọn lộ trình `merged_inner_city`.
+- Không coi giờ tại điểm cuối LGD là đã biết; trường này là `null` trong JSON.
