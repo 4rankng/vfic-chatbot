@@ -1,0 +1,228 @@
+{
+  "name": "VFIC Persist Lead",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        -240
+      ],
+      "id": "subworkflow-trigger-01",
+      "name": "Execute Sub-workflow Trigger"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Tin nhắn người dùng: ' + ($('Execute Sub-workflow Trigger').first().json.user_text ?? '') + '\\n\\nPhản hồi của bot: ' + ($('Execute Sub-workflow Trigger').first().json.bot_output ?? '') }}",
+        "batching": {},
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Bạn là bộ trích xuất thông tin lead cho chatbot tuyển dụng lao động phổ thông VFIC. Dựa vào tin nhắn người dùng và phản hồi của bot, trả về DUY NHẤT một object JSON hợp lệ với các khóa: name, phone, birth_year, age, living_area, address, gender, region, desired_job, years_experience, latest_company, expected_salary, lead_score. Chỉ ghi nhận thông tin người dùng đã cung cấp rõ ràng; không suy đoán từ câu hỏi của bot hoặc từ nội dung việc làm được gợi ý. Nếu chưa có giá trị, dùng null. Ý nghĩa trường: phone là số điện thoại liên hệ chính; birth_year hoặc age chỉ ghi khi người dùng cung cấp rõ ràng; living_area là khu vực đang sinh sống; address là địa chỉ cụ thể nếu có; gender là giới tính nếu có; region là khu vực muốn làm việc; desired_job là vị trí/công việc muốn ứng tuyển; years_experience là kinh nghiệm liên quan như công nhân, kho, bán hàng, bảo vệ, lái xe; latest_company là công ty/xưởng/kho từng làm gần nhất nếu người dùng nói; expected_salary là mức lương mong muốn. Không hỏi và không trích xuất CV/profile, học vấn/bằng cấp, lương hiện tại, hoặc thời gian báo trước vì không cần cho lead lao động phổ thông giai đoạn đầu. Chuẩn hóa phone thành số điện thoại Việt Nam nếu có thể. lead_score chỉ được là \"hot\", \"warm\", \"not_interested\" hoặc null. Xếp hot khi người dùng cung cấp số điện thoại hợp lệ hoặc thể hiện muốn ứng tuyển ngay; warm khi có nhu cầu/khu vực/nghề rõ ràng nhưng chưa có số điện thoại; not_interested khi từ chối hoặc không quan tâm. Chỉ xuất JSON thuần bắt đầu bằng { và kết thúc bằng }, không markdown, không giải thích."
+            }
+          ]
+        }
+      },
+      "id": "f097ef8b-3be2-4d93-bfa6-00fdcfde7259",
+      "name": "Extract Lead",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -560,
+        -240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "hasOutputParser": true,
+      "notesInFlow": true,
+      "notes": "Extracts only explicit user-provided recruitment lead fields. Merge Lead and Upsert Lead protect existing values from null overwrite. Schema reduced to 13 fields; email, education_level/cv_profile_url/current_salary/notice_period are intentionally excluded for lao động phổ thông."
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "jsonExample": "{\"name\":\"Dũng\",\"phone\":\"0357210887\",\"birth_year\":1998,\"age\":27,\"living_area\":\"Quận 7, TP.HCM\",\"address\":null,\"gender\":\"Nam\",\"region\":\"Hải Phòng\",\"desired_job\":\"Lao động phổ thông\",\"years_experience\":\"2 năm\",\"latest_company\":\"Cty ABC\",\"expected_salary\":\"9-11 triệu\",\"lead_score\":\"warm\"}",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":[\"string\",\"null\"]},\"phone\":{\"type\":[\"string\",\"null\"]},\"birth_year\":{\"type\":[\"number\",\"null\"]},\"age\":{\"type\":[\"number\",\"null\"]},\"living_area\":{\"type\":[\"string\",\"null\"]},\"address\":{\"type\":[\"string\",\"null\"]},\"gender\":{\"type\":[\"string\",\"null\"]},\"region\":{\"type\":[\"string\",\"null\"]},\"desired_job\":{\"type\":[\"string\",\"null\"]},\"years_experience\":{\"type\":[\"string\",\"null\"]},\"latest_company\":{\"type\":[\"string\",\"null\"]},\"expected_salary\":{\"type\":[\"string\",\"null\"]},\"lead_score\":{\"type\":[\"string\",\"null\"],\"enum\":[\"hot\",\"warm\",\"not_interested\",null]}},\"required\":[\"name\",\"phone\",\"birth_year\",\"age\",\"living_area\",\"address\",\"gender\",\"region\",\"desired_job\",\"years_experience\",\"latest_company\",\"expected_salary\",\"lead_score\"]}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -560,
+        -480
+      ],
+      "id": "lead-parser-01",
+      "name": "Lead Parser",
+      "notesInFlow": true,
+      "notes": "Native structured output parser for Extract Lead. Reduced lao động phổ thông schema; email, education_level, cv_profile_url, current_salary, and notice_period are intentionally excluded."
+    },
+    {
+      "parameters": {
+        "model": "MiniMax-M2.7-highspeed",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "a0c7573f-36d1-441b-8265-1f78b1e8bd62",
+      "name": "Extract Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -64
+      ],
+      "credentials": {
+        "minimaxApi": {
+          "id": "6d3L1WaKJET1JaRz",
+          "name": "MiniMax Token Plan"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first()?.json ?? {};\nconst raw = input.output ?? input.text ?? input;\n\nconst parseLead = (value) => {\n  if (value && typeof value === 'object' && !Array.isArray(value)) return value;\n\n  const text = String(value ?? '').trim();\n  if (!text) return {};\n\n  const withoutFence = text\n    .replace(/^\\x60\\x60\\x60(?:json)?/i, '')\n    .replace(/\\x60\\x60\\x60$/i, '')\n    .trim();\n  const match = withoutFence.match(/\\{[\\s\\S]*\\}/);\n  if (!match) return {};\n\n  try {\n    const parsed = JSON.parse(match[0]);\n    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};\n  } catch (error) {\n    return {};\n  }\n};\n\nconst pick = (value) => {\n  if (value === null || value === undefined) return null;\n  const text = String(value).replace(/\\s+/g, ' ').trim();\n  return text === '' ? null : text;\n};\n\nconst normalizePhone = (value) => {\n  const text = pick(value);\n  if (!text) return null;\n\n  let phone = text.replace(/[^\\d+]/g, '');\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst normalizeInteger = (value, min, max) => {\n  const text = pick(value);\n  if (!text) return null;\n  const match = text.match(/\\d{1,4}/);\n  if (!match) return null;\n  const number = Number(match[0]);\n  if (!Number.isInteger(number) || number < min || number > max) return null;\n  return number;\n};\n\nconst normalizeLeadScore = (value, phone) => {\n  const score = pick(value)?.toLowerCase();\n  if (['hot', 'warm', 'not_interested'].includes(score)) return score;\n  return phone ? 'hot' : null;\n};\n\nconst ext = parseLead(raw);\nconst chatId = pick($('Execute Sub-workflow Trigger').first()?.json?.chat_id);\n\nif (!chatId) {\n  throw new Error('Missing normalized Zalo chat ID');\n}\n\nconst phone = normalizePhone(ext.phone);\n\nreturn [{\n  json: {\n    zalo_id: chatId,\n    name: pick(ext.name),\n    phone,\n    birth_year: normalizeInteger(ext.birth_year, 1900, new Date().getFullYear()),\n    age: normalizeInteger(ext.age, 15, 80),\n    living_area: pick(ext.living_area),\n    address: pick(ext.address),\n    gender: pick(ext.gender),\n    region: pick(ext.region),\n    desired_job: pick(ext.desired_job),\n    years_experience: pick(ext.years_experience),\n    latest_company: pick(ext.latest_company),\n    expected_salary: pick(ext.expected_salary),\n    lead_score: normalizeLeadScore(ext.lead_score, phone),\n  },\n}];"
+      },
+      "id": "241d46cd-75ba-4b7d-bd75-256244a2fc3d",
+      "name": "Merge Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -240
+      ],
+      "retryOnFail": false,
+      "notesInFlow": true,
+      "notes": "Parses extractor output defensively, normalizes practical lao dong pho thong lead fields, and emits nulls for missing/low-confidence values."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.leads (zalo_id, name, phone, birth_year, age, living_area, address, gender, region, desired_job, years_experience, latest_company, expected_salary, lead_score)\nVALUES ($1, NULLIF($2, ''), NULLIF($3, ''), $4, $5, NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''), NULLIF($13, ''), NULLIF($14, ''))\nON CONFLICT (zalo_id) DO UPDATE SET\n  name = COALESCE(EXCLUDED.name, leads.name),\n  phone = COALESCE(EXCLUDED.phone, leads.phone),\n  birth_year = COALESCE(EXCLUDED.birth_year, leads.birth_year),\n  age = COALESCE(EXCLUDED.age, leads.age),\n  living_area = COALESCE(EXCLUDED.living_area, leads.living_area),\n  address = COALESCE(EXCLUDED.address, leads.address),\n  gender = COALESCE(EXCLUDED.gender, leads.gender),\n  region = COALESCE(EXCLUDED.region, leads.region),\n  desired_job = COALESCE(EXCLUDED.desired_job, leads.desired_job),\n  years_experience = COALESCE(EXCLUDED.years_experience, leads.years_experience),\n  latest_company = COALESCE(EXCLUDED.latest_company, leads.latest_company),\n  expected_salary = COALESCE(EXCLUDED.expected_salary, leads.expected_salary),\n  lead_score = COALESCE(EXCLUDED.lead_score, leads.lead_score)\nRETURNING zalo_id, name, phone, birth_year, age, living_area, address, gender, region, desired_job, years_experience, latest_company, expected_salary, lead_score;",
+        "options": {
+          "queryReplacement": "={{ [$json.zalo_id, $json.name, $json.phone, $json.birth_year, $json.age, $json.living_area, $json.address, $json.gender, $json.region, $json.desired_job, $json.years_experience, $json.latest_company, $json.expected_salary, $json.lead_score] }}",
+          "queryBatching": "independently",
+          "replaceEmptyStrings": true
+        }
+      },
+      "id": "7c27852d-9691-4b46-9911-1abf2144a32d",
+      "name": "Upsert Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        160,
+        -240
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "8m7DPa6v6XXKKZKZ",
+          "name": "Postgres account"
+        }
+      },
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "notesInFlow": true,
+      "notes": "Parameterized upsert for practical lao dong pho thong lead fields. COALESCE prevents blank extraction results from erasing existing lead data."
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first()?.json ?? {};\nreturn [{\n  json: {\n    ok: true,\n    zalo_id: row.zalo_id ?? $('Execute Sub-workflow Trigger').first()?.json?.chat_id ?? null,\n    lead_score: row.lead_score ?? null,\n    phone_present: Boolean(row.phone),\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -240
+      ],
+      "id": "lead-result-01",
+      "name": "Lead Result"
+    }
+  ],
+  "connections": {
+    "Execute Sub-workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Lead": {
+      "main": [
+        [
+          {
+            "node": "Merge Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "ai_outputParser": [
+        [
+          {
+            "node": "Lead Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract Lead",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Lead": {
+      "main": [
+        [
+          {
+            "node": "Upsert Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Lead": {
+      "main": [
+        [
+          {
+            "node": "Lead Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {},
+  "active": false,
+  "versionId": "68f240ce-88ac-4659-85f4-3e7fd6a56a01",
+  "id": "vficPersistLead01",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "c84bcc898daaa57109bc9fb5491b846480cbc722b97f195dcd3b8e23390f5edd"
+  },
+  "tags": [],
+  "nodeGroups": []
+}
