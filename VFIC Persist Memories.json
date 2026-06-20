@@ -38,9 +38,7 @@
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
-      "settings": {
-        "onError": "continueRegularOutput"
-      },
+      "onError": "continueRegularOutput",
       "notesInFlow": true,
       "notes": "Extracts durable candidate facts after each chat turn. Split Memories drops invalid/noisy output."
     },
@@ -121,7 +119,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const stripOuterQuotes = (value) => String(value ?? '')\n  .replace(/^['\"“”]+|['\"“”]+$/g, '')\n  .trim();\n\nconst removeVietnameseMarks = (value) => value\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/đ/g, 'd')\n  .replace(/Đ/g, 'D');\n\nconst normalizePhone = (value) => {\n  const raw = String(value ?? '').replace(/[^\\d+]/g, '');\n  let phone = raw;\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst canonicalize = (value) => {\n  const stripped = stripOuterQuotes(value);\n  const phone = normalizePhone(stripped);\n  if (phone) return 'phone:' + phone;\n\n  return removeVietnameseMarks(stripped)\n    .toLowerCase()\n    .replace(/^(nguoi dung|ung vien|ban ay|ban)\\s+/i, '')\n    .replace(/^(sdt|so dien thoai|dien thoai|khu vuc|nghe mong muon|muon|muon tim viec|ten la)[:\\s-]*/i, '')\n    .replace(/[^a-z0-9]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n};\n\nconst all = $input.all();\n\nconst candidates = all\n  .filter((item) => item.json.source === 'candidate')\n  .map((item) => ({\n    content: stripOuterQuotes(item.json.content),\n    canonical_key: item.json.canonical_key || canonicalize(item.json.content),\n  }))\n  .filter((item) => item.content.length >= 6 && item.content.length <= 240 && item.canonical_key);\n\nconst existing = new Set(\n  all\n    .filter((item) => item.json.source === 'existing')\n    .flatMap((item) => [\n      item.json.metadata?.canonical_key,\n      canonicalize(item.json.content),\n    ])\n    .filter(Boolean)\n);\n\nconst seen = new Set();\nconst novel = [];\nfor (const item of candidates) {\n  if (existing.has(item.canonical_key) || seen.has(item.canonical_key)) continue;\n  seen.add(item.canonical_key);\n  novel.push(item);\n}\n\nconst chatId = $('When Executed by Another Workflow').first()?.json?.chat_id ?? null;\nreturn novel.map((item) => ({\n  json: {\n    content: item.content,\n    canonical_key: item.canonical_key,\n    chat_id: chatId,\n    zalo_id: chatId,\n  },\n}));"
+        "jsCode": "const stripOuterQuotes = (value) => String(value ?? '')\n  .replace(/^['\"“”]+|['\"“”]+$/g, '')\n  .trim();\n\nconst removeVietnameseMarks = (value) => value\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/đ/g, 'd')\n  .replace(/Đ/g, 'D');\n\nconst normalizePhone = (value) => {\n  const raw = String(value ?? '').replace(/[^\\d+]/g, '');\n  let phone = raw;\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst canonicalize = (value) => {\n  const stripped = stripOuterQuotes(value);\n  const phone = normalizePhone(stripped);\n  if (phone) return 'phone:' + phone;\n\n  return removeVietnameseMarks(stripped)\n    .toLowerCase()\n    .replace(/^(nguoi dung|ung vien|ban ay|ban)\\s+/i, '')\n    .replace(/^(sdt|so dien thoai|dien thoai|khu vuc|nghe mong muon|muon|muon tim viec|ten la)[:\\s-]*/i, '')\n    .replace(/[^a-z0-9]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n};\n\nconst all = $input.all();\nconst chatId = stripOuterQuotes($('When Executed by Another Workflow').first()?.json?.chat_id);\nif (!chatId) {\n  throw new Error('Missing chat_id; refusing to save unscoped memories');\n}\n\nconst candidates = all\n  .filter((item) => item.json.source === 'candidate')\n  .map((item) => ({\n    content: stripOuterQuotes(item.json.content),\n    canonical_key: item.json.canonical_key || canonicalize(item.json.content),\n  }))\n  .filter((item) => item.content.length >= 6 && item.content.length <= 240 && item.canonical_key);\n\nconst existing = new Set(\n  all\n    .filter((item) => item.json.source === 'existing')\n    .flatMap((item) => [\n      item.json.metadata?.canonical_key,\n      canonicalize(item.json.content),\n    ])\n    .filter(Boolean)\n);\n\nconst seen = new Set();\nconst novel = [];\nfor (const item of candidates) {\n  if (existing.has(item.canonical_key) || seen.has(item.canonical_key)) continue;\n  seen.add(item.canonical_key);\n  novel.push(item);\n}\n\nreturn novel.map((item) => ({\n  json: {\n    content: item.content,\n    canonical_key: item.canonical_key,\n    chat_id: chatId,\n    zalo_id: chatId,\n  },\n}));"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -158,9 +156,7 @@
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
-      "settings": {
-        "onError": "continueRegularOutput"
-      },
+      "onError": "continueRegularOutput",
       "notesInFlow": true,
       "credentials": {
         "supabaseApi": {

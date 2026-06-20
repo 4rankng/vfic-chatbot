@@ -3,36 +3,15 @@
   "nodes": [
     {
       "parameters": {
-        "event": "message.text.received"
+        "jsCode": "const message = $('Zalo Message').first()?.json?.message ?? {};\nconst chat = message.chat ?? {};\n\nconst pick = (value) => {\n  if (value === null || value === undefined) return null;\n  const text = String(value).trim();\n  return text === '' ? null : text;\n};\n\nconst chatId = pick(chat.id ?? message.chatId ?? message.from?.id ?? message.sender?.id);\nif (!chatId) {\n  throw new Error('Missing Zalo chat ID');\n}\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    user_text: pick(message.text) ?? '',\n    user_name: pick(chat.name ?? message.from?.name ?? message.sender?.name),\n    event_name: pick($('Zalo Message').first()?.json?.event_name ?? $('Zalo Message').first()?.json?.event),\n    received_at: new Date().toISOString(),\n  },\n}];"
       },
-      "type": "n8n-nodes-zalo-platform.zaloBotTrigger",
-      "typeVersion": 1,
-      "position": [
-        -2544,
-        1520
-      ],
-      "id": "8e332645-8a4a-44cc-bb14-ecc67feaaf40",
-      "name": "Zalo Bot Trigger",
-      "webhookId": "9af2dae3-daeb-4340-aba6-a80cf40b346c",
-      "alwaysOutputData": false,
-      "credentials": {
-        "zaloBotApi": {
-          "id": "Byy17zfaXnI7gnsm",
-          "name": "Zalo Bot account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const message = $('Zalo Bot Trigger').first()?.json?.message ?? {};\nconst chat = message.chat ?? {};\n\nconst pick = (value) => {\n  if (value === null || value === undefined) return null;\n  const text = String(value).trim();\n  return text === '' ? null : text;\n};\n\nconst chatId = pick(chat.id ?? message.chatId ?? message.from?.id ?? message.sender?.id);\nif (!chatId) {\n  throw new Error('Missing Zalo chat ID');\n}\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    user_text: pick(message.text) ?? '',\n    user_name: pick(chat.name ?? message.from?.name ?? message.sender?.name),\n    event_name: pick($('Zalo Bot Trigger').first()?.json?.event_name ?? $('Zalo Bot Trigger').first()?.json?.event),\n    received_at: new Date().toISOString(),\n  },\n}];"
-      },
-      "id": "70c79c57-58f3-4ae4-860e-9b5428fa30db",
+      "id": "3129392f-199f-444b-a710-e2d03a1ebe65",
       "name": "Normalize Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2368,
-        1520
+        -3216,
+        1584
       ],
       "retryOnFail": false,
       "notesInFlow": true,
@@ -46,10 +25,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -2176,
-        1520
+        -3024,
+        1584
       ],
-      "id": "180181fa-ff37-47ee-a47f-2ed0f75eb3d8",
+      "id": "3ceeb0e3-f1dd-413a-a68c-d74bd1171d23",
       "name": "Typing...",
       "retryOnFail": true,
       "maxTries": 2,
@@ -72,40 +51,17 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -1856,
-        1520
+        -2704,
+        1584
       ],
-      "id": "ff848080-2a53-4ed7-a133-5ed18c18817e",
+      "id": "73a5fd91-d3fe-437d-ad95-dba837da8b94",
       "name": "AI Agent",
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
-      "onError": "continueErrorOutput",
       "notesInFlow": true,
+      "onError": "continueErrorOutput",
       "notes": "Main candidate-facing consultation agent. Reads normalized user_text and should use tools before naming specific jobs."
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $('Normalize Message').item.json.chat_id }}",
-        "text": "={{ (() => {\n  const fallback = 'Xin lỗi, hiện tôi chưa tạo được phản hồi. Bạn vui lòng nhắn lại giúp tôi nhé.';\n  const text = String($json.output ?? '').trim();\n  if (!text) return fallback;\n  return text\n    .replace(/\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60/g, '')\n    .replace(/(\\*\\*|__|###?|---)/g, '')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim() || fallback;\n})() }}"
-      },
-      "type": "n8n-nodes-zalo-platform.zaloBot",
-      "typeVersion": 1,
-      "position": [
-        -1232,
-        1472
-      ],
-      "id": "ffec19c4-6dae-4266-8aa8-b194da0d914f",
-      "name": "Zalo Bot",
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000,
-      "credentials": {
-        "zaloBotApi": {
-          "id": "Byy17zfaXnI7gnsm",
-          "name": "Zalo Bot account"
-        }
-      }
     },
     {
       "parameters": {
@@ -115,10 +71,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -1296,
-        1616
+        -2176,
+        1712
       ],
-      "id": "b1a891b9-b7d6-4688-80ee-f0512c4bdeb6",
+      "id": "2653b241-166a-4f75-8b54-68271d2abc25",
       "name": "Error Reply",
       "retryOnFail": true,
       "maxTries": 2,
@@ -134,73 +90,15 @@
     },
     {
       "parameters": {
-        "description": "Tìm kiếm kho việc làm VFIC (chỉ các công việc THẬT đang tuyển từ các công ty đối tác). Gọi mỗi khi người lao động hỏi về việc làm, công ty, mức lương, địa điểm, yêu cầu công việc, hoặc cần được gợi ý — và luôn gọi TRƯỚC KHI giới thiệu bất kỳ việc làm cụ thể nào. Truyền vào một cụm từ tìm kiếm theo nghề/khu vực/kỹ năng, ví dụ: \"bán hàng Hà Nội\", \"lái xe\", \"kho vận\". Trả về các vị trí phù hợp nhất, mỗi vị trí kèm: tên việc, công ty đối tác, địa điểm, mức lương, yêu cầu, quyền lợi. Tuyệt đối chỉ tư vấn dựa trên kết quả trả về, không tự bịa ra việc làm hay mức lương.",
-        "topK": 10
-      },
-      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
-      "typeVersion": 1.1,
-      "position": [
-        -1456,
-        1984
-      ],
-      "id": "6ebc477d-3908-46db-b875-eaca33957a6b",
-      "name": "Việc làm"
-    },
-    {
-      "parameters": {
-        "tableName": {
-          "__rl": true,
-          "mode": "list",
-          "value": "documents",
-          "cachedResultName": "documents"
-        },
-        "options": {}
-      },
-      "id": "c69c4ff0-0831-42c1-aaa4-816093dabff6",
-      "name": "RetrievalMode",
-      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
-      "typeVersion": 1.3,
-      "position": [
-        -1488,
-        2176
-      ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "mi2PJt3fTISbLnsB",
-          "name": "Supabase account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "modelName": "models/gemini-embedding-2"
-      },
-      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
-      "typeVersion": 1,
-      "position": [
-        -1408,
-        2416
-      ],
-      "id": "3162b28c-5ea5-40e8-8fc2-e89d0187938e",
-      "name": "Embeddings Việc Làm",
-      "credentials": {
-        "googlePalmApi": {
-          "id": "mDsUFokyGXe3a8Hu",
-          "name": "Google Gemini(PaLM) Api account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -2032,
-        1888
+        -2880,
+        1952
       ],
-      "id": "df773ea0-cbb1-4c77-9bc7-7805b3cf36b4",
+      "id": "85dd6e46-cf39-48ba-840d-bd4d1a41492b",
       "name": "ChatAgent",
       "credentials": {
         "minimaxApi": {
@@ -211,21 +109,119 @@
     },
     {
       "parameters": {
-        "model": "MiniMax-M2.7-highspeed",
-        "options": {}
+        "description": "Tìm kiếm thông tin ĐÃ GHI NHỚ về đúng người dùng Zalo hiện tại: tên, số điện thoại, khu vực, nghề mong muốn, kinh nghiệm, sở thích, ràng buộc, lịch sử tư vấn và quyết định đã chốt. Luôn dùng công cụ này khi cần nhớ lại, xác nhận hoặc cá nhân hóa theo thông tin cá nhân của người dùng. Truyền vào một câu hỏi cụ thể, ví dụ: \"người này tên gì và muốn làm việc ở đâu\", \"số điện thoại của người dùng là gì\". Chỉ trả về thông tin thực sự đã lưu, tuyệt đối không bịa ra.",
+        "topK": 5
       },
-      "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
+      "id": "a9370b1e-60db-4792-ad0a-3de5b8eb0643",
+      "name": "Thông tin người dùng",
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "typeVersion": 1.1,
+      "position": [
+        -2608,
+        2400
+      ],
+      "notesInFlow": true,
+      "notes": "Semantic long-term candidate memory filtered by normalized chat_id metadata."
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('Normalize Message').first()?.json ?? {};\nconst agent = $input.first()?.json ?? {};\n\nreturn [{\n  json: {\n    chat_id: normalized.chat_id ?? null,\n    user_text: normalized.user_text ?? '',\n    bot_output: agent.output ?? '',\n    user_name: normalized.user_name ?? null,\n    received_at: normalized.received_at ?? new Date().toISOString(),\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2288,
+        1264
+      ],
+      "id": "d7d97ec5-7bc8-436b-9c51-6d45a4626524",
+      "name": "Build Persistence Payload"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "KLkmNoNNEIPoumEA",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/KLkmNoNNEIPoumEA",
+          "cachedResultName": "VFIC Persist Lead"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $json.chat_id }}",
+            "user_text": "={{ $json.user_text }}",
+            "bot_output": "={{ $json.bot_output }}",
+            "user_name": "={{ $json.user_name }}",
+            "received_at": "={{ $json.received_at }}"
+          }
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -2064,
+        1104
+      ],
+      "id": "93b552cf-0cef-43bd-8c68-2a7b667f9fd5",
+      "name": "Execute VFIC Persist Lead"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aqW02ebGGw2YHunR",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aqW02ebGGw2YHunR",
+          "cachedResultName": "VFIC Persist Memories"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $json.chat_id }}",
+            "user_text": "={{ $json.user_text }}",
+            "bot_output": "={{ $json.bot_output }}",
+            "user_name": "={{ $json.user_name }}",
+            "received_at": "={{ $json.received_at }}"
+          }
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -2080,
+        1344
+      ],
+      "id": "be599e10-1a4d-46bd-b540-faf07f0ff69e",
+      "name": "Execute VFIC Persist Memories"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalize Message').item.json.chat_id }}",
+        "text": "={{ (() => {\n  const fallback = 'Xin lỗi, hiện tôi chưa tạo được phản hồi. Bạn vui lòng nhắn lại giúp tôi nhé.';\n  const text = String($json.output ?? '').trim();\n  if (!text) return fallback;\n  return text\n    .replace(/\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60/g, '')\n    .replace(/(\\*\\*|__|###?|---)/g, '')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim() || fallback;\n})() }}"
+      },
+      "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -1232,
-        2208
+        -2176,
+        1552
       ],
-      "id": "fab73aa4-1340-46c3-a049-fd9f800c4ea0",
-      "name": "LookupAgent",
+      "id": "a7970a02-f5e6-4f5b-afc4-ef270caffc3d",
+      "name": "Chat Reply",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
       "credentials": {
-        "minimaxApi": {
-          "id": "6d3L1WaKJET1JaRz",
-          "name": "MiniMax Token Plan"
+        "zaloBotApi": {
+          "id": "Byy17zfaXnI7gnsm",
+          "name": "Zalo Bot account"
         }
       }
     },
@@ -239,11 +235,11 @@
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.4,
       "position": [
-        -1808,
-        1888
+        -2656,
+        1952
       ],
-      "id": "2df6c16b-40e0-4f91-a401-c719e0e5d0f9",
-      "name": "PostgresMem",
+      "id": "585f4ec1-1f95-4fb1-9795-185b4f5a0fa1",
+      "name": "MemStore",
       "notesInFlow": true,
       "credentials": {
         "postgres": {
@@ -255,19 +251,96 @@
     },
     {
       "parameters": {
-        "description": "Tìm kiếm thông tin ĐÃ GHI NHỚ về đúng người dùng Zalo hiện tại: tên, số điện thoại, khu vực, nghề mong muốn, kinh nghiệm, sở thích, ràng buộc, lịch sử tư vấn và quyết định đã chốt. Luôn dùng công cụ này khi cần nhớ lại, xác nhận hoặc cá nhân hóa theo thông tin cá nhân của người dùng. Truyền vào một câu hỏi cụ thể, ví dụ: \"người này tên gì và muốn làm việc ở đâu\", \"số điện thoại của người dùng là gì\". Chỉ trả về thông tin thực sự đã lưu, tuyệt đối không bịa ra.",
-        "topK": 5
+        "event": "message.text.received"
       },
-      "id": "e14972d8-101c-4c4b-8381-8b0526306d42",
-      "name": "Thông tin người dùng",
+      "type": "n8n-nodes-zalo-platform.zaloBotTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3392,
+        1584
+      ],
+      "id": "4b4ec554-6770-4341-933c-c2f61d7f2183",
+      "name": "Zalo Message",
+      "webhookId": "9af2dae3-daeb-4340-aba6-a80cf40b346c",
+      "alwaysOutputData": false,
+      "credentials": {
+        "zaloBotApi": {
+          "id": "Byy17zfaXnI7gnsm",
+          "name": "Zalo Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Tìm kiếm kho việc làm VFIC (chỉ các công việc THẬT đang tuyển từ các công ty đối tác). Gọi mỗi khi người lao động hỏi về việc làm, công ty, mức lương, địa điểm, yêu cầu công việc, hoặc cần được gợi ý — và luôn gọi TRƯỚC KHI giới thiệu bất kỳ việc làm cụ thể nào. Truyền vào một cụm từ tìm kiếm theo nghề/khu vực/kỹ năng, ví dụ: \"bán hàng Hà Nội\", \"lái xe\", \"kho vận\". Trả về các vị trí phù hợp nhất, mỗi vị trí kèm: tên việc, công ty đối tác, địa điểm, mức lương, yêu cầu, quyền lợi. Tuyệt đối chỉ tư vấn dựa trên kết quả trả về, không tự bịa ra việc làm hay mức lương.",
+        "topK": 10
+      },
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1.1,
       "position": [
-        -1712,
-        2608
+        -2304,
+        2048
       ],
-      "notesInFlow": true,
-      "notes": "Semantic long-term candidate memory filtered by normalized chat_id metadata."
+      "id": "f01eef79-d887-4fd5-96f7-5a99aaa60ace",
+      "name": "Thông tin việc làm"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-2"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -2256,
+        2480
+      ],
+      "id": "e375aa14-ef50-4ad0-9f74-c759c3eeddd9",
+      "name": "Embed2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mDsUFokyGXe3a8Hu",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-2"
+      },
+      "id": "7ed56bb0-c315-4801-bd73-b4a4b0cacc70",
+      "name": "Embed1",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -2880,
+        2768
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mDsUFokyGXe3a8Hu",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "MiniMax-M2.7-highspeed",
+        "options": {}
+      },
+      "id": "303f501e-4cd7-4899-9663-97a9d93a337b",
+      "name": "UserInfoLookup",
+      "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
+      "typeVersion": 1,
+      "position": [
+        -2432,
+        2592
+      ],
+      "credentials": {
+        "minimaxApi": {
+          "id": "6d3L1WaKJET1JaRz",
+          "name": "MiniMax Token Plan"
+        }
+      }
     },
     {
       "parameters": {
@@ -289,13 +362,13 @@
           }
         }
       },
-      "id": "90cdf012-39bb-4457-b33b-bfaa71ed28a2",
-      "name": "MemoryStore",
+      "id": "22618aee-7c44-44d3-b1ac-5dac44712970",
+      "name": "UserMemStore",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        -1968,
-        2816
+        -2864,
+        2608
       ],
       "credentials": {
         "supabaseApi": {
@@ -306,20 +379,26 @@
     },
     {
       "parameters": {
-        "modelName": "models/gemini-embedding-2"
+        "tableName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "documents",
+          "cachedResultName": "documents"
+        },
+        "options": {}
       },
-      "id": "1998aad5-aaca-4b37-96cc-8832ce2d1b0d",
-      "name": "Embeddings Memories",
-      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
-      "typeVersion": 1,
+      "id": "5eec22e1-598b-407b-ae83-5ea7e6041561",
+      "name": "JobMemStore",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
       "position": [
-        -2128,
-        2928
+        -2336,
+        2240
       ],
       "credentials": {
-        "googlePalmApi": {
-          "id": "mDsUFokyGXe3a8Hu",
-          "name": "Google Gemini(PaLM) Api account"
+        "supabaseApi": {
+          "id": "mi2PJt3fTISbLnsB",
+          "name": "Supabase account"
         }
       }
     },
@@ -328,14 +407,14 @@
         "model": "MiniMax-M2.7-highspeed",
         "options": {}
       },
-      "id": "6142037d-959b-4fa0-b73e-cfee796597c3",
-      "name": "LookupMem",
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -1536,
-        2800
+        -2048,
+        2240
       ],
+      "id": "f88b3e35-1b99-4df6-a7d1-937fd6d637eb",
+      "name": "JobLookup",
       "credentials": {
         "minimaxApi": {
           "id": "6d3L1WaKJET1JaRz",
@@ -345,77 +424,35 @@
     },
     {
       "parameters": {
-        "jsCode": "const normalized = $('Normalize Message').first()?.json ?? {};\nconst agent = $input.first()?.json ?? {};\n\nreturn [{\n  json: {\n    chat_id: normalized.chat_id ?? null,\n    user_text: normalized.user_text ?? '',\n    bot_output: agent.output ?? '',\n    user_name: normalized.user_name ?? null,\n    received_at: normalized.received_at ?? new Date().toISOString(),\n  },\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1056,
-        1312
-      ],
-      "id": "a174bb31-a452-4b4a-8502-a2fbf13831ce",
-      "name": "Build Persistence Payload"
-    },
-    {
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "KLkmNoNNEIPoumEA",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/KLkmNoNNEIPoumEA",
-          "cachedResultName": "VFIC Persist Lead"
-        },
-        "mode": "each",
+        "operation": "executeQuery",
+        "query": "INSERT INTO vfic_message_dedup (chat_id, msg_hash, seen_at)\nVALUES (\n  $1,\n  md5(lower(regexp_replace(btrim(COALESCE($2::text, '')), '\\s+', ' ', 'g'))),\n  now()\n)\nON CONFLICT (chat_id, msg_hash)\nDO UPDATE SET seen_at = now()\nWHERE vfic_message_dedup.seen_at < now() - interval '8 seconds'\nRETURNING chat_id;",
         "options": {
-          "waitForSubWorkflow": false
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.message.chat.id, $json.message.text] }}"
         }
       },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
       "position": [
-        -800,
-        1216
+        -3304,
+        1584
       ],
-      "id": "2b14e3dd-3605-4775-818a-b5eeb5aaa7fd",
-      "name": "Execute VFIC Persist Lead"
-    },
-    {
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "aqW02ebGGw2YHunR",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/aqW02ebGGw2YHunR",
-          "cachedResultName": "VFIC Persist Memories"
-        },
-        "mode": "each",
-        "options": {
-          "waitForSubWorkflow": false
+      "id": "a1d2e000-0001-0000-0000-dedup00000001",
+      "name": "Dedup Message",
+      "retryOnFail": false,
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "Idempotency gate (dedup rapid duplicate Zalo messages). Atomic upsert on (chat_id, md5(normalized text)). Returns 1 row = first/stale -> proceed; returns 0 rows = duplicate within 8s -> chain starves, no reply.",
+      "credentials": {
+        "postgres": {
+          "id": "8m7DPa6v6XXKKZKZ",
+          "name": "Postgres account"
         }
-      },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        -784,
-        1440
-      ],
-      "id": "7934514d-3107-4e41-b732-760e932d44a4",
-      "name": "Execute VFIC Persist Memories"
+      }
     }
   ],
   "pinData": {},
   "connections": {
-    "Zalo Bot Trigger": {
-      "main": [
-        [
-          {
-            "node": "Normalize Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Normalize Message": {
       "main": [
         [
@@ -442,7 +479,7 @@
       "main": [
         [
           {
-            "node": "Zalo Bot",
+            "node": "Chat Reply",
             "type": "main",
             "index": 0
           },
@@ -477,67 +514,12 @@
         ]
       ]
     },
-    "Việc làm": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "RetrievalMode": {
-      "ai_vectorStore": [
-        [
-          {
-            "node": "Việc làm",
-            "type": "ai_vectorStore",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Embeddings Việc Làm": {
-      "ai_embedding": [
-        [
-          {
-            "node": "RetrievalMode",
-            "type": "ai_embedding",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "ChatAgent": {
       "ai_languageModel": [
         [
           {
             "node": "AI Agent",
             "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "LookupAgent": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Việc làm",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "PostgresMem": {
-      "ai_memory": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_memory",
             "index": 0
           }
         ]
@@ -554,7 +536,73 @@
         ]
       ]
     },
-    "MemoryStore": {
+    "MemStore": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zalo Message": {
+      "main": [
+        [
+          {
+            "node": "Dedup Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thông tin việc làm": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed2": {
+      "ai_embedding": [
+        [
+          {
+            "node": "JobMemStore",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "UserMemStore",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UserInfoLookup": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Thông tin người dùng",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UserMemStore": {
       "ai_vectorStore": [
         [
           {
@@ -565,23 +613,34 @@
         ]
       ]
     },
-    "Embeddings Memories": {
-      "ai_embedding": [
+    "JobMemStore": {
+      "ai_vectorStore": [
         [
           {
-            "node": "MemoryStore",
-            "type": "ai_embedding",
+            "node": "Thông tin việc làm",
+            "type": "ai_vectorStore",
             "index": 0
           }
         ]
       ]
     },
-    "LookupMem": {
+    "JobLookup": {
       "ai_languageModel": [
         [
           {
-            "node": "Thông tin người dùng",
+            "node": "Thông tin việc làm",
             "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Message": {
+      "main": [
+        [
+          {
+            "node": "Normalize Message",
+            "type": "main",
             "index": 0
           }
         ]
@@ -594,7 +653,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "b9a2376b-772e-4ad9-b010-90899a36f27f",
+  "versionId": "ceb1008d-d5bf-44ec-8aaf-7ac63567c7e8",
   "meta": {
     "templateCredsSetupCompleted": true,
     "aiBuilderAssisted": true,
