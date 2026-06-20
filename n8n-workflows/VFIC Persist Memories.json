@@ -5,14 +5,14 @@
       "parameters": {
         "inputSource": "passthrough"
       },
-      "id": "c055762a-8fe7-4141-a639-df2372f30060",
-      "typeVersion": 1.1,
-      "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
       "position": [
-        192,
-        928
-      ]
+        448,
+        784
+      ],
+      "id": "81f20a5d-3074-4e25-ac80-21088df93a87",
+      "name": "When Executed by Another Workflow"
     },
     {
       "parameters": {
@@ -27,20 +27,20 @@
         },
         "batching": {}
       },
-      "id": "d139cf06-2f67-4a4f-a64f-c63af0a6bc7f",
-      "name": "Extract Memories",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        448,
-        928
+        704,
+        784
       ],
+      "id": "c170ce36-5159-49cc-8501-a5adf12a9db7",
+      "name": "Extract Memories",
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
-      "onError": "continueRegularOutput",
       "notesInFlow": true,
-      "notes": "Extracts durable candidate facts after each chat turn. Split Memories drops invalid/noisy output."
+      "notes": "Extracts durable candidate facts after each chat turn. Split Memories drops invalid/noisy output.",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -49,14 +49,14 @@
           "temperature": 0
         }
       },
-      "id": "8d51aebb-8070-4637-bd16-93b36e222dfd",
-      "name": "ExtractLLM",
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        448,
-        1136
+        704,
+        992
       ],
+      "id": "f3cb1571-eb39-42f2-a4a3-302fb8f93de4",
+      "name": "ExtractLLM",
       "credentials": {
         "minimaxApi": {
           "id": "6d3L1WaKJET1JaRz",
@@ -68,22 +68,22 @@
       "parameters": {
         "jsCode": "const raw = ($input.first()?.json?.text ?? $input.first()?.json?.output ?? '').toString();\nlet facts = [];\n\nconst stripOuterQuotes = (value) => String(value ?? '')\n  .replace(/^['\"“”]+|['\"“”]+$/g, '')\n  .trim();\n\nconst removeVietnameseMarks = (value) => value\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/đ/g, 'd')\n  .replace(/Đ/g, 'D');\n\nconst normalizePhone = (value) => {\n  const raw = String(value ?? '').replace(/[^\\d+]/g, '');\n  let phone = raw;\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst canonicalize = (value) => {\n  const stripped = stripOuterQuotes(value);\n  const phone = normalizePhone(stripped);\n  if (phone) return `phone:${phone}`;\n\n  return removeVietnameseMarks(stripped)\n    .toLowerCase()\n    .replace(/^(nguoi dung|ung vien|ban ay|ban)\\s+/i, '')\n    .replace(/^(sdt|so dien thoai|dien thoai|khu vuc|nghe mong muon|muon|muon tim viec|ten la)[:\\s-]*/i, '')\n    .replace(/[^a-z0-9]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n};\n\nconst normalizeFact = (value) => stripOuterQuotes(value)\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst isUsefulFact = (fact) => {\n  if (!fact) return false;\n  if (fact.length < 6 || fact.length > 240) return false;\n  if (/^(xin chào|chào bạn|cảm ơn|tôi có thể|bạn đang muốn|bạn có muốn)/i.test(fact)) return false;\n  if (/^(tên công việc|công ty\\/?đối tác|địa điểm|mức lương|yêu cầu cơ bản|quyền lợi):/i.test(fact)) return false;\n  return true;\n};\n\ntry {\n  let text = raw.trim()\n    .replace(/^\\x60\\x60\\x60(?:json)?/i, '')\n    .replace(/\\x60\\x60\\x60$/i, '')\n    .trim();\n  const start = text.indexOf('[');\n  const end = text.lastIndexOf(']');\n  if (start !== -1 && end !== -1 && end > start) text = text.slice(start, end + 1);\n\n  const parsed = JSON.parse(text);\n  if (Array.isArray(parsed)) {\n    const seen = new Set();\n    facts = parsed\n      .map(normalizeFact)\n      .filter(isUsefulFact)\n      .map((content) => ({ content, canonical_key: canonicalize(content) }))\n      .filter((fact) => fact.canonical_key)\n      .filter((fact) => {\n        if (seen.has(fact.canonical_key)) return false;\n        seen.add(fact.canonical_key);\n        return true;\n      });\n  }\n} catch (error) {\n  facts = [];\n}\n\nreturn facts.slice(0, 10).map((fact) => ({ json: { ...fact, source: 'candidate' } }));"
       },
-      "id": "b2fd4ee0-55cb-4d6d-87a5-9ea09a124407",
-      "name": "Split Memories",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        816,
-        816
+        1072,
+        672
       ],
+      "id": "5c0a5864-6fcf-4f34-a8fc-61812d3fdde6",
+      "name": "Split Memories",
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
+      "notesInFlow": true,
+      "notes": "Keeps only concise, unique user facts. Invalid extractor output yields no items instead of noisy memory writes.",
       "settings": {
         "onError": "continueRegularOutput"
-      },
-      "notesInFlow": true,
-      "notes": "Keeps only concise, unique user facts. Invalid extractor output yields no items instead of noisy memory writes."
+      }
     },
     {
       "parameters": {
@@ -97,25 +97,25 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        816,
-        1040
+        1072,
+        896
       ],
-      "id": "62ad93e8-ad61-4792-aa79-8894c9fd178a",
+      "id": "cbee992d-96a5-488c-9ee0-a14152725bc1",
       "name": "Get Memories",
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000,
-      "settings": {
-        "onError": "continueRegularOutput"
-      },
-      "notesInFlow": true,
       "credentials": {
         "postgres": {
           "id": "8m7DPa6v6XXKKZKZ",
           "name": "Postgres account"
         }
       },
-      "notes": "Lists existing memory content for the active chat so Dedup Facts can drop repeats. Assumes the Supabase vector store and the Postgres leads DB share the same Postgres instance; if not, swap to the Supabase node or HTTP request to /rest/v1/memories."
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "notesInFlow": true,
+      "notes": "Lists existing memory content for the active chat so Dedup Facts can drop repeats. Assumes the Supabase vector store and the Postgres leads DB share the same Postgres instance; if not, swap to the Supabase node or HTTP request to /rest/v1/memories.",
+      "settings": {
+        "onError": "continueRegularOutput"
+      }
     },
     {
       "parameters": {
@@ -124,10 +124,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1168,
-        880
+        1424,
+        736
       ],
-      "id": "f0960327-508f-42aa-931f-927ca014fd8e",
+      "id": "dd5eed60-b98a-4129-a2ca-bcaaa714ff88",
       "name": "Dedup Facts",
       "notesInFlow": true,
       "notes": "Cross-turn dedup: drops facts that already exist in the chat's stored memory and de-duplicates within the same turn. Output items are unique Vietnamese candidate facts; empty list is a no-op for Save Memories."
@@ -145,26 +145,26 @@
           "queryName": "match_memories"
         }
       },
-      "id": "3f122ba3-9c81-4c19-9368-bb7bd62e3579",
-      "name": "Save Memories",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        1408,
-        928
+        1664,
+        784
       ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000,
-      "onError": "continueRegularOutput",
-      "notesInFlow": true,
+      "id": "d8322774-00cc-4c03-9019-e050a0bd9c19",
+      "name": "Save Memories",
       "credentials": {
         "supabaseApi": {
           "id": "mi2PJt3fTISbLnsB",
           "name": "Supabase account"
         }
       },
-      "notes": "Writes only deduplicated memories. Metadata includes chat_id, zalo_id, and canonical_key so retrieval and future dedupe are user-scoped."
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "notesInFlow": true,
+      "notes": "Writes only deduplicated memories. Metadata includes chat_id, zalo_id, and canonical_key so retrieval and future dedupe are user-scoped.",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -193,27 +193,27 @@
           }
         }
       },
-      "id": "d7793622-c812-4602-a0a9-77774fafe172",
-      "name": "MemoryData",
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1.1,
       "position": [
-        1568,
-        1136
-      ]
+        1824,
+        992
+      ],
+      "id": "47ff3b56-6bb5-44a6-8534-4f4590a20121",
+      "name": "MemoryData"
     },
     {
       "parameters": {
         "modelName": "models/gemini-embedding-2"
       },
-      "id": "2300b3bb-6c72-40da-99e5-1d561de4181a",
-      "name": "Embeddings Write",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1376,
-        1136
+        1632,
+        992
       ],
+      "id": "63ef90f5-36dd-4e3e-b190-5cdaa40fefcb",
+      "name": "Embeddings Write",
       "credentials": {
         "googlePalmApi": {
           "id": "mDsUFokyGXe3a8Hu",
@@ -228,10 +228,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1744,
-        928
+        2000,
+        784
       ],
-      "id": "f3896fb8-47de-4d2f-a718-234919beee31",
+      "id": "c18530a3-59d9-4e9e-bc40-038b251fe7e3",
       "name": "Memory Result"
     }
   ],
@@ -345,10 +345,10 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "binaryMode": "separate"
   },
-  "versionId": "08d85811-5080-433e-b5d4-17f7f1eaccaf",
+  "versionId": "af9e7111-cc8d-4fb6-8124-e8018ff53eaf",
   "meta": {
     "instanceId": "c84bcc898daaa57109bc9fb5491b846480cbc722b97f195dcd3b8e23390f5edd"
   },

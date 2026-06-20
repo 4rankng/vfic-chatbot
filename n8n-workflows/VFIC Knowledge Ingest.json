@@ -1,0 +1,543 @@
+{
+  "name": "VFIC Knowledge Ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.drive_file_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        160,
+        -48
+      ],
+      "id": "17a51859-7bed-4711-a2ec-ef90a6cc7578",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sasr9HxSNkjcPNlX",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "documents",
+          "cachedResultName": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        656,
+        -48
+      ],
+      "id": "b5224dd1-dcb3-447e-a725-ec492e145a85",
+      "name": "InsertMode",
+      "credentials": {
+        "supabaseApi": {
+          "id": "mi2PJt3fTISbLnsB",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-2"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        208,
+        192
+      ],
+      "id": "8a490d10-3840-417e-869f-10dc92bab96d",
+      "name": "DocAnalysis",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mDsUFokyGXe3a8Hu",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "binary",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "file_id",
+                "value": "={{ $('Prepare Drive File').item.json.file_id }}"
+              },
+              {
+                "name": "file_name",
+                "value": "={{ $('Prepare Drive File').item.json.file_name || '' }}"
+              },
+              {
+                "name": "modified_time",
+                "value": "={{ $('Prepare Drive File').item.json.modified_time || '' }}"
+              },
+              {
+                "name": "version",
+                "value": "={{ $('Prepare Drive File').item.json.version || '' }}"
+              },
+              {
+                "name": "source",
+                "value": "google_drive"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        192
+      ],
+      "id": "de4996bc-6c7a-44d4-9c0a-38591a85e23a",
+      "name": "Data"
+    },
+    {
+      "parameters": {
+        "event": "fileCreated",
+        "folderToWatch": {
+          "__rl": true,
+          "cachedResultName": "VFIC-Knowledge",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1BbEngLUkWRAKnMw8n0-m7C3xkGyuq6UC",
+          "mode": "list",
+          "value": "1BbEngLUkWRAKnMw8n0-m7C3xkGyuq6UC"
+        },
+        "options": {},
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyHour"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder"
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        -128
+      ],
+      "id": "a591b4f6-6a27-436d-ac48-28d40d2427fa",
+      "name": "Google Drive Created Trigger",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sasr9HxSNkjcPNlX",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "event": "fileUpdated",
+        "folderToWatch": {
+          "__rl": true,
+          "cachedResultName": "VFIC-Knowledge",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1BbEngLUkWRAKnMw8n0-m7C3xkGyuq6UC",
+          "mode": "list",
+          "value": "1BbEngLUkWRAKnMw8n0-m7C3xkGyuq6UC"
+        },
+        "options": {},
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyHour"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder"
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        32
+      ],
+      "id": "d1f6454e-4f6f-471b-9448-6ab19c502b53",
+      "name": "Google Drive Updated Trigger",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sasr9HxSNkjcPNlX",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const file = $input.first()?.json ?? {};\nconst driveFileId = String(file.id ?? '').trim();\nif (!driveFileId) {\n  throw new Error('Missing Google Drive file ID');\n}\n\nreturn [{\n  json: {\n    ...file,\n    drive_file_id: driveFileId,\n    file_id: driveFileId,\n    file_name: file.name ?? null,\n    modified_time: file.modifiedTime ?? null,\n    version: file.version ?? null,\n    source: 'google_drive',\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        -48
+      ],
+      "id": "73558266-0b9f-4fc0-b00d-e4cd6eb7d90e",
+      "name": "Prepare Drive File"
+    },
+    {
+      "parameters": {
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            {
+              "condition": "eq",
+              "keyName": "drive_file_id",
+              "keyValue": "={{ $json.drive_file_id }}"
+            }
+          ]
+        },
+        "matchType": "allFilters",
+        "operation": "delete",
+        "resource": "row",
+        "tableId": "documents"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        -48
+      ],
+      "id": "b29e4291-df85-4c62-baf6-f6409efedbaf",
+      "name": "Delete Existing KB Rows",
+      "credentials": {
+        "supabaseApi": {
+          "id": "mi2PJt3fTISbLnsB",
+          "name": "Supabase account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -832,
+        320
+      ],
+      "id": "e122f2b2-05f9-45e7-862f-3d3148e77fbf",
+      "name": "Schedule Reconcile",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "filter": {},
+        "operation": "search",
+        "options": {
+          "fields": [
+            "*"
+          ]
+        },
+        "queryString": "trashed = false and mimeType != 'application/vnd.google-apps.folder' and '1BbEngLUkWRAKnMw8n0-m7C3xkGyuq6UC' in parents",
+        "resource": "fileFolder",
+        "returnAll": true,
+        "searchMethod": "query"
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -592,
+        320
+      ],
+      "id": "0f31e080-df0f-457b-a7d1-e96983f18dc4",
+      "name": "Search Current Drive Files",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "sasr9HxSNkjcPNlX",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentFiles = $input.all()\n  .map((item) => item.json ?? {})\n  .filter((item) => item.id)\n  .map((item) => ({\n    drive_file_id: String(item.id),\n    file_name: item.name ?? null,\n    modified_time: item.modifiedTime ?? null,\n    version: item.version ?? null,\n  }));\n\nreturn [{\n  json: {\n    current_file_ids: currentFiles.map((item) => item.drive_file_id),\n    current_files: currentFiles,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        320
+      ],
+      "id": "9f0b1d7c-e6b0-4f98-8cb9-4da49f79c437",
+      "name": "Collect Current Drive Files"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "getAll",
+        "tableId": "documents",
+        "returnAll": true,
+        "orderBy": "id",
+        "filterType": "string",
+        "filterString": "drive_file_id=not.is.null&source=eq.google_drive"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        320
+      ],
+      "id": "35c979db-72f4-41ea-b38e-a28a6eb73bb3",
+      "name": "Get Indexed KB Files",
+      "credentials": {
+        "supabaseApi": {
+          "id": "mi2PJt3fTISbLnsB",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentIds = new Set(( $('Collect Current Drive Files').first()?.json?.current_file_ids ?? [] ).map((value) => String(value)));\nconst stale = new Set();\n\nfor (const item of $input.all()) {\n  const driveFileId = item.json?.drive_file_id ? String(item.json.drive_file_id) : '';\n  if (driveFileId && !currentIds.has(driveFileId)) {\n    stale.add(driveFileId);\n  }\n}\n\nreturn [...stale].map((drive_file_id) => ({\n  json: { drive_file_id },\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        320
+      ],
+      "id": "f5607ea4-0f66-48fd-93d1-bfc17de1cc7f",
+      "name": "Find Removed Files"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "delete",
+        "tableId": "documents",
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "drive_file_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.drive_file_id }}"
+            },
+            {
+              "keyName": "source",
+              "condition": "eq",
+              "keyValue": "google_drive"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        416,
+        320
+      ],
+      "id": "0f229efe-3d16-46ca-9ec5-953a9512efca",
+      "name": "Delete Removed KB Rows",
+      "credentials": {
+        "supabaseApi": {
+          "id": "mi2PJt3fTISbLnsB",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const file = $('Prepare Drive File').first()?.json ?? {};\nconst driveFileId = String(file.drive_file_id ?? '').trim();\nif (!driveFileId) {\n  throw new Error('Missing prepared Google Drive file ID after delete');\n}\n\nreturn [{ json: file }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -48
+      ],
+      "id": "f6c1d7cb-18db-4411-b65a-302e7eb64adf",
+      "name": "Continue With Drive File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "InsertMode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DocAnalysis": {
+      "ai_embedding": [
+        [
+          {
+            "node": "InsertMode",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data": {
+      "ai_document": [
+        [
+          {
+            "node": "InsertMode",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Created Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Drive File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Updated Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Drive File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Drive File": {
+      "main": [
+        [
+          {
+            "node": "Delete Existing KB Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Reconcile": {
+      "main": [
+        [
+          {
+            "node": "Search Current Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Current Drive Files": {
+      "main": [
+        [
+          {
+            "node": "Collect Current Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Current Drive Files": {
+      "main": [
+        [
+          {
+            "node": "Get Indexed KB Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Indexed KB Files": {
+      "main": [
+        [
+          {
+            "node": "Find Removed Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Removed Files": {
+      "main": [
+        [
+          {
+            "node": "Delete Removed KB Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Existing KB Rows": {
+      "main": [
+        [
+          {
+            "node": "Continue With Drive File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue With Drive File": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "67e2b4c8-bd5f-406a-9660-2164450ec6f7",
+  "meta": {
+    "instanceId": "c84bcc898daaa57109bc9fb5491b846480cbc722b97f195dcd3b8e23390f5edd"
+  },
+  "nodeGroups": [],
+  "id": "wY4YI1nFu1bw0ERt",
+  "tags": []
+}

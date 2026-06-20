@@ -1,0 +1,437 @@
+Below is a build-ready miniCRM spec for your VFIC recruitment chatbot system, using Tabler + Bootstrap for the admin UI.
+
+Tabler is suitable here because it is a responsive Bootstrap 5 admin template with built-in dashboard layouts, dark mode, forms, tables, charts, maps, and UI components. Tabler Icons are also free/MIT-licensed and can be used for commercial admin UI icons.
+
+1. Product goal
+
+Build a miniCRM + live chat console for VFIC recruiters to:
+
+1. Monitor all Zalo chatbot conversations
+2. Take over any chat from chatbot
+3. Stop chatbot when recruiter takes over
+4. View and manage worker leads
+5. Assign leads to recruiters
+6. Follow up with interested workers
+7. Manage jobs and company knowledge used by chatbot
+8. Track basic recruitment and chatbot metrics
+
+The miniCRM should not replace n8n. The correct separation is:
+
+miniCRM = human operation console
+n8n = chatbot workflow automation
+Supabase/Postgres = source of truth
+Zalo OA = communication channel
+2. Recommended stack
+Frontend
+React + TypeScript + Vite
+Bootstrap 5
+Tabler UI template
+Tabler Icons
+React Router
+TanStack Query or SWR
+Supabase JS client for auth/realtime
+Backend
+
+You have two reasonable options.
+
+Option A — fastest MVP
+Supabase Auth
+Supabase Postgres
+Supabase Realtime
+Supabase Storage
+Supabase RPC / Edge Functions
+n8n Webhook workflows
+
+Supabase Realtime can listen to Postgres changes, which is useful for live conversation updates in the miniCRM.
+
+
+18. Build order
+Sprint 1 — Foundation
+Tabler layout
+Login
+RBAC
+Database tables
+Basic dashboard shell
+Sprint 2 — Conversation MVP
+Conversation inbox
+Conversation detail
+Realtime messages
+Take over
+Release to bot
+Recruiter send message
+Close/reopen
+Sprint 3 — Lead CRM
+Lead list
+Lead detail
+Lead stage update
+Assign recruiter
+Internal notes
+Follow-up task
+Sprint 4 — Jobs and knowledge
+Job CRUD
+Knowledge document list
+Upload document
+Approve/archive document
+Basic retrieval test page
+Sprint 5 — Analytics and hardening
+Dashboard metrics
+Audit log
+Export leads
+Error states
+Permission testing
+Mobile responsive fixes
+19. Acceptance tests
+Human takeover race test
+Given conversation.mode = BOT
+And chatbot is generating a reply
+When recruiter clicks Take over
+Then conversation.mode becomes HUMAN
+And conversation.version increments
+And pending bot reply is cancelled
+And no bot message is sent to Zalo
+Recruiter reply test
+Given conversation.mode = HUMAN
+And recruiter is assigned
+When recruiter sends message
+Then outbound_message is created
+And Zalo message is sent
+And transcript updates in realtime
+Bot guardrail test
+Given user asks off-topic question
+When chatbot processes message
+Then bot gives short redirect response
+And does not invent unrelated answer
+Lead qualification test
+Given worker gives job preference, location, and availability
+When lead qualification workflow runs
+Then lead_stage becomes QUALIFIED
+And qualification reasons are saved
+And recruiter follow-up task is created
+20. MVP definition
+
+Your first production MVP is complete when recruiters can do this:
+
+Login
+See all Zalo conversations
+Open a conversation
+Take over from chatbot
+Send message to worker
+View lead profile
+Update lead stage
+Assign recruiter
+Create follow-up task
+Close conversation
+
+That is the core miniCRM. Job management, knowledge approval, and analytics are important, but the first must-have is conversation control + lead ownership.
+
+
+Yes — simplify the miniCRM to only 2 user types:
+
+ADMIN
+RECRUITER
+
+This is better for MVP. You do not need manager, content_admin, viewer, or complex RBAC yet. Use simple role-based access control first, then expand later only if VFIC grows.
+
+Tabler is still a good fit because it provides Bootstrap-based admin layouts, reusable UI components, dark mode, tables, charts, and forms that match this miniCRM use case. Supabase RLS is also suitable for enforcing admin/recruiter access rules at database level, especially if the frontend talks directly to Supabase.
+
+Updated user model
+User types
+Role	Meaning
+ADMIN	Company owner/admin. Can see and manage everything.
+RECRUITER	Recruitment staff. Can handle assigned chats/leads and follow up workers.
+
+Use enum values:
+
+type UserRole = "admin" | "recruiter";
+
+Vietnamese labels:
+
+admin      = Quản trị viên
+recruiter  = Nhân viên tuyển dụng
+Permission model
+Simple rule
+Admin can access all data.
+Recruiter can access assigned conversations/leads.
+Recruiter can take over unassigned conversations.
+Recruiter cannot manage system settings, chatbot config, users, or knowledge approval.
+Permission table
+Feature	Admin	Recruiter
+Dashboard	Full	Limited
+View all conversations	Yes	No
+View assigned conversations	Yes	Yes
+View unassigned/new conversations	Yes	Yes
+Take over chat	Yes	Yes
+Release chat back to bot	Yes	Yes, only owned chat
+Send message to worker	Yes	Yes, only owned chat
+Assign conversation to recruiter	Yes	No
+Reassign conversation	Yes	No
+Close/reopen conversation	Yes	Yes, only owned chat
+View all leads	Yes	No
+View assigned leads	Yes	Yes
+Edit lead	Yes	Yes, only assigned lead
+Export leads	Yes	No
+Create/update jobs	Yes	No
+View jobs	Yes	Yes
+Upload knowledge docs	Yes	No
+Approve/archive knowledge docs	Yes	No
+View analytics	Full	Own performance only
+Manage users	Yes	No
+Manage chatbot settings	Yes	No
+View audit log	Yes	No
+Updated navigation
+Admin sidebar
+Tổng quan
+Hội thoại
+Lead / Ứng viên
+Follow-up
+Việc làm
+Kho kiến thức
+Báo cáo
+Nhân viên tuyển dụng
+Cài đặt chatbot
+Nhật ký hệ thống
+Recruiter sidebar
+Tổng quan của tôi
+Hội thoại
+Lead của tôi
+Follow-up của tôi
+Việc làm
+Hồ sơ cá nhân
+Updated pages
+1. Login
+
+Route:
+
+/login
+
+After login:
+
+admin      → /dashboard
+recruiter  → /my-dashboard
+2. Admin dashboard
+
+Route:
+
+/dashboard
+
+Admin sees company-wide metrics:
+
+Total conversations
+New conversations today
+Active bot conversations
+Human takeover conversations
+Qualified leads
+Applications
+Hires
+Overdue follow-ups
+Failed Zalo sends
+n8n workflow errors
+3. Recruiter dashboard
+
+Route:
+
+/my-dashboard
+
+Recruiter sees only personal work:
+
+My assigned conversations
+My unread conversations
+My assigned leads
+My qualified leads
+My overdue follow-ups
+My completed follow-ups
+My applications
+My hires
+4. Conversation inbox
+
+Route:
+
+/conversations
+Admin view
+
+Admin can see:
+
+All conversations
+Bot conversations
+Pending human conversations
+Human-owned conversations
+Closed conversations
+All recruiters' conversations
+Recruiter view
+
+Recruiter can see:
+
+Conversations assigned to me
+Unassigned conversations
+Conversations I took over
+Conversations needing human support
+
+Recruiter should not see conversations assigned to another recruiter unless admin allows it later.
+
+Conversation filters
+Tất cả
+Của tôi
+Chưa phân công
+Cần người xử lý
+Bot đang xử lý
+Tôi đang xử lý
+Đã đóng
+
+For admin, add:
+
+Theo nhân viên tuyển dụng
+5. Conversation detail
+
+Route:
+
+/conversations/:id
+
+Main actions:
+
+Action	Admin	Recruiter
+Take over	Yes	Yes, if unassigned or assigned to self
+Send message	Yes	Yes, if assigned to self
+Assign recruiter	Yes	No
+Release to bot	Yes	Yes, if assigned to self
+Close	Yes	Yes, if assigned to self
+Reopen	Yes	Yes, if assigned to self
+Add note	Yes	Yes, if assigned to self
+Delete message	No by default	No
+
+Important rule:
+
+When recruiter takes over, chatbot must stop immediately.
+
+Takeover function:
+
+take_over_conversation(conversation_id, recruiter_id)
+
+This must:
+
+Set conversations.mode = 'HUMAN'
+Set conversations.assigned_recruiter_id = recruiter_id
+Increment conversations.version
+Cancel pending bot outbound messages
+Insert system message
+Insert audit event
+Push realtime update
+
+Supabase Realtime can subscribe to Postgres changes, which is useful for live chat updates in the miniCRM.
+
+6. Leads
+Admin route
+/leads
+
+Admin can see all leads.
+
+Recruiter route
+/my-leads
+
+Recruiter can see:
+
+Assigned leads
+Leads created from conversations they own
+Unassigned qualified leads only if you allow recruiter self-pickup
+Lead stages
+
+Keep the stages simple:
+
+NEW
+ENGAGED
+QUALIFIED
+APPLIED
+HIRED
+LOST
+UNQUALIFIED
+
+Remove HANDED_OFF if recruiters are already inside the system. Handoff is represented by:
+
+assigned_recruiter_id is not null
+7. Jobs
+Admin
+
+Admin can:
+
+Create job
+Edit job
+Activate job
+Pause job
+Mark full
+Archive job
+Recruiter
+
+Recruiter can:
+
+View active jobs
+Search jobs
+Copy job info
+Recommend job to worker
+View matched leads for own leads only
+
+Recruiter should not edit job records in MVP.
+
+8. Knowledge base
+
+Only Admin should manage company knowledge.
+
+Admin can:
+
+Upload document
+Preview extracted text
+Approve document
+Archive document
+Re-run embedding
+Test retrieval
+
+Recruiter can either have:
+
+No access
+
+or read-only access:
+
+View approved knowledge only
+
+For MVP, I recommend admin-only knowledge management. This avoids recruiters accidentally changing what the chatbot is allowed to say.
+
+9. Follow-up
+Admin
+
+Admin can see all follow-ups.
+
+Recruiter
+
+Recruiter can see only:
+
+My pending follow-ups
+My overdue follow-ups
+My completed follow-ups
+
+Recruiter can:
+
+Create follow-up for own lead
+Mark follow-up done
+Snooze follow-up
+Cancel own follow-up
+
+Admin can reassign or delete any follow-up.
+
+- n8n is hosted in DigitalOcean, VPS 1vCPU Mem:2GB SDD:50GB
+- n8n hosts ChatBot workflow, whenever user interact with ZaloBot, it will send message
+  to the n8n ChatBot workflow and
+- ChatBot mission now is to consult user given list of knowledge provided by VFIC
+- ChatBot save leads in the lead table in Supabase
+- ChatBot memory, conversation history all save in Supabase currently
+
+
+However,
+
+user currently has no interface to monitor all conversation or take over chat from ChatBot
+or have statistic metrics. User cannot access lead info.
+
+
+The company mission is
+Bên cty mình có những ý chính sau đây cần làm, sau này có thể mở rộng hơn. Cty muốn có một chatbot nói chuyện với người lao động để tư vấn người lao động tìm được việc làm phù hợp với hoàn cảnh từng người. Cty muốn chatbot
+- Tư vấn người lao động dựa vào kiến thức, tài liệu của cty, không trả lời ngoài lề
+- Xác định người lao động nào có mong muốn làm việc, bỏ qua những người hỏi chơi không hứng thú
+- Chuyển danh sách những người có nhu cầu về trang web của công ty để nv tuyển dụng follow up hoặc Chatbot tự follow up với người lao động để thuyết phục người lao động đăng ký ứng tuyển.
+- Nv tuyển dụng có thể can thiệp bất kỳ đoạn chat nào, nếu có người can thiệp thì chatbot không tiếp tục nữa

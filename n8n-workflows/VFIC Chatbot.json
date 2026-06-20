@@ -5,13 +5,13 @@
       "parameters": {
         "jsCode": "const message = $('Zalo Message').first()?.json?.message ?? {};\nconst chat = message.chat ?? {};\n\nconst pick = (value) => {\n  if (value === null || value === undefined) return null;\n  const text = String(value).trim();\n  return text === '' ? null : text;\n};\n\nconst chatId = pick(chat.id ?? message.chatId ?? message.from?.id ?? message.sender?.id);\nif (!chatId) {\n  throw new Error('Missing Zalo chat ID');\n}\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    user_text: pick(message.text) ?? '',\n    user_name: pick(chat.name ?? message.from?.name ?? message.sender?.name),\n    event_name: pick($('Zalo Message').first()?.json?.event_name ?? $('Zalo Message').first()?.json?.event),\n    received_at: new Date().toISOString(),\n  },\n}];"
       },
-      "id": "3129392f-199f-444b-a710-e2d03a1ebe65",
+      "id": "87d1674c-6b56-4e55-921c-69f14f090a3b",
       "name": "Normalize Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -3216,
-        1584
+        -4592,
+        1808
       ],
       "retryOnFail": false,
       "notesInFlow": true,
@@ -25,10 +25,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -3024,
-        1584
+        -4400,
+        1808
       ],
-      "id": "3ceeb0e3-f1dd-413a-a68c-d74bd1171d23",
+      "id": "32dfccaf-9a5c-492d-8d07-7555897c01df",
       "name": "Typing...",
       "retryOnFail": true,
       "maxTries": 2,
@@ -51,10 +51,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -2704,
-        1584
+        -4080,
+        1808
       ],
-      "id": "73a5fd91-d3fe-437d-ad95-dba837da8b94",
+      "id": "9103e68a-66d2-48c0-b2d3-39eb2b8745a3",
       "name": "AI Agent",
       "retryOnFail": true,
       "maxTries": 2,
@@ -71,10 +71,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -2176,
-        1712
+        -3552,
+        1936
       ],
-      "id": "2653b241-166a-4f75-8b54-68271d2abc25",
+      "id": "b057e4dc-e651-44ed-b243-5d104adce1c9",
       "name": "Error Reply",
       "retryOnFail": true,
       "maxTries": 2,
@@ -90,15 +90,16 @@
     },
     {
       "parameters": {
+        "model": "MiniMax-M2.7-highspeed",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -2880,
-        1952
+        -4256,
+        2176
       ],
-      "id": "85dd6e46-cf39-48ba-840d-bd4d1a41492b",
+      "id": "eaf059aa-b2bc-49ce-b3e0-677ba2c076a9",
       "name": "ChatAgent",
       "credentials": {
         "minimaxApi": {
@@ -112,13 +113,13 @@
         "description": "Tìm kiếm thông tin ĐÃ GHI NHỚ về đúng người dùng Zalo hiện tại: tên, số điện thoại, khu vực, nghề mong muốn, kinh nghiệm, sở thích, ràng buộc, lịch sử tư vấn và quyết định đã chốt. Luôn dùng công cụ này khi cần nhớ lại, xác nhận hoặc cá nhân hóa theo thông tin cá nhân của người dùng. Truyền vào một câu hỏi cụ thể, ví dụ: \"người này tên gì và muốn làm việc ở đâu\", \"số điện thoại của người dùng là gì\". Chỉ trả về thông tin thực sự đã lưu, tuyệt đối không bịa ra.",
         "topK": 5
       },
-      "id": "a9370b1e-60db-4792-ad0a-3de5b8eb0643",
+      "id": "0d42c9f3-b5dd-4830-84ff-acb9c02b3979",
       "name": "Thông tin người dùng",
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1.1,
       "position": [
-        -2608,
-        2400
+        -3984,
+        2624
       ],
       "notesInFlow": true,
       "notes": "Semantic long-term candidate memory filtered by normalized chat_id metadata."
@@ -130,10 +131,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2288,
-        1264
+        -3664,
+        1488
       ],
-      "id": "d7d97ec5-7bc8-436b-9c51-6d45a4626524",
+      "id": "305a87dc-8aa7-4334-995b-4d067eb31edd",
       "name": "Build Persistence Payload"
     },
     {
@@ -163,10 +164,10 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        -2064,
-        1104
+        -3440,
+        1328
       ],
-      "id": "93b552cf-0cef-43bd-8c68-2a7b667f9fd5",
+      "id": "dfaad377-7738-4200-8c38-d936935410d2",
       "name": "Execute VFIC Persist Lead"
     },
     {
@@ -196,10 +197,10 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        -2080,
-        1344
+        -3456,
+        1568
       ],
-      "id": "be599e10-1a4d-46bd-b540-faf07f0ff69e",
+      "id": "75a24888-d867-4f2a-bbf5-1bc3af424ee3",
       "name": "Execute VFIC Persist Memories"
     },
     {
@@ -210,10 +211,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
       "position": [
-        -2176,
-        1552
+        -3552,
+        1776
       ],
-      "id": "a7970a02-f5e6-4f5b-afc4-ef270caffc3d",
+      "id": "70842501-cf7b-4214-8318-f6d245f530e3",
       "name": "Chat Reply",
       "retryOnFail": true,
       "maxTries": 2,
@@ -230,15 +231,15 @@
         "sessionIdType": "customKey",
         "sessionKey": "={{ $('Normalize Message').item.json.chat_id }}",
         "tableName": "vfic_chat_histories",
-        "contextWindowLength": 8
+        "contextWindowLength": 25
       },
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.4,
       "position": [
-        -2656,
-        1952
+        -4032,
+        2176
       ],
-      "id": "585f4ec1-1f95-4fb1-9795-185b4f5a0fa1",
+      "id": "4a50b158-1737-47b1-8cdf-4ac4a8e0c0eb",
       "name": "MemStore",
       "notesInFlow": true,
       "credentials": {
@@ -256,10 +257,10 @@
       "type": "n8n-nodes-zalo-platform.zaloBotTrigger",
       "typeVersion": 1,
       "position": [
-        -3392,
-        1584
+        -5312,
+        1760
       ],
-      "id": "4b4ec554-6770-4341-933c-c2f61d7f2183",
+      "id": "bcae578f-dc70-41e3-8fc5-e6fa5e23ba50",
       "name": "Zalo Message",
       "webhookId": "9af2dae3-daeb-4340-aba6-a80cf40b346c",
       "alwaysOutputData": false,
@@ -278,10 +279,10 @@
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1.1,
       "position": [
-        -2304,
-        2048
+        -3680,
+        2272
       ],
-      "id": "f01eef79-d887-4fd5-96f7-5a99aaa60ace",
+      "id": "385c9ced-7cbf-4b7b-b942-b82edb004015",
       "name": "Thông tin việc làm"
     },
     {
@@ -291,10 +292,10 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -2256,
-        2480
+        -3632,
+        2704
       ],
-      "id": "e375aa14-ef50-4ad0-9f74-c759c3eeddd9",
+      "id": "f07cabb6-6ca5-4a8a-8b0b-7e273df535ce",
       "name": "Embed2",
       "credentials": {
         "googlePalmApi": {
@@ -307,13 +308,13 @@
       "parameters": {
         "modelName": "models/gemini-embedding-2"
       },
-      "id": "7ed56bb0-c315-4801-bd73-b4a4b0cacc70",
+      "id": "497c490f-c86e-43b1-9243-493db0603fce",
       "name": "Embed1",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -2880,
-        2768
+        -4256,
+        2992
       ],
       "credentials": {
         "googlePalmApi": {
@@ -327,13 +328,13 @@
         "model": "MiniMax-M2.7-highspeed",
         "options": {}
       },
-      "id": "303f501e-4cd7-4899-9663-97a9d93a337b",
+      "id": "92f24017-203e-46bf-ae5c-b6718d275931",
       "name": "UserInfoLookup",
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -2432,
-        2592
+        -3808,
+        2816
       ],
       "credentials": {
         "minimaxApi": {
@@ -362,13 +363,13 @@
           }
         }
       },
-      "id": "22618aee-7c44-44d3-b1ac-5dac44712970",
+      "id": "d9633af7-05dc-44e3-99d2-13eb1ba162da",
       "name": "UserMemStore",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        -2864,
-        2608
+        -4240,
+        2832
       ],
       "credentials": {
         "supabaseApi": {
@@ -387,13 +388,13 @@
         },
         "options": {}
       },
-      "id": "5eec22e1-598b-407b-ae83-5ea7e6041561",
+      "id": "c5e053e5-ff3c-4140-8bf1-cfed44b37012",
       "name": "JobMemStore",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
       "typeVersion": 1.3,
       "position": [
-        -2336,
-        2240
+        -3712,
+        2464
       ],
       "credentials": {
         "supabaseApi": {
@@ -410,10 +411,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatMinimax",
       "typeVersion": 1,
       "position": [
-        -2048,
-        2240
+        -3424,
+        2464
       ],
-      "id": "f88b3e35-1b99-4df6-a7d1-937fd6d637eb",
+      "id": "5dd3307a-96d5-4741-a2de-fc460e784a19",
       "name": "JobLookup",
       "credentials": {
         "minimaxApi": {
@@ -431,24 +432,22 @@
           "queryReplacement": "={{ [$json.message.chat.id, $json.message.text] }}"
         }
       },
+      "id": "a1d2e000-0001-0000-0000-dedup00000001",
+      "name": "Dedup Message",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -3304,
-        1584
+        -4912,
+        1808
       ],
-      "id": "a1d2e000-0001-0000-0000-dedup00000001",
-      "name": "Dedup Message",
-      "retryOnFail": false,
-      "onError": "continueRegularOutput",
-      "notesInFlow": true,
-      "notes": "Idempotency gate (dedup rapid duplicate Zalo messages). Atomic upsert on (chat_id, md5(normalized text)). Returns 1 row = first/stale -> proceed; returns 0 rows = duplicate within 8s -> chain starves, no reply.",
       "credentials": {
         "postgres": {
           "id": "8m7DPa6v6XXKKZKZ",
           "name": "Postgres account"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Idempotency gate (dedup rapid duplicate Zalo messages). Atomic upsert on (chat_id, md5(normalized text)). Returns 1 row = first/stale -> proceed; returns 0 rows = duplicate within 8s -> chain starves, no reply."
     }
   ],
   "pinData": {},
@@ -547,17 +546,6 @@
         ]
       ]
     },
-    "Zalo Message": {
-      "main": [
-        [
-          {
-            "node": "Dedup Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Thông tin việc làm": {
       "ai_tool": [
         [
@@ -635,6 +623,17 @@
         ]
       ]
     },
+    "Zalo Message": {
+      "main": [
+        [
+          {
+            "node": "Dedup Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Dedup Message": {
       "main": [
         [
@@ -647,13 +646,13 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "ceb1008d-d5bf-44ec-8aaf-7ac63567c7e8",
+  "versionId": "4ecef2fb-a8b5-47c9-b175-515bb1ab9d9b",
   "meta": {
     "templateCredsSetupCompleted": true,
     "aiBuilderAssisted": true,
