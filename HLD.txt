@@ -1,745 +1,120 @@
-Below is a build-ready miniCRM spec for your VFIC recruitment chatbot system, using Tabler + Bootstrap for the admin UI.
+# VFIC miniCRM — High-Level Design
 
-Tabler is suitable here because it is a responsive Bootstrap 5 admin template with built-in dashboard layouts, dark mode, forms, tables, charts, maps, and UI components. Tabler Icons are also free/MIT-licensed and can be used for commercial admin UI icons.
+> **Status:** specification / reference document only. No code, database migration,
+> or n8n workflow change is applied by this document — those are implemented
+> separately. Last revised 2026-06-20.
 
-1. Product goal
+## Contents
 
-Build a miniCRM + live chat console for VFIC recruiters to:
+1. [Overview](#1-overview)
+2. [System architecture](#2-system-architecture)
+3. [Roles & permissions](#3-roles--permissions)
+4. [Data model](#4-data-model)
+5. [Human takeover (core feature)](#5-human-takeover-core-feature)
+6. [Security & realtime](#6-security--realtime)
+7. [Feature & page specs](#7-feature--page-specs)
+8. [Acceptance tests](#8-acceptance-tests)
+9. [Build plan](#9-build-plan)
+10. [MVP definition](#10-mvp-definition)
+11. [Notes & references](#11-notes--references)
+
+---
+
+## 1. Overview
+
+### 1.1 Company mission
+
+> Bên cty mình có những ý chính sau đây cần làm, sau này có thể mở rộng hơn. Cty
+> muốn có một chatbot nói chuyện với người lao động để tư vấn người lao động tìm
+> được việc làm phù hợp với hoàn cảnh từng người. Cty muốn chatbot:
+
+- Tư vấn người lao động dựa vào kiến thức, tài liệu của cty, không trả lời ngoài lề.
+- Xác định người lao động nào có mong muốn làm việc, bỏ qua những người hỏi chơi không hứng thú.
+- Chuyển danh sách những người có nhu cầu về trang web của công ty để nhân viên tuyển dụng follow up, hoặc để chatbot tự follow up thuyết phục người lao động đăng ký ứng tuyển.
+- Nhân viên tuyển dụng có thể can thiệp bất kỳ đoạn chat nào; nếu có người can thiệp thì chatbot không tiếp tục nữa.
+
+**In short:** a Zalo chatbot that consults workers using VFIC's knowledge base, qualifies the interested ones into leads, and lets recruitment staff take over any conversation — at which point the bot must stop.
+
+### 1.2 Current state
+
+- **n8n** is hosted on DigitalOcean (VPS 1 vCPU, 2 GB RAM, 50 GB SSD). It hosts the ChatBot workflow: whenever a user interacts with the Zalo Bot, the message is sent to the n8n ChatBot workflow.
+- The ChatBot's mission today is to consult users given the knowledge provided by VFIC.
+- The ChatBot saves **leads** to the `leads` table in Supabase.
+- The ChatBot's memory and conversation history are saved in Supabase.
+
+The bot is a stateless pipeline:
+
+```
+Zalo Message -> Dedup Message -> Normalize Message -> Typing... ->
+AI Agent -> [Chat Reply, Build Persistence Payload -> Persist Lead + Persist Memories]
+```
+
+Existing Supabase tables (project `vichwmxeptglqmzefsiq`):
+
+| Table | Purpose |
+|---|---|
+| `leads` | Worker profiles, keyed by `zalo_id`; `lead_score` ∈ hot/warm/not_interested |
+| `documents` | Knowledge-base vector table; `drive_file_id` is a generated column |
+| `memories` | Per-candidate semantic memory (vector) |
+| `vfic_chat_histories` | LangChain memory blob (`session_id` + `message` jsonb) — **not** a displayable transcript |
+| `vfic_message_dedup` | MD5-of-text dedup with an 8-second window, for Zalo double-delivery only |
+
+### 1.3 The problem
+
+Users currently have **no interface** to monitor conversations, take over a chat from the ChatBot, view statistics/metrics, or access lead information.
+
+### 1.4 Product goal
+
+Build a **miniCRM + live chat console** for VFIC recruiters to:
 
 1. Monitor all Zalo chatbot conversations
-2. Take over any chat from chatbot
-3. Stop chatbot when recruiter takes over
+2. Take over any chat from the chatbot
+3. Stop the chatbot when a recruiter takes over
 4. View and manage worker leads
 5. Assign leads to recruiters
 6. Follow up with interested workers
-7. Manage jobs and company knowledge used by chatbot
+7. Manage jobs and company knowledge used by the chatbot
 8. Track basic recruitment and chatbot metrics
 
-The miniCRM should not replace n8n. The correct separation is:
+---
 
-miniCRM = human operation console
-n8n = chatbot workflow automation
-Supabase/Postgres = source of truth
-Zalo OA = communication channel
-2. Recommended stack
-Frontend
-React + TypeScript + Vite
-Bootstrap 5
-Tabler UI template
-Tabler Icons
-React Router
-TanStack Query or SWR
-Supabase JS client for auth/realtime
-Backend
+## 2. System architecture
 
-You have two reasonable options.
+### 2.1 Separation of concerns (the four pillars)
 
-Option A — fastest MVP
-Supabase Auth
-Supabase Postgres
-Supabase Realtime
-Supabase Storage
-Supabase RPC / Edge Functions
-n8n Webhook workflows
+The miniCRM must **not** replace n8n. The correct separation is:
 
-Supabase Realtime can listen to Postgres changes, which is useful for live conversation updates in the miniCRM.
+| Component | Role |
+|---|---|
+| **miniCRM** | Human operation console |
+| **n8n** | Chatbot workflow automation |
+| **Supabase / Postgres** | Source of truth |
+| **Zalo OA** | Communication channel |
 
+### 2.2 Does the admin web need its own database?
 
-18. Build order
-Sprint 1 — Foundation
-Tabler layout
-Login
-RBAC
-Database tables
-Basic dashboard shell
-Sprint 2 — Conversation MVP
-Conversation inbox
-Conversation detail
-Realtime messages
-Take over
-Release to bot
-Recruiter send message
-Close/reopen
-Sprint 3 — Lead CRM
-Lead list
-Lead detail
-Lead stage update
-Assign recruiter
-Internal notes
-Follow-up task
-Sprint 4 — Jobs and knowledge
-Job CRUD
-Knowledge document list
-Upload document
-Approve/archive document
-Basic retrieval test page
-Sprint 5 — Analytics and hardening
-Dashboard metrics
-Audit log
-Export leads
-Error states
-Permission testing
-Mobile responsive fixes
-19. Acceptance tests
-Human takeover race test
-Given conversation.mode = BOT
-And chatbot is generating a reply
-When recruiter clicks Take over
-Then conversation.mode becomes HUMAN
-And conversation.version increments
-And the in-flight bot reply is suppressed (pre-send guard sees mode=HUMAN and skips the send; see Takeover Addendum §2 — there is no kill signal)
-And no bot message is sent to Zalo
-Recruiter reply test
-Given conversation.mode = HUMAN
-And recruiter is assigned
-When recruiter sends message
-Then outbound_message is created
-And Zalo message is sent
-And transcript updates in realtime
-Bot guardrail test
-Given user asks off-topic question
-When chatbot processes message
-Then bot gives short redirect response
-And does not invent unrelated answer
-Lead qualification test
-Given worker gives job preference, location, and availability
-When lead qualification workflow runs
-Then lead_stage becomes QUALIFIED
-And qualification reasons are saved
-And recruiter follow-up task is created
-20. MVP definition
+**No.** One Supabase Postgres is the single source of truth. The admin web is a **thin React client**: Supabase JS for auth, RLS-gated reads/writes, and Realtime subscriptions; Supabase Storage for uploaded KB docs. It owns only static build assets (hosted on Vercel / Netlify / etc.) and ephemeral UI state — no data database of its own.
 
-Your first production MVP is complete when recruiters can do this:
+Two access patterns into the **same** database:
 
-Login
-See all Zalo conversations
-Open a conversation
-Take over from chatbot
-Send message to worker
-View lead profile
-Update lead stage
-Assign recruiter
-Create follow-up task
-Close conversation
+- **Bot (n8n):** Postgres node, direct DB connection, **bypasses RLS** (trusted infrastructure).
+- **Admin web:** Supabase JS with the user's JWT, **subject to RLS**.
 
-That is the core miniCRM. Job management, knowledge approval, and analytics are important, but the first must-have is conversation control + lead ownership.
+> If analytics/BI isolation is ever needed later, use a read-replica or a separate schema — not a separate app DB.
 
+### 2.3 Tech stack
 
-Yes — simplify the miniCRM to only 2 user types:
+**Frontend:** React + TypeScript + Vite, Bootstrap 5, Tabler UI template, Tabler Icons, React Router, TanStack Query or SWR, Supabase JS client (auth + realtime).
 
-ADMIN
-RECRUITER
+Tabler is a responsive Bootstrap 5 admin template with built-in dashboard layouts, dark mode, forms, tables, charts, maps, and UI components; Tabler Icons are MIT-licensed and usable commercially. Supabase RLS enforces admin/recruiter access rules at the database level since the frontend talks directly to Supabase.
 
-This is better for MVP. You do not need manager, content_admin, viewer, or complex RBAC yet. Use simple role-based access control first, then expand later only if VFIC grows.
+**Backend (Option A — fastest MVP):** Supabase Auth, Supabase Postgres, Supabase Realtime, Supabase Storage, Supabase RPC / Edge Functions, n8n webhook workflows.
 
-Tabler is still a good fit because it provides Bootstrap-based admin layouts, reusable UI components, dark mode, tables, charts, and forms that match this miniCRM use case. Supabase RLS is also suitable for enforcing admin/recruiter access rules at database level, especially if the frontend talks directly to Supabase.
+> Supabase Realtime can listen to Postgres changes, which powers live conversation updates in the miniCRM.
 
-Updated user model
-User types
-Role	Meaning
-ADMIN	Company owner/admin. Can see and manage everything.
-RECRUITER	Recruitment staff. Can handle assigned chats/leads and follow up workers.
+### 2.4 Component interaction
 
-Use enum values:
-
-type UserRole = "admin" | "recruiter";
-
-Vietnamese labels:
-
-admin      = Quản trị viên
-recruiter  = Nhân viên tuyển dụng
-Permission model
-Simple rule
-Admin can access all data.
-Recruiter can access assigned conversations/leads.
-Recruiter can take over unassigned conversations.
-Recruiter cannot manage system settings, chatbot config, users, or knowledge approval.
-Permission table
-Feature	Admin	Recruiter
-Dashboard	Full	Limited
-View all conversations	Yes	No
-View assigned conversations	Yes	Yes
-View unassigned/new conversations	Yes	Yes
-Take over chat	Yes	Yes
-Release chat back to bot	Yes	Yes, only owned chat
-Send message to worker	Yes	Yes, only owned chat
-Assign conversation to recruiter	Yes	No
-Reassign conversation	Yes	No
-Close/reopen conversation	Yes	Yes, only owned chat
-View all leads	Yes	No
-View assigned leads	Yes	Yes
-Edit lead	Yes	Yes, only assigned lead
-Export leads	Yes	No
-Create/update jobs	Yes	No
-View jobs	Yes	Yes
-Upload knowledge docs	Yes	No
-Approve/archive knowledge docs	Yes	No
-View analytics	Full	Own performance only
-Manage users	Yes	No
-Manage chatbot settings	Yes	No
-View audit log	Yes	No
-Updated navigation
-Admin sidebar
-Tổng quan
-Hội thoại
-Lead / Ứng viên
-Follow-up
-Việc làm
-Kho kiến thức
-Báo cáo
-Nhân viên tuyển dụng
-Cài đặt chatbot
-Nhật ký hệ thống
-Recruiter sidebar
-Tổng quan của tôi
-Hội thoại
-Lead của tôi
-Follow-up của tôi
-Việc làm
-Hồ sơ cá nhân
-Updated pages
-1. Login
-
-Route:
-
-/login
-
-After login:
-
-admin      → /dashboard
-recruiter  → /my-dashboard
-2. Admin dashboard
-
-Route:
-
-/dashboard
-
-Admin sees company-wide metrics:
-
-Total conversations
-New conversations today
-Active bot conversations
-Human takeover conversations
-Qualified leads
-Applications
-Hires
-Overdue follow-ups
-Failed Zalo sends
-n8n workflow errors
-3. Recruiter dashboard
-
-Route:
-
-/my-dashboard
-
-Recruiter sees only personal work:
-
-My assigned conversations
-My unread conversations
-My assigned leads
-My qualified leads
-My overdue follow-ups
-My completed follow-ups
-My applications
-My hires
-4. Conversation inbox
-
-Route:
-
-/conversations
-Admin view
-
-Admin can see:
-
-All conversations
-Bot conversations
-Pending human conversations
-Human-owned conversations
-Closed conversations
-All recruiters' conversations
-Recruiter view
-
-Recruiter can see:
-
-Conversations assigned to me
-Unassigned conversations
-Conversations I took over
-Conversations needing human support
-
-Recruiter should not see conversations assigned to another recruiter unless admin allows it later.
-
-Conversation filters
-Tất cả
-Của tôi
-Chưa phân công
-Cần người xử lý
-Bot đang xử lý
-Tôi đang xử lý
-Đã đóng
-
-For admin, add:
-
-Theo nhân viên tuyển dụng
-5. Conversation detail
-
-Route:
-
-/conversations/:id
-
-Main actions:
-
-Action	Admin	Recruiter
-Take over	Yes	Yes, if unassigned or assigned to self
-Send message	Yes	Yes, if assigned to self
-Assign recruiter	Yes	No
-Release to bot	Yes	Yes, if assigned to self
-Close	Yes	Yes, if assigned to self
-Reopen	Yes	Yes, if assigned to self
-Add note	Yes	Yes, if assigned to self
-Delete message	No by default	No
-
-Important rule:
-
-When recruiter takes over, chatbot must stop immediately.
-
-Takeover function:
-
-take_over_conversation(conversation_id, recruiter_id)
-
-This must:
-
-Set conversations.mode = 'HUMAN'
-Set conversations.assigned_recruiter_id = recruiter_id
-Increment conversations.version
-No kill signal — the bot's pre-send guard will see mode=HUMAN and suppress the in-flight reply (recorded as a messages row with delivery_status='suppressed'; see Takeover Addendum §2)
-Insert system message
-Insert audit event
-Push realtime update
-
-Supabase Realtime can subscribe to Postgres changes, which is useful for live chat updates in the miniCRM.
-
-6. Leads
-Admin route
-/leads
-
-Admin can see all leads.
-
-Recruiter route
-/my-leads
-
-Recruiter can see:
-
-Assigned leads
-Leads created from conversations they own
-Unassigned qualified leads only if you allow recruiter self-pickup
-Lead stages
-
-Keep the stages simple:
-
-NEW
-ENGAGED
-QUALIFIED
-APPLIED
-HIRED
-LOST
-UNQUALIFIED
-
-Remove HANDED_OFF if recruiters are already inside the system. Handoff is represented by:
-
-assigned_recruiter_id is not null
-7. Jobs
-Admin
-
-Admin can:
-
-Create job
-Edit job
-Activate job
-Pause job
-Mark full
-Archive job
-Recruiter
-
-Recruiter can:
-
-View active jobs
-Search jobs
-Copy job info
-Recommend job to worker
-View matched leads for own leads only
-
-Recruiter should not edit job records in MVP.
-
-8. Knowledge base
-
-Only Admin should manage company knowledge.
-
-Admin can:
-
-Upload document
-Preview extracted text
-Approve document
-Archive document
-Re-run embedding
-Test retrieval
-
-Recruiter can either have:
-
-No access
-
-or read-only access:
-
-View approved knowledge only
-
-For MVP, I recommend admin-only knowledge management. This avoids recruiters accidentally changing what the chatbot is allowed to say.
-
-9. Follow-up
-Admin
-
-Admin can see all follow-ups.
-
-Recruiter
-
-Recruiter can see only:
-
-My pending follow-ups
-My overdue follow-ups
-My completed follow-ups
-
-Recruiter can:
-
-Create follow-up for own lead
-Mark follow-up done
-Snooze follow-up
-Cancel own follow-up
-
-Admin can reassign or delete any follow-up.
-
-- n8n is hosted in DigitalOcean, VPS 1vCPU Mem:2GB SDD:50GB
-- n8n hosts ChatBot workflow, whenever user interact with ZaloBot, it will send message
-  to the n8n ChatBot workflow and
-- ChatBot mission now is to consult user given list of knowledge provided by VFIC
-- ChatBot save leads in the lead table in Supabase
-- ChatBot memory, conversation history all save in Supabase currently
-
-
-However,
-
-user currently has no interface to monitor all conversation or take over chat from ChatBot
-or have statistic metrics. User cannot access lead info.
-
-
-The company mission is
-Bên cty mình có những ý chính sau đây cần làm, sau này có thể mở rộng hơn. Cty muốn có một chatbot nói chuyện với người lao động để tư vấn người lao động tìm được việc làm phù hợp với hoàn cảnh từng người. Cty muốn chatbot
-- Tư vấn người lao động dựa vào kiến thức, tài liệu của cty, không trả lời ngoài lề
-- Xác định người lao động nào có mong muốn làm việc, bỏ qua những người hỏi chơi không hứng thú
-- Chuyển danh sách những người có nhu cầu về trang web của công ty để nv tuyển dụng follow up hoặc Chatbot tự follow up với người lao động để thuyết phục người lao động đăng ký ứng tuyển.
-- Nv tuyển dụng có thể can thiệp bất kỳ đoạn chat nào, nếu có người can thiệp thì chatbot không tiếp tục nữa
-
-
-================================================================================
-TECHNICAL ARCHITECTURE ADDENDUM — Human Takeover & Data Model
-(2026-06-20. Makes the takeover feature build-ready. Corrects the "cancel
-pending bot reply" wording in §19 and §5 above — see §2 below.)
-This is SPECIFICATION / reference only. No migration, workflow JSON, or
-Supabase/n8n change is applied by this document; implement separately.
-================================================================================
-
-0. Current system vs. what the takeover feature requires
-
-Today (VFIC-Chatbot.json, currently active:false) the bot is a stateless
-pipeline:
-  Zalo Message -> Dedup Message -> Normalize Message -> Typing... ->
-  AI Agent -> [Chat Reply, Build Persistence Payload -> Persist Lead + Persist Memories]
-
-Existing Supabase tables (project vichwmxeptglqmzefsiq):
-  leads                         (3 rows; zalo_id keyed; lead_score hot/warm/not_interested)
-  documents                     (8 rows; KB vector table; drive_file_id generated)
-  memories                      (22 rows; per-candidate semantic memory)
-  vfic_chat_histories           (LangChain memory blob: session_id + message jsonb; NOT a transcript)
-  vfic_message_dedup            (MD5-of-text dedup, 8s window; for Zalo double-delivery only)
-
-What does NOT exist today (all greenfield for this feature):
-  conversations table, conversation.mode/version/assigned_recruiter_id,
-  structured messages/transcript table, profiles/RBAC layer, take_over/
-  release RPCs, any Realtime enrollment, the send-time guard in the bot.
-=> Takeover is mostly greenfield on the data layer, plus a REQUIRED modification
-   to the bot workflow. The miniCRM frontend itself does not exist yet.
-
-1. Does the admin web need its own database?
-
-NO. One Supabase Postgres is the single source of truth (per §1 Product goal).
-The admin web is a THIN React client: Supabase JS for auth, RLS-gated
-reads/writes, and Realtime subscriptions; Supabase Storage for uploaded KB
-docs. It owns only static build assets (hosted on Vercel/Netlify/etc.) and
-ephemeral UI state — no data database of its own.
-
-Two access patterns into the SAME database:
-  - Bot (n8n):  Postgres node, direct DB connection, BYPASSES RLS (trusted infra).
-  - Admin web:  Supabase JS with the user's JWT, SUBJECT TO RLS.
-(If analytics/BI isolation is ever needed later, use a read-replica or a
-separate schema — not a separate app DB.)
-
-2. Core insight: you cannot "cancel" an in-flight n8n run
-
-The §19 acceptance test line "pending bot reply is cancelled" and the §5
-takeover step "Cancel pending bot outbound messages" describe the OUTCOME, not
-the mechanism. n8n executions cannot be cancelled externally. The correct model
-is CHECK-BEFORE-SEND at two guard points in the bot:
-
-  (a) Run-start guard — a new inbound arrives; if mode=HUMAN, the bot logs the
-      worker's line (so the recruiter still sees it) and STOPS: no typing, no AI.
-      This is "the bot is off for this chat."
-  (b) Pre-send guard — immediately before the Zalo send, re-check
-      mode='BOT' AND version = version_at_start. If it fails, write a messages
-      row with delivery_status='suppressed' (storing the bot's proposed reply so
-      a recruiter can see what it would have sent) and STOP.
-
-The recruiter's take_over_conversation() is an ATOMIC, transactional flip
-(mode->HUMAN, version++) that the bot's guard then observes on its next read.
-Checking BOTH mode and version also kills STALE runs (e.g. recruiter took over
-then released back to BOT during one bot run: mode is BOT again but version
-changed, so the original run's reply is correctly suppressed).
-
-The only unavoidable residual race window is the sub-second gap between the
-pre-send check and the Zalo HTTP call — Zalo is an external, non-transactional
-API. For a recruitment chat this is acceptable; tighter options exist (§3).
-
-3. Send-design alternatives (CHOSEN: Design 1)
-
-  Design 1 — guard node (CHOSEN for MVP): keep the bot's existing direct
-    zaloBot send; insert a Postgres ownership check right before it. Smallest
-    change, no new infra. Residual window = n8n inter-node latency.
-  Design 2 — Edge Function: replace the direct send with a Supabase Edge
-    Function that does check+send back-to-back server-side; same function
-    serves recruiter outbound. Tightest practical window (~tens of ms); new
-    infra (Deno + Zalo OA token in Supabase secrets).
-  Design 3 — transactional outbox: bot writes a pending message row; a worker
-    claims it atomically (UPDATE ... WHERE mode='BOT') and sends. Closes the
-    race at the check; best observability; most infra.
-
-The data model in §4 is IDENTICAL for all three, so starting with Design 1
-does NOT preclude graduating to Design 2 or 3 later if leakage is observed.
-
-4. Data model (DDL — to be created as a Supabase migration)
-
--- enums
-CREATE TYPE conversation_mode   AS ENUM ('BOT','HUMAN');
-CREATE TYPE conversation_status AS ENUM ('OPEN','CLOSED');
-CREATE TYPE message_sender      AS ENUM ('WORKER','BOT','RECRUITER','SYSTEM');
-
--- profiles: minimal RBAC (auth.uid() FK + future frontend); auto-create on signup
-CREATE TABLE profiles (
-  id        uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role      text NOT NULL DEFAULT 'recruiter' CHECK (role IN ('admin','recruiter')),
-  full_name text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-BEGIN INSERT INTO public.profiles (id) VALUES (NEW.id); RETURN NEW; END; $$;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- conversations (join key = the existing Zalo chat_id, so the bot needs no new id)
-CREATE TABLE conversations (
-  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  zalo_chat_id          text UNIQUE NOT NULL,
-  mode                  conversation_mode   NOT NULL DEFAULT 'BOT',
-  status                conversation_status NOT NULL DEFAULT 'OPEN',
-  needs_human           boolean NOT NULL DEFAULT false,   -- "Cần người xử lý" escalation flag
-  version               int  NOT NULL DEFAULT 1,          -- optimistic lock; bumped on every ownership transition
-  assigned_recruiter_id uuid REFERENCES profiles(id),
-  taken_over_at         timestamptz,
-  last_message_at       timestamptz,
-  created_at            timestamptz NOT NULL DEFAULT now(),
-  updated_at            timestamptz NOT NULL DEFAULT now()
-);
-
--- messages (structured transcript; written by bot AND human)
-CREATE TABLE messages (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  sender          message_sender NOT NULL,
-  recruiter_id    uuid REFERENCES profiles(id),            -- set when sender = RECRUITER
-  body            text NOT NULL,
-  zalo_message_id text,                                     -- inbound idempotency
-  delivery_status text NOT NULL DEFAULT 'sent'
-                  CHECK (delivery_status IN ('sent','suppressed','failed','pending')),
-  created_at      timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX messages_conv_idx ON messages (conversation_id, created_at);
-CREATE UNIQUE INDEX messages_zalo_uidx
-  ON messages (conversation_id, zalo_message_id) WHERE zalo_message_id IS NOT NULL;
-
--- updated_at
-CREATE OR REPLACE FUNCTION public.touch_updated_at() RETURNS trigger
-  LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at=now(); RETURN NEW; END; $$;
-CREATE TRIGGER conversations_touch BEFORE UPDATE ON conversations
-  FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
-
-Field decisions:
-  - mode {BOT, HUMAN}     = who is handling the chat
-  - status {OPEN, CLOSED} = lifecycle
-  - needs_human (bool)    = "Cần người xử lý" escalation (chosen over a 3rd
-                            PENDING_HUMAN mode value, to keep "who handles"
-                            separate from "needs attention")
-  - contact == lead: no separate contacts table — reuse `leads` keyed by
-    zalo_id (already upserted by VFIC Persist Lead).
-  - The suppressed messages row stores the bot's proposed reply.
-
-5. RPCs (atomic, SECURITY DEFINER — bypass RLS safely; authz checked inside)
-
-CREATE OR REPLACE FUNCTION public.take_over_conversation(p_zalo_chat_id text, p_recruiter_id uuid)
-RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE v_conv uuid; v_owner uuid;
-BEGIN
-  SELECT assigned_recruiter_id INTO v_owner FROM conversations WHERE zalo_chat_id=p_zalo_chat_id;
-  IF v_owner IS NOT NULL AND v_owner <> p_recruiter_id THEN
-    RAISE EXCEPTION 'conversation already owned by another recruiter';
-  END IF;
-  INSERT INTO conversations (zalo_chat_id, mode, assigned_recruiter_id, taken_over_at, version)
-  VALUES (p_zalo_chat_id,'HUMAN',p_recruiter_id,now(),2)
-  ON CONFLICT (zalo_chat_id) DO UPDATE
-    SET mode='HUMAN', assigned_recruiter_id=p_recruiter_id, taken_over_at=now(),
-        needs_human=false, version=conversations.version+1
-  RETURNING id INTO v_conv;
-  INSERT INTO messages (conversation_id, sender, body)
-  VALUES (v_conv,'SYSTEM','Cuộc hội thoại đã được chuyển cho nhân viên.');
-  RETURN v_conv;
-END; $$;
-
-CREATE OR REPLACE FUNCTION public.release_to_bot(p_zalo_chat_id text, p_recruiter_id uuid)
-RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE v_conv uuid;
-BEGIN
-  UPDATE conversations SET mode='BOT', version=version+1
-  WHERE zalo_chat_id=p_zalo_chat_id AND assigned_recruiter_id=p_recruiter_id
-  RETURNING id INTO v_conv;
-  IF v_conv IS NULL THEN RAISE EXCEPTION 'not owner or not found'; END IF;
-  INSERT INTO messages (conversation_id, sender, body)
-  VALUES (v_conv,'SYSTEM','Cuộc hội thoại đã được trả lại cho chatbot.');
-  RETURN v_conv;
-END; $$;
-
-take_over_conversation flips mode + assigns + bumps version + resets
-needs_human + inserts the SYSTEM message — all in ONE transaction, so a
-concurrent bot guard read after commit sees HUMAN, and two recruiters racing
-cannot split ownership (exactly one wins, the other raises).
-
-6. RLS + GRANTs + Realtime (frontend-facing; bot bypasses via direct DB conn)
-
--- enable RLS
-ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE messages     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles     ENABLE ROW LEVEL SECURITY;
-
--- enabling RLS alone is NOT enough: authenticated needs table privileges or
--- policies silently match nothing. anon gets nothing (CRM is auth-only).
-GRANT SELECT, INSERT, UPDATE, DELETE ON conversations, messages, profiles TO authenticated;
-
--- policies: admin = all; recruiter = assigned-to-me OR unassigned; recruiter
--- may INSERT only RECRUITER messages on a conversation they own that is HUMAN.
-CREATE POLICY conv_admin_all        ON conversations FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'));
-CREATE POLICY conv_recruiter_read   ON conversations FOR SELECT TO authenticated
-  USING (assigned_recruiter_id=auth.uid() OR assigned_recruiter_id IS NULL);
-CREATE POLICY msg_admin_all         ON messages FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'));
-CREATE POLICY msg_recruiter_read    ON messages FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM conversations c WHERE c.id=conversation_id
-        AND (c.assigned_recruiter_id=auth.uid() OR c.assigned_recruiter_id IS NULL)));
-CREATE POLICY msg_recruiter_insert  ON messages FOR INSERT TO authenticated
-  WITH CHECK (sender='RECRUITER' AND recruiter_id=auth.uid()
-        AND EXISTS (SELECT 1 FROM conversations c WHERE c.id=conversation_id
-                    AND c.assigned_recruiter_id=auth.uid() AND c.mode='HUMAN'));
-CREATE POLICY profile_self          ON profiles FOR SELECT TO authenticated
-  USING (id=auth.uid() OR EXISTS (SELECT 1 FROM profiles p WHERE p.id=auth.uid() AND p.role='admin'));
-
--- Realtime: enroll tables + full replica identity so the inbox/transcript push live.
--- Realtime RESPECTS RLS: a recruiter's subscription only fires for rows her
--- SELECT policy allows -> per-recruiter live scoping is automatic.
-ALTER TABLE conversations REPLICA IDENTITY FULL;
-ALTER TABLE messages     REPLICA IDENTITY FULL;
-ALTER PUBLICATION supabase_realtime ADD TABLE conversations, messages;
-
-7. n8n bot modifications (VFIC-Chatbot.json, id iodmXzjRe03KqPdB — edit IN
-   PLACE, do not create a new workflow; keep active:false until §9 tests pass)
-
-New chain (added nodes in [brackets]; Normalize also exports msg_id from the
-Zalo payload — confirm exact path during edit):
-
-  Zalo Message -> Dedup Message -> Normalize Message
-    -> [Ensure Conversation]      (Postgres)  upsert, RETURN id, version, mode (v0=version)
-    -> [Insert Inbound Message]   (Postgres)  WORKER msg, idempotent on zalo_message_id
-    -> [Run-Start Guard]          (IF)        mode='HUMAN'?
-          true  -> Stop                                   (inbound already logged; no typing/AI)
-          false -> Typing... -> AI Agent
-                    -> [Recheck Ownership] (Postgres)  SELECT (mode='BOT' AND version=$v0) AS ok
-                    -> [Pre-Send Guard]    (IF)        {{ $recheck.ok }}
-                          false -> [Insert Suppressed Message] (Postgres, BOT, 'suppressed') -> Stop
-                          true  -> Chat Reply (existing zaloBot)
-                                   + [Insert Bot Message] (Postgres, BOT, 'sent')
-                                   + (Build Persistence Payload -> Persist Lead + Persist Memories) [unchanged]
-
-Node SQL:
-  -- Ensure Conversation   ($1 = chat_id)
-  INSERT INTO conversations (zalo_chat_id) VALUES ($1)
-  ON CONFLICT (zalo_chat_id) DO UPDATE SET updated_at=now()
-  RETURNING id, version, mode;
-
-  -- Insert Inbound Message  ($1=conv_id, $2=user_text, $3=msg_id)  [prefer Postgres `insert` op or a log_message() RPC for free-text]
-  INSERT INTO messages (conversation_id, sender, body, zalo_message_id)
-  VALUES ($1,'WORKER',$2,$3)
-  ON CONFLICT (conversation_id, zalo_message_id) WHERE zalo_message_id IS NOT NULL DO NOTHING;
-
-  -- Recheck Ownership  ($1=conv_id, $2=v0)
-  SELECT (mode='BOT' AND version=$2) AS ok FROM conversations WHERE id=$1;
-
-  -- Insert Suppressed / Insert Bot Message  ($1=conv_id, $2=AI reply text)
-  INSERT INTO messages (conversation_id, sender, body, delivery_status)
-  VALUES ($1,'BOT',$2,'suppressed');   -- or 'sent' for the success branch
-
-Implementation notes from n8n node types (consulted via n8n MCP):
-  - Postgres executeQuery binds params via options.queryReplacement (a COMMA-
-    SEPARATED list -> $1, $2, ...). Safe for the Recheck (conv_id, version).
-    For FREE-TEXT inserts (message body) prefer the Postgres node's `insert`
-    operation (column mapping) or a typed log_message() RPC, to avoid the
-    comma-split pitfall. Reuse the existing Postgres account credential and
-    the existing zaloBot node/credential (unchanged).
-  - IF node (v2.3): conditions = { combinator: 'and', conditions: [...], options }.
-
-8. Recruiter outbound (Phase B — not in the takeover core)
-
-Recruiter sends -> admin web inserts a messages row (sender=RECRUITER)
-  [RLS enforces owned + HUMAN] -> a pending-outbound row -> an n8n webhook
-  workflow CLAIMS it and sends via the existing zaloBot node (Zalo OA token
-  stays in n8n, never in the browser) -> updates delivery_status. This is a
-  mini-outbox for human messages and keeps a single Zalo-send primitive.
-On "Release to bot", append the recruiter's lines into vfic_chat_histories so
-the bot's LangChain memory (session = chat_id) includes the human exchange and
-resumes with full context.
-
-9. Acceptance tests (refined; corrects §19's "cancelled" wording; bot active:false)
-
-  1. Run-start guard: set mode='HUMAN', send a Zalo message -> one WORKER
-     message logged, no AI run, no BOT message, no Zalo send.
-  2. Pre-send guard (takeover wins): send a message triggering a slow reply
-     (temp Wait node), call take_over_conversation during the wait -> mode=HUMAN,
-     version incremented, a BOT message with delivery_status='suppressed'
-     (containing the proposed reply), a SYSTEM message, NO Zalo send.
-  3. Stale-run: take_over then release_to_bot inside one run -> original reply
-     suppressed (version mismatch); a NEW message after release -> fresh 'sent'.
-  4. Idempotency: replay the same inbound zalo_message_id -> a single WORKER row.
-  5. Double-takeover: two concurrent take_over_conversation calls (different
-     recruiters) -> exactly one succeeds, the other raises 'owned by another'.
-  6. Design-1 window (documented, not pass/fail): measure the guard->send gap;
-     confirm sub-second. A tighter Design 2/3 is available if leakage appears.
-  Flip VFIC-Chatbot to active:true only after 1-5 pass.
-
-10. High-level interaction sequence diagram (mermaid)
+High-level interaction between workers, Zalo, n8n, the admin web, and recruiters/admins (detailed flows are in [§5](#5-human-takeover-core-feature)):
 
 ```mermaid
 sequenceDiagram
@@ -794,26 +169,436 @@ sequenceDiagram
     end
 ```
 
-11. Phasing
+---
 
-  Phase A (this spec): schema + RPCs + RLS/GRANTs/Realtime + bot guard nodes +
-     acceptance tests. Shippable with SQL + a manual bot test execution; no
-     frontend required.
-  Phase B: recruiter-outbound webhook (mini-outbox) + release-to-bot memory
-     backfill into vfic_chat_histories.
-  Phase C: React + TypeScript + Vite + Tabler frontend (inbox, detail, take-
-     over button, realtime), against the RBAC + RLS model in §6.
+## 3. Roles & permissions
 
-12. MCP consultation notes (consulted before finalizing)
+### 3.1 Roles
 
-  - n8n MCP (node types): confirmed Postgres executeQuery param binding
-    (queryReplacement comma caveat) and IF node v2.3 condition shape — see §7.
-  - Supabase MCP (RLS + Realtime docs): confirmed (a) enabling RLS is
-    insufficient without GRANTs to authenticated — see §6; (b) Realtime
-    respects RLS so per-recruiter live scoping is automatic.
-  - Resulting corrections folded in: GRANTs required; "cancel" is a suppress;
-    suppressed message stores the proposed reply; free-text inserts avoid
-    executeQuery; contact reuses leads; escalation = needs_human boolean +
-    status (not a 3rd mode value).
-================================================================================
-END ADDENDUM
+Simplified to **two** user types for the MVP (no manager/content_admin/viewer yet — expand later only if VFIC grows):
+
+| Role | Meaning |
+|---|---|
+| **ADMIN** | Company owner/admin. Can see and manage everything. |
+| **RECRUITER** | Recruitment staff. Can handle assigned chats/leads and follow up workers. |
+
+```ts
+type UserRole = "admin" | "recruiter";
+```
+
+Vietnamese labels: `admin` = **Quản trị viên**, `recruiter` = **Nhân viên tuyển dụng**.
+
+**Simple rule:** admin can access all data; a recruiter can access assigned conversations/leads and can take over unassigned conversations; a recruiter cannot manage system settings, chatbot config, users, or knowledge approval.
+
+### 3.2 Permission matrix
+
+| Feature | Admin | Recruiter |
+|---|---|---|
+| Dashboard | Full | Limited |
+| View all conversations | Yes | No |
+| View assigned conversations | Yes | Yes |
+| View unassigned / new conversations | Yes | Yes |
+| Take over chat | Yes | Yes |
+| Release chat back to bot | Yes | Yes, only owned chat |
+| Send message to worker | Yes | Yes, only owned chat |
+| Assign conversation to recruiter | Yes | No |
+| Reassign conversation | Yes | No |
+| Close / reopen conversation | Yes | Yes, only owned chat |
+| View all leads | Yes | No |
+| View assigned leads | Yes | Yes |
+| Edit lead | Yes | Yes, only assigned lead |
+| Export leads | Yes | No |
+| Create / update jobs | Yes | No |
+| View jobs | Yes | Yes |
+| Upload knowledge docs | Yes | No |
+| Approve / archive knowledge docs | Yes | No |
+| View analytics | Full | Own performance only |
+| Manage users | Yes | No |
+| Manage chatbot settings | Yes | No |
+| View audit log | Yes | No |
+
+### 3.3 Navigation
+
+**Admin sidebar:** Tổng quan · Hội thoại · Lead / Ứng viên · Follow-up · Việc làm · Kho kiến thức · Báo cáo · Nhân viên tuyển dụng · Cài đặt chatbot · Nhật ký hệ thống
+
+**Recruiter sidebar:** Tổng quan của tôi · Hội thoại · Lead của tôi · Follow-up của tôi · Việc làm · Hồ sơ cá nhân
+
+---
+
+## 4. Data model
+
+### 4.1 Existing tables (reuse)
+
+Reuse as-is: `documents` (KB), `memories` (per-candidate memory), `vfic_message_dedup` (delivery dedup). Extend `leads` (add `assigned_recruiter_id`, a `status` enum for stages, and an FK to conversations — see [§7.5](#75-leads)).
+
+> **contact = lead:** there is no separate contacts table. The worker identity is the `leads` row keyed by `zalo_id`, which the bot already upserts via *VFIC Persist Lead*.
+
+### 4.2 New tables (DDL — create as a Supabase migration)
+
+```sql
+-- enums
+CREATE TYPE conversation_mode   AS ENUM ('BOT','HUMAN');
+CREATE TYPE conversation_status AS ENUM ('OPEN','CLOSED');
+CREATE TYPE message_sender      AS ENUM ('WORKER','BOT','RECRUITER','SYSTEM');
+
+-- profiles: minimal RBAC (auth.uid() FK + future frontend); auto-create on signup
+CREATE TABLE profiles (
+  id        uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role      text NOT NULL DEFAULT 'recruiter' CHECK (role IN ('admin','recruiter')),
+  full_name text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN INSERT INTO public.profiles (id) VALUES (NEW.id); RETURN NEW; END; $$;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- conversations (join key = the existing Zalo chat_id, so the bot needs no new id)
+CREATE TABLE conversations (
+  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  zalo_chat_id          text UNIQUE NOT NULL,
+  mode                  conversation_mode   NOT NULL DEFAULT 'BOT',
+  status                conversation_status NOT NULL DEFAULT 'OPEN',
+  needs_human           boolean NOT NULL DEFAULT false,   -- "Cần người xử lý" escalation flag
+  version               int  NOT NULL DEFAULT 1,          -- optimistic lock; bumped on every ownership transition
+  assigned_recruiter_id uuid REFERENCES profiles(id),
+  taken_over_at         timestamptz,
+  last_message_at       timestamptz,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+
+-- messages (structured transcript; written by bot AND human)
+CREATE TABLE messages (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender          message_sender NOT NULL,
+  recruiter_id    uuid REFERENCES profiles(id),            -- set when sender = RECRUITER
+  body            text NOT NULL,
+  zalo_message_id text,                                     -- inbound idempotency
+  delivery_status text NOT NULL DEFAULT 'sent'
+                  CHECK (delivery_status IN ('sent','suppressed','failed','pending')),
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX messages_conv_idx ON messages (conversation_id, created_at);
+CREATE UNIQUE INDEX messages_zalo_uidx
+  ON messages (conversation_id, zalo_message_id) WHERE zalo_message_id IS NOT NULL;
+
+-- updated_at
+CREATE OR REPLACE FUNCTION public.touch_updated_at() RETURNS trigger
+  LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at=now(); RETURN NEW; END; $$;
+CREATE TRIGGER conversations_touch BEFORE UPDATE ON conversations
+  FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+```
+
+### 4.3 Field decisions
+
+- `mode` {BOT, HUMAN} — **who is handling** the chat.
+- `status` {OPEN, CLOSED} — **lifecycle**.
+- `needs_human` (boolean) — the **"Cần người xử lý"** escalation flag. Chosen over a third `PENDING_HUMAN` mode value to keep "who handles" separate from "needs attention".
+- `version` — optimistic lock; bumped on every ownership transition (take over / release).
+- The suppressed `messages` row stores the bot's **proposed reply** so a recruiter can see what the bot was about to send.
+
+---
+
+## 5. Human takeover (core feature)
+
+### 5.1 Requirement & the "cancel" problem
+
+**Important rule:** when a recruiter takes over, the chatbot must stop immediately, and any in-flight bot reply must not reach the worker.
+
+n8n executions **cannot be cancelled externally**. So "cancel the pending bot reply" describes the *outcome*, not the mechanism. The correct model is **check-before-send**: the bot checks whether it still owns the conversation and, if not, silently drops the reply.
+
+### 5.2 Mechanism — two guard points
+
+1. **Run-start guard** — when a new inbound arrives, if `mode = HUMAN` the bot logs the worker's line (so the recruiter still sees it) and **stops**: no typing, no AI. This is "the bot is off for this chat."
+2. **Pre-send guard** — immediately before the Zalo send, re-check `mode = 'BOT' AND version = version_at_start`. If it fails, write a `messages` row with `delivery_status = 'suppressed'` (storing the bot's proposed reply) and **stop**.
+
+The recruiter's `take_over_conversation()` is an **atomic, transactional flip** (`mode → HUMAN`, `version++`) that the bot's guard then observes on its next read. Checking **both** `mode` and `version` also kills **stale** runs (e.g. recruiter took over *then* released back to BOT during one bot run: `mode` is BOT again but `version` changed, so the original run's reply is correctly suppressed).
+
+> The only unavoidable residual race window is the sub-second gap between the pre-send check and the Zalo HTTP call — Zalo is an external, non-transactional API. For a recruitment chat this is acceptable; tighter options exist (§5.3).
+
+### 5.3 Send-design alternatives (CHOSEN: Design 1)
+
+| | Design 1 — guard node | Design 2 — Edge Function | Design 3 — transactional outbox |
+|---|---|---|---|
+| Idea | Keep the bot's direct `zaloBot` send; insert a Postgres ownership check right before it | Replace the direct send with a Supabase Edge Function doing check + send back-to-back; same function serves recruiter outbound | Bot writes a pending message row; a worker claims it atomically (`UPDATE … WHERE mode='BOT'`) and sends |
+| Race window | n8n inter-node latency (largest, variable) | ~tens of ms (function latency) | Effectively closed at the check |
+| New infra | None | Deno function + Zalo token in Supabase secrets | Worker + monitoring |
+| MVP fit | ★★★★★ | ★★★ | ★★ |
+
+The data model in [§4](#4-data-model) is **identical for all three**, so starting with **Design 1** does not preclude graduating to Design 2 or 3 later if leakage is observed in production.
+
+### 5.4 Takeover / release RPCs
+
+Atomic, `SECURITY DEFINER` (bypass RLS safely; authorization is checked *inside*). `take_over_conversation` flips mode + assigns + bumps version + resets `needs_human` + inserts the SYSTEM message — **all in one transaction**, so a concurrent bot guard read after commit sees `HUMAN`, and two recruiters racing cannot split ownership (exactly one wins, the other raises).
+
+```sql
+CREATE OR REPLACE FUNCTION public.take_over_conversation(p_zalo_chat_id text, p_recruiter_id uuid)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_conv uuid; v_owner uuid;
+BEGIN
+  SELECT assigned_recruiter_id INTO v_owner FROM conversations WHERE zalo_chat_id=p_zalo_chat_id;
+  IF v_owner IS NOT NULL AND v_owner <> p_recruiter_id THEN
+    RAISE EXCEPTION 'conversation already owned by another recruiter';
+  END IF;
+  INSERT INTO conversations (zalo_chat_id, mode, assigned_recruiter_id, taken_over_at, version)
+  VALUES (p_zalo_chat_id,'HUMAN',p_recruiter_id,now(),2)
+  ON CONFLICT (zalo_chat_id) DO UPDATE
+    SET mode='HUMAN', assigned_recruiter_id=p_recruiter_id, taken_over_at=now(),
+        needs_human=false, version=conversations.version+1
+  RETURNING id INTO v_conv;
+  INSERT INTO messages (conversation_id, sender, body)
+  VALUES (v_conv,'SYSTEM','Cuộc hội thoại đã được chuyển cho nhân viên.');
+  RETURN v_conv;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.release_to_bot(p_zalo_chat_id text, p_recruiter_id uuid)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_conv uuid;
+BEGIN
+  UPDATE conversations SET mode='BOT', version=version+1
+  WHERE zalo_chat_id=p_zalo_chat_id AND assigned_recruiter_id=p_recruiter_id
+  RETURNING id INTO v_conv;
+  IF v_conv IS NULL THEN RAISE EXCEPTION 'not owner or not found'; END IF;
+  INSERT INTO messages (conversation_id, sender, body)
+  VALUES (v_conv,'SYSTEM','Cuộc hội thoại đã được trả lại cho chatbot.');
+  RETURN v_conv;
+END; $$;
+```
+
+### 5.5 n8n bot modifications
+
+Edit **`VFIC-Chatbot.json`** (workflow id `iodmXzjRe03KqPdB`) **in place** — do not create a new workflow. Keep `active: false` until acceptance tests pass. New chain (added nodes in [brackets]; `Normalize` also exports `msg_id` from the Zalo payload — confirm exact path during edit):
+
+```
+Zalo Message -> Dedup Message -> Normalize Message
+  -> [Ensure Conversation]      (Postgres)  upsert, RETURN id, version, mode (v0=version)
+  -> [Insert Inbound Message]   (Postgres)  WORKER msg, idempotent on zalo_message_id
+  -> [Run-Start Guard]          (IF)        mode='HUMAN'?
+        true  -> Stop                                   (inbound already logged; no typing/AI)
+        false -> Typing... -> AI Agent
+                  -> [Recheck Ownership] (Postgres)  SELECT (mode='BOT' AND version=$v0) AS ok
+                  -> [Pre-Send Guard]    (IF)        {{ $recheck.ok }}
+                        false -> [Insert Suppressed Message] (Postgres, BOT, 'suppressed') -> Stop
+                        true  -> Chat Reply (existing zaloBot)
+                                 + [Insert Bot Message] (Postgres, BOT, 'sent')
+                                 + (Build Persistence Payload -> Persist Lead + Persist Memories) [unchanged]
+```
+
+Node SQL:
+
+```sql
+-- Ensure Conversation   ($1 = chat_id)
+INSERT INTO conversations (zalo_chat_id) VALUES ($1)
+ON CONFLICT (zalo_chat_id) DO UPDATE SET updated_at=now()
+RETURNING id, version, mode;
+
+-- Insert Inbound Message  ($1=conv_id, $2=user_text, $3=msg_id)  [prefer Postgres `insert` op or a log_message() RPC for free-text]
+INSERT INTO messages (conversation_id, sender, body, zalo_message_id)
+VALUES ($1,'WORKER',$2,$3)
+ON CONFLICT (conversation_id, zalo_message_id) WHERE zalo_message_id IS NOT NULL DO NOTHING;
+
+-- Recheck Ownership  ($1=conv_id, $2=v0)
+SELECT (mode='BOT' AND version=$2) AS ok FROM conversations WHERE id=$1;
+
+-- Insert Suppressed / Insert Bot Message  ($1=conv_id, $2=AI reply text)
+INSERT INTO messages (conversation_id, sender, body, delivery_status)
+VALUES ($1,'BOT',$2,'suppressed');   -- or 'sent' for the success branch
+```
+
+**n8n implementation notes** (from n8n MCP node types):
+
+- Postgres `executeQuery` binds params via `options.queryReplacement` — a **comma-separated** list → `$1, $2, …`. Safe for the Recheck (`conv_id`, `version`). For **free-text** inserts (the message body), prefer the Postgres node's `insert` operation (column mapping) or a typed `log_message()` RPC, to avoid the comma-split pitfall.
+- IF node (v2.3): `conditions = { combinator: 'and', conditions: [...], options }`.
+- Reuse the existing **Postgres account** credential and the existing **`zaloBot`** node/credential (unchanged).
+
+### 5.6 Recruiter outbound (Phase B)
+
+Recruiter sends → admin web inserts a `messages` row (`sender = RECRUITER`) [RLS enforces owned + HUMAN] → a pending-outbound row → an n8n webhook workflow **claims** it and sends via the existing `zaloBot` node (Zalo OA token stays in n8n, never in the browser) → updates `delivery_status`. This is a **mini-outbox** for human messages and keeps a single Zalo-send primitive.
+
+On **Release to bot**, append the recruiter's lines into `vfic_chat_histories` so the bot's LangChain memory (session = `chat_id`) includes the human exchange and resumes with full context.
+
+---
+
+## 6. Security & realtime
+
+### 6.1 RLS policies + grants
+
+RLS is **frontend-facing**; the bot bypasses it via its direct DB connection. **Enabling RLS alone is not enough** — the `authenticated` role also needs table privileges or policies silently match nothing. `anon` gets nothing (the CRM is auth-only).
+
+```sql
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles     ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON conversations, messages, profiles TO authenticated;
+
+-- admin = all; recruiter = assigned-to-me OR unassigned; recruiter may INSERT only
+-- RECRUITER messages on a conversation they own that is HUMAN.
+CREATE POLICY conv_admin_all        ON conversations FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'));
+CREATE POLICY conv_recruiter_read   ON conversations FOR SELECT TO authenticated
+  USING (assigned_recruiter_id=auth.uid() OR assigned_recruiter_id IS NULL);
+CREATE POLICY msg_admin_all         ON messages FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin'));
+CREATE POLICY msg_recruiter_read    ON messages FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM conversations c WHERE c.id=conversation_id
+        AND (c.assigned_recruiter_id=auth.uid() OR c.assigned_recruiter_id IS NULL)));
+CREATE POLICY msg_recruiter_insert  ON messages FOR INSERT TO authenticated
+  WITH CHECK (sender='RECRUITER' AND recruiter_id=auth.uid()
+        AND EXISTS (SELECT 1 FROM conversations c WHERE c.id=conversation_id
+                    AND c.assigned_recruiter_id=auth.uid() AND c.mode='HUMAN'));
+CREATE POLICY profile_self          ON profiles FOR SELECT TO authenticated
+  USING (id=auth.uid() OR EXISTS (SELECT 1 FROM profiles p WHERE p.id=auth.uid() AND p.role='admin'));
+```
+
+### 6.2 Realtime
+
+Enroll the tables and set full replica identity so the inbox/transcript push live. **Realtime respects RLS**: a recruiter's `postgres_changes` subscription only fires for rows her `SELECT` policy allows → per-recruiter live scoping is automatic (no client-side filtering needed).
+
+```sql
+ALTER TABLE conversations REPLICA IDENTITY FULL;
+ALTER TABLE messages     REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE conversations, messages;
+```
+
+---
+
+## 7. Feature & page specs
+
+### 7.1 Login
+
+Route `/login`. After login: `admin → /dashboard`, `recruiter → /my-dashboard`.
+
+### 7.2 Dashboards
+
+**Admin dashboard** (`/dashboard`) — company-wide metrics: total conversations; new conversations today; active bot conversations; human-takeover conversations; qualified leads; applications; hires; overdue follow-ups; failed Zalo sends; n8n workflow errors.
+
+**Recruiter dashboard** (`/my-dashboard`) — personal work only: my assigned/unread conversations; my assigned/qualified leads; my overdue/completed follow-ups; my applications; my hires.
+
+### 7.3 Conversation inbox
+
+Route `/conversations`.
+
+**Admin view:** all conversations, bot conversations, pending-human conversations, human-owned conversations, closed conversations, all recruiters' conversations.
+
+**Recruiter view:** conversations assigned to me, unassigned conversations, conversations I took over, conversations needing human support. A recruiter should not see conversations assigned to another recruiter unless an admin allows it later.
+
+**Filters:** Tất cả · Của tôi · Chưa phân công · Cần người xử lý · Bot đang xử lý · Tôi đang xử lý · Đã đóng. For admin, add: **Theo nhân viên tuyển dụng**.
+
+### 7.4 Conversation detail
+
+Route `/conversations/:id`. Main actions:
+
+| Action | Admin | Recruiter |
+|---|---|---|
+| Take over | Yes | Yes, if unassigned or assigned to self |
+| Send message | Yes | Yes, if assigned to self |
+| Assign recruiter | Yes | No |
+| Release to bot | Yes | Yes, if assigned to self |
+| Close | Yes | Yes, if assigned to self |
+| Reopen | Yes | Yes, if assigned to self |
+| Add note | Yes | Yes, if assigned to self |
+| Delete message | No by default | No |
+
+`take_over_conversation(conversation_id, recruiter_id)` must: set `mode = HUMAN`, set `assigned_recruiter_id`, increment `version`, suppress the in-flight bot reply via the pre-send guard (no kill signal — see [§5](#5-human-takeover-core-feature)), insert a system message + audit event, and push a realtime update.
+
+### 7.5 Leads
+
+Admin route `/leads` (all leads). Recruiter route `/my-leads` (assigned leads, leads from conversations they own, and unassigned qualified leads only if recruiter self-pickup is allowed).
+
+**Lead stages** (keep simple):
+
+`NEW · ENGAGED · QUALIFIED · APPLIED · HIRED · LOST · UNQUALIFIED`
+
+`HANDED_OFF` is removed (recruiters are inside the system); handoff is represented by `assigned_recruiter_id IS NOT NULL`. Implement stages as a CHECK/enum on `leads.status`.
+
+### 7.6 Jobs
+
+**Admin:** create / edit / activate / pause / mark full / archive jobs.
+**Recruiter:** view active jobs, search, copy job info, recommend a job to a worker, view matched leads for own leads only. Recruiters should not edit job records in the MVP.
+
+### 7.7 Knowledge base
+
+Only **admin** should manage company knowledge (this avoids recruiters changing what the chatbot is allowed to say). Admin can: upload document, preview extracted text, approve, archive, re-run embedding, test retrieval. Recruiters get no access (MVP recommendation) or read-only access to approved knowledge.
+
+### 7.8 Follow-up
+
+**Admin** sees all follow-ups and can reassign or delete any.
+**Recruiter** sees only their own pending / overdue / completed follow-ups, and can: create a follow-up for an own lead, mark done, snooze, or cancel their own follow-up.
+
+---
+
+## 8. Acceptance tests
+
+1. **Run-start guard** — set `mode = HUMAN`, send a Zalo message → one WORKER message logged, no AI run, no BOT message, no Zalo send.
+2. **Pre-send guard (takeover wins)** — given `mode = BOT` and a bot reply generating, when the recruiter clicks Take over: `mode` becomes HUMAN, `version` increments, the in-flight bot reply is **suppressed** (the pre-send guard sees `mode = HUMAN` and skips the send — there is no kill signal), a BOT message with `delivery_status = 'suppressed'` (containing the proposed reply) and a SYSTEM message are written, and **no** bot message is sent to Zalo.
+3. **Stale-run** — `take_over` then `release_to_bot` inside one run → the original reply is suppressed (version mismatch); a new message after release gets a fresh `sent` BOT reply.
+4. **Idempotency** — replay the same inbound `zalo_message_id` → a single WORKER row.
+5. **Double-takeover** — two concurrent `take_over_conversation` calls (different recruiters) → exactly one succeeds, the other raises "owned by another recruiter".
+6. **Recruiter reply** — given `mode = HUMAN` and the recruiter is assigned, when the recruiter sends a message → an outbound message is created, the Zalo message is sent, and the transcript updates in realtime.
+7. **Bot guardrail** — given an off-topic question, when the chatbot processes it → the bot gives a short redirect response and does not invent an unrelated answer.
+8. **Lead qualification** — given a worker states job preference, location, and availability, when the qualification workflow runs → `lead_stage` becomes QUALIFIED, qualification reasons are saved, and a recruiter follow-up task is created.
+9. **Design-1 window (documented, not pass/fail)** — measure the guard → send gap; confirm it is sub-second. A tighter Design 2/3 is available if leakage appears.
+
+Flip `VFIC-Chatbot` to `active: true` only after tests 1–5 pass.
+
+---
+
+## 9. Build plan
+
+### 9.1 Phases
+
+- **Phase A — takeover core:** schema + RPCs + RLS/grants/Realtime + bot guard nodes + acceptance tests. Shippable with SQL and a manual bot test execution; no frontend required.
+- **Phase B — recruiter engagement:** recruiter-outbound webhook (mini-outbox) + release-to-bot memory backfill into `vfic_chat_histories`.
+- **Phase C — frontend:** React + TypeScript + Vite + Tabler UI (inbox, detail, take-over button, realtime), against the RBAC + RLS model in [§6](#6-security--realtime).
+
+### 9.2 Sprints (within the frontend phases)
+
+- **Sprint 1 — Foundation:** Tabler layout, login, RBAC, database tables, basic dashboard shell.
+- **Sprint 2 — Conversation MVP:** inbox, detail, realtime messages, take over, release to bot, recruiter send message, close/reopen.
+- **Sprint 3 — Lead CRM:** lead list, detail, stage update, assign recruiter, internal notes, follow-up task.
+- **Sprint 4 — Jobs and knowledge:** job CRUD, knowledge document list, upload, approve/archive, basic retrieval test page.
+- **Sprint 5 — Analytics and hardening:** dashboard metrics, audit log, export leads, error states, permission testing, mobile responsive fixes.
+
+---
+
+## 10. MVP definition
+
+The first production MVP is complete when recruiters can:
+
+- Log in
+- See all Zalo conversations
+- Open a conversation
+- Take over from the chatbot
+- Send a message to a worker
+- View a lead profile
+- Update a lead stage
+- Assign a recruiter
+- Create a follow-up task
+- Close a conversation
+
+That is the core miniCRM. Job management, knowledge approval, and analytics are important, but the first must-have is **conversation control + lead ownership**.
+
+---
+
+## 11. Notes & references
+
+### 11.1 Takeover feature status against the current system
+
+Most of the takeover feature is **greenfield** on the data layer (no `conversations`/`messages`/`profiles` tables, no `mode`/`version`/`assigned_recruiter_id`, no `take_over`/`release` RPCs, no Realtime enrollment, no send-time guard), **plus a required modification to the bot workflow**. The miniCRM frontend does not exist yet.
+
+### 11.2 MCP consultation (consulted before finalizing)
+
+- **n8n MCP (node types):** confirmed Postgres `executeQuery` param binding (`queryReplacement` comma caveat) and the IF node v2.3 condition shape — see [§5.5](#55-n8n-bot-modifications).
+- **Supabase MCP (RLS + Realtime docs):** confirmed (a) enabling RLS is insufficient without GRANTs to `authenticated` — see [§6.1](#61-rls-policies--grants); (b) Realtime respects RLS, so per-recruiter live scoping is automatic.
+- **Resulting decisions:** GRANTs required; "cancel" is a suppress; the suppressed message stores the proposed reply; free-text inserts avoid `executeQuery`; contact reuses `leads`; escalation is a `needs_human` boolean + `status` (not a third mode value).
+
+### 11.3 Infrastructure
+
+- n8n is hosted on DigitalOcean (VPS 1 vCPU, 2 GB RAM, 50 GB SSD) and hosts the ChatBot workflow.
+- The Zalo OA token must stay server-side (n8n or a Supabase Edge Function), never in the browser.
