@@ -1,0 +1,29 @@
+// See https://containers.dev/implementors/json_reference/ for configuration reference
+{
+  "name": "Atomic CRM",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceFolder": "/workspaces/atomic-crm",
+  "workspaceMount": "source=${localWorkspaceFolder},target=${containerWorkspaceFolder},type=bind,consistency=cached",
+  "remoteUser": "node",
+  "features": {
+    "./claude-code": {},
+    "./npm": {
+      "workspaceFolder": "${containerWorkspaceFolder}"
+    },
+    "./playwright": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  },
+  "mounts": [
+    {
+      "type": "volume",
+      "source": "${devcontainerId}-tmp",
+      "target": "/tmp"
+    }
+  ]
+}
