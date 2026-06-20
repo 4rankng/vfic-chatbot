@@ -114,7 +114,7 @@
     },
     {
       "parameters": {
-        "event": "fileCreated",
+        "event": "={{ 'fileCreated' }}",
         "folderToWatch": {
           "__rl": true,
           "cachedResultName": "VFIC-Knowledge",
@@ -276,19 +276,6 @@
           "name": "Google Drive account"
         }
       }
-    },
-    {
-      "parameters": {
-        "jsCode": "const currentFiles = $input.all()\n  .map((item) => item.json ?? {})\n  .filter((item) => item.id)\n  .map((item) => ({\n    drive_file_id: String(item.id),\n    file_name: item.name ?? null,\n    modified_time: item.modifiedTime ?? null,\n    version: item.version ?? null,\n  }));\n\nreturn [{\n  json: {\n    current_file_ids: currentFiles.map((item) => item.drive_file_id),\n    current_files: currentFiles,\n  },\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -352,
-        320
-      ],
-      "id": "9f0b1d7c-e6b0-4f98-8cb9-4da49f79c437",
-      "name": "Collect Current Drive Files"
     },
     {
       "parameters": {
@@ -484,28 +471,6 @@
         ]
       ]
     },
-    "Search Current Drive Files": {
-      "main": [
-        [
-          {
-            "node": "Collect Current Drive Files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect Current Drive Files": {
-      "main": [
-        [
-          {
-            "node": "Get Indexed KB Files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Get Indexed KB Files": {
       "main": [
         [
@@ -562,13 +527,13 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "3c9e245f-6d91-4b0d-8b75-7a1ba09f17dc",
+  "versionId": "64605f60-f9d9-42aa-9d56-e55650a3b5ee",
   "meta": {
     "instanceId": "c84bcc898daaa57109bc9fb5491b846480cbc722b97f195dcd3b8e23390f5edd"
   },

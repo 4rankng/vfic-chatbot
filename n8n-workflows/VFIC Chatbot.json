@@ -20,7 +20,7 @@
     {
       "parameters": {
         "operation": "sendChatAction",
-        "chatId": "={{ $json.chat_id }}"
+        "chatId": "={{ $('Normalize Message').item.json.chat_id }}"
       },
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
@@ -452,10 +452,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select * from public.search_bus_timetable('vfic', 'LG Display', $1, null, null, 12);",
+        "query": "select * from public.search_bus_timetable('vfic', $1, $2, null, null, 12);",
         "options": {
           "queryBatching": "independently",
-          "queryReplacement": "={{ [$fromAI('question', 'Nguyên văn câu hỏi lịch xe/xe buýt/xe đưa đón của người dùng, giữ nguyên địa điểm và ca làm việc nếu có', 'string')] }}"
+          "queryReplacement": "={{ [$fromAI('company', 'Tên công ty người dùng đang hỏi; nếu không nói rõ nhưng ngữ cảnh là LG Display hoặc LGD thì dùng LG Display', 'string'), $fromAI('question', 'Nguyên văn câu hỏi lịch xe/xe buýt/xe đưa đón của người dùng, giữ nguyên địa điểm và ca làm việc nếu có', 'string')] }}"
         }
       },
       "id": "bustimetable-structured-tool-0001",
@@ -473,6 +473,36 @@
         }
       },
       "notes": "Structured timetable lookup. Calls public.search_bus_timetable instead of letting the LLM infer bus stop times from RAG chunks."
+    },
+    {
+      "id": "zalo-typing-heartbeat-start-0001",
+      "name": "Start Typing Heartbeat",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -4488,
+        1664
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "xC09ai7j1kD1djbo",
+          "mode": "id",
+          "cachedResultName": "VFIC Zalo Typing Heartbeat",
+          "cachedResultUrl": "/workflow/xC09ai7j1kD1djbo"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $json.chat_id }}"
+          }
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "notes": "Fire-and-forget typing heartbeat. Starts a child workflow that refreshes Zalo sendChatAction while the AI Agent is generating a response."
     }
   ],
   "pinData": {},
@@ -481,7 +511,7 @@
       "main": [
         [
           {
-            "node": "Typing...",
+            "node": "Start Typing Heartbeat",
             "type": "main",
             "index": 0
           }
@@ -680,15 +710,26 @@
           }
         ]
       ]
+    },
+    "Start Typing Heartbeat": {
+      "main": [
+        [
+          {
+            "node": "Typing...",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "7f86cb8e-e85b-492c-ad61-385023768295",
+  "versionId": "bc4fc794-286a-45ed-b653-7be0199070fd",
   "meta": {
     "templateCredsSetupCompleted": true,
     "aiBuilderAssisted": true,

@@ -1,0 +1,463 @@
+{
+  "name": "VFIC Zalo Typing Heartbeat",
+  "nodes": [
+    {
+      "id": "03311ed9-72b1-40dc-95fe-cb626dade869",
+      "name": "Heartbeat Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "chat_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fd5a1026-7b6e-47e8-96aa-984d71703ece",
+      "name": "Typing Pulse 1",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "eb1cd519-d464-410d-962d-490be6801a52",
+      "name": "Wait 4s 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "webhookId": "bc364140-5013-44a8-9902-940c91e90483"
+    },
+    {
+      "id": "55f8e5c2-cb37-437f-a934-1645c42fe18d",
+      "name": "Typing Pulse 2",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "1256f878-e504-484c-8898-eff75a1c3182",
+      "name": "Wait 4s 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "webhookId": "03d695b4-a688-4b3e-8966-763e84dd8d4f"
+    },
+    {
+      "id": "2b3d2c4e-151c-4a0d-8e7d-d955a6b5ad2c",
+      "name": "Typing Pulse 3",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "ec9c6854-ae86-4c65-a0dd-39e3b06fb6e9",
+      "name": "Wait 4s 3",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "webhookId": "c71a5486-e615-4f69-a6eb-405f0e55e12a"
+    },
+    {
+      "id": "9cac3bf1-4781-4f02-8895-10dc5c7e970c",
+      "name": "Typing Pulse 4",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "a5c3dd10-2491-49eb-a4ca-875acc154368",
+      "name": "Wait 4s 4",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "webhookId": "d64ccbd3-1709-4992-a25d-9303dacb1b1e"
+    },
+    {
+      "id": "13d57233-a462-494b-9646-bd25be5cf607",
+      "name": "Typing Pulse 5",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "5ab09da2-bc13-4cc1-88a5-919903c047c0",
+      "name": "Wait 4s 5",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "webhookId": "6db7a3c9-328b-4b61-91c4-7ed483b5bf33"
+    },
+    {
+      "id": "1f6993f6-abb5-4019-98e8-e1b7c2d061c5",
+      "name": "Typing Pulse 6",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "6d2a18b9-5bc3-4e50-9d70-ce745a59cf4d",
+      "name": "Wait 4s 6",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "webhookId": "9d70a89e-b787-40ec-969e-5fb71fba4c2d"
+    },
+    {
+      "id": "0407fc26-76f8-4a85-9751-e4e34dc7367f",
+      "name": "Typing Pulse 7",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        2912,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "ea1277ce-be49-4460-aa5a-25f64d46c1e7",
+      "name": "Wait 4s 7",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3136,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "webhookId": "f2cf1f9f-0a99-43ac-98c3-4a425e353edf"
+    },
+    {
+      "id": "a5e37ff3-1682-4fd7-b17a-0f6bd5980ece",
+      "name": "Typing Pulse 8",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        0
+      ],
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.chat_id }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Heartbeat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing Pulse 1": {
+      "main": [
+        [
+          {
+            "node": "Wait 4s 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 1": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing Pulse 2": {
+      "main": [
+        [
+          {
+            "node": "Wait 4s 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 2": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing Pulse 3": {
+      "main": [
+        [
+          {
+            "node": "Wait 4s 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 3": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing Pulse 4": {
+      "main": [
+        [
+          {
+            "node": "Wait 4s 4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 4": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing Pulse 5": {
+      "main": [
+        [
+          {
+            "node": "Wait 4s 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 5": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing Pulse 6": {
+      "main": [
+        [
+          {
+            "node": "Wait 4s 6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 6": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typing Pulse 7": {
+      "main": [
+        [
+          {
+            "node": "Wait 4s 7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 7": {
+      "main": [
+        [
+          {
+            "node": "Typing Pulse 8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "a4555479-ff27-4410-8a04-9130a6d85d72",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "id": "xC09ai7j1kD1djbo",
+  "tags": []
+}
