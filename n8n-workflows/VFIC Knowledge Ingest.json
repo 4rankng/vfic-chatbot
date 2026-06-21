@@ -304,7 +304,24 @@
     },
     {
       "parameters": {
-        "jsCode": "const currentIds = new Set(( $('Collect Current Drive Files').first()?.json?.current_file_ids ?? [] ).map((value) => String(value)));\nconst stale = new Set();\n\nfor (const item of $input.all()) {\n  const driveFileId = item.json?.drive_file_id ? String(item.json.drive_file_id) : '';\n  if (driveFileId && !currentIds.has(driveFileId)) {\n    stale.add(driveFileId);\n  }\n}\n\nreturn [...stale].map((drive_file_id) => ({\n  json: { drive_file_id },\n}));"
+        "mode": "runOnceForAllItems",
+        "jsCode": "const currentFileIds = [...new Set(\n  $input.all()\n    .map((item) => String(item.json?.id ?? '').trim())\n    .filter(Boolean)\n)];\n\nreturn [{\n  json: {\n    current_file_ids: currentFileIds,\n    current_file_count: currentFileIds.length,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        320
+      ],
+      "id": "93c9a2ac-3a3b-45d4-b1db-e12b18304a65",
+      "name": "Collect Current Drive Files",
+      "notesInFlow": true,
+      "notes": "Collapses the Google Drive search results into a single item that contains the current Drive file IDs for reconcile/deletion checks."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const allItems = $input.all();\nconst currentIds = new Set(\n  (allItems.find((item) => Array.isArray(item.json?.current_file_ids))?.json?.current_file_ids ?? [])\n    .map((value) => String(value).trim())\n    .filter(Boolean)\n);\nconst stale = new Set();\n\nfor (const item of allItems) {\n  const driveFileId = item.json?.drive_file_id ? String(item.json.drive_file_id).trim() : '';\n  if (driveFileId && !currentIds.has(driveFileId)) {\n    stale.add(driveFileId);\n  }\n}\n\nreturn [...stale].map((drive_file_id) => ({\n  json: { drive_file_id },\n}));"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -467,11 +484,38 @@
             "node": "Search Current Drive Files",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Get Indexed KB Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Current Drive Files": {
+      "main": [
+        [
+          {
+            "node": "Collect Current Drive Files",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     },
     "Get Indexed KB Files": {
+      "main": [
+        [
+          {
+            "node": "Find Removed Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Current Drive Files": {
       "main": [
         [
           {
@@ -531,9 +575,9 @@
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
-    "availableInMCP": false
+    "availableInMCP": true
   },
-  "versionId": "64605f60-f9d9-42aa-9d56-e55650a3b5ee",
+  "versionId": "589ba334-6812-4107-adaa-1a42723570ec",
   "meta": {
     "instanceId": "c84bcc898daaa57109bc9fb5491b846480cbc722b97f195dcd3b8e23390f5edd"
   },

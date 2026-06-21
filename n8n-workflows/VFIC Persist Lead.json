@@ -16,8 +16,23 @@
     },
     {
       "parameters": {
+        "jsCode": "const trigger = $input.first()?.json ?? {};\n\nreturn [{\n  json: {\n    ...trigger,\n    __source: 'lead_context',\n  },\n}];"
+      },
+      "id": "1dc09c1b-3151-4f72-90f7-4c7dd38bd620",
+      "name": "Prepare Lead Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        144
+      ],
+      "notesInFlow": true,
+      "notes": "Carries the trigger payload forward as regular data so this workflow also works when embedded inline inside Execute Workflow."
+    },
+    {
+      "parameters": {
         "promptType": "define",
-        "text": "={{ 'Tin nhắn người dùng: ' + ($('Execute Sub-workflow Trigger').first().json.user_text ?? '') + '\\n\\nPhản hồi của bot: ' + ($('Execute Sub-workflow Trigger').first().json.bot_output ?? '') }}",
+        "text": "={{ 'Tin nhắn người dùng: ' + ($json.user_text ?? '') + '\\n\\nPhản hồi của bot: ' + ($json.bot_output ?? '') }}",
         "hasOutputParser": true,
         "messages": {
           "messageValues": [
@@ -83,7 +98,8 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first()?.json ?? {};\nconst raw = input.output ?? input.text ?? input;\n\nconst parseLead = (value) => {\n  if (value && typeof value === 'object' && !Array.isArray(value)) return value;\n\n  const text = String(value ?? '').trim();\n  if (!text) return {};\n\n  const withoutFence = text\n    .replace(/^\\x60\\x60\\x60(?:json)?/i, '')\n    .replace(/\\x60\\x60\\x60$/i, '')\n    .trim();\n  const match = withoutFence.match(/\\{[\\s\\S]*\\}/);\n  if (!match) return {};\n\n  try {\n    const parsed = JSON.parse(match[0]);\n    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};\n  } catch (error) {\n    return {};\n  }\n};\n\nconst pick = (value) => {\n  if (value === null || value === undefined) return null;\n  const text = String(value).replace(/\\s+/g, ' ').trim();\n  return text === '' ? null : text;\n};\n\nconst normalizePhone = (value) => {\n  const text = pick(value);\n  if (!text) return null;\n\n  let phone = text.replace(/[^\\d+]/g, '');\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst normalizeInteger = (value, min, max) => {\n  const text = pick(value);\n  if (!text) return null;\n  const match = text.match(/\\d{1,4}/);\n  if (!match) return null;\n  const number = Number(match[0]);\n  if (!Number.isInteger(number) || number < min || number > max) return null;\n  return number;\n};\n\nconst normalizeLeadScore = (value, phone) => {\n  const score = pick(value)?.toLowerCase();\n  if (['hot', 'warm', 'not_interested'].includes(score)) return score;\n  return phone ? 'hot' : null;\n};\n\nconst ext = parseLead(raw);\nconst chatId = pick($('Execute Sub-workflow Trigger').first()?.json?.chat_id);\n\nif (!chatId) {\n  throw new Error('Missing normalized Zalo chat ID');\n}\n\nconst phone = normalizePhone(ext.phone);\n\nreturn [{\n  json: {\n    zalo_id: chatId,\n    name: pick(ext.name),\n    phone,\n    birth_year: normalizeInteger(ext.birth_year, 1900, new Date().getFullYear()),\n    age: normalizeInteger(ext.age, 15, 80),\n    living_area: pick(ext.living_area),\n    address: pick(ext.address),\n    gender: pick(ext.gender),\n    region: pick(ext.region),\n    desired_job: pick(ext.desired_job),\n    years_experience: pick(ext.years_experience),\n    latest_company: pick(ext.latest_company),\n    expected_salary: pick(ext.expected_salary),\n    lead_score: normalizeLeadScore(ext.lead_score, phone),\n  },\n}];"
+        "jsCode": "const context = $('Prepare Lead Context').first()?.json ?? {};\nconst extractor = $input.first()?.json ?? {};\nconst raw = extractor.output ?? extractor.text ?? extractor;\n\nconst parseLead = (value) => {\n  if (value && typeof value === 'object' && !Array.isArray(value)) return value;\n\n  const text = String(value ?? '').trim();\n  if (!text) return {};\n\n  const withoutFence = text\n    .replace(/^\\x60\\x60\\x60(?:json)?/i, '')\n    .replace(/\\x60\\x60\\x60$/i, '')\n    .trim();\n  const match = withoutFence.match(/\\{[\\s\\S]*\\}/);\n  if (!match) return {};\n\n  try {\n    const parsed = JSON.parse(match[0]);\n    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};\n  } catch (error) {\n    return {};\n  }\n};\n\nconst pick = (value) => {\n  if (value === null || value === undefined) return null;\n  const text = String(value).replace(/\\s+/g, ' ').trim();\n  return text === '' ? null : text;\n};\n\nconst normalizePhone = (value) => {\n  const text = pick(value);\n  if (!text) return null;\n\n  let phone = text.replace(/[^\\d+]/g, '');\n  if (phone.startsWith('+84')) phone = '0' + phone.slice(3);\n  if (phone.startsWith('84') && phone.length >= 11) phone = '0' + phone.slice(2);\n\n  return /^0\\d{8,10}$/.test(phone) ? phone : null;\n};\n\nconst normalizeInteger = (value, min, max) => {\n  const text = pick(value);\n  if (!text) return null;\n  const match = text.match(/\\d{1,4}/);\n  if (!match) return null;\n  const number = Number(match[0]);\n  if (!Number.isInteger(number) || number < min || number > max) return null;\n  return number;\n};\n\nconst normalizeLeadScore = (value, phone) => {\n  const score = pick(value)?.toLowerCase();\n  if (['hot', 'warm', 'not_interested'].includes(score)) return score;\n  return phone ? 'hot' : null;\n};\n\nconst ext = parseLead(raw);\nconst chatId = pick(context.chat_id);\n\nif (!chatId) {\n  return [];\n}\n\nconst phone = normalizePhone(ext.phone);\n\nreturn [{\n  json: {\n    zalo_id: chatId,\n    name: pick(ext.name),\n    phone,\n    birth_year: normalizeInteger(ext.birth_year, 1900, new Date().getFullYear()),\n    age: normalizeInteger(ext.age, 15, 80),\n    living_area: pick(ext.living_area),\n    address: pick(ext.address),\n    gender: pick(ext.gender),\n    region: pick(ext.region),\n    desired_job: pick(ext.desired_job),\n    years_experience: pick(ext.years_experience),\n    latest_company: pick(ext.latest_company),\n    expected_salary: pick(ext.expected_salary),\n    lead_score: normalizeLeadScore(ext.lead_score, phone),\n  },\n}];",
+        "mode": "runOnceForAllItems"
       },
       "id": "318e5f1e-1640-4fbe-8664-3c1d9b0bc7ef",
       "name": "Merge Lead",
@@ -129,7 +145,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const row = $input.first()?.json ?? {};\nreturn [{\n  json: {\n    ok: true,\n    zalo_id: row.zalo_id ?? $('Execute Sub-workflow Trigger').first()?.json?.chat_id ?? null,\n    lead_score: row.lead_score ?? null,\n    phone_present: Boolean(row.phone),\n  },\n}];"
+        "jsCode": "const row = $input.first()?.json ?? {};\nreturn [{\n  json: {\n    ok: true,\n    zalo_id: row.zalo_id ?? null,\n    lead_score: row.lead_score ?? null,\n    phone_present: Boolean(row.phone),\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -144,6 +160,17 @@
   "pinData": {},
   "connections": {
     "Execute Sub-workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Lead Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Lead Context": {
       "main": [
         [
           {
@@ -210,13 +237,13 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
-    "availableInMCP": false
+    "availableInMCP": true
   },
-  "versionId": "270501ff-ca6e-4cfd-a6fd-fb6aeaf496a6",
+  "versionId": "0faa8f5f-6793-4bdd-8d26-6e148c73e641",
   "meta": {
     "instanceId": "c84bcc898daaa57109bc9fb5491b846480cbc722b97f195dcd3b8e23390f5edd"
   },

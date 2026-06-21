@@ -1,3 +1,12 @@
 .omc
 .DS_Store
 .claude
+
+# vendored upstream clone (Chatwoot Rails source) — 146MB, has its own .git
+chatwoot/
+
+# never commit secrets
+.env
+.env.*
+!.env.example
+
