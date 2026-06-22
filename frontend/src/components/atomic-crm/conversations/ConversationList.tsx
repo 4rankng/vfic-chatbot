@@ -1,61 +1,30 @@
 import { useState, useMemo, useEffect } from "react";
-import { ListBase, useListContext, useDataProvider } from "ra-core";
+import { ListBase, useListContext, useDataProvider, RecordContextProvider } from "ra-core";
 import { useLocation } from "react-router";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import {
-  Bot,
-  Filter,
-  Inbox,
-  MessageSquare,
-  Search,
-  UserCircle,
-} from "lucide-react";
-import { TopToolbar } from "../layout/TopToolbar";
-
 import type { Conversation, Lead, Message } from "../types";
-import { LEAD_STAGES } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
-import { RecordContextProvider } from "ra-core";
-import { getRelativeTimeString } from "../leads/leadUtils";
-import { LeadAvatar } from "../leads/LeadAvatar";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
+import { InboxIcons } from "./InboxIcons";
+import "./inbox.css";
 
-type ModeFilter = "all" | "bot" | "human";
+type ModeFilter = "all" | "bot" | "handoff";
 
 type ConversationRow = Conversation & {
   _lead?: Lead | null;
   _lastMessage?: Message | null;
 };
 
-const MODE_LABELS: Record<ModeFilter, string> = {
-  all: "Tất cả",
-  bot: "Bot",
-  human: "Nhân viên",
+export const getLeadStatusColor = (lead?: Lead | null) => {
+  if (!lead || (!lead.name && !lead.phone)) return { bg: 'var(--surface-solid)', ink: 'var(--ink-faint)' };
+  if (!lead.phone || !lead.desired_job) return { bg: 'var(--brand-light)', ink: 'var(--brand)' };
+  return { bg: 'var(--success-light)', ink: 'var(--success)' };
 };
 
-const stageLabel = (value: string) =>
-  LEAD_STAGES.find((s) => s.value === value)?.label ?? value;
-
-const ModeBadge = ({ mode }: { mode: "bot" | "human" }) => (
-  <Badge
-    variant={mode === "human" ? "default" : "secondary"}
-    className="gap-1 text-[10px] font-semibold uppercase tracking-wide"
-  >
-    {mode === "human" ? (
-      <>
-        <UserCircle className="size-3" /> Nhân viên
-      </>
-    ) : (
-      <>
-        <Bot className="size-3" /> Bot
-      </>
-    )}
-  </Badge>
-);
+const getRelativeTimeString = (dateStr?: string) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+};
 
 const ConversationListItem = ({
   conversation,
@@ -72,62 +41,36 @@ const ConversationListItem = ({
   const time = getRelativeTimeString(
     conversation.last_inbound_at ?? conversation.updated_at,
   );
-  const senderKind: "candidate" | "recruiter" | "bot" | "system" = lastMessage
-    ? lastMessage.type === "inbound"
-      ? "candidate"
-      : lastMessage.type === "system"
-        ? "system"
-        : lastMessage.data?.recruiter_id
-          ? "recruiter"
-          : "bot"
-    : "bot";
+  
+  const name = lead?.name || `Khách hàng · ${(conversation.zalo_chat_id || "").slice(-4)}`;
+  const colors = getLeadStatusColor(lead);
+  
+  const statusClass = conversation.mode === 'human' ? 'handoff' : 'bot';
+  const statusLabel = conversation.mode === 'human' ? 'Cần tiếp nhận' : 'AI đang xử lý';
 
   return (
     <button
-      type="button"
+      className={`conversation ${isActive ? "active" : ""}`}
       onClick={() => onSelect(conversation)}
-      className={cn(
-        "flex w-full items-start gap-3 border-b border-border/40 px-4 py-4 text-left transition-colors relative",
-        isActive
-          ? "bg-primary/5 hover:bg-primary/10"
-          : "hover:bg-muted/60 focus-visible:bg-muted focus-visible:outline-none",
-      )}
+      aria-label={`Mở hội thoại với ${name}`}
     >
-      {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-md"></div>}
-      <div className="shrink-0 pt-0.5">
-        <LeadAvatar record={lead as any} size="md" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2 mb-1">
-          <span className="truncate text-sm font-semibold text-foreground">
-            {lead?.name ||
-              `Khách hàng chưa biết · đuôi ${(conversation.zalo_chat_id || "").slice(-4)}`}
+      <span className="avatar round" style={{ "--avatar-bg": colors.bg, "--avatar-ink": colors.ink } as any}>
+        <svg className="icon" style={{ width: '22px', height: '22px' }}><use href="#i-user"/></svg>
+        <span className="presence"></span>
+      </span>
+      <span className="conv-body">
+        <span className="conv-top">
+          <span className="conv-name">{name}</span>
+          <span className="conv-time">{time}</span>
+        </span>
+        <span className="conv-preview">{preview}</span>
+        <span className="conv-bottom">
+          <span className={`mini-chip ${statusClass}`}>
+            <svg className="icon"><use href={statusClass === 'bot' ? "#i-bot" : "#i-user"}/></svg>
+            {statusLabel}
           </span>
-          <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">{time}</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground truncate mb-2">
-          {senderKind === "candidate" ? (
-             <UserCircle className="size-3.5 shrink-0" />
-          ) : senderKind === "recruiter" ? (
-             <UserCircle className="size-3.5 shrink-0 text-primary" />
-          ) : senderKind === "system" ? (
-             <Sparkles className="size-3.5 shrink-0 text-amber-500" />
-          ) : (
-             <Bot className={cn("size-3.5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-          )}
-          <span className="truncate text-xs">
-            {preview}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <ModeBadge mode={conversation.mode} />
-          {lead?.lead_stage && (
-            <Badge variant="outline" className="text-[10px] font-medium bg-green-50/50 text-green-600 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-              {stageLabel(lead.lead_stage)}
-            </Badge>
-          )}
-        </div>
-      </div>
+        </span>
+      </span>
     </button>
   );
 };
@@ -139,27 +82,18 @@ const ConversationListPanel = ({
   selectedId: string | null;
   onSelect: (c: Conversation) => void;
 }) => {
-  const { data: conversations, isPending } = useListContext<Conversation>();
+  const { data: conversations } = useListContext<Conversation>();
   const dataProvider = useDataProvider<any>();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
-  const [lastMessages, setLastMessages] = useState<
-    Record<string, Message | null>
-  >({});
+  const [lastMessages, setLastMessages] = useState<Record<string, Message | null>>({});
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<ModeFilter>("all");
 
-  // Hydrate leads + last messages for visible conversations.
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
     let cancelled = false;
     (async () => {
-      const zaloIds = Array.from(
-        new Set(
-          conversations
-            .map((c) => c.zalo_chat_id)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      );
+      const zaloIds = Array.from(new Set(conversations.map((c) => c.zalo_chat_id).filter(Boolean)));
       const fetchedLeads: Record<string, Lead | null> = {};
       await Promise.all(
         zaloIds.map(async (zaloId) => {
@@ -178,12 +112,9 @@ const ConversationListPanel = ({
       if (cancelled) return;
       setLeads((prev) => ({ ...prev, ...fetchedLeads }));
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [conversations, dataProvider]);
 
-  // Fetch the last message for each conversation for the preview snippet.
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
     let cancelled = false;
@@ -194,9 +125,7 @@ const ConversationListPanel = ({
           try {
             let msg: Message | null = null;
             if (import.meta.env.DEV) {
-              const { dataProvider: fakeProvider } = await import(
-                "../providers/fakerest"
-              );
+              const { dataProvider: fakeProvider } = await import("../providers/fakerest");
               try {
                 const all = await fakeProvider.getList("messages", {
                   filter: { conversation_id: c.id },
@@ -207,52 +136,8 @@ const ConversationListPanel = ({
               } catch {}
             }
             if (!msg) {
-              // Try real Supabase query
-              const { getSupabaseClient } = await import(
-                "../providers/supabase/supabase"
-              );
-              const { data } = await getSupabaseClient()
-                .from("vfic_chat_histories")
-                .select("*")
-                .eq("session_id", c.zalo_chat_id)
-                .order("id", { ascending: false })
-                .limit(1);
-              if (data && data.length > 0) {
-                // need to use the same toMessage logic as ConversationShow
-                const row = data[0];
-                const msgData = row?.message ?? {};
-                const type = String(msgData.type ?? "").toLowerCase();
-                const recruiterId = msgData.data?.recruiter_id;
-                const isRecruiter = type === "human" && Boolean(recruiterId);
-                const rawContent = isRecruiter
-                  ? (msgData.data?.content ?? msgData.content)
-                  : msgData.content;
-                let content = "";
-                if (typeof rawContent === "string") content = rawContent;
-                else if (Array.isArray(rawContent)) {
-                  content = rawContent
-                    .map((p) =>
-                      p && typeof p === "object" && "text" in p
-                        ? String(p.text ?? "")
-                        : String(p),
-                    )
-                    .join("")
-                    .trim();
-                } else content = String(rawContent ?? "");
-
-                msg = {
-                  id: String(row.id),
-                  zalo_message_id: String(row.id),
-                  conversation_id: row.session_id,
-                  type: type === "ai" || isRecruiter ? "outbound" : "inbound",
-                  content: content,
-                  data: { recruiter_id: recruiterId },
-                  created_at:
-                    msgData.data?.created_at ??
-                    row.created_at ??
-                    new Date().toISOString(),
-                };
-              }
+              const { chatRepository } = await import("./chatRepository");
+              msg = await chatRepository.getLastMessage(c.zalo_chat_id);
             }
             fetched[c.id] = msg;
           } catch {
@@ -263,212 +148,124 @@ const ConversationListPanel = ({
       if (cancelled) return;
       setLastMessages((prev) => ({ ...prev, ...fetched }));
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [conversations]);
 
   const rows: ConversationRow[] = useMemo(() => {
     if (!conversations) return [];
-    const filtered = conversations
+    return conversations
       .map((c) => ({
         ...c,
         _lead: leads[c.zalo_chat_id] ?? null,
         _lastMessage: lastMessages[c.id] ?? null,
       }))
       .filter((c) => {
-        if (mode !== "all" && c.mode !== mode) return false;
+        if (mode !== "all") {
+          const m = c.mode === 'bot' ? 'bot' : 'handoff';
+          if (m !== mode) return false;
+        }
         if (query) {
           const q = query.toLowerCase();
           const haystack = [
             c.zalo_chat_id,
             c._lead?.name,
             c._lead?.phone,
-            c._lead?.desired_job,
             c._lastMessage?.content,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
+          ].filter(Boolean).join(" ").toLowerCase();
           if (!haystack.includes(q)) return false;
         }
         return true;
       });
-    return filtered;
   }, [conversations, leads, lastMessages, mode, query]);
 
+  const countAll = conversations?.length || 0;
+  const countBot = conversations?.filter(c => c.mode === 'bot').length || 0;
+  const countHandoff = conversations?.filter(c => c.mode !== 'bot').length || 0;
+
   return (
-    <div className="flex h-full flex-col">
-      {/* Search + filter bar */}
-      <div className="flex flex-col gap-4 border-b border-border/40 p-5">
-        <div className="relative group">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <input
+    <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
+
+
+      <div className="inbox-tools">
+        <label className="search">
+          <svg className="icon"><use href="#i-search"/></svg>
+          <input 
+            type="search" 
+            placeholder="Tìm ứng viên hoặc tin nhắn" 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Tìm cuộc trò chuyện…"
-            className="w-full bg-muted/50 text-sm border-none rounded-xl py-2.5 pl-9 pr-4 focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all outline-none placeholder:text-muted-foreground"
           />
-        </div>
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <div className="flex flex-1 gap-2">
-            {(["all", "bot", "human"] as ModeFilter[]).map((m) => {
-              const isSelected = mode === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors border",
-                    isSelected
-                      ? "bg-primary/10 text-primary border-primary/20 dark:bg-primary/20"
-                      : "bg-transparent text-muted-foreground border-transparent hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  {m === "all" && <Filter className="size-3.5" />}
-                  {MODE_LABELS[m]}
-                </button>
-              );
-            })}
-          </div>
-          <span className="text-xs text-muted-foreground font-normal ml-auto">
-            {rows.length}
-          </span>
-        </div>
+          <span className="search-key">⌘K</span>
+        </label>
+
       </div>
 
-      {/* Conversation list */}
-      <div className="flex-1 overflow-y-auto">
-        {isPending ? (
-          <div className="flex flex-col">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-start gap-3 border-b p-4">
-                <Skeleton className="size-10 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-3.5 w-1/2" />
-                  <Skeleton className="h-3 w-3/4" />
-                  <Skeleton className="h-4 w-20" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
-            <Inbox className="size-10 opacity-50" />
-            <p className="text-sm font-medium">Chưa có cuộc trò chuyện</p>
-            <p className="text-xs">
-              {query
-                ? "Thử từ khóa khác."
-                : "Các cuộc trò chuyện từ Zalo sẽ hiển thị tại đây."}
-            </p>
-          </div>
+      <div className="section-label"><span>Hộp thư đến</span><span>{rows.length} cuộc trò chuyện</span></div>
+      
+      <div className="conversations">
+        {rows.length === 0 ? (
+          <div className="empty-state">Không tìm thấy hội thoại phù hợp.</div>
         ) : (
-          <div>
-            {rows.map((c) => (
-              <ConversationListItem
-                key={c.id}
-                conversation={c}
-                isActive={selectedId === c.id}
-                onSelect={onSelect}
-              />
-            ))}
-          </div>
+          rows.map((c) => (
+            <ConversationListItem
+              key={c.id}
+              conversation={c}
+              isActive={selectedId === c.id}
+              onSelect={onSelect}
+            />
+          ))
         )}
       </div>
-    </div>
+
+
+    </aside>
   );
 };
-
-const ConversationDetail = ({
-  conversation,
-}: {
-  conversation: Conversation;
-}) => {
-  return (
-    <RecordContextProvider value={conversation}>
-      <div className="grid h-full grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[1fr_340px]">
-        <div className="overflow-hidden">
-          <ConversationShowContent />
-        </div>
-        <aside className="hidden border-l lg:block">
-          <LeadProfilePanel />
-        </aside>
-      </div>
-    </RecordContextProvider>
-  );
-};
-
-const EmptyDetail = () => (
-  <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-muted-foreground">
-    <div className="rounded-full bg-muted p-6">
-      <MessageSquare className="size-12 text-muted-foreground/60" />
-    </div>
-    <div>
-      <p className="text-base font-medium text-foreground">
-        Chọn một cuộc trò chuyện
-      </p>
-      <p className="mt-1 max-w-sm text-sm">
-        Chọn một cuộc trò chuyện từ danh sách bên trái để xem lịch sử trò
-        chuyện và trả lời với tư cách nhân viên tuyển dụng.
-      </p>
-    </div>
-  </div>
-);
 
 const ConversationListContent = () => {
   const { data: conversations } = useListContext<Conversation>();
   const location = useLocation();
-
-  // Default to the most recent conversation if none is selected.
-  const initialId =
-    conversations && conversations.length > 0
-      ? (conversations[0] as Conversation).id
-      : null;
-
-  const [selectedId, setSelectedId] = useState<string | null>(initialId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileState, setMobileState] = useState<"" | "list-open" | "profile-open">("");
 
   useEffect(() => {
-    // If the URL hash points at a specific conversation, use that.
-    const match = location.pathname.match(/\/conversations\/([^/]+)/);
-    if (match) setSelectedId(match[1]);
-  }, [location.pathname]);
+    if (conversations && conversations.length > 0 && !selectedId) {
+      const match = location.pathname.match(/\/conversations\/([^/]+)/);
+      setSelectedId(match ? match[1] : (conversations[0] as Conversation).id);
+    }
+  }, [conversations, location.pathname, selectedId]);
 
-  const selected =
-    conversations?.find((c) => c.id === selectedId) ??
-    (conversations?.[0] as Conversation | undefined) ??
-    null;
+  const selected = conversations?.find((c) => c.id === selectedId) ?? null;
 
   return (
-    <>
-      <TopToolbar>
-        <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
-          Cuộc trò chuyện
-        </h2>
-      </TopToolbar>
-      <Card className="mt-4 overflow-hidden p-0 py-0">
-        <div className="grid h-[calc(100vh-220px)] min-h-[500px] grid-cols-1 md:grid-cols-[360px_1fr] overflow-hidden">
-          <div className="border-r">
-            <ConversationListPanel
-              selectedId={selected?.id ?? null}
-              onSelect={(c) => setSelectedId(c.id)}
-            />
-          </div>
-          <div className="bg-background">
-            {selected ? (
-              <ConversationDetail conversation={selected} />
-            ) : (
-              <EmptyDetail />
-            )}
-          </div>
-        </div>
-      </Card>
-    </>
+    <div className="inbox-bg-container">
+      <InboxIcons />
+      <main className={`app ${mobileState}`} id="app">
+        <ConversationListPanel
+          selectedId={selected?.id ?? null}
+          onSelect={(c) => {
+            setSelectedId(c.id);
+            setMobileState("");
+          }}
+        />
+        
+        {selected ? (
+          <RecordContextProvider value={selected}>
+             <ConversationShowContent onOpenList={() => setMobileState("list-open")} onOpenProfile={() => setMobileState("profile-open")} />
+             <LeadProfilePanel />
+          </RecordContextProvider>
+        ) : (
+          <section className="panel center-panel">
+             <div className="empty-state">Vui lòng chọn một cuộc trò chuyện từ danh sách.</div>
+          </section>
+        )}
+        
+        <div className="backdrop" onClick={() => setMobileState("")}></div>
+      </main>
+    </div>
   );
 };
 
-// ListBase provides the ListContext; the consumer that calls useListContext
-// must be a child of ListBase, not a sibling rendered alongside it.
 export const ConversationList = () => (
   <ListBase perPage={500} sort={{ field: "updated_at", order: "DESC" }}>
     <ConversationListContent />

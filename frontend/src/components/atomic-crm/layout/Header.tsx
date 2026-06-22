@@ -27,21 +27,21 @@ const Header = () => {
   return (
     <>
       <nav className="grow">
-        <header className="bg-white dark:bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+        <header className="bg-white dark:bg-card shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
           <div className="max-w-screen-xl mx-auto px-6 md:px-8">
-            <div className="flex justify-between items-center flex-1 py-3">
+            <div className="flex justify-between items-stretch flex-1 h-12">
               <Link
                 to="/"
-                className="flex items-center gap-2.5 text-foreground no-underline"
+                className="flex items-center text-foreground no-underline h-full"
               >
                 <img
                   src="/light-logo.png"
-                  className="h-14 w-auto dark:hidden"
+                  className="h-full py-1 w-auto dark:hidden"
                   alt={title}
                 />
                 <img
                   src="/dark-logo.png"
-                  className="h-14 w-auto hidden dark:block"
+                  className="h-full py-1 w-auto hidden dark:block"
                   alt={title}
                 />
               </Link>
@@ -91,7 +91,7 @@ const NavigationTab = ({
 }) => (
   <Link
     to={to}
-    className={`flex items-center gap-2 px-5 py-3.5 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
+    className={`flex items-center gap-2 px-5 py-2 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
       isActive
         ? "text-foreground border-primary"
         : "text-muted-foreground border-transparent hover:text-foreground"
