@@ -26,3 +26,5 @@ cypress/screenshots
 !.yarn/sdks
 !.yarn/versions
 .github
+.omc
+.omc/**

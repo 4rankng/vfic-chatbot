@@ -1,8 +1,8 @@
 export const vietnameseCrmMessages = {
   resources: {
     leads: {
-      name: "Khách hàng tiềm năng |||| Khách hàng tiềm năng",
-      forcedCaseName: "Khách hàng tiềm năng",
+      name: "Leads |||| Leads",
+      forcedCaseName: "Leads",
       fields: {
         name: "Họ tên",
         phone: "Số điện thoại",
@@ -13,8 +13,8 @@ export const vietnameseCrmMessages = {
       },
     },
     conversations: {
-      name: "Cuộc trò chuyện |||| Cuộc trò chuyện",
-      forcedCaseName: "Cuộc trò chuyện",
+      name: "Chat |||| Chat",
+      forcedCaseName: "Chat",
       fields: {
         mode: "Chế độ (bot/human)",
         last_inbound_at: "Tin nhắn cuối",
@@ -267,7 +267,7 @@ export const vietnameseCrmMessages = {
     page: {
       access_denied: "Truy cập bị từ chối",
       create: "Tạo mới %{name}",
-      dashboard: "Bảng điều khiển",
+      dashboard: "Dashboard",
       edit: "%{name} #%{id}",
       empty: "Chưa có %{name}",
       error: "Có lỗi xảy ra",
@@ -301,7 +301,8 @@ export const vietnameseCrmMessages = {
       deleting_multiple_items: "Đang xóa %{smart_count} mục...",
       deleting_one_item: "Đang xóa 1 mục...",
       delete_confirm: "Bạn có chắc muốn xóa %{name}?",
-      delete_final_confirm: "Hành động này không thể hoàn tác. Bạn có chắc muốn xóa %{name}?",
+      delete_final_confirm:
+        "Hành động này không thể hoàn tác. Bạn có chắc muốn xóa %{name}?",
       delete_title: "Xóa %{name} #%{id}",
       deleted: "Đã xóa %{name}",
       deleted_and_downgraded: "Đã xóa %{name} và thu hồi quyền",
@@ -353,13 +354,14 @@ export const vietnameseCrmMessages = {
         visible: "Ẩn mật khẩu",
       },
       autocomplete: {
-        create_label: "Tạo \"%{name}\"",
+        create_label: 'Tạo "%{name}"',
         empty: "Không có kết quả",
       },
     },
     form: {
       message: {
-        invalid_form: "Biểu mẫu có lỗi. Vui lòng kiểm tra lại các trường đánh dấu.",
+        invalid_form:
+          "Biểu mẫu có lỗi. Vui lòng kiểm tra lại các trường đánh dấu.",
       },
       alert: {
         save_form_error: "Không thể lưu biểu mẫu.",

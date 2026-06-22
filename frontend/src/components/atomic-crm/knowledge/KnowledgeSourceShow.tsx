@@ -54,7 +54,10 @@ const KnowledgeSourceShowContent = () => {
           />
           <Field label="Phiên bản" value={source.version || "—"} />
           <Field label="Ngày tạo" value={formatDateTime(source.created_at)} />
-          <Field label="Ngày cập nhật" value={formatDateTime(source.updated_at)} />
+          <Field
+            label="Ngày cập nhật"
+            value={formatDateTime(source.updated_at)}
+          />
           <Field
             label="Siêu dữ liệu"
             value={

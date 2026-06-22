@@ -49,7 +49,7 @@ export const Dashboard = () => {
 
   return (
     <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full pb-8">
-      <TopToolbar className="flex-col items-start md:flex-row md:items-end gap-4 border-b border-border pb-5 mb-2">
+      <TopToolbar className="flex-col items-start md:flex-row md:items-end gap-4 pb-5 mb-2">
         <div className="mr-auto">
           <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground">
             Tổng quan phân tích
@@ -114,7 +114,7 @@ export const Dashboard = () => {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart */}
-        <Card className="lg:col-span-2 border border-border bg-card shadow-xs hover:shadow-md transition-all duration-300">
+        <Card className="lg:col-span-2 border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
@@ -176,7 +176,7 @@ export const Dashboard = () => {
         </Card>
 
         {/* Side Panel */}
-        <Card className="border border-border bg-card shadow-xs hover:shadow-md transition-all duration-300 flex flex-col">
+        <Card className="border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
@@ -248,7 +248,7 @@ const KpiCard = ({
   trendUp?: boolean;
   neutral?: boolean;
 }) => (
-  <Card className="border border-border bg-card shadow-xs hover:shadow-md transition-all duration-300 group overflow-hidden relative">
+  <Card className="border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300 group overflow-hidden relative">
     <CardHeader className="flex flex-row items-center justify-between pb-3">
       <CardTitle className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
         {title}

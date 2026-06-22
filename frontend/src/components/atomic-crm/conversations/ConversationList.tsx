@@ -1,5 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
-import { ListBase, useListContext, useDataProvider, RecordContextProvider } from "ra-core";
+import {
+  ListBase,
+  useListContext,
+  useDataProvider,
+  RecordContextProvider,
+} from "ra-core";
 import { useLocation } from "react-router";
 import type { Conversation, Lead, Message } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
@@ -15,15 +20,17 @@ type ConversationRow = Conversation & {
 };
 
 export const getLeadStatusColor = (lead?: Lead | null) => {
-  if (!lead || (!lead.name && !lead.phone)) return { bg: 'var(--surface-solid)', ink: 'var(--ink-faint)' };
-  if (!lead.phone || !lead.desired_job) return { bg: 'var(--brand-light)', ink: 'var(--brand)' };
-  return { bg: 'var(--success-light)', ink: 'var(--success)' };
+  if (!lead || (!lead.name && !lead.phone))
+    return { bg: "var(--surface-solid)", ink: "var(--ink-faint)" };
+  if (!lead.phone || !lead.desired_job)
+    return { bg: "var(--brand-light)", ink: "var(--brand)" };
+  return { bg: "var(--success-light)", ink: "var(--success)" };
 };
 
 const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
-  return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 };
 
 const ConversationListItem = ({
@@ -41,12 +48,12 @@ const ConversationListItem = ({
   const time = getRelativeTimeString(
     conversation.last_inbound_at ?? conversation.updated_at,
   );
-  
-  const name = lead?.name || `Khách hàng · ${(conversation.zalo_chat_id || "").slice(-4)}`;
+
+  const name =
+    lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
-  
-  const statusClass = conversation.mode === 'human' ? 'handoff' : 'bot';
-  const statusLabel = conversation.mode === 'human' ? 'Cần tiếp nhận' : 'AI đang xử lý';
+
+  const statusLabel = conversation.mode === "human" ? "Cần tiếp quản" : "";
 
   return (
     <button
@@ -54,9 +61,13 @@ const ConversationListItem = ({
       onClick={() => onSelect(conversation)}
       aria-label={`Mở hội thoại với ${name}`}
     >
-      <span className="avatar round" style={{ "--avatar-bg": colors.bg, "--avatar-ink": colors.ink } as any}>
-        <svg className="icon" style={{ width: '22px', height: '22px' }}><use href="#i-user"/></svg>
-        <span className="presence"></span>
+      <span
+        className="avatar round"
+        style={{ "--avatar-bg": colors.bg, "--avatar-ink": colors.ink } as any}
+      >
+        <svg className="icon" style={{ width: "22px", height: "22px" }}>
+          <use href="#i-user" />
+        </svg>
       </span>
       <span className="conv-body">
         <span className="conv-top">
@@ -65,10 +76,14 @@ const ConversationListItem = ({
         </span>
         <span className="conv-preview">{preview}</span>
         <span className="conv-bottom">
-          <span className={`mini-chip ${statusClass}`}>
-            <svg className="icon"><use href={statusClass === 'bot' ? "#i-bot" : "#i-user"}/></svg>
-            {statusLabel}
-          </span>
+          {conversation.mode === "human" && (
+            <span className={`mini-chip handoff`}>
+              <svg className="icon">
+                <use href="#i-user" />
+              </svg>
+              {statusLabel}
+            </span>
+          )}
         </span>
       </span>
     </button>
@@ -85,15 +100,19 @@ const ConversationListPanel = ({
   const { data: conversations } = useListContext<Conversation>();
   const dataProvider = useDataProvider<any>();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
-  const [lastMessages, setLastMessages] = useState<Record<string, Message | null>>({});
+  const [lastMessages, setLastMessages] = useState<
+    Record<string, Message | null>
+  >({});
   const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<ModeFilter>("all");
+  const mode: ModeFilter = "all";
 
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
     let cancelled = false;
     (async () => {
-      const zaloIds = Array.from(new Set(conversations.map((c) => c.zalo_chat_id).filter(Boolean)));
+      const zaloIds = Array.from(
+        new Set(conversations.map((c) => c.zalo_chat_id).filter(Boolean)),
+      );
       const fetchedLeads: Record<string, Lead | null> = {};
       await Promise.all(
         zaloIds.map(async (zaloId) => {
@@ -112,7 +131,9 @@ const ConversationListPanel = ({
       if (cancelled) return;
       setLeads((prev) => ({ ...prev, ...fetchedLeads }));
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [conversations, dataProvider]);
 
   useEffect(() => {
@@ -125,7 +146,9 @@ const ConversationListPanel = ({
           try {
             let msg: Message | null = null;
             if (import.meta.env.DEV) {
-              const { dataProvider: fakeProvider } = await import("../providers/fakerest");
+              const { dataProvider: fakeProvider } = await import(
+                "../providers/fakerest"
+              );
               try {
                 const all = await fakeProvider.getList("messages", {
                   filter: { conversation_id: c.id },
@@ -148,7 +171,9 @@ const ConversationListPanel = ({
       if (cancelled) return;
       setLastMessages((prev) => ({ ...prev, ...fetched }));
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [conversations]);
 
   const rows: ConversationRow[] = useMemo(() => {
@@ -161,7 +186,7 @@ const ConversationListPanel = ({
       }))
       .filter((c) => {
         if (mode !== "all") {
-          const m = c.mode === 'bot' ? 'bot' : 'handoff';
+          const m = c.mode === "bot" ? "bot" : "handoff";
           if (m !== mode) return false;
         }
         if (query) {
@@ -171,37 +196,38 @@ const ConversationListPanel = ({
             c._lead?.name,
             c._lead?.phone,
             c._lastMessage?.content,
-          ].filter(Boolean).join(" ").toLowerCase();
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
           if (!haystack.includes(q)) return false;
         }
         return true;
       });
   }, [conversations, leads, lastMessages, mode, query]);
 
-  const countAll = conversations?.length || 0;
-  const countBot = conversations?.filter(c => c.mode === 'bot').length || 0;
-  const countHandoff = conversations?.filter(c => c.mode !== 'bot').length || 0;
-
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
-
-
       <div className="inbox-tools">
         <label className="search">
-          <svg className="icon"><use href="#i-search"/></svg>
-          <input 
-            type="search" 
-            placeholder="Tìm ứng viên hoặc tin nhắn" 
+          <svg className="icon">
+            <use href="#i-search" />
+          </svg>
+          <input
+            type="search"
+            placeholder="Tìm ứng viên hoặc tin nhắn"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <span className="search-key">⌘K</span>
         </label>
-
       </div>
 
-      <div className="section-label"><span>Hộp thư đến</span><span>{rows.length} cuộc trò chuyện</span></div>
-      
+      <div className="section-label">
+        <span>Hộp thư đến</span>
+        <span>{rows.length} cuộc trò chuyện</span>
+      </div>
+
       <div className="conversations">
         {rows.length === 0 ? (
           <div className="empty-state">Không tìm thấy hội thoại phù hợp.</div>
@@ -216,8 +242,6 @@ const ConversationListPanel = ({
           ))
         )}
       </div>
-
-
     </aside>
   );
 };
@@ -226,7 +250,9 @@ const ConversationListContent = () => {
   const { data: conversations } = useListContext<Conversation>();
   const location = useLocation();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mobileState, setMobileState] = useState<"" | "list-open" | "profile-open">("");
+  const [layoutState, setLayoutState] = useState<
+    "" | "list-open" | "profile-open"
+  >("");
 
   useEffect(() => {
     if (conversations && conversations.length > 0 && !selectedId) {
@@ -240,27 +266,36 @@ const ConversationListContent = () => {
   return (
     <div className="inbox-bg-container">
       <InboxIcons />
-      <main className={`app ${mobileState}`} id="app">
+      <main className={`app ${layoutState}`} id="app">
         <ConversationListPanel
           selectedId={selected?.id ?? null}
           onSelect={(c) => {
             setSelectedId(c.id);
-            setMobileState("");
+            setLayoutState("");
           }}
         />
-        
+
         {selected ? (
           <RecordContextProvider value={selected}>
-             <ConversationShowContent onOpenList={() => setMobileState("list-open")} onOpenProfile={() => setMobileState("profile-open")} />
-             <LeadProfilePanel />
+            <ConversationShowContent
+              onOpenList={() => setLayoutState("list-open")}
+              onOpenProfile={() =>
+                setLayoutState(
+                  layoutState === "profile-open" ? "" : "profile-open",
+                )
+              }
+            />
+            <LeadProfilePanel />
           </RecordContextProvider>
         ) : (
           <section className="panel center-panel">
-             <div className="empty-state">Vui lòng chọn một cuộc trò chuyện từ danh sách.</div>
+            <div className="empty-state">
+              Vui lòng chọn một cuộc trò chuyện từ danh sách.
+            </div>
           </section>
         )}
-        
-        <div className="backdrop" onClick={() => setMobileState("")}></div>
+
+        <div className="backdrop" onClick={() => setLayoutState("")}></div>
       </main>
     </div>
   );

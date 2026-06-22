@@ -24,7 +24,7 @@ export function ThemeModeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="relative hidden sm:inline-flex"
+      className="relative"
       onClick={toggleTheme}
       aria-label="Toggle theme"
     >

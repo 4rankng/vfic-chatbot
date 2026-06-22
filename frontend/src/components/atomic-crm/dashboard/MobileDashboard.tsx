@@ -87,19 +87,31 @@ export const MobileDashboard = () => {
         <div className="grid grid-cols-2 gap-3.5">
           <MobileKpiCard
             title="Tổng khách hàng"
-            value={isLoadingLeads ? "..." : totalLeadsCount.toString().padStart(2, "0")}
+            value={
+              isLoadingLeads
+                ? "..."
+                : totalLeadsCount.toString().padStart(2, "0")
+            }
             icon={<Users className="size-4" />}
             description="Tất cả quy trình"
           />
           <MobileKpiCard
             title="Cần phản hồi"
-            value={isLoadingConversations ? "..." : unreadConvs.toString().padStart(2, "0")}
+            value={
+              isLoadingConversations
+                ? "..."
+                : unreadConvs.toString().padStart(2, "0")
+            }
             icon={<AlertCircle className="size-4" />}
             description="Đợi phản hồi"
           />
           <MobileKpiCard
             title="Đạt chuẩn"
-            value={isLoadingLeads ? "..." : qualifiedLeads.toString().padStart(2, "0")}
+            value={
+              isLoadingLeads
+                ? "..."
+                : qualifiedLeads.toString().padStart(2, "0")
+            }
             icon={<UserCheck className="size-4" />}
             description="Sẵn sàng tuyển dụng"
           />

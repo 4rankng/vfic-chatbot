@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useRecordContext, useDataProvider, useNotify } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import type { CrmDataProvider } from "../providers/supabase/dataProvider";
-import { getLeadStatusColor } from "../conversations/ConversationList";
 
 export const LeadProfilePanel = () => {
   const conversation = useRecordContext<Conversation>();
@@ -52,9 +51,9 @@ export const LeadProfilePanel = () => {
 
   const handleEditClick = () => {
     setEditData({
-      phone: lead?.phone || '',
-      desired_job: lead?.desired_job || '',
-      expected_salary: lead?.expected_salary || ''
+      phone: lead?.phone || "",
+      desired_job: lead?.desired_job || "",
+      expected_salary: lead?.expected_salary || "",
     });
     setIsEditing(true);
   };
@@ -63,66 +62,96 @@ export const LeadProfilePanel = () => {
     if (!lead) return;
     setIsSaving(true);
     try {
-      const { data } = await dataProvider.update('leads', {
+      const { data } = await dataProvider.update("leads", {
         id: lead.id,
         data: editData,
-        previousData: lead
+        previousData: lead,
       });
       setLead(data as Lead);
       setIsEditing(false);
-      notify('Đã cập nhật hồ sơ', { type: 'success' });
+      notify("Đã cập nhật hồ sơ", { type: "success" });
     } catch (e) {
-      notify('Lỗi khi cập nhật hồ sơ', { type: 'error' });
+      notify("Lỗi khi cập nhật hồ sơ", { type: "error" });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const name = lead?.name || `Khách hàng · ${(zaloChatId || "").slice(-4)}`;
-  const colors = getLeadStatusColor(lead);
-
   return (
     <aside className="panel right-panel" aria-label="Hồ sơ ứng viên">
       <div className="profile-header">
-        <div className="profile-title"><svg className="icon"><use href="#i-user"/></svg><span>Hồ sơ ứng viên</span></div>
+        <div className="profile-title">
+          <svg className="icon">
+            <use href="#i-user" />
+          </svg>
+          <span>Hồ sơ ứng viên</span>
+        </div>
         <div className="profile-header-actions">
-          <button className="icon-btn small ghost" aria-label="Tùy chọn"><svg className="icon"><use href="#i-more"/></svg></button>
+          <button className="icon-btn small ghost" aria-label="Tùy chọn">
+            <svg className="icon">
+              <use href="#i-more" />
+            </svg>
+          </button>
         </div>
       </div>
       <div className="profile-scroll">
         {isLoading ? (
           <div className="empty-state">Đang tải hồ sơ...</div>
         ) : notFound || !lead ? (
-          <div className="empty-state">Chưa liên kết hồ sơ khách hàng</div>
+          <div className="empty-state">Chưa liên kết hồ sơ ứng viên</div>
         ) : (
           <>
-
-
             <section className="profile-section">
               <div className="section-head">
                 <h3>Thông tin tuyển dụng</h3>
                 {!isEditing ? (
-                  <button type="button" onClick={handleEditClick}>Chỉnh sửa</button>
+                  <button type="button" onClick={handleEditClick}>
+                    Chỉnh sửa
+                  </button>
                 ) : (
                   <div className="flex gap-3">
-                    <button type="button" style={{ color: "var(--ink-muted)" }} onClick={() => setIsEditing(false)} disabled={isSaving}>Hủy</button>
-                    <button type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu'}</button>
+                    <button
+                      type="button"
+                      style={{ color: "var(--ink-muted)" }}
+                      onClick={() => setIsEditing(false)}
+                      disabled={isSaving}
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? "Đang lưu..." : "Lưu"}
+                    </button>
                   </div>
                 )}
               </div>
               <div className="detail-list">
                 <div className="detail-row">
-                  <span className="detail-icon"><svg className="icon"><use href="#i-phone"/></svg></span>
+                  <span className="detail-icon">
+                    <svg className="icon">
+                      <use href="#i-phone" />
+                    </svg>
+                  </span>
                   <div className="flex-1">
                     <div className="detail-label">Số điện thoại</div>
                     {!isEditing ? (
-                      <div className={`detail-value ${!lead.phone ? 'missing' : ''}`}>{lead.phone || 'Chưa cung cấp'}</div>
+                      <div
+                        className={`detail-value ${!lead.phone ? "missing cursor-pointer hover:text-[var(--brand)] transition-colors" : ""}`}
+                        onClick={() => !lead.phone && handleEditClick()}
+                      >
+                        {lead.phone || "Thêm số điện thoại"}
+                      </div>
                     ) : (
-                      <input 
-                        type="text" 
-                        className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1" 
-                        value={editData.phone || ''} 
-                        onChange={(e) => setEditData({...editData, phone: e.target.value})} 
+                      <input
+                        type="text"
+                        className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1"
+                        value={editData.phone || ""}
+                        onChange={(e) =>
+                          setEditData({ ...editData, phone: e.target.value })
+                        }
                         placeholder="Nhập số điện thoại"
                         disabled={isSaving}
                       />
@@ -130,17 +159,31 @@ export const LeadProfilePanel = () => {
                   </div>
                 </div>
                 <div className="detail-row">
-                  <span className="detail-icon"><svg className="icon"><use href="#i-briefcase"/></svg></span>
+                  <span className="detail-icon">
+                    <svg className="icon">
+                      <use href="#i-briefcase" />
+                    </svg>
+                  </span>
                   <div className="flex-1">
                     <div className="detail-label">Công việc mong muốn</div>
                     {!isEditing ? (
-                      <div className={`detail-value ${!lead.desired_job ? 'missing' : ''}`}>{lead.desired_job || 'Chưa cung cấp'}</div>
+                      <div
+                        className={`detail-value ${!lead.desired_job ? "missing cursor-pointer hover:text-[var(--brand)] transition-colors" : ""}`}
+                        onClick={() => !lead.desired_job && handleEditClick()}
+                      >
+                        {lead.desired_job || "Thêm công việc"}
+                      </div>
                     ) : (
-                      <input 
-                        type="text" 
-                        className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1" 
-                        value={editData.desired_job || ''} 
-                        onChange={(e) => setEditData({...editData, desired_job: e.target.value})} 
+                      <input
+                        type="text"
+                        className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1"
+                        value={editData.desired_job || ""}
+                        onChange={(e) =>
+                          setEditData({
+                            ...editData,
+                            desired_job: e.target.value,
+                          })
+                        }
                         placeholder="Nhập công việc"
                         disabled={isSaving}
                       />
@@ -148,17 +191,33 @@ export const LeadProfilePanel = () => {
                   </div>
                 </div>
                 <div className="detail-row">
-                  <span className="detail-icon"><svg className="icon"><use href="#i-coins"/></svg></span>
+                  <span className="detail-icon">
+                    <svg className="icon">
+                      <use href="#i-coins" />
+                    </svg>
+                  </span>
                   <div className="flex-1">
                     <div className="detail-label">Lương mong muốn</div>
                     {!isEditing ? (
-                      <div className={`detail-value ${!lead.expected_salary ? 'missing' : ''}`}>{lead.expected_salary || 'Chưa cung cấp'}</div>
+                      <div
+                        className={`detail-value ${!lead.expected_salary ? "missing cursor-pointer hover:text-[var(--brand)] transition-colors" : ""}`}
+                        onClick={() =>
+                          !lead.expected_salary && handleEditClick()
+                        }
+                      >
+                        {lead.expected_salary || "Thêm mức lương"}
+                      </div>
                     ) : (
-                      <input 
-                        type="text" 
-                        className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1" 
-                        value={editData.expected_salary || ''} 
-                        onChange={(e) => setEditData({...editData, expected_salary: e.target.value})} 
+                      <input
+                        type="text"
+                        className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1"
+                        value={editData.expected_salary || ""}
+                        onChange={(e) =>
+                          setEditData({
+                            ...editData,
+                            expected_salary: e.target.value,
+                          })
+                        }
                         placeholder="Nhập mức lương"
                         disabled={isSaving}
                       />
@@ -167,10 +226,6 @@ export const LeadProfilePanel = () => {
                 </div>
               </div>
             </section>
-
-
-
-
           </>
         )}
       </div>

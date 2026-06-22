@@ -1,123 +1,36 @@
-import { DragDropContext, type OnDragEndResponder } from "@hello-pangea/dnd";
-import isEqual from "lodash/isEqual";
-import { useDataProvider, useListContext, type DataProvider } from "ra-core";
-import { useEffect, useState } from "react";
+import { useListContext } from "ra-core";
 
 import { LEAD_STAGES, type Lead } from "../types";
-import { LeadColumn } from "./LeadColumn";
-import type { LeadsByStage } from "./stages";
-import { getLeadsByStage } from "./stages";
+import { LeadCard } from "./LeadCard";
 
-// Re-export so existing consumers (LeadColumn, Dashboard) keep compiling while
+// Re-export so existing consumers (Dashboard) keep compiling while
 // reading the single canonical source in types.ts — eliminates stage drift.
 export { LEAD_STAGES };
 
 export const LeadListContent = () => {
-  const { data: unorderedLeads, isPending, refetch } = useListContext<Lead>();
-  const dataProvider = useDataProvider();
-
-  const [leadsByStage, setLeadsByStage] = useState<LeadsByStage>(
-    getLeadsByStage([], LEAD_STAGES),
-  );
-
-  useEffect(() => {
-    if (unorderedLeads) {
-      const newLeadsByStage = getLeadsByStage(unorderedLeads, LEAD_STAGES);
-      if (!isEqual(newLeadsByStage, leadsByStage)) {
-        setLeadsByStage(newLeadsByStage);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unorderedLeads]);
+  const { data: leads, isPending } = useListContext<Lead>();
 
   if (isPending) return null;
 
-  const onDragEnd: OnDragEndResponder = (result) => {
-    const { destination, source } = result;
-
-    if (!destination) return;
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    )
-      return;
-
-    const sourceStage = source.droppableId;
-    const destinationStage = destination.droppableId;
-    const sourceLead = leadsByStage[sourceStage][source.index]!;
-
-    // compute local state change synchronously
-    setLeadsByStage(
-      updateLeadStageLocal(
-        sourceLead,
-        { stage: sourceStage, index: source.index },
-        { stage: destinationStage, index: destination.index },
-        leadsByStage,
-      ),
+  if (!leads || leads.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl bg-muted/20 px-6 py-16 text-center">
+        <p className="font-mono text-sm font-semibold text-muted-dim">
+          Chưa có khách hàng
+        </p>
+        <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+          Khi có khách hàng mới, họ sẽ xuất hiện tại đây. Nhấp vào một khách
+          hàng để bắt đầu trò chuyện.
+        </p>
+      </div>
     );
-
-    // persist the changes
-    updateLeadStage(sourceLead, destinationStage, dataProvider).then(() => {
-      refetch();
-    });
-  };
+  }
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-4">
-        {LEAD_STAGES.map((stage) => (
-          <LeadColumn
-            stage={stage.value}
-            leads={leadsByStage[stage.value] || []}
-            key={stage.value}
-          />
-        ))}
-      </div>
-    </DragDropContext>
+    <div className="flex w-full max-w-3xl flex-col gap-3">
+      {leads.map((lead) => (
+        <LeadCard key={lead.id} lead={lead} />
+      ))}
+    </div>
   );
-};
-
-const updateLeadStageLocal = (
-  sourceLead: Lead,
-  source: { stage: string; index: number },
-  destination: { stage: string; index?: number },
-  leadsByStage: LeadsByStage,
-) => {
-  if (source.stage === destination.stage) {
-    const column = [...(leadsByStage[source.stage] || [])];
-    column.splice(source.index, 1);
-    column.splice(destination.index ?? column.length + 1, 0, sourceLead);
-    return { ...leadsByStage, [destination.stage]: column };
-  } else {
-    const sourceColumn = [...(leadsByStage[source.stage] || [])];
-    const destinationColumn = [...(leadsByStage[destination.stage] || [])];
-    sourceColumn.splice(source.index, 1);
-    destinationColumn.splice(
-      destination.index ?? destinationColumn.length + 1,
-      0,
-      sourceLead,
-    );
-    return {
-      ...leadsByStage,
-      [source.stage]: sourceColumn,
-      [destination.stage]: destinationColumn,
-    };
-  }
-};
-
-const updateLeadStage = async (
-  source: Lead,
-  destinationStage: string,
-  dataProvider: DataProvider,
-) => {
-  // Drop index-dependent code entirely.
-  // Just update the lead_stage.
-  await dataProvider.update("leads", {
-    id: source.id,
-    data: {
-      lead_stage: destinationStage,
-      updated_at: new Date().toISOString(),
-    },
-    previousData: source,
-  });
 };

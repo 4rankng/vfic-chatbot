@@ -11,7 +11,8 @@ import { durationLabel, outcomeMeta } from "./botRunMeta";
 const BotRunRow = ({ run }: { run: BotRun }) => {
   const redirect = useRedirect();
   const meta = outcomeMeta(run.outcome);
-  const preview = run.proposed_reply?.slice(0, 140) ?? "— không có câu trả lời —";
+  const preview =
+    run.proposed_reply?.slice(0, 140) ?? "— không có câu trả lời —";
   const dur = durationLabel(run);
   return (
     <button

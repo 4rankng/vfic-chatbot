@@ -79,7 +79,10 @@ export const chatRepository = {
     return (data ?? []).map(toMessage).filter((m): m is Message => m != null);
   },
 
-  subscribeToMessages(zaloChatId: string, onNewMessage: (msg: Message) => void) {
+  subscribeToMessages(
+    zaloChatId: string,
+    onNewMessage: (msg: Message) => void,
+  ) {
     const channel = getSupabaseClient()
       .channel(`chat_${zaloChatId}`)
       .on(

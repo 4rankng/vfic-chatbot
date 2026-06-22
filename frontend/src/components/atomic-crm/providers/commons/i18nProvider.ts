@@ -32,9 +32,7 @@ export const getInitialLocale = (): "vi" => {
 export const i18nProvider = polyglotI18nProvider(
   () => vietnameseCatalog,
   "vi",
-  [
-    { locale: "vi", name: "Tiếng Việt" },
-  ],
+  [{ locale: "vi", name: "Tiếng Việt" }],
   { allowMissing: true },
 );
 
@@ -44,4 +42,3 @@ export const testI18nProvider = polyglotI18nProvider(
   [{ locale: "vi", name: "Tiếng Việt" }],
   { allowMissing: true },
 );
-
