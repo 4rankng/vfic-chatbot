@@ -1,4 +1,4 @@
-import { Children, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Translate,
   useAuthProvider,
@@ -6,21 +6,17 @@ import {
   useLogout,
   UserMenuContext,
 } from "ra-core";
-import { LogOut } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
-export type UserMenuProps = {
-  children?: React.ReactNode;
-};
+export type UserMenuProps = {};
 
 /**
  * A user menu component displayed in the top right corner of the admin layout.
@@ -31,7 +27,7 @@ export type UserMenuProps = {
  *
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/usermenu UserMenu documentation}
  */
-export function UserMenu({ children }: UserMenuProps) {
+export function UserMenu() {
   const authProvider = useAuthProvider();
   const { data: identity } = useGetIdentity();
   const logout = useLogout();
@@ -58,23 +54,15 @@ export function UserMenu({ children }: UserMenuProps) {
           >
             <Avatar className="h-8 w-8">
               <AvatarImage src={identity?.avatar} role="presentation" />
-              <AvatarFallback>{identity?.fullName?.charAt(0)}</AvatarFallback>
+              <AvatarFallback>
+                <User className="size-4" />
+              </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56" align="end" forceMount>
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium leading-none">
-                {identity?.fullName}
-              </p>
-            </div>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {children}
-          {Children.count(children) > 0 && <DropdownMenuSeparator />}
+        <DropdownMenuContent className="w-32" align="end" forceMount>
           <DropdownMenuItem onClick={() => logout()} className="cursor-pointer">
-            <LogOut />
+            <LogOut className="mr-2 h-4 w-4" />
             <Translate i18nKey="ra.auth.logout">Log out</Translate>
           </DropdownMenuItem>
         </DropdownMenuContent>

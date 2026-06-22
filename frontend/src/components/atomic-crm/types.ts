@@ -53,7 +53,7 @@ export type Lead = {
   phone: string;
   desired_job: string;
   expected_salary: string;
-  lead_score: number;
+  lead_score: LeadScoreValue | null;
   lead_stage: string;
   created_at: string;
   updated_at: string;
@@ -77,6 +77,37 @@ export type Message = {
   content: string;
   data: any;
   created_at: string;
+} & Pick<RaRecord, "id">;
+
+// A single bot execution against a conversation. `outcome` is the takeover
+// race-guard verdict: sent (delivered to Zalo), suppressed (a recruiter took
+// over mid-run — version mismatch), or error. Read-only ops data.
+export type BotRun = {
+  id: number;
+  conversation_id: string;
+  started_at: string;
+  ended_at: string | null;
+  version_at_start: number;
+  proposed_reply: string | null;
+  outcome: "sent" | "suppressed" | "error";
+} & Pick<RaRecord, "id">;
+
+// Knowledge-source row (Drive-ingested docs for RAG). `status` is free text
+// (default 'published'); chunks live in `documents` (joined via documents.source
+// = knowledge_sources.source_name). Read-only admin view.
+export type KnowledgeSource = {
+  id: string;
+  project_id: string;
+  company_id: string | null;
+  source_name: string;
+  source_type: string;
+  document_type: string;
+  source_ref: string | null;
+  version: string;
+  status: string;
+  metadata: unknown;
+  created_at: string;
+  updated_at: string;
 } & Pick<RaRecord, "id">;
 
 export interface Company {
@@ -178,14 +209,6 @@ export interface Task {
   created_at?: string;
 }
 
-export interface SalesFormData {
-  email: string;
-  first_name: string;
-  last_name: string;
-  password?: string;
-  administrator?: boolean;
-}
-
 export interface SignUpData {
   email: string;
   password: string;
@@ -222,15 +245,27 @@ export type Activity = {
 export type EmailAndType = { email: string | null; type: string | null };
 export type PhoneAndType = { number: string | null; type: string | null };
 
-// Lead stages — used across LeadShow, LeadCard, LeadColumn
+// Lead stages — DB-CHECK canonical values (leads.lead_stage CHECK constraint).
+// Order = recruitment funnel. Used across LeadShow, LeadCard, LeadColumn, Dashboard.
 export const LEAD_STAGES = [
   { value: "NEW", label: "New", color: "bg-slate-500" },
-  { value: "QUALIFIED", label: "Qualified", color: "bg-blue-500" },
-  { value: "CONTACTED", label: "Contacted", color: "bg-cyan-500" },
-  { value: "INTERVIEWING", label: "Interviewing", color: "bg-amber-500" },
-  { value: "OFFERED", label: "Offered", color: "bg-purple-500" },
+  { value: "ENGAGED", label: "Engaged", color: "bg-blue-500" },
+  { value: "QUALIFIED", label: "Qualified", color: "bg-cyan-500" },
+  { value: "APPLIED", label: "Applied", color: "bg-amber-500" },
   { value: "HIRED", label: "Hired", color: "bg-emerald-500" },
-  { value: "REJECTED", label: "Rejected", color: "bg-rose-500" },
+  { value: "LOST", label: "Lost", color: "bg-rose-500" },
+  { value: "UNQUALIFIED", label: "Unqualified", color: "bg-zinc-500" },
 ] as const;
 
 export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];
+
+// Lead scores — DB-CHECK canonical values (leads.lead_score CHECK constraint).
+// Categorical (hot / warm / not_interested), NOT a 0-100 numeric despite the
+// legacy column name. Used across LeadShow, LeadCard, LeadInfoPanel, ContactInputs.
+export const LEAD_SCORES = [
+  { value: "hot", label: "Hot", color: "bg-rose-500" },
+  { value: "warm", label: "Warm", color: "bg-amber-500" },
+  { value: "not_interested", label: "Not interested", color: "bg-zinc-500" },
+] as const;
+
+export type LeadScoreValue = (typeof LEAD_SCORES)[number]["value"];

@@ -20,14 +20,44 @@ export const vietnameseCrmMessages = {
         last_inbound_at: "Tin nhắn cuối",
         assigned_recruiter_id: "Người phụ trách",
       },
+      reply: {
+        disabled: "Tính năng trả lời chưa được cấu hình.",
+        unauthorized: "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.",
+        forbidden: "Tài khoản không có quyền gửi tin nhắn.",
+        conflict:
+          "Hội thoại đang được người khác tiếp quản. Hãy Tiếp nhận trước khi trả lời.",
+        network: "Không kết nối được đến máy chủ. Vui lòng thử lại.",
+        error: "Gửi tin nhắn thất bại.",
+      },
+      takeover: {
+        success: "Đã tiếp nhận cuộc trò chuyện",
+        error: "Tiếp nhận thất bại",
+      },
+      release: {
+        success: "Đã trả lại cho bot",
+        error: "Trả lại thất bại",
+      },
     },
-    profiles: {
+    bot_runs: {
+      name: "Lần chạy bot |||| Lần chạy bot",
+      forcedCaseName: "Lần chạy bot",
+    },
+    knowledge_sources: {
+      name: "Nguồn kiến thức |||| Nguồn kiến thức",
+      forcedCaseName: "Nguồn kiến thức",
+    },
+    users: {
       name: "Tài khoản |||| Tài khoản",
       forcedCaseName: "Tài khoản",
       fields: {
         full_name: "Họ tên",
         email: "Email",
+        first_name: "Tên",
+        last_name: "Họ",
         role: "Vai trò",
+      },
+      action: {
+        new: "Tài khoản mới",
       },
     },
   },
@@ -50,7 +80,7 @@ export const vietnameseCrmMessages = {
       system_activity: "Hoạt động Hệ thống",
       snapshot: "Cập nhật nhanh tình hình hiện tại",
       active_leads: "Khách hàng đang hoạt động",
-      drop_off: "Tỷ lệ rớt"
+      drop_off: "Tỷ lệ rớt",
     },
     header: {
       import_data: "Nhập dữ liệu",

@@ -93,7 +93,7 @@ export const buildLead = (overrides: Partial<Lead> = {}): Lead => ({
   phone: "+84 900 000 000",
   desired_job: "Software Engineer",
   expected_salary: "1000 USD",
-  lead_score: 50,
+  lead_score: "warm",
   lead_stage: "NEW",
   created_at: "2025-01-01T09:00:00.000Z",
   updated_at: "2025-01-02T10:00:00.000Z",

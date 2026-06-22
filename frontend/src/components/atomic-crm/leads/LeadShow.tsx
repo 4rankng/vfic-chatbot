@@ -46,10 +46,14 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
         setConversation(data?.[0] ?? null);
         setIsLoading(false);
       })
-      .catch((e: any) => {
+      .catch((e: unknown) => {
         if (cancelled) return;
-        const msg = e?.message ?? "Failed to load conversation";
-        if (/vfic_chat_histories|relation.*does not exist/i.test(msg)) {
+        const msg =
+          e instanceof Error ? e.message : "Failed to load conversation";
+        // Only the genuine "relation does not exist" (schema/table missing, e.g.
+        // a fresh or demo setup) should render as "no conversation yet". Any other
+        // failure (RLS denial, network, 5xx) is surfaced instead of swallowed.
+        if (/relation.*does not exist/i.test(msg)) {
           setConversation(null);
           setError(null);
         } else {
@@ -78,7 +82,10 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
               )}
             >
               <Skeleton
-                className={cn("h-16 rounded-lg", i % 2 === 0 ? "w-1/2" : "w-2/5")}
+                className={cn(
+                  "h-16 rounded-lg",
+                  i % 2 === 0 ? "w-1/2" : "w-2/5",
+                )}
               />
             </div>
           ))}
@@ -157,11 +164,7 @@ const LeadHero = () => {
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <LeadStageBadge stage={record.lead_stage} />
-              <LeadScoreBar
-                score={record.lead_score ?? 0}
-                showLabel={false}
-                className="w-32"
-              />
+              <LeadScoreBar score={record.lead_score} className="w-32" />
             </div>
           </div>
         </div>
@@ -233,11 +236,7 @@ export const LeadShowContentMobile = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <LeadStageBadge stage={record.lead_stage} />
-            <LeadScoreBar
-              score={record.lead_score ?? 0}
-              showLabel={false}
-              className="flex-1"
-            />
+            <LeadScoreBar score={record.lead_score} className="flex-1" />
           </div>
           {record.desired_job && (
             <div className="text-sm text-muted-foreground">

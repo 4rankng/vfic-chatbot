@@ -5,10 +5,12 @@ test.describe("VFIC CRM end-to-end", () => {
     // We assume the app is running on the local dev server and standard auth is bypassed/mocked or not required on dashboard
     // If auth is required, we would use a fixture to log in.
     await page.goto("/");
-    
+
     // Check if the dashboard title is visible
-    await expect(page.locator("text=Analytics Overview")).toBeVisible({ timeout: 10000 });
-    
+    await expect(page.locator("text=Analytics Overview")).toBeVisible({
+      timeout: 10000,
+    });
+
     // Check if KPI cards are visible
     await expect(page.locator("text=Total Leads")).toBeVisible();
     await expect(page.locator("text=Active Conversations")).toBeVisible();
@@ -16,10 +18,12 @@ test.describe("VFIC CRM end-to-end", () => {
 
   test("should navigate to leads pipeline", async ({ page }) => {
     await page.goto("/leads");
-    
+
     // Check if the title is visible
-    await expect(page.locator("text=Leads Pipeline")).toBeVisible({ timeout: 10000 });
-    
+    await expect(page.locator("text=Leads Pipeline")).toBeVisible({
+      timeout: 10000,
+    });
+
     // Check if pipeline stages are visible
     await expect(page.locator("text=NEW")).toBeVisible();
     await expect(page.locator("text=QUALIFIED")).toBeVisible();
@@ -28,14 +32,16 @@ test.describe("VFIC CRM end-to-end", () => {
 
   test("should navigate to conversations inbox", async ({ page }) => {
     await page.goto("/conversations");
-    
+
     // Check if the title is visible
-    await expect(page.locator("text=Conversations")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=Conversations")).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("should navigate to profiles management", async ({ page }) => {
     await page.goto("/profiles");
-    
+
     // Check if the title is visible
     await expect(page.locator("text=Profiles")).toBeVisible({ timeout: 10000 });
   });

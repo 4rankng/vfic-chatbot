@@ -6,7 +6,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
-import { LEAD_STAGES } from "../types";
+import { LEAD_SCORES, LEAD_STAGES } from "../types";
 
 export const ContactInputs = () => (
   <Card>
@@ -18,6 +18,14 @@ export const ContactInputs = () => (
       <SelectInput
         source="lead_stage"
         choices={LEAD_STAGES as unknown as { value: string; label: string }[]}
+        optionText="label"
+        optionValue="value"
+      />
+      <SelectInput
+        source="lead_score"
+        choices={LEAD_SCORES as unknown as { value: string; label: string }[]}
+        optionText="label"
+        optionValue="value"
       />
     </CardContent>
   </Card>

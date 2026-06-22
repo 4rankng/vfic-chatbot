@@ -249,7 +249,7 @@ const SettingsFormFields = () => {
       {/* Left navigation */}
       <nav className="hidden md:block w-48 shrink-0">
         <div className="sticky top-4 space-y-1">
-          <h1 className="text-2xl font-semibold px-3 mb-2">
+          <h1 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground px-3 mb-4">
             {translate("crm.settings.title")}
           </h1>
           {SECTIONS.map((section) => (

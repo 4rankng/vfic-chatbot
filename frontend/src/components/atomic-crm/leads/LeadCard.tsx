@@ -1,9 +1,9 @@
 import { Draggable } from "@hello-pangea/dnd";
 import { useRedirect, RecordContextProvider } from "ra-core";
 import { Card, CardContent } from "@/components/ui/card";
-import { User, Briefcase } from "lucide-react";
 
 import type { Lead } from "../types";
+import { LeadScoreBar } from "./LeadScoreBar";
 
 export const LeadCard = ({ lead, index }: { lead: Lead; index: number }) => {
   if (!lead) return null;
@@ -35,7 +35,7 @@ export const LeadCardContent = ({
 
   return (
     <div
-      className="cursor-pointer"
+      className="cursor-pointer select-none"
       {...provided?.draggableProps}
       {...provided?.dragHandleProps}
       ref={provided?.innerRef}
@@ -43,29 +43,34 @@ export const LeadCardContent = ({
     >
       <RecordContextProvider value={lead}>
         <Card
-          className={`py-3 transition-all duration-200 ${
+          className={`py-3.5 border border-border bg-card transition-all duration-200 rounded-xl ${
             snapshot?.isDragging
-              ? "opacity-90 transform rotate-1 shadow-lg border-primary"
-              : "shadow-sm hover:shadow-md"
+              ? "opacity-90 transform rotate-1 shadow-md border-primary/80 ring-3 ring-primary/15"
+              : "shadow-xs hover:-translate-y-0.5 hover:shadow-sm hover:border-muted-dim/40"
           }`}
         >
-          <CardContent className="px-3 flex flex-col gap-1">
-            <div className="font-medium text-sm flex items-center gap-2">
-              <User className="w-3 h-3 text-muted-foreground" />
-              {lead.name}
+          <CardContent className="px-3.5 py-0 flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div
+                className={`text-sm ${lead.name ? "font-semibold text-foreground" : "italic text-muted-dim font-medium"}`}
+              >
+                {lead.name ||
+                  `Unknown lead · ending ${(lead.zalo_id || "").slice(-4)}`}
+              </div>
             </div>
+
             {lead.desired_job && (
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                <Briefcase className="w-3 h-3" />
+              <div className="bg-muted/40 border border-border/50 rounded-lg px-2.5 py-2 mt-1 text-xs text-muted-foreground/90 font-medium line-clamp-2">
                 {lead.desired_job}
               </div>
             )}
-            <div className="flex justify-between items-center mt-2">
-              <span className="text-[10px] text-muted-foreground px-2 py-0.5 bg-muted rounded-full">
-                Score: {lead.lead_score || "N/A"}
-              </span>
-              <span className="text-[10px] text-muted-foreground">
-                {lead.updated_at ? new Date(lead.updated_at).toLocaleDateString() : ""}
+
+            <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-border/50">
+              <LeadScoreBar score={lead.lead_score} />
+              <span className="font-mono text-[10px] font-semibold text-muted-dim">
+                {lead.updated_at
+                  ? new Date(lead.updated_at).toLocaleDateString()
+                  : ""}
               </span>
             </div>
           </CardContent>

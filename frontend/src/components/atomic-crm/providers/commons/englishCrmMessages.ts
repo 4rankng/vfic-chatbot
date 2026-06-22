@@ -7,10 +7,45 @@ export const englishCrmMessages = {
     conversations: {
       name: "Conversation |||| Conversations",
       forcedCaseName: "Conversation",
+      reply: {
+        disabled: "Reply is not configured.",
+        unauthorized: "Your session has expired. Please sign in again.",
+        forbidden: "Your account is not allowed to send replies.",
+        conflict:
+          "Someone else has taken over this conversation. Take over before replying.",
+        network: "Could not reach the reply service. Please try again.",
+        error: "Failed to send the reply.",
+      },
+      takeover: {
+        success: "Conversation taken over",
+        error: "Failed to take over",
+      },
+      release: {
+        success: "Conversation released to bot",
+        error: "Failed to release",
+      },
     },
-    profiles: {
+    bot_runs: {
+      name: "Bot Run |||| Bot Runs",
+      forcedCaseName: "Bot Run",
+    },
+    knowledge_sources: {
+      name: "Knowledge Source |||| Knowledge Sources",
+      forcedCaseName: "Knowledge Source",
+    },
+    users: {
       name: "User |||| Users",
       forcedCaseName: "User",
+      fields: {
+        full_name: "Full name",
+        email: "Email",
+        first_name: "First name",
+        last_name: "Last name",
+        role: "Role",
+      },
+      action: {
+        new: "New user",
+      },
     },
     companies: {
       name: "Company |||| Companies",
@@ -295,31 +330,6 @@ export const englishCrmMessages = {
         note_or_attachment_required: "A note or an attachment is required",
       },
     },
-    sales: {
-      name: "User |||| Users",
-      fields: {
-        first_name: "First name",
-        last_name: "Last name",
-        email: "Email",
-        administrator: "Admin",
-        disabled: "Disabled",
-      },
-      create: {
-        error: "An error occurred while creating the user.",
-        success:
-          "User created. They will soon receive an email to set their password.",
-        title: "Create a new user",
-      },
-      edit: {
-        error: "An error occurred. Please try again.",
-        record_not_found: "Record not found",
-        success: "User updated successfully",
-        title: "Edit %{name}",
-      },
-      action: {
-        new: "New user",
-      },
-    },
     tasks: {
       name: "Task |||| Tasks",
       forcedCaseName: "Task",
@@ -433,7 +443,7 @@ export const englishCrmMessages = {
       system_activity: "System Activity",
       snapshot: "Quick snapshot of current operations",
       active_leads: "Active Leads",
-      drop_off: "Drop-off Rate"
+      drop_off: "Drop-off Rate",
     },
     changelog: {
       title: "Changelog",

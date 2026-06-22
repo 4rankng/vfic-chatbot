@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Home, ListTodo, Plus, Settings, Users } from "lucide-react";
+import { Home, ListTodo, Users } from "lucide-react";
 import { useTranslate } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 
@@ -15,8 +15,6 @@ export const MobileNavigation = () => {
     currentPath = "/leads";
   } else if (matchPath("/conversations/*", location.pathname)) {
     currentPath = "/conversations";
-  } else if (matchPath("/profiles/*", location.pathname)) {
-    currentPath = "/profiles";
   } else {
     currentPath = false;
   }
@@ -30,10 +28,11 @@ export const MobileNavigation = () => {
       className="fixed bottom-0 left-0 right-0 z-50 bg-secondary h-14 border-t"
       style={{
         paddingBottom: isPwa && isWebiOS ? 15 : undefined,
-        height: "calc(var(--spacing)) * 6" + (isPwa && isWebiOS ? " + 15px" : ""),
+        height:
+          "calc(var(--spacing)) * 6" + (isPwa && isWebiOS ? " + 15px" : ""),
       }}
     >
-      <div className="flex justify-center h-full items-center">
+      <div className="flex justify-around w-full max-w-md mx-auto h-full items-center">
         <>
           <NavigationButton
             href="/"
@@ -49,18 +48,13 @@ export const MobileNavigation = () => {
             })}
             isActive={currentPath === "/leads"}
           />
-          <CreateButton />
           <NavigationButton
             href="/conversations"
             Icon={ListTodo}
-            label={translate("resources.conversations.name", { smart_count: 2 })}
+            label={translate("resources.conversations.name", {
+              smart_count: 2,
+            })}
             isActive={currentPath === "/conversations"}
-          />
-          <NavigationButton
-            href="/profiles"
-            Icon={Settings}
-            label="Profiles"
-            isActive={currentPath === "/profiles"}
           />
         </>
       </div>
@@ -93,21 +87,3 @@ const NavigationButton = ({
     </Link>
   </Button>
 );
-
-const CreateButton = () => {
-  const translate = useTranslate();
-
-  return (
-    <Button
-      asChild
-      variant="default"
-      size="icon"
-      className="h-16 w-16 rounded-full -mt-8 mx-2 shadow-lg hover:shadow-xl transition-all"
-      aria-label={translate("ra.action.create")}
-    >
-      <Link to="/leads/create">
-        <Plus className="size-10" />
-      </Link>
-    </Button>
-  );
-};

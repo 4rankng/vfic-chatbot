@@ -1,5 +1,5 @@
 import { FileText, Settings, User, Users } from "lucide-react";
-import { CanAccess, useTranslate, useUserMenu } from "ra-core";
+import { useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { RefreshButton } from "@/components/admin/refresh-button";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
@@ -11,7 +11,7 @@ import { useConfigurationContext } from "../root/ConfigurationContext";
 import { ChangelogPage } from "../misc/ChangelogPage";
 
 const Header = () => {
-  const { darkModeLogo, lightModeLogo, title } = useConfigurationContext();
+  const { title } = useConfigurationContext();
   const location = useLocation();
   const translate = useTranslate();
 
@@ -29,24 +29,23 @@ const Header = () => {
   return (
     <>
       <nav className="grow">
-        <header className="bg-secondary">
+        <header className="bg-background border-b border-border">
           <div className="px-4">
             <div className="flex justify-between items-center flex-1">
               <Link
                 to="/"
-                className="flex items-center gap-2 text-secondary-foreground no-underline"
+                className="flex items-center gap-2.5 text-foreground no-underline"
               >
                 <img
-                  className="[.light_&]:hidden h-6"
-                  src={darkModeLogo}
+                  src="/light-logo.png"
+                  className="h-14 w-auto dark:hidden"
                   alt={title}
                 />
                 <img
-                  className="[.dark_&]:hidden h-6"
-                  src={lightModeLogo}
+                  src="/dark-logo.png"
+                  className="h-14 w-auto hidden dark:block"
                   alt={title}
                 />
-                <h1 className="text-xl font-semibold">{title}</h1>
               </Link>
               <div>
                 <nav className="flex">
@@ -75,16 +74,7 @@ const Header = () => {
                 <LocalesMenuButton />
                 <ThemeModeToggle />
                 <RefreshButton />
-                <UserMenu>
-                  <ProfileMenu />
-                  <CanAccess resource="profiles" action="list">
-                    <UsersMenu />
-                  </CanAccess>
-                  <CanAccess resource="configuration" action="edit">
-                    <SettingsMenu />
-                  </CanAccess>
-                  <ChangelogMenuItem />
-                </UserMenu>
+                <UserMenu />
               </div>
             </div>
           </div>
@@ -105,17 +95,24 @@ const NavigationTab = ({
 }) => (
   <Link
     to={to}
-    className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+    className={`flex items-center gap-2 px-5 py-3.5 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
       isActive
-        ? "text-secondary-foreground border-secondary-foreground"
-        : "text-secondary-foreground/70 border-transparent hover:text-secondary-foreground/80"
+        ? "text-foreground border-primary"
+        : "text-muted-foreground border-transparent hover:text-foreground"
     }`}
   >
+    <span
+      className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+        isActive
+          ? "bg-primary shadow-[0_0_8px_var(--primary)]"
+          : "bg-muted-foreground/30"
+      }`}
+    />
     {label}
   </Link>
 );
 
-const UsersMenu = () => {
+export const UsersMenu = () => {
   const translate = useTranslate();
   const userMenuContext = useUserMenu();
   if (!userMenuContext) {
@@ -123,15 +120,15 @@ const UsersMenu = () => {
   }
   return (
     <DropdownMenuItem asChild onClick={userMenuContext.onClose}>
-      <Link to="/profiles" className="flex items-center gap-2">
+      <Link to="/users" className="flex items-center gap-2">
         <Users />
-        {translate("resources.profiles.name", { smart_count: 2 })}
+        {translate("resources.users.name", { smart_count: 2 })}
       </Link>
     </DropdownMenuItem>
   );
 };
 
-const ProfileMenu = () => {
+export const ProfileMenu = () => {
   const translate = useTranslate();
   const userMenuContext = useUserMenu();
   if (!userMenuContext) {
@@ -147,7 +144,7 @@ const ProfileMenu = () => {
   );
 };
 
-const SettingsMenu = () => {
+export const SettingsMenu = () => {
   const translate = useTranslate();
   const userMenuContext = useUserMenu();
   if (!userMenuContext) {
@@ -163,7 +160,7 @@ const SettingsMenu = () => {
   );
 };
 
-const ChangelogMenuItem = () => {
+export const ChangelogMenuItem = () => {
   const translate = useTranslate();
   const userMenuContext = useUserMenu();
   if (!userMenuContext) {

@@ -1,9 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import {
-  ListBase,
-  useListContext,
-  useDataProvider,
-} from "ra-core";
+import { ListBase, useListContext, useDataProvider } from "ra-core";
 import { useLocation } from "react-router";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +21,7 @@ import { ConversationShowContent } from "./ConversationShow";
 import { RecordContextProvider } from "ra-core";
 import { getRelativeTimeString } from "../leads/leadUtils";
 import { LeadAvatar } from "../leads/LeadAvatar";
+import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 
 type ModeFilter = "all" | "bot" | "human";
 
@@ -65,12 +62,14 @@ const ConversationListItem = ({
   const time = getRelativeTimeString(
     conversation.last_inbound_at ?? conversation.updated_at,
   );
-  const senderKind: "candidate" | "recruiter" | "bot" = lastMessage
+  const senderKind: "candidate" | "recruiter" | "bot" | "system" = lastMessage
     ? lastMessage.type === "inbound"
       ? "candidate"
-      : lastMessage.data?.recruiter_id
-        ? "recruiter"
-        : "bot"
+      : lastMessage.type === "system"
+        ? "system"
+        : lastMessage.data?.recruiter_id
+          ? "recruiter"
+          : "bot"
     : "bot";
 
   return (
@@ -88,7 +87,8 @@ const ConversationListItem = ({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate text-sm font-semibold">
-            {lead?.name ?? conversation.zalo_chat_id}
+            {lead?.name ||
+              `Unknown lead · ending ${(conversation.zalo_chat_id || "").slice(-4)}`}
           </span>
           <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
         </div>
@@ -98,7 +98,9 @@ const ConversationListItem = ({
               ? "👤"
               : senderKind === "recruiter"
                 ? "🧑‍💼"
-                : "🤖"}
+                : senderKind === "system"
+                  ? "🔹"
+                  : "🤖"}
           </span>
           <span className="truncate text-xs text-muted-foreground">
             {preview}
@@ -127,7 +129,9 @@ const ConversationListPanel = ({
   const { data: conversations, isPending } = useListContext<Conversation>();
   const dataProvider = useDataProvider<any>();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
-  const [lastMessages, setLastMessages] = useState<Record<string, Message | null>>({});
+  const [lastMessages, setLastMessages] = useState<
+    Record<string, Message | null>
+  >({});
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<ModeFilter>("all");
 
@@ -175,15 +179,69 @@ const ConversationListPanel = ({
       await Promise.all(
         conversations.map(async (c) => {
           try {
-            // Try FakeRest messages first (demo mode), then the in-memory store.
-            const { dataProvider } = await import("../providers/fakerest");
-            const all = await dataProvider.getList("messages", {
-              filter: { conversation_id: c.id },
-              pagination: { page: 1, perPage: 1000 },
-              sort: { field: "created_at", order: "ASC" },
-            });
-            const list = (all?.data as Message[]) ?? [];
-            fetched[c.id] = list[list.length - 1] ?? null;
+            let msg: Message | null = null;
+            if (import.meta.env.DEV) {
+              const { dataProvider: fakeProvider } = await import(
+                "../providers/fakerest"
+              );
+              try {
+                const all = await fakeProvider.getList("messages", {
+                  filter: { conversation_id: c.id },
+                  pagination: { page: 1, perPage: 1 },
+                  sort: { field: "created_at", order: "DESC" },
+                });
+                msg = (all?.data?.[0] as Message) ?? null;
+              } catch {}
+            }
+            if (!msg) {
+              // Try real Supabase query
+              const { getSupabaseClient } = await import(
+                "../providers/supabase/supabase"
+              );
+              const { data } = await getSupabaseClient()
+                .from("vfic_chat_histories")
+                .select("*")
+                .eq("session_id", c.zalo_chat_id)
+                .order("id", { ascending: false })
+                .limit(1);
+              if (data && data.length > 0) {
+                // need to use the same toMessage logic as ConversationShow
+                const row = data[0];
+                const msgData = row?.message ?? {};
+                const type = String(msgData.type ?? "").toLowerCase();
+                const recruiterId = msgData.data?.recruiter_id;
+                const isRecruiter = type === "human" && Boolean(recruiterId);
+                const rawContent = isRecruiter
+                  ? (msgData.data?.content ?? msgData.content)
+                  : msgData.content;
+                let content = "";
+                if (typeof rawContent === "string") content = rawContent;
+                else if (Array.isArray(rawContent)) {
+                  content = rawContent
+                    .map((p) =>
+                      p && typeof p === "object" && "text" in p
+                        ? String(p.text ?? "")
+                        : String(p),
+                    )
+                    .join("")
+                    .trim();
+                } else content = String(rawContent ?? "");
+
+                msg = {
+                  id: String(row.id),
+                  zalo_message_id: String(row.id),
+                  conversation_id: row.session_id,
+                  type: type === "ai" || isRecruiter ? "outbound" : "inbound",
+                  content: content,
+                  data: { recruiter_id: recruiterId },
+                  created_at:
+                    msgData.data?.created_at ??
+                    row.created_at ??
+                    new Date().toISOString(),
+                };
+              }
+            }
+            fetched[c.id] = msg;
           } catch {
             fetched[c.id] = null;
           }
@@ -312,11 +370,16 @@ const ConversationDetail = ({
   conversation: Conversation;
 }) => {
   return (
-    <div className="flex h-full flex-col">
-      <RecordContextProvider value={conversation}>
-        <ConversationShowContent />
-      </RecordContextProvider>
-    </div>
+    <RecordContextProvider value={conversation}>
+      <div className="grid h-full grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[1fr_340px]">
+        <div className="overflow-hidden">
+          <ConversationShowContent />
+        </div>
+        <aside className="hidden border-l lg:block">
+          <LeadProfilePanel />
+        </aside>
+      </div>
+    </RecordContextProvider>
   );
 };
 
@@ -337,7 +400,7 @@ const EmptyDetail = () => (
   </div>
 );
 
-export const ConversationList = () => {
+const ConversationListContent = () => {
   const { data: conversations } = useListContext<Conversation>();
   const location = useLocation();
 
@@ -361,12 +424,14 @@ export const ConversationList = () => {
     null;
 
   return (
-    <ListBase perPage={500} sort={{ field: "updated_at", order: "DESC" }}>
+    <>
       <TopToolbar>
-        <h2 className="mr-auto text-xl font-semibold">Conversations</h2>
+        <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
+          Conversations
+        </h2>
       </TopToolbar>
-      <Card className="mt-4 overflow-hidden">
-        <div className="grid h-[calc(100vh-220px)] min-h-[500px] grid-cols-1 md:grid-cols-[360px_1fr]">
+      <Card className="mt-4 overflow-hidden p-0 py-0">
+        <div className="grid h-[calc(100vh-220px)] min-h-[500px] grid-cols-1 md:grid-cols-[360px_1fr] rounded-[inherit] overflow-hidden">
           <div className="border-r">
             <ConversationListPanel
               selectedId={selected?.id ?? null}
@@ -382,6 +447,14 @@ export const ConversationList = () => {
           </div>
         </div>
       </Card>
-    </ListBase>
+    </>
   );
 };
+
+// ListBase provides the ListContext; the consumer that calls useListContext
+// must be a child of ListBase, not a sibling rendered alongside it.
+export const ConversationList = () => (
+  <ListBase perPage={500} sort={{ field: "updated_at", order: "DESC" }}>
+    <ConversationListContent />
+  </ListBase>
+);

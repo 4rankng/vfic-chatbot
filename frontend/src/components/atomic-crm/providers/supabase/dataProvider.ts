@@ -1,22 +1,67 @@
 import { supabaseDataProvider } from "ra-supabase-core";
 import {
   withLifecycleCallbacks,
+  type CreateParams,
   type DataProvider,
+  type DeleteManyParams,
+  type DeleteParams,
   type GetListParams,
-  type Identifier,
+  type GetManyParams,
+  type GetOneParams,
   type ResourceCallbacks,
+  type UpdateManyParams,
+  type UpdateParams,
 } from "ra-core";
+import type { Session, User } from "@supabase/supabase-js";
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
+import { vficConfig } from "@/lib/vfic/config";
+import { sendHumanReply } from "@/lib/vfic/humanReplyService";
+
+// The CRM exposes friendly resource names that differ from the underlying VFIC
+// table names. The "users" resource (URL /users, menu "Users", admin-gated) is
+// backed by the `profiles` table. Map each friendly resource to its real table
+// for every CRUD verb so the data layer queries the right PostgREST endpoint.
+// (ra-supabase-core / ra-data-postgrest uses the resource name as the table
+// name verbatim, so without this the Users screen would 404 against live.)
+const RESOURCE_TABLE_MAP: Record<string, string> = {
+  users: "profiles",
+};
+const resolveTable = (resource: string) =>
+  RESOURCE_TABLE_MAP[resource] ?? resource;
+
+const withTableAlias = (provider: DataProvider): DataProvider => {
+  return {
+    ...provider,
+    getList: (resource: string, params: GetListParams) =>
+      provider.getList(resolveTable(resource), params),
+    getOne: (resource: string, params: GetOneParams) =>
+      provider.getOne(resolveTable(resource), params),
+    getMany: (resource: string, params: GetManyParams) =>
+      provider.getMany(resolveTable(resource), params),
+    update: (resource: string, params: UpdateParams) =>
+      provider.update(resolveTable(resource), params),
+    updateMany: (resource: string, params: UpdateManyParams) =>
+      provider.updateMany(resolveTable(resource), params),
+    create: (resource: string, params: CreateParams) =>
+      provider.create(resolveTable(resource), params),
+    delete: (resource: string, params: DeleteParams) =>
+      provider.delete(resolveTable(resource), params),
+    deleteMany: (resource: string, params: DeleteManyParams) =>
+      provider.deleteMany(resolveTable(resource), params),
+  };
+};
 
 const getBaseDataProvider = () =>
-  supabaseDataProvider({
-    instanceUrl: import.meta.env.VITE_SUPABASE_URL,
-    apiKey: import.meta.env.VITE_SB_PUBLISHABLE_KEY,
-    supabaseClient: getSupabaseClient(),
-    sortOrder: "asc,desc.nullslast" as any,
-  });
+  withTableAlias(
+    supabaseDataProvider({
+      instanceUrl: vficConfig.supabaseUrl,
+      apiKey: vficConfig.supabasePublishableKey,
+      supabaseClient: getSupabaseClient(),
+      sortOrder: "asc,desc.nullslast" as any,
+    }),
+  );
 
 const getDataProviderWithCustomMethods = () => {
   const baseDataProvider = getBaseDataProvider();
@@ -35,50 +80,23 @@ const getDataProviderWithCustomMethods = () => {
       // seeded defaults without 404-ing against a missing configuration table.
       return {} as ConfigurationContextValue;
     },
+    // VFIC has no configuration table. Kept as a no-op so legacy callers
+    // (e.g. SettingsPage) keep typechecking without writing to a dead table.
     async updateConfiguration(
       config: ConfigurationContextValue,
     ): Promise<ConfigurationContextValue> {
-      try {
-        const { data } = await baseDataProvider.update("configuration", {
-          id: 1,
-          data: { config },
-          previousData: { id: 1 },
-        });
-        return data.config as ConfigurationContextValue;
-      } catch (error) {
-        console.warn("Failed to update configuration table, using local configuration:", error);
-        return config;
-      }
+      return config;
     },
 
     // VFIC custom methods — contracts verified against the live n8n workflow
     // (wridAhFQuct6IGoX) and the vfic_take_over / vfic_release RPCs.
-    // The webhook 409s with conversation_not_owned unless mode='human' and
-    // assigned_recruiter_id == recruiter_id.
+    //
+    // sendHumanReply delegates to humanReplyService: ownership is carried by the
+    // Bearer JWT (introspected by n8n), and the body carries NO recruiter_id —
+    // closing the spoof vector. Typed HumanReplyError surfaces 401/403/409 to the
+    // UI. (Phase 3b will re-route this through the vfic_human_relay edge fn.)
     async sendHumanReply(zaloChatId: string, message: string) {
-      const session = await getSupabaseClient().auth.getSession();
-      const recruiterId = session.data.session?.user?.id;
-      if (!recruiterId) throw new Error("Not authenticated");
-
-      const response = await fetch(
-        "https://bot.tingting.vip/webhook/vfic-human-reply",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            zalo_chat_id: zaloChatId,
-            message,
-            recruiter_id: recruiterId,
-          }),
-        },
-      );
-      if (!response.ok) {
-        if (response.status === 409) {
-          throw new Error("Conversation not owned — take over before replying.");
-        }
-        throw new Error(`Failed to send reply (${response.status})`);
-      }
-      return response.json();
+      await sendHumanReply({ zaloChatId, message });
     },
 
     async takeOverConversation(zaloChatId: string) {
@@ -88,7 +106,7 @@ const getDataProviderWithCustomMethods = () => {
 
       const { data, error } = await getSupabaseClient().rpc("vfic_take_over", {
         p_zalo_chat_id: zaloChatId,
-        p_recruiter: recruiterId
+        p_recruiter: recruiterId,
       });
       if (error) throw new Error(error.message);
       return data;
@@ -101,91 +119,72 @@ const getDataProviderWithCustomMethods = () => {
 
       const { data, error } = await getSupabaseClient().rpc("vfic_release", {
         p_zalo_chat_id: zaloChatId,
-        p_recruiter: recruiterId
+        p_recruiter: recruiterId,
       });
       if (error) throw new Error(error.message);
       return data;
     },
 
-    async createProfile(body: any) {
-      const { data, error } = await getSupabaseClient().functions.invoke("vfic_create_user", {
-        method: "POST",
-        body
-      });
+    async createProfile(body: Record<string, unknown>) {
+      const { data, error } = await getSupabaseClient().functions.invoke(
+        "vfic_create_user",
+        {
+          method: "POST",
+          body,
+        },
+      );
       if (!data || error) {
         throw new Error(error?.message || "Failed to create user");
       }
       return data;
     },
-    async signUp(body: {
+
+    // Sign-up is disabled. VFIC accounts are provisioned out-of-band by an
+    // admin (Phase 7: vfic_admin_users edge function). This neutralises the
+    // previous unauthenticated-account-creation surface (supabase.auth.signUp)
+    // while preserving the method signature so the fakerest provider and the
+    // legacy SignupPage typecheck.
+    async signUp(_body: {
       email: string;
       password: string;
       first_name: string;
       last_name: string;
-    }) {
-      const { data, error } = await getSupabaseClient().auth.signUp({
-        email: body.email,
-        password: body.password,
-        options: {
-          data: {
-            first_name: body.first_name,
-            last_name: body.last_name,
-          },
-        },
-      });
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async salesUpdate(id: Identifier, data: Partial<any>) {
-      const { data: previousData } = await baseDataProvider.getOne("sales", { id });
-      if (!previousData) throw new Error("User not found");
-      const { data: updated } = await baseDataProvider.update("sales", {
-        id,
-        data,
-        previousData,
-      });
-      return updated;
+    }): Promise<{ user: User | null; session: Session | null }> {
+      throw new Error("Sign-up is disabled.");
     },
   } satisfies DataProvider;
 };
 
-export type CrmDataProvider = ReturnType<typeof getDataProviderWithCustomMethods>;
+export type CrmDataProvider = ReturnType<
+  typeof getDataProviderWithCustomMethods
+>;
 
 const lifeCycleCallbacks: ResourceCallbacks[] = [
   {
     resource: "leads",
     beforeGetList: async (params) => {
-      return applyFullTextSearch([
-        "name",
-        "phone",
-        "desired_job",
-        "zalo_id",
-      ])(params);
+      return applyFullTextSearch(["name", "phone", "desired_job", "zalo_id"])(
+        params,
+      );
     },
   },
   {
     resource: "conversations",
     beforeGetList: async (params) => {
-      return applyFullTextSearch(["zalo_chat_id", "assigned_recruiter_id"])(params);
+      return applyFullTextSearch(["zalo_chat_id", "assigned_recruiter_id"])(
+        params,
+      );
     },
   },
   {
-    resource: "profiles",
+    resource: "users",
     beforeGetList: async (params) => {
       return applyFullTextSearch(["full_name", "email"])(params);
     },
-  }
+  },
 ];
 
 export const getDataProvider = () => {
-  if (import.meta.env.VITE_SUPABASE_URL === undefined) {
-    throw new Error("Please set the VITE_SUPABASE_URL environment variable");
-  }
-  if (import.meta.env.VITE_SB_PUBLISHABLE_KEY === undefined) {
-    throw new Error(
-      "Please set the VITE_SB_PUBLISHABLE_KEY environment variable",
-    );
-  }
   return withLifecycleCallbacks(
     getDataProviderWithCustomMethods(),
     lifeCycleCallbacks,

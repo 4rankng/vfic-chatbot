@@ -36,7 +36,10 @@ export const generateMessages = (db: Db, perConv = 12): Message[] => {
 
     // Alternate: candidate, ai, candidate, recruiter (if human), etc.
     for (let i = 0; i < perConv; i++) {
-      timestamp = new Date(timestamp.getTime() + 1000 * 60 * (5 + random.number({ min: 0, max: 30 })));
+      timestamp = new Date(
+        timestamp.getTime() +
+          1000 * 60 * (5 + random.number({ min: 0, max: 30 })),
+      );
 
       let type: "inbound" | "outbound" | "system" = "inbound";
       let content = "";

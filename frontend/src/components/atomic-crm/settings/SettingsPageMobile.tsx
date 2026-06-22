@@ -21,7 +21,6 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Check, Copy, LogOut, Moon, Smartphone, Sun } from "lucide-react";
 import {
-  Form,
   Translate,
   useAuthProvider,
   useDataProvider,
@@ -44,9 +43,8 @@ import {
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
 import { ChangelogPage } from "../misc/ChangelogPage";
-import ImageEditorField from "../misc/ImageEditorField";
 import type { CrmDataProvider } from "../providers/types";
-import type { SalesFormData } from "../types";
+import type { Profile } from "../types";
 
 const ChangePasswordButton = () => {
   const translate = useTranslate();
@@ -109,8 +107,9 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
 
 const ProfileSection = () => {
   const { identity, refetch: refetchIdentity } = useGetIdentity();
-  const { data, refetch: refetchUser } = useGetOne("sales", {
-    id: identity?.id,
+  const profileId = identity?.id != null ? String(identity.id) : undefined;
+  const { data, refetch: refetchUser } = useGetOne<Profile>("users", {
+    id: profileId,
   });
   const translate = useTranslate();
   const notify = useNotify();
@@ -120,11 +119,11 @@ const ProfileSection = () => {
   const saveField = useCallback(
     async (field: string, value: string) => {
       if (!identity || !data) return;
-      const current = data[field as keyof typeof data];
+      const current = data[field as keyof Profile];
       if (value === current) return;
 
       const queryKey = [
-        "sales",
+        "users",
         "getOne",
         { id: String(identity.id), meta: undefined },
       ];
@@ -134,10 +133,11 @@ const ProfileSection = () => {
       );
 
       try {
-        await dataProvider.salesUpdate(identity.id, {
-          ...data,
-          [field]: value,
-        } as SalesFormData);
+        await dataProvider.update("users", {
+          id: identity.id,
+          data: { [field]: value },
+          previousData: data,
+        });
         refetchIdentity();
         refetchUser();
         notify("crm.profile.updated", {
@@ -162,26 +162,6 @@ const ProfileSection = () => {
     ],
   );
 
-  const handleAvatarUpdate = useCallback(
-    async (values: SalesFormData) => {
-      if (!data) return;
-      try {
-        await dataProvider.salesUpdate(data.id, values);
-        refetchIdentity();
-        refetchUser();
-        notify("crm.profile.updated", {
-          messageArgs: { _: "Your profile has been updated" },
-        });
-      } catch {
-        notify("crm.profile.update_error", {
-          type: "error",
-          messageArgs: { _: "An error occurred. Please try again." },
-        });
-      }
-    },
-    [data, dataProvider, refetchIdentity, refetchUser, notify],
-  );
-
   if (!identity || !data) return null;
 
   return (
@@ -190,39 +170,16 @@ const ProfileSection = () => {
         {translate("crm.profile.title", { _: "Profile" })}
       </SectionLabel>
       <ItemGroup className="rounded-lg border overflow-hidden">
-        <Form record={data}>
-          <Item size="sm">
-            <ItemContent>
-              <ImageEditorField
-                source="avatar"
-                type="avatar"
-                onSave={handleAvatarUpdate}
-                linkPosition="right"
-              />
-            </ItemContent>
-          </Item>
-        </Form>
-
-        <ItemSeparator />
-
         <InlineEditRow
-          label={translate("resources.sales.fields.first_name")}
-          value={data.first_name ?? ""}
-          onSave={(v) => saveField("first_name", v)}
+          label={translate("resources.users.fields.full_name")}
+          value={data.full_name ?? ""}
+          onSave={(v) => saveField("full_name", v)}
         />
 
         <ItemSeparator />
 
         <InlineEditRow
-          label={translate("resources.sales.fields.last_name")}
-          value={data.last_name ?? ""}
-          onSave={(v) => saveField("last_name", v)}
-        />
-
-        <ItemSeparator />
-
-        <InlineEditRow
-          label={translate("resources.sales.fields.email")}
+          label={translate("resources.users.fields.email")}
           value={data.email ?? ""}
           onSave={(v) => saveField("email", v)}
         />

@@ -4,13 +4,13 @@ import {
   useRecordContext,
   useDataProvider,
   useNotify,
-  useRefresh,
+  useTranslate,
+  useGetList,
 } from "ra-core";
 import { TopToolbar } from "../layout/TopToolbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -22,15 +22,21 @@ import {
   Sparkles,
   UserCircle,
   User as UserIcon,
+  Wrench,
 } from "lucide-react";
 import { getSupabaseClient } from "../providers/supabase/supabase";
 import { cn } from "@/lib/utils";
-import type { Conversation, Message } from "../types";
+import type { Conversation, Message, Lead } from "../types";
 import { CrmDataProvider } from "../providers/supabase/dataProvider";
+import { HumanReplyError } from "@/lib/vfic/humanReplyService";
+import { useConversationActions } from "./useConversationActions";
 
-type SenderKind = "candidate" | "bot" | "recruiter" | "system";
+type SenderKind = "candidate" | "bot" | "recruiter" | "system" | "tool";
 
 const classify = (msg: Message): SenderKind => {
+  // Tool calls (RAG lookups, lead ops) are flagged on the mapped message via
+  // data.tool by toMessage(); they render as muted, centered bubbles.
+  if (msg.data?.tool) return "tool";
   if (msg.type === "system") return "system";
   if (msg.type === "inbound") return "candidate";
   if (msg.data?.recruiter_id) return "recruiter";
@@ -67,7 +73,15 @@ const SENDER_META: Record<
   system: {
     label: "System",
     icon: Sparkles,
-    bubble: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100",
+    bubble:
+      "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100",
+    align: "center",
+  },
+  tool: {
+    label: "Tool",
+    icon: Wrench,
+    bubble:
+      "border border-dashed border-border bg-muted/60 text-muted-foreground",
     align: "center",
   },
 };
@@ -107,27 +121,41 @@ const extractText = (value: unknown): string => {
 const toMessage = (row: any): Message | null => {
   const msg = row?.message ?? {};
   const type = String(msg.type ?? "").toLowerCase();
-  if (type !== "ai" && type !== "human") return null; // hide tool / unknown
+  // ai = bot outbound; human = candidate-inbound OR recruiter-outbound;
+  if (type !== "ai" && type !== "human") return null;
   const recruiterId = msg.data?.recruiter_id;
   const isRecruiter = type === "human" && Boolean(recruiterId);
   const rawContent = isRecruiter
     ? (msg.data?.content ?? msg.content)
     : msg.content;
+  const content = extractText(rawContent);
+  // Filter out internal agent tool calling logs
+  if (
+    type === "ai" &&
+    content.startsWith("Calling ") &&
+    content.includes("with input:")
+  ) {
+    return null;
+  }
+  const messageType: Message["type"] =
+    type === "ai" || isRecruiter ? "outbound" : "inbound";
   return {
     id: String(row.id),
     zalo_message_id: String(row.id),
     conversation_id: row.session_id,
-    type: type === "ai" || isRecruiter ? "outbound" : "inbound",
-    content: extractText(rawContent),
+    type: messageType,
+    content: content,
     data: { recruiter_id: recruiterId },
     created_at:
       msg.data?.created_at ?? row.created_at ?? new Date().toISOString(),
   };
 };
 
-const tryLoadDemoMessages = async (
-  zaloChatId: string,
-): Promise<Message[]> => {
+const tryLoadDemoMessages = async (zaloChatId: string): Promise<Message[]> => {
+  // Demo data is for local dev only. In production we never want a Supabase
+  // outage / RLS denial to silently render fake conversations as real, so the
+  // demo loader is a no-op outside dev.
+  if (!import.meta.env.DEV) return [];
   try {
     const fakerest = await import("../providers/fakerest");
     const { dataProvider } = fakerest;
@@ -171,10 +199,15 @@ const useConversationRealtime = (zaloChatId?: string) => {
           .order("id", { ascending: true });
         if (cancelled) return;
         if (err) {
-          // Supabase unreachable / table missing → fall through to demo data.
-          const demo = await tryLoadDemoMessages(zaloChatId);
-          if (cancelled) return;
-          setMessages(demo);
+          // Supabase error: demo data in dev, explicit error UI in production.
+          if (import.meta.env.DEV) {
+            const demo = await tryLoadDemoMessages(zaloChatId);
+            if (cancelled) return;
+            setMessages(demo);
+          } else {
+            setError("Could not load the conversation. Please try again.");
+            setMessages([]);
+          }
           setIsLoading(false);
           return;
         }
@@ -184,11 +217,16 @@ const useConversationRealtime = (zaloChatId?: string) => {
         setMessages(mapped);
         setIsLoading(false);
       } catch {
-        // No Supabase at all → use demo data.
+        // No Supabase at all: demo data in dev, explicit error UI in production.
         if (cancelled) return;
-        const demo = await tryLoadDemoMessages(zaloChatId);
-        if (cancelled) return;
-        setMessages(demo);
+        if (import.meta.env.DEV) {
+          const demo = await tryLoadDemoMessages(zaloChatId);
+          if (cancelled) return;
+          setMessages(demo);
+        } else {
+          setError("Could not load the conversation. Please try again.");
+          setMessages([]);
+        }
         setIsLoading(false);
       }
     };
@@ -302,13 +340,25 @@ export const ConversationShowContent = () => {
   );
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
-  const refresh = useRefresh();
+  const translate = useTranslate();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [localMode, setLocalMode] = useState<"bot" | "human" | undefined>(
-    undefined,
-  );
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Shared takeover/release logic — the same hook the lead-profile drawer uses,
+  // so both action surfaces stay behaviourally identical.
+  const { isBotMode, handleTakeover, handleRelease } =
+    useConversationActions(record);
+
+  const { data: leadData } = useGetList(
+    "leads",
+    {
+      filter: { zalo_id: record?.zalo_chat_id },
+      pagination: { page: 1, perPage: 1 },
+    },
+    { enabled: !!record?.zalo_chat_id },
+  );
+  const lead = leadData?.[0] as Lead | undefined;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -316,43 +366,41 @@ export const ConversationShowContent = () => {
     }
   }, [messages]);
 
-  // Group consecutive messages from the same sender for visual cohesion.
   const grouped = useMemo(() => {
-    return messages.map((msg, idx) => {
-      const prev = messages[idx - 1];
-      const sameKind = prev && classify(prev) === classify(msg);
-      return { msg, isFirstOfGroup: !sameKind };
-    });
+    const result: Array<{
+      msg: Message;
+      isFirstOfGroup: boolean;
+      isInternalGroup?: boolean;
+      groupMessages?: Message[];
+    }> = [];
+    let currentInternalGroup: Message[] | null = null;
+
+    for (const msg of messages) {
+      const kind = classify(msg);
+      if (kind === "tool" || kind === "system") {
+        if (!currentInternalGroup) {
+          currentInternalGroup = [msg];
+          result.push({
+            msg,
+            isFirstOfGroup: true,
+            isInternalGroup: true,
+            groupMessages: currentInternalGroup,
+          });
+        } else {
+          currentInternalGroup.push(msg);
+        }
+      } else {
+        currentInternalGroup = null;
+        const prev = result[result.length - 1];
+        const sameKind =
+          prev && !prev.isInternalGroup && classify(prev.msg) === kind;
+        result.push({ msg, isFirstOfGroup: !sameKind });
+      }
+    }
+    return result;
   }, [messages]);
 
   if (!record) return null;
-
-  // After takeover/release the record context is stale until the parent
-  // re-fetches; fall back to the locally-tracked mode for snappy UX.
-  const effectiveMode = localMode ?? record.mode;
-  const isBotMode = effectiveMode === "bot";
-
-  const handleTakeover = async () => {
-    try {
-      await dataProvider.takeOverConversation(record.id);
-      setLocalMode("human");
-      notify("Conversation taken over", { type: "success" });
-      refresh();
-    } catch (e: any) {
-      notify(e?.message ?? "Failed to take over", { type: "error" });
-    }
-  };
-
-  const handleRelease = async () => {
-    try {
-      await dataProvider.releaseConversation(record.id);
-      setLocalMode("bot");
-      notify("Conversation released to bot", { type: "success" });
-      refresh();
-    } catch (e: any) {
-      notify(e?.message ?? "Failed to release", { type: "error" });
-    }
-  };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -360,10 +408,13 @@ export const ConversationShowContent = () => {
 
     setIsSending(true);
     try {
-      await dataProvider.sendHumanReply(record.id, reply);
-      setReply("");
-    } catch (e: any) {
-      notify(e?.message ?? "Failed to send", { type: "error" });
+      await dataProvider.sendHumanReply(record.zalo_chat_id, reply);
+      setReply(""); // clear only on success — keep the text on failure for retry
+    } catch (e: unknown) {
+      const status = e instanceof HumanReplyError ? e.status : "error";
+      notify(translate(`resources.conversations.reply.${status}`), {
+        type: "error",
+      });
     } finally {
       setIsSending(false);
     }
@@ -376,8 +427,14 @@ export const ConversationShowContent = () => {
           <CardTitle className="flex items-center gap-2 truncate text-base">
             <Inbox className="size-4 shrink-0 text-muted-foreground" />
             <span className="truncate">
-              {record.zalo_chat_id || "Conversation"}
+              {lead?.name ||
+                `Unknown lead · ending ${(record.zalo_chat_id || "").slice(-4)}`}
             </span>
+            {lead && (
+              <span className="text-sm font-normal text-muted-foreground hidden sm:inline-block">
+                · {lead.desired_job || "No job specified"} · {lead.lead_stage}
+              </span>
+            )}
           </CardTitle>
           <Badge
             variant={isBotMode ? "secondary" : "default"}
@@ -457,17 +514,45 @@ export const ConversationShowContent = () => {
             </div>
           </div>
         ) : (
-          <ScrollArea className="flex-1 px-4 py-4 md:px-6" ref={scrollRef}>
+          <div
+            className="flex-1 overflow-y-auto px-4 py-4 md:px-6"
+            ref={scrollRef}
+          >
             <div className="flex flex-col gap-2.5">
-              {grouped.map(({ msg, isFirstOfGroup }, idx) => (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  showTime={isFirstOfGroup || idx === 0}
-                />
-              ))}
+              {grouped.map(
+                ({ msg, isFirstOfGroup, isInternalGroup, groupMessages }) => {
+                  if (isInternalGroup && groupMessages) {
+                    return (
+                      <details key={msg.id} className="w-full my-2 text-center">
+                        <summary className="cursor-pointer text-xs text-muted-foreground select-none opacity-80 hover:opacity-100 flex justify-center items-center list-none outline-none">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="size-3" />
+                            AI activity · {groupMessages.length} actions
+                          </span>
+                        </summary>
+                        <div className="w-full mt-3 flex flex-col gap-2.5">
+                          {groupMessages.map((m, i) => (
+                            <MessageBubble
+                              key={m.id}
+                              msg={m}
+                              showTime={i === 0}
+                            />
+                          ))}
+                        </div>
+                      </details>
+                    );
+                  }
+                  return (
+                    <MessageBubble
+                      key={msg.id}
+                      msg={msg}
+                      showTime={isFirstOfGroup}
+                    />
+                  );
+                },
+              )}
             </div>
-          </ScrollArea>
+          </div>
         )}
 
         <div className="border-t bg-background p-3 md:p-4">

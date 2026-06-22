@@ -16,6 +16,7 @@ const getBaseAuthProvider = () =>
       return {
         id: profile.id,
         fullName: profile.full_name,
+        role: profile.role,
         avatar: "", // Profiles don't have avatars yet
       };
     },
@@ -94,38 +95,10 @@ export const getAuthProvider = (): AuthProvider => {
       return baseAuthProvider.logout(params);
     },
     checkAuth: async (params) => {
-      // Users are on the set-password page, nothing to do
-      if (
-        window.location.pathname === "/set-password" ||
-        window.location.hash.includes("#/set-password")
-      ) {
-        return;
-      }
-      // Users are on the forgot-password page, nothing to do
-      if (
-        window.location.pathname === "/forgot-password" ||
-        window.location.hash.includes("#/forgot-password")
-      ) {
-        return;
-      }
-      // Users are on the sign-up page, nothing to do
-      if (
-        window.location.pathname === "/sign-up" ||
-        window.location.hash.includes("#/sign-up")
-      ) {
-        return;
-      }
-
-      const isInitialized = await getIsInitialized();
-
-      if (!isInitialized) {
-        await getSupabaseClient().auth.signOut();
-        throw {
-          redirectTo: "/sign-up",
-          message: false,
-        };
-      }
-
+      // Onboarding routes (sign-up / set-password / forgot-password) were
+      // removed, and the init gate is always true for VFIC (the admin is
+      // seeded out-of-band). Auth is fully delegated to the base Supabase
+      // auth provider.
       return baseAuthProvider.checkAuth(params);
     },
     canAccess: async (params) => {
@@ -136,8 +109,9 @@ export const getAuthProvider = (): AuthProvider => {
       const profile = await getProfile();
       if (profile == null) return false;
 
-      // Compute access rights from the profile role
-      const role = profile.role === "admin" ? "admin" : "user";
+      // Compute access rights from the profile role (passed through unchanged
+      // so recruiter/admin are distinguished correctly).
+      const role = profile.role;
       return canAccess(role, params);
     },
     getAuthorizationDetails(authorizationId: string) {

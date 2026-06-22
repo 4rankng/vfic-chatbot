@@ -6,12 +6,12 @@ import { randomDate } from "./utils";
 
 const LEAD_STAGES = [
   "NEW",
+  "ENGAGED",
   "QUALIFIED",
-  "CONTACTED",
-  "INTERVIEWING",
-  "OFFERED",
+  "APPLIED",
   "HIRED",
-  "REJECTED",
+  "LOST",
+  "UNQUALIFIED",
 ];
 
 const JOB_TITLES = [
@@ -99,7 +99,7 @@ export const generateLeads = (_db: Db, size = 500): Lead[] => {
       })} ${random.number({ min: 100, max: 999 })}`,
       desired_job: random.arrayElement(JOB_TITLES),
       expected_salary: random.arrayElement(SALARY_RANGES),
-      lead_score: random.number({ min: 0, max: 100 }),
+      lead_score: random.arrayElement(["hot", "warm", "not_interested"]),
       lead_stage: stage,
       created_at: createdAt.toISOString(),
       updated_at: updatedAt.toISOString(),

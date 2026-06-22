@@ -9,10 +9,45 @@ export const frenchCrmMessages = {
     conversations: {
       name: "Conversation |||| Conversations",
       forcedCaseName: "Conversation",
+      reply: {
+        disabled: "La réponse n'est pas configurée.",
+        unauthorized: "Votre session a expiré. Veuillez vous reconnecter.",
+        forbidden: "Votre compte n'est pas autorisé à envoyer des réponses.",
+        conflict:
+          "Quelqu'un d'autre a pris le relais sur cette conversation. Prenez le relais avant de répondre.",
+        network: "Impossible de joindre le service. Veuillez réessayer.",
+        error: "Échec de l'envoi de la réponse.",
+      },
+      takeover: {
+        success: "Conversation prise en charge",
+        error: "Échec de la prise en charge",
+      },
+      release: {
+        success: "Conversation rendue au bot",
+        error: "Échec de la libération",
+      },
     },
-    profiles: {
+    bot_runs: {
+      name: "Exécution du bot |||| Exécutions du bot",
+      forcedCaseName: "Exécution du bot",
+    },
+    knowledge_sources: {
+      name: "Source de connaissances |||| Sources de connaissances",
+      forcedCaseName: "Source de connaissances",
+    },
+    users: {
       name: "Utilisateur |||| Utilisateurs",
       forcedCaseName: "Utilisateur",
+      fields: {
+        full_name: "Nom complet",
+        email: "E-mail",
+        first_name: "Prénom",
+        last_name: "Nom",
+        role: "Rôle",
+      },
+      action: {
+        new: "Nouvel utilisateur",
+      },
     },
     companies: {
       name: "Entreprise |||| Entreprises",
@@ -298,32 +333,6 @@ export const frenchCrmMessages = {
       },
       validation: {
         note_or_attachment_required: "Une note ou une pièce jointe est requise",
-      },
-    },
-    sales: {
-      name: "Utilisateur |||| Utilisateurs",
-      fields: {
-        first_name: "Prénom",
-        last_name: "Nom",
-        email: "E-mail",
-        administrator: "Admin",
-        disabled: "Désactivé",
-      },
-      create: {
-        error:
-          "Une erreur s'est produite lors de la création de l'utilisateur.",
-        success:
-          "Utilisateur créé. Ils recevront prochainement un email pour définir leur mot de passe.",
-        title: "Créer un nouvel utilisateur",
-      },
-      edit: {
-        error: "Une erreur s'est produite. Veuillez réessayer.",
-        record_not_found: "Enregistrement introuvable",
-        success: "Utilisateur mis à jour avec succès",
-        title: "Modifier %{name}",
-      },
-      action: {
-        new: "Nouvel utilisateur",
       },
     },
     tasks: {

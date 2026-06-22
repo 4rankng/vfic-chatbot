@@ -11,19 +11,16 @@ import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { Admin } from "@/components/admin/admin";
-import { ForgotPasswordPage } from "@/components/supabase/forgot-password-page";
-import { SetPasswordPage } from "@/components/supabase/set-password-page";
-import { OAuthConsentPage } from "@/components/supabase/oauth-consent-page";
 
 import leads from "../leads";
 import profiles from "../profiles";
 import conversations from "../conversations";
+import automation from "../automation";
+import knowledge from "../knowledge";
 import { Dashboard } from "../dashboard/Dashboard";
 import { MobileDashboard } from "../dashboard/MobileDashboard";
 import { Layout } from "../layout/Layout";
 import { MobileLayout } from "../layout/MobileLayout";
-import { SignupPage } from "../login/SignupPage";
-import { ConfirmationRequired } from "../login/ConfirmationRequired";
 import { ChangelogPage } from "../misc/ChangelogPage";
 import {
   getAuthProvider as defaultAuthProviderBuilder,
@@ -238,20 +235,6 @@ const DesktopAdmin = (
       dashboard={props.dashboard ?? Dashboard}
       {...props}
     >
-      <CustomRoutes noLayout>
-        <Route path={SignupPage.path} element={<SignupPage />} />
-        <Route
-          path={ConfirmationRequired.path}
-          element={<ConfirmationRequired />}
-        />
-        <Route path={SetPasswordPage.path} element={<SetPasswordPage />} />
-        <Route
-          path={ForgotPasswordPage.path}
-          element={<ForgotPasswordPage />}
-        />
-        <Route path={OAuthConsentPage.path} element={<OAuthConsentPage />} />
-      </CustomRoutes>
-
       <CustomRoutes>
         <Route path={ProfilePage.path} element={<ProfilePage />} />
         <Route path={SettingsPage.path} element={<SettingsPage />} />
@@ -259,7 +242,14 @@ const DesktopAdmin = (
       </CustomRoutes>
       <Resource name="leads" {...leads} />
       <Resource name="conversations" {...conversations} />
-      <Resource name="profiles" {...profiles} />
+      <Resource name="bot_runs" {...automation} />
+      <Resource name="knowledge_sources" {...knowledge} />
+      {/* Users admin: always registered so /users resolves.
+          Access is gated inside ProfileList (CanAccess) and via Header
+          menu visibility — ra-core's static-children walker does not
+          descend into <CanAccess>, so wrapping here would silently
+          disable the route. RLS is the security boundary. */}
+      <Resource name="users" {...profiles} />
     </Admin>
   );
 };
@@ -296,19 +286,6 @@ const MobileAdmin = (
         dashboard={props.dashboard ?? MobileDashboard}
         {...props}
       >
-        <CustomRoutes noLayout>
-          <Route path={SignupPage.path} element={<SignupPage />} />
-          <Route
-            path={ConfirmationRequired.path}
-            element={<ConfirmationRequired />}
-          />
-          <Route path={SetPasswordPage.path} element={<SetPasswordPage />} />
-          <Route
-            path={ForgotPasswordPage.path}
-            element={<ForgotPasswordPage />}
-          />
-          <Route path={OAuthConsentPage.path} element={<OAuthConsentPage />} />
-        </CustomRoutes>
         <CustomRoutes>
           <Route
             path={SettingsPageMobile.path}
@@ -318,6 +295,14 @@ const MobileAdmin = (
         </CustomRoutes>
         <Resource name="leads" {...leads} />
         <Resource name="conversations" {...conversations} />
+        <Resource name="bot_runs" {...automation} />
+        <Resource name="knowledge_sources" {...knowledge} />
+        {/* Users admin: always registered so /users resolves.
+            Access is gated inside ProfileList (CanAccess) and via Header
+            menu visibility — ra-core's static-children walker does not
+            descend into <CanAccess>, so wrapping here would silently
+            disable the route. RLS is the security boundary. */}
+        <Resource name="users" {...profiles} />
       </Admin>
     </PersistQueryClientProvider>
   );

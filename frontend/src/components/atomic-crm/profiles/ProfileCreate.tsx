@@ -19,7 +19,7 @@ export const ProfileCreate = () => {
     try {
       await dataProvider.createProfile(data);
       notify("User created successfully", { type: "success" });
-      redirect("/profiles");
+      redirect("/users");
     } catch (e: any) {
       notify(e.message, { type: "error" });
     } finally {
@@ -37,14 +37,19 @@ export const ProfileCreate = () => {
           <Form onSubmit={onSubmit}>
             <div className="flex flex-col gap-4">
               <TextInput source="email" label="Email" type="email" isRequired />
-              <TextInput source="password" label="Password" type="password" isRequired />
+              <TextInput
+                source="password"
+                label="Password"
+                type="password"
+                isRequired
+              />
               <TextInput source="full_name" label="Full Name" isRequired />
               <SelectInput
                 source="role"
                 label="Role"
                 choices={[
                   { id: "admin", name: "Admin" },
-                  { id: "recruiter", name: "Recruiter" }
+                  { id: "recruiter", name: "Recruiter" },
                 ]}
                 isRequired
               />

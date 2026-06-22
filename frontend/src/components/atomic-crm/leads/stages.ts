@@ -4,7 +4,7 @@ export type LeadsByStage = Record<string, Lead[]>;
 
 export const getLeadsByStage = (
   unorderedLeads: Lead[],
-  leadStages: { value: string; label: string }[]
+  leadStages: readonly { value: string; label: string }[],
 ) => {
   if (!leadStages) return {};
   const leadsByStage: Record<string, Lead[]> = unorderedLeads.reduce(
@@ -25,7 +25,8 @@ export const getLeadsByStage = (
   leadStages.forEach((stage) => {
     if (leadsByStage[stage.value]) {
       leadsByStage[stage.value] = leadsByStage[stage.value].sort(
-        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        (a, b) =>
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
       );
     }
   });

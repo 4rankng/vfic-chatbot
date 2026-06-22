@@ -2,7 +2,6 @@ import {
   withLifecycleCallbacks,
   type CreateParams,
   type DataProvider,
-  type GetListParams,
   type GetListResult,
   type Identifier,
   type RaRecord,
@@ -19,7 +18,6 @@ import type {
   Deal,
   DealNote,
   Sale,
-  SalesFormData,
   SignUpData,
   Task,
 } from "../../types";
@@ -185,12 +183,21 @@ export const createDataProvider = ({
       case "deal_notes":
       case "notes":
         return "contact_notes";
+      // The CRM "users" resource is backed by the "sales" collection in demo
+      // mode (mirroring the supabase provider's users→profiles alias).
+      case "users":
+        return "sales";
       default:
         return resource;
     }
   };
 
-  const dataProviderWithCustomMethod: CrmDataProvider = {
+  // NOTE: intentionally untyped here. The fakerest demo provider carries
+  // extra CRM-era demo helpers (e.g. updatePassword) that the VFIC
+  // CrmDataProvider surface doesn't expose; a strict `: CrmDataProvider`
+  // annotation triggers excess-property errors on those. The public contract
+  // is still enforced by the `as CrmDataProvider` cast at the function's return.
+  const dataProviderWithCustomMethod = {
     ...baseDataProvider,
     async getList<RecordType extends RaRecord = RaRecord>(
       resource: string,
@@ -264,6 +271,10 @@ export const createDataProvider = ({
     },
     async sendHumanReply(_id: Identifier, _message: string) {
       // In demo mode we don't actually post anywhere — just succeed.
+    },
+    // Demo-mode stub: mirrors the Supabase createProfile custom method so this
+    // provider satisfies CrmDataProvider. Profile creation is a no-op in demo.
+    async createProfile(_body: Record<string, unknown>) {
       return { ok: true };
     },
     signUp: async ({
@@ -302,35 +313,6 @@ export const createDataProvider = ({
       } as unknown as Session;
 
       return { user: demoUser, session: demoSession };
-    },
-    salesCreate: async ({ ...data }: SalesFormData): Promise<Sale> => {
-      const response = await dataProvider.create("sales", {
-        data: {
-          ...data,
-          password: "new_password",
-        },
-      });
-
-      return response.data;
-    },
-    salesUpdate: async (
-      id: Identifier,
-      data: Partial<Omit<SalesFormData, "password">>,
-    ): Promise<Sale> => {
-      const { data: previousData } = await dataProvider.getOne<Sale>("sales", {
-        id,
-      });
-
-      if (!previousData) {
-        throw new Error("User not found");
-      }
-
-      const { data: sale } = await dataProvider.update<Sale>("sales", {
-        id,
-        data,
-        previousData,
-      });
-      return { ...sale, user_id: sale.id.toString() };
     },
     isInitialized: async (): Promise<boolean> => {
       const sales = await dataProvider.getList<Sale>("sales", {

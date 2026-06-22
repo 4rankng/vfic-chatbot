@@ -23,7 +23,7 @@ const successLeads = [
     phone: "+84 901 234 567",
     desired_job: "Senior Frontend Developer",
     expected_salary: "1500 USD",
-    lead_score: 85,
+    lead_score: "warm",
     lead_stage: "QUALIFIED",
     zalo_id: "zalo-12345",
   }),

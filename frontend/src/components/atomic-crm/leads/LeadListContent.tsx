@@ -3,20 +3,14 @@ import isEqual from "lodash/isEqual";
 import { useDataProvider, useListContext, type DataProvider } from "ra-core";
 import { useEffect, useState } from "react";
 
-import type { Lead } from "../types";
+import { LEAD_STAGES, type Lead } from "../types";
 import { LeadColumn } from "./LeadColumn";
 import type { LeadsByStage } from "./stages";
 import { getLeadsByStage } from "./stages";
 
-export const LEAD_STAGES = [
-  { value: "NEW", label: "New" },
-  { value: "QUALIFIED", label: "Qualified" },
-  { value: "CONTACTED", label: "Contacted" },
-  { value: "INTERVIEWING", label: "Interviewing" },
-  { value: "OFFERED", label: "Offered" },
-  { value: "HIRED", label: "Hired" },
-  { value: "REJECTED", label: "Rejected" },
-];
+// Re-export so existing consumers (LeadColumn, Dashboard) keep compiling while
+// reading the single canonical source in types.ts — eliminates stage drift.
+export { LEAD_STAGES };
 
 export const LeadListContent = () => {
   const { data: unorderedLeads, isPending, refetch } = useListContext<Lead>();
@@ -42,7 +36,11 @@ export const LeadListContent = () => {
     const { destination, source } = result;
 
     if (!destination) return;
-    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    )
+      return;
 
     const sourceStage = source.droppableId;
     const destinationStage = destination.droppableId;
@@ -94,7 +92,11 @@ const updateLeadStageLocal = (
     const sourceColumn = [...(leadsByStage[source.stage] || [])];
     const destinationColumn = [...(leadsByStage[destination.stage] || [])];
     sourceColumn.splice(source.index, 1);
-    destinationColumn.splice(destination.index ?? destinationColumn.length + 1, 0, sourceLead);
+    destinationColumn.splice(
+      destination.index ?? destinationColumn.length + 1,
+      0,
+      sourceLead,
+    );
     return {
       ...leadsByStage,
       [source.stage]: sourceColumn,
@@ -112,9 +114,9 @@ const updateLeadStage = async (
   // Just update the lead_stage.
   await dataProvider.update("leads", {
     id: source.id,
-    data: { 
+    data: {
       lead_stage: destinationStage,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     },
     previousData: source,
   });

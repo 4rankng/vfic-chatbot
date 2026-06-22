@@ -164,7 +164,11 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
             icon={<Phone className="size-4" />}
             label="Phone"
             value={record.phone}
-            href={record.phone ? `tel:${record.phone.replace(/\s+/g, "")}` : undefined}
+            href={
+              record.phone
+                ? `tel:${record.phone.replace(/\s+/g, "")}`
+                : undefined
+            }
             copyable
           />
           <Separator />
@@ -226,7 +230,7 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
               <Hash className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <LeadScoreBar score={record.lead_score ?? 0} />
+              <LeadScoreBar score={record.lead_score} />
             </div>
           </div>
         </CardContent>
