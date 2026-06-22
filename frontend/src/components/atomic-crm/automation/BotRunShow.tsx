@@ -28,7 +28,7 @@ const BotRunShowContent = () => {
         <CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-4 py-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Bot className="size-4 text-muted-foreground" />
-            Bot Run #{run.id}
+            Lần chạy bot #{run.id}
           </CardTitle>
           <span
             className={cn(
@@ -41,39 +41,39 @@ const BotRunShowContent = () => {
         </CardHeader>
         <CardContent className="flex flex-col px-4 py-2">
           <Field
-            label="Proposed reply"
+            label="Câu trả lời đề xuất"
             value={
               run.proposed_reply ? (
                 <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-sm">
                   {run.proposed_reply}
                 </pre>
               ) : (
-                "— none —"
+                "— không có —"
               )
             }
           />
           <Field
-            label="Conversation"
+            label="Cuộc trò chuyện"
             value={
               <span className="font-mono text-xs">{run.conversation_id}</span>
             }
           />
-          <Field label="Outcome" value={run.outcome} />
+          <Field label="Kết quả" value={meta.label} />
           <Field
-            label="Version at start"
+            label="Phiên bản khi bắt đầu"
             value={
               <span>
                 {run.version_at_start}{" "}
                 <span className="text-xs text-muted-foreground">
-                  (conversations.version when the run began — used by the
-                  takeover race guard)
+                  (conversations.version khi lần chạy bắt đầu — dùng cho cơ chế
+                  chống tranh chấp tiếp nhận)
                 </span>
               </span>
             }
           />
-          <Field label="Started" value={formatDateTime(run.started_at)} />
+          <Field label="Bắt đầu" value={formatDateTime(run.started_at)} />
           <Field
-            label="Ended"
+            label="Kết thúc"
             value={
               run.ended_at ? (
                 <span>
@@ -81,7 +81,7 @@ const BotRunShowContent = () => {
                   {dur ? (
                     <span className="text-xs text-muted-foreground">
                       {" "}
-                      · duration {dur}
+                      · thời lượng {dur}
                     </span>
                   ) : null}
                 </span>
@@ -97,7 +97,7 @@ const BotRunShowContent = () => {
 export const BotRunShow = () => (
   <ShowBase>
     <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">Bot Run</h2>
+      <h2 className="mr-auto text-xl font-semibold">Lần chạy bot</h2>
     </TopToolbar>
     <BotRunShowContent />
   </ShowBase>

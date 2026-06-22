@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 export const LeadBreadcrumb = ({
   className,
-  rootLabel = "Leads",
+  rootLabel = "Khách hàng",
 }: {
   className?: string;
   rootLabel?: string;
@@ -16,7 +16,7 @@ export const LeadBreadcrumb = ({
   const listPath = resource ? createPath({ resource, type: "list" }) : "/leads";
   return (
     <nav
-      aria-label="Breadcrumb"
+      aria-label="Đường dẫn"
       className={cn(
         "flex items-center gap-1.5 text-sm text-muted-foreground",
         className,

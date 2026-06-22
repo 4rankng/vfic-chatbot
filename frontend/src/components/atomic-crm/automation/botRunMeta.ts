@@ -8,12 +8,12 @@ export const OUTCOME_META: Record<
   BotRun["outcome"],
   { label: string; classes: string }
 > = {
-  sent: { label: "Sent", classes: "bg-emerald-500 text-white" },
+  sent: { label: "Đã gửi", classes: "bg-emerald-500 text-white" },
   suppressed: {
-    label: "Suppressed",
+    label: "Đã chặn",
     classes: "bg-amber-500 text-white",
   },
-  error: { label: "Error", classes: "bg-rose-500 text-white" },
+  error: { label: "Lỗi", classes: "bg-rose-500 text-white" },
 };
 
 export const outcomeMeta = (
@@ -31,15 +31,15 @@ export const durationLabel = (run: {
     new Date(run.ended_at).getTime() - new Date(run.started_at).getTime();
   if (!Number.isFinite(ms) || ms < 0) return null;
   if (ms < 1000) return `${ms} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
-  return `${Math.round(ms / 60_000)} m`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} giây`;
+  return `${Math.round(ms / 60_000)} phút`;
 };
 
 export const formatDateTime = (iso?: string | null): string => {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(d);

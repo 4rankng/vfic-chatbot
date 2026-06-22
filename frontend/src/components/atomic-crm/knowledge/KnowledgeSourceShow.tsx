@@ -39,11 +39,11 @@ const KnowledgeSourceShowContent = () => {
           </span>
         </CardHeader>
         <CardContent className="flex flex-col px-4 py-2">
-          <Field label="Source name" value={source.source_name} />
-          <Field label="Document type" value={source.document_type} />
-          <Field label="Source type" value={source.source_type} />
+          <Field label="Tên nguồn" value={source.source_name} />
+          <Field label="Loại tài liệu" value={source.document_type} />
+          <Field label="Loại nguồn" value={source.source_type} />
           <Field
-            label="Source reference"
+            label="Tham chiếu nguồn"
             value={
               source.source_ref ? (
                 <span className="font-mono text-xs break-all">
@@ -52,11 +52,11 @@ const KnowledgeSourceShowContent = () => {
               ) : null
             }
           />
-          <Field label="Version" value={source.version || "—"} />
-          <Field label="Created" value={formatDateTime(source.created_at)} />
-          <Field label="Updated" value={formatDateTime(source.updated_at)} />
+          <Field label="Phiên bản" value={source.version || "—"} />
+          <Field label="Ngày tạo" value={formatDateTime(source.created_at)} />
+          <Field label="Ngày cập nhật" value={formatDateTime(source.updated_at)} />
           <Field
-            label="Metadata"
+            label="Siêu dữ liệu"
             value={
               <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs">
                 {JSON.stringify(source.metadata ?? {}, null, 2)}
@@ -72,7 +72,7 @@ const KnowledgeSourceShowContent = () => {
 export const KnowledgeSourceShow = () => (
   <ShowBase>
     <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">Knowledge Source</h2>
+      <h2 className="mr-auto text-xl font-semibold">Nguồn kiến thức</h2>
     </TopToolbar>
     <KnowledgeSourceShowContent />
   </ShowBase>

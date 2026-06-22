@@ -16,14 +16,12 @@ const initials = (name?: string) => {
 };
 
 const palette = [
-  "bg-rose-500/15 text-rose-700 dark:text-rose-300",
-  "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",
-  "bg-blue-500/15 text-blue-700 dark:text-blue-300",
-  "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
-  "bg-purple-500/15 text-purple-700 dark:text-purple-300",
-  "bg-pink-500/15 text-pink-700 dark:text-pink-300",
+  "bg-gradient-to-br from-purple-400 to-indigo-500 text-white border-transparent",
+  "bg-gradient-to-br from-pink-400 to-rose-400 text-white border-transparent",
+  "bg-gradient-to-br from-emerald-400 to-teal-500 text-white border-transparent",
+  "bg-gradient-to-br from-cyan-400 to-blue-500 text-white border-transparent",
+  "bg-gradient-to-br from-orange-400 to-orange-600 text-white border-transparent",
+  "bg-gradient-to-br from-violet-400 to-fuchsia-500 text-white border-transparent",
 ];
 
 const paletteFor = (seed?: string) => {

@@ -11,7 +11,7 @@ import { durationLabel, outcomeMeta } from "./botRunMeta";
 const BotRunRow = ({ run }: { run: BotRun }) => {
   const redirect = useRedirect();
   const meta = outcomeMeta(run.outcome);
-  const preview = run.proposed_reply?.slice(0, 140) ?? "— no proposed reply —";
+  const preview = run.proposed_reply?.slice(0, 140) ?? "— không có câu trả lời —";
   const dur = durationLabel(run);
   return (
     <button
@@ -45,7 +45,7 @@ const BotRunListContent = () => {
     <>
       <TopToolbar>
         <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
-          Bot Runs
+          Lần chạy bot
         </h2>
       </TopToolbar>
       <Card className="mt-4 overflow-hidden p-0 py-0">
@@ -65,9 +65,9 @@ const BotRunListContent = () => {
           ) : !data || data.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
               <Inbox className="size-10 opacity-50" />
-              <p className="text-sm font-medium">No bot runs recorded yet</p>
+              <p className="text-sm font-medium">Chưa có lần chạy bot nào</p>
               <p className="text-xs">
-                Executions of the recruitment chatbot will appear here.
+                Các lần thực thi chatbot tuyển dụng sẽ hiển thị tại đây.
               </p>
             </div>
           ) : (

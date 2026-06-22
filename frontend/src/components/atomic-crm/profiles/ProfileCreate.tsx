@@ -18,7 +18,7 @@ export const ProfileCreate = () => {
     setIsSubmitting(true);
     try {
       await dataProvider.createProfile(data);
-      notify("User created successfully", { type: "success" });
+      notify("Đã tạo người dùng thành công", { type: "success" });
       redirect("/users");
     } catch (e: any) {
       notify(e.message, { type: "error" });
@@ -30,7 +30,7 @@ export const ProfileCreate = () => {
   return (
     <CreateBase>
       <TopToolbar>
-        <h2 className="text-xl font-semibold mr-auto">Create User</h2>
+        <h2 className="text-xl font-semibold mr-auto">Tạo người dùng</h2>
       </TopToolbar>
       <Card className="mt-4 max-w-2xl">
         <CardContent className="pt-6">
@@ -39,22 +39,22 @@ export const ProfileCreate = () => {
               <TextInput source="email" label="Email" type="email" isRequired />
               <TextInput
                 source="password"
-                label="Password"
+                label="Mật khẩu"
                 type="password"
                 isRequired
               />
-              <TextInput source="full_name" label="Full Name" isRequired />
+              <TextInput source="full_name" label="Họ tên" isRequired />
               <SelectInput
                 source="role"
-                label="Role"
+                label="Vai trò"
                 choices={[
-                  { id: "admin", name: "Admin" },
-                  { id: "recruiter", name: "Recruiter" },
+                  { id: "admin", name: "Quản trị" },
+                  { id: "recruiter", name: "Nhân viên" },
                 ]}
                 isRequired
               />
               <Button type="submit" disabled={isSubmitting}>
-                Create User
+                Tạo người dùng
               </Button>
             </div>
           </Form>

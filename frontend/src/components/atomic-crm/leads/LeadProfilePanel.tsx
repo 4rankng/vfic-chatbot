@@ -26,31 +26,33 @@ const Field = ({
   label,
   value,
   mono,
+  colorClass = "bg-muted border-border text-muted-foreground",
 }: {
   icon: ReactNode;
   label: string;
   value?: ReactNode;
   mono?: boolean;
+  colorClass?: string;
 }) => {
   const empty = value === undefined || value === null || value === "";
   return (
-    <div className="flex items-start gap-2.5 py-2">
-      <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+    <div className="flex gap-4">
+      <div className={cn("size-8 rounded-full flex items-center justify-center shrink-0 border mt-1", colorClass)}>
         {icon}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">
           {label}
-        </div>
-        <div
+        </p>
+        <p
           className={cn(
-            "mt-0.5 text-sm",
-            mono && "font-mono text-xs",
-            empty && "italic text-muted-foreground",
+            "text-sm font-medium leading-snug",
+            mono && "font-mono",
+            empty ? "italic text-muted-foreground font-normal" : "text-foreground",
           )}
         >
-          {empty ? <span className="text-xs">Not provided</span> : value}
-        </div>
+          {empty ? "Chưa cung cấp" : value}
+        </p>
       </div>
     </div>
   );
@@ -105,30 +107,25 @@ export const LeadProfilePanel = () => {
   const { isBotMode } = useConversationActions(conversation);
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden rounded-none border-0">
-      <CardHeader className="border-b px-4 py-3">
-        <CardTitle className="flex items-center justify-between gap-2 text-base">
-          <span className="flex items-center gap-2">
-            <UserIcon className="size-4 text-muted-foreground" />
-            Lead Profile
-          </span>
-          <Badge
-            variant={isBotMode ? "secondary" : "default"}
-            className="shrink-0 gap-1"
-          >
-            {isBotMode ? (
-              <>
-                <Bot className="size-3" /> Bot
-              </>
-            ) : (
-              <>
-                <UserCircle className="size-3" /> Human
-              </>
-            )}
-          </Badge>
+    <Card className="flex h-full flex-col overflow-hidden rounded-none border-0 bg-background shadow-[-4px_0_24px_rgba(0,0,0,0.02)] relative z-10">
+      <CardHeader className="h-[72px] px-6 flex flex-row items-center justify-between border-b border-border/40 shrink-0 py-0">
+        <CardTitle className="font-semibold text-foreground flex items-center gap-2 text-base">
+          <UserIcon className="size-4 text-muted-foreground" />
+          Hồ sơ khách hàng
         </CardTitle>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md border border-border/50 font-medium">
+          {isBotMode ? (
+            <>
+              <Bot className="size-3.5" /> Bot
+            </>
+          ) : (
+            <>
+              <UserCircle className="size-3.5" /> Nhân viên
+            </>
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto p-4">
+      <CardContent className="flex-1 overflow-y-auto p-6">
         {isLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-12 w-full" />
@@ -140,42 +137,52 @@ export const LeadProfilePanel = () => {
             <div className="rounded-full bg-muted p-3">
               <Inbox className="size-6" />
             </div>
-            <p className="text-sm font-medium">No lead linked</p>
+            <p className="text-sm font-medium">Chưa liên kết khách hàng</p>
             <p className="text-xs">
-              This conversation has no matching lead yet (joins on leads.zalo_id
-              = conversations.zalo_chat_id).
+              Cuộc trò chuyện này chưa có khách hàng tương ứng (nối qua
+              leads.zalo_id = conversations.zalo_chat_id).
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <LeadAvatar record={lead} size="md" />
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold">
+          <div>
+            <div className="flex items-center gap-4 mb-8">
+              <LeadAvatar record={lead} size="lg" className="w-14 h-14 text-xl shadow-md" />
+              <div>
+                <h3 className="font-semibold text-foreground text-lg mb-1">
                   {lead.name ||
-                    `Unknown lead · ending ${lead.zalo_id?.slice(-4) || "????"}`}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    `Khách hàng chưa biết · ${lead.zalo_id?.slice(-4) || "????"}`}
+                </h3>
+                <div className="flex flex-wrap items-center gap-1.5">
                   <LeadStageBadge stage={lead.lead_stage} />
                   <LeadScoreBar score={lead.lead_score} />
                 </div>
               </div>
             </div>
-            <Field
-              icon={<Phone className="size-3.5" />}
-              label="Phone"
-              value={lead.phone}
-            />
-            <Field
-              icon={<Briefcase className="size-3.5" />}
-              label="Desired job"
-              value={lead.desired_job}
-            />
-            <Field
-              icon={<CircleDollarSign className="size-3.5" />}
-              label="Expected salary"
-              value={lead.expected_salary}
-            />
+            <div className="space-y-6">
+              <Field
+                icon={<Phone className="size-4" />}
+                label="Số điện thoại"
+                value={lead.phone}
+                colorClass="bg-muted text-muted-foreground border-border"
+              />
+              <Field
+                icon={<Briefcase className="size-4 text-blue-500" />}
+                label="Công việc mong muốn"
+                value={lead.desired_job}
+                colorClass="bg-blue-500/10 border-blue-500/20"
+              />
+              <Field
+                icon={<CircleDollarSign className="size-4 text-green-500" />}
+                label="Lương mong muốn"
+                value={lead.expected_salary}
+                colorClass="bg-green-500/10 border-green-500/20"
+              />
+            </div>
+            <div className="mt-10 pt-6 border-t border-border/40">
+                <button className="w-full flex items-center justify-center gap-2 bg-card border border-border/50 text-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-muted/50 transition-colors shadow-sm">
+                    <UserIcon className="size-4" /> Cập nhật hồ sơ
+                </button>
+            </div>
           </div>
         )}
       </CardContent>

@@ -10,7 +10,7 @@ export const LeadList = () => {
     <ListBase perPage={100} sort={{ field: "updated_at", order: "DESC" }}>
       <TopToolbar>
         <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
-          Leads Pipeline
+          Quy trình khách hàng
         </h2>
         <CreateButton />
       </TopToolbar>

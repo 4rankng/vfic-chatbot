@@ -100,7 +100,7 @@ export const ProfilePage = () => {
           {translate("crm.profile.title")}
         </h2>
         <p className="text-muted-foreground text-xs font-medium mt-1">
-          Manage your account information and preferences
+          Quản lý thông tin và tùy chọn tài khoản của bạn
         </p>
       </div>
       <Form onSubmit={handleOnSubmit} record={data}>
@@ -130,7 +130,7 @@ const ProfileForm = ({
           <div className="mb-4 flex items-center gap-2">
             <span className="w-1.5 h-4.5 bg-primary rounded-full" />
             <span className="font-display text-lg font-bold tracking-wider uppercase text-foreground">
-              Account Details
+              Thông tin tài khoản
             </span>
           </div>
 

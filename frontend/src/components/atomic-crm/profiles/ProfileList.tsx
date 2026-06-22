@@ -8,11 +8,16 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShieldOff } from "lucide-react";
 
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Quản trị",
+  recruiter: "Nhân viên",
+};
+
 const RoleBadge = ({ record }: any) => {
   if (!record) return null;
   return (
     <Badge variant={record.role === "admin" ? "default" : "secondary"}>
-      {record.role}
+      {ROLE_LABELS[record.role] ?? record.role}
     </Badge>
   );
 };
@@ -49,14 +54,14 @@ export const ProfileList = () => {
         </TopToolbar>
         <Card className="mt-4">
           <DataTable bulkActionButtons={false}>
-            <DataTable.Col source="full_name" label="Name">
+            <DataTable.Col source="full_name" label="Họ tên">
               <TextField source="full_name" className="font-semibold" />
             </DataTable.Col>
             <DataTable.Col source="email" label="Email" />
-            <DataTable.Col source="role" label="Role">
-              <RoleBadge source="role" label="Role" />
+            <DataTable.Col source="role" label="Vai trò">
+              <RoleBadge source="role" label="Vai trò" />
             </DataTable.Col>
-            <DataTable.Col source="created_at" label="Created At">
+            <DataTable.Col source="created_at" label="Ngày tạo">
               <DateField source="created_at" showTime />
             </DataTable.Col>
           </DataTable>

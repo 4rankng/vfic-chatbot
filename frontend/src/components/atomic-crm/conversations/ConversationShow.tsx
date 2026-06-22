@@ -26,12 +26,16 @@ import {
 } from "lucide-react";
 import { getSupabaseClient } from "../providers/supabase/supabase";
 import { cn } from "@/lib/utils";
+import { LEAD_STAGES } from "../types";
 import type { Conversation, Message, Lead } from "../types";
 import { CrmDataProvider } from "../providers/supabase/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 
 type SenderKind = "candidate" | "bot" | "recruiter" | "system" | "tool";
+
+const stageLabel = (value: string) =>
+  LEAD_STAGES.find((s) => s.value === value)?.label ?? value;
 
 const classify = (msg: Message): SenderKind => {
   // Tool calls (RAG lookups, lead ops) are flagged on the mapped message via
@@ -50,38 +54,42 @@ const SENDER_META: Record<
     icon: typeof Bot;
     bubble: string;
     align: "start" | "end" | "center";
+    avatar?: string;
   }
 > = {
   candidate: {
-    label: "Candidate",
+    label: "Ứng viên",
     icon: UserIcon,
-    bubble: "bg-muted text-foreground",
-    align: "start",
+    bubble: "bg-card border border-border/50 text-card-foreground shadow-sm rounded-2xl rounded-tr-sm",
+    align: "end",
+    avatar: "bg-primary text-primary-foreground",
   },
   bot: {
     label: "AI Bot",
     icon: Bot,
-    bubble: "bg-blue-100 text-blue-950 dark:bg-blue-900/40 dark:text-blue-50",
-    align: "end",
+    bubble: "bg-primary/10 border border-primary/20 text-foreground shadow-sm rounded-2xl rounded-tl-sm",
+    align: "start",
+    avatar: "bg-primary/20 text-primary border border-primary/30",
   },
   recruiter: {
-    label: "Recruiter",
+    label: "Nhân viên",
     icon: UserCircle,
-    bubble: "bg-primary text-primary-foreground",
-    align: "end",
+    bubble: "bg-primary text-primary-foreground shadow-sm rounded-2xl rounded-tl-sm",
+    align: "start",
+    avatar: "bg-primary text-primary-foreground",
   },
   system: {
-    label: "System",
+    label: "Hệ thống",
     icon: Sparkles,
     bubble:
-      "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100",
+      "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100 rounded-full",
     align: "center",
   },
   tool: {
-    label: "Tool",
+    label: "Công cụ",
     icon: Wrench,
     bubble:
-      "border border-dashed border-border bg-muted/60 text-muted-foreground",
+      "border border-dashed border-border bg-muted/60 text-muted-foreground rounded-xl",
     align: "center",
   },
 };
@@ -90,7 +98,7 @@ const formatTime = (iso?: string) => {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
@@ -205,7 +213,7 @@ const useConversationRealtime = (zaloChatId?: string) => {
             if (cancelled) return;
             setMessages(demo);
           } else {
-            setError("Could not load the conversation. Please try again.");
+            setError("Không thể tải cuộc trò chuyện. Vui lòng thử lại.");
             setMessages([]);
           }
           setIsLoading(false);
@@ -281,18 +289,17 @@ const MessageBubble = ({
 
   if (isCentered) {
     return (
-      <div className="flex justify-center">
+      <div className="flex justify-center my-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div
           className={cn(
-            "max-w-md rounded-lg px-4 py-2 text-center text-xs shadow-sm",
+            "max-w-md px-4 py-1.5 text-center text-xs shadow-sm",
             meta.bubble,
           )}
         >
-          <div className="mb-0.5 flex items-center justify-center gap-1 font-semibold uppercase tracking-wide opacity-70">
-            <Icon className="size-3" />
-            {meta.label}
+          <div className="flex items-center justify-center gap-1 font-semibold opacity-80">
+            <Icon className="size-3.5" />
+            <span>{msg.content}</span>
           </div>
-          <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
         </div>
       </div>
     );
@@ -301,32 +308,29 @@ const MessageBubble = ({
   return (
     <div
       className={cn(
-        "flex w-full",
-        (meta.align as string) === "end" ? "justify-end" : "justify-start",
+        "flex w-full gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300",
+        (meta.align as string) === "end" ? "flex-row-reverse" : "flex-row",
       )}
     >
-      <div
-        className={cn(
-          "max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm",
-          meta.bubble,
-        )}
-      >
+      <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 shadow-sm text-sm font-medium", meta.avatar)}>
+        <Icon className="size-4" />
+      </div>
+      <div className="max-w-[75%]">
+        <div className={cn("flex items-center gap-2 mb-1.5 mx-1", meta.align === "end" ? "justify-end" : "")}>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{meta.label}</span>
+            {showTime && msg.created_at && (
+                <span className="text-xs text-muted-foreground/70">· {formatTime(msg.created_at)}</span>
+            )}
+        </div>
         <div
           className={cn(
-            "mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide",
-            "opacity-70",
+            "px-4 py-3 leading-relaxed text-[15px]",
+            meta.bubble,
           )}
         >
-          <Icon className="size-3" />
-          {meta.label}
-          {showTime && msg.created_at && (
-            <span className="ml-1 font-normal normal-case opacity-80">
-              • {formatTime(msg.created_at)}
-            </span>
-          )}
-        </div>
-        <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-          {msg.content}
+          <div className="whitespace-pre-wrap break-words">
+            {msg.content}
+          </div>
         </div>
       </div>
     </div>
@@ -421,51 +425,57 @@ export const ConversationShowContent = () => {
   };
 
   return (
-    <Card className="flex h-[calc(100vh-220px)] flex-col overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-4 py-3 md:px-6 md:py-4">
+    <Card className="flex h-[calc(100vh-220px)] flex-col overflow-hidden rounded-none border-none shadow-none bg-transparent">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 border-b border-border/40 bg-card/80 backdrop-blur-md px-6 py-4 z-20 shrink-0 shadow-sm h-[72px]">
         <div className="flex min-w-0 items-center gap-3">
-          <CardTitle className="flex items-center gap-2 truncate text-base">
-            <Inbox className="size-4 shrink-0 text-muted-foreground" />
-            <span className="truncate">
-              {lead?.name ||
-                `Unknown lead · ending ${(record.zalo_chat_id || "").slice(-4)}`}
-            </span>
-            {lead && (
-              <span className="text-sm font-normal text-muted-foreground hidden sm:inline-block">
-                · {lead.desired_job || "No job specified"} · {lead.lead_stage}
+          <div className="bg-muted p-2 rounded-lg text-muted-foreground hidden sm:block">
+            <UserIcon className="size-5" />
+          </div>
+          <div>
+            <CardTitle className="flex items-center gap-2 truncate text-lg font-semibold text-foreground">
+              <span className="truncate">
+                {lead?.name ||
+                  `Khách hàng chưa biết · đuôi ${(record.zalo_chat_id || "").slice(-4)}`}
               </span>
-            )}
-          </CardTitle>
-          <Badge
-            variant={isBotMode ? "secondary" : "default"}
-            className="shrink-0 gap-1"
-          >
-            {isBotMode ? (
-              <>
-                <Bot className="size-3" /> Bot
-              </>
-            ) : (
-              <>
-                <UserCircle className="size-3" /> Human
-              </>
-            )}
-          </Badge>
+              {lead && (
+                <span className="text-sm font-normal text-muted-foreground hidden sm:inline-block">
+                  · {lead.desired_job || "Chưa có công việc"}
+                </span>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mt-0.5">
+              <span className={cn("flex items-center gap-1 px-2 py-0.5 rounded border", isBotMode ? "bg-muted/50 border-border" : "bg-primary/10 text-primary border-primary/20")}>
+                {isBotMode ? (
+                  <>
+                    <Bot className="size-3.5" /> Bot đang xử lý
+                  </>
+                ) : (
+                  <>
+                    <UserCircle className="size-3.5" /> Nhân viên tiếp nhận
+                  </>
+                )}
+              </span>
+              {lead?.lead_stage && (
+                <span className="hidden sm:inline-block">· {stageLabel(lead.lead_stage)}</span>
+              )}
+            </div>
+          </div>
         </div>
         <div className="flex shrink-0 gap-2">
           {isBotMode ? (
-            <Button size="sm" onClick={handleTakeover} className="gap-2">
+            <Button size="default" onClick={handleTakeover} className="gap-2 rounded-xl font-medium shadow-[0_0_15px_rgba(224,112,31,0.3)] hover:shadow-[0_0_20px_rgba(224,112,31,0.4)] transition-all hover:-translate-y-0.5">
               <UserCircle className="size-4" />
-              Take Over
+              Tiếp nhận
             </Button>
           ) : (
             <Button
-              size="sm"
+              size="default"
               variant="outline"
               onClick={handleRelease}
-              className="gap-2"
+              className="gap-2 rounded-xl font-medium bg-background"
             >
               <Bot className="size-4" />
-              Release to Bot
+              Trả lại Bot
             </Button>
           )}
         </div>
@@ -475,7 +485,7 @@ export const ConversationShowContent = () => {
           <div className="flex flex-1 items-center justify-center p-6">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
               <AlertTriangle className="size-8 text-destructive" />
-              <p className="font-medium">Failed to load messages</p>
+              <p className="font-medium">Không thể tải tin nhắn</p>
               <p className="text-xs text-muted-foreground">{error}</p>
             </div>
           </div>
@@ -505,32 +515,30 @@ export const ConversationShowContent = () => {
                 <Inbox className="size-8 text-muted-foreground" />
               </div>
               <div>
-                <p className="font-medium">No messages yet</p>
+                <p className="font-medium">Chưa có tin nhắn</p>
                 <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                  The chat history is empty. New messages from Zalo will appear
-                  here in real time.
+                  Lịch sử trò chuyện trống. Tin nhắn mới từ Zalo sẽ hiển thị tại
+                  đây theo thời gian thực.
                 </p>
               </div>
             </div>
           </div>
         ) : (
           <div
-            className="flex-1 overflow-y-auto px-4 py-4 md:px-6"
+            className="flex-1 overflow-y-auto px-4 py-6 md:px-6 z-10"
             ref={scrollRef}
           >
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-6">
               {grouped.map(
                 ({ msg, isFirstOfGroup, isInternalGroup, groupMessages }) => {
                   if (isInternalGroup && groupMessages) {
                     return (
-                      <details key={msg.id} className="w-full my-2 text-center">
-                        <summary className="cursor-pointer text-xs text-muted-foreground select-none opacity-80 hover:opacity-100 flex justify-center items-center list-none outline-none">
-                          <span className="flex items-center gap-1">
-                            <Sparkles className="size-3" />
-                            AI activity · {groupMessages.length} actions
-                          </span>
+                      <details key={msg.id} className="w-full my-2 text-center fade-in-up">
+                        <summary className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border bg-card shadow-sm text-xs text-muted-foreground select-none opacity-80 hover:opacity-100 list-none outline-none transition-opacity">
+                          <Sparkles className="size-3" />
+                          Hoạt động AI · {groupMessages.length} hành động
                         </summary>
-                        <div className="w-full mt-3 flex flex-col gap-2.5">
+                        <div className="w-full mt-4 flex flex-col gap-3">
                           {groupMessages.map((m, i) => (
                             <MessageBubble
                               key={m.id}
@@ -552,41 +560,52 @@ export const ConversationShowContent = () => {
                 },
               )}
             </div>
+            <div className="h-8"></div>
           </div>
         )}
 
-        <div className="border-t bg-background p-3 md:p-4">
+        <div className="border-t border-border/40 bg-card p-4 shrink-0 relative z-20">
           {isBotMode ? (
-            <div className="mb-2 flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-              <Lock className="mt-0.5 size-3.5 shrink-0" />
-              <span>
-                The bot is currently handling this conversation. Take over to
-                start replying manually.
-              </span>
+            <div className="bg-muted/80 backdrop-blur border border-border/50 rounded-xl p-3 mb-4 flex items-start gap-3 shadow-sm">
+              <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-sm text-foreground font-medium">Bot đang xử lý cuộc trò chuyện này. Hãy tiếp nhận để bắt đầu trả lời thủ công.</p>
+              </div>
             </div>
           ) : null}
-          <form onSubmit={handleSend} className="flex items-center gap-2">
-            <Input
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-              placeholder={
-                isBotMode
-                  ? "Take over the conversation to reply…"
-                  : "Type your reply…"
-              }
-              disabled={isBotMode || isSending}
-              className="flex-1"
-              autoComplete="off"
-            />
-            <Button
+          <form onSubmit={handleSend} className="flex items-center gap-3">
+            <div className="flex-1 relative">
+              <input
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder={
+                  isBotMode
+                    ? "Hãy tiếp nhận cuộc trò chuyện để trả lời..."
+                    : "Nhập câu trả lời..."
+                }
+                disabled={isBotMode || isSending}
+                className={cn(
+                  "w-full bg-muted/50 border border-border/50 text-foreground text-sm rounded-xl py-3 px-4 outline-none transition-all placeholder:text-muted-foreground",
+                  !isBotMode && "focus:ring-2 focus:ring-primary/20 focus:bg-background focus:border-primary/30",
+                  isBotMode && "cursor-not-allowed opacity-70"
+                )}
+                autoComplete="off"
+              />
+            </div>
+            <button
               type="submit"
-              size="icon"
               disabled={isBotMode || isSending || !reply.trim()}
-              aria-label="Send message"
-              title="Send message"
+              aria-label="Gửi tin nhắn"
+              title="Gửi tin nhắn"
+              className={cn(
+                "w-11 h-11 rounded-xl flex items-center justify-center transition-colors shadow-sm",
+                isBotMode || isSending || !reply.trim()
+                  ? "bg-muted text-muted-foreground cursor-not-allowed"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              )}
             >
-              <Send className="size-4" />
-            </Button>
+              <Send className="size-5" />
+            </button>
           </form>
         </div>
       </CardContent>
@@ -598,7 +617,7 @@ export const ConversationShow = () => {
   return (
     <ShowBase>
       <TopToolbar>
-        <h2 className="mr-auto text-xl font-semibold">Conversation</h2>
+        <h2 className="mr-auto text-xl font-semibold">Cuộc trò chuyện</h2>
       </TopToolbar>
       <ConversationShowContent />
     </ShowBase>

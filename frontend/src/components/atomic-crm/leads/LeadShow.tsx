@@ -49,7 +49,7 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
       .catch((e: unknown) => {
         if (cancelled) return;
         const msg =
-          e instanceof Error ? e.message : "Failed to load conversation";
+          e instanceof Error ? e.message : "Không thể tải cuộc trò chuyện";
         // Only the genuine "relation does not exist" (schema/table missing, e.g.
         // a fresh or demo setup) should render as "no conversation yet". Any other
         // failure (RLS denial, network, 5xx) is surfaced instead of swallowed.
@@ -99,7 +99,7 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
       <Card className="flex h-[calc(100vh-220px)] flex-col items-center justify-center p-6">
         <div className="text-center text-sm text-muted-foreground">
           <p className="font-medium text-destructive">
-            Failed to load conversation
+            Không thể tải cuộc trò chuyện
           </p>
           <p className="mt-1 text-xs">{error}</p>
         </div>
@@ -115,10 +115,10 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
             <Bot className="size-8 text-muted-foreground" />
           </div>
           <div>
-            <p className="text-base font-medium">No conversation yet</p>
+            <p className="text-base font-medium">Chưa có cuộc trò chuyện</p>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              When this candidate starts a chat on Zalo, the conversation will
-              appear here.
+              Khi ứng viên này bắt đầu trò chuyện trên Zalo, cuộc trò chuyện sẽ
+              hiển thị tại đây.
             </p>
           </div>
         </div>
@@ -144,7 +144,7 @@ const LeadHero = () => {
           <LeadAvatar size="xl" />
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-bold tracking-tight">
-              {record.name || "Unnamed Lead"}
+              {record.name || "Khách hàng chưa có tên"}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {record.phone && (
@@ -227,10 +227,10 @@ export const LeadShowContentMobile = () => {
             <LeadAvatar size="lg" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-lg font-semibold">
-                {record.name || "Unnamed Lead"}
+                {record.name || "Khách hàng chưa có tên"}
               </h1>
               <div className="text-xs text-muted-foreground">
-                {record.phone || "No phone"}
+                {record.phone || "Chưa có số điện thoại"}
               </div>
             </div>
           </div>
@@ -258,7 +258,7 @@ export const LeadShow = (props: ShowBaseProps = {}) => {
       <div className="flex flex-col gap-3">
         <LeadBreadcrumb />
         <TopToolbar>
-          <h2 className="mr-auto text-xl font-semibold">Lead</h2>
+          <h2 className="mr-auto text-xl font-semibold">Khách hàng</h2>
           <RefreshButton />
           <EditButton />
           <DeleteButton

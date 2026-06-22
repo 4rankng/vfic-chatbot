@@ -55,7 +55,7 @@ export const LeadCardContent = ({
                 className={`text-sm ${lead.name ? "font-semibold text-foreground" : "italic text-muted-dim font-medium"}`}
               >
                 {lead.name ||
-                  `Unknown lead · ending ${(lead.zalo_id || "").slice(-4)}`}
+                  `Khách hàng chưa biết · đuôi ${(lead.zalo_id || "").slice(-4)}`}
               </div>
             </div>
 
@@ -69,7 +69,7 @@ export const LeadCardContent = ({
               <LeadScoreBar score={lead.lead_score} />
               <span className="font-mono text-[10px] font-semibold text-muted-dim">
                 {lead.updated_at
-                  ? new Date(lead.updated_at).toLocaleDateString()
+                  ? new Date(lead.updated_at).toLocaleDateString("vi-VN")
                   : ""}
               </span>
             </div>

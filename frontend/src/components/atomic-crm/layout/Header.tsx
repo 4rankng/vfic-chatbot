@@ -1,9 +1,7 @@
 import { FileText, Settings, User, Users } from "lucide-react";
 import { useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
-import { RefreshButton } from "@/components/admin/refresh-button";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
-import { LocalesMenuButton } from "@/components/admin/locales-menu-button";
 import { UserMenu } from "@/components/admin/user-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
@@ -29,9 +27,9 @@ const Header = () => {
   return (
     <>
       <nav className="grow">
-        <header className="bg-background border-b border-border">
-          <div className="px-4">
-            <div className="flex justify-between items-center flex-1">
+        <header className="bg-white dark:bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+          <div className="max-w-screen-xl mx-auto px-6 md:px-8">
+            <div className="flex justify-between items-center flex-1 py-3">
               <Link
                 to="/"
                 className="flex items-center gap-2.5 text-foreground no-underline"
@@ -71,9 +69,7 @@ const Header = () => {
                 </nav>
               </div>
               <div className="flex items-center">
-                <LocalesMenuButton />
                 <ThemeModeToggle />
-                <RefreshButton />
                 <UserMenu />
               </div>
             </div>

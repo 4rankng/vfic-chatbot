@@ -22,7 +22,7 @@ export const LeadColumn = ({
           {stageLabel}
         </h3>
         <span className="font-mono text-xs font-semibold text-muted-foreground">
-          {leads.length} {leads.length === 1 ? "lead" : "leads"}
+          {leads.length} khách hàng
         </span>
       </div>
       <Droppable droppableId={stage}>
@@ -40,7 +40,7 @@ export const LeadColumn = ({
             {leads.length === 0 && !snapshot.isDraggingOver && (
               <div className="flex-1 border border-dashed border-border/70 flex flex-col items-center justify-center p-6 rounded-xl bg-card/20 text-center text-muted-dim">
                 <span className="font-mono text-xs font-semibold">
-                  conveyor idle
+                  Chưa có khách hàng
                 </span>
               </div>
             )}

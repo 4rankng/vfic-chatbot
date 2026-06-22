@@ -26,7 +26,7 @@ export const LeadScoreBar = ({
           className,
         )}
       >
-        Score: N/A
+        Điểm: Chưa có
       </span>
     );
   }

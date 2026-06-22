@@ -52,62 +52,62 @@ export const Dashboard = () => {
       <TopToolbar className="flex-col items-start md:flex-row md:items-end gap-4 border-b border-border pb-5 mb-2">
         <div className="mr-auto">
           <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground">
-            Analytics Overview
+            Tổng quan phân tích
           </h2>
           <p className="text-muted-foreground text-sm font-medium mt-1">
-            Recruitment performance across every active pipeline
+            Hiệu suất tuyển dụng trên mọi quy trình đang hoạt động
           </p>
         </div>
         <div className="flex items-center gap-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <span>All pipelines</span>
+          <span>Tất cả quy trình</span>
           <span>•</span>
-          <span>Last 30 days</span>
+          <span>30 ngày qua</span>
           <span>•</span>
-          <span>Updated 5 min ago</span>
+          <span>Cập nhật 5 phút trước</span>
         </div>
       </TopToolbar>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
-          title="Total leads"
+          title="Tổng khách hàng"
           value={
             isLoadingLeads ? "..." : totalLeadsCount.toString().padStart(2, "0")
           }
-          description="Across all pipelines"
+          description="Trên tất cả quy trình"
           icon={<Users className="w-4 h-4" />}
           trend="+12%"
           trendUp={true}
         />
         <KpiCard
-          title="Needs reply"
+          title="Cần phản hồi"
           value={
             isLoadingConversations
               ? "..."
               : unreadConvs.toString().padStart(2, "0")
           }
-          description="Awaiting recruiter response"
+          description="Đợi nhân viên phản hồi"
           icon={<AlertCircle className="w-4 h-4" />}
-          trend={unreadConvs > 0 ? `${unreadConvs} active` : undefined}
+          trend={unreadConvs > 0 ? `${unreadConvs} đang xử lý` : undefined}
           trendUp={false}
           neutral={unreadConvs === 0}
         />
         <KpiCard
-          title="Qualified candidates"
+          title="Ứng viên đạt chuẩn"
           value={
             isLoadingLeads ? "..." : qualifiedLeads.toString().padStart(2, "0")
           }
-          description="Hiring ready"
+          description="Sẵn sàng tuyển dụng"
           icon={<UserCheck className="w-4 h-4" />}
           trend="+5%"
           trendUp={true}
         />
         <KpiCard
-          title="Conversion rate"
+          title="Tỷ lệ chuyển đổi"
           value={isLoadingLeads ? "..." : `${hiredRate}%`}
-          description="Leads to hired ratio"
+          description="Tỷ lệ khách hàng thành tuyển dụng"
           icon={<TrendingUp className="w-4 h-4" />}
-          trend={hiredRate === 0 ? "Early stage" : "Active"}
+          trend={hiredRate === 0 ? "Giai đoạn đầu" : "Đang hoạt động"}
           trendUp={hiredRate > 0}
           neutral={hiredRate === 0}
         />
@@ -119,11 +119,11 @@ export const Dashboard = () => {
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
               <span className="font-display text-xl font-bold tracking-wider uppercase text-foreground">
-                Pipeline Distribution
+                Phân bổ quy trình
               </span>
             </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Current snapshot of leads across all stages
+              Tổng quan khách hàng trên các giai đoạn
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -181,7 +181,7 @@ export const Dashboard = () => {
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
               <span className="font-display text-xl font-bold tracking-wider uppercase text-foreground">
-                System Activity
+                Hoạt động hệ thống
               </span>
             </CardTitle>
           </CardHeader>
@@ -192,10 +192,10 @@ export const Dashboard = () => {
             >
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-500" />
-                Needs attention
+                Cần chú ý
               </h4>
               <p className="text-xs text-muted-foreground ml-6">
-                {unreadConvs} conversations awaiting reply
+                {unreadConvs} cuộc trò chuyện cần phản hồi
               </p>
             </div>
 
@@ -207,21 +207,20 @@ export const Dashboard = () => {
             >
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <UserCheck className="w-4 h-4 text-cyan-500" />
-                Qualified leads
+                Khách hàng đạt chuẩn
               </h4>
               <p className="text-xs text-muted-foreground ml-6">
-                {qualifiedLeads} candidate{qualifiedLeads !== 1 && "s"} ready
-                for review
+                {qualifiedLeads} ứng viên cần xem xét
               </p>
             </div>
 
             <div className="space-y-2 cursor-pointer hover:bg-muted/50 p-2 rounded-md transition-colors -mx-2">
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <Activity className="w-4 h-4 text-emerald-500" />
-                Recent activity
+                Hoạt động gần đây
               </h4>
               <p className="text-xs text-muted-foreground ml-6">
-                Pipeline updated · 12 min ago
+                Quy trình cập nhật · 12 phút trước
               </p>
             </div>
           </CardContent>

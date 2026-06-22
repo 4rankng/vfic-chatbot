@@ -24,7 +24,7 @@ const formatDateTime = (iso?: string | null) => {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return null;
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat("vi-VN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -45,7 +45,7 @@ const formatRelative = (iso?: string | null) => {
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  const rtf = new Intl.RelativeTimeFormat("vi", { numeric: "auto" });
   if (abs < hour) return rtf.format(Math.round(diff / minute), "minute");
   if (abs < day) return rtf.format(Math.round(diff / hour), "hour");
   if (abs < 30 * day) return rtf.format(Math.round(diff / day), "day");
@@ -67,7 +67,7 @@ const Copyable = ({ value }: { value: string }) => {
     <button
       type="button"
       onClick={onCopy}
-      title="Copy"
+      title="Sao chép"
       className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {copied ? (
@@ -114,7 +114,7 @@ const InfoRow = ({
           )}
         >
           {empty ? (
-            <span className="text-xs">{emptyHint ?? "Not provided"}</span>
+            <span className="text-xs">{emptyHint ?? "Chưa cung cấp"}</span>
           ) : href ? (
             <a
               href={href}
@@ -150,19 +150,19 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <User className="size-4 text-muted-foreground" />
-            Lead Information
+            Thông tin khách hàng
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col">
           <InfoRow
             icon={<User className="size-4" />}
-            label="Full name"
+            label="Họ tên"
             value={record.name}
           />
           <Separator />
           <InfoRow
             icon={<Phone className="size-4" />}
-            label="Phone"
+            label="Số điện thoại"
             value={record.phone}
             href={
               record.phone
@@ -186,19 +186,19 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Briefcase className="size-4 text-muted-foreground" />
-            Job &amp; Compensation
+            Công việc &amp; mức lương
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col">
           <InfoRow
             icon={<Briefcase className="size-4" />}
-            label="Desired job"
+            label="Công việc mong muốn"
             value={record.desired_job}
           />
           <Separator />
           <InfoRow
             icon={<CircleDollarSign className="size-4" />}
-            label="Expected salary"
+            label="Lương mong muốn"
             value={record.expected_salary}
           />
         </CardContent>
@@ -208,7 +208,7 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Hash className="size-4 text-muted-foreground" />
-            Qualification
+            Đánh giá
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -218,7 +218,7 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Pipeline stage
+                Giai đoạn quy trình
               </div>
               <div className="mt-1">
                 <LeadStageBadge stage={record.lead_stage} />
@@ -240,22 +240,22 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Calendar className="size-4 text-muted-foreground" />
-            Timeline
+            Dòng thời gian
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col">
           <InfoRow
             icon={<Calendar className="size-4" />}
-            label="Created"
+            label="Ngày tạo"
             value={created}
-            emptyHint="Unknown"
+            emptyHint="Không rõ"
           />
           <Separator />
           <InfoRow
             icon={<Calendar className="size-4" />}
-            label="Last updated"
+            label="Cập nhật lần cuối"
             value={updated ? `${updated} (${updatedRelative})` : undefined}
-            emptyHint="Never"
+            emptyHint="Chưa bao giờ"
           />
         </CardContent>
       </Card>

@@ -13,7 +13,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
 export type UserMenuProps = {};
@@ -50,14 +49,18 @@ export function UserMenu() {
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            className="relative h-8 w-8 ml-2 rounded-full"
+            size="icon"
+            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted ml-1 transition-colors relative"
           >
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={identity?.avatar} role="presentation" />
-              <AvatarFallback>
-                <User className="size-4" />
-              </AvatarFallback>
-            </Avatar>
+            {identity?.avatar ? (
+              <img
+                src={identity.avatar}
+                className="h-5 w-5 rounded-full object-cover"
+                alt="Profile"
+              />
+            ) : (
+              <User className="h-5 w-5" />
+            )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-32" align="end" forceMount>

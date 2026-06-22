@@ -17,14 +17,14 @@ const MobileHeader = ({ children }: { children: React.ReactNode }) => {
 
   const handleBellClick = () => {
     if (unreadConvs > 0) {
-      notify(`You have ${unreadConvs} conversation(s) needing attention`, { type: "info" });
+      notify(`Bạn có ${unreadConvs} cuộc trò chuyện cần phản hồi`, { type: "info" });
     } else {
-      notify("You have no new notifications", { type: "info" });
+      notify("Bạn không có thông báo mới", { type: "info" });
     }
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-10 bg-background border-b border-border h-14 px-4 w-full flex justify-between items-center">
+    <header className="fixed top-0 left-0 right-0 z-10 bg-white dark:bg-card border-b border-border shadow-[0_1px_3px_rgba(0,0,0,0.05)] h-16 px-4 w-full flex justify-between items-center">
       <div className="flex items-center min-w-0">
         {children}
       </div>
@@ -32,14 +32,14 @@ const MobileHeader = ({ children }: { children: React.ReactNode }) => {
         <Button
           variant="ghost"
           size="icon"
-          className="relative text-foreground h-8 w-8 rounded-full"
+          className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative"
           onClick={handleBellClick}
         >
           <Bell className="h-5 w-5" />
           {hasNotifications && (
-            <span className="absolute top-1 right-1 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+            <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full bg-blue-600 rounded-full opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
             </span>
           )}
         </Button>

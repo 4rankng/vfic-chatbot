@@ -76,38 +76,38 @@ export const MobileDashboard = () => {
         {/* Analytics Title for Mobile */}
         <div>
           <h2 className="font-display text-2xl font-extrabold tracking-wide uppercase text-foreground">
-            Analytics Overview
+            Tổng quan phân tích
           </h2>
           <p className="text-muted-foreground text-xs font-medium mt-0.5">
-            Recruitment performance
+            Hiệu suất tuyển dụng
           </p>
         </div>
 
         {/* KPI Cards (2 columns layout) */}
         <div className="grid grid-cols-2 gap-3.5">
           <MobileKpiCard
-            title="Total leads"
+            title="Tổng khách hàng"
             value={isLoadingLeads ? "..." : totalLeadsCount.toString().padStart(2, "0")}
             icon={<Users className="size-4" />}
-            description="All pipelines"
+            description="Tất cả quy trình"
           />
           <MobileKpiCard
-            title="Needs reply"
+            title="Cần phản hồi"
             value={isLoadingConversations ? "..." : unreadConvs.toString().padStart(2, "0")}
             icon={<AlertCircle className="size-4" />}
-            description="Awaiting response"
+            description="Đợi phản hồi"
           />
           <MobileKpiCard
-            title="Qualified"
+            title="Đạt chuẩn"
             value={isLoadingLeads ? "..." : qualifiedLeads.toString().padStart(2, "0")}
             icon={<UserCheck className="size-4" />}
-            description="Hiring ready"
+            description="Sẵn sàng tuyển dụng"
           />
           <MobileKpiCard
-            title="Hired rate"
+            title="Tỷ lệ tuyển"
             value={isLoadingLeads ? "..." : `${hiredRate}%`}
             icon={<TrendingUp className="size-4" />}
-            description="Leads to hired"
+            description="Tỷ lệ chuyển đổi"
           />
         </div>
 
@@ -117,11 +117,11 @@ export const MobileDashboard = () => {
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
               <span className="font-display text-base font-bold tracking-wider uppercase text-foreground">
-                Pipeline Distribution
+                Phân bổ quy trình
               </span>
             </CardTitle>
             <CardDescription className="text-[11px] text-muted-foreground">
-              Current snapshot of leads across stages
+              Tổng quan khách hàng theo giai đoạn
             </CardDescription>
           </CardHeader>
           <CardContent className="px-4 pb-4">
@@ -178,7 +178,7 @@ export const MobileDashboard = () => {
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
               <span className="font-display text-base font-bold tracking-wider uppercase text-foreground">
-                System Activity
+                Hoạt động hệ thống
               </span>
             </CardTitle>
           </CardHeader>
@@ -189,10 +189,10 @@ export const MobileDashboard = () => {
             >
               <h4 className="text-xs font-semibold flex items-center gap-2">
                 <AlertCircle className="size-3.5 text-amber-500" />
-                Needs attention
+                Cần chú ý
               </h4>
               <p className="text-[10px] text-muted-foreground ml-5.5">
-                {unreadConvs} conversations awaiting reply
+                {unreadConvs} cuộc trò chuyện cần phản hồi
               </p>
             </div>
 
@@ -204,10 +204,10 @@ export const MobileDashboard = () => {
             >
               <h4 className="text-xs font-semibold flex items-center gap-2">
                 <UserCheck className="size-3.5 text-cyan-500" />
-                Qualified leads
+                Khách hàng đạt chuẩn
               </h4>
               <p className="text-[10px] text-muted-foreground ml-5.5">
-                {qualifiedLeads} candidate{qualifiedLeads !== 1 && "s"} ready
+                {qualifiedLeads} ứng viên cần xem xét
               </p>
             </div>
           </CardContent>

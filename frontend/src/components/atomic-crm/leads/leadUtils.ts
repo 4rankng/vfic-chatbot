@@ -9,7 +9,7 @@ export const findDealLabel = (dealStages: DealStage[], dealValue: string) => {
 
 export function getRelativeTimeString(
   dateString: string,
-  locale = "en",
+  locale = "vi",
 ): string {
   const date = new Date(dateString);
   date.setHours(0, 0, 0, 0);

@@ -61,7 +61,7 @@ const KnowledgeSourceListContent = () => {
     <>
       <TopToolbar>
         <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
-          Knowledge Base
+          Cơ sở kiến thức
         </h2>
       </TopToolbar>
       <Card className="mt-4 overflow-hidden p-0 py-0">
@@ -81,9 +81,9 @@ const KnowledgeSourceListContent = () => {
           ) : !data || data.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
               <BookOpen className="size-10 opacity-50" />
-              <p className="text-sm font-medium">No knowledge sources</p>
+              <p className="text-sm font-medium">Chưa có nguồn kiến thức</p>
               <p className="text-xs">
-                Documents ingested from Drive will appear here.
+                Tài liệu được nhập từ Drive sẽ hiển thị tại đây.
               </p>
             </div>
           ) : (

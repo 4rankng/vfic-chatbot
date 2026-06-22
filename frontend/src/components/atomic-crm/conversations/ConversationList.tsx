@@ -17,6 +17,7 @@ import {
 import { TopToolbar } from "../layout/TopToolbar";
 
 import type { Conversation, Lead, Message } from "../types";
+import { LEAD_STAGES } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { RecordContextProvider } from "ra-core";
 import { getRelativeTimeString } from "../leads/leadUtils";
@@ -30,6 +31,15 @@ type ConversationRow = Conversation & {
   _lastMessage?: Message | null;
 };
 
+const MODE_LABELS: Record<ModeFilter, string> = {
+  all: "Tất cả",
+  bot: "Bot",
+  human: "Nhân viên",
+};
+
+const stageLabel = (value: string) =>
+  LEAD_STAGES.find((s) => s.value === value)?.label ?? value;
+
 const ModeBadge = ({ mode }: { mode: "bot" | "human" }) => (
   <Badge
     variant={mode === "human" ? "default" : "secondary"}
@@ -37,7 +47,7 @@ const ModeBadge = ({ mode }: { mode: "bot" | "human" }) => (
   >
     {mode === "human" ? (
       <>
-        <UserCircle className="size-3" /> Human
+        <UserCircle className="size-3" /> Nhân viên
       </>
     ) : (
       <>
@@ -58,7 +68,7 @@ const ConversationListItem = ({
 }) => {
   const lead = conversation._lead;
   const lastMessage = conversation._lastMessage;
-  const preview = lastMessage?.content?.slice(0, 80) ?? "No messages yet";
+  const preview = lastMessage?.content?.slice(0, 80) ?? "Chưa có tin nhắn";
   const time = getRelativeTimeString(
     conversation.last_inbound_at ?? conversation.updated_at,
   );
@@ -77,40 +87,43 @@ const ConversationListItem = ({
       type="button"
       onClick={() => onSelect(conversation)}
       className={cn(
-        "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors",
+        "flex w-full items-start gap-3 border-b border-border/40 px-4 py-4 text-left transition-colors relative",
         isActive
-          ? "bg-accent"
+          ? "bg-primary/5 hover:bg-primary/10"
           : "hover:bg-muted/60 focus-visible:bg-muted focus-visible:outline-none",
       )}
     >
-      <LeadAvatar record={lead as any} size="md" />
+      {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-md"></div>}
+      <div className="shrink-0 pt-0.5">
+        <LeadAvatar record={lead as any} size="md" />
+      </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-semibold">
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <span className="truncate text-sm font-semibold text-foreground">
             {lead?.name ||
-              `Unknown lead · ending ${(conversation.zalo_chat_id || "").slice(-4)}`}
+              `Khách hàng chưa biết · đuôi ${(conversation.zalo_chat_id || "").slice(-4)}`}
           </span>
-          <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
+          <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">{time}</span>
         </div>
-        <div className="mt-0.5 flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {senderKind === "candidate"
-              ? "👤"
-              : senderKind === "recruiter"
-                ? "🧑‍💼"
-                : senderKind === "system"
-                  ? "🔹"
-                  : "🤖"}
-          </span>
-          <span className="truncate text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground truncate mb-2">
+          {senderKind === "candidate" ? (
+             <UserCircle className="size-3.5 shrink-0" />
+          ) : senderKind === "recruiter" ? (
+             <UserCircle className="size-3.5 shrink-0 text-primary" />
+          ) : senderKind === "system" ? (
+             <Sparkles className="size-3.5 shrink-0 text-amber-500" />
+          ) : (
+             <Bot className={cn("size-3.5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+          )}
+          <span className="truncate text-xs">
             {preview}
           </span>
         </div>
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <ModeBadge mode={conversation.mode} />
           {lead?.lead_stage && (
-            <Badge variant="outline" className="text-[10px]">
-              {lead.lead_stage}
+            <Badge variant="outline" className="text-[10px] font-medium bg-green-50/50 text-green-600 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+              {stageLabel(lead.lead_stage)}
             </Badge>
           )}
         </div>
@@ -287,36 +300,39 @@ const ConversationListPanel = ({
   return (
     <div className="flex h-full flex-col">
       {/* Search + filter bar */}
-      <div className="flex flex-col gap-2 border-b p-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
+      <div className="flex flex-col gap-4 border-b border-border/40 p-5">
+        <div className="relative group">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search conversations…"
-            className="pl-9"
+            placeholder="Tìm cuộc trò chuyện…"
+            className="w-full bg-muted/50 text-sm border-none rounded-xl py-2.5 pl-9 pr-4 focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all outline-none placeholder:text-muted-foreground"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="size-3.5 text-muted-foreground" />
-          <div className="flex flex-1 gap-1">
-            {(["all", "bot", "human"] as ModeFilter[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={cn(
-                  "rounded-md px-2 py-1 text-xs font-medium capitalize transition-colors",
-                  mode === m
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/70",
-                )}
-              >
-                {m}
-              </button>
-            ))}
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex flex-1 gap-2">
+            {(["all", "bot", "human"] as ModeFilter[]).map((m) => {
+              const isSelected = mode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors border",
+                    isSelected
+                      ? "bg-primary/10 text-primary border-primary/20 dark:bg-primary/20"
+                      : "bg-transparent text-muted-foreground border-transparent hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {m === "all" && <Filter className="size-3.5" />}
+                  {MODE_LABELS[m]}
+                </button>
+              );
+            })}
           </div>
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-xs text-muted-foreground font-normal ml-auto">
             {rows.length}
           </span>
         </div>
@@ -340,11 +356,11 @@ const ConversationListPanel = ({
         ) : rows.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
             <Inbox className="size-10 opacity-50" />
-            <p className="text-sm font-medium">No conversations</p>
+            <p className="text-sm font-medium">Chưa có cuộc trò chuyện</p>
             <p className="text-xs">
               {query
-                ? "Try a different search term."
-                : "Conversations from Zalo will appear here."}
+                ? "Thử từ khóa khác."
+                : "Các cuộc trò chuyện từ Zalo sẽ hiển thị tại đây."}
             </p>
           </div>
         ) : (
@@ -390,11 +406,11 @@ const EmptyDetail = () => (
     </div>
     <div>
       <p className="text-base font-medium text-foreground">
-        Select a conversation
+        Chọn một cuộc trò chuyện
       </p>
       <p className="mt-1 max-w-sm text-sm">
-        Pick a conversation from the list on the left to view its full chat
-        history and reply as a recruiter.
+        Chọn một cuộc trò chuyện từ danh sách bên trái để xem lịch sử trò
+        chuyện và trả lời với tư cách nhân viên tuyển dụng.
       </p>
     </div>
   </div>
@@ -427,11 +443,11 @@ const ConversationListContent = () => {
     <>
       <TopToolbar>
         <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
-          Conversations
+          Cuộc trò chuyện
         </h2>
       </TopToolbar>
       <Card className="mt-4 overflow-hidden p-0 py-0">
-        <div className="grid h-[calc(100vh-220px)] min-h-[500px] grid-cols-1 md:grid-cols-[360px_1fr] rounded-[inherit] overflow-hidden">
+        <div className="grid h-[calc(100vh-220px)] min-h-[500px] grid-cols-1 md:grid-cols-[360px_1fr] overflow-hidden">
           <div className="border-r">
             <ConversationListPanel
               selectedId={selected?.id ?? null}
