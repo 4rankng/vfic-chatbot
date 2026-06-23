@@ -825,7 +825,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO public.conversations (zalo_chat_id, last_inbound_at)\nVALUES ($1, now())\nON CONFLICT (zalo_chat_id) DO UPDATE\n  SET last_inbound_at = now(), updated_at = now()\nRETURNING id, mode, version, chatwoot_conversation_id, chatwoot_contact_id;",
+        "query": "INSERT INTO public.conversations (zalo_chat_id, last_inbound_at)\nVALUES ($1, now())\nON CONFLICT (zalo_chat_id) DO UPDATE\n  SET last_inbound_at = now(), updated_at = now()\nRETURNING id, mode, version;",
         "options": {
           "queryReplacement": "={{ [$('Normalize Message').item.json.chat_id] }}"
         }
@@ -841,7 +841,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge normalized input with the conversations row, then apply the run-start guard.\n// If a recruiter owns this chat (mode=human), starve the chain -> no typing, no AI, no send.\nconst norm = $('Normalize Message').first().json;\nconst ec = $input.first().json;\nif (ec.mode === 'human') return [];\nreturn [{\n  json: {\n    ...norm,\n    conversation_id: ec.id,\n    mode: ec.mode,\n    version_at_start: ec.version,\n    chatwoot_conversation_id: ec.chatwoot_conversation_id,\n    chatwoot_contact_id: ec.chatwoot_contact_id\n  }\n}];"
+        "jsCode": "// Merge normalized input with the conversations row, then apply the run-start guard.\n// If a recruiter owns this chat (mode=human), starve the chain -> no typing, no AI, no send.\nconst norm = $('Normalize Message').first().json;\nconst ec = $input.first().json;\nif (ec.mode === 'human') return [];\nreturn [{\n  json: {\n    ...norm,\n    conversation_id: ec.id,\n    mode: ec.mode,\n    version_at_start: ec.version\n  }\n}];"
       },
       "id": "vfic-run-start-guard-0001",
       "name": "Run-Start Guard",

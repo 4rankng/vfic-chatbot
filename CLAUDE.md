@@ -1,10 +1,10 @@
 # CLAUDE.md — VFIC ATS (ChatBotN8N)
 
 This repo runs the VFIC recruitment stack: an **n8n** chatbot brain, a
-**Supabase** (Postgres) data layer, a **React/Atomic-CRM** console
-(`frontend/`), and a trimmed **Chatwoot** fork. Each layer has a live
-cloud instance that is edited in place; the repo must stay a faithful
-mirror so the service can be rebuilt from it alone.
+**Supabase** (Postgres) data layer, and a **React/Atomic-CRM** console
+(`frontend/`). Each layer has a live cloud instance that is edited in
+place; the repo must stay a faithful mirror so the service can be
+rebuilt from it alone.
 
 ## ⚑ Sync live → local after EVERY infra change  (disaster-recovery rule)
 
@@ -17,7 +17,6 @@ reflected in the repo — so mirror them immediately.
 | **Supabase schema** — migration, column, RLS policy, function, trigger, index, enum | (a) append the SQL to `supabase/migrations/<YYYYMMDD>_<name>.sql`; (b) **regenerate `supabase/schema.sql`** snapshot from the live catalog (see below) |
 | **Supabase edge function** | mirror under `supabase/functions/<name>/` |
 | **n8n workflow** edit (via n8n-mcp) | re-export the workflow JSON to `n8n-workflows/<Workflow Name>.json` |
-| **Chatwoot** brand/code change | follow `Makefile` (`brand-apply`/`build`/`deploy`); the forked sources live in `chatwoot/` |
 
 Do not consider a live infra task done until the local mirror is updated and
 committed. `git status` should show the matching local change alongside any
@@ -50,15 +49,11 @@ point-in-time snapshot regenerated after each change.
   `vector(3072)`. The CRM `users` resource aliases to the live `profiles` table.
 - **n8n**: edit workflows **in place** (never create new ones). Known workflows:
   `VFIC Chatbot` (`iodmXzjRe03KqPdB`), `VFIC Knowledge Ingest`
-  (`wY4YI1nFu1bw0ERt`), `VFIC Chatwoot Bridge`, `VFIC Persist Lead`,
+  (`wY4YI1nFu1bw0ERt`), `VFIC Persist Lead`,
   `VFIC Persist Memories`. Local copies: `n8n-workflows/`. The n8n MCP token is
   a JWT that **401s against the native REST `/api/v1`** — export via MCP tools,
   not curl.
-- **Chatwoot**: live at `chat.tingting.vip`; deploy via `make deploy`
-  (brand → build amd64 → ship → restart). Brand is DB-driven
-  (`installation_configs`), not YAML. Never `docker compose down -v`
-  (wipes Redis → lockout).
-- **Droplet**: `bot.tingting.vip` (1 vCPU / 2 GB) hosts n8n + Chatwoot containers.
+- **Droplet**: `bot.tingting.vip` (1 vCPU / 2 GB) hosts n8n.
 
 ## Repo layout
 
@@ -67,8 +62,6 @@ frontend/         React + react-admin console (Atomic CRM). See frontend/CLAUDE.
 supabase/         LIVE VFIC schema: schema.sql (snapshot), migrations/ (change log),
                   functions/, seed_vfic_minicrm_admin.sql
 n8n-workflows/    exported n8n workflow JSON (5 workflows)
-chatwoot/         trimmed/rebranded Chatwoot fork
-chatwoot Makefile brand/build/deploy automation for chat.tingting.vip
 .omc/             OMC state, runbooks, plans, specs
 ```
 

@@ -135,10 +135,7 @@ CREATE TABLE public.bus_route_service_days (
 CREATE TABLE public.conversations (
   id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   zalo_chat_id               text NOT NULL,
-  chatwoot_conversation_id   bigint,
-  chatwoot_contact_id        bigint,
   mode                       conv_mode NOT NULL DEFAULT 'bot'::conv_mode,
-  assigned_chatwoot_agent_id bigint,
   taken_over_at              timestamptz,
   version                    integer NOT NULL DEFAULT 1,
   last_inbound_at            timestamptz,
