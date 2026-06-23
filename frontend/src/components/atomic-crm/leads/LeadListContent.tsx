@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
-import { useListContext, ShowBase } from "ra-core";
+import { useListContext, useRefresh, ShowBase } from "ra-core";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin";
+import { RefreshCw, Users } from "lucide-react";
 
 import { LEAD_STAGES, type Lead } from "../types";
 import { LeadCard } from "./LeadCard";
@@ -27,6 +31,7 @@ const compareLeads =
 export const LeadListContent = () => {
   const { data: leads, isPending, error, sort, filterValues } = useListContext<Lead>();
   const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(null);
+  const refresh = useRefresh();
   
   const filters = filterValues ?? {};
   const hasActiveStage = Boolean(filters.lead_stage);
@@ -58,15 +63,17 @@ export const LeadListContent = () => {
 
   if (!sortedLeads || sortedLeads.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl bg-muted/20 px-6 py-16 text-center border border-border/50">
-        <p className="font-mono text-sm font-semibold text-muted-dim">
-          Chưa có ứng viên
-        </p>
-        <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-          Khi có ứng viên mới, họ sẽ xuất hiện tại đây. Nhấp vào một ứng
-          viên để xem chi tiết.
-        </p>
-      </div>
+      <EmptyState
+        icon={<Users className="size-6" />}
+        title="Chưa có ứng viên"
+        description="Ứng viên được tạo tự động khi ứng viên nhắn tin qua Zalo. Nhấp vào một ứng viên để xem chi tiết."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => refresh()}>
+            <RefreshCw className="size-4" />
+            Làm mới
+          </Button>
+        }
+      />
     );
   }
 
@@ -100,10 +107,10 @@ export const LeadListContent = () => {
 
 const LeadCardSkeleton = () => (
   <div className="flex items-center gap-3 bg-card px-4 py-4">
-    <div className="size-9 shrink-0 animate-pulse rounded-full bg-muted" />
+    <Skeleton shimmer className="size-9 shrink-0 rounded-full" />
     <div className="flex-1 space-y-2">
-      <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
-      <div className="h-3 w-1/2 animate-pulse rounded bg-muted/70" />
+      <Skeleton shimmer className="h-4 w-1/3 rounded" />
+      <Skeleton shimmer className="h-3 w-1/2 rounded" />
     </div>
   </div>
 );

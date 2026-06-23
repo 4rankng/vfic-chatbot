@@ -125,6 +125,16 @@ const getDataProviderWithCustomMethods = () => {
       return data;
     },
 
+    // Reset a conversation's unread_count to 0 without bumping updated_at. The
+    // RPC (vfic_mark_read) suppresses touch_updated_at via a transaction-local
+    // GUC, so opening a chat does NOT re-sort the updated_at DESC inbox.
+    async markAsRead(zaloChatId: string) {
+      const { error } = await getSupabaseClient().rpc("vfic_mark_read", {
+        p_zalo_chat_id: zaloChatId,
+      });
+      if (error) throw new Error(error.message);
+    },
+
     async createProfile(body: Record<string, unknown>) {
       const { data, error } = await getSupabaseClient().functions.invoke(
         "vfic_create_user",

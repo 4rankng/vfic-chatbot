@@ -208,6 +208,18 @@ export const ConversationShowContent = ({
 
   const { isBotMode, handleTakeover } = useConversationActions(record);
 
+  // Server-confirm the optimistic unread clear from the inbox list. Skips the
+  // round-trip when nothing is unread, and re-fires if a realtime inbound bumps
+  // the counter while the recruiter is viewing the thread. vfic_mark_read resets
+  // unread_count without touching updated_at (no inbox re-sort).
+  useEffect(() => {
+    if (!record?.zalo_chat_id) return;
+    if ((record.unread_count ?? 0) === 0) return;
+    dataProvider.markAsRead(record.zalo_chat_id).catch(() => {
+      /* non-fatal: badge re-syncs on the next list load */
+    });
+  }, [record?.zalo_chat_id, record?.unread_count, dataProvider]);
+
   const { data: leadData } = useGetList(
     "leads",
     {

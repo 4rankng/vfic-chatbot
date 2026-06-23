@@ -272,6 +272,11 @@ export const createDataProvider = ({
     async sendHumanReply(_id: Identifier, _message: string) {
       // In demo mode we don't actually post anywhere — just succeed.
     },
+    // Demo-mode stub: unread tracking has no backend in demo, so this is a
+    // no-op (mirrors the Supabase vfic_mark_read RPC).
+    async markAsRead(_zaloChatId: string) {
+      /* no-op in demo */
+    },
     // Demo-mode stub: mirrors the Supabase createProfile custom method so this
     // provider satisfies CrmDataProvider. Profile creation is a no-op in demo.
     async createProfile(_body: Record<string, unknown>) {

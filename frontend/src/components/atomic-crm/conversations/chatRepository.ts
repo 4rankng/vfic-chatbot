@@ -87,6 +87,46 @@ export const chatRepository = {
     return results;
   },
 
+  /**
+   * Batched "latest message per conversation" peek — a single RPC
+   * (vfic_last_messages, DISTINCT ON session_id ... id DESC) instead of the old
+   * per-conversation N+1 probe. Returns a map of zalo_chat_id -> snippet text,
+   * used for inbox row previews.
+   */
+  async getLastMessages(
+    zaloIds: string[],
+  ): Promise<Record<string, string>> {
+    const distinct = Array.from(new Set(zaloIds.filter(Boolean)));
+    if (distinct.length === 0) return {};
+
+    const { data, error } = await getSupabaseClient().rpc(
+      "vfic_last_messages",
+      { p_session_ids: distinct },
+    );
+    if (error) throw error;
+
+    const out: Record<string, string> = {};
+    for (const row of (data as Array<{ session_id: string; message: unknown }>) ?? []) {
+      const msg = (row?.message ?? {}) as {
+        type?: string;
+        content?: unknown;
+        data?: { recruiter_id?: unknown; content?: unknown };
+      };
+      const type = String(msg.type ?? "").toLowerCase();
+      // Mirror toMessage: ai = bot outbound; human w/ recruiter_id = recruiter.
+      if (type !== "ai" && type !== "human") continue;
+      const isRecruiter = type === "human" && Boolean(msg.data?.recruiter_id);
+      const raw = isRecruiter
+        ? (msg.data?.content ?? msg.content)
+        : msg.content;
+      const text = extractText(raw);
+      if (text && row.session_id && !(row.session_id in out)) {
+        out[row.session_id] = text;
+      }
+    }
+    return out;
+  },
+
   async getConversationMessages(
     zaloChatId: string,
     options?: { limit?: number; beforeId?: string },
@@ -122,6 +162,19 @@ export const chatRepository = {
       messages: mapped.reverse(),
       hasMore,
     };
+  },
+
+  /**
+   * Lightweight message count for a conversation (head-only count query). Used
+   * by the lead timeline's "Tổng tin nhắn" derived signal.
+   */
+  async getMessageCount(zaloChatId: string): Promise<number> {
+    const { count, error } = await getSupabaseClient()
+      .from("vfic_chat_histories")
+      .select("*", { count: "exact", head: true })
+      .eq("session_id", zaloChatId);
+    if (error) throw error;
+    return count ?? 0;
   },
 
   subscribeToMessages(

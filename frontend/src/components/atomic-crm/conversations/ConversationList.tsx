@@ -7,6 +7,7 @@ import { InboxIcons } from "./InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import MobileHeader from "../layout/MobileHeader";
 import { chatRepository } from "./chatRepository";
+import { Skeleton } from "@/components/ui/skeleton";
 import "./inbox.css";
 
 // How many contact rows to render at a time. The list still loads (and client
@@ -16,6 +17,7 @@ const VISIBLE_PAGE_SIZE = 50;
 
 type ConversationRow = Conversation & {
   _lead?: Lead | null;
+  _snippet?: string;
 };
 
 export const getLeadStatusColor = (lead?: Lead | null) => {
@@ -36,10 +38,12 @@ const ConversationListItem = ({
   conversation,
   isActive,
   onSelect,
+  readIds,
 }: {
   conversation: ConversationRow;
   isActive: boolean;
   onSelect: (c: Conversation) => void;
+  readIds: Set<string>;
 }) => {
   const lead = conversation._lead;
   const time = getRelativeTimeString(
@@ -49,11 +53,16 @@ const ConversationListItem = ({
   const name =
     lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
-  // Contacts-only inbox: no chat-history probe. Show the contact's phone as a
-  // muted subtitle when available; otherwise the row is just name + time.
-  const subtitle = lead?.phone || "";
+  // Preview = latest message snippet (batched via vfic_last_messages), falling
+  // back to the contact's phone when no snippet is available yet.
+  const subtitle = conversation._snippet || lead?.phone || "";
 
   const statusLabel = conversation.mode === "human" ? "Cần tiếp quản" : "";
+  // Unread badge: optimistically cleared once opened (readIds); otherwise the
+  // live counter kept in sync by the vfic_chat_histories_unread trigger.
+  const unread = readIds.has(conversation.id)
+    ? 0
+    : conversation.unread_count ?? 0;
 
   return (
     <button
@@ -63,11 +72,53 @@ const ConversationListItem = ({
     >
       <span
         className="avatar round"
-        style={{ "--avatar-bg": colors.bg, "--avatar-ink": colors.ink } as any}
+        style={
+          {
+            "--avatar-bg": colors.bg,
+            "--avatar-ink": colors.ink,
+            position: "relative",
+          } as any
+        }
       >
         <svg className="icon" style={{ width: "22px", height: "22px" }}>
           <use href="#i-user" />
         </svg>
+        {unread > 0 && (
+          <span
+            aria-label={`${unread} tin nhắn chưa đọc`}
+            style={
+              unread === 1
+                ? {
+                    position: "absolute",
+                    top: -2,
+                    right: -2,
+                    width: 12,
+                    height: 12,
+                    borderRadius: 9999,
+                    background: "var(--ember)",
+                    boxShadow: "0 0 0 2px var(--card)",
+                  }
+                : {
+                    position: "absolute",
+                    top: -6,
+                    right: -6,
+                    minWidth: 18,
+                    height: 18,
+                    padding: "0 4px",
+                    borderRadius: 9999,
+                    background: "var(--ember)",
+                    color: "#fff",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    lineHeight: "18px",
+                    textAlign: "center",
+                    boxShadow: "0 0 0 2px var(--card)",
+                  }
+            }
+          >
+            {unread > 1 ? (unread > 9 ? "9+" : unread) : ""}
+          </span>
+        )}
       </span>
       <span className="conv-body">
         <span className="conv-top">
@@ -90,22 +141,43 @@ const ConversationListItem = ({
   );
 };
 
+// Shimmer skeleton matching the inbox row shape, shown while the first page
+// loads (replaces the previous "flash of empty-state" on slow connections).
+const ConversationListItemSkeleton = () => (
+  <div className="conversation" aria-hidden style={{ cursor: "default" }}>
+    <Skeleton
+      shimmer
+      className="!rounded-full"
+      style={{ width: 36, height: 36, flexShrink: 0 }}
+    />
+    <div
+      className="conv-body"
+      style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}
+    >
+      <Skeleton shimmer style={{ height: 13, width: "55%", borderRadius: 6 }} />
+      <Skeleton shimmer style={{ height: 12, width: "85%", borderRadius: 6 }} />
+    </div>
+  </div>
+);
+
 const ConversationListPanel = ({
   selectedId,
   onSelect,
+  readIds,
 }: {
   selectedId: string | null;
   onSelect: (c: Conversation) => void;
+  readIds: Set<string>;
 }) => {
-  const { data: conversations } = useListContext<Conversation>();
+  const { data: conversations, isPending } = useListContext<Conversation>();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
+  const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(VISIBLE_PAGE_SIZE);
 
-  // Resolve contact (lead) details for every conversation in ONE batched
-  // request, replacing the old per-zalo_id N+1 that fired hundreds of leads
-  // requests on mount. getLeadsByZaloIds orders by updated_at DESC, so the
-  // first lead seen per zalo_id is the most recent (same rule as data?.[0]).
+  // Resolve contact details AND the latest message per conversation in one
+  // batched pass each (getLeadsByZaloIds + getLastMessages), replacing the old
+  // per-zalo_id N+1 lookups. Both fire concurrently.
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
     let cancelled = false;
@@ -114,7 +186,10 @@ const ConversationListPanel = ({
         new Set(conversations.map((c) => c.zalo_chat_id).filter(Boolean)),
       );
       try {
-        const all = await chatRepository.getLeadsByZaloIds(zaloIds);
+        const [all, snips] = await Promise.all([
+          chatRepository.getLeadsByZaloIds(zaloIds),
+          chatRepository.getLastMessages(zaloIds),
+        ]);
         if (cancelled) return;
         const byZalo: Record<string, Lead | null> = {};
         for (const lead of all) {
@@ -122,8 +197,9 @@ const ConversationListPanel = ({
           if (key && byZalo[key] === undefined) byZalo[key] = lead;
         }
         setLeads((prev) => ({ ...prev, ...byZalo }));
+        setSnippets((prev) => ({ ...prev, ...snips }));
       } catch {
-        // Leave previously loaded leads intact on error.
+        // Leave previously loaded leads/snippets intact on error.
       }
     })();
     return () => {
@@ -137,6 +213,7 @@ const ConversationListPanel = ({
       .map((c) => ({
         ...c,
         _lead: leads[c.zalo_chat_id] ?? null,
+        _snippet: snippets[c.zalo_chat_id] ?? "",
       }))
       .filter((c) => {
         if (query) {
@@ -149,7 +226,7 @@ const ConversationListPanel = ({
         }
         return true;
       });
-  }, [conversations, leads, query]);
+  }, [conversations, leads, snippets, query]);
 
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
@@ -173,8 +250,12 @@ const ConversationListPanel = ({
         <span>{rows.length} cuộc trò chuyện</span>
       </div>
 
-      <div className="conversations">
-        {rows.length === 0 ? (
+      <div className="conversations animate-in fade-in-0 duration-300">
+        {isPending ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <ConversationListItemSkeleton key={i} />
+          ))
+        ) : rows.length === 0 ? (
           <div className="empty-state">Không tìm thấy hội thoại phù hợp.</div>
         ) : (
           <>
@@ -184,6 +265,7 @@ const ConversationListPanel = ({
                 conversation={c}
                 isActive={selectedId === c.id}
                 onSelect={onSelect}
+                readIds={readIds}
               />
             ))}
             {rows.length > visibleCount && (
@@ -207,6 +289,9 @@ const ConversationListContent = () => {
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Conversations already opened this session — clears the unread badge
+  // optimistically (ConversationShow confirms server-side via markAsRead).
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
   const urlId = searchParams.get("id");
   // On mobile the detail pane is shown iff a conversation id is in the URL, so
@@ -246,6 +331,14 @@ const ConversationListContent = () => {
 
   const openConversation = (c: Conversation) => {
     setSelectedId(c.id);
+    // Optimistically clear the unread badge for this row; ConversationShow
+    // confirms server-side via markAsRead on open.
+    setReadIds((prev) => {
+      if (prev.has(c.id)) return prev;
+      const next = new Set(prev);
+      next.add(c.id);
+      return next;
+    });
     // Push (not replace) so each opened conversation is a history entry and the
     // browser back button returns to the list.
     setSearchParams((prev) => {
@@ -272,6 +365,7 @@ const ConversationListContent = () => {
         <ConversationListPanel
           selectedId={selected?.id ?? null}
           onSelect={openConversation}
+          readIds={readIds}
         />
 
         {selected ? (

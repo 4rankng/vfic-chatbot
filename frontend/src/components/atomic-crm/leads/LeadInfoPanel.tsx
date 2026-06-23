@@ -9,7 +9,7 @@ import {
   User,
   Check,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRecordContext } from "ra-core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { Lead } from "../types";
 import { LeadScoreBar } from "./LeadScoreBar";
 import { LeadStageBadge } from "./LeadStageBadge";
+import { chatRepository } from "../conversations/chatRepository";
 
 const formatDateTime = (iso?: string | null) => {
   if (!iso) return null;
@@ -138,6 +139,27 @@ const InfoRow = ({
 
 export const LeadInfoPanel = ({ className }: { className?: string }) => {
   const record = useRecordContext<Lead>();
+  // Derived activity signal: total messages in this contact's Zalo thread.
+  // Hooks must run before the early return below.
+  const [messageCount, setMessageCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!record?.zalo_id) {
+      setMessageCount(null);
+      return;
+    }
+    let cancelled = false;
+    chatRepository
+      .getMessageCount(record.zalo_id)
+      .then((n) => {
+        if (!cancelled) setMessageCount(n);
+      })
+      .catch(() => {
+        if (!cancelled) setMessageCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [record?.zalo_id]);
   if (!record) return null;
 
   const created = formatDateTime(record.created_at);
@@ -257,6 +279,27 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
             value={updated ? `${updated} (${updatedRelative})` : undefined}
             emptyHint="Chưa bao giờ"
           />
+          <Separator />
+          <InfoRow
+            icon={<MessageSquare className="size-4" />}
+            label="Tổng tin nhắn"
+            value={messageCount === null ? undefined : `${messageCount}`}
+            emptyHint="Đang tải…"
+          />
+          {record.phone && (
+            <>
+              <Separator />
+              <div className="flex items-center gap-2 pt-2.5">
+                <a
+                  href={`tel:${record.phone.replace(/\s+/g, "")}`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <Phone className="size-3.5" />
+                  Gọi lại
+                </a>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

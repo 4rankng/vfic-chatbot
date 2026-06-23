@@ -57,6 +57,11 @@ export type Lead = {
   lead_stage: string;
   created_at: string;
   updated_at: string;
+  // Extra live columns (returned by select("*")); surfaced for derived tags /
+  // timeline. Optional to stay backward-compatible with partial selections.
+  region?: string | null;
+  living_area?: string | null;
+  notes?: string | null;
 } & Pick<RaRecord, "id">;
 
 export type Conversation = {
@@ -67,6 +72,11 @@ export type Conversation = {
   assigned_recruiter_id: string | null;
   created_at: string;
   updated_at: string;
+  // Denormalized unread inbound counter, kept in sync by the
+  // vfic_chat_histories_unread trigger. Reset to 0 by vfic_mark_read on open.
+  // Optional: the fakerest demo provider / story fixtures don't supply it, so
+  // all use sites default to 0 via `?? 0`.
+  unread_count?: number;
 } & Pick<RaRecord, "id">;
 
 export type Message = {

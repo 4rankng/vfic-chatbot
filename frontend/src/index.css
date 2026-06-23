@@ -44,84 +44,98 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Additional Variant0 Custom Colors */
-  --color-steel: #3d5a73;
-  --color-steel-soft: #dce5ea;
-  --color-amber-soft: rgba(224, 112, 31, 0.13);
-  --color-ember: #d6362a;
-  --color-ember-soft: rgba(214, 54, 42, 0.12);
-  --color-muted-dim: #9aa5ad;
-  --color-green: #2e9e63;
+  /* VFIC custom colors — converted to OKLCH (exact sRGB equivalents; original
+     hex preserved in trailing comments). See adr/ADR-oklch-token-convention.md
+     for the three-tier convention. */
+  --color-steel: oklch(0.4554 0.0537 245.4); /* #3d5a73 */
+  --color-steel-soft: oklch(0.9165 0.0118 231.7); /* #dce5ea */
+  /* Tier B — perceptual tint (was rgba(224,112,31,0.13)). --primary and
+     --background are real :root vars (not @theme inline), so this resolves
+     per-theme at runtime. NOTE: this is the one intended visible change — the
+     tint is now theme-aware instead of a fixed alpha over an unknown surface. */
+  --color-amber-soft: color-mix(in oklab, var(--primary) 13%, var(--background));
+  --color-ember: oklch(0.5785 0.1984 29.0); /* #d6362a */
+  /* Tier B — perceptual tint (was rgba(214,54,42,0.12)). Raw OKLCH because
+     --color-ember is an @theme inline token (not a runtime var). */
+  --color-ember-soft: color-mix(
+    in oklab,
+    oklch(0.5785 0.1984 29.0) 12%,
+    var(--background)
+  );
+  --color-muted-dim: oklch(0.7157 0.0171 239.2); /* #9aa5ad */
+  --color-green: oklch(0.6222 0.1338 155.6); /* #2e9e63 */
 }
 
 :root {
   --radius: 14px;
-  --background: #f1f3f5;
-  --foreground: #1a2228;
-  --card: #ffffff;
-  --card-foreground: #1a2228;
-  --popover: #ffffff;
-  --popover-foreground: #1a2228;
-  --primary: #e0701f;
-  --primary-foreground: #ffffff;
-  --secondary: #fbfcfc;
-  --secondary-foreground: #1a2228;
-  --muted: #fbfcfc;
-  --muted-foreground: #5e6b76;
-  --accent: #fbfcfc;
-  --accent-foreground: #1a2228;
-  --destructive: #d6362a;
-  --border: rgba(20, 32, 42, 0.09);
-  --input: rgba(20, 32, 42, 0.09);
-  --ring: #e0701f;
-  --grid-color: rgba(20, 32, 42, 0.025);
+  --background: oklch(0.9632 0.0034 247.9); /* #f1f3f5 */
+  --foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --card: oklch(1 0 0); /* #ffffff */
+  --card-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --popover: oklch(1 0 0); /* #ffffff */
+  --popover-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --primary: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --primary-foreground: oklch(1 0 0); /* #ffffff */
+  --secondary: oklch(0.9903 0.0011 197.1); /* #fbfcfc */
+  --secondary-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --muted: oklch(0.9903 0.0011 197.1); /* #fbfcfc */
+  --muted-foreground: oklch(0.5208 0.0235 243.7); /* #5e6b76 */
+  --accent: oklch(0.9903 0.0011 197.1); /* #fbfcfc */
+  --accent-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --destructive: oklch(0.5785 0.1984 29.0); /* #d6362a */
+  --border: oklch(0.2372 0.0257 244.3 / 0.09); /* rgba(20,32,42,0.09) */
+  --input: oklch(0.2372 0.0257 244.3 / 0.09); /* rgba(20,32,42,0.09) */
+  --ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --grid-color: oklch(0.2372 0.0257 244.3 / 0.025); /* rgba(20,32,42,0.025) */
+  --shimmer-highlight: oklch(0.2372 0.0257 244.3 / 0.06); /* rgba(20,32,42,0.06) */
 
-  --chart-1: #3d5a73;
-  --chart-2: #e0701f;
-  --chart-3: #d6362a;
-  --chart-4: #2e9e63;
-  --chart-5: #5e6b76;
+  --chart-1: oklch(0.4554 0.0537 245.4); /* #3d5a73 */
+  --chart-2: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --chart-3: oklch(0.5785 0.1984 29.0); /* #d6362a */
+  --chart-4: oklch(0.6222 0.1338 155.6); /* #2e9e63 */
+  --chart-5: oklch(0.5208 0.0235 243.7); /* #5e6b76 */
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #1a2228;
-  --sidebar-primary: #e0701f;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fbfcfc;
-  --sidebar-accent-foreground: #1a2228;
-  --sidebar-border: rgba(20, 32, 42, 0.09);
-  --sidebar-ring: #e0701f;
+  --sidebar: oklch(1 0 0); /* #ffffff */
+  --sidebar-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --sidebar-primary: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
+  --sidebar-accent: oklch(0.9903 0.0011 197.1); /* #fbfcfc */
+  --sidebar-accent-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --sidebar-border: oklch(0.2372 0.0257 244.3 / 0.09); /* rgba(20,32,42,0.09) */
+  --sidebar-ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
 }
 
 .dark {
-  --background: #080c14;
-  --foreground: #f1f5f9;
-  --card: #0f1524;
-  --card-foreground: #f1f5f9;
-  --popover: #0f1524;
-  --popover-foreground: #f1f5f9;
-  --primary: #f07e2f;
-  --primary-foreground: #ffffff;
-  --secondary: #161f30;
-  --secondary-foreground: #f1f5f9;
-  --muted: #111827;
-  --muted-foreground: #8a99ad;
-  --accent: #161f30;
-  --accent-foreground: #f1f5f9;
-  --destructive: #e0453b;
-  --border: rgba(148, 163, 184, 0.1);
-  --input: rgba(148, 163, 184, 0.1);
-  --ring: #f07e2f;
-  --grid-color: rgba(255, 255, 255, 0.015);
+  --background: oklch(0.1542 0.0185 263.2); /* #080c14 */
+  --foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  --card: oklch(0.1979 0.0317 266.9); /* #0f1524 */
+  --card-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  --popover: oklch(0.1979 0.0317 266.9); /* #0f1524 */
+  --popover-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  --primary: oklch(0.71 0.1649 50.8); /* #f07e2f */
+  --primary-foreground: oklch(1 0 0); /* #ffffff */
+  --secondary: oklch(0.2394 0.0354 262.6); /* #161f30 */
+  --secondary-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  --muted: oklch(0.2101 0.0318 264.7); /* #111827 */
+  --muted-foreground: oklch(0.6778 0.0342 255.6); /* #8a99ad */
+  --accent: oklch(0.2394 0.0354 262.6); /* #161f30 */
+  --accent-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  --destructive: oklch(0.6117 0.1934 28.0); /* #e0453b */
+  --border: oklch(0.7107 0.0351 256.8 / 0.1); /* rgba(148,163,184,0.1) */
+  --input: oklch(0.7107 0.0351 256.8 / 0.1); /* rgba(148,163,184,0.1) */
+  --ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
+  --grid-color: oklch(1 0 0 / 0.015); /* rgba(255,255,255,0.015) */
+  --shimmer-highlight: oklch(1 0 0 / 0.06); /* rgba(255,255,255,0.06) */
 
   /* Sidebar styling for a seamless premium dark sidebar */
-  --sidebar: #0b101c;
-  --sidebar-foreground: #f1f5f9;
-  --sidebar-primary: #f07e2f;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #161f30;
-  --sidebar-accent-foreground: #f1f5f9;
-  --sidebar-border: rgba(148, 163, 184, 0.08);
-  --sidebar-ring: #f07e2f;
+  --sidebar: oklch(0.1745 0.0263 266.4); /* #0b101c */
+  --sidebar-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  --sidebar-primary: oklch(0.71 0.1649 50.8); /* #f07e2f */
+  --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
+  --sidebar-accent: oklch(0.2394 0.0354 262.6); /* #161f30 */
+  --sidebar-accent-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  --sidebar-border: oklch(0.7107 0.0351 256.8 / 0.08); /* rgba(148,163,184,0.08) */
+  --sidebar-ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
 }
 
 a,
@@ -193,16 +207,16 @@ body::before {
   pointer-events: none;
   background: radial-gradient(
     circle at 50% 0%,
-    rgba(255, 255, 255, 0.8) 0%,
-    rgba(241, 243, 245, 0) 70%
+    oklch(1 0 0 / 0.8) 0%,
+    oklch(0.9632 0.0034 247.9 / 0) 70%
   );
 }
 
 .dark body::before {
   background: radial-gradient(
     circle at 50% 0%,
-    rgba(240, 126, 47, 0.05) 0%,
-    rgba(8, 12, 20, 0) 70%
+    oklch(0.71 0.1649 50.8 / 0.05) 0%,
+    oklch(0.1542 0.0185 263.2 / 0) 70%
   );
 }
 
@@ -215,5 +229,30 @@ body::before {
   body {
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
+  }
+}
+
+/* Skeleton shimmer sweep — a translucent highlight band that travels across the
+   bg-accent surface (used via <Skeleton shimmer>). Falls back gracefully in both
+   themes via the --shimmer-highlight token. */
+@layer utilities {
+  @keyframes vfic-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+  .animate-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--shimmer-highlight) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: vfic-shimmer 1.4s ease-in-out infinite;
   }
 }

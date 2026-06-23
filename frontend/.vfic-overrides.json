@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "purpose": "VFIC has permanently forked Atomic CRM. The paths below hold VFIC-specific customizations and MUST NOT be overwritten by a blind registry block sync. The only safe sync surface is individual shadcn primitives from ui.shadcn.com into src/components/ui/. See docs/upstream-sync.md.",
+  "fork": {
+    "upstream": "Atomic CRM (marmelab/atomic-crm)",
+    "upstreamRegistry": "https://marmelab.com/atomic-crm/r/atomic-crm.json",
+    "adminKitRegistry": "https://marmelab.com/shadcn-admin-kit/r/admin.json",
+    "shadcnStyle": "new-york",
+    "posture": "permanent-fork",
+    "pinUpstreamCommit": "TODO: record the upstream Atomic CRM commit this fork diverged from (git log the earliest VFIC edit under src/components/atomic-crm/root/CRM.tsx)"
+  },
+  "locked": {
+    "description": "Globs/paths with VFIC customizations. Never overwrite via registry sync.",
+    "paths": [
+      "src/index.css",
+      "src/App.tsx",
+      "src/main.tsx",
+      "src/components/atomic-crm/root/**",
+      "src/components/atomic-crm/layout/**",
+      "src/components/atomic-crm/leads/**",
+      "src/components/atomic-crm/conversations/**",
+      "src/components/atomic-crm/dashboard/**",
+      "src/components/atomic-crm/settings/**",
+      "src/components/atomic-crm/login/**",
+      "src/components/atomic-crm/providers/**",
+      "src/lib/vfic/**",
+      "public/light-logo.png",
+      "public/dark-logo.png",
+      "public/logos/**"
+    ],
+    "customizations": [
+      "Vietnamese-only UI (custom vi locale catalog via vietnameseCrmMessages; language switcher removed; i18nProvider pinned to vi)",
+      "Resources repointed at live VFIC Supabase: leads, conversations, bot_runs, knowledge_sources, users. Upstream contacts/companies/deals/tags/tasks/notes/sales were DELETED.",
+      "Custom Supabase dataProvider + authProvider (src/components/atomic-crm/providers/supabase/) bound to VFIC schema (profiles/leads/conversations/messages).",
+      "Topbar: floating glass-pill + command palette + notifications bell (src/components/atomic-crm/layout/).",
+      "/leads overhaul: dense LeadCard, LeadStageMenu, LeadsToolbar, grouped collapsible list, ?display mobile gate.",
+      "Conversations: virtualized chat thread (react-virtuoso), contacts-only inbox, batched getLeadsByZaloIds.",
+      "OKLCH design tokens in src/index.css (three-tier convention; see adr/ADR-oklch-token-convention.md).",
+      "Responsive layout across mobile/tablet/laptop/widescreen (dvh heights, 1440 cap, list-first mobile via ?id= URL)."
+    ]
+  },
+  "syncSurface": {
+    "description": "Refresh individual primitives here from the canonical ui.shadcn.com registry. These mirror upstream and are meant to be customized in place.",
+    "paths": ["src/components/ui/", "src/components/admin/"],
+    "safeCommand": "npx shadcn add <component-name>   # one primitive, then diff & re-apply any VFIC patch",
+    "forbiddenCommand": "npx shadcn add https://marmelab.com/atomic-crm/r/atomic-crm.json -o   # overwrites every locked path above"
+  },
+  "precommit": {
+    "note": "`make registry-gen` regenerates frontend/registry.json additively from file globs. It is safe but always review the diff — it should only ever ADD entries, never drop VFIC files."
+  }
+}
