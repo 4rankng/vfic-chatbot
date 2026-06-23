@@ -289,9 +289,14 @@ const ConversationListContent = () => {
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Conversations already opened this session — clears the unread badge
-  // optimistically (ConversationShow confirms server-side via markAsRead).
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  // Optimistic unread-clears. Reset whenever the list refreshes so the server
+  // state stays authoritative (markAsRead has reset unread_count) — otherwise a
+  // fresh inbound that bumps the count back above 0 would stay hidden for the
+  // whole session after a chat is opened once.
+  const [pendingReadIds, setPendingReadIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setPendingReadIds(new Set());
+  }, [conversations]);
 
   const urlId = searchParams.get("id");
   // On mobile the detail pane is shown iff a conversation id is in the URL, so
@@ -333,7 +338,7 @@ const ConversationListContent = () => {
     setSelectedId(c.id);
     // Optimistically clear the unread badge for this row; ConversationShow
     // confirms server-side via markAsRead on open.
-    setReadIds((prev) => {
+    setPendingReadIds((prev) => {
       if (prev.has(c.id)) return prev;
       const next = new Set(prev);
       next.add(c.id);
@@ -365,7 +370,7 @@ const ConversationListContent = () => {
         <ConversationListPanel
           selectedId={selected?.id ?? null}
           onSelect={openConversation}
-          readIds={readIds}
+          readIds={pendingReadIds}
         />
 
         {selected ? (

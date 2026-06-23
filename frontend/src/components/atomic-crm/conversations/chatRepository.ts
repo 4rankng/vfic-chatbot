@@ -106,20 +106,9 @@ export const chatRepository = {
     if (error) throw error;
 
     const out: Record<string, string> = {};
-    for (const row of (data as Array<{ session_id: string; message: unknown }>) ?? []) {
-      const msg = (row?.message ?? {}) as {
-        type?: string;
-        content?: unknown;
-        data?: { recruiter_id?: unknown; content?: unknown };
-      };
-      const type = String(msg.type ?? "").toLowerCase();
-      // Mirror toMessage: ai = bot outbound; human w/ recruiter_id = recruiter.
-      if (type !== "ai" && type !== "human") continue;
-      const isRecruiter = type === "human" && Boolean(msg.data?.recruiter_id);
-      const raw = isRecruiter
-        ? (msg.data?.content ?? msg.content)
-        : msg.content;
-      const text = extractText(raw);
+    for (const row of (data as Array<{ id: number; session_id: string; message: unknown }>) ?? []) {
+      // Reuse toMessage so direction + content extraction stay in one place.
+      const text = toMessage(row)?.content ?? "";
       if (text && row.session_id && !(row.session_id in out)) {
         out[row.session_id] = text;
       }
@@ -166,7 +155,7 @@ export const chatRepository = {
 
   /**
    * Lightweight message count for a conversation (head-only count query). Used
-   * by the lead timeline's "Tổng tin nhắn" derived signal.
+   * by the lead timeline's total-message-count signal.
    */
   async getMessageCount(zaloChatId: string): Promise<number> {
     const { count, error } = await getSupabaseClient()

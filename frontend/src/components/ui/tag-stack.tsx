@@ -63,7 +63,12 @@ function TagStack({
               +{overflow.length}
             </Badge>
           </TooltipTrigger>
-          <TooltipContent>{overflow.map((t) => t.label).join(" • ")}</TooltipContent>
+          <TooltipContent>
+            {overflow
+              .map((t) => t.label.trim())
+              .filter(Boolean)
+              .join(" • ")}
+          </TooltipContent>
         </Tooltip>
       ) : null}
     </div>

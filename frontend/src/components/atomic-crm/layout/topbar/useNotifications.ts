@@ -11,7 +11,7 @@ import type { Conversation } from "../../types";
  */
 export const useNotifications = () => {
   const { data: conversations } = useGetList<Conversation>("conversations", {
-    pagination: { page: 1, perPage: 100 },
+    pagination: { page: 1, perPage: 500 },
   });
 
   const count =

@@ -2,7 +2,7 @@ import { useRedirect, RecordContextProvider } from "ra-core";
 import { Phone } from "lucide-react";
 
 import { LEAD_STAGES, LEAD_SCORES, type Lead } from "../types";
-import { getRelativeTimeString } from "./leadUtils";
+import { getRelativeTimeString, telHref } from "./leadUtils";
 import { LeadAvatar } from "./LeadAvatar";
 import { LeadStageMenu } from "./LeadStageMenu";
 import {
@@ -53,15 +53,13 @@ export const LeadCardContent = ({ lead, showStageBadge, onClick }: { lead: Lead;
   // Derived tag stack from existing lead signals (no tags backend needed).
   // Score + region/living_area — these aren't surfaced elsewhere in the row, so
   // the pills add info without duplicating the job/stage columns.
+  const areaTag = lead.region?.trim() || lead.living_area?.trim() || null;
   const tags: TagStackTag[] = [
     scoreToTag(lead.lead_score),
-    lead.region ? { label: lead.region, tone: "default" as TagTone } : null,
-    !lead.region && lead.living_area
-      ? { label: lead.living_area, tone: "default" as TagTone }
-      : null,
+    areaTag ? { label: areaTag, tone: "default" } : null,
   ].filter((t): t is TagStackTag => t !== null);
 
-  const telHref = lead.phone ? `tel:${lead.phone.replace(/\s+/g, "")}` : null;
+  const callHref = telHref(lead.phone);
 
   return (
     // `group` is required: LeadStageMenu's trigger relies on group-hover to
@@ -112,9 +110,9 @@ export const LeadCardContent = ({ lead, showStageBadge, onClick }: { lead: Lead;
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            {telHref && (
+            {callHref && (
               <a
-                href={telHref}
+                href={callHref}
                 onClick={(e) => e.stopPropagation()}
                 aria-label={`Gọi ${lead.phone}`}
                 className="flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
