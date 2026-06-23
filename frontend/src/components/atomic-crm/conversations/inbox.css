@@ -42,21 +42,41 @@
 }
 
 .dark {
+  --surface: #080c14;
+  --surface-solid: #0f1524;
+  --surface-hover: #161f30;
+
+  --ink: #f1f5f9;
+  --ink-muted: #8a99ad;
+  --ink-faint: rgba(148, 163, 184, 0.4);
+
+  --border: rgba(148, 163, 184, 0.08);
+  --border-strong: rgba(148, 163, 184, 0.12);
+  --border-glass: rgba(148, 163, 184, 0.05);
+
+  --brand: var(--primary);
+  --brand-hover: var(--primary);
+  --brand-light: rgba(240, 126, 47, 0.12);
+
+  --chat-bg: #080c14;
+  --chat-bubble-in: #161f30;
+  --chat-bubble-out: #1b3d2b;
+  --chat-header-bg: #0f1524;
+  --chat-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
-
-  --chat-bg: #0b141a;
-  --chat-bubble-in: #202c33;
-  --chat-bubble-out: #005c4b;
-  --chat-header-bg: #202c33;
-  --chat-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.5);
 }
 
 /* Global Container */
 .inbox-bg-container {
   width: 100%;
+  /* 120px matches both shells' chrome (mobile: 64 header + 56 nav; desktop: sticky bar).
+     dvh shrinks when the mobile soft keyboard opens so the composer stays visible;
+     the vh line is a fallback for browsers without dvh support. */
   height: calc(100vh - 120px);
+  height: calc(100dvh - 120px);
   color: var(--ink);
   font-family:
     "Inter",
@@ -1274,26 +1294,51 @@
   }
 }
 
-@media (max-width: 960px) {
+/* ---- Mobile (<= 767px): list-first master/detail ----
+   The JS gate (useIsMobile @ 768px) and this block share one boundary, so the
+   drawer only fires once MobileAdmin has mounted. The conversation LIST is the
+   default pane; tapping a row pushes ?id=<conv> (detail-open) and the detail
+   slides in from the right; the browser back button / in-app back clears it. */
+@media (max-width: 767px) {
+  .inbox-bg-container {
+    /* clear the way for the fixed 64px mobile header + the 56px bottom nav */
+    margin-top: 64px;
+    padding: 0;
+    height: calc(100vh - 120px);
+    height: calc(100dvh - 120px);
+  }
   .inbox-bg-container .app {
     grid-template-columns: 1fr;
   }
+  /* List: in-flow, full-width, visible by default. */
   .inbox-bg-container .left-panel {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    border-right: 0;
+    box-shadow: none;
+    transform: none;
+    visibility: visible;
+    transition: none;
+  }
+  /* Detail: off-canvas to the right until a conversation is selected. */
+  .inbox-bg-container .center-panel {
     position: absolute;
-    inset: 0 auto 0 0;
-    width: min(340px, calc(100% - 48px));
-    box-shadow: 24px 0 64px rgba(0, 0, 0, 0.2);
-    transform: translateX(-105%);
+    inset: 0;
+    z-index: 4;
+    background: var(--surface);
+    box-shadow: -24px 0 64px rgba(0, 0, 0, 0.2);
+    transform: translateX(105%);
+    visibility: hidden;
     transition:
       transform 0.3s var(--ease),
       visibility 0.3s;
-    visibility: hidden;
   }
-  .inbox-bg-container .app.list-open .left-panel {
+  .inbox-bg-container .app.detail-open .center-panel {
     transform: translateX(0);
     visibility: visible;
   }
-  .inbox-bg-container .app.list-open .backdrop,
+  .inbox-bg-container .app.detail-open .backdrop,
   .inbox-bg-container .app.profile-open .backdrop {
     display: block;
     position: absolute;
@@ -1325,6 +1370,19 @@
   }
   .inbox-bg-container .bubble {
     max-width: 90%;
+  }
+}
+
+/* ---- Widescreen (>= 1536px): cap message line length for readability ----
+   Gated above the laptop band (1024-1440) so laptop rendering is unchanged. */
+@media (min-width: 1536px) {
+  .inbox-bg-container .bubble {
+    max-width: min(70%, 640px);
+  }
+  .inbox-bg-container .chat-scroller,
+  .inbox-bg-container .composer-wrap {
+    padding-left: max(32px, calc((100% - 768px) / 2));
+    padding-right: max(32px, calc((100% - 768px) / 2));
   }
 }
 

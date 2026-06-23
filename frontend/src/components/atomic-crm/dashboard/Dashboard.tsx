@@ -48,7 +48,7 @@ export const Dashboard = () => {
     : 0;
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full pb-8">
+    <div className="flex flex-col gap-6 mx-auto w-full pb-8">
       <TopToolbar className="flex-col items-start md:flex-row md:items-end gap-4 pb-5 mb-2">
         <div className="mr-auto">
           <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground">
@@ -58,7 +58,7 @@ export const Dashboard = () => {
             Hiệu suất tuyển dụng trên mọi quy trình đang hoạt động
           </p>
         </div>
-        <div className="flex items-center gap-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <span>Tất cả quy trình</span>
           <span>•</span>
           <span>30 ngày qua</span>
@@ -112,9 +112,9 @@ export const Dashboard = () => {
           neutral={hiredRate === 0}
         />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main Chart */}
-        <Card className="lg:col-span-2 border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300">
+        <Card className="md:col-span-2 border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />

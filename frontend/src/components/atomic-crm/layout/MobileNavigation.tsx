@@ -28,8 +28,6 @@ export const MobileNavigation = () => {
       className="fixed bottom-0 left-0 right-0 z-50 bg-secondary h-14 border-t"
       style={{
         paddingBottom: isPwa && isWebiOS ? 15 : undefined,
-        height:
-          "calc(var(--spacing)) * 6" + (isPwa && isWebiOS ? " + 15px" : ""),
       }}
     >
       <div className="flex justify-around w-full max-w-md mx-auto h-full items-center">
@@ -83,7 +81,9 @@ const NavigationButton = ({
   >
     <Link to={href}>
       <Icon className="size-6" />
-      <span className="text-[0.6rem] font-medium">{label}</span>
+      <span className="min-w-0 w-full truncate text-center text-[0.625rem] font-medium">
+        {label}
+      </span>
     </Link>
   </Button>
 );

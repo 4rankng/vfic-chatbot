@@ -28,7 +28,7 @@ const Header = () => {
 
   return (
     <div className="sticky top-0 z-40 px-4 pt-3 md:px-6 md:pt-4">
-      <div className="mx-auto max-w-screen-xl">
+      <div className="mx-auto max-w-[1440px]">
         <header className="flex h-14 items-center justify-between gap-3 rounded-2xl border border-border/70 bg-white/70 px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:bg-card/60 md:px-4">
           {/* Brand */}
           <Link

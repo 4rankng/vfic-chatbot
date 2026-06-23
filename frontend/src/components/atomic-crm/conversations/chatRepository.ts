@@ -65,18 +65,34 @@ export const chatRepository = {
     return null;
   },
 
-  async getConversationMessages(zaloChatId: string): Promise<Message[]> {
-    const { data, error } = await getSupabaseClient()
+  async getConversationMessages(
+    zaloChatId: string,
+    options?: { limit?: number; beforeId?: string },
+  ): Promise<Message[]> {
+    let query = getSupabaseClient()
       .from("vfic_chat_histories")
       .select("*")
       .eq("session_id", zaloChatId)
-      .order("id", { ascending: true });
+      .order("id", { ascending: false });
+
+    if (options?.beforeId) {
+      query = query.lt("id", options.beforeId);
+    }
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw error;
     }
 
-    return (data ?? []).map(toMessage).filter((m): m is Message => m != null);
+    const mapped = (data ?? [])
+      .map(toMessage)
+      .filter((m): m is Message => m != null);
+    return mapped.reverse();
   },
 
   subscribeToMessages(

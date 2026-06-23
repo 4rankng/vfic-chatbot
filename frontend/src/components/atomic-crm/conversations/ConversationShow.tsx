@@ -13,6 +13,7 @@ import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { getLeadStatusColor } from "./ConversationList";
 import { chatRepository } from "./chatRepository";
+import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 
 const classify = (
   msg: Message,
@@ -33,7 +34,10 @@ const formatTime = (iso?: string) => {
   }).format(d);
 };
 
-const tryLoadDemoMessages = async (zaloChatId: string): Promise<Message[]> => {
+const tryLoadDemoMessages = async (
+  zaloChatId: string,
+  options?: { limit?: number; beforeId?: string },
+): Promise<Message[]> => {
   if (!import.meta.env.DEV) return [];
   try {
     const fakerest = await import("../providers/fakerest");
@@ -47,9 +51,19 @@ const tryLoadDemoMessages = async (zaloChatId: string): Promise<Message[]> => {
     const { data } = await dataProvider.getList("messages", {
       filter: { conversation_id: convId },
       pagination: { page: 1, perPage: 1000 },
-      sort: { field: "created_at", order: "ASC" },
+      sort: { field: "created_at", order: "DESC" },
     });
-    return Array.isArray(data) ? (data as Message[]) : [];
+    let list = Array.isArray(data) ? (data as Message[]) : [];
+    if (options?.beforeId) {
+      const idx = list.findIndex((m) => String(m.id) === options.beforeId);
+      if (idx !== -1) {
+        list = list.slice(idx + 1);
+      }
+    }
+    if (options?.limit) {
+      list = list.slice(0, options.limit);
+    }
+    return list.reverse();
   } catch {
     return [];
   }
@@ -58,34 +72,42 @@ const tryLoadDemoMessages = async (zaloChatId: string): Promise<Message[]> => {
 const useConversationRealtime = (zaloChatId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const isFetchingRef = useRef(false);
 
-  useEffect(() => {
+  const fetchInitial = async () => {
     if (!zaloChatId) {
       setIsLoading(false);
       return;
     }
-    let cancelled = false;
     setIsLoading(true);
-
-    const fetchInitial = async () => {
-      try {
-        const mapped = await chatRepository.getConversationMessages(zaloChatId);
-        if (cancelled) return;
-        setMessages(mapped);
-      } catch (err) {
-        if (cancelled) return;
-        if (import.meta.env.DEV) {
-          const demo = await tryLoadDemoMessages(zaloChatId);
-          if (cancelled) return;
-          setMessages(demo);
-        } else {
-          setMessages([]);
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
+    try {
+      const mapped = await chatRepository.getConversationMessages(zaloChatId, {
+        limit: 10,
+      });
+      setMessages(mapped);
+      setHasMore(mapped.length === 10);
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        const demo = await tryLoadDemoMessages(zaloChatId, { limit: 10 });
+        setMessages(demo);
+        setHasMore(demo.length === 10);
+      } else {
+        setMessages([]);
+        setHasMore(false);
       }
-    };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setMessages([]);
+    setHasMore(false);
     fetchInitial();
+
+    if (!zaloChatId) return;
 
     let cleanup: (() => void) | undefined;
     try {
@@ -97,29 +119,57 @@ const useConversationRealtime = (zaloChatId?: string) => {
     } catch {}
 
     return () => {
-      cancelled = true;
       cleanup?.();
     };
   }, [zaloChatId]);
 
-  return { messages, isLoading };
+  const loadMore = async (earliestId: string) => {
+    if (isFetchingRef.current || !hasMore || !zaloChatId) return;
+    isFetchingRef.current = true;
+    setIsLoadingMore(true);
+
+    try {
+      const older = await chatRepository.getConversationMessages(zaloChatId, {
+        limit: 10,
+        beforeId: earliestId,
+      });
+      setHasMore(older.length === 10);
+      setMessages((prev) => [...older, ...prev]);
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        const demo = await tryLoadDemoMessages(zaloChatId, {
+          limit: 10,
+          beforeId: earliestId,
+        });
+        setHasMore(demo.length === 10);
+        setMessages((prev) => [...demo, ...prev]);
+      }
+    } finally {
+      setIsLoadingMore(false);
+      isFetchingRef.current = false;
+    }
+  };
+
+  return { messages, isLoading, isLoadingMore, hasMore, loadMore };
 };
 
 export const ConversationShowContent = ({
   onOpenList,
-  onOpenProfile,
 }: {
   onOpenList?: () => void;
-  onOpenProfile?: () => void;
 }) => {
   const record = useRecordContext<Conversation>();
-  const { messages } = useConversationRealtime(record?.zalo_chat_id);
+  const { messages, isLoadingMore, hasMore, loadMore } =
+    useConversationRealtime(record?.zalo_chat_id);
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const translate = useTranslate();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
+  const prevLastMessageIdRef = useRef<string | null>(null);
 
   const { isBotMode, handleTakeover } = useConversationActions(record);
 
@@ -133,10 +183,34 @@ export const ConversationShowContent = ({
   );
   const lead = leadData?.[0] as Lead | undefined;
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop } = scrollRef.current;
+    if (scrollTop < 50 && hasMore && !isLoadingMore && messages.length > 0) {
+      pendingScrollRestoreRef.current = scrollRef.current.scrollHeight;
+      loadMore(messages[0].id);
     }
+  };
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+
+    if (pendingScrollRestoreRef.current !== null) {
+      const scrollHeightDiff =
+        scrollRef.current.scrollHeight - pendingScrollRestoreRef.current;
+      scrollRef.current.scrollTop = scrollHeightDiff;
+      pendingScrollRestoreRef.current = null;
+    } else {
+      const currentLastMsg = messages[messages.length - 1];
+      const prevLastMsgId = prevLastMessageIdRef.current;
+      if (
+        !prevLastMsgId ||
+        (currentLastMsg && currentLastMsg.id !== prevLastMsgId)
+      ) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }
+    prevLastMessageIdRef.current = messages[messages.length - 1]?.id ?? null;
   }, [messages]);
 
   const handleSend = async (e: React.FormEvent) => {
@@ -175,7 +249,7 @@ export const ConversationShowContent = ({
         </button>
         <div
           className="header-person cursor-pointer hover:opacity-80 transition-opacity"
-          onClick={onOpenProfile}
+          onClick={() => setIsProfileOpen(true)}
         >
           <div
             className="header-avatar"
@@ -198,7 +272,7 @@ export const ConversationShowContent = ({
         <div className="header-actions">
           <button
             className="icon-btn small mobile-toggle profile-toggle"
-            onClick={onOpenProfile}
+            onClick={() => setIsProfileOpen(true)}
             aria-label="Mở hồ sơ ứng viên"
           >
             <svg className="icon">
@@ -208,8 +282,16 @@ export const ConversationShowContent = ({
         </div>
       </header>
 
-      <div className="chat-scroller" ref={scrollRef}>
+      <div className="chat-scroller" ref={scrollRef} onScroll={handleScroll}>
         <div id="messageStream">
+          {isLoadingMore && (
+            <div
+              className="day-marker"
+              style={{ margin: "8px 0", background: "transparent" }}
+            >
+              <span>Đang tải tin nhắn cũ hơn...</span>
+            </div>
+          )}
           {messages.map((m, index) => {
             const kind = classify(m);
             if (kind === "system" || kind === "event") {
@@ -348,6 +430,8 @@ export const ConversationShowContent = ({
           </button>
         </form>
       </footer>
+
+      <LeadProfilePanel open={isProfileOpen} onOpenChange={setIsProfileOpen} />
     </section>
   );
 };

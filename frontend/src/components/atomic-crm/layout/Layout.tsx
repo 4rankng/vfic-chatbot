@@ -13,7 +13,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     <>
       <Header />
       <main
-        className="max-w-screen-xl mx-auto pt-6 px-6 md:pt-8 md:px-8"
+        className="max-w-[1440px] mx-auto pt-6 px-6 md:pt-8 md:px-8"
         id="main-content"
       >
         <ErrorBoundary FallbackComponent={Error}>

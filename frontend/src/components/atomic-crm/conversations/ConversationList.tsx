@@ -5,11 +5,12 @@ import {
   useDataProvider,
   RecordContextProvider,
 } from "ra-core";
-import { useLocation } from "react-router";
+import { useSearchParams } from "react-router";
 import type { Conversation, Lead, Message } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
-import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 import { InboxIcons } from "./InboxIcons";
+import { useIsMobile } from "@/hooks/use-mobile";
+import MobileHeader from "../layout/MobileHeader";
 import "./inbox.css";
 
 type ModeFilter = "all" | "bot" | "handoff";
@@ -248,44 +249,63 @@ const ConversationListPanel = ({
 
 const ConversationListContent = () => {
   const { data: conversations } = useListContext<Conversation>();
-  const location = useLocation();
+  const isMobile = useIsMobile();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [layoutState, setLayoutState] = useState<
-    "" | "list-open" | "profile-open"
-  >("");
 
+  const urlId = searchParams.get("id");
+  // On mobile the detail pane is shown iff a conversation id is in the URL, so
+  // the browser back button naturally returns to the list. Desktop always shows
+  // the detail alongside the list.
+  const detailOpen = !isMobile || !!urlId;
+
+  // Seed the selection: a deep link (?id=) opens that conversation; otherwise
+  // desktop auto-selects the first for an immediate detail view, while mobile
+  // stays list-first until the user taps a row.
   useEffect(() => {
-    if (conversations && conversations.length > 0 && !selectedId) {
-      const match = location.pathname.match(/\/conversations\/([^/]+)/);
-      setSelectedId(match ? match[1] : (conversations[0] as Conversation).id);
+    if (!conversations || conversations.length === 0 || selectedId) return;
+    if (urlId && conversations.some((c) => c.id === urlId)) {
+      setSelectedId(urlId);
+    } else if (!isMobile) {
+      setSelectedId((conversations[0] as Conversation).id);
     }
-  }, [conversations, location.pathname, selectedId]);
+  }, [conversations, urlId, selectedId, isMobile]);
 
   const selected = conversations?.find((c) => c.id === selectedId) ?? null;
 
+  const openConversation = (c: Conversation) => {
+    setSelectedId(c.id);
+    // Push (not replace) so each opened conversation is a history entry and the
+    // browser back button returns to the list.
+    setSearchParams((prev) => {
+      prev.set("id", c.id);
+      return prev;
+    });
+  };
+
+  const backToList = () => {
+    setSearchParams(
+      (prev) => {
+        prev.delete("id");
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+
   return (
     <div className="inbox-bg-container">
+      {isMobile && <MobileHeader />}
       <InboxIcons />
-      <main className={`app ${layoutState}`} id="app">
+      <main className={`app ${detailOpen ? "detail-open" : ""}`} id="app">
         <ConversationListPanel
           selectedId={selected?.id ?? null}
-          onSelect={(c) => {
-            setSelectedId(c.id);
-            setLayoutState("");
-          }}
+          onSelect={openConversation}
         />
 
         {selected ? (
           <RecordContextProvider value={selected}>
-            <ConversationShowContent
-              onOpenList={() => setLayoutState("list-open")}
-              onOpenProfile={() =>
-                setLayoutState(
-                  layoutState === "profile-open" ? "" : "profile-open",
-                )
-              }
-            />
-            <LeadProfilePanel />
+            <ConversationShowContent onOpenList={backToList} />
           </RecordContextProvider>
         ) : (
           <section className="panel center-panel">
@@ -295,7 +315,7 @@ const ConversationListContent = () => {
           </section>
         )}
 
-        <div className="backdrop" onClick={() => setLayoutState("")}></div>
+        <div className="backdrop" onClick={backToList}></div>
       </main>
     </div>
   );

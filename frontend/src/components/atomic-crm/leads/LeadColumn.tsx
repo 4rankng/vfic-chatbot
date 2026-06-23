@@ -2,56 +2,7 @@ import { Droppable } from "@hello-pangea/dnd";
 import type { Lead } from "../types";
 import { LeadCard } from "./LeadCard";
 import { LEAD_STAGES } from "./LeadListContent";
-import {
-  CircleDashed,
-  Users,
-  CheckCircle2,
-  FileText,
-  Briefcase,
-  XCircle,
-  Ban,
-} from "lucide-react";
-
-const STAGE_CONFIG: Record<
-  string,
-  { bg: string; text: string; icon: React.ReactNode }
-> = {
-  NEW: {
-    bg: "bg-slate-100 dark:bg-slate-800",
-    text: "text-slate-700 dark:text-slate-300",
-    icon: <CircleDashed className="w-4 h-4" />,
-  },
-  ENGAGED: {
-    bg: "bg-blue-100 dark:bg-blue-900/30",
-    text: "text-blue-700 dark:text-blue-300",
-    icon: <Users className="w-4 h-4" />,
-  },
-  QUALIFIED: {
-    bg: "bg-cyan-100 dark:bg-cyan-900/30",
-    text: "text-cyan-700 dark:text-cyan-300",
-    icon: <CheckCircle2 className="w-4 h-4" />,
-  },
-  APPLIED: {
-    bg: "bg-amber-100 dark:bg-amber-900/30",
-    text: "text-amber-700 dark:text-amber-300",
-    icon: <FileText className="w-4 h-4" />,
-  },
-  HIRED: {
-    bg: "bg-emerald-100 dark:bg-emerald-900/30",
-    text: "text-emerald-700 dark:text-emerald-300",
-    icon: <Briefcase className="w-4 h-4" />,
-  },
-  LOST: {
-    bg: "bg-rose-100 dark:bg-rose-900/30",
-    text: "text-rose-700 dark:text-rose-300",
-    icon: <XCircle className="w-4 h-4" />,
-  },
-  UNQUALIFIED: {
-    bg: "bg-zinc-100 dark:bg-zinc-900/30",
-    text: "text-zinc-700 dark:text-zinc-300",
-    icon: <Ban className="w-4 h-4" />,
-  },
-};
+import { STAGE_CONFIG } from "./stages";
 
 export const LeadColumn = ({
   stage,
@@ -62,6 +13,7 @@ export const LeadColumn = ({
 }) => {
   const stageLabel = LEAD_STAGES.find((s) => s.value === stage)?.label || stage;
   const config = STAGE_CONFIG[stage] || STAGE_CONFIG.NEW;
+  const StageIcon = config.icon;
 
   return (
     <div className="flex-grow pb-8 min-w-[320px] bg-muted/20 border-0 rounded-2xl flex flex-col min-h-[600px] shadow-sm">
@@ -69,7 +21,7 @@ export const LeadColumn = ({
         className={`flex justify-between items-center px-4 py-3 rounded-t-2xl ${config.bg} ${config.text} mb-2`}
       >
         <div className="flex items-center gap-2">
-          {config.icon}
+          <StageIcon className="w-4 h-4" />
           <h3 className="font-semibold text-[13px] tracking-wide uppercase">
             {stageLabel}
           </h3>

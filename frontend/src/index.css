@@ -74,6 +74,7 @@
   --border: rgba(20, 32, 42, 0.09);
   --input: rgba(20, 32, 42, 0.09);
   --ring: #e0701f;
+  --grid-color: rgba(20, 32, 42, 0.025);
 
   --chart-1: #3d5a73;
   --chart-2: #e0701f;
@@ -92,24 +93,35 @@
 }
 
 .dark {
-  --background: #12181e;
-  --foreground: #f1f3f5;
-  --card: #1a2228;
-  --card-foreground: #f1f3f5;
-  --popover: #1a2228;
-  --popover-foreground: #f1f3f5;
-  --primary: #e0701f;
+  --background: #080c14;
+  --foreground: #f1f5f9;
+  --card: #0f1524;
+  --card-foreground: #f1f5f9;
+  --popover: #0f1524;
+  --popover-foreground: #f1f5f9;
+  --primary: #f07e2f;
   --primary-foreground: #ffffff;
-  --secondary: #12181e;
-  --secondary-foreground: #f1f3f5;
-  --muted: #12181e;
-  --muted-foreground: #9aa5ad;
-  --accent: #12181e;
-  --accent-foreground: #f1f3f5;
-  --destructive: #d6362a;
-  --border: rgba(255, 255, 255, 0.09);
-  --input: rgba(255, 255, 255, 0.09);
-  --ring: #e0701f;
+  --secondary: #161f30;
+  --secondary-foreground: #f1f5f9;
+  --muted: #111827;
+  --muted-foreground: #8a99ad;
+  --accent: #161f30;
+  --accent-foreground: #f1f5f9;
+  --destructive: #e0453b;
+  --border: rgba(148, 163, 184, 0.1);
+  --input: rgba(148, 163, 184, 0.1);
+  --ring: #f07e2f;
+  --grid-color: rgba(255, 255, 255, 0.015);
+
+  /* Sidebar styling for a seamless premium dark sidebar */
+  --sidebar: #0b101c;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #f07e2f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #161f30;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: rgba(148, 163, 184, 0.08);
+  --sidebar-ring: #f07e2f;
 }
 
 a,
@@ -167,8 +179,8 @@ body {
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   background-color: var(--background);
   background-image:
-    linear-gradient(var(--border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
   background-size: 32px 32px;
   position: relative;
 }
@@ -189,8 +201,8 @@ body::before {
 .dark body::before {
   background: radial-gradient(
     circle at 50% 0%,
-    rgba(26, 34, 40, 0.4) 0%,
-    rgba(18, 24, 30, 0) 70%
+    rgba(240, 126, 47, 0.05) 0%,
+    rgba(8, 12, 20, 0) 70%
   );
 }
 
