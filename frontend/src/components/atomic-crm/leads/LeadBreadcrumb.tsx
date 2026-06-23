@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 export const LeadBreadcrumb = ({
   className,
-  rootLabel = "Khách hàng",
+  rootLabel = "Ứng viên",
 }: {
   className?: string;
   rootLabel?: string;

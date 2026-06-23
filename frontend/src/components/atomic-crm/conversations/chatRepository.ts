@@ -68,7 +68,7 @@ export const chatRepository = {
   async getConversationMessages(
     zaloChatId: string,
     options?: { limit?: number; beforeId?: string },
-  ): Promise<Message[]> {
+  ): Promise<{ messages: Message[]; hasMore: boolean }> {
     let query = getSupabaseClient()
       .from("vfic_chat_histories")
       .select("*")
@@ -89,10 +89,17 @@ export const chatRepository = {
       throw error;
     }
 
+    const rawCount = data?.length ?? 0;
+    const limit = options?.limit ?? 10;
+    const hasMore = rawCount === limit;
+
     const mapped = (data ?? [])
       .map(toMessage)
       .filter((m): m is Message => m != null);
-    return mapped.reverse();
+    return {
+      messages: mapped.reverse(),
+      hasMore,
+    };
   },
 
   subscribeToMessages(

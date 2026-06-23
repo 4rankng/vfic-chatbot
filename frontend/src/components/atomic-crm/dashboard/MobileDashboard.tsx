@@ -216,7 +216,7 @@ export const MobileDashboard = () => {
             >
               <h4 className="text-xs font-semibold flex items-center gap-2">
                 <UserCheck className="size-3.5 text-cyan-500" />
-                Khách hàng đạt chuẩn
+                Ứng viên đạt chuẩn
               </h4>
               <p className="text-[10px] text-muted-foreground ml-5.5">
                 {qualifiedLeads} ứng viên cần xem xét

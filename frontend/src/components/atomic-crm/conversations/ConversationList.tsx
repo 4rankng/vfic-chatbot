@@ -263,13 +263,29 @@ const ConversationListContent = () => {
   // desktop auto-selects the first for an immediate detail view, while mobile
   // stays list-first until the user taps a row.
   useEffect(() => {
-    if (!conversations || conversations.length === 0 || selectedId) return;
+    if (!conversations || conversations.length === 0) return;
+
+    // A stale deep link (?id= for a deleted/invalid conversation) would leave
+    // detailOpen true with no selectable conversation, stranding the user on
+    // an empty detail pane. Clear it so the list shows instead.
+    if (isMobile && urlId && !conversations.some((c) => c.id === urlId)) {
+      setSearchParams(
+        (prev) => {
+          prev.delete("id");
+          return prev;
+        },
+        { replace: true },
+      );
+      return;
+    }
+
+    if (selectedId) return;
     if (urlId && conversations.some((c) => c.id === urlId)) {
       setSelectedId(urlId);
     } else if (!isMobile) {
       setSelectedId((conversations[0] as Conversation).id);
     }
-  }, [conversations, urlId, selectedId, isMobile]);
+  }, [conversations, urlId, selectedId, isMobile, setSearchParams]);
 
   const selected = conversations?.find((c) => c.id === selectedId) ?? null;
 

@@ -1,8 +1,8 @@
 export const vietnameseCrmMessages = {
   resources: {
     leads: {
-      name: "Leads |||| Leads",
-      forcedCaseName: "Leads",
+      name: "Ứng viên |||| Ứng viên",
+      forcedCaseName: "Ứng viên",
       fields: {
         name: "Họ tên",
         phone: "Số điện thoại",
@@ -13,8 +13,8 @@ export const vietnameseCrmMessages = {
       },
     },
     conversations: {
-      name: "Chat |||| Chat",
-      forcedCaseName: "Chat",
+      name: "Tin nhắn |||| Tin nhắn",
+      forcedCaseName: "Tin nhắn",
       fields: {
         mode: "Chế độ (bot/human)",
         last_inbound_at: "Tin nhắn cuối",
@@ -86,8 +86,8 @@ export const vietnameseCrmMessages = {
       label: "Điều hướng",
     },
     dashboard: {
-      title: "Tổng quan Phân tích",
-      total_leads: "Tổng Khách hàng",
+      title: "Tổng quan",
+      total_leads: "Tổng Ứng viên",
       across_pipelines: "Trên tất cả các giai đoạn",
       active_conversations: "Đoạn chat đang hoạt động",
       engaged: "Ứng viên đang tương tác",
@@ -99,7 +99,7 @@ export const vietnameseCrmMessages = {
       pipeline_desc: "Phân bổ ứng viên hiện tại qua các giai đoạn",
       system_activity: "Hoạt động Hệ thống",
       snapshot: "Cập nhật nhanh tình hình hiện tại",
-      active_leads: "Khách hàng đang hoạt động",
+      active_leads: "Ứng viên đang hoạt động",
       drop_off: "Tỷ lệ rớt",
     },
     header: {

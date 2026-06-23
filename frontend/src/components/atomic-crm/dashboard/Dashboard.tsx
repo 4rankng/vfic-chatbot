@@ -207,7 +207,7 @@ export const Dashboard = () => {
             >
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <UserCheck className="w-4 h-4 text-cyan-500" />
-                Khách hàng đạt chuẩn
+                Ứng viên đạt chuẩn
               </h4>
               <p className="text-xs text-muted-foreground ml-6">
                 {qualifiedLeads} ứng viên cần xem xét

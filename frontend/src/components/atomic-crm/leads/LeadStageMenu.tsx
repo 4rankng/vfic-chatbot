@@ -41,20 +41,29 @@ export const LeadStageMenu = () => {
 
   const handleSelect = (stage: string) => {
     if (isPending || stage === lead.lead_stage) return;
+    
+    let updateData: Partial<Lead> & { closed_reason?: string } = { lead_stage: stage };
+    
+    if (stage === "CLOSED") {
+      const reason = window.prompt("Lý do đóng ứng viên này?");
+      if (reason === null) return; // User cancelled
+      if (reason) updateData.closed_reason = reason;
+    }
+
     update(
       "leads",
       {
         id: lead.id,
-        data: { lead_stage: stage },
+        data: updateData,
         previousData: lead,
       },
       {
         mutationMode: "optimistic",
-        onSuccess: () => notify("Đã cập nhật giai đoạn", { type: "success" }),
+        onSuccess: () => notify("Đã cập nhật giai đoạn", { type: "success", undoable: true }),
         onError: (error) =>
           notify(
             isRlsError(error)
-              ? "Bạn không có quyền chuyển khách hàng sang giai đoạn này"
+              ? "Bạn không có quyền chuyển ứng viên sang giai đoạn này"
               : "Không thể cập nhật giai đoạn",
             { type: "error" },
           ),

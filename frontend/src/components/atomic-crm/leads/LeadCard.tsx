@@ -1,91 +1,86 @@
 import { useRedirect, RecordContextProvider } from "ra-core";
-import { cn } from "@/lib/utils";
 
-import type { Lead } from "../types";
-import type { LeadScoreValue } from "../types";
+import { LEAD_STAGES, type Lead } from "../types";
 import { getRelativeTimeString } from "./leadUtils";
 import { LeadAvatar } from "./LeadAvatar";
-import { LeadScoreBar } from "./LeadScoreBar";
 import { LeadStageMenu } from "./LeadStageMenu";
 
-// Categorical score accent for the dense card's left rail. `leads.lead_score`
-// is CHECK-constrained to hot | warm | not_interested (NOT numeric). This maps
-// each value to a single categorical colour — preserved from the legacy card.
-const SCORE_CARD_STYLE: Record<LeadScoreValue, { accent: string }> = {
-  hot: { accent: "before:bg-rose-400/80 dark:before:bg-rose-500/70" },
-  warm: { accent: "before:bg-amber-400/80 dark:before:bg-amber-500/70" },
-  not_interested: {
-    accent: "before:bg-zinc-400/70 dark:before:bg-zinc-500/70",
-  },
-};
-
-export const LeadCard = ({ lead }: { lead: Lead }) => {
+export const LeadCard = ({ lead, showStageBadge, onClick }: { lead: Lead; showStageBadge?: boolean; onClick?: (lead: Lead) => void }) => {
   if (!lead) return null;
-  return <LeadCardContent lead={lead} />;
+  return <LeadCardContent lead={lead} showStageBadge={showStageBadge} onClick={onClick} />;
 };
 
-/**
- * Dense triage row — the shared lead atom. Clicking anywhere except the ⋯ stage
- * menu opens the lead's show page.
- */
-export const LeadCardContent = ({ lead }: { lead: Lead }) => {
+export const LeadCardContent = ({ lead, showStageBadge, onClick }: { lead: Lead; showStageBadge?: boolean; onClick?: (lead: Lead) => void }) => {
   const redirect = useRedirect();
   const handleClick = () => {
-    redirect(`/leads/${lead.id}/show`, undefined, undefined, undefined, {
-      _scrollToTop: false,
-    });
+    if (onClick) {
+      onClick(lead);
+    } else {
+      redirect(`/leads/${lead.id}/show`, undefined, undefined, undefined, {
+        _scrollToTop: false,
+      });
+    }
   };
 
-  const scoreStyle = lead.lead_score
-    ? SCORE_CARD_STYLE[lead.lead_score as LeadScoreValue]
-    : null;
   const updatedAt = lead.updated_at
     ? getRelativeTimeString(lead.updated_at, "vi")
     : null;
 
-  return (
-    <div className="cursor-pointer select-none" onClick={handleClick}>
-      <RecordContextProvider value={lead}>
-        <div
-          className={cn(
-            "group relative flex items-center gap-3 rounded-xl border px-3 py-2.5",
-            "border-zinc-200/60 bg-white/80 backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-900/60",
-            "transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40",
-            "before:absolute before:left-0 before:top-2.5 before:bottom-2.5 before:w-1 before:rounded-full before:content-['']",
-            scoreStyle?.accent ?? "before:bg-transparent",
-          )}
-        >
-          <LeadAvatar record={lead} size="sm" className="size-9 shrink-0" />
+  const stageLabel = LEAD_STAGES.find((s) => s.value === lead.lead_stage)?.label || lead.lead_stage;
+  const isHighPriority = lead.lead_score === "hot";
 
-          <div className="min-w-0 flex-1">
-            <div
-              className={cn(
-                "truncate text-sm font-semibold text-foreground",
-                !lead.name && "font-medium italic text-muted-foreground",
-              )}
-            >
-              {lead.name ||
-                `Khách hàng chưa biết · đuôi ${(lead.zalo_id || "").slice(-4)}`}
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              {lead.desired_job ? (
-                <span className="truncate">{lead.desired_job}</span>
-              ) : (
-                <span className="italic text-muted-foreground/70">
-                  Chưa rõ công việc
+  const identifier = lead.phone || lead.zalo_id || "";
+  const maskedId = identifier.length > 4 ? `•••• ${identifier.slice(-4)}` : identifier;
+
+  return (
+    <div className="cursor-pointer select-none bg-card hover:bg-accent/50 transition-colors" onClick={handleClick}>
+      <RecordContextProvider value={lead}>
+        <div className="flex items-center gap-4 px-4 py-3 min-h-[64px]">
+          <LeadAvatar record={lead} size="sm" className="size-10 shrink-0" />
+
+          <div className="min-w-0 flex-[2]">
+            <div className="flex items-center gap-2">
+              {isHighPriority && (
+                <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 uppercase tracking-wide">
+                  Ưu tiên cao
                 </span>
               )}
-              {updatedAt && (
+              <div className="truncate text-[15px] font-semibold text-foreground">
+                {lead.name || "Chưa rõ tên"}
+              </div>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+              {!lead.name && (
                 <>
+                  <span className="shrink-0">SĐT {maskedId}</span>
                   <span className="shrink-0 text-muted-foreground/50">·</span>
-                  <span className="shrink-0 tabular-nums">{updatedAt}</span>
                 </>
               )}
+              <span className="truncate">Nguồn Zalo</span>
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
-            <LeadScoreBar score={lead.lead_score} />
+          <div className="min-w-0 flex-[2] hidden md:block">
+             <div className="truncate text-[14px] text-foreground font-medium">
+              {lead.desired_job || "Chưa rõ công việc"}
+             </div>
+             {showStageBadge && (
+               <div className="mt-0.5 text-[13px] text-muted-foreground">
+                 Giai đoạn: {stageLabel}
+               </div>
+             )}
+          </div>
+
+          <div className="min-w-0 flex-[2] hidden lg:block text-[13px]">
+             <div className="text-muted-foreground">
+               Liên hệ cuối: {updatedAt || "Chưa rõ"}
+             </div>
+             <div className="mt-0.5 text-foreground font-medium">
+               Tiếp theo: Gọi lại hôm nay
+             </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
             <LeadStageMenu />
           </div>
         </div>

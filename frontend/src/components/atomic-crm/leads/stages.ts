@@ -6,7 +6,6 @@ import {
   CircleDashed,
   FileText,
   Users,
-  XCircle,
 } from "lucide-react";
 
 import type { Lead } from "../types";
@@ -79,12 +78,7 @@ export const STAGE_CONFIG: Record<string, StageConfig> = {
     text: "text-emerald-700 dark:text-emerald-300",
     icon: Briefcase,
   },
-  LOST: {
-    bg: "bg-rose-100 dark:bg-rose-900/30",
-    text: "text-rose-700 dark:text-rose-300",
-    icon: XCircle,
-  },
-  UNQUALIFIED: {
+  CLOSED: {
     bg: "bg-zinc-100 dark:bg-zinc-900/30",
     text: "text-zinc-700 dark:text-zinc-300",
     icon: Ban,

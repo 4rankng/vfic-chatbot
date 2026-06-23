@@ -144,7 +144,7 @@ const LeadHero = () => {
           <LeadAvatar size="xl" />
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-bold tracking-tight">
-              {record.name || "Khách hàng chưa có tên"}
+              {record.name || "Chưa rõ tên ứng viên"}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {record.phone && (
@@ -227,7 +227,7 @@ export const LeadShowContentMobile = () => {
             <LeadAvatar size="lg" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-lg font-semibold">
-                {record.name || "Khách hàng chưa có tên"}
+                {record.name || "Chưa rõ tên ứng viên"}
               </h1>
               <div className="text-xs text-muted-foreground">
                 {record.phone || "Chưa có số điện thoại"}
@@ -258,7 +258,7 @@ export const LeadShow = (props: ShowBaseProps = {}) => {
       <div className="flex flex-col gap-3">
         <LeadBreadcrumb />
         <TopToolbar>
-          <h2 className="mr-auto text-xl font-semibold">Khách hàng</h2>
+          <h2 className="mr-auto text-xl font-semibold">Ứng viên</h2>
           <RefreshButton />
           <EditButton />
           <DeleteButton

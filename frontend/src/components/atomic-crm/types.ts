@@ -249,12 +249,11 @@ export type PhoneAndType = { number: string | null; type: string | null };
 // Order = recruitment funnel. Used across LeadShow, LeadCard, LeadColumn, Dashboard.
 export const LEAD_STAGES = [
   { value: "NEW", label: "Mới", color: "bg-slate-500" },
-  { value: "ENGAGED", label: "Đang tương tác", color: "bg-blue-500" },
-  { value: "QUALIFIED", label: "Đạt chuẩn", color: "bg-cyan-500" },
+  { value: "ENGAGED", label: "Đang liên hệ", color: "bg-blue-500" },
+  { value: "QUALIFIED", label: "Đủ điều kiện", color: "bg-cyan-500" },
   { value: "APPLIED", label: "Đã ứng tuyển", color: "bg-amber-500" },
   { value: "HIRED", label: "Đã tuyển", color: "bg-emerald-500" },
-  { value: "LOST", label: "Đã mất", color: "bg-rose-500" },
-  { value: "UNQUALIFIED", label: "Không đạt", color: "bg-zinc-500" },
+  { value: "CLOSED", label: "Đã đóng", color: "bg-zinc-500" },
 ] as const;
 
 export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];
@@ -263,8 +262,8 @@ export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];
 // Categorical (hot / warm / not_interested), NOT a 0-100 numeric despite the
 // legacy column name. Used across LeadShow, LeadCard, LeadInfoPanel, ContactInputs.
 export const LEAD_SCORES = [
-  { value: "hot", label: "Nóng", color: "bg-rose-500" },
-  { value: "warm", label: "Ấm", color: "bg-amber-500" },
+  { value: "hot", label: "Ưu tiên cao", color: "bg-rose-500" },
+  { value: "warm", label: "Ưu tiên", color: "bg-amber-500" },
   { value: "not_interested", label: "Không quan tâm", color: "bg-zinc-500" },
 ] as const;
 

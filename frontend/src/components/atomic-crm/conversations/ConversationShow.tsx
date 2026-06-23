@@ -37,8 +37,8 @@ const formatTime = (iso?: string) => {
 const tryLoadDemoMessages = async (
   zaloChatId: string,
   options?: { limit?: number; beforeId?: string },
-): Promise<Message[]> => {
-  if (!import.meta.env.DEV) return [];
+): Promise<{ messages: Message[]; hasMore: boolean }> => {
+  if (!import.meta.env.DEV) return { messages: [], hasMore: false };
   try {
     const fakerest = await import("../providers/fakerest");
     const { dataProvider } = fakerest;
@@ -47,7 +47,7 @@ const tryLoadDemoMessages = async (
       pagination: { page: 1, perPage: 1 },
     });
     const convId = (convs?.[0] as any)?.id;
-    if (!convId) return [];
+    if (!convId) return { messages: [], hasMore: false };
     const { data } = await dataProvider.getList("messages", {
       filter: { conversation_id: convId },
       pagination: { page: 1, perPage: 1000 },
@@ -60,12 +60,18 @@ const tryLoadDemoMessages = async (
         list = list.slice(idx + 1);
       }
     }
+    const rawCount = list.length;
+    const limit = options?.limit ?? 10;
+    const hasMore = rawCount > limit;
     if (options?.limit) {
       list = list.slice(0, options.limit);
     }
-    return list.reverse();
+    return {
+      messages: list.reverse(),
+      hasMore,
+    };
   } catch {
-    return [];
+    return { messages: [], hasMore: false };
   }
 };
 
@@ -83,16 +89,18 @@ const useConversationRealtime = (zaloChatId?: string) => {
     }
     setIsLoading(true);
     try {
-      const mapped = await chatRepository.getConversationMessages(zaloChatId, {
-        limit: 10,
-      });
+      const { messages: mapped, hasMore: apiHasMore } =
+        await chatRepository.getConversationMessages(zaloChatId, {
+          limit: 10,
+        });
       setMessages(mapped);
-      setHasMore(mapped.length === 10);
-    } catch (err) {
+      setHasMore(apiHasMore);
+    } catch {
       if (import.meta.env.DEV) {
-        const demo = await tryLoadDemoMessages(zaloChatId, { limit: 10 });
+        const { messages: demo, hasMore: demoHasMore } =
+          await tryLoadDemoMessages(zaloChatId, { limit: 10 });
         setMessages(demo);
-        setHasMore(demo.length === 10);
+        setHasMore(demoHasMore);
       } else {
         setMessages([]);
         setHasMore(false);
@@ -124,25 +132,34 @@ const useConversationRealtime = (zaloChatId?: string) => {
   }, [zaloChatId]);
 
   const loadMore = async (earliestId: string) => {
-    if (isFetchingRef.current || !hasMore || !zaloChatId) return;
+    if (isFetchingRef.current || !hasMore || !zaloChatId) {
+      return;
+    }
     isFetchingRef.current = true;
     setIsLoadingMore(true);
 
     try {
-      const older = await chatRepository.getConversationMessages(zaloChatId, {
-        limit: 10,
-        beforeId: earliestId,
-      });
-      setHasMore(older.length === 10);
-      setMessages((prev) => [...older, ...prev]);
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        const demo = await tryLoadDemoMessages(zaloChatId, {
+      const { messages: older, hasMore: apiHasMore } =
+        await chatRepository.getConversationMessages(zaloChatId, {
           limit: 10,
           beforeId: earliestId,
         });
-        setHasMore(demo.length === 10);
+      setHasMore(apiHasMore);
+      setMessages((prev) => [...older, ...prev]);
+    } catch {
+      if (import.meta.env.DEV) {
+        const { messages: demo, hasMore: demoHasMore } =
+          await tryLoadDemoMessages(zaloChatId, {
+            limit: 10,
+            beforeId: earliestId,
+          });
+        setHasMore(demoHasMore);
         setMessages((prev) => [...demo, ...prev]);
+      } else {
+        // A failed load-more must not keep re-firing on every scroll-to-top
+        // (hasMore stays true -> the backend gets spammed with failing
+        // requests). Stop the loop; reopening the conversation retries.
+        setHasMore(false);
       }
     } finally {
       setIsLoadingMore(false);
@@ -186,7 +203,7 @@ export const ConversationShowContent = ({
   const handleScroll = () => {
     if (!scrollRef.current) return;
     const { scrollTop } = scrollRef.current;
-    if (scrollTop < 50 && hasMore && !isLoadingMore && messages.length > 0) {
+    if (scrollTop < 300 && hasMore && !isLoadingMore && messages.length > 0) {
       pendingScrollRestoreRef.current = scrollRef.current.scrollHeight;
       loadMore(messages[0].id);
     }
@@ -207,7 +224,14 @@ export const ConversationShowContent = ({
         !prevLastMsgId ||
         (currentLastMsg && currentLastMsg.id !== prevLastMsgId)
       ) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        // Stick to the bottom only when the user is already there (or on the
+        // first load). Otherwise a new inbound message would yank the viewport
+        // away from history the user is reading.
+        const el = scrollRef.current;
+        const wasNearBottom =
+          !prevLastMsgId ||
+          el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        if (wasNearBottom) el.scrollTop = el.scrollHeight;
       }
     }
     prevLastMessageIdRef.current = messages[messages.length - 1]?.id ?? null;
