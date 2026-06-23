@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useListContext, ShowBase } from "ra-core";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { ListPagination } from "@/components/admin";
 
 import { LEAD_STAGES, type Lead } from "../types";
 import { LeadCard } from "./LeadCard";
@@ -81,6 +82,7 @@ export const LeadListContent = () => {
           />
         ))}
       </div>
+      <ListPagination rowsPerPageOptions={[20, 50, 100]} className="pt-4" />
       <Sheet open={!!selectedLeadId} onOpenChange={(open) => !open && setSelectedLeadId(null)}>
         <SheetContent side="right" className="w-full sm:max-w-[480px] lg:max-w-[600px] p-0 overflow-y-auto border-l">
           {selectedLeadId && (

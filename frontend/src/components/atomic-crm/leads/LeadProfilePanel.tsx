@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRecordContext, useDataProvider, useNotify } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import type { CrmDataProvider } from "../providers/supabase/dataProvider";
@@ -12,11 +12,19 @@ import {
 export const LeadProfilePanel = ({
   open,
   onOpenChange,
+  lead: leadProp,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Lead already loaded by the parent (looked up by zalo_id). When present
+   *  the panel reuses it instead of firing a duplicate getList on every open. */
+  lead?: Lead;
 }) => {
   const conversation = useRecordContext<Conversation>();
+  // Mirror into a ref (not a dep) so a parent background refetch doesn't
+  // re-trigger the open effect and discard an in-progress edit.
+  const leadPropRef = useRef(leadProp);
+  leadPropRef.current = leadProp;
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [lead, setLead] = useState<Lead | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +43,15 @@ export const LeadProfilePanel = ({
         setLead(null);
         setNotFound(true);
       }
+      return;
+    }
+    // Reuse the parent's already-loaded lead instead of a duplicate getList;
+    // fall back to fetching only if it isn't loaded yet (first-open race).
+    const sharedLead = leadPropRef.current;
+    if (sharedLead) {
+      setLead(sharedLead);
+      setNotFound(false);
+      setIsLoading(false);
       return;
     }
     let cancelled = false;

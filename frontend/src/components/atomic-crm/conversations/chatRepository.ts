@@ -1,5 +1,5 @@
 import { getSupabaseClient } from "../providers/supabase/supabase";
-import type { Message } from "../types";
+import type { Lead, Message } from "../types";
 
 export const extractText = (value: unknown): string => {
   if (value == null) return "";
@@ -50,19 +50,41 @@ export const toMessage = (row: any): Message | null => {
   };
 };
 
-export const chatRepository = {
-  async getLastMessage(zaloChatId: string): Promise<Message | null> {
-    const { data } = await getSupabaseClient()
-      .from("vfic_chat_histories")
-      .select("*")
-      .eq("session_id", zaloChatId)
-      .order("id", { ascending: false })
-      .limit(1);
+// PostgREST URL-length safety: fetch leads in bounded batches and merge.
+const LEAD_BATCH_SIZE = 100;
 
-    if (data && data.length > 0) {
-      return toMessage(data[0]);
+export const chatRepository = {
+  /**
+   * Fetch leads for many zalo ids in parallel batches (URL-safe chunking),
+   * replacing the old per-conversation N+1 lookup. Returns the most recent
+   * lead per zalo_id (matches the previous `data?.[0]` + updated_at DESC rule).
+   */
+  async getLeadsByZaloIds(zaloIds: string[]): Promise<Lead[]> {
+    const distinct = Array.from(new Set(zaloIds.filter(Boolean)));
+    if (distinct.length === 0) return [];
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < distinct.length; i += LEAD_BATCH_SIZE) {
+      chunks.push(distinct.slice(i, i + LEAD_BATCH_SIZE));
     }
-    return null;
+    // Fire every chunk concurrently. Promise.all preserves chunk order, so the
+    // consumer's "first lead per zalo_id wins" dedup still sees updated_at DESC.
+    // The Supabase client resolves (data/error) rather than rejecting.
+    const responses = await Promise.all(
+      chunks.map((chunk) =>
+        getSupabaseClient()
+          .from("leads")
+          .select("*")
+          .in("zalo_id", chunk)
+          .order("updated_at", { ascending: false }),
+      ),
+    );
+    const results: Lead[] = [];
+    for (const { data, error } of responses) {
+      if (error) throw error;
+      if (data) results.push(...(data as Lead[]));
+    }
+    return results;
   },
 
   async getConversationMessages(

@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
   useRecordContext,
   useDataProvider,
@@ -93,7 +94,15 @@ const useConversationRealtime = (zaloChatId?: string) => {
         await chatRepository.getConversationMessages(zaloChatId, {
           limit: 10,
         });
-      setMessages(mapped);
+      // Merge, don't replace: a realtime INSERT between subscribe() and this
+      // resolve is already in state, and a blind setMessages(mapped) would
+      // drop it (the fetch predates the insert). Union by id, fetched-first.
+      setMessages((prev) => {
+        if (prev.length === 0) return mapped;
+        const fetchedIds = new Set(mapped.map((m) => m.id));
+        const realtimeOnly = prev.filter((m) => !fetchedIds.has(m.id));
+        return realtimeOnly.length > 0 ? [...mapped, ...realtimeOnly] : mapped;
+      });
       setHasMore(apiHasMore);
     } catch {
       if (import.meta.env.DEV) {
@@ -131,9 +140,9 @@ const useConversationRealtime = (zaloChatId?: string) => {
     };
   }, [zaloChatId]);
 
-  const loadMore = async (earliestId: string) => {
+  const loadMore = async (earliestId: string): Promise<number> => {
     if (isFetchingRef.current || !hasMore || !zaloChatId) {
-      return;
+      return 0;
     }
     isFetchingRef.current = true;
     setIsLoadingMore(true);
@@ -146,6 +155,7 @@ const useConversationRealtime = (zaloChatId?: string) => {
         });
       setHasMore(apiHasMore);
       setMessages((prev) => [...older, ...prev]);
+      return older.length;
     } catch {
       if (import.meta.env.DEV) {
         const { messages: demo, hasMore: demoHasMore } =
@@ -155,12 +165,13 @@ const useConversationRealtime = (zaloChatId?: string) => {
           });
         setHasMore(demoHasMore);
         setMessages((prev) => [...demo, ...prev]);
-      } else {
-        // A failed load-more must not keep re-firing on every scroll-to-top
-        // (hasMore stays true -> the backend gets spammed with failing
-        // requests). Stop the loop; reopening the conversation retries.
-        setHasMore(false);
+        return demo.length;
       }
+      // A failed load-more must not keep re-firing on every scroll-to-top
+      // (hasMore stays true -> the backend gets spammed with failing
+      // requests). Stop the loop; reopening the conversation retries.
+      setHasMore(false);
+      return 0;
     } finally {
       setIsLoadingMore(false);
       isFetchingRef.current = false;
@@ -176,7 +187,7 @@ export const ConversationShowContent = ({
   onOpenList?: () => void;
 }) => {
   const record = useRecordContext<Conversation>();
-  const { messages, isLoadingMore, hasMore, loadMore } =
+  const { messages, isLoading, isLoadingMore, hasMore, loadMore } =
     useConversationRealtime(record?.zalo_chat_id);
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
@@ -184,9 +195,9 @@ export const ConversationShowContent = ({
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const pendingScrollRestoreRef = useRef<number | null>(null);
-  const prevLastMessageIdRef = useRef<string | null>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const [firstItemIndex, setFirstItemIndex] = useState(0);
+  const initialJumpDoneRef = useRef(false);
 
   const { isBotMode, handleTakeover } = useConversationActions(record);
 
@@ -200,42 +211,94 @@ export const ConversationShowContent = ({
   );
   const lead = leadData?.[0] as Lead | undefined;
 
-  const handleScroll = () => {
-    if (!scrollRef.current) return;
-    const { scrollTop } = scrollRef.current;
-    if (scrollTop < 300 && hasMore && !isLoadingMore && messages.length > 0) {
-      pendingScrollRestoreRef.current = scrollRef.current.scrollHeight;
-      loadMore(messages[0].id);
-    }
-  };
-
+  // Snap to the newest message instantly when a conversation opens, then let
+  // Virtuoso's followOutput handle subsequent appends (smooth only when the
+  // user is already at the bottom — reading history is never yanked away).
   useEffect(() => {
-    if (!scrollRef.current) return;
-
-    if (pendingScrollRestoreRef.current !== null) {
-      const scrollHeightDiff =
-        scrollRef.current.scrollHeight - pendingScrollRestoreRef.current;
-      scrollRef.current.scrollTop = scrollHeightDiff;
-      pendingScrollRestoreRef.current = null;
-    } else {
-      const currentLastMsg = messages[messages.length - 1];
-      const prevLastMsgId = prevLastMessageIdRef.current;
-      if (
-        !prevLastMsgId ||
-        (currentLastMsg && currentLastMsg.id !== prevLastMsgId)
-      ) {
-        // Stick to the bottom only when the user is already there (or on the
-        // first load). Otherwise a new inbound message would yank the viewport
-        // away from history the user is reading.
-        const el = scrollRef.current;
-        const wasNearBottom =
-          !prevLastMsgId ||
-          el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-        if (wasNearBottom) el.scrollTop = el.scrollHeight;
-      }
+    if (messages.length > 0 && !initialJumpDoneRef.current) {
+      initialJumpDoneRef.current = true;
+      virtuosoRef.current?.scrollToIndex({
+        index: "LAST",
+        align: "end",
+        behavior: "auto",
+      });
     }
-    prevLastMessageIdRef.current = messages[messages.length - 1]?.id ?? null;
   }, [messages]);
+
+  // Reset per-conversation state so each thread opens at its newest message.
+  useEffect(() => {
+    initialJumpDoneRef.current = false;
+    setFirstItemIndex(0);
+  }, [record?.zalo_chat_id]);
+
+  const handleStartReached = useCallback(() => {
+    // Ignore the top-touch fired during the initial mount/snap so we don't
+    // eagerly fetch older messages before the user actually scrolls up.
+    if (!initialJumpDoneRef.current) return;
+    if (hasMore && messages.length > 0) {
+      loadMore(messages[0].id).then((count: number) => {
+        if (count > 0) setFirstItemIndex((i) => i + count);
+      });
+    }
+  }, [hasMore, messages, loadMore]);
+
+  const followOutput = useCallback(
+    (isAtBottom: boolean) => (isAtBottom ? ("smooth" as const) : false),
+    [],
+  );
+
+  const renderMessage = (m: Message, virtuosoIndex: number) => {
+    const kind = classify(m);
+    if (kind === "system" || kind === "event") {
+      return (
+        <div className={kind === "system" ? "day-marker" : "system-event"}>
+          {kind === "event" && (
+            <svg className="icon">
+              <use href="#i-sparkles" />
+            </svg>
+          )}
+          <span>{m.content}</span>
+        </div>
+      );
+    }
+
+    const pos = virtuosoIndex - firstItemIndex;
+    const prevMsg = pos > 0 ? messages[pos - 1] : null;
+    const prevKind = prevMsg ? classify(prevMsg) : null;
+    const isGrouped = prevKind === kind;
+    const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
+
+    return (
+      <div className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}>
+        {kind === "user" && !isGrouped ? (
+          <span className="message-avatar">
+            <svg className="icon">
+              <use href={`#${avatarIcon}`} />
+            </svg>
+          </span>
+        ) : kind === "user" && isGrouped ? (
+          <span className="message-avatar-placeholder" style={{ width: 32 }} />
+        ) : null}
+        <div className="bubble">
+          <div className="bubble-content">
+            <p>{m.content}</p>
+            <span className="bubble-time-inline">
+              {formatTime(m.created_at)}
+            </span>
+          </div>
+        </div>
+        {kind !== "user" && !isGrouped ? (
+          <span className="message-avatar">
+            <svg className="icon">
+              <use href={`#${avatarIcon}`} />
+            </svg>
+          </span>
+        ) : kind !== "user" && isGrouped ? (
+          <span className="message-avatar-placeholder" style={{ width: 32 }} />
+        ) : null}
+      </div>
+    );
+  };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,6 +321,32 @@ export const ConversationShowContent = ({
   const name =
     lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
+
+  // Keep the Virtuoso component slots referentially stable except when the
+  // loading flags actually change — otherwise typing in the composer would
+  // recreate this object every keystroke and force Virtuoso to remount.
+  const virtuosoComponents = useMemo(
+    () => ({
+      Header: () =>
+        isLoadingMore ? (
+          <div
+            className="day-marker"
+            style={{ margin: "8px 0", background: "transparent" }}
+          >
+            <span>Đang tải tin nhắn cũ hơn...</span>
+          </div>
+        ) : null,
+      EmptyPlaceholder: () =>
+        isLoading ? (
+          <div className="day-marker" style={{ background: "transparent" }}>
+            <span>Đang tải tin nhắn...</span>
+          </div>
+        ) : (
+          <div className="empty-state">Chưa có tin nhắn nào.</div>
+        ),
+    }),
+    [isLoading, isLoadingMore],
+  );
 
   return (
     <section className="panel center-panel" aria-label="Nội dung trò chuyện">
@@ -306,82 +395,18 @@ export const ConversationShowContent = ({
         </div>
       </header>
 
-      <div className="chat-scroller" ref={scrollRef} onScroll={handleScroll}>
-        <div id="messageStream">
-          {isLoadingMore && (
-            <div
-              className="day-marker"
-              style={{ margin: "8px 0", background: "transparent" }}
-            >
-              <span>Đang tải tin nhắn cũ hơn...</span>
-            </div>
-          )}
-          {messages.map((m, index) => {
-            const kind = classify(m);
-            if (kind === "system" || kind === "event") {
-              return (
-                <div
-                  key={m.id}
-                  className={kind === "system" ? "day-marker" : "system-event"}
-                >
-                  {kind === "event" && (
-                    <svg className="icon">
-                      <use href="#i-sparkles" />
-                    </svg>
-                  )}
-                  <span>{m.content}</span>
-                </div>
-              );
-            }
-
-            const prevMsg = index > 0 ? messages[index - 1] : null;
-            const prevKind = prevMsg ? classify(prevMsg) : null;
-            const isGrouped = prevKind === kind;
-
-            const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
-
-            return (
-              <div
-                key={m.id}
-                className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}
-              >
-                {kind === "user" && !isGrouped ? (
-                  <span className="message-avatar">
-                    <svg className="icon">
-                      <use href={`#${avatarIcon}`} />
-                    </svg>
-                  </span>
-                ) : kind === "user" && isGrouped ? (
-                  <span
-                    className="message-avatar-placeholder"
-                    style={{ width: 32 }}
-                  ></span>
-                ) : null}
-                <div className="bubble">
-                  <div className="bubble-content">
-                    <p>{m.content}</p>
-                    <span className="bubble-time-inline">
-                      {formatTime(m.created_at)}
-                    </span>
-                  </div>
-                </div>
-                {kind !== "user" && !isGrouped ? (
-                  <span className="message-avatar">
-                    <svg className="icon">
-                      <use href={`#${avatarIcon}`} />
-                    </svg>
-                  </span>
-                ) : kind !== "user" && isGrouped ? (
-                  <span
-                    className="message-avatar-placeholder"
-                    style={{ width: 32 }}
-                  ></span>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <Virtuoso
+        ref={virtuosoRef}
+        className="chat-scroller"
+        style={{ height: "100%" }}
+        data={messages}
+        computeItemKey={(_, m) => m.id}
+        firstItemIndex={firstItemIndex}
+        startReached={handleStartReached}
+        followOutput={followOutput}
+        components={virtuosoComponents}
+        itemContent={(index, m) => renderMessage(m, index)}
+      />
 
       <footer className="composer-wrap">
         <div className="handoff-note">
@@ -455,7 +480,11 @@ export const ConversationShowContent = ({
         </form>
       </footer>
 
-      <LeadProfilePanel open={isProfileOpen} onOpenChange={setIsProfileOpen} />
+      <LeadProfilePanel
+        open={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
+        lead={lead}
+      />
     </section>
   );
 };

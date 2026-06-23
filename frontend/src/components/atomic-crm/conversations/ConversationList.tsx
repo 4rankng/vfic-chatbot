@@ -1,23 +1,21 @@
 import { useState, useMemo, useEffect } from "react";
-import {
-  ListBase,
-  useListContext,
-  useDataProvider,
-  RecordContextProvider,
-} from "ra-core";
+import { ListBase, useListContext, RecordContextProvider } from "ra-core";
 import { useSearchParams } from "react-router";
-import type { Conversation, Lead, Message } from "../types";
+import type { Conversation, Lead } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "./InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import MobileHeader from "../layout/MobileHeader";
+import { chatRepository } from "./chatRepository";
 import "./inbox.css";
 
-type ModeFilter = "all" | "bot" | "handoff";
+// How many contact rows to render at a time. The list still loads (and client
+// search still covers) every conversation; we only gate the rendered subset so
+// the first paint stays instant even with hundreds of contacts.
+const VISIBLE_PAGE_SIZE = 50;
 
 type ConversationRow = Conversation & {
   _lead?: Lead | null;
-  _lastMessage?: Message | null;
 };
 
 export const getLeadStatusColor = (lead?: Lead | null) => {
@@ -44,8 +42,6 @@ const ConversationListItem = ({
   onSelect: (c: Conversation) => void;
 }) => {
   const lead = conversation._lead;
-  const lastMessage = conversation._lastMessage;
-  const preview = lastMessage?.content?.slice(0, 80) ?? "Chưa có tin nhắn";
   const time = getRelativeTimeString(
     conversation.last_inbound_at ?? conversation.updated_at,
   );
@@ -53,6 +49,9 @@ const ConversationListItem = ({
   const name =
     lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
+  // Contacts-only inbox: no chat-history probe. Show the contact's phone as a
+  // muted subtitle when available; otherwise the row is just name + time.
+  const subtitle = lead?.phone || "";
 
   const statusLabel = conversation.mode === "human" ? "Cần tiếp quản" : "";
 
@@ -75,17 +74,17 @@ const ConversationListItem = ({
           <span className="conv-name">{name}</span>
           <span className="conv-time">{time}</span>
         </span>
-        <span className="conv-preview">{preview}</span>
-        <span className="conv-bottom">
-          {conversation.mode === "human" && (
+        {subtitle && <span className="conv-preview">{subtitle}</span>}
+        {conversation.mode === "human" && (
+          <span className="conv-bottom">
             <span className={`mini-chip handoff`}>
               <svg className="icon">
                 <use href="#i-user" />
               </svg>
               {statusLabel}
             </span>
-          )}
-        </span>
+          </span>
+        )}
       </span>
     </button>
   );
@@ -99,14 +98,14 @@ const ConversationListPanel = ({
   onSelect: (c: Conversation) => void;
 }) => {
   const { data: conversations } = useListContext<Conversation>();
-  const dataProvider = useDataProvider<any>();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
-  const [lastMessages, setLastMessages] = useState<
-    Record<string, Message | null>
-  >({});
   const [query, setQuery] = useState("");
-  const mode: ModeFilter = "all";
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_PAGE_SIZE);
 
+  // Resolve contact (lead) details for every conversation in ONE batched
+  // request, replacing the old per-zalo_id N+1 that fired hundreds of leads
+  // requests on mount. getLeadsByZaloIds orders by updated_at DESC, so the
+  // first lead seen per zalo_id is the most recent (same rule as data?.[0]).
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
     let cancelled = false;
@@ -114,63 +113,18 @@ const ConversationListPanel = ({
       const zaloIds = Array.from(
         new Set(conversations.map((c) => c.zalo_chat_id).filter(Boolean)),
       );
-      const fetchedLeads: Record<string, Lead | null> = {};
-      await Promise.all(
-        zaloIds.map(async (zaloId) => {
-          try {
-            const { data } = await dataProvider.getList("leads", {
-              filter: { zalo_id: zaloId },
-              pagination: { page: 1, perPage: 1 },
-              sort: { field: "updated_at", order: "DESC" },
-            });
-            fetchedLeads[zaloId] = (data?.[0] as Lead) ?? null;
-          } catch {
-            fetchedLeads[zaloId] = null;
-          }
-        }),
-      );
-      if (cancelled) return;
-      setLeads((prev) => ({ ...prev, ...fetchedLeads }));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [conversations, dataProvider]);
-
-  useEffect(() => {
-    if (!conversations || conversations.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const fetched: Record<string, Message | null> = {};
-      await Promise.all(
-        conversations.map(async (c) => {
-          try {
-            let msg: Message | null = null;
-            if (import.meta.env.DEV) {
-              const { dataProvider: fakeProvider } = await import(
-                "../providers/fakerest"
-              );
-              try {
-                const all = await fakeProvider.getList("messages", {
-                  filter: { conversation_id: c.id },
-                  pagination: { page: 1, perPage: 1 },
-                  sort: { field: "created_at", order: "DESC" },
-                });
-                msg = (all?.data?.[0] as Message) ?? null;
-              } catch {}
-            }
-            if (!msg) {
-              const { chatRepository } = await import("./chatRepository");
-              msg = await chatRepository.getLastMessage(c.zalo_chat_id);
-            }
-            fetched[c.id] = msg;
-          } catch {
-            fetched[c.id] = null;
-          }
-        }),
-      );
-      if (cancelled) return;
-      setLastMessages((prev) => ({ ...prev, ...fetched }));
+      try {
+        const all = await chatRepository.getLeadsByZaloIds(zaloIds);
+        if (cancelled) return;
+        const byZalo: Record<string, Lead | null> = {};
+        for (const lead of all) {
+          const key = lead.zalo_id;
+          if (key && byZalo[key] === undefined) byZalo[key] = lead;
+        }
+        setLeads((prev) => ({ ...prev, ...byZalo }));
+      } catch {
+        // Leave previously loaded leads intact on error.
+      }
     })();
     return () => {
       cancelled = true;
@@ -183,21 +137,11 @@ const ConversationListPanel = ({
       .map((c) => ({
         ...c,
         _lead: leads[c.zalo_chat_id] ?? null,
-        _lastMessage: lastMessages[c.id] ?? null,
       }))
       .filter((c) => {
-        if (mode !== "all") {
-          const m = c.mode === "bot" ? "bot" : "handoff";
-          if (m !== mode) return false;
-        }
         if (query) {
           const q = query.toLowerCase();
-          const haystack = [
-            c.zalo_chat_id,
-            c._lead?.name,
-            c._lead?.phone,
-            c._lastMessage?.content,
-          ]
+          const haystack = [c.zalo_chat_id, c._lead?.name, c._lead?.phone]
             .filter(Boolean)
             .join(" ")
             .toLowerCase();
@@ -205,7 +149,7 @@ const ConversationListPanel = ({
         }
         return true;
       });
-  }, [conversations, leads, lastMessages, mode, query]);
+  }, [conversations, leads, query]);
 
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
@@ -216,7 +160,7 @@ const ConversationListPanel = ({
           </svg>
           <input
             type="search"
-            placeholder="Tìm ứng viên hoặc tin nhắn"
+            placeholder="Tìm ứng viên hoặc số điện thoại"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -233,14 +177,25 @@ const ConversationListPanel = ({
         {rows.length === 0 ? (
           <div className="empty-state">Không tìm thấy hội thoại phù hợp.</div>
         ) : (
-          rows.map((c) => (
-            <ConversationListItem
-              key={c.id}
-              conversation={c}
-              isActive={selectedId === c.id}
-              onSelect={onSelect}
-            />
-          ))
+          <>
+            {rows.slice(0, visibleCount).map((c) => (
+              <ConversationListItem
+                key={c.id}
+                conversation={c}
+                isActive={selectedId === c.id}
+                onSelect={onSelect}
+              />
+            ))}
+            {rows.length > visibleCount && (
+              <button
+                type="button"
+                className="load-more-btn"
+                onClick={() => setVisibleCount((c) => c + VISIBLE_PAGE_SIZE)}
+              >
+                Tải thêm ({rows.length - visibleCount} còn lại)
+              </button>
+            )}
+          </>
         )}
       </div>
     </aside>

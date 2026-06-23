@@ -691,12 +691,34 @@
 .inbox-bg-container .chat-scroller {
   padding: 32px;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  overflow-anchor: auto;
   scrollbar-width: none;
   background: var(--chat-bg);
 }
 .inbox-bg-container .chat-scroller::-webkit-scrollbar {
   display: none;
+}
+
+/* "Load more" affordance for the contacts-only inbox (client-side paging) */
+.inbox-bg-container .load-more-btn {
+  display: block;
+  width: 100%;
+  margin: 8px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 12px;
+  background: var(--surface-solid);
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.inbox-bg-container .load-more-btn:hover {
+  background: var(--brand-light);
+  color: var(--brand);
 }
 
 .inbox-bg-container .day-marker {
@@ -741,20 +763,9 @@
   align-items: flex-end;
   gap: 12px;
   margin-bottom: 20px;
-  animation: slideUp 0.4s var(--ease) both;
 }
 .inbox-bg-container .message-row.grouped {
   margin-top: -16px;
-}
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .inbox-bg-container .message-row.user {
