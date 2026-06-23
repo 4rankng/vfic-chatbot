@@ -198,6 +198,13 @@ export const ConversationShowContent = ({
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [firstItemIndex, setFirstItemIndex] = useState(0);
   const initialJumpDoneRef = useRef(false);
+  // Load older messages only on a genuine upward scroll — not merely because
+  // the top happens to be visible (which is the case the moment a thread opens,
+  // when the initial page fits the viewport, and would otherwise auto-fetch the
+  // whole history). Armed by the scroll listener below, disarmed after each
+  // page so one scroll-up = one page and the list can never run away.
+  const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null);
+  const readyForMoreRef = useRef(false);
 
   const { isBotMode, handleTakeover } = useConversationActions(record);
 
@@ -228,14 +235,33 @@ export const ConversationShowContent = ({
   // Reset per-conversation state so each thread opens at its newest message.
   useEffect(() => {
     initialJumpDoneRef.current = false;
+    readyForMoreRef.current = false;
     setFirstItemIndex(0);
   }, [record?.zalo_chat_id]);
 
+  // Arm "load more" only after the user scrolls away from the bottom (i.e.
+  // scrolls up to read history). A freshly opened thread parks at the newest
+  // message, so the top being visible there must NOT trigger a fetch.
+  useEffect(() => {
+    if (!scrollerEl) return;
+    const onScroll = () => {
+      const atBottom =
+        scrollerEl.scrollTop + scrollerEl.clientHeight >=
+        scrollerEl.scrollHeight - 1;
+      if (!atBottom) readyForMoreRef.current = true;
+    };
+    scrollerEl.addEventListener("scroll", onScroll, { passive: true });
+    return () => scrollerEl.removeEventListener("scroll", onScroll);
+  }, [scrollerEl]);
+
   const handleStartReached = useCallback(() => {
-    // Ignore the top-touch fired during the initial mount/snap so we don't
-    // eagerly fetch older messages before the user actually scrolls up.
+    // Ignore the initial mount/snap top-touch and any fire that is not the
+    // result of a real upward scroll.
     if (!initialJumpDoneRef.current) return;
+    if (!readyForMoreRef.current) return;
     if (hasMore && messages.length > 0) {
+      // Disarm until the next upward scroll — one page per scroll-up.
+      readyForMoreRef.current = false;
       loadMore(messages[0].id).then((count: number) => {
         if (count > 0) setFirstItemIndex((i) => i + count);
       });
@@ -397,6 +423,7 @@ export const ConversationShowContent = ({
 
       <Virtuoso
         ref={virtuosoRef}
+        scrollerRef={(el) => setScrollerEl(el as HTMLElement | null)}
         className="chat-scroller"
         style={{ height: "100%" }}
         data={messages}
