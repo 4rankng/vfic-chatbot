@@ -1,0 +1,243 @@
+{
+  "id": "wridAhFQuct6IGoX",
+  "name": "VFIC Human Reply",
+  "active": true,
+  "isArchived": false,
+  "versionId": "9177ecc5-ea10-4410-97f4-5b363d106860",
+  "activeVersionId": "9177ecc5-ea10-4410-97f4-5b363d106860",
+  "triggerCount": 1,
+  "createdAt": "2026-06-21T14:09:29.482Z",
+  "updatedAt": "2026-06-21T14:09:29.482Z",
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "connections": {
+    "POST /vfic-human-reply": {
+      "main": [
+        [
+          {
+            "node": "Normalize Reply Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Reply Payload": {
+      "main": [
+        [
+          {
+            "node": "Check Human Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Human Ownership": {
+      "main": [
+        [
+          {
+            "node": "Allowed To Reply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed To Reply?": {
+      "main": [
+        [
+          {
+            "node": "Send Zalo Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Forbidden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Zalo Message": {
+      "main": [
+        [
+          {
+            "node": "Append Transcript And Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Transcript And Audit": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "id": "ed4c1baa-3446-40f8-86c2-3a09724d4841",
+      "name": "POST /vfic-human-reply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vfic-human-reply",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "a9109949-fda8-485e-98e2-ed91c3209fba"
+    },
+    {
+      "id": "e9d4f6e3-e092-4f51-990b-b0dbf5cc16cc",
+      "name": "Normalize Reply Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $json.body || $json;\nconst pick = (value) => value == null ? \"\" : String(value).trim();\nconst zalo_chat_id = pick(body.zalo_chat_id);\nconst message = pick(body.message);\nconst recruiter_id = pick(body.recruiter_id);\nif (!zalo_chat_id || !message || !recruiter_id) { throw new Error(\"Missing zalo_chat_id, message, or recruiter_id\"); }\nreturn { zalo_chat_id, message, recruiter_id, sent_at: new Date().toISOString() };"
+      }
+    },
+    {
+      "id": "92b1f774-0fe3-49ca-93d4-bd9968779940",
+      "name": "Check Human Ownership",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        800,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH payload AS (SELECT $1::text AS zalo_chat_id, $2::uuid AS recruiter_id, $3::text AS message), conv AS (\n  SELECT c.id, c.version\n  FROM public.conversations c, payload p\n  WHERE c.zalo_chat_id = p.zalo_chat_id\n    AND c.mode = 'human'\n    AND c.assigned_recruiter_id = p.recruiter_id\n)\nSELECT p.zalo_chat_id, p.recruiter_id, p.message, EXISTS (SELECT 1 FROM conv) AS allowed, (SELECT id FROM conv) AS conversation_id, (SELECT version FROM conv) AS version FROM payload p;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$(\"Normalize Reply Payload\").item.json.zalo_chat_id, $(\"Normalize Reply Payload\").item.json.recruiter_id, $(\"Normalize Reply Payload\").item.json.message] }}"
+        }
+      }
+    },
+    {
+      "id": "084d1b66-8164-4303-aa63-d4f734917794",
+      "name": "Allowed To Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.allowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b4d6d3ae-2ba3-43ca-99e4-9bfb0de50f17",
+      "name": "Send Zalo Message",
+      "type": "n8n-nodes-zalo-platform.zaloBot",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        220
+      ],
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $(\"Check Human Ownership\").item.json.zalo_chat_id }}",
+        "text": "={{ $(\"Check Human Ownership\").item.json.message }}"
+      }
+    },
+    {
+      "id": "cb7172b1-8e69-496a-a8a7-c0d4c6eea0f1",
+      "name": "Append Transcript And Audit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1640,
+        220
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH hist AS (\n  INSERT INTO public.vfic_chat_histories (session_id, message)\n  VALUES ($1, jsonb_build_object('type', 'human', 'data', jsonb_build_object('content', $2, 'recruiter_id', $3, 'created_at', now())))\n  RETURNING id\n), audit AS (\n  INSERT INTO public.bot_runs (conversation_id, outcome, version_at_start, proposed_reply, ended_at)\n  VALUES ($4::uuid, 'sent', $5::integer, $2, now())\n  RETURNING id\n)\nSELECT (SELECT id FROM hist) AS history_id, (SELECT id FROM audit) AS audit_id;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$(\"Check Human Ownership\").item.json.zalo_chat_id, $(\"Check Human Ownership\").item.json.message, $(\"Check Human Ownership\").item.json.recruiter_id, $(\"Check Human Ownership\").item.json.conversation_id, $(\"Check Human Ownership\").item.json.version] }}"
+        }
+      }
+    },
+    {
+      "id": "9ce13014-ccaf-424c-bdb7-528935aee32d",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1920,
+        220
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, history_id: $json.history_id, audit_id: $json.audit_id } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "aadedf80-ce79-4ea1-a87f-4cea492dcc36",
+      "name": "Respond Forbidden",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1360,
+        420
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: \"conversation_not_owned\" } }}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    }
+  ],
+  "tags": [],
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "parentFolderId": null,
+  "description": "Receives miniCRM recruiter replies, verifies conversation ownership, sends through Zalo, and appends transcript/audit rows in Supabase.",
+  "canExecute": true
+}
