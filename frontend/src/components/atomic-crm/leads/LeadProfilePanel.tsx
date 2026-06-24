@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useRecordContext, useDataProvider, useNotify } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import type { CrmDataProvider } from "../providers/supabase/dataProvider";
@@ -9,17 +9,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export const LeadProfilePanel = ({
-  open,
-  onOpenChange,
-  lead: leadProp,
-}: {
+type LeadProfilePanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Lead already loaded by the parent (looked up by zalo_id). When present
    *  the panel reuses it instead of firing a duplicate getList on every open. */
   lead?: Lead;
-}) => {
+};
+
+// Memoized so the heavy dialog body (edit form, three input rows, save flow)
+// does NOT re-render on every ConversationShow message-state change while the
+// dialog is closed. All hooks run unconditionally; the early return below the
+// hook block skips the expensive JSX tree when `open` is false.
+const LeadProfilePanelImpl = ({
+  open,
+  onOpenChange,
+  lead: leadProp,
+}: LeadProfilePanelProps) => {
   const conversation = useRecordContext<Conversation>();
   // Mirror into a ref (not a dep) so a parent background refetch doesn't
   // re-trigger the open effect and discard an in-progress edit.
@@ -80,6 +86,13 @@ export const LeadProfilePanel = ({
     };
   }, [dataProvider, zaloChatId, open]);
 
+  // Skip the heavy dialog body entirely while closed — ConversationShowContent
+  // re-renders on every message/keystroke, and without this early return the
+  // full edit-form tree would be evaluated even though Radix Dialog unmounts
+  // the portalled content. The Dialog wrapper still renders so Radix manages
+  // the open/close transition; its body is the part we short-circuit.
+  if (!open) return null;
+
   const handleEditClick = () => {
     setEditData({
       phone: lead?.phone || "",
@@ -101,7 +114,7 @@ export const LeadProfilePanel = ({
       setLead(data as Lead);
       setIsEditing(false);
       notify("Đã cập nhật hồ sơ", { type: "success" });
-    } catch (e) {
+    } catch {
       notify("Lỗi khi cập nhật hồ sơ", { type: "error" });
     } finally {
       setIsSaving(false);
@@ -287,3 +300,6 @@ export const LeadProfilePanel = ({
     </Dialog>
   );
 };
+
+export const LeadProfilePanel = memo(LeadProfilePanelImpl);
+LeadProfilePanel.displayName = "LeadProfilePanel";

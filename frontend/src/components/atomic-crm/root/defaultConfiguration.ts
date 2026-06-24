@@ -1,11 +1,13 @@
 import type { ConfigurationContextValue } from "./ConfigurationContext";
 
-export const defaultDarkModeLogo = "./logos/logo_atomic_crm_dark.svg";
-export const defaultLightModeLogo = "./logos/logo_atomic_crm_light.svg";
+// Brand logos live in public/ and are served at the site root. The PNGs are
+// theme-matched (light-logo.png for light mode, dark-logo.png for dark mode).
+export const defaultDarkModeLogo = "/dark-logo.png";
+export const defaultLightModeLogo = "/light-logo.png";
 
 export const defaultCurrency = "USD";
 
-export const defaultTitle = "Atomic CRM";
+export const defaultTitle = "VFIC";
 
 export const defaultCompanySectors = [
   { value: "communication-services", label: "Communication Services" },

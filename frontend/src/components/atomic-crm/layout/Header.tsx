@@ -1,6 +1,7 @@
 import { FileText, Settings, User, Users } from "lucide-react";
 import { useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
+import { useMemo } from "react";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
 import { UserMenu } from "@/components/admin/user-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -15,16 +16,15 @@ const Header = () => {
   const location = useLocation();
   const translate = useTranslate();
 
-  let currentPath: string | false = "/";
-  if (matchPath("/", location.pathname)) {
-    currentPath = "/";
-  } else if (matchPath("/leads/*", location.pathname)) {
-    currentPath = "/leads";
-  } else if (matchPath("/conversations/*", location.pathname)) {
-    currentPath = "/conversations";
-  } else {
-    currentPath = false;
-  }
+  const currentPath = useMemo<string | false>(() => {
+    if (matchPath("/", location.pathname)) return "/";
+    if (matchPath("/leads/*", location.pathname)) return "/leads";
+    if (matchPath("/conversations/*", location.pathname))
+      return "/conversations";
+    // Unmatched secondary routes (e.g. /settings, /profile, /users) leave no
+    // pill highlighted, matching the prior behavior.
+    return false;
+  }, [location.pathname]);
 
   return (
     <div className="sticky top-0 z-40 px-4 pt-3 md:px-6 md:pt-4">

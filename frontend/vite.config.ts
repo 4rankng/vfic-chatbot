@@ -58,6 +58,33 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          // React core — stable, must be in its own early-loaded chunk
+          if (id.includes("/react-dom/") || id.includes("/react/")) {
+            return "react-vendor";
+          }
+          // react-admin headless framework
+          if (id.includes("/ra-core/") || id.includes("/ra-supabase")) {
+            return "ra-vendor";
+          }
+          // TanStack Query family
+          if (id.includes("/@tanstack/")) {
+            return "tanstack-vendor";
+          }
+          // Supabase JS client
+          if (id.includes("/@supabase/")) {
+            return "supabase-vendor";
+          }
+          // Icon set (large barrel)
+          if (id.includes("/lucide-react/")) {
+            return "lucide-vendor";
+          }
+        },
+      },
+    },
   },
   resolve: {
     preserveSymlinks: true,

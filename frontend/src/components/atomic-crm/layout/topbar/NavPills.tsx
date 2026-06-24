@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link } from "react-router";
 
 interface NavPillProps {
@@ -9,8 +10,10 @@ interface NavPillProps {
 /**
  * Segmented pill nav item. A soft active highlight plus a brand dot reads
  * cleanly on the frosted glass topbar. Replaces the old underline-style tab.
+ * Memoized: all props are primitives (string, string, boolean) so React.memo
+ * short-circuits re-renders when the active route is unchanged.
  */
-export const NavPill = ({ label, to, isActive }: NavPillProps) => (
+export const NavPill = memo(({ label, to, isActive }: NavPillProps) => (
   <Link
     to={to}
     className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors ${
@@ -26,4 +29,4 @@ export const NavPill = ({ label, to, isActive }: NavPillProps) => (
     />
     {label}
   </Link>
-);
+));

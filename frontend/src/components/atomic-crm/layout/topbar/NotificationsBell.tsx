@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Bell } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -9,8 +10,10 @@ import { useNotifications } from "./useNotifications";
  * Notifications bell shared by the desktop and mobile topbars. Shows a pulsing
  * brand-colored dot when conversations need human takeover, and navigates to the
  * filtered takeover queue on click (instead of only showing a toast).
+ * Memoized: accepts no props, so React.memo trivially short-circuits any
+ * ancestor re-render that is not triggered by the internal useNotifications hook.
  */
-export const NotificationsBell = () => {
+export const NotificationsBell = memo(() => {
   const navigate = useNavigate();
   const { hasNotifications } = useNotifications();
 
@@ -37,4 +40,4 @@ export const NotificationsBell = () => {
       )}
     </Button>
   );
-};
+});

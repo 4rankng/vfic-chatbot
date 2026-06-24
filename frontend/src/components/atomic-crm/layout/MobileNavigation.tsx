@@ -3,31 +3,34 @@ import { cn } from "@/lib/utils";
 import { Home, ListTodo, Users } from "lucide-react";
 import { useTranslate } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
+import { useMemo } from "react";
+
+// Static per-session: display-mode and UA do not change without a reload.
+const IS_PWA =
+  typeof window !== "undefined" &&
+  window.matchMedia("(display-mode: standalone)").matches;
+const IS_WEB_IOS =
+  typeof window !== "undefined" &&
+  /iPad|iPod|iPhone/.test(window.navigator.userAgent);
 
 export const MobileNavigation = () => {
   const location = useLocation();
   const translate = useTranslate();
 
-  let currentPath: string | boolean = "/";
-  if (matchPath("/", location.pathname)) {
-    currentPath = "/";
-  } else if (matchPath("/leads/*", location.pathname)) {
-    currentPath = "/leads";
-  } else if (matchPath("/conversations/*", location.pathname)) {
-    currentPath = "/conversations";
-  } else {
-    currentPath = false;
-  }
-
-  const isPwa = window.matchMedia("(display-mode: standalone)").matches;
-  const isWebiOS = /iPad|iPod|iPhone/.test(window.navigator.userAgent);
+  const currentPath = useMemo<string | boolean>(() => {
+    if (matchPath("/", location.pathname)) return "/";
+    if (matchPath("/leads/*", location.pathname)) return "/leads";
+    if (matchPath("/conversations/*", location.pathname))
+      return "/conversations";
+    return false;
+  }, [location.pathname]);
 
   return (
     <nav
       aria-label={translate("crm.navigation.label")}
       className="fixed bottom-0 left-0 right-0 z-50 bg-secondary h-14 border-t"
       style={{
-        paddingBottom: isPwa && isWebiOS ? 15 : undefined,
+        paddingBottom: IS_PWA && IS_WEB_IOS ? 15 : undefined,
       }}
     >
       <div className="flex justify-around w-full max-w-md mx-auto h-full items-center">

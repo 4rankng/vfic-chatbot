@@ -34,7 +34,7 @@ test.describe.fixme("VFIC CRM end-to-end", () => {
     // Check if pipeline stages are visible
     await expect(page.locator("text=NEW")).toBeVisible();
     await expect(page.locator("text=QUALIFIED")).toBeVisible();
-    await expect(page.locator("text=INTERVIEWING")).toBeVisible();
+    await expect(page.locator("text=HIRED")).toBeVisible();
   });
 
   test("should navigate to conversations inbox", async ({ page }) => {

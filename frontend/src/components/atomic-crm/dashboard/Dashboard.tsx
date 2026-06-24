@@ -1,4 +1,3 @@
-import { useGetList } from "ra-core";
 import {
   Card,
   CardContent,
@@ -14,38 +13,20 @@ import {
   Activity,
   AlertCircle,
 } from "lucide-react";
-import { LEAD_STAGES } from "../leads/LeadListContent";
-import type { Lead, Conversation } from "../types";
 import { useNavigate } from "react-router-dom";
+import { useDashboardStats } from "./useDashboardStats";
 
 export const Dashboard = () => {
   const navigate = useNavigate();
 
-  // Fetch metrics
-  const { data: allLeads, isPending: isLoadingLeads } = useGetList<Lead>(
-    "leads",
-    {
-      pagination: { page: 1, perPage: 1000 },
-    },
-  );
-
-  const { data: allConversations, isPending: isLoadingConversations } =
-    useGetList<Conversation>("conversations", {
-      pagination: { page: 1, perPage: 1000 },
-    });
-
-  // Calculate stats
-  const totalLeadsCount = allLeads?.length || 0;
-  const qualifiedLeads =
-    allLeads?.filter((l) => l.lead_stage === "QUALIFIED").length || 0;
-  const unreadConvs =
-    allConversations?.filter((c) => c.mode === "human").length || 0; // Simple heuristic for now
-
-  const hiredLeads =
-    allLeads?.filter((l) => l.lead_stage === "HIRED").length || 0;
-  const hiredRate = totalLeadsCount
-    ? Math.round((hiredLeads / totalLeadsCount) * 100)
-    : 0;
+  const {
+    totalLeads: totalLeadsCount,
+    qualifiedCount: qualifiedLeads,
+    unreadConversationCount: unreadConvs,
+    hiredRate,
+    stageBreakdown,
+    isPending: isLoading,
+  } = useDashboardStats();
 
   return (
     <div className="flex flex-col gap-6 mx-auto w-full pb-8">
@@ -72,7 +53,7 @@ export const Dashboard = () => {
         <KpiCard
           title="Tổng khách hàng"
           value={
-            isLoadingLeads ? "..." : totalLeadsCount.toString().padStart(2, "0")
+            isLoading ? "..." : totalLeadsCount.toString().padStart(2, "0")
           }
           description="Trên tất cả quy trình"
           icon={<Users className="w-4 h-4" />}
@@ -82,9 +63,7 @@ export const Dashboard = () => {
         <KpiCard
           title="Cần phản hồi"
           value={
-            isLoadingConversations
-              ? "..."
-              : unreadConvs.toString().padStart(2, "0")
+            isLoading ? "..." : unreadConvs.toString().padStart(2, "0")
           }
           description="Đợi nhân viên phản hồi"
           icon={<AlertCircle className="w-4 h-4" />}
@@ -95,7 +74,7 @@ export const Dashboard = () => {
         <KpiCard
           title="Ứng viên đạt chuẩn"
           value={
-            isLoadingLeads ? "..." : qualifiedLeads.toString().padStart(2, "0")
+            isLoading ? "..." : qualifiedLeads.toString().padStart(2, "0")
           }
           description="Sẵn sàng tuyển dụng"
           icon={<UserCheck className="w-4 h-4" />}
@@ -104,7 +83,7 @@ export const Dashboard = () => {
         />
         <KpiCard
           title="Tỷ lệ chuyển đổi"
-          value={isLoadingLeads ? "..." : `${hiredRate}%`}
+          value={isLoading ? "..." : `${hiredRate}%`}
           description="Tỷ lệ khách hàng thành tuyển dụng"
           icon={<TrendingUp className="w-4 h-4" />}
           trend={hiredRate === 0 ? "Giai đoạn đầu" : "Đang hoạt động"}
@@ -128,18 +107,14 @@ export const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3">
-              {isLoadingLeads ? (
+              {isLoading ? (
                 <div className="w-full h-[200px] flex items-center justify-center text-muted-foreground">
                   <Activity className="w-8 h-8 animate-spin" />
                 </div>
               ) : (
-                LEAD_STAGES.map((stage) => {
-                  const count =
-                    allLeads?.filter((l) => l.lead_stage === stage.value)
-                      .length || 0;
-                  const percentage = totalLeadsCount
-                    ? Math.round((count / totalLeadsCount) * 100)
-                    : 0;
+                stageBreakdown.map((stage) => {
+                  const count = stage.count;
+                  const percentage = stage.percentage;
                   // extract color for bg
                   const bgClass = stage.color;
                   return (

@@ -1,4 +1,3 @@
-import { useGetList } from "ra-core";
 import {
   Card,
   CardContent,
@@ -15,9 +14,8 @@ import {
 } from "lucide-react";
 import MobileHeader from "../layout/MobileHeader";
 import { MobileContent } from "../layout/MobileContent";
-import { LEAD_STAGES } from "../leads/LeadListContent";
-import type { Lead, Conversation } from "../types";
 import { useNavigate } from "react-router";
+import { useDashboardStats } from "./useDashboardStats";
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -44,31 +42,14 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => {
 export const MobileDashboard = () => {
   const navigate = useNavigate();
 
-  // Fetch metrics
-  const { data: allLeads, isPending: isLoadingLeads } = useGetList<Lead>(
-    "leads",
-    {
-      pagination: { page: 1, perPage: 1000 },
-    },
-  );
-
-  const { data: allConversations, isPending: isLoadingConversations } =
-    useGetList<Conversation>("conversations", {
-      pagination: { page: 1, perPage: 1000 },
-    });
-
-  // Calculate stats
-  const totalLeadsCount = allLeads?.length || 0;
-  const qualifiedLeads =
-    allLeads?.filter((l) => l.lead_stage === "QUALIFIED").length || 0;
-  const unreadConvs =
-    allConversations?.filter((c) => c.mode === "human").length || 0;
-
-  const hiredLeads =
-    allLeads?.filter((l) => l.lead_stage === "HIRED").length || 0;
-  const hiredRate = totalLeadsCount
-    ? Math.round((hiredLeads / totalLeadsCount) * 100)
-    : 0;
+  const {
+    totalLeads: totalLeadsCount,
+    qualifiedCount: qualifiedLeads,
+    unreadConversationCount: unreadConvs,
+    hiredRate,
+    stageBreakdown,
+    isPending: isLoading,
+  } = useDashboardStats();
 
   return (
     <Wrapper>
@@ -88,7 +69,7 @@ export const MobileDashboard = () => {
           <MobileKpiCard
             title="Tổng khách hàng"
             value={
-              isLoadingLeads
+              isLoading
                 ? "..."
                 : totalLeadsCount.toString().padStart(2, "0")
             }
@@ -98,7 +79,7 @@ export const MobileDashboard = () => {
           <MobileKpiCard
             title="Cần phản hồi"
             value={
-              isLoadingConversations
+              isLoading
                 ? "..."
                 : unreadConvs.toString().padStart(2, "0")
             }
@@ -108,7 +89,7 @@ export const MobileDashboard = () => {
           <MobileKpiCard
             title="Đạt chuẩn"
             value={
-              isLoadingLeads
+              isLoading
                 ? "..."
                 : qualifiedLeads.toString().padStart(2, "0")
             }
@@ -117,7 +98,7 @@ export const MobileDashboard = () => {
           />
           <MobileKpiCard
             title="Tỷ lệ tuyển"
-            value={isLoadingLeads ? "..." : `${hiredRate}%`}
+            value={isLoading ? "..." : `${hiredRate}%`}
             icon={<TrendingUp className="size-4" />}
             description="Tỷ lệ chuyển đổi"
           />
@@ -138,18 +119,14 @@ export const MobileDashboard = () => {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="flex flex-col gap-2.5">
-              {isLoadingLeads ? (
+              {isLoading ? (
                 <div className="w-full h-[120px] flex items-center justify-center text-muted-foreground">
                   <Activity className="size-6 animate-spin" />
                 </div>
               ) : (
-                LEAD_STAGES.map((stage) => {
-                  const count =
-                    allLeads?.filter((l) => l.lead_stage === stage.value)
-                      .length || 0;
-                  const percentage = totalLeadsCount
-                    ? Math.round((count / totalLeadsCount) * 100)
-                    : 0;
+                stageBreakdown.map((stage) => {
+                  const count = stage.count;
+                  const percentage = stage.percentage;
                   const bgClass = stage.color;
                   return (
                     <div

@@ -143,6 +143,7 @@ CREATE TABLE public.conversations (
   updated_at                 timestamptz NOT NULL DEFAULT now(),
   assigned_recruiter_id      uuid,
   unread_count               integer NOT NULL DEFAULT 0,   -- added 2026-06-23 (unread tracking)
+  bot_locked_until           timestamptz,                  -- added 2026-06-24 (per-chat bot-run mutex; set by VFIC Chatbot Acquire Chat Lock, cleared at Update Sent/Update Suppressed, 30s TTL)
   CONSTRAINT conversations_zalo_chat_id_key UNIQUE (zalo_chat_id)
 );
 
@@ -288,6 +289,8 @@ CREATE INDEX bus_stops_name_trgm_idx  ON public.bus_stops USING gin (stop_name g
 CREATE INDEX companies_project_idx ON public.companies (project_id);
 
 CREATE INDEX conversations_assigned_recruiter_id_idx ON public.conversations (assigned_recruiter_id);
+
+CREATE INDEX vfic_chat_histories_session_id_idx ON public.vfic_chat_histories (session_id, id DESC);
 
 CREATE INDEX documents_drive_file_id_idx          ON public.documents (drive_file_id);
 CREATE INDEX documents_source_drive_file_id_idx   ON public.documents (source, drive_file_id) WHERE (source IS NOT NULL AND drive_file_id IS NOT NULL);

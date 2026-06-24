@@ -2,12 +2,10 @@
   "id": "iodmXzjRe03KqPdB",
   "name": "VFIC Chatbot",
   "active": true,
-  "isArchived": false,
-  "versionId": "76947221-2c89-485d-bb3e-40c643eb06b6",
-  "activeVersionId": "76947221-2c89-485d-bb3e-40c643eb06b6",
-  "triggerCount": 1,
+  "versionId": "235eef74-93dc-4d14-9442-dd2a5ba64a59",
+  "activeVersionId": "235eef74-93dc-4d14-9442-dd2a5ba64a59",
   "createdAt": "2026-06-19T11:28:47.623Z",
-  "updatedAt": "2026-06-23T13:57:32.207Z",
+  "updatedAt": "2026-06-24T06:19:34.580Z",
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
@@ -207,17 +205,6 @@
         [
           {
             "node": "Run-Start Guard",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run-Start Guard": {
-      "main": [
-        [
-          {
-            "node": "Typing...",
             "type": "main",
             "index": 0
           }
@@ -437,6 +424,28 @@
         [
           {
             "node": "Safe To Send ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run-Start Guard": {
+      "main": [
+        [
+          {
+            "node": "Acquire Chat Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Chat Lock": {
+      "main": [
+        [
+          {
+            "node": "Typing...",
             "type": "main",
             "index": 0
           }
@@ -917,7 +926,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO public.bot_runs (conversation_id, outcome, version_at_start, proposed_reply, ended_at)\nVALUES ($1, 'suppressed', $2, $3, now());",
+        "query": "WITH run AS (\n  INSERT INTO public.bot_runs (conversation_id, outcome, version_at_start, proposed_reply, ended_at)\n  VALUES ($1, 'suppressed', $2, $3, now())\n  RETURNING conversation_id\n)\nUPDATE public.conversations\n  SET bot_locked_until = NULL\n  WHERE id = (SELECT conversation_id FROM run);",
         "options": {
           "queryReplacement": "={{ [$('Run-Start Guard').item.json.conversation_id, $('Run-Start Guard').item.json.version_at_start, $('Pre-Send Decision').item.json.output] }}"
         }
@@ -934,7 +943,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO public.bot_runs (conversation_id, outcome, version_at_start, proposed_reply, ended_at)\nVALUES ($1, 'sent', $2, $3, now());",
+        "query": "WITH run AS (\n  INSERT INTO public.bot_runs (conversation_id, outcome, version_at_start, proposed_reply, ended_at)\n  VALUES ($1, 'sent', $2, $3, now())\n  RETURNING conversation_id\n)\nUPDATE public.conversations\n  SET bot_locked_until = NULL\n  WHERE id = (SELECT conversation_id FROM run);",
         "options": {
           "queryReplacement": "={{ [$('Run-Start Guard').item.json.conversation_id, $('Run-Start Guard').item.json.version_at_start, $('Pre-Send Decision').item.json.output] }}"
         }
@@ -1158,6 +1167,25 @@
         1424
       ],
       "notes": "Routes only risky replies to the LLM safety checker. Clean replies go straight to the final send gate."
+    },
+    {
+      "id": "e8b612f2-be0a-47be-8733-3500ee804b1c",
+      "name": "Acquire Chat Lock",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        560,
+        460
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.conversations\n  SET bot_locked_until = now() + interval '30 seconds'\n  WHERE zalo_chat_id = $1\n    AND (bot_locked_until IS NULL OR bot_locked_until < now())\n  RETURNING id, mode, version;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.chat_id] }}"
+        }
+      },
+      "notes": "Per-chat mutex: claims the bot-run slot for this Zalo chat for 30s. Returns 0 rows if another run holds it -> downstream (Typing, AI Agent) starves, preventing concurrent double-replies. Auto-releases at Update Sent/Update Suppressed (bot_locked_until=NULL); TTL covers crashes. Placed AFTER Run-Start Guard so human-mode starves don't hold a lock."
     }
   ],
   "tags": [],
@@ -1167,25 +1195,5 @@
     "builderVariant": "mcp"
   },
   "parentFolderId": null,
-  "description": "VFIC Zalo chatbot with guarded AI replies, structured hiring tools, memory, dedup retries, fast safety filtering, and persistence only after approved sends.",
-  "scopes": [
-    "execution:reveal",
-    "workflow:create",
-    "workflow:delete",
-    "workflow:disableRedaction",
-    "workflow:enableRedaction",
-    "workflow:execute",
-    "workflow:execute-chat",
-    "workflow:export",
-    "workflow:import",
-    "workflow:list",
-    "workflow:move",
-    "workflow:publish",
-    "workflow:read",
-    "workflow:share",
-    "workflow:unpublish",
-    "workflow:unshare",
-    "workflow:update"
-  ],
-  "canExecute": true
+  "description": "VFIC Zalo chatbot with guarded AI replies, structured hiring tools, memory, dedup retries, fast safety filtering, and persistence only after approved sends."
 }

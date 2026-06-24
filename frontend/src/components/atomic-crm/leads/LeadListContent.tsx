@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useListContext, useRefresh, ShowBase } from "ra-core";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,12 @@ export const LeadListContent = () => {
   
   const filters = filterValues ?? {};
   const hasActiveStage = Boolean(filters.lead_stage);
+
+  // Stable handler so LeadCard's memo holds across list re-renders. The inline
+  // arrow previously created a new function per render and defeated memoization.
+  const handleLeadSelect = useCallback((lead: Lead) => {
+    setSelectedLeadId(lead.id);
+  }, []);
 
   const sortedLeads = useMemo(() => {
     const list = [...(leads ?? [])];
@@ -81,11 +87,11 @@ export const LeadListContent = () => {
     <>
       <div className="flex flex-col gap-px rounded-xl border border-border/50 bg-border/50 overflow-hidden shadow-sm">
         {sortedLeads.map((lead) => (
-          <LeadCard 
-            key={lead.id} 
-            lead={lead} 
-            showStageBadge={!hasActiveStage} 
-            onClick={(l) => setSelectedLeadId(l.id)}
+          <LeadCard
+            key={lead.id}
+            lead={lead}
+            showStageBadge={!hasActiveStage}
+            onClick={handleLeadSelect}
           />
         ))}
       </div>

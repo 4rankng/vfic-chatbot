@@ -263,7 +263,8 @@ export const LEAD_STAGES = [
   { value: "QUALIFIED", label: "Đủ điều kiện", color: "bg-cyan-500" },
   { value: "APPLIED", label: "Đã ứng tuyển", color: "bg-amber-500" },
   { value: "HIRED", label: "Đã tuyển", color: "bg-emerald-500" },
-  { value: "CLOSED", label: "Đã đóng", color: "bg-zinc-500" },
+  { value: "LOST", label: "Đã mất", color: "bg-rose-500" },
+  { value: "UNQUALIFIED", label: "Không đạt", color: "bg-zinc-500" },
 ] as const;
 
 export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];

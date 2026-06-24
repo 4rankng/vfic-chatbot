@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useRedirect, RecordContextProvider } from "ra-core";
 import { Phone } from "lucide-react";
 
@@ -24,12 +25,17 @@ const scoreToTag = (score: Lead["lead_score"]): TagStackTag | null => {
   return { label: found.label, tone };
 };
 
-export const LeadCard = ({ lead, showStageBadge, onClick }: { lead: Lead; showStageBadge?: boolean; onClick?: (lead: Lead) => void }) => {
-  if (!lead) return null;
-  return <LeadCardContent lead={lead} showStageBadge={showStageBadge} onClick={onClick} />;
-};
+interface LeadCardProps {
+  lead: Lead;
+  showStageBadge?: boolean;
+  onClick?: (lead: Lead) => void;
+}
 
-export const LeadCardContent = ({ lead, showStageBadge, onClick }: { lead: Lead; showStageBadge?: boolean; onClick?: (lead: Lead) => void }) => {
+// Memoize the heavy inner component so it only re-renders when its own props
+// change. The list passes a stable onClick (useCallback in LeadListContent)
+// and a boolean showStageBadge, so the only driver of re-renders is the lead
+// object reference itself — exactly what we want.
+const LeadCardContentBase = ({ lead, showStageBadge, onClick }: LeadCardProps) => {
   const redirect = useRedirect();
   const handleClick = () => {
     if (onClick) {
@@ -127,3 +133,12 @@ export const LeadCardContent = ({ lead, showStageBadge, onClick }: { lead: Lead;
     </div>
   );
 };
+
+export const LeadCardContent = memo(LeadCardContentBase);
+
+// Thin null-guard wrapper. Also memoized so a stable onClick + unchanged lead
+// reference from the list doesn't needlessly re-render the guard layer either.
+export const LeadCard = memo(({ lead, showStageBadge, onClick }: LeadCardProps) => {
+  if (!lead) return null;
+  return <LeadCardContent lead={lead} showStageBadge={showStageBadge} onClick={onClick} />;
+});

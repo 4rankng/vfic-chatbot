@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { ListBase, useListContext, RecordContextProvider } from "ra-core";
 import { useSearchParams } from "react-router";
 import type { Conversation, Lead } from "../types";
@@ -34,112 +34,128 @@ const getRelativeTimeString = (dateStr?: string) => {
   return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 };
 
-const ConversationListItem = ({
-  conversation,
-  isActive,
-  onSelect,
-  readIds,
-}: {
+// Hoisted static style objects so list rows don't allocate brand-new objects on
+// every render (defeats React.memo). These have no per-row variance.
+const UNREAD_BADGE_DOT_STYLE: React.CSSProperties = {
+  position: "absolute",
+  top: -2,
+  right: -2,
+  width: 12,
+  height: 12,
+  borderRadius: 9999,
+  background: "var(--ember)",
+  boxShadow: "0 0 0 2px var(--card)",
+} as const;
+
+const UNREAD_BADGE_COUNT_STYLE: React.CSSProperties = {
+  position: "absolute",
+  top: -6,
+  right: -6,
+  minWidth: 18,
+  height: 18,
+  padding: "0 4px",
+  borderRadius: 9999,
+  background: "var(--ember)",
+  color: "#fff",
+  fontSize: 10,
+  fontWeight: 700,
+  lineHeight: "18px",
+  textAlign: "center",
+  boxShadow: "0 0 0 2px var(--card)",
+} as const;
+
+const AVATAR_ICON_STYLE: React.CSSProperties = {
+  width: "22px",
+  height: "22px",
+} as const;
+
+type ConversationListItemProps = {
   conversation: ConversationRow;
   isActive: boolean;
   onSelect: (c: Conversation) => void;
   readIds: Set<string>;
-}) => {
-  const lead = conversation._lead;
-  const time = getRelativeTimeString(
-    conversation.last_inbound_at ?? conversation.updated_at,
-  );
-
-  const name =
-    lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
-  const colors = getLeadStatusColor(lead);
-  // Preview = latest message snippet (batched via vfic_last_messages), falling
-  // back to the contact's phone when no snippet is available yet.
-  const subtitle = conversation._snippet || lead?.phone || "";
-
-  const statusLabel = conversation.mode === "human" ? "Cần tiếp quản" : "";
-  // Unread badge: optimistically cleared once opened (readIds); otherwise the
-  // live counter kept in sync by the vfic_chat_histories_unread trigger.
-  const unread = readIds.has(conversation.id)
-    ? 0
-    : conversation.unread_count ?? 0;
-
-  return (
-    <button
-      className={`conversation ${isActive ? "active" : ""}`}
-      onClick={() => onSelect(conversation)}
-      aria-label={`Mở hội thoại với ${name}`}
-    >
-      <span
-        className="avatar round"
-        style={
-          {
-            "--avatar-bg": colors.bg,
-            "--avatar-ink": colors.ink,
-            position: "relative",
-          } as any
-        }
-      >
-        <svg className="icon" style={{ width: "22px", height: "22px" }}>
-          <use href="#i-user" />
-        </svg>
-        {unread > 0 && (
-          <span
-            aria-label={`${unread} tin nhắn chưa đọc`}
-            style={
-              unread === 1
-                ? {
-                    position: "absolute",
-                    top: -2,
-                    right: -2,
-                    width: 12,
-                    height: 12,
-                    borderRadius: 9999,
-                    background: "var(--ember)",
-                    boxShadow: "0 0 0 2px var(--card)",
-                  }
-                : {
-                    position: "absolute",
-                    top: -6,
-                    right: -6,
-                    minWidth: 18,
-                    height: 18,
-                    padding: "0 4px",
-                    borderRadius: 9999,
-                    background: "var(--ember)",
-                    color: "#fff",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    lineHeight: "18px",
-                    textAlign: "center",
-                    boxShadow: "0 0 0 2px var(--card)",
-                  }
-            }
-          >
-            {unread > 1 ? (unread > 9 ? "9+" : unread) : ""}
-          </span>
-        )}
-      </span>
-      <span className="conv-body">
-        <span className="conv-top">
-          <span className="conv-name">{name}</span>
-          <span className="conv-time">{time}</span>
-        </span>
-        {subtitle && <span className="conv-preview">{subtitle}</span>}
-        {conversation.mode === "human" && (
-          <span className="conv-bottom">
-            <span className={`mini-chip handoff`}>
-              <svg className="icon">
-                <use href="#i-user" />
-              </svg>
-              {statusLabel}
-            </span>
-          </span>
-        )}
-      </span>
-    </button>
-  );
 };
+
+// React.memo so a re-render of the list (typing in search, marking another row
+// read, a sibling row's realtime update) does NOT re-render every visible row.
+// Props are stable: `onSelect` is a useCallback in the parent, `readIds` is a
+// Set identity that only changes when a read is committed, and `conversation`
+// objects come from a memoized `rows` array.
+const ConversationListItem = memo(
+  ({ conversation, isActive, onSelect, readIds }: ConversationListItemProps) => {
+    const lead = conversation._lead;
+    const time = getRelativeTimeString(
+      conversation.last_inbound_at ?? conversation.updated_at,
+    );
+
+    const name =
+      lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
+    const colors = getLeadStatusColor(lead);
+    // Preview = latest message snippet (batched via vfic_last_messages), falling
+    // back to the contact's phone when no snippet is available yet.
+    const subtitle = conversation._snippet || lead?.phone || "";
+
+    const statusLabel = conversation.mode === "human" ? "Cần tiếp quản" : "";
+    // Unread badge: optimistically cleared once opened (readIds); otherwise the
+    // live counter kept in sync by the vfic_chat_histories_unread trigger.
+    const unread = readIds.has(conversation.id)
+      ? 0
+      : conversation.unread_count ?? 0;
+
+    return (
+      <button
+        className={`conversation ${isActive ? "active" : ""}`}
+        onClick={() => onSelect(conversation)}
+        aria-label={`Mở hội thoại với ${name}`}
+      >
+        <span
+          className="avatar round"
+          style={
+            {
+              "--avatar-bg": colors.bg,
+              "--avatar-ink": colors.ink,
+              position: "relative",
+            } as React.CSSProperties
+          }
+        >
+          <svg className="icon" style={AVATAR_ICON_STYLE}>
+            <use href="#i-user" />
+          </svg>
+          {unread > 0 && (
+            <span
+              aria-label={`${unread} tin nhắn chưa đọc`}
+              style={
+                unread === 1
+                  ? UNREAD_BADGE_DOT_STYLE
+                  : UNREAD_BADGE_COUNT_STYLE
+              }
+            >
+              {unread > 1 ? (unread > 9 ? "9+" : unread) : ""}
+            </span>
+          )}
+        </span>
+        <span className="conv-body">
+          <span className="conv-top">
+            <span className="conv-name">{name}</span>
+            <span className="conv-time">{time}</span>
+          </span>
+          {subtitle && <span className="conv-preview">{subtitle}</span>}
+          {conversation.mode === "human" && (
+            <span className="conv-bottom">
+              <span className={`mini-chip handoff`}>
+                <svg className="icon">
+                  <use href="#i-user" />
+                </svg>
+                {statusLabel}
+              </span>
+            </span>
+          )}
+        </span>
+      </button>
+    );
+  },
+);
+ConversationListItem.displayName = "ConversationListItem";
 
 // Shimmer skeleton matching the inbox row shape, shown while the first page
 // loads (replaces the previous "flash of empty-state" on slow connections).
@@ -334,7 +350,10 @@ const ConversationListContent = () => {
 
   const selected = conversations?.find((c) => c.id === selectedId) ?? null;
 
-  const openConversation = (c: Conversation) => {
+  // Stable identity so memoized ConversationListItem children don't re-render
+  // on every list state change (the parent re-renders on search/selection, but
+  // `onSelect` itself never needs to change — it only calls stable setters).
+  const openConversation = useCallback((c: Conversation) => {
     setSelectedId(c.id);
     // Optimistically clear the unread badge for this row; ConversationShow
     // confirms server-side via markAsRead on open.
@@ -350,7 +369,7 @@ const ConversationListContent = () => {
       prev.set("id", c.id);
       return prev;
     });
-  };
+  }, []);
 
   const backToList = () => {
     setSearchParams(

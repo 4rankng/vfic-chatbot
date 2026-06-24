@@ -140,43 +140,49 @@ const useConversationRealtime = (zaloChatId?: string) => {
     };
   }, [zaloChatId]);
 
-  const loadMore = async (earliestId: string): Promise<number> => {
-    if (isFetchingRef.current || !hasMore || !zaloChatId) {
-      return 0;
-    }
-    isFetchingRef.current = true;
-    setIsLoadingMore(true);
+  // Stable identity so the consumer's useCallback(handleStartReached) memo
+  // holds across renders — without this the startReached handler is rebuilt
+  // every keystroke and Virtuoso re-binds the scroll listener.
+  const loadMore = useCallback(
+    async (earliestId: string): Promise<number> => {
+      if (isFetchingRef.current || !hasMore || !zaloChatId) {
+        return 0;
+      }
+      isFetchingRef.current = true;
+      setIsLoadingMore(true);
 
-    try {
-      const { messages: older, hasMore: apiHasMore } =
-        await chatRepository.getConversationMessages(zaloChatId, {
-          limit: 10,
-          beforeId: earliestId,
-        });
-      setHasMore(apiHasMore);
-      setMessages((prev) => [...older, ...prev]);
-      return older.length;
-    } catch {
-      if (import.meta.env.DEV) {
-        const { messages: demo, hasMore: demoHasMore } =
-          await tryLoadDemoMessages(zaloChatId, {
+      try {
+        const { messages: older, hasMore: apiHasMore } =
+          await chatRepository.getConversationMessages(zaloChatId, {
             limit: 10,
             beforeId: earliestId,
           });
-        setHasMore(demoHasMore);
-        setMessages((prev) => [...demo, ...prev]);
-        return demo.length;
+        setHasMore(apiHasMore);
+        setMessages((prev) => [...older, ...prev]);
+        return older.length;
+      } catch {
+        if (import.meta.env.DEV) {
+          const { messages: demo, hasMore: demoHasMore } =
+            await tryLoadDemoMessages(zaloChatId, {
+              limit: 10,
+              beforeId: earliestId,
+            });
+          setHasMore(demoHasMore);
+          setMessages((prev) => [...demo, ...prev]);
+          return demo.length;
+        }
+        // A failed load-more must not keep re-firing on every scroll-to-top
+        // (hasMore stays true -> the backend gets spammed with failing
+        // requests). Stop the loop; reopening the conversation retries.
+        setHasMore(false);
+        return 0;
+      } finally {
+        setIsLoadingMore(false);
+        isFetchingRef.current = false;
       }
-      // A failed load-more must not keep re-firing on every scroll-to-top
-      // (hasMore stays true -> the backend gets spammed with failing
-      // requests). Stop the loop; reopening the conversation retries.
-      setHasMore(false);
-      return 0;
-    } finally {
-      setIsLoadingMore(false);
-      isFetchingRef.current = false;
-    }
-  };
+    },
+    [hasMore, zaloChatId],
+  );
 
   return { messages, isLoading, isLoadingMore, hasMore, loadMore };
 };
@@ -285,58 +291,67 @@ export const ConversationShowContent = ({
     [],
   );
 
-  const renderMessage = (m: Message, virtuosoIndex: number) => {
-    const kind = classify(m);
-    if (kind === "system" || kind === "event") {
+  // Stable identity for the Virtuoso `itemContent` callback. Without this the
+  // inline arrow at the call site rebuilds every render, and Virtuoso re-renders
+  // all visible message rows on every keystroke / new message. Deps are the two
+  // values read inside (the message list for grouping lookahead, and the
+  // firstItemIndex offset that shifts on prepend). Signature matches Virtuoso's
+  // native (index, item) order so it can be passed directly as `itemContent`.
+  const renderMessage = useCallback(
+    (virtuosoIndex: number, m: Message) => {
+      const kind = classify(m);
+      if (kind === "system" || kind === "event") {
+        return (
+          <div className={kind === "system" ? "day-marker" : "system-event"}>
+            {kind === "event" && (
+              <svg className="icon">
+                <use href="#i-sparkles" />
+              </svg>
+            )}
+            <span>{m.content}</span>
+          </div>
+        );
+      }
+
+      const pos = virtuosoIndex - firstItemIndex;
+      const prevMsg = pos > 0 ? messages[pos - 1] : null;
+      const prevKind = prevMsg ? classify(prevMsg) : null;
+      const isGrouped = prevKind === kind;
+      const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
+
       return (
-        <div className={kind === "system" ? "day-marker" : "system-event"}>
-          {kind === "event" && (
-            <svg className="icon">
-              <use href="#i-sparkles" />
-            </svg>
-          )}
-          <span>{m.content}</span>
+        <div className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}>
+          {kind === "user" && !isGrouped ? (
+            <span className="message-avatar">
+              <svg className="icon">
+                <use href={`#${avatarIcon}`} />
+              </svg>
+            </span>
+          ) : kind === "user" && isGrouped ? (
+            <span className="message-avatar-placeholder" style={{ width: 32 }} />
+          ) : null}
+          <div className="bubble">
+            <div className="bubble-content">
+              <p>{m.content}</p>
+              <span className="bubble-time-inline">
+                {formatTime(m.created_at)}
+              </span>
+            </div>
+          </div>
+          {kind !== "user" && !isGrouped ? (
+            <span className="message-avatar">
+              <svg className="icon">
+                <use href={`#${avatarIcon}`} />
+              </svg>
+            </span>
+          ) : kind !== "user" && isGrouped ? (
+            <span className="message-avatar-placeholder" style={{ width: 32 }} />
+          ) : null}
         </div>
       );
-    }
-
-    const pos = virtuosoIndex - firstItemIndex;
-    const prevMsg = pos > 0 ? messages[pos - 1] : null;
-    const prevKind = prevMsg ? classify(prevMsg) : null;
-    const isGrouped = prevKind === kind;
-    const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
-
-    return (
-      <div className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}>
-        {kind === "user" && !isGrouped ? (
-          <span className="message-avatar">
-            <svg className="icon">
-              <use href={`#${avatarIcon}`} />
-            </svg>
-          </span>
-        ) : kind === "user" && isGrouped ? (
-          <span className="message-avatar-placeholder" style={{ width: 32 }} />
-        ) : null}
-        <div className="bubble">
-          <div className="bubble-content">
-            <p>{m.content}</p>
-            <span className="bubble-time-inline">
-              {formatTime(m.created_at)}
-            </span>
-          </div>
-        </div>
-        {kind !== "user" && !isGrouped ? (
-          <span className="message-avatar">
-            <svg className="icon">
-              <use href={`#${avatarIcon}`} />
-            </svg>
-          </span>
-        ) : kind !== "user" && isGrouped ? (
-          <span className="message-avatar-placeholder" style={{ width: 32 }} />
-        ) : null}
-      </div>
-    );
-  };
+    },
+    [messages, firstItemIndex],
+  );
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -444,7 +459,7 @@ export const ConversationShowContent = ({
         startReached={handleStartReached}
         followOutput={followOutput}
         components={virtuosoComponents}
-        itemContent={(index, m) => renderMessage(m, index)}
+        itemContent={renderMessage}
       />
 
       <footer className="composer-wrap">

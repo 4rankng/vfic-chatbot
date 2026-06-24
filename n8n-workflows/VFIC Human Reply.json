@@ -1,122 +1,84 @@
 {
-  "id": "wridAhFQuct6IGoX",
   "name": "VFIC Human Reply",
+  "id": "wridAhFQuct6IGoX",
   "active": true,
   "isArchived": false,
-  "versionId": "9177ecc5-ea10-4410-97f4-5b363d106860",
-  "activeVersionId": "9177ecc5-ea10-4410-97f4-5b363d106860",
-  "triggerCount": 1,
+  "versionId": "5061366f-bdca-4d6f-92d1-9d79a94fdf7b",
+  "description": "Receives miniCRM recruiter replies, verifies conversation ownership, sends through Zalo, and appends transcript/audit rows in Supabase.",
   "createdAt": "2026-06-21T14:09:29.482Z",
-  "updatedAt": "2026-06-21T14:09:29.482Z",
-  "settings": {
-    "executionOrder": "v1",
-    "availableInMCP": true
-  },
-  "connections": {
-    "POST /vfic-human-reply": {
-      "main": [
-        [
-          {
-            "node": "Normalize Reply Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Normalize Reply Payload": {
-      "main": [
-        [
-          {
-            "node": "Check Human Ownership",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Human Ownership": {
-      "main": [
-        [
-          {
-            "node": "Allowed To Reply?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Allowed To Reply?": {
-      "main": [
-        [
-          {
-            "node": "Send Zalo Message",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond Forbidden",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send Zalo Message": {
-      "main": [
-        [
-          {
-            "node": "Append Transcript And Audit",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Append Transcript And Audit": {
-      "main": [
-        [
-          {
-            "node": "Respond OK",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
+  "updatedAt": "2026-06-24T06:04:10.838Z",
+  "triggerCount": 1,
+  "settings": { "executionOrder": "v1", "availableInMCP": true },
+  "tags": [],
+  "meta": { "aiBuilderAssisted": true, "builderVariant": "mcp" },
   "nodes": [
     {
       "id": "ed4c1baa-3446-40f8-86c2-3a09724d4841",
       "name": "POST /vfic-human-reply",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [
-        240,
-        300
-      ],
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "vfic-human-reply",
-        "responseMode": "responseNode",
-        "options": {}
-      },
+      "position": [240, 300],
+      "parameters": { "httpMethod": "POST", "path": "vfic-human-reply", "responseMode": "responseNode", "options": {} },
       "webhookId": "a9109949-fda8-485e-98e2-ed91c3209fba"
+    },
+    {
+      "id": "851b5e18-a995-4e7b-be5d-9e3ac9541c7f",
+      "name": "Introspect JWT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [400, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://vichwmxeptglqmzefsiq.supabase.co/auth/v1/user",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpY2h3bXhlcHRnbHFtemVmc2lxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4Njg3OTIsImV4cCI6MjA5NzQ0NDc5Mn0.af0eih7ggA_KW_omsTfgNbcZMGXwlrqk8qqG56ktn2s" },
+            { "name": "Authorization", "value": "={{ $json.headers.authorization || '' }}" }
+          ]
+        },
+        "options": { "response": { "response": { "fullResponse": true, "neverError": true, "responseFormat": "json" } } }
+      },
+      "notes": "Validates the recruiter's Supabase Bearer JWT and returns the user id. Publishable anon key used as apikey (inherently public); the per-request user JWT is passed through from the incoming Authorization header. neverError+fullResponse so a bad token yields statusCode!=200 instead of node failure."
+    },
+    {
+      "id": "1ccc343a-7320-4f35-89c0-39e64e0bb75b",
+      "name": "Auth OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $json.statusCode }}", "operator": { "type": "number", "operation": "equals" }, "rightValue": 200 }
+          ]
+        }
+      }
     },
     {
       "id": "e9d4f6e3-e092-4f51-990b-b0dbf5cc16cc",
       "name": "Normalize Reply Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        520,
-        300
-      ],
+      "position": [520, 300],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const body = $json.body || $json;\nconst pick = (value) => value == null ? \"\" : String(value).trim();\nconst zalo_chat_id = pick(body.zalo_chat_id);\nconst message = pick(body.message);\nconst recruiter_id = pick(body.recruiter_id);\nif (!zalo_chat_id || !message || !recruiter_id) { throw new Error(\"Missing zalo_chat_id, message, or recruiter_id\"); }\nreturn { zalo_chat_id, message, recruiter_id, sent_at: new Date().toISOString() };"
+        "jsCode": "const body = $('POST /vfic-human-reply').item.json.body || {};\nconst pick = (value) => value == null ? \"\" : String(value).trim();\nconst zalo_chat_id = pick(body.zalo_chat_id);\nconst message = pick(body.message);\n// recruiter_id is derived from the introspected Supabase JWT, NOT the request body\n// (anti-spoof: a client cannot claim another recruiter's id).\nconst recruiter_id = pick($('Introspect JWT').item.json?.data?.id);\nif (!zalo_chat_id || !message || !recruiter_id) { throw new Error(\"Missing zalo_chat_id, message, or valid session\"); }\nreturn { zalo_chat_id, message, recruiter_id, sent_at: new Date().toISOString() };"
+      }
+    },
+    {
+      "id": "2726f898-a8bd-4c69-bdd6-f764ee017eed",
+      "name": "Respond Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [940, 520],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: 'unauthorized' } }}",
+        "options": { "responseCode": 401 }
       }
     },
     {
@@ -124,10 +86,7 @@
       "name": "Check Human Ownership",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
-      "position": [
-        800,
-        300
-      ],
+      "position": [800, 300],
       "parameters": {
         "operation": "executeQuery",
         "query": "WITH payload AS (SELECT $1::text AS zalo_chat_id, $2::uuid AS recruiter_id, $3::text AS message), conv AS (\n  SELECT c.id, c.version\n  FROM public.conversations c, payload p\n  WHERE c.zalo_chat_id = p.zalo_chat_id\n    AND c.mode = 'human'\n    AND c.assigned_recruiter_id = p.recruiter_id\n)\nSELECT p.zalo_chat_id, p.recruiter_id, p.message, EXISTS (SELECT 1 FROM conv) AS allowed, (SELECT id FROM conv) AS conversation_id, (SELECT version FROM conv) AS version FROM payload p;",
@@ -142,25 +101,12 @@
       "name": "Allowed To Reply?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [
-        1080,
-        300
-      ],
+      "position": [1080, 300],
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
           "conditions": [
-            {
-              "leftValue": "={{ $json.allowed }}",
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            }
+            { "leftValue": "={{ $json.allowed }}", "operator": { "type": "boolean", "operation": "true" } }
           ],
           "combinator": "and"
         }
@@ -171,10 +117,7 @@
       "name": "Send Zalo Message",
       "type": "n8n-nodes-zalo-platform.zaloBot",
       "typeVersion": 1,
-      "position": [
-        1360,
-        220
-      ],
+      "position": [1360, 220],
       "parameters": {
         "operation": "sendMessage",
         "chatId": "={{ $(\"Check Human Ownership\").item.json.zalo_chat_id }}",
@@ -186,10 +129,7 @@
       "name": "Append Transcript And Audit",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
-      "position": [
-        1640,
-        220
-      ],
+      "position": [1640, 220],
       "parameters": {
         "operation": "executeQuery",
         "query": "WITH hist AS (\n  INSERT INTO public.vfic_chat_histories (session_id, message)\n  VALUES ($1, jsonb_build_object('type', 'human', 'data', jsonb_build_object('content', $2, 'recruiter_id', $3, 'created_at', now())))\n  RETURNING id\n), audit AS (\n  INSERT INTO public.bot_runs (conversation_id, outcome, version_at_start, proposed_reply, ended_at)\n  VALUES ($4::uuid, 'sent', $5::integer, $2, now())\n  RETURNING id\n)\nSELECT (SELECT id FROM hist) AS history_id, (SELECT id FROM audit) AS audit_id;",
@@ -204,10 +144,7 @@
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        1920,
-        220
-      ],
+      "position": [1920, 220],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { ok: true, history_id: $json.history_id, audit_id: $json.audit_id } }}",
@@ -219,25 +156,22 @@
       "name": "Respond Forbidden",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        1360,
-        420
-      ],
+      "position": [1360, 420],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { ok: false, error: \"conversation_not_owned\" } }}",
-        "options": {
-          "responseCode": 409
-        }
+        "options": { "responseCode": 409 }
       }
     }
   ],
-  "tags": [],
-  "meta": {
-    "aiBuilderAssisted": true,
-    "builderVariant": "mcp"
-  },
-  "parentFolderId": null,
-  "description": "Receives miniCRM recruiter replies, verifies conversation ownership, sends through Zalo, and appends transcript/audit rows in Supabase.",
-  "canExecute": true
+  "connections": {
+    "POST /vfic-human-reply": { "main": [ [ { "node": "Introspect JWT", "type": "main", "index": 0 } ] ] },
+    "Introspect JWT": { "main": [ [ { "node": "Auth OK?", "type": "main", "index": 0 } ] ] },
+    "Auth OK?": { "main": [ [ { "node": "Normalize Reply Payload", "type": "main", "index": 0 } ], [ { "node": "Respond Unauthorized", "type": "main", "index": 0 } ] ] },
+    "Normalize Reply Payload": { "main": [ [ { "node": "Check Human Ownership", "type": "main", "index": 0 } ] ] },
+    "Check Human Ownership": { "main": [ [ { "node": "Allowed To Reply?", "type": "main", "index": 0 } ] ] },
+    "Allowed To Reply?": { "main": [ [ { "node": "Send Zalo Message", "type": "main", "index": 0 } ], [ { "node": "Respond Forbidden", "type": "main", "index": 0 } ] ] },
+    "Send Zalo Message": { "main": [ [ { "node": "Append Transcript And Audit", "type": "main", "index": 0 } ] ] },
+    "Append Transcript And Audit": { "main": [ [ { "node": "Respond OK", "type": "main", "index": 0 } ] ] }
+  }
 }
