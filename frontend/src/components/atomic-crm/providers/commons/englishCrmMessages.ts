@@ -401,6 +401,7 @@ export const englishCrmMessages = {
       recovery_email_sent:
         "If you're a registered user, you should receive a password recovery email shortly.",
       sign_in_failed: "Failed to log in.",
+      sign_in_google: "Sign in with Google",
       sign_in_google_workspace: "Sign in with Google Workplace",
       signup: {
         create_account: "Create account",
@@ -409,6 +410,10 @@ export const englishCrmMessages = {
         creating: "Creating...",
         initial_user_created: "Initial user successfully created",
       },
+      welcome_back: "Welcome back",
+      welcome_subtitle: "Sign in to continue with %{title}",
+      recover_now: "Recover now",
+      or_divider: "or",
       welcome_title: "Welcome to Atomic CRM",
     },
     common: {

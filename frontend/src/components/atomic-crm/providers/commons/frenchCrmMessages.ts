@@ -406,6 +406,7 @@ export const frenchCrmMessages = {
       recovery_email_sent:
         "Si vous êtes un utilisateur enregistré, vous devriez recevoir prochainement un e-mail de récupération de mot de passe.",
       sign_in_failed: "Échec de la connexion.",
+      sign_in_google: "Se connecter avec Google",
       sign_in_google_workspace: "Connectez-vous avec Google Workplace",
       signup: {
         create_account: "Créer un compte",
@@ -414,6 +415,10 @@ export const frenchCrmMessages = {
         creating: "Création...",
         initial_user_created: "Utilisateur initial créé avec succès",
       },
+      welcome_back: "Bon retour",
+      welcome_subtitle: "Connectez-vous pour continuer avec %{title}",
+      recover_now: "Récupérer maintenant",
+      or_divider: "ou",
       welcome_title: "Bienvenue sur Atomic CRM",
     },
     common: {
