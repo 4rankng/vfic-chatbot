@@ -204,7 +204,7 @@ const ConversationListPanel = ({
       try {
         const [all, snips] = await Promise.all([
           chatRepository.getLeadsByZaloIds(zaloIds),
-          chatRepository.getLastMessages(zaloIds),
+          chatRepository.getLastMessages(conversations),
         ]);
         if (cancelled) return;
         const byZalo: Record<string, Lead | null> = {};

@@ -1,131 +1,132 @@
-import type { AuthProvider } from "ra-core";
-import { supabaseAuthProvider } from "ra-supabase-core";
+import type { AuthProvider, UserIdentity } from "ra-core";
 
-import { canAccess } from "../commons/canAccess";
-import { getSupabaseClient } from "./supabase";
+import { canAccess as canAccessFn } from "../commons/canAccess";
+import {
+  ApiError,
+  apiJson,
+  clearTokens,
+  getAccessToken,
+  setTokens,
+} from "./supabase";
 
-const getBaseAuthProvider = () =>
-  supabaseAuthProvider(getSupabaseClient(), {
-    getIdentity: async () => {
-      const profile = await getProfile();
+// JWT auth provider (replaces Supabase Auth).
+//
+// The CRM holds only the user's access/refresh JWT pair. login exchanges
+// credentials for tokens and caches the identity; getIdentity/getPermissions
+// read the cache (refreshed on demand). checkError forces a re-login only when
+// the backend rejects an access token that the REST client could not refresh
+// (ApiError 401) — a 403 (action denied) or a reply 409 (not HUMAN) is surfaced
+// by the caller, not a logout trigger.
 
-      if (profile == null) {
-        throw new Error();
-      }
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+}
 
-      return {
-        id: profile.id,
-        fullName: profile.full_name,
-        role: profile.role,
-        avatar: "", // Profiles don't have avatars yet
-      };
-    },
-  });
+interface MeResponse {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: "admin" | "recruiter";
+}
 
-// To speed up checks, we cache the initialization state
-// and the current sale in the local storage. They are cleared on logout.
-const IS_INITIALIZED_CACHE_KEY = "RaStore.auth.is_initialized";
-const CURRENT_PROFILE_CACHE_KEY = "RaStore.auth.current_profile";
+const IDENTITY_KEY = "RaStore.auth.identity";
 
-function getLocalStorage(): Storage | null {
-  if (typeof window !== "undefined" && window.localStorage) {
-    return window.localStorage;
-  }
+function storage(): Storage | null {
+  if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
   return null;
 }
 
-export async function getIsInitialized() {
-  // Always true for VFIC, we assume admin is seeded.
-  return true;
-}
-
-const getProfile = async () => {
-  const storage = getLocalStorage();
-  const cachedValue = storage?.getItem(CURRENT_PROFILE_CACHE_KEY);
-  if (cachedValue != null) {
-    return JSON.parse(cachedValue);
+// Cached /auth/me so getIdentity/getPermissions stay sync-fast after the first
+// load. Invalidated on logout and whenever the access token is gone.
+const fetchIdentity = async (force = false): Promise<MeResponse | null> => {
+  const store = storage();
+  if (!force && store) {
+    const cached = store.getItem(IDENTITY_KEY);
+    if (cached) {
+      try {
+        return JSON.parse(cached) as MeResponse;
+      } catch {
+        /* fall through to refetch */
+      }
+    }
   }
-
-  const { data: dataSession, error: errorSession } =
-    await getSupabaseClient().auth.getSession();
-
-  // Shouldn't happen after login but just in case
-  if (dataSession?.session?.user == null || errorSession) {
-    return undefined;
-  }
-
-  const { data: dataProfile, error: errorProfile } = await getSupabaseClient()
-    .from("profiles")
-    .select("id, full_name, role")
-    .match({ id: dataSession?.session?.user.id })
-    .single();
-
-  if (dataProfile == null || errorProfile) {
-    return undefined;
-  }
-
-  storage?.setItem(CURRENT_PROFILE_CACHE_KEY, JSON.stringify(dataProfile));
-  return dataProfile;
+  if (!getAccessToken()) return null;
+  const me = await apiJson<MeResponse>("/api/v1/auth/me");
+  store?.setItem(IDENTITY_KEY, JSON.stringify(me));
+  return me;
 };
 
-function clearCache() {
-  const storage = getLocalStorage();
-  storage?.removeItem(IS_INITIALIZED_CACHE_KEY);
-  storage?.removeItem(CURRENT_PROFILE_CACHE_KEY);
-}
+const clearIdentity = (): void => {
+  storage()?.removeItem(IDENTITY_KEY);
+};
 
 export const getAuthProvider = (): AuthProvider => {
-  const baseAuthProvider = getBaseAuthProvider();
   return {
-    ...baseAuthProvider,
-    login: async (params) => {
-      if (params.ssoDomain) {
-        const { error } = await getSupabaseClient().auth.signInWithSSO({
-          domain: params.ssoDomain,
-        });
-        if (error) {
-          throw error;
-        }
-        return;
+    login: async (params: unknown) => {
+      const { username, email, password } = params as {
+        username?: string;
+        email?: string;
+        password: string;
+      };
+      const loginEmail = email ?? username;
+      if (!loginEmail || !password) {
+        throw new Error("Email và mật khẩu là bắt buộc");
       }
-      return baseAuthProvider.login(params);
+      const tokens = await apiJson<TokenResponse>("/api/v1/auth/login", {
+        method: "POST",
+        body: { email: loginEmail, password },
+      });
+      setTokens(tokens.access_token, tokens.refresh_token);
+      await fetchIdentity(true);
     },
-    logout: async (params) => {
-      clearCache();
-      return baseAuthProvider.logout(params);
-    },
-    checkAuth: async (params) => {
-      // Onboarding routes (sign-up / set-password / forgot-password) were
-      // removed, and the init gate is always true for VFIC (the admin is
-      // seeded out-of-band). Auth is fully delegated to the base Supabase
-      // auth provider.
-      return baseAuthProvider.checkAuth(params);
-    },
-    canAccess: async (params) => {
-      const isInitialized = await getIsInitialized();
-      if (!isInitialized) return false;
 
-      // Get the current user
-      const profile = await getProfile();
-      if (profile == null) return false;
+    logout: async () => {
+      clearTokens();
+      clearIdentity();
+    },
 
-      // Compute access rights from the profile role (passed through unchanged
-      // so recruiter/admin are distinguished correctly).
-      const role = profile.role;
-      return canAccess(role, params);
+    checkAuth: async () => {
+      if (!getAccessToken()) {
+        throw new Error("Not authenticated");
+      }
     },
-    getAuthorizationDetails(authorizationId: string) {
-      return getSupabaseClient().auth.oauth.getAuthorizationDetails(
-        authorizationId,
-      );
+
+    checkError: async (error: unknown) => {
+      // The REST client already attempted a refresh on 401. Reaching here with a
+      // 401 means the refresh failed too — force re-login. 403/409 etc. are
+      // caller-handled (denied action / conflict), not session failures.
+      if (error instanceof ApiError && error.status === 401) {
+        clearTokens();
+        clearIdentity();
+        throw error;
+      }
     },
-    approveAuthorization(authorizationId: string) {
-      return getSupabaseClient().auth.oauth.approveAuthorization(
-        authorizationId,
-      );
+
+    getIdentity: async (): Promise<UserIdentity> => {
+      const me = await fetchIdentity();
+      if (!me) throw new Error("Not authenticated");
+      return {
+        id: me.id,
+        fullName: me.full_name ?? me.email,
+        role: me.role,
+      } as UserIdentity;
     },
-    denyAuthorization(authorizationId: string) {
-      return getSupabaseClient().auth.oauth.denyAuthorization(authorizationId);
+
+    getPermissions: async () => {
+      const me = await fetchIdentity();
+      return me?.role ?? null;
+    },
+
+    canAccess: async (params: Parameters<typeof canAccessFn>[1]) => {
+      const me = await fetchIdentity();
+      if (!me) return false;
+      return canAccessFn(me.role, params);
     },
   };
 };
+
+// Kept for StartPage (isInitialized gate) + the dataProvider's custom method.
+// VFIC seeds the admin out-of-band, so the app is always considered initialized
+// (no sign-up / first-run flow).
+export const getIsInitialized = async (): Promise<boolean> => true;

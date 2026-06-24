@@ -1,0 +1,29 @@
+Currently we are using n8n as chatbot, remote supabase as db, and web admin. Those takes lots of resources but poor performance
+
+
+What I want is to create our own codebase repo
+
+1. backend: please read the n8n flow to have an understanding of existing implementation, and then you create a backend to handle
+the chatbot logic. For the knowledge base we can have user upload file to web frontend, then backend will convert file content to knowledge
+for llm agent to digest. The database is postgres we will host in our droplet. So our droplet will have redis, backend, frontend, postgres
+
+2. frontend: this is the dashboard page, lead management. page, chat page, user management page, knowledge management
+
+
+
+
+
+
+
+
+
+1. The Python Stack (Highly Recommended for AI)
+Python currently has the richest ecosystem for building AI agents.
+
+The Backend (Zalo Webhook): FastAPI
+
+Why: It is lightning-fast, incredibly minimal, and easy to run locally or on your own VPS using Uvicorn/Docker. It is the perfect blank slate for receiving HTTP POST requests from Zalo's Bot API.
+
+The Brain (Agent Framework): LangGraph (by LangChain)
+
+Why: While basic LangChain is great, LangGraph is specifically designed for building complex, reliable LLM agents. It natively supports Anthropic (langchain-anthropic), allows you to give your agent tools (like web search or database access), and manages the agent's memory natively. You define the logic as a state graph, giving you absolute control over how the bot "thinks" before it replies.

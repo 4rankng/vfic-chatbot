@@ -94,26 +94,31 @@
   box-sizing: border-box;
 }
 
-.inbox-bg-container * {
+/* Chat-element + base-reset rules are scoped to :is(.inbox-bg-container,
+   .chat-surface) so the shared <ChatThread> renders identically inside the
+   inbox shell (.inbox-bg-container) AND on the lead page (.chat-surface).
+   :is() preserves the original specificity (0,2,0), so the inbox cascade is
+   unchanged. Inbox-shell layout rules stay scoped to .inbox-bg-container. */
+:is(.inbox-bg-container, .chat-surface) * {
   box-sizing: border-box;
 }
-.inbox-bg-container button,
-.inbox-bg-container input,
-.inbox-bg-container textarea {
+:is(.inbox-bg-container, .chat-surface) button,
+:is(.inbox-bg-container, .chat-surface) input,
+:is(.inbox-bg-container, .chat-surface) textarea {
   font: inherit;
 }
-.inbox-bg-container button {
+:is(.inbox-bg-container, .chat-surface) button {
   color: inherit;
   cursor: pointer;
 }
-.inbox-bg-container button:focus-visible,
-.inbox-bg-container input:focus-visible,
-.inbox-bg-container textarea:focus-visible {
+:is(.inbox-bg-container, .chat-surface) button:focus-visible,
+:is(.inbox-bg-container, .chat-surface) input:focus-visible,
+:is(.inbox-bg-container, .chat-surface) textarea:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-.inbox-bg-container .icon {
+:is(.inbox-bg-container, .chat-surface) .icon {
   width: 18px;
   height: 18px;
   display: inline-block;
@@ -688,14 +693,14 @@
 }
 
 /* Chat Content */
-.inbox-bg-container .chat-scroller {
+:is(.inbox-bg-container, .chat-surface) .chat-scroller {
   padding: 32px;
   overflow-y: auto;
   overflow-anchor: auto;
   scrollbar-width: none;
   background: var(--chat-bg);
 }
-.inbox-bg-container .chat-scroller::-webkit-scrollbar {
+:is(.inbox-bg-container, .chat-surface) .chat-scroller::-webkit-scrollbar {
   display: none;
 }
 
@@ -721,7 +726,7 @@
   color: var(--brand);
 }
 
-.inbox-bg-container .day-marker {
+:is(.inbox-bg-container, .chat-surface) .day-marker {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -732,15 +737,15 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.inbox-bg-container .day-marker::before,
-.inbox-bg-container .day-marker::after {
+:is(.inbox-bg-container, .chat-surface) .day-marker::before,
+:is(.inbox-bg-container, .chat-surface) .day-marker::after {
   content: "";
   flex: 1;
   height: 1px;
   background: var(--border-strong);
 }
 
-.inbox-bg-container .system-event {
+:is(.inbox-bg-container, .chat-surface) .system-event {
   width: fit-content;
   margin: 0 auto 24px;
   padding: 8px 16px;
@@ -754,29 +759,29 @@
   align-items: center;
   gap: 8px;
 }
-.inbox-bg-container .system-event .icon {
+:is(.inbox-bg-container, .chat-surface) .system-event .icon {
   color: var(--brand);
 }
 
-.inbox-bg-container .message-row {
+:is(.inbox-bg-container, .chat-surface) .message-row {
   display: flex;
   align-items: flex-end;
   gap: 12px;
   margin-bottom: 20px;
 }
-.inbox-bg-container .message-row.grouped {
+:is(.inbox-bg-container, .chat-surface) .message-row.grouped {
   margin-top: -16px;
 }
 
-.inbox-bg-container .message-row.user {
+:is(.inbox-bg-container, .chat-surface) .message-row.user {
   justify-content: flex-start;
 }
-.inbox-bg-container .message-row.bot,
-.inbox-bg-container .message-row.agent {
+:is(.inbox-bg-container, .chat-surface) .message-row.bot,
+:is(.inbox-bg-container, .chat-surface) .message-row.agent {
   justify-content: flex-end;
 }
 
-.inbox-bg-container .message-avatar {
+:is(.inbox-bg-container, .chat-surface) .message-avatar {
   width: 32px;
   height: 32px;
   display: grid;
@@ -786,18 +791,18 @@
   border: 1px solid var(--border);
   color: var(--ink-muted);
 }
-.inbox-bg-container .message-row.bot .message-avatar {
+:is(.inbox-bg-container, .chat-surface) .message-row.bot .message-avatar {
   background: var(--brand-light);
   color: var(--brand);
   border-color: transparent;
 }
-.inbox-bg-container .message-row.agent .message-avatar {
+:is(.inbox-bg-container, .chat-surface) .message-row.agent .message-avatar {
   background: var(--accent-light);
   color: var(--accent);
   border-color: transparent;
 }
 
-.inbox-bg-container .bubble {
+:is(.inbox-bg-container, .chat-surface) .bubble {
   max-width: 70%;
   padding: 8px 12px;
   border-radius: 8px;
@@ -805,45 +810,45 @@
   line-height: 1.4;
   box-shadow: var(--chat-shadow);
 }
-.inbox-bg-container .bubble p {
+:is(.inbox-bg-container, .chat-surface) .bubble p {
   margin: 0;
   display: inline;
 }
-.inbox-bg-container .bubble p + p {
+:is(.inbox-bg-container, .chat-surface) .bubble p + p {
   display: block;
   margin-top: 12px;
 }
 
-.inbox-bg-container .message-row.user .bubble {
+:is(.inbox-bg-container, .chat-surface) .message-row.user .bubble {
   background: var(--chat-bubble-in);
   color: var(--ink);
   border: none;
   border-top-left-radius: 0;
 }
-.inbox-bg-container .message-row.user.grouped .bubble {
+:is(.inbox-bg-container, .chat-surface) .message-row.user.grouped .bubble {
   border-top-left-radius: 8px;
 }
 
-.inbox-bg-container .message-row.bot .bubble,
-.inbox-bg-container .message-row.agent .bubble {
+:is(.inbox-bg-container, .chat-surface) .message-row.bot .bubble,
+:is(.inbox-bg-container, .chat-surface) .message-row.agent .bubble {
   background: var(--chat-bubble-out);
   color: var(--ink);
   border: none;
   border-top-right-radius: 0;
 }
-.inbox-bg-container .message-row.bot.grouped .bubble,
-.inbox-bg-container .message-row.agent.grouped .bubble {
+:is(.inbox-bg-container, .chat-surface) .message-row.bot.grouped .bubble,
+:is(.inbox-bg-container, .chat-surface) .message-row.agent.grouped .bubble {
   border-top-right-radius: 8px;
 }
 
-.inbox-bg-container .bubble-content {
+:is(.inbox-bg-container, .chat-surface) .bubble-content {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
   justify-content: flex-end;
 }
-.inbox-bg-container .bubble-time-inline {
+:is(.inbox-bg-container, .chat-surface) .bubble-time-inline {
   font-size: 11px;
   font-weight: 500;
   color: var(--ink-faint);
@@ -854,13 +859,13 @@
 }
 
 /* Composer */
-.inbox-bg-container .composer-wrap {
+:is(.inbox-bg-container, .chat-surface) .composer-wrap {
   padding: 12px 24px;
   background: var(--chat-header-bg);
   border-top: 1px solid var(--border);
 }
 
-.inbox-bg-container .handoff-note {
+:is(.inbox-bg-container, .chat-surface) .handoff-note {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -873,15 +878,15 @@
   font-weight: 600;
   color: var(--ink-muted);
 }
-.inbox-bg-container .handoff-note .icon {
+:is(.inbox-bg-container, .chat-surface) .handoff-note .icon {
   color: var(--brand);
 }
-.inbox-bg-container .handoff-note .strong {
+:is(.inbox-bg-container, .chat-surface) .handoff-note .strong {
   color: var(--ink);
   font-weight: 800;
 }
 
-.inbox-bg-container .inline-takeover-btn {
+:is(.inbox-bg-container, .chat-surface) .inline-takeover-btn {
   margin-left: auto;
   padding: 6px 14px;
   background: var(--brand);
@@ -892,12 +897,12 @@
   font-weight: 700;
   transition: var(--transition);
 }
-.inbox-bg-container .inline-takeover-btn:hover {
+:is(.inbox-bg-container, .chat-surface) .inline-takeover-btn:hover {
   filter: brightness(1.1);
   transform: translateY(-1px);
 }
 
-.inbox-bg-container .composer {
+:is(.inbox-bg-container, .chat-surface) .composer {
   display: flex;
   align-items: flex-end;
   gap: 12px;
@@ -908,17 +913,17 @@
   box-shadow: none;
   transition: var(--transition);
 }
-.inbox-bg-container .composer:focus-within {
+:is(.inbox-bg-container, .chat-surface) .composer:focus-within {
   border-color: var(--brand);
   box-shadow: none;
 }
-.inbox-bg-container .composer.disabled {
+:is(.inbox-bg-container, .chat-surface) .composer.disabled {
   opacity: 0.7;
   background: transparent;
   box-shadow: none;
 }
 
-.inbox-bg-container .composer textarea {
+:is(.inbox-bg-container, .chat-surface) .composer textarea {
   flex: 1;
   min-height: 44px;
   max-height: 120px;
@@ -931,11 +936,11 @@
   font-size: 14px;
   line-height: 1.5;
 }
-.inbox-bg-container .composer textarea::placeholder {
+:is(.inbox-bg-container, .chat-surface) .composer textarea::placeholder {
   color: var(--ink-faint);
 }
 
-.inbox-bg-container .composer-action {
+:is(.inbox-bg-container, .chat-surface) .composer-action {
   width: 44px;
   height: 44px;
   display: grid;
@@ -946,20 +951,20 @@
   color: var(--ink-faint);
   transition: var(--transition);
 }
-.inbox-bg-container .composer-action:hover:not(:disabled) {
+:is(.inbox-bg-container, .chat-surface) .composer-action:hover:not(:disabled) {
   color: var(--brand);
   background: var(--surface-hover);
 }
-.inbox-bg-container .composer-action.send {
+:is(.inbox-bg-container, .chat-surface) .composer-action.send {
   background: linear-gradient(135deg, var(--brand), var(--brand-hover));
   color: white;
   box-shadow: none;
 }
-.inbox-bg-container .composer-action.send:hover:not(:disabled) {
+:is(.inbox-bg-container, .chat-surface) .composer-action.send:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: none;
 }
-.inbox-bg-container .composer-action.send:disabled {
+:is(.inbox-bg-container, .chat-surface) .composer-action.send:disabled {
   background: var(--surface-solid);
   color: var(--ink-faint);
   border: 1px solid var(--border);
@@ -1252,7 +1257,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-.inbox-bg-container .empty-state {
+:is(.inbox-bg-container, .chat-surface) .empty-state {
   display: grid;
   place-items: center;
   min-height: 300px;
@@ -1376,10 +1381,10 @@
   .inbox-bg-container .takeover-btn span {
     display: none;
   }
-  .inbox-bg-container .chat-scroller {
+  :is(.inbox-bg-container, .chat-surface) .chat-scroller {
     padding: 24px 16px;
   }
-  .inbox-bg-container .bubble {
+  :is(.inbox-bg-container, .chat-surface) .bubble {
     max-width: 90%;
   }
 }
@@ -1387,11 +1392,11 @@
 /* ---- Widescreen (>= 1536px): cap message line length for readability ----
    Gated above the laptop band (1024-1440) so laptop rendering is unchanged. */
 @media (min-width: 1536px) {
-  .inbox-bg-container .bubble {
+  :is(.inbox-bg-container, .chat-surface) .bubble {
     max-width: min(70%, 640px);
   }
-  .inbox-bg-container .chat-scroller,
-  .inbox-bg-container .composer-wrap {
+  :is(.inbox-bg-container, .chat-surface) .chat-scroller,
+  :is(.inbox-bg-container, .chat-surface) .composer-wrap {
     padding-left: max(32px, calc((100% - 768px) / 2));
     padding-right: max(32px, calc((100% - 768px) / 2));
   }
@@ -1410,7 +1415,7 @@
   width: 18px;
   height: 18px;
 }
-.inbox-bg-container .system-event .icon {
+:is(.inbox-bg-container, .chat-surface) .system-event .icon {
   width: 14px;
   height: 14px;
 }
@@ -1423,7 +1428,7 @@
   height: 20px;
   margin-bottom: 4px;
 }
-.inbox-bg-container .handoff-note .icon {
+:is(.inbox-bg-container, .chat-surface) .handoff-note .icon {
   width: 16px;
   height: 16px;
 }

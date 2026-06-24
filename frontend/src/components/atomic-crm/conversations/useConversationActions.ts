@@ -28,7 +28,7 @@ export const useConversationActions = (record?: Conversation) => {
   const handleTakeover = async () => {
     if (!record) return;
     try {
-      await dataProvider.takeOverConversation(record.zalo_chat_id);
+      await dataProvider.takeOverConversation(record.id);
       setLocalMode("human");
       notify("conversations.takeover.success", { type: "success" });
       refresh();
@@ -42,7 +42,7 @@ export const useConversationActions = (record?: Conversation) => {
   const handleRelease = async () => {
     if (!record) return;
     try {
-      await dataProvider.releaseConversation(record.zalo_chat_id);
+      await dataProvider.releaseConversation(record.id);
       setLocalMode("bot");
       notify("conversations.release.success", { type: "success" });
       refresh();

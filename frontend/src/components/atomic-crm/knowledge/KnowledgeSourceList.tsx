@@ -23,7 +23,7 @@ const KnowledgeSourceRow = ({ source }: { source: KnowledgeSource }) => {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate text-sm font-semibold">
-            {source.source_name}
+            {source.file_name}
           </span>
           <span className="shrink-0 text-xs text-muted-foreground">
             {getRelativeTimeString(source.updated_at ?? source.created_at)}
@@ -38,9 +38,9 @@ const KnowledgeSourceRow = ({ source }: { source: KnowledgeSource }) => {
           >
             {source.status || "—"}
           </span>
-          {source.document_type && (
+          {source.source && (
             <Badge variant="outline" className="text-[10px]">
-              {source.document_type}
+              {source.source}
             </Badge>
           )}
           {source.version && (

@@ -1,196 +1,180 @@
-import { getSupabaseClient } from "../providers/supabase/supabase";
+import { vficConfig } from "@/lib/vfic/config";
 import type { Lead, Message } from "../types";
+import {
+  apiJson,
+  getAccessToken,
+} from "../providers/supabase/supabase";
 
-export const extractText = (value: unknown): string => {
-  if (value == null) return "";
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) {
-    return value
-      .map((part) =>
-        part && typeof part === "object" && "text" in part
-          ? String((part as { text: unknown }).text ?? "")
-          : String(part),
-      )
-      .join("")
-      .trim();
-  }
-  return String(value);
-};
+// Chat data access over the FastAPI REST + SSE backend (replaces the Supabase
+// client + postgres_changes realtime). Conversations are keyed by their UUID
+// `id` (the react-admin record identity); the lead<->conversation join stays
+// zalo-keyed on the inbox side (leads carry zalo_id, conversations zalo_chat_id).
 
-export const toMessage = (row: any): Message | null => {
-  const msg = row?.message ?? {};
-  const type = String(msg.type ?? "").toLowerCase();
-  // ai = bot outbound; human = candidate-inbound OR recruiter-outbound;
-  if (type !== "ai" && type !== "human") return null;
-  const recruiterId = msg.data?.recruiter_id;
-  const isRecruiter = type === "human" && Boolean(recruiterId);
-  const rawContent = isRecruiter
-    ? (msg.data?.content ?? msg.content)
-    : msg.content;
-  const content = extractText(rawContent);
-  // Filter out internal agent tool calling logs
-  if (
-    type === "ai" &&
-    content.startsWith("Calling ") &&
-    content.includes("with input:")
-  ) {
-    return null;
-  }
-  const messageType: Message["type"] =
-    type === "ai" || isRecruiter ? "outbound" : "inbound";
+type ApiRecord = Record<string, unknown>;
+interface ListEnvelope {
+  data: ApiRecord[];
+  total: number;
+}
+
+// Map a typed backend MessageOut to the CRM's Message view model.
+//   sender WORKER  -> inbound (candidate)
+//   sender BOT/RECRUITER -> outbound
+//   sender SYSTEM  -> system
+const toMessage = (row: ApiRecord): Message => {
+  const sender = String(row.sender ?? "").toUpperCase();
+  const recruiterId = row.recruiter_id ?? null;
+  const type: Message["type"] =
+    sender === "SYSTEM" ? "system" : sender === "WORKER" ? "inbound" : "outbound";
   return {
     id: String(row.id),
-    zalo_message_id: String(row.id),
-    conversation_id: row.session_id,
-    type: messageType,
-    content: content,
+    zalo_message_id: String(row.zalo_message_id ?? row.id),
+    conversation_id: String(row.conversation_id ?? ""),
+    type,
+    content: String(row.body ?? ""),
     data: { recruiter_id: recruiterId },
-    created_at:
-      msg.data?.created_at ?? row.created_at ?? new Date().toISOString(),
+    created_at: String(row.created_at ?? new Date().toISOString()),
   };
 };
 
-// PostgREST URL-length safety: fetch leads in bounded batches and merge.
-const LEAD_BATCH_SIZE = 100;
-
 export const chatRepository = {
   /**
-   * Fetch leads for many zalo ids in parallel batches (URL-safe chunking),
-   * replacing the old per-conversation N+1 lookup. Returns the most recent
-   * lead per zalo_id (matches the previous `data?.[0]` + updated_at DESC rule).
+   * Resolve the most recent lead per zalo id (inbox lead badges). The backend
+   * leads list honours `zalo_ids` (csv `IN`) and orders by updated_at DESC; the
+   * consumer keeps the first (newest) lead per zalo_id.
    */
   async getLeadsByZaloIds(zaloIds: string[]): Promise<Lead[]> {
     const distinct = Array.from(new Set(zaloIds.filter(Boolean)));
     if (distinct.length === 0) return [];
-
-    const chunks: string[][] = [];
-    for (let i = 0; i < distinct.length; i += LEAD_BATCH_SIZE) {
-      chunks.push(distinct.slice(i, i + LEAD_BATCH_SIZE));
-    }
-    // Fire every chunk concurrently. Promise.all preserves chunk order, so the
-    // consumer's "first lead per zalo_id wins" dedup still sees updated_at DESC.
-    // The Supabase client resolves (data/error) rather than rejecting.
-    const responses = await Promise.all(
-      chunks.map((chunk) =>
-        getSupabaseClient()
-          .from("leads")
-          .select("*")
-          .in("zalo_id", chunk)
-          .order("updated_at", { ascending: false }),
-      ),
-    );
-    const results: Lead[] = [];
-    for (const { data, error } of responses) {
-      if (error) throw error;
-      if (data) results.push(...(data as Lead[]));
-    }
-    return results;
+    const sp = new URLSearchParams({
+      zalo_ids: distinct.join(","),
+      per_page: String(distinct.length),
+    });
+    const body = await apiJson<ListEnvelope>(`/api/v1/leads?${sp.toString()}`);
+    return body.data as unknown as Lead[];
   },
 
   /**
-   * Batched "latest message per conversation" peek — a single RPC
-   * (vfic_last_messages, DISTINCT ON session_id ... id DESC) instead of the old
-   * per-conversation N+1 probe. Returns a map of zalo_chat_id -> snippet text,
-   * used for inbox row previews.
+   * Latest message snippet per conversation, for inbox row previews. Fans out
+   * the per-conversation last-messages endpoint in parallel (bounded by the
+   * inbox page size; a batch endpoint can replace this later). Returns a map of
+   * zalo_chat_id -> snippet text.
    */
   async getLastMessages(
-    zaloIds: string[],
+    conversations: { id: string; zalo_chat_id: string }[],
   ): Promise<Record<string, string>> {
-    const distinct = Array.from(new Set(zaloIds.filter(Boolean)));
-    if (distinct.length === 0) return {};
-
-    const { data, error } = await getSupabaseClient().rpc(
-      "vfic_last_messages",
-      { p_session_ids: distinct },
-    );
-    if (error) throw error;
-
     const out: Record<string, string> = {};
-    for (const row of (data as Array<{ id: number; session_id: string; message: unknown }>) ?? []) {
-      // Reuse toMessage so direction + content extraction stay in one place.
-      const text = toMessage(row)?.content ?? "";
-      if (text && row.session_id && !(row.session_id in out)) {
-        out[row.session_id] = text;
-      }
+    const valid = conversations.filter((c) => c?.id && c?.zalo_chat_id);
+    if (valid.length === 0) return out;
+    const results = await Promise.all(
+      valid.map(async (c) => {
+        try {
+          const msgs = await apiJson<ApiRecord[]>(
+            `/api/v1/conversations/${encodeURIComponent(c.id)}/last-messages?limit=1`,
+          );
+          const last = msgs?.[0];
+          return [c.zalo_chat_id, last ? toMessage(last).content : ""] as const;
+        } catch {
+          return [c.zalo_chat_id, ""] as const;
+        }
+      }),
+    );
+    for (const [zalo, text] of results) {
+      if (zalo && text) out[zalo] = text;
     }
     return out;
   },
 
+  /**
+   * Paginated message history for a conversation. The backend returns the
+   * newest page by default, or the page older than `beforeId` (the integer id of
+   * the oldest currently-visible message) for cursor-based load-more. Server
+   * order is newest-first; we reverse to chronological for the virtualised
+   * scroller. A full page (== limit) implies more history may exist.
+   */
   async getConversationMessages(
-    zaloChatId: string,
+    conversationId: string,
     options?: { limit?: number; beforeId?: string },
   ): Promise<{ messages: Message[]; hasMore: boolean }> {
-    let query = getSupabaseClient()
-      .from("vfic_chat_histories")
-      .select("*")
-      .eq("session_id", zaloChatId)
-      .order("id", { ascending: false });
-
-    if (options?.beforeId) {
-      query = query.lt("id", options.beforeId);
-    }
-
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw error;
-    }
-
-    const rawCount = data?.length ?? 0;
     const limit = options?.limit ?? 10;
-    const hasMore = rawCount === limit;
-
-    const mapped = (data ?? [])
-      .map(toMessage)
-      .filter((m): m is Message => m != null);
-    return {
-      messages: mapped.reverse(),
-      hasMore,
-    };
+    const sp = new URLSearchParams({ per_page: String(limit) });
+    if (options?.beforeId) {
+      sp.set("before_id", String(options.beforeId));
+    }
+    const body = await apiJson<ListEnvelope>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${sp.toString()}`,
+    );
+    const mapped = (body.data ?? []).map(toMessage);
+    mapped.reverse();
+    return { messages: mapped, hasMore: mapped.length >= limit };
   },
 
   /**
-   * Lightweight message count for a conversation (head-only count query). Used
-   * by the lead timeline's total-message-count signal.
+   * Approximate total message count for a contact's Zalo thread (lead timeline
+   * activity signal). Resolves the conversation by zalo_chat_id, then reads the
+   * messages page total (capped at the per_page ceiling).
    */
   async getMessageCount(zaloChatId: string): Promise<number> {
-    const { count, error } = await getSupabaseClient()
-      .from("vfic_chat_histories")
-      .select("*", { count: "exact", head: true })
-      .eq("session_id", zaloChatId);
-    if (error) throw error;
-    return count ?? 0;
+    if (!zaloChatId) return 0;
+    const convSp = new URLSearchParams({ zalo_chat_id: zaloChatId, per_page: "1" });
+    const conv = await apiJson<ListEnvelope>(
+      `/api/v1/conversations?${convSp.toString()}`,
+    );
+    const convId = conv.data?.[0]?.id;
+    if (!convId) return 0;
+    const msgSp = new URLSearchParams({ per_page: "200" });
+    const msgs = await apiJson<ListEnvelope>(
+      `/api/v1/conversations/${encodeURIComponent(String(convId))}/messages?${msgSp.toString()}`,
+    );
+    return msgs.total ?? msgs.data.length;
   },
 
+  /**
+   * Subscribe to new messages for a conversation over the SSE realtime stream.
+   * EventSource cannot set headers, so the access JWT rides in `?token=`. The
+   * stream is global (one channel); we filter `message.created` events by
+   * `conversation_id`. The event payload carries only ids, so on a match we
+   * refetch the latest page and merge — the consumer dedups by message id.
+   * Returns an unsubscribe fn (no-op when there is no session token).
+   */
   subscribeToMessages(
-    zaloChatId: string,
+    conversationId: string,
     onNewMessage: (msg: Message) => void,
-  ) {
-    const channel = getSupabaseClient()
-      .channel(`chat_${zaloChatId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "vfic_chat_histories",
-          filter: `session_id=eq.${zaloChatId}`,
-        },
-        (payload) => {
-          const newMsg = toMessage(payload.new);
-          if (newMsg) {
-            onNewMessage(newMsg);
-          }
-        },
-      )
-      .subscribe();
+  ): () => void {
+    const token = getAccessToken();
+    if (!token || !conversationId) {
+      return () => {
+        /* nothing to clean up */
+      };
+    }
+    const url = `${vficConfig.realtimeUrl}?token=${encodeURIComponent(token)}`;
+    let closed = false;
+    const es = new EventSource(url);
+
+    es.addEventListener("message.created", (event) => {
+      const payload = JSON.parse((event as MessageEvent).data) as {
+        conversation_id?: string;
+      };
+      if (payload.conversation_id !== conversationId) return;
+      // Refetch + merge (SSE carries ids only). Ignore failures — the next
+      // event/list refresh reconciles.
+      chatRepository
+        .getConversationMessages(conversationId, { limit: 25 })
+        .then(({ messages }) => {
+          for (const m of messages) onNewMessage(m);
+        })
+        .catch(() => {
+          /* best-effort */
+        });
+    });
+
+    es.onerror = () => {
+      // EventSource auto-reconnects; nothing to do here.
+    };
 
     return () => {
-      getSupabaseClient().removeChannel(channel);
+      if (closed) return;
+      closed = true;
+      es.close();
     };
   },
 };

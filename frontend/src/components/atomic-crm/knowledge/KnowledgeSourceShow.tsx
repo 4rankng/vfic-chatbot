@@ -27,7 +27,7 @@ const KnowledgeSourceShowContent = () => {
         <CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-4 py-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <BookOpen className="size-4 text-muted-foreground" />
-            {source.source_name}
+            {source.file_name}
           </CardTitle>
           <span
             className={cn(
@@ -39,15 +39,14 @@ const KnowledgeSourceShowContent = () => {
           </span>
         </CardHeader>
         <CardContent className="flex flex-col px-4 py-2">
-          <Field label="Tên nguồn" value={source.source_name} />
-          <Field label="Loại tài liệu" value={source.document_type} />
-          <Field label="Loại nguồn" value={source.source_type} />
+          <Field label="Tên tài liệu" value={source.file_name} />
+          <Field label="Nguồn" value={source.source} />
           <Field
-            label="Tham chiếu nguồn"
+            label="Drive file ID"
             value={
-              source.source_ref ? (
+              source.drive_file_id ? (
                 <span className="font-mono text-xs break-all">
-                  {source.source_ref}
+                  {source.drive_file_id}
                 </span>
               ) : null
             }
@@ -57,14 +56,6 @@ const KnowledgeSourceShowContent = () => {
           <Field
             label="Ngày cập nhật"
             value={formatDateTime(source.updated_at)}
-          />
-          <Field
-            label="Siêu dữ liệu"
-            value={
-              <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs">
-                {JSON.stringify(source.metadata ?? {}, null, 2)}
-              </pre>
-            }
           />
         </CardContent>
       </Card>

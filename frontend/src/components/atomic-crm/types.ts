@@ -67,15 +67,16 @@ export type Lead = {
 export type Conversation = {
   id: string;
   zalo_chat_id: string;
-  mode: "bot" | "human";
+  // Backend ConversationMode is BOT/HUMAN/CLOSED; the REST dataProvider
+  // lower-cases it so render checks (`=== "bot" / "human"`) keep working.
+  mode: "bot" | "human" | "closed";
   last_inbound_at: string;
   assigned_recruiter_id: string | null;
   created_at: string;
   updated_at: string;
   // Denormalized unread inbound counter, kept in sync by the
   // vfic_chat_histories_unread trigger. Reset to 0 by vfic_mark_read on open.
-  // Optional: the fakerest demo provider / story fixtures don't supply it, so
-  // all use sites default to 0 via `?? 0`.
+  // Optional: partial selects may omit it; use sites default to 0 via `?? 0`.
   unread_count?: number;
 } & Pick<RaRecord, "id">;
 
@@ -102,20 +103,16 @@ export type BotRun = {
   outcome: "sent" | "suppressed" | "error";
 } & Pick<RaRecord, "id">;
 
-// Knowledge-source row (Drive-ingested docs for RAG). `status` is free text
-// (default 'published'); chunks live in `documents` (joined via documents.source
-// = knowledge_sources.source_name). Read-only admin view.
+// Knowledge document (Drive-ingested RAG doc). Mirrors the backend
+// KnowledgeDocumentOut shape served at /api/v1/knowledge/documents. Read-only
+// admin view (ingestion is bot-side via the Drive-sync workflow).
 export type KnowledgeSource = {
   id: string;
-  project_id: string;
-  company_id: string | null;
-  source_name: string;
-  source_type: string;
-  document_type: string;
-  source_ref: string | null;
-  version: string;
+  drive_file_id: string | null;
+  file_name: string;
+  source: string;
+  version: string | null;
   status: string;
-  metadata: unknown;
   created_at: string;
   updated_at: string;
 } & Pick<RaRecord, "id">;

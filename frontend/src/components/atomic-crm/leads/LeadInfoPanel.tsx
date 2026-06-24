@@ -19,7 +19,6 @@ import type { Lead } from "../types";
 import { LeadScoreBar } from "./LeadScoreBar";
 import { LeadStageBadge } from "./LeadStageBadge";
 import { chatRepository } from "../conversations/chatRepository";
-import { telHref } from "./leadUtils";
 
 const formatDateTime = (iso?: string | null) => {
   if (!iso) return null;
@@ -187,7 +186,6 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
             icon={<Phone className="size-4" />}
             label="Số điện thoại"
             value={record.phone}
-            href={telHref(record.phone) ?? undefined}
             copyable
           />
           <Separator />
@@ -283,20 +281,6 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
             value={messageCount === null ? undefined : `${messageCount}`}
             emptyHint="Đang tải…"
           />
-          {record.phone && (
-            <>
-              <Separator />
-              <div className="flex items-center gap-2 pt-2.5">
-                <a
-                  href={telHref(record.phone) ?? undefined}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                >
-                  <Phone className="size-3.5" />
-                  Gọi lại
-                </a>
-              </div>
-            </>
-          )}
         </CardContent>
       </Card>
     </div>

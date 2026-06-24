@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.gitignore
+.omc
+.claude
+e2e
+graphify-out
+coverage
+*.log
+.DS_Store
+npm-debug.log*

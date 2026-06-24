@@ -50,12 +50,3 @@ export function formatISODateString(dateString: string) {
 
   return format(date, "PP");
 }
-
-// Build a sanitized tel: href — keep only digits and a leading +, so formatted
-// numbers like "(028) 1234" or "+84 28…" become dialable. Null when there is
-// no usable phone, so callers can gate the link on the result.
-export function telHref(phone?: string | null): string | null {
-  if (!phone) return null;
-  const cleaned = phone.replace(/[^\d+]/g, "");
-  return cleaned ? `tel:${cleaned}` : null;
-}

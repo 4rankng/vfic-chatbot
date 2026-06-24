@@ -1,9 +1,8 @@
 import { memo } from "react";
 import { useRedirect, RecordContextProvider } from "ra-core";
-import { Phone } from "lucide-react";
 
 import { LEAD_STAGES, LEAD_SCORES, type Lead } from "../types";
-import { getRelativeTimeString, telHref } from "./leadUtils";
+import { getRelativeTimeString } from "./leadUtils";
 import { LeadAvatar } from "./LeadAvatar";
 import { LeadStageMenu } from "./LeadStageMenu";
 import {
@@ -65,12 +64,8 @@ const LeadCardContentBase = ({ lead, showStageBadge, onClick }: LeadCardProps) =
     areaTag ? { label: areaTag, tone: "default" } : null,
   ].filter((t): t is TagStackTag => t !== null);
 
-  const callHref = telHref(lead.phone);
-
   return (
-    // `group` is required: LeadStageMenu's trigger relies on group-hover to
-    // reveal (previously broken — the wrapper had no group ancestor).
-    <div className="group cursor-pointer select-none bg-card hover:bg-accent/50 transition-colors" onClick={handleClick}>
+    <div className="cursor-pointer select-none bg-card hover:bg-accent/50 transition-colors" onClick={handleClick}>
       <RecordContextProvider value={lead}>
         <div className="flex items-center gap-4 px-4 py-3 min-h-[64px]">
           <LeadAvatar record={lead} size="sm" className="size-10 shrink-0" />
@@ -110,22 +105,9 @@ const LeadCardContentBase = ({ lead, showStageBadge, onClick }: LeadCardProps) =
              <div className="text-muted-foreground">
                Liên hệ cuối: {updatedAt || "Chưa rõ"}
              </div>
-             <div className="mt-0.5 text-foreground font-medium">
-               Tiếp theo: Gọi lại hôm nay
-             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            {callHref && (
-              <a
-                href={callHref}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Gọi ${lead.phone}`}
-                className="flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <Phone className="size-4" />
-              </a>
-            )}
             <LeadStageMenu />
           </div>
         </div>

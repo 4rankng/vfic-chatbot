@@ -1,0 +1,38 @@
+# Caddy edge — auto-TLS for bot.tingting.vip.
+# /webhooks, /api, /realtime -> FastAPI (web:8000); everything else -> the
+# frontend nginx image (frontend:80). apiBaseUrl defaults to same-origin,
+# so the SPA needs no deploy-time env injection.
+bot.tingting.vip {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	handle /webhooks/* {
+		reverse_proxy web:8000
+	}
+
+	# Public liveness probe -> backend JSON health (not the SPA).
+	handle /health {
+		reverse_proxy web:8000
+	}
+
+	handle /api/* {
+		reverse_proxy web:8000
+	}
+
+	# SSE: disable buffering so events flush to the client immediately.
+	handle /realtime/* {
+		reverse_proxy web:8000 {
+			flush_interval -1
+		}
+	}
+
+	# SPA (react-admin) served by the frontend image.
+	handle {
+		reverse_proxy frontend:80
+	}
+}

@@ -1,6 +1,3 @@
-// For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
-import storybook from "eslint-plugin-storybook";
-
 import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
@@ -73,5 +70,4 @@ export default tseslint.config(
       "@typescript-eslint/consistent-type-imports": "off",
     },
   },
-  storybook.configs["flat/recommended"],
 );

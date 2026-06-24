@@ -1,0 +1,20 @@
+# Exclude everything not needed in the runtime image.
+.venv
+.omc
+.pytest_cache
+.ruff_cache
+vfic_backend.egg-info
+tests
+__pycache__
+**/__pycache__
+*.pyc
+.git
+.gitignore
+.env
+.env.*
+Dockerfile
+.dockerignore
+docker-compose*.yml
+Caddyfile
+*.log
+.DS_Store

@@ -1,0 +1,36 @@
+# Lightweight LOCAL DEV stack: Postgres+pgvector, Redis, Adminer only.
+# Backend (uvicorn --reload) and frontend (vite) run on the host for hot-reload,
+# so these services are exposed on localhost. `make dev` (from backend/) drives it.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: vfic
+      POSTGRES_PASSWORD: vfic
+      POSTGRES_DB: vfic
+    ports: ["5432:5432"]
+    volumes: [vfic_dev_pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vfic -d vfic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes: [vfic_dev_redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  adminer:
+    image: adminer:4
+    depends_on: [postgres]
+    ports: ["8081:8080"]
+
+volumes:
+  vfic_dev_pgdata:
+  vfic_dev_redisdata:

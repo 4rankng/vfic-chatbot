@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Generate /opt/vfic/.env on first deploy: strong random infra secrets filled,
+# third-party API keys left BLANK for the operator to fill. Idempotent.
+set -euo pipefail
+
+ENV_FILE="${VFIC_ENV_FILE:-/opt/vfic/.env}"
+
+if [ -f "$ENV_FILE" ]; then
+  echo "==> $ENV_FILE already exists; leaving untouched."
+  exit 0
+fi
+
+mkdir -p "$(dirname "$ENV_FILE")"
+
+PG_PASS=$(openssl rand -hex 18)
+REDIS_PASS=$(openssl rand -hex 18)
+JWT_SECRET=$(openssl rand -hex 32)
+ADMIN_PASS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)
+
+umask 077
+cat > "$ENV_FILE" <<EOF
+# VFIC production env — generated on first deploy (mode 0600).
+# Fill the blank API keys below, then recreate the app services:
+#   cd /opt/vfic && docker compose up -d --force-recreate web worker-chatbot worker-ingest scheduler
+
+APP_ENV=production
+CORS_ORIGINS=https://bot.tingting.vip
+
+# ---- Postgres (self-hosted, pgvector) ----
+POSTGRES_USER=vfic
+POSTGRES_PASSWORD=$PG_PASS
+POSTGRES_DB=vfic
+DATABASE_URL=postgresql+asyncpg://vfic:$PG_PASS@postgres:5432/vfic
+DATABASE_URL_SYNC=postgresql+psycopg://vfic:$PG_PASS@postgres:5432/vfic
+
+# ---- Redis (RQ broker + per-chat mutex + pub/sub) ----
+REDIS_PASSWORD=$REDIS_PASS
+REDIS_URL=redis://:$REDIS_PASS@redis:6379/0
+
+# ---- Auth (JWT) ----
+JWT_SECRET=$JWT_SECRET
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+REFRESH_TOKEN_EXPIRE_DAYS=14
+
+# ---- Bootstrap admin (used once by \`make deploy\` -> scripts.create_admin) ----
+VFIC_BOOTSTRAP_ADMIN_EMAIL=admin@vfic.vn
+VFIC_BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASS
+
+# ---- Zalo OA (webhook verify + send). NEVER exposed to frontend. ----
+ZALO_OA_TOKEN=
+ZALO_OA_OAID=
+ZALO_API_BASE=https://openapi.zalo.me
+
+# ---- LLM: MiniMax (OpenAI-compatible). Agent + safety. ----
+MINIMAX_API_KEY=
+MINIMAX_BASE_URL=https://api.minimaxi.com/v1
+MINIMAX_AGENT_MODEL=MiniMax-M2.7-highspeed
+MINIMAX_SAFETY_MODEL=MiniMax-M2.5-highspeed
+MINIMAX_REQUEST_TIMEOUT=60
+
+# ---- Embeddings: Google Gemini (3072-dim). ----
+GEMINI_API_KEY=
+GEMINI_EMBEDDING_MODEL=gemini-embedding-2
+EMBEDDING_DIM=3072
+
+# ---- Google Drive (knowledge ingest) ----
+GOOGLE_DRIVE_CREDENTIALS_JSON=
+GOOGLE_DRIVE_FOLDER_ID=
+
+# ---- Runtime ----
+WEB_CONCURRENCY=2
+EOF
+
+echo "==> Created $ENV_FILE (mode 0600)."
+echo "==> Bootstrap admin -> email: admin@vfic.vn   password: $ADMIN_PASS"
+echo "    (also stored in $ENV_FILE as VFIC_BOOTSTRAP_ADMIN_PASSWORD)"

@@ -41,9 +41,9 @@ export const LeadStageMenu = () => {
 
   const handleSelect = (stage: string) => {
     if (isPending || stage === lead.lead_stage) return;
-    
+
     let updateData: Partial<Lead> & { closed_reason?: string } = { lead_stage: stage };
-    
+
     if (stage === "CLOSED") {
       const reason = window.prompt("Lý do đóng ứng viên này?");
       if (reason === null) return; // User cancelled
@@ -79,9 +79,11 @@ export const LeadStageMenu = () => {
           aria-label="Đổi giai đoạn"
           disabled={isPending}
           onClick={(e) => e.stopPropagation()}
+          // Always visible — hover-reveal (`group-hover:opacity-100`) made the
+          // trigger undiscoverable on touch (no hover state). Mirrors the
+          // always-visible treatment already applied to the call button.
           className={cn(
             "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition",
-            "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100",
             "hover:bg-muted hover:text-foreground",
             "disabled:cursor-wait disabled:opacity-50",
           )}

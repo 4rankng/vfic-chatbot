@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useListContext, useRefresh, ShowBase } from "ra-core";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,7 +9,7 @@ import { RefreshCw, Users } from "lucide-react";
 
 import { LEAD_STAGES, type Lead } from "../types";
 import { LeadCard } from "./LeadCard";
-import { LeadShowContent } from "./LeadShow";
+import { LeadShowContentSheet } from "./LeadShow";
 
 export { LEAD_STAGES };
 
@@ -97,14 +97,20 @@ export const LeadListContent = () => {
       </div>
       <ListPagination rowsPerPageOptions={[20, 50, 100]} className="pt-4" />
       <Sheet open={!!selectedLeadId} onOpenChange={(open) => !open && setSelectedLeadId(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-[480px] lg:max-w-[600px] p-0 overflow-y-auto border-l">
-          {selectedLeadId && (
-            <ShowBase resource="leads" id={selectedLeadId}>
-              <div className="p-4 md:p-6 pb-20">
-                <LeadShowContent />
-              </div>
-            </ShowBase>
-          )}
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px] lg:max-w-[600px] border-l"
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>Chi tiết ứng viên</SheetTitle>
+          </SheetHeader>
+          <div className="flex min-h-0 flex-1 flex-col">
+            {selectedLeadId && (
+              <ShowBase resource="leads" id={selectedLeadId}>
+                <LeadShowContentSheet />
+              </ShowBase>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
     </>

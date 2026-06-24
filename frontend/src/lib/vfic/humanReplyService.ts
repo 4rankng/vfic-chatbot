@@ -1,17 +1,16 @@
-// Human-reply bridge: SPA -> n8n human-reply webhook.
+// Recruiter reply bridge: SPA -> FastAPI recruiter-reply endpoint.
 //
-// SECURITY: ownership is established by the Bearer JWT (the Supabase session
-// token), NOT by a body field. n8n introspects the JWT via Supabase's
-// /auth/v1/user endpoint and uses the introspected user id as the SOLE
-// ownership + audit source. The request body carries only the conversational
-// payload — no recruiter_id — so a client cannot spoof another recruiter.
-//
-// Phase 3b will route this through the vfic_human_relay Edge function
-// (HMAC-signed) instead of calling n8n directly; the contract here is
-// unchanged.
+// SECURITY: ownership is established by the Bearer JWT (the user's access
+// token), NOT by a body field. The backend verifies the caller is the
+// assigned recruiter (or an admin) AND that the conversation is in HUMAN mode
+// before sending via Zalo (server-side OA token). The request body carries
+// only the message text — no recruiter_id — so a client cannot spoof another
+// recruiter. `conversationId` is the conversation UUID (react-admin record id).
 
-import { vficConfig } from "./config";
-import { getSupabaseClient } from "../../components/atomic-crm/providers/supabase/supabase";
+import {
+  ApiError,
+  apiJson,
+} from "../../components/atomic-crm/providers/supabase/supabase";
 
 export type HumanReplyStatus =
   | "disabled"
@@ -36,15 +35,6 @@ export class HumanReplyError extends Error {
   }
 }
 
-const authHeader = async (): Promise<string> => {
-  const { data } = await getSupabaseClient().auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) {
-    throw new HumanReplyError("unauthorized", "No Supabase session token");
-  }
-  return `Bearer ${token}`;
-};
-
 const statusFor = (httpStatus: number): HumanReplyStatus => {
   if (httpStatus === 401) return "unauthorized";
   if (httpStatus === 403) return "forbidden";
@@ -54,37 +44,27 @@ const statusFor = (httpStatus: number): HumanReplyStatus => {
 };
 
 export const sendHumanReply = async ({
-  zaloChatId,
+  conversationId,
   message,
 }: {
-  zaloChatId: string;
+  conversationId: string;
   message: string;
 }): Promise<void> => {
-  const webhookUrl = vficConfig.humanReplyWebhookUrl;
-  if (!webhookUrl) {
-    throw new HumanReplyError("disabled", "Human-reply webhook not configured");
-  }
-  const header = await authHeader();
-
-  let response: Response;
   try {
-    response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: header,
+    await apiJson(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+      {
+        method: "POST",
+        body: { body: message },
       },
-      // No recruiter_id: ownership comes from the introspected JWT.
-      body: JSON.stringify({ zalo_chat_id: zaloChatId, message }),
-    });
-  } catch {
-    throw new HumanReplyError("network", "Network error calling reply webhook");
-  }
-
-  if (!response.ok) {
-    throw new HumanReplyError(
-      statusFor(response.status),
-      `Reply webhook returned ${response.status}`,
     );
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      throw new HumanReplyError(
+        statusFor(error.status),
+        `Reply endpoint returned ${error.status}`,
+      );
+    }
+    throw new HumanReplyError("network", "Network error calling reply endpoint");
   }
 };

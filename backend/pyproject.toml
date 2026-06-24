@@ -1,0 +1,53 @@
+[project]
+name = "vfic-backend"
+version = "0.1.0"
+description = "VFIC recruitment platform backend — FastAPI + LangGraph (replaces n8n)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+    "pgvector>=0.3.6",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "email-validator>=2.2",
+    "python-jose[cryptography]>=3.3",
+    "passlib[argon2]>=1.7.4",
+    "redis>=5.2",
+    "rq>=2.0",
+    "rq-scheduler>=0.14",
+    "httpx>=0.28",
+    "sse-starlette>=2.1",
+    "python-multipart>=0.0.17",
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.2",
+    "google-genai>=0.3",
+    "google-api-python-client>=2.154",
+    "google-auth-oauthlib>=1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

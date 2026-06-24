@@ -9,5 +9,5 @@ export default {
   list: KnowledgeSourceList,
   show: KnowledgeSourceShow,
   recordRepresentation: (record?: KnowledgeSource) =>
-    record?.source_name ?? "Knowledge source",
+    record?.file_name ?? "Knowledge source",
 };

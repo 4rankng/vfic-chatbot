@@ -1,0 +1,114 @@
+# VFIC production stack — image-based. Shipped to /opt/vfic on the droplet.
+# Images: franknguyenvd/vfic-backend (web + workers + scheduler),
+#         franknguyenvd/vfic-frontend (nginx static). Caddy = edge (auto-TLS).
+# All app config comes from .env (compose auto-loads /opt/vfic/.env).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vfic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-vfic}
+    volumes: [vfic_pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    volumes: [vfic_redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  web:
+    image: franknguyenvd/vfic-backend:latest
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    expose: ["8000"]
+    restart: unless-stopped
+
+  # RQ worker: chatbot runs (user-facing latency) + lead/memory persistence.
+  worker-chatbot:
+    image: franknguyenvd/vfic-backend:latest
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["rq", "worker", "webhook_high", "persistence_low", "--url", "${REDIS_URL}"]
+    healthcheck:
+      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # RQ worker: knowledge ingest / reindex / bus rebuild (slow, Drive-bound).
+  worker-ingest:
+    image: franknguyenvd/vfic-backend:latest
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["rq", "worker", "ingest", "--url", "${REDIS_URL}"]
+    healthcheck:
+      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, follow-ups.
+  scheduler:
+    image: franknguyenvd/vfic-backend:latest
+    env_file: .env
+    depends_on:
+      redis: { condition: service_healthy }
+    command: ["rqscheduler", "--url", "${REDIS_URL}"]
+    healthcheck:
+      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # SPA served by the frontend nginx image; Caddy reverse-proxies to it.
+  frontend:
+    image: franknguyenvd/vfic-frontend:latest
+    expose: ["80"]
+    restart: unless-stopped
+
+  # DB UI — bound to loopback only. Reach via `make adminer` SSH tunnel.
+  adminer:
+    image: adminer:4
+    depends_on: [postgres]
+    ports: ["127.0.0.1:8081:8080"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on: [web, frontend]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - vfic_caddy_data:/data
+      - vfic_caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  vfic_pgdata:
+  vfic_redisdata:
+  vfic_caddy_data:
+  vfic_caddy_config:

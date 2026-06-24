@@ -146,6 +146,18 @@ class RouteErrorBoundary extends Component<
   }
 }
 
+// React Router's <CustomRoutes> is a <Routes>, which accepts only <Route>
+// (or <Fragment>) as direct children — wrapping the routes in an error
+// boundary or <Suspense> trips the "is not a <Route> component" invariant
+// at route-config build time. Wrap each route's *element* instead, so a
+// rejected lazy import still isolates the failure to that route pane and
+// offers a reload (the original intent of RouteErrorBoundary).
+const RouteBoundary = ({ children }: { children: ReactNode }) => (
+  <RouteErrorBoundary>
+    <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+  </RouteErrorBoundary>
+);
+
 export type CRMProps = {
   dataProvider?: CrmDataProvider;
   authProvider?: AuthProvider;
@@ -332,20 +344,37 @@ export const CRM = ({
         {...rest}
       >
         <CustomRoutes>
-          <RouteErrorBoundary>
-            <Suspense fallback={<RouteFallback />}>
-              {!isMobile && (
-                <Route path={PROFILE_PATH} element={<ProfilePage />} />
-              )}
-              {!isMobile && (
-                <Route path={SETTINGS_PATH} element={<SettingsPage />} />
-              )}
-              {isMobile && (
-                <Route path={SETTINGS_PATH} element={<SettingsPageMobile />} />
-              )}
-              <Route path={CHANGELOG_PATH} element={<ChangelogPage />} />
-            </Suspense>
-          </RouteErrorBoundary>
+          {!isMobile && (
+            <Route
+              path={PROFILE_PATH}
+              element={
+                <RouteBoundary>
+                  <ProfilePage />
+                </RouteBoundary>
+              }
+            />
+          )}
+          {!isMobile && (
+            <Route
+              path={SETTINGS_PATH}
+              element={
+                <RouteBoundary>
+                  <SettingsPage />
+                </RouteBoundary>
+              }
+            />
+          )}
+          {isMobile && (
+            <Route
+              path={SETTINGS_PATH}
+              element={
+                <RouteBoundary>
+                  <SettingsPageMobile />
+                </RouteBoundary>
+              }
+            />
+          )}
+          <Route path={CHANGELOG_PATH} element={<ChangelogPage />} />
         </CustomRoutes>
         <Resource name="leads" {...leads} />
         <Resource name="conversations" {...conversations} />

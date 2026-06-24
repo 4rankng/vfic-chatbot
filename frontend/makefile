@@ -1,4 +1,4 @@
-.PHONY: build help
+.PHONY: build help push
 
 # Run silently, show output on failure
 run-silent = $1 >/tmp/atomic-crm-$2.log 2>&1 || (cat /tmp/atomic-crm-$2.log && false)
@@ -172,3 +172,26 @@ monitor: ## one-shot summary of the most recent agent session (pass SESSION=<id>
 
 sessions: ## list known agent sessions, newest first
 	@node scripts/harness-monitor.mjs --list
+
+# ---- VFIC production image (DockerHub) ----
+# Build & push the AMD64 frontend image. Tags immutable SHA + :latest; uses
+# registry cache. Mirrors payroll/backend/Makefile `push`. The DockerHub account
+# is already authed locally via the Docker Desktop keychain (no password here).
+IMAGE_NAME := franknguyenvd/vfic-frontend
+GIT_SHA    := $(shell git rev-parse --short HEAD)
+BUILDER    := bb
+
+push:
+	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || docker buildx create --name $(BUILDER) --driver docker-container --use
+	@docker buildx use $(BUILDER)
+	@docker buildx inspect --bootstrap >/dev/null
+	@echo "Building & pushing AMD64 frontend image..."
+	docker buildx build \
+		--platform linux/amd64 \
+		--tag $(IMAGE_NAME):latest \
+		--tag $(IMAGE_NAME):$(GIT_SHA) \
+		--cache-from type=registry,ref=$(IMAGE_NAME):latest \
+		--build-arg BUILDKIT_INLINE_CACHE=1 \
+		--push \
+		.
+	@echo "Push complete: $(IMAGE_NAME):latest ($(GIT_SHA))"
