@@ -100,6 +100,10 @@ async def clean_kb(db_session):
 # collides (UniqueViolation / stale state) and the suite looks flaky. Reference
 # + seed tables (users, jobs, projects, companies, personas, bus_*,
 # system_settings) are deliberately preserved; KB tables stay owned by clean_kb.
+#
+# Keep this as ONE multi-table TRUNCATE statement: leads <-> conversations share
+# a circular FK (leads.zalo_id -> conversations.zalo_chat_id) that only resolves
+# inside a single atomic TRUNCATE; splitting it into per-table statements fails.
 _TRANSIENT_TABLES = (
     "audit_events",
     "message_dedup",

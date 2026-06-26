@@ -183,28 +183,6 @@ const ProfileForm = ({
           </CardContent>
         </Card>
       )}
-      <Card className="border border-border bg-card shadow-xs hover:shadow-sm transition-all duration-300">
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-4.5 bg-primary rounded-full" />
-              <span className="font-display text-lg font-bold tracking-wider uppercase text-foreground">
-                {translate("crm.profile.mcp.title", {
-                  _: "MCP Server",
-                })}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {translate("crm.profile.mcp.description", {
-                _: "Use this URL to connect your AI assistant to your CRM data via the Model Context Protocol (MCP).",
-              })}
-            </p>
-            <CopyPaste
-              value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp`}
-            />
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

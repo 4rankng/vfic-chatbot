@@ -5,12 +5,13 @@ rotated on each /refresh and rejected if the user has since been disabled/delete
 """
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.ratelimit import enforce_rate_limit
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -47,7 +48,12 @@ async def _tokens_for(user: User) -> TokenResponse:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def login(
+    body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    # Argon2 verify is expensive (~50-200ms); cap attempts/IP so a stuffing
+    # attack cannot pin the droplet's ASGI workers.
+    await enforce_rate_limit(request, "auth-login", limit=10, window=60)
     user = await authenticate(db, body.email, body.password)
     if user is None:
         raise HTTPException(
@@ -59,8 +65,9 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
-    body: RefreshRequest, db: AsyncSession = Depends(get_db)
+    body: RefreshRequest, request: Request, db: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
+    await enforce_rate_limit(request, "auth-refresh", limit=20, window=60)
     try:
         payload = await decode_token(body.refresh_token)
     except Exception:

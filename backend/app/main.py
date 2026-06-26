@@ -1,14 +1,16 @@
 """VFIC API entrypoint."""
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import auth, bot_runs, conversations, dashboard, jobs, knowledge, leads, personas, projects, realtime, users, webhooks
 from app.core.config import get_settings
 from app.core.db import engine
-from app.core.logging import setup_logging
+from app.core.logging import request_id_ctx, setup_logging
 
 settings = get_settings()
 setup_logging()
@@ -61,6 +63,33 @@ app.include_router(webhooks.router)
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.middleware("http")
+async def request_id_middleware(request, call_next):
+    """Stamp every request with a correlation id (echoed back as X-Request-Id)
+    so a failure traces across logs and downstream Zalo/RQ calls."""
+    rid = request.headers.get("x-request-id") or uuid.uuid4().hex
+    token = request_id_ctx.set(rid)
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-Id"] = rid
+        return response
+    finally:
+        request_id_ctx.reset(token)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    """Catch-all: log with request_id and return a consistent Vietnamese 500
+    instead of a bare English 'Internal Server Error'. Keeps the {detail} shape
+    the frontend already parses. HTTPException has its own handler, so genuine
+    business errors (Vietnamese detail, intended status) are unaffected."""
+    logger.exception("unhandled error path=%s", request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Đã có lỗi xảy ra, vui lòng thử lại sau."},
+    )
 
 
 # Socket.IO realtime: mount the AsyncServer at the ASGI root so /socket.io/ is

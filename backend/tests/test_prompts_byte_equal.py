@@ -2,6 +2,7 @@
 to n8n-workflows/VFIC Chatbot.json. Catches prompt drift (the core behavior IP)."""
 import json
 import os
+import pytest
 import re
 from pathlib import Path
 
@@ -20,7 +21,16 @@ def _workflow_path() -> Path:
     raise FileNotFoundError("VFIC Chatbot.json not found; set N8N_WORKFLOWS_DIR")
 
 
-WORKFLOW = _workflow_path()
+# The n8n-workflows/ tree is DR-only and may be absent from a checkout. Skip the
+# whole module (rather than erroring at collection) when the ground-truth file
+# is missing — these tests guard prompt drift, not core runtime behavior.
+try:
+    WORKFLOW = _workflow_path()
+except FileNotFoundError:
+    pytest.skip(
+        "VFIC Chatbot.json not found; set N8N_WORKFLOWS_DIR",
+        allow_module_level=True,
+    )
 
 
 def _workflow(name: str) -> Path:

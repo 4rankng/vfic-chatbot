@@ -128,3 +128,18 @@ async def test_webhook_accepts_unsigned_when_no_secret(client, monkeypatch):
     r = await client.post("/webhooks/zalo", json=_payload("sig-2", chat_id="z-sig2"))
     assert r.status_code == 200
 
+
+async def test_webhook_rejects_unsigned_in_nondev_without_secret(client, monkeypatch):
+    """Non-dev with NEITHER secret configured must fail-closed (503), not accept
+    blind — otherwise anyone could inject inbound messages."""
+    import app.api.webhooks as wh
+    from app.core.config import get_settings
+
+    s = get_settings()
+    monkeypatch.setattr(s, "app_env", "production")
+    monkeypatch.setattr(s, "zalo_oa_secret", "")
+    monkeypatch.setattr(s, "zalo_bot_webhook_secret", "")
+    monkeypatch.setattr(wh, "enqueue_chat_run", lambda job: None)
+    r = await client.post("/webhooks/zalo", json=_payload("sig-3", chat_id="z-sig3"))
+    assert r.status_code == 503
+

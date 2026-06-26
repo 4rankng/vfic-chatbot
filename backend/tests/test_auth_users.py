@@ -60,6 +60,28 @@ async def test_login_wrong_password_is_401(client):
     assert r.status_code == 401
 
 
+async def test_login_rate_limited_in_production(client, _reset_redis, monkeypatch):
+    """Production caps login attempts per IP (dev/test skips the limiter, so the
+    rest of the suite's repeated logins are unaffected)."""
+    from app.core.config import get_settings
+    from app.core.redis import get_redis
+
+    monkeypatch.setattr(get_settings(), "app_env", "production")
+    # Unique forwarded-IP bucket (flushed) so leftover state never collides.
+    bucket = "203.0.113.7"
+    await get_redis().delete(f"rl:auth-login:{bucket}")
+    headers = {"X-Forwarded-For": bucket}
+    body = {"email": ADMIN_EMAIL, "password": "wrong"}
+
+    # limit=10: the first 10 attempts pass the limiter (and 401 on bad password).
+    for _ in range(10):
+        r = await client.post("/api/v1/auth/login", json=body, headers=headers)
+        assert r.status_code == 401, r.text
+    # The 11th from the same IP is throttled.
+    r = await client.post("/api/v1/auth/login", json=body, headers=headers)
+    assert r.status_code == 429, r.text
+
+
 async def test_refresh_rotates_tokens_and_rejects_access_token(client):
     tok = await _admin_token(client)
 
