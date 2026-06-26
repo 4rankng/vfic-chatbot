@@ -33,7 +33,10 @@ _settings = get_settings()
 async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     # Read the RAW body so logging shows the exact bytes Zalo sent.
     raw = await request.body()
-    logger.info("zalo webhook inbound bytes=%d body=%s", len(raw), raw.decode("utf-8", "replace")[:1000])
+    if _settings.app_env == "development":
+        logger.info("zalo webhook inbound bytes=%d body=%s", len(raw), raw.decode("utf-8", "replace")[:1000])
+    else:
+        logger.info("zalo webhook inbound bytes=%d", len(raw))
 
     if _settings.zalo_bot_webhook_secret:
         # Bot Platform: shared-secret echo (X-Bot-Api-Secret-Token).

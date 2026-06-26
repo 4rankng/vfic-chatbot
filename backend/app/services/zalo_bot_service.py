@@ -283,9 +283,8 @@ class ZaloBotAdminClient:
         """Long-poll for new updates. Default timeout 30s per Zalo docs.
 
         Returns the raw list of events in ``raw["result"]`` so the caller can
-        normalize them (the payload schema is shared with the webhook
-        contract — see ``ZaloWebhookService.normalize`` for the OA variant;
-        a Bot Platform variant is intentionally out of scope here).
+        normalize them (the payload schema is shared with the webhook contract
+        — see ``ZaloWebhookService.normalize``).
         """
         body: dict[str, Any] = {}
         if timeout is not None:

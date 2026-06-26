@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # LLM: MiniMax (OpenAI-compatible). Agent + safety. KEPT from n8n, prompts ported verbatim.
     minimax_api_key: str = ""
-    minimax_base_url: str = "https://api.minimaxi.com/v1"
+    minimax_base_url: str = "https://api.minimax.io/v1"
     minimax_agent_model: str = "MiniMax-M2.7-highspeed"
     minimax_safety_model: str = "MiniMax-M2.5-highspeed"
     minimax_request_timeout: int = 60

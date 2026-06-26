@@ -55,7 +55,7 @@ ZALO_BOT_WEBHOOK_SECRET=
 
 # ---- LLM: MiniMax (OpenAI-compatible). Agent + safety. ----
 MINIMAX_API_KEY=
-MINIMAX_BASE_URL=https://api.minimaxi.com/v1
+MINIMAX_BASE_URL=https://api.minimax.io/v1
 MINIMAX_AGENT_MODEL=MiniMax-M2.7-highspeed
 MINIMAX_SAFETY_MODEL=MiniMax-M2.5-highspeed
 MINIMAX_REQUEST_TIMEOUT=60
