@@ -1,7 +1,7 @@
 # Caddy edge — auto-TLS for bot.tingting.vip.
-# /webhooks, /api, /realtime -> FastAPI (web:8000); everything else -> the
-# frontend nginx image (frontend:80). apiBaseUrl defaults to same-origin,
-# so the SPA needs no deploy-time env injection.
+# /webhooks, /api, /realtime, /socket.io -> FastAPI (web:8000); everything
+# else -> the frontend nginx image (frontend:80). apiBaseUrl defaults to
+# same-origin, so the SPA needs no deploy-time env injection.
 bot.tingting.vip {
 	encode zstd gzip
 
@@ -29,6 +29,12 @@ bot.tingting.vip {
 		reverse_proxy web:8000 {
 			flush_interval -1
 		}
+	}
+
+	# Socket.IO realtime (WebSocket + polling). reverse_proxy transparently
+	# upgrades the WS connection, so wss://<origin>/socket.io/ works here.
+	handle /socket.io/* {
+		reverse_proxy web:8000
 	}
 
 	# SPA (react-admin) served by the frontend image.
