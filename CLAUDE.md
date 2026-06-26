@@ -37,6 +37,17 @@ tree is **not** live — do not "sync" to it.
   The "graph" (`app/graph/runner.py`) is a hand-rolled state machine, not the
   LangGraph library. LLMs: MiniMax (agent + safety) + Gemini (embeddings,
   `vector(3072)`).
+- **External integrations (gotchas — do not re-break these)**:
+  - **Zalo is the Bot Platform** (`bot-api.zaloplatforms.com`), NOT the
+    Official Account. Inbound verifies `X-Bot-Api-Secret-Token` (NOT the OA
+    `X-Zevent-Signature` HMAC); outbound sends via `ZaloBotSender`
+    `/bot{token}/sendMessage`. Single client: `app/services/zalo_bot_service.py`;
+    secrets `ZALO_BOT_TOKEN` + `ZALO_BOT_WEBHOOK_SECRET`. (The OA client
+    `app/services/zalo_service.py` was deleted 2026-06-27.)
+  - **MiniMax uses the international endpoint**:
+    `MINIMAX_BASE_URL=https://api.minimax.io/v1`. The key is an international
+    key; the domestic `api.minimaxi.com` 401-rejects it (code 2049). Do not
+    revert to the domestic URL.
 - **Data layer**: self-hosted **Postgres 16 + pgvector** + **Redis 7**, both
   containers in `backend/docker-compose.yml`. Schema = `backend/alembic/`.
   No DB-level RLS — authorization is enforced in the app
