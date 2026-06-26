@@ -204,8 +204,11 @@ const SettingsFormFields = () => {
     "crm.settings.validation.entities.categories",
   );
 
+  // Cap at the backend's per_page<=200 ceiling (the deals resource is legacy
+  // Atomic-CRM settings config, but this guards against a 422 if it ever maps
+  // to a live list endpoint).
   const { data: deals } = useGetList("deals", {
-    pagination: { page: 1, perPage: 1000 },
+    pagination: { page: 1, perPage: 200 },
   });
 
   const validateDealStages = useCallback(
