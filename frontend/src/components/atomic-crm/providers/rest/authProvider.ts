@@ -7,7 +7,7 @@ import {
   clearTokens,
   getAccessToken,
   setTokens,
-} from "./supabase";
+} from "./api";
 
 // JWT auth provider (replaces Supabase Auth).
 //

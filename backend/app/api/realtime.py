@@ -4,15 +4,14 @@ EventSource cannot set Authorization headers, so the JWT is accepted via ?token=
 (or the Bearer header). Auth is enforced before the stream opens.
 """
 import json
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from app.api.dependencies import get_user_from_token
 from app.core.db import get_db
 from app.core.redis import get_redis
-from app.core.security import decode_token
 from app.models.user import User
 from app.services.realtime import CHANNEL
 
@@ -20,6 +19,7 @@ router = APIRouter()
 
 
 async def _user_from_request(request: Request, db: AsyncSession) -> User:
+    # Token can arrive as ?token= (EventSource can't set headers) or Bearer.
     token = request.query_params.get("token")
     if not token:
         auth = request.headers.get("authorization") or ""
@@ -27,20 +27,7 @@ async def _user_from_request(request: Request, db: AsyncSession) -> User:
             token = auth[7:].strip()
     if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing token")
-    try:
-        payload = await decode_token(token)
-        if payload.get("type") != "access":
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
-        uid = uuid.UUID(payload["sub"])
-    except (ValueError, KeyError) as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token") from exc
-    user = await db.get(User, uid)
-    if user is None or user.disabled:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
-    # Reject access tokens superseded by a password change (ver mismatch).
-    if payload.get("ver", 0) != user.token_version:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
-    return user
+    return await get_user_from_token(token, db)
 
 
 async def _event_generator(request: Request):

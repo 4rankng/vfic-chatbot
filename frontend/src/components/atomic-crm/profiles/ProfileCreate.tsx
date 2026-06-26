@@ -6,7 +6,7 @@ import { TopToolbar } from "../layout/TopToolbar";
 import { Button } from "@/components/ui/button";
 import { useDataProvider } from "ra-core";
 import { useState } from "react";
-import type { CrmDataProvider } from "../providers/supabase/dataProvider";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
 
 export const ProfileCreate = () => {
   const notify = useNotify();

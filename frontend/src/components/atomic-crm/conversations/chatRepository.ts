@@ -3,7 +3,7 @@ import type { Lead, Message } from "../types";
 import {
   apiJson,
   getAccessToken,
-} from "../providers/supabase/supabase";
+} from "../providers/rest/api";
 
 // Chat data access over the FastAPI REST + SSE backend (replaces the Supabase
 // client + postgres_changes realtime). Conversations are keyed by their UUID
@@ -22,7 +22,7 @@ interface ListEnvelope {
 //   sender SYSTEM  -> system
 const toMessage = (row: ApiRecord): Message => {
   const sender = String(row.sender ?? "").toUpperCase();
-  const recruiterId = row.recruiter_id ?? null;
+  const recruiterId = row.recruiter_id != null ? String(row.recruiter_id) : null;
   const type: Message["type"] =
     sender === "SYSTEM" ? "system" : sender === "WORKER" ? "inbound" : "outbound";
   return {
@@ -54,10 +54,10 @@ export const chatRepository = {
   },
 
   /**
-   * Latest message snippet per conversation, for inbox row previews. Fans out
-   * the per-conversation last-messages endpoint in parallel (bounded by the
-   * inbox page size; a batch endpoint can replace this later). Returns a map of
-   * zalo_chat_id -> snippet text.
+   * Latest message snippet per conversation, for inbox row previews. ONE batched
+   * request (chunked at the backend's 200-id cap) instead of an N-fanout of
+   * per-conversation GETs. The endpoint returns {conversation_id -> body}; we
+   * re-key by zalo_chat_id for the inbox consumers.
    */
   async getLastMessages(
     conversations: { id: string; zalo_chat_id: string }[],
@@ -65,21 +65,22 @@ export const chatRepository = {
     const out: Record<string, string> = {};
     const valid = conversations.filter((c) => c?.id && c?.zalo_chat_id);
     if (valid.length === 0) return out;
-    const results = await Promise.all(
-      valid.map(async (c) => {
-        try {
-          const msgs = await apiJson<ApiRecord[]>(
-            `/api/v1/conversations/${encodeURIComponent(c.id)}/last-messages?limit=1`,
-          );
-          const last = msgs?.[0];
-          return [c.zalo_chat_id, last ? toMessage(last).content : ""] as const;
-        } catch {
-          return [c.zalo_chat_id, ""] as const;
-        }
-      }),
-    );
-    for (const [zalo, text] of results) {
-      if (zalo && text) out[zalo] = text;
+    const zaloById = new Map(valid.map((c) => [c.id, c.zalo_chat_id]));
+    for (let i = 0; i < valid.length; i += 200) {
+      const chunk = valid.slice(i, i + 200).map((c) => c.id);
+      let snippets: Record<string, string> = {};
+      try {
+        const resp = await apiJson<{ snippets: Record<string, string> }>(
+          `/api/v1/conversations/last-messages/batch?ids=${encodeURIComponent(chunk.join(","))}`,
+        );
+        snippets = resp?.snippets ?? {};
+      } catch {
+        snippets = {};
+      }
+      for (const [cid, text] of Object.entries(snippets)) {
+        const zalo = zaloById.get(cid);
+        if (zalo && text) out[zalo] = text;
+      }
     }
     return out;
   },

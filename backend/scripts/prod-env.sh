@@ -47,9 +47,9 @@ REFRESH_TOKEN_EXPIRE_DAYS=14
 VFIC_BOOTSTRAP_ADMIN_EMAIL=admin@vfic.vn
 VFIC_BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASS
 
-# ---- Zalo OA (webhook verify + send). NEVER exposed to frontend. ----
-ZALO_OA_TOKEN=
-ZALO_OA_OAID=
+# ---- Zalo bot (send replies + optional inbound HMAC verify). NEVER exposed to frontend. ----
+ZALO_BOT_TOKEN=
+ZALO_OA_SECRET=
 ZALO_API_BASE=https://openapi.zalo.me
 
 # ---- LLM: MiniMax (OpenAI-compatible). Agent + safety. ----
@@ -63,10 +63,6 @@ MINIMAX_REQUEST_TIMEOUT=60
 GEMINI_API_KEY=
 GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 EMBEDDING_DIM=3072
-
-# ---- Google Drive (knowledge ingest) ----
-GOOGLE_DRIVE_CREDENTIALS_JSON=
-GOOGLE_DRIVE_FOLDER_ID=
 
 # ---- Runtime ----
 WEB_CONCURRENCY=2

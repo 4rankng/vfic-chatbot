@@ -10,7 +10,7 @@
 import {
   ApiError,
   apiJson,
-} from "../../components/atomic-crm/providers/supabase/supabase";
+} from "../../components/atomic-crm/providers/rest/api";
 
 export type HumanReplyStatus =
   | "disabled"

@@ -1,192 +1,126 @@
-# AGENTS.md
+# AGENTS.md — VFIC miniCRM (Ting Ting) frontend
 
 ## Project Overview
 
-Atomic CRM is a full-featured CRM built with React, shadcn-admin-kit, and Supabase. It provides contact management, task tracking, notes, email capture, and deal management with a Kanban board.
+**VFIC miniCRM** (brand *Ting Ting*) is the recruiter/admin console for the
+VFIC recruitment platform. It is a React + react-admin single-page app that
+talks to the **VFIC FastAPI backend** (`/api/v1` REST + `/realtime` SSE).
+The UI is **Vietnamese-only**. It is derived from the open-source
+*Atomic CRM* / *shadcn-admin-kit* template (by Marmelab) but has been
+stripped to five resources.
+
+> **History:** until 2026-06-26 this app used Supabase directly (PostgREST +
+> Supabase Auth + Realtime). It has been **fully migrated to the FastAPI
+> backend**. Any reference to Supabase, FakeRest, contacts/companies/deals/
+> tasks/sales resources, or `supabase/schemas` as the source of truth is
+> **stale template residue** and should be ignored.
 
 ## Development Commands
 
-### Setup
-```bash
-make install          # Install dependencies (frontend, backend, local Supabase)
-make start            # Start full stack with real API (Supabase + Vite dev server)
-make stop             # Stop the stack
-make start-demo       # Start full-stack with FakeRest data provider
-```
-
-### Testing and Code Quality
+Real commands are **npm scripts** (the `Makefile`'s `supabase-*` targets are
+stale template leftovers and do not apply to VFIC).
 
 ```bash
-make test             # Run unit tests (vitest)
-make typecheck        # Run TypeScript type checking
-make lint             # Run ESLint and Prettier checks
+npm install                 # install dependencies
+npm run dev                 # Vite dev server -> http://localhost:5173
+npm run typecheck           # tsc --noEmit (tsconfig.app.json)
+npm run build               # tsc && vite build (production bundle)
+npm run test:unit:app       # vitest unit tests
+npm run lint                # eslint
+npm run prettier            # prettier --check
+make push                   # build + push franknguyenvd/vfic-frontend image (deploy)
 ```
 
-### Building
-
-```bash
-make build            # Build production bundle (runs tsc + vite build)
-```
-
-### Database Management
-
-The database schema is defined declaratively in `supabase/schemas/` (source of truth). Migrations in `supabase/migrations/` are auto-generated and should generally not be edited directly — but sometimes manual adjustment is needed (e.g., replacing a DROP+CREATE with an ALTER TABLE RENAME for column renames). Function definitions in `02_functions.sql` must use the exact `pg_dump` format (run `npx supabase db dump --local --schema public`) to avoid phantom diffs.
-
-```bash
-npx supabase db diff --local -f <name>  # Generate migration from schema changes
-npx supabase migration up --local       # Apply migrations locally
-npx supabase db push                    # Push migrations to remote
-npx supabase db reset --local           # Reset local database (destructive)
-```
-
-### Registry (Shadcn Components)
-
-```bash
-make registry-gen     # Generate registry.json (runs automatically on pre-commit)
-make registry-build   # Build Shadcn registry
-```
+Point the app at a backend by setting `VITE_API_URL` (defaults to the same
+origin `/api/v1`); see `src/lib/vfic/config.ts`.
 
 ## Architecture
 
 ### Technology Stack
 
-- **Frontend**: React 19 + TypeScript + Vite
-- **Routing**: React Router v7
-- **Data Fetching**: React Query (TanStack Query)
-- **Forms**: React Hook Form
-- **Application Logic**: shadcn-admin-kit + ra-core (react-admin headless)
-- **UI Components**: Shadcn UI + Radix UI
-- **Styling**: Tailwind CSS v4
-- **Backend**: Supabase (PostgreSQL + REST API + Auth + Storage + Edge Functions)
+- **Framework**: React 19 + TypeScript + Vite
+- **Admin layer**: react-admin (ra-core) + shadcn-admin-kit (vendored, mutable)
+- **UI**: Shadcn UI + Radix UI, **Tailwind CSS v4**
+- **Data**: TanStack Query (via react-admin) against the FastAPI REST API
+- **Realtime**: Server-Sent Events (`EventSource`) at `/realtime/events`
+- **Auth**: JWT (access + refresh) held in `localStorage`; see
+  `src/components/atomic-crm/providers/rest/authProvider.ts`
 - **Testing**: Vitest
+
+### Data Source (single, REST)
+
+One data provider: **`src/components/atomic-crm/providers/rest/dataProvider.ts`**
+maps react-admin verbs onto `/api/v1/{resource}`. There is **no Supabase
+client** and **no FakeRest** in production. The `providers/rest/` directory
+was renamed from `providers/supabase/` in 2026-06-26 (the old name was
+misleading — the code was always REST).
+
+Chat-specific calls (message history, last-message snippets, SSE subscribe)
+live in `src/components/atomic-crm/conversations/chatRepository.ts` and
+`src/lib/vfic/humanReplyService.ts`, which use the same REST client.
+
+### Resources (the five that exist)
+
+Declared in `src/components/atomic-crm/root/CRM.tsx`:
+
+| Resource | Module | Purpose |
+|---|---|---|
+| `leads` | `atomic-crm/leads/` | Candidate pipeline (list/show/create/edit) |
+| `conversations` | `atomic-crm/conversations/` | Zalo chat inbox + thread |
+| `bot_runs` | `atomic-crm/automation/` | Bot execution audit trail (read-only) |
+| `knowledge_sources` | `atomic-crm/knowledge/` | RAG document admin (read-only) |
+| `users` | `atomic-crm/profiles/` | Admin user provisioning |
+
+The CRM `users` resource maps to the backend `users` table (formerly Supabase
+`profiles`). The legacy `knowledge_sources` name targets the backend
+`/api/v1/knowledge/documents` route (see `RESOURCE_PATH` in the dataProvider).
 
 ### Directory Structure
 
 ```
 src/
 ├── components/
-│   ├── admin/              # Shadcn Admin Kit components (mutable dependency)
-│   ├── atomic-crm/         # Main CRM application code (~15,000 LOC)
-│   │   ├── activity/       # Activity logs
-│   │   ├── companies/      # Company management
-│   │   ├── contacts/       # Contact management (includes CSV import/export)
-│   │   ├── dashboard/      # Dashboard widgets
-│   │   ├── deals/          # Deal pipeline (Kanban)
-│   │   ├── filters/        # List filters
-│   │   ├── layout/         # App layout components
-│   │   ├── login/          # Authentication pages
-│   │   ├── misc/           # Shared utilities
-│   │   ├── notes/          # Note management
-│   │   ├── providers/      # Data providers (Supabase + FakeRest)
-│   │   ├── root/           # Root CRM component
-│   │   ├── sales/          # Sales team management
-│   │   ├── settings/       # Settings page
-│   │   ├── simple-list/    # List components
-│   │   ├── tags/           # Tag management
-│   │   └── tasks/          # Task management
-│   ├── supabase/           # Supabase-specific auth components
-│   └── ui/                 # Shadcn UI components (mutable dependency)
-├── hooks/                  # Custom React hooks
-├── lib/                    # Utility functions
-└── App.tsx                 # Application entry point
-
-supabase/
-├── functions/              # Edge functions (user management, inbound email)
-├── migrations/             # Database migrations (auto-generated, do not edit directly)
-└── schemas/                # Declarative schema (source of truth for DB structure)
+│   ├── admin/              # shadcn-admin-kit framework code (mutable dependency, vendored)
+│   ├── ui/                 # Shadcn UI primitives (mutable dependency)
+│   └── atomic-crm/         # The VFIC app
+│       ├── automation/     # bot_runs
+│       ├── conversations/  # inbox + chat thread + chatRepository
+│       ├── dashboard/      # recruiter/admin dashboard
+│       ├── knowledge/      # knowledge_sources admin
+│       ├── layout/         # app shell, header, topbar, notifications
+│       ├── leads/          # candidate pipeline
+│       ├── login/          # auth page
+│       ├── profiles/       # users resource
+│       ├── providers/      # dataProvider + authProvider + i18n (REST, not Supabase)
+│       ├── root/           # <CRM> root component (resource registration)
+│       ├── settings/       # settings + profile pages
+│       ├── consts.ts / types.ts
+├── lib/vfic/               # config.ts (API/SSE URLs), humanReplyService.ts
+└── App.tsx                 # renders <CRM />
 ```
 
-### Key Architecture Patterns
+### Mutable Dependencies
 
-For more details, check out the doc/src/content/docs/developers/architecture-choices.mdx document.
+Vendored framework code that may be modified directly (this is intentional —
+they are copy-paste dependencies, not npm packages):
+- `src/components/admin/` — shadcn-admin-kit
+- `src/components/ui/` — Shadcn UI
 
-#### Mutable Dependencies
+### i18n
 
-The codebase includes mutable dependencies that should be modified directly if needed:
-- `src/components/admin/`: Shadcn Admin Kit framework code
-- `src/components/ui/`: Shadcn UI components
-
-#### Configuration via `<CRM>` Component
-
-The `src/App.tsx` file renders the `<CRM>` component, which accepts props for domain-specific configuration:
-- `contactGender`: Gender options
-- `companySectors`: Company industry sectors
-- `dealCategories`, `dealStages`, `dealPipelineStatuses`: Deal configuration
-- `noteStatuses`: Note status options with colors
-- `taskTypes`: Task type options
-- `logo`, `title`: Branding
-- `lightTheme`, `darkTheme`: Theme customization
-- `disableTelemetry`: Opt-out of anonymous usage tracking
-
-#### Database Views
-
-Complex queries are handled via database views to simplify frontend code and reduce HTTP overhead. For example, `contacts_summary` provides aggregated contact data including task counts.
-
-#### Database Triggers
-
-User data syncs between Supabase's `auth.users` table and the CRM's `sales` table via triggers (see `supabase/schemas/04_triggers.sql`).
-
-#### Edge Functions
-
-Located in `supabase/functions/`:
-- User management (creating/updating users, account disabling)
-- Inbound email webhook processing
-
-#### Data Providers
-
-Two data providers are available:
-1. **Supabase** (default): Production backend using PostgreSQL
-2. **FakeRest**: In-browser fake API for development/demos, resets on page reload
-
-When using FakeRest, database views are emulated in the frontend. Test data generators are in `src/components/atomic-crm/providers/fakerest/dataGenerator/`.
-
-#### Filter Syntax
-
-List filters follow the `ra-data-postgrest` convention with operator concatenation: `field_name@operator` (e.g., `first_name@eq`). The FakeRest adapter maps these to FakeRest syntax at runtime.
-
-## Development Workflows
+Vietnamese-only. `providers/commons/i18nProvider.ts` pins the locale to `vi`
+and uses `vietnameseCrmMessages.ts` (with `englishCrmMessages.ts` as the
+fallback catalog). Do not wire other locales into the app.
 
 ### Path Aliases
 
-The project uses TypeScript path aliases configured in `tsconfig.json` and `components.json`:
-- `@/components` → `src/components`
-- `@/lib` → `src/lib`
-- `@/hooks` → `src/hooks`
-- `@/components/ui` → `src/components/ui`
-
-### Adding Custom Fields
-
-When modifying contact or company data structures:
-1. Edit the relevant schema file in `supabase/schemas/` (table in `01_tables.sql`, views in `03_views.sql`, etc.)
-2. Generate a migration: `npx supabase db diff --local -f <name>`
-3. Apply it: `npx supabase migration up --local`
-4. Update the sample CSV: `src/components/atomic-crm/contacts/contacts_export.csv`
-5. Update the import function: `src/components/atomic-crm/contacts/useContactImport.tsx`
-6. If using FakeRest, update data generators in `src/components/atomic-crm/providers/fakerest/dataGenerator/`
-7. Don't forget to update the related view (`contacts_summary`, `companies_summary`) in `03_views.sql`
-8. Don't forget the export functions
-9. Don't forget the contact merge logic
-
-### Running with Test Data
-
-Import `test-data/contacts.csv` via the Contacts page → Import button.
-
-### Git Hooks
-
-- Pre-commit: Automatically runs `make registry-gen` to update `registry.json`
-
-### Accessing Local Services During Development
-
-- Frontend: http://localhost:5173/
-- Supabase Dashboard: http://localhost:54323/
-- REST API: http://127.0.0.1:54321
-- Storage (attachments): http://localhost:54323/project/default/storage/buckets/attachments
-- Inbucket (email testing): http://localhost:54324/
+`@/components`, `@/lib`, `@/hooks`, `@/components/ui` (see `tsconfig.json`).
 
 ## Important Notes
 
-- The codebase is intentionally small (~15,000 LOC in `src/components/atomic-crm`) for easy customization
-- Modify files in `src/components/admin` and `src/components/ui` directly - they are meant to be customized
-- Unit tests can be added in the `src/` directory (test files are named `*.test.ts` or `*.test.tsx`)
-- User deletion is not supported to avoid data loss; use account disabling instead
-- Filter operators must be supported by the `supabaseAdapter` when using FakeRest
+- The app is **Vietnamese-only** in user-facing strings; code/identifiers/
+  comments are English.
+- Auth tokens live in `localStorage` under `RaStore.auth.*` (access + refresh);
+  a 401 triggers one transparent refresh.
+- The `Makefile` `supabase-*` targets and `scripts/supabase-*.mjs` helpers are
+  stale Atomic-CRM template leftovers and are not used by VFIC.

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useDataProvider, useNotify, useRefresh } from "ra-core";
 import type { Conversation } from "../types";
-import type { CrmDataProvider } from "../providers/supabase/dataProvider";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
 
 export type ConversationMode = Conversation["mode"];
 

@@ -161,7 +161,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
 
               {showEmailPassword ? (
                 <p className="text-center text-sm text-muted-foreground">
-                  {translate("ra-supabase.auth.forgot_password", {
+                  {translate("ra-auth.auth.forgot_password", {
                     _: "Forgot password?",
                   })}{" "}
                   <Link

@@ -21,10 +21,14 @@ _CRED = HTTPException(
 )
 
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
+async def get_user_from_token(token: str, db: AsyncSession) -> User:
+    """Shared access-token verification used by every authed entry point:
+    decode -> type=access -> user lookup -> disabled + token_version check.
+
+    Raises 401 (_CRED) on any failure. Both the Bearer-header path
+    (get_current_user) and the SSE ?token= path (realtime._user_from_request)
+    route through here so the verification logic cannot drift between them.
+    """
     try:
         payload = await decode_token(token)
         if payload.get("type") != "access":
@@ -40,6 +44,13 @@ async def get_current_user(
     if payload.get("ver", 0) != user.token_version:
         raise _CRED
     return user
+
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    return await get_user_from_token(token, db)
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:

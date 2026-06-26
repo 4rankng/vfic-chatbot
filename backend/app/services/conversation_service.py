@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import desc, func, or_, select, update
+from sqlalchemy import desc, func, or_, select, text, update
 
 from app.models.conversation import (
     BotRun,
@@ -70,6 +70,51 @@ class ConversationService:
                 select(Conversation).where(Conversation.zalo_chat_id == zalo_chat_id)
             )
         ).first()
+
+    async def last_messages_batch(self, *, viewer: User, ids_str: str) -> dict[str, str]:
+        """Latest message body per conversation, in ONE set-based query.
+
+        Replaces the client-side N-fanout (one GET /conversations/{id}/last-messages
+        per inbox row). Scope-filtered to the viewer (admin = all, recruiter = their
+        own + unassigned), id list parsed + capped at 200.
+        """
+        # Parse comma-separated UUIDs; ignore garbage; cap to 200.
+        ids: list[str] = []
+        for token in (ids_str or "").split(","):
+            s = token.strip()
+            if not s:
+                continue
+            try:
+                ids.append(str(uuid.UUID(s)))
+            except ValueError:
+                continue
+            if len(ids) >= 200:
+                break
+        if not ids:
+            return {}
+
+        params: dict = {"ids": ids}
+        scope = ""
+        if viewer.role != Role.admin:
+            scope = "AND (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+            params["uid"] = str(viewer.id)
+
+        rows = (
+            await self.db.execute(
+                text(
+                    f"""
+                    SELECT DISTINCT ON (m.conversation_id)
+                           m.conversation_id::text AS cid, m.body AS content
+                      FROM messages m
+                      JOIN conversations c ON c.id = m.conversation_id
+                     WHERE m.conversation_id = ANY(:ids) {scope}
+                     ORDER BY m.conversation_id, m.created_at DESC, m.id DESC
+                    """
+                ),
+                params,
+            )
+        ).all()
+        return {r.cid: (r.content or "") for r in rows}
 
     async def list(
         self,

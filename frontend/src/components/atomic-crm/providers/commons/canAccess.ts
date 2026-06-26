@@ -12,8 +12,8 @@ type CanAccessParams<
  *
  * admin and recruiter have identical data access EXCEPT for user management
  * (the `users` resource): only admin can manage users. Everything else is
- * available to both roles. Real enforcement is Supabase RLS; this is the
- * UX layer.
+ * available to both roles. Real enforcement is the FastAPI backend
+ * (app/api/dependencies.py); this is the UX layer.
  */
 export const canAccess = <
   RecordType extends Record<string, any> = Record<string, any>,

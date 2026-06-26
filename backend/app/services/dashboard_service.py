@@ -6,7 +6,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
+from app.models.user import Role, User
 from app.schemas.job import DashboardMetrics
 
 
@@ -19,7 +19,7 @@ class DashboardService:
         # to them or unassigned. The previous version left pending_followups,
         # failed_zalo_sends, bot_errors and the suppression rate unscoped, so a
         # recruiter saw global (cross-recruiter) numbers for those tiles.
-        if viewer.role == "admin":
+        if viewer.role == Role.admin:
             open_convs = await self.db.scalar(text("SELECT count(*) FROM conversations WHERE status = 'OPEN'"), {})
             hot_leads = await self.db.scalar(text("SELECT count(*) FROM leads WHERE lead_score = 'hot'"), {})
             pending_fu = await self.db.scalar(text("SELECT count(*) FROM follow_up_tasks WHERE status = 'PENDING'"), {})

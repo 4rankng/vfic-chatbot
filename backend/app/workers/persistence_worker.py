@@ -39,27 +39,14 @@ def run_persist_memory_job(job: dict) -> None:
 
 
 def _build_extractor():
-    """Shared MiniMax extractor (safety model, temp 0) for lead + memory extraction.
+    """MiniMax extractor for lead + memory extraction.
 
-    Defined once so the lead and memory paths cannot drift on model/base_url/timeout.
+    Thin wrapper over the shared factory in llm_real so the lead and memory
+    paths reuse the exact same safety-LLM wiring as the chatbot agent.
     """
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_openai import ChatOpenAI
+    from app.graph.llm_real import build_minimax_extractor
 
-    from app.core.config import get_settings
-
-    s = get_settings()
-    llm = ChatOpenAI(
-        model=s.minimax_safety_model,
-        api_key=s.minimax_api_key,
-        base_url=s.minimax_base_url,
-        temperature=0.0,
-    )
-
-    async def extractor(system: str, user: str) -> str:
-        return (await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])).content
-
-    return extractor
+    return build_minimax_extractor()
 
 
 async def _persist_lead_async(job: dict) -> None:
@@ -81,6 +68,6 @@ async def _persist_memory_async(job: dict) -> None:
 
     async with async_session() as db:
         await MemoryService.persist(
-            db, GeminiEmbedder(), _build_extractor(),
+            db, GeminiEmbedder().batch, _build_extractor(),
             job["chat_id"], job["user_text"], job.get("bot_output", ""),
         )

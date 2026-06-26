@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useRecordContext, useDataProvider, useNotify } from "ra-core";
 import type { Conversation, Lead } from "../types";
-import type { CrmDataProvider } from "../providers/supabase/dataProvider";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import {
   Dialog,
   DialogContent,

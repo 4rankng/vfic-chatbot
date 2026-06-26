@@ -1,68 +1,78 @@
 # CLAUDE.md — VFIC ATS (ChatBotN8N)
 
-This repo runs the VFIC recruitment stack: an **n8n** chatbot brain, a
-**Supabase** (Postgres) data layer, and a **React/Atomic-CRM** console
-(`frontend/`). Each layer has a live cloud instance that is edited in
-place; the repo must stay a faithful mirror so the service can be
-rebuilt from it alone.
+This repo runs the VFIC recruitment stack: a **FastAPI + LangGraph** chatbot
+backend (`backend/`), a **self-hosted Postgres+pgvector + Redis** data layer,
+and a **React / react-admin** console (`frontend/`, brand *Ting Ting* /
+*VFIC miniCRM*). The whole stack is deployed as Docker images to a single
+droplet (`bot.tingting.vip`) behind Caddy; **the repo is the source of truth**
+— the live service is rebuilt from it alone.
 
-## ⚑ Sync live → local after EVERY infra change  (disaster-recovery rule)
+> **History:** until 2026-06-26 the brain was **n8n** and the data layer was
+> **Supabase**. Both were decommissioned in a big-bang cutover. They are now
+> **legacy / disaster-recovery only** (see `legacy/` and `n8n-workflows/`).
+> Any instruction elsewhere that treats n8n or Supabase as live is stale.
 
-**Why:** if a cloud account is lost (Supabase, n8n), the repo must contain
-enough to rebuild the service. Live edits made via MCP are *not* automatically
-reflected in the repo — so mirror them immediately.
+## ⚑ The repo IS the source of truth (disaster-recovery rule)
 
-| Change you made live | Local file(s) you MUST also update |
+The live system runs Docker images **built from this repo** — there are no
+in-place cloud edits to mirror anymore. So the rule is simple: **every change
+must be committed**, and the repo must always contain enough to rebuild the
+service (`alembic/` for schema, `backend/` + `frontend/` for code,
+`docker-compose.yml` + `Caddyfile` for topology).
+
+| Change you make | What MUST be committed alongside it |
 |---|---|
-| **Supabase schema** — migration, column, RLS policy, function, trigger, index, enum | (a) append the SQL to `supabase/migrations/<YYYYMMDD>_<name>.sql`; (b) **regenerate `supabase/schema.sql`** snapshot from the live catalog (see below) |
-| **Supabase edge function** | mirror under `supabase/functions/<name>/` |
-| **n8n workflow** edit (via n8n-mcp) | re-export the workflow JSON to `n8n-workflows/<Workflow Name>.json` |
+| **DB schema** — table/column/index/enum/function/trigger | a new `backend/alembic/versions/<NNNN>_<name>.py` migration (the live DDL is `alembic/versions/0001_baseline.py` + successors) |
+| **Backend code** (`backend/app/**`) | the change itself; it ships on the next `franknguyenvd/vfic-backend` image rebuild + `make deploy` |
+| **Frontend code** (`frontend/**`) | the change itself; it ships on the next `franknguyenvd/vfic-frontend` image rebuild + `make deploy` |
+| **Infra topology** | `backend/docker-compose.yml`, `backend/Caddyfile`, root + `backend/Makefile` |
 
-Do not consider a live infra task done until the local mirror is updated and
-committed. `git status` should show the matching local change alongside any
-code change.
+Do not consider a task done until the change is committed. The `supabase/`
+and `n8n-workflows/` trees are **not** live — do not "sync" to them.
 
-### Regenerating `supabase/schema.sql`
+## Infrastructure references (live)
 
-`pg_dump` / the Supabase CLI are not assumed available; regenerate from the live
-catalog with `mcp__supabase__execute_sql` against project
-`vichwmxeptglqmzefsiq`. Run these in parallel, then assemble DDL in order
-(extensions → enums → tables → FKs → indexes → functions → triggers → RLS):
+- **Backend**: FastAPI app `app.main:app` (10 routers under `/api/v1` +
+  `/realtime` SSE + `/webhooks/zalo`). Entry point `backend/app/main.py`.
+  The "graph" (`app/graph/runner.py`) is a hand-rolled state machine, not the
+  LangGraph library. LLMs: MiniMax (agent + safety) + Gemini (embeddings,
+  `vector(3072)`).
+- **Data layer**: self-hosted **Postgres 16 + pgvector** + **Redis 7**, both
+  containers in `backend/docker-compose.yml`. Schema = `backend/alembic/`.
+  No DB-level RLS — authorization is enforced in the app
+  (`app/api/dependencies.py`).
+- **Workers**: RQ — `worker-chatbot` (queues `webhook_high`, `persistence_low`),
+  `worker-ingest` (`ingest`), `scheduler` (`rqscheduler`). Chat-turn concurrency
+  is guarded by `conversations.bot_locked_until` + an optimistic `version`
+  field — do not remove either.
+- **Edge**: Caddy (auto-TLS) → `web` (FastAPI) + `frontend` (nginx SPA).
+- **Droplet**: `bot.tingting.vip` (1 vCPU / 2 GB). Prod dir `/opt/vfic`.
+- **Images**: `franknguyenvd/vfic-{backend,frontend}` on DockerHub.
+- **Deploy**: root `Makefile` → `make deploy` builds+pushes both images and
+  rolls the droplet. Dev: `make dev` (Postgres+Redis+Adminer in docker,
+  backend + frontend on the host with hot-reload).
 
-- columns/types/defaults/nullability:
-  `format_type(atttypid, atttypmod)` + `pg_get_expr(adbin)` over `pg_attribute`
-- constraints: `pg_constraint` + `pg_get_constraintdef(oid)`
-- indexes: `pg_indexes.indexdef` (skip PK/UNIQUE-constraint-backed names)
-- functions: `pg_get_functiondef` for `prokind='f'` in `public` **excluding the
-  pgvector C helpers** (filter by business names: `is_vfic_*`, `touch_updated_at`,
-  `vfic_*`)
-- triggers: `pg_get_triggerdef` over `pg_trigger` (non-internal, public)
-- RLS: `pg_class.relrowsecurity`; policies from `pg_policies`
+## Legacy / DR-only (do not treat as live)
 
-`migrations/` remains the ordered change log; `schema.sql` is the consolidated
-point-in-time snapshot regenerated after each change.
-
-## Infrastructure references
-
-- **Supabase**: project `VFIC-Chatbot`, ref **`vichwmxeptglqmzefsiq`**
-  (region ap-northeast-2, Postgres 17). Use `mcp__supabase__*`. Embeddings are
-  `vector(3072)`. The CRM `users` resource aliases to the live `profiles` table.
-- **n8n**: edit workflows **in place** (never create new ones). Known workflows:
-  `VFIC Chatbot` (`iodmXzjRe03KqPdB`), `VFIC Knowledge Ingest`
-  (`wY4YI1nFu1bw0ERt`), `VFIC Persist Lead`,
-  `VFIC Persist Memories`. Local copies: `n8n-workflows/`. The n8n MCP token is
-  a JWT that **401s against the native REST `/api/v1`** — export via MCP tools,
-  not curl.
-- **Droplet**: `bot.tingting.vip` (1 vCPU / 2 GB) hosts n8n.
+- **`legacy/supabase-pre-rewrite/`** — the decommissioned Supabase schema
+  (`schema.sql`, migrations, edge function, seed). Project ref was
+  `vichwmxeptglqmzefsiq`. Kept for history only; the live DDL is alembic.
+- **`n8n-workflows/`** — exported n8n workflow JSON (5 workflows). n8n is
+  torn down on the droplet. **These files are still read by
+  `backend/tests/test_prompts_byte_equal.py` and
+  `backend/scripts/gen_lead_memory_prompts.py`** as the prompt ground truth —
+  do not delete them, but do not edit them expecting a live effect.
 
 ## Repo layout
 
 ```
-frontend/         React + react-admin console (Atomic CRM). See frontend/CLAUDE.md.
-supabase/         LIVE VFIC schema: schema.sql (snapshot), migrations/ (change log),
-                  functions/, seed_vfic_minicrm_admin.sql
-n8n-workflows/    exported n8n workflow JSON (5 workflows)
-.omc/             OMC state, runbooks, plans, specs
+backend/          FastAPI + LangGraph backend (api / services / models / graph / workers)
+                  alembic/ = live DDL (0001_baseline.py + successors); Dockerfile + compose
+frontend/         React + react-admin console (Atomic-CRM-derived, vi-only). See frontend/CLAUDE.md.
+legacy/           decommissioned Supabase layer (DR/history only)
+n8n-workflows/    legacy n8n JSON (DR + still read by backend tests/scripts)
+kb/               knowledge-base source docs (LGDisplay bus timetable, guidelines)
+.omc/             OMC state, runbooks, plans, specs (gitignored operational artifacts)
 ```
 
 ## Conventions
@@ -70,6 +80,6 @@ n8n-workflows/    exported n8n workflow JSON (5 workflows)
 - **Language**: code/identifiers/comments/commits in **English**; user-facing
   strings in the console are **Vietnamese** (the app is vi-only — see
   `frontend/CLAUDE.md`).
-- **Naming**: snake_case for SQL / DB / n8n identifiers (never hyphens).
+- **Naming**: snake_case for SQL / DB identifiers (never hyphens).
 - **Frontend specifics** (Tailwind v4, shadcn, ra-core, dev commands):
   see `frontend/CLAUDE.md` and `frontend/AGENTS.md`.

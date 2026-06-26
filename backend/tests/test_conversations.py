@@ -250,6 +250,44 @@ async def test_mark_read_and_release(client, db_session):
     assert released.status_code == 200 and released.json()["mode"] == "BOT"
 
 
+async def test_last_messages_batch_returns_latest_per_conversation(client, db_session):
+    """GET /conversations/last-messages/batch returns the latest body per
+    conversation in ONE request (replaces the client-side N-fanout)."""
+    conv_a = await _make_conv(db_session, "batch-a")
+    conv_b = await _make_conv(db_session, "batch-b")
+    # two messages on a (second has the higher id -> latest); one on b.
+    db_session.add_all([
+        Message(conversation_id=conv_a.id, sender=MessageSender.BOT, body="old a"),
+        Message(conversation_id=conv_a.id, sender=MessageSender.BOT, body="new a"),
+        Message(conversation_id=conv_b.id, sender=MessageSender.BOT, body="only b"),
+    ])
+    await db_session.commit()
+
+    tok = await _admin_token(client)
+    ids = f"{conv_a.id},{conv_b.id}"
+    r = await client.get(
+        f"/api/v1/conversations/last-messages/batch?ids={ids}",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert r.status_code == 200, r.text
+    snippets = r.json()["snippets"]
+    assert snippets[str(conv_a.id)] == "new a"
+    assert snippets[str(conv_b.id)] == "only b"
+
+
+async def test_last_messages_batch_ignores_garbage_ids(client, db_session):
+    conv = await _make_conv(db_session, "batch-g")
+    db_session.add(Message(conversation_id=conv.id, sender=MessageSender.BOT, body="hi"))
+    await db_session.commit()
+    tok = await _admin_token(client)
+    r = await client.get(
+        "/api/v1/conversations/last-messages/batch?ids=not-a-uuid,," + f"{conv.id}",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["snippets"] == {str(conv.id): "hi"}
+
+
 # --- SSE realtime ---------------------------------------------------------------
 
 

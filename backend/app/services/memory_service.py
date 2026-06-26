@@ -19,7 +19,8 @@ from app.core.vector import vec_literal
 from app.graph.lead_memory_prompts import MEMORY_EXTRACT_PROMPT
 
 Extractor = Callable[[str, str], Awaitable[str]]
-Embedder = Callable[[str], Awaitable[list[float]]]
+# Batch embedder: many texts -> many vectors in one call (avoids the per-fact N+1).
+BatchEmbedder = Callable[[list[str]], Awaitable[list[list[float]]]]
 
 # Verbatim skip list from the 'Should Persist?' node.
 _SKIP = {
@@ -91,7 +92,7 @@ class MemoryService:
         return _parse_facts(raw)
 
     @staticmethod
-    async def save(db: AsyncSession, embedder: Embedder, chat_id: str, facts: list[str]) -> int:
+    async def save(db: AsyncSession, embed_batch: BatchEmbedder, chat_id: str, facts: list[str]) -> int:
         rows = (
             await db.execute(
                 text("SELECT metadata->>'canonical_key' AS ck FROM memories WHERE metadata->>'chat_id' = :c"),
@@ -100,33 +101,51 @@ class MemoryService:
         ).all()
         existing = {r.ck for r in rows if r.ck}
 
-        saved = 0
+        # Dedup first (intra-batch + vs stored), then ONE batched embed + ONE
+        # executemany INSERT. Previously this looped embedder()+INSERT per fact (N+N).
+        new_facts: list[str] = []
         for fact in facts:
             ck = canonical_key(fact)
-            if not ck or ck in existing:
-                continue
-            emb = vec_literal(await embedder(fact))
-            await db.execute(
-                text(
-                    "INSERT INTO memories(content, metadata, embedding) "
-                    "VALUES (:c, CAST(:m AS jsonb), CAST(:e AS vector))"
+            if ck and ck not in existing:
+                existing.add(ck)
+                new_facts.append(fact)
+        if not new_facts:
+            await db.commit()
+            return 0
+
+        embeddings = await embed_batch(new_facts)
+        rows_to_write = [
+            {
+                "c": fact,
+                "m": json.dumps(
+                    {"chat_id": chat_id, "canonical_key": canonical_key(fact), "zalo_id": chat_id}
                 ),
-                {
-                    "c": fact,
-                    "m": json.dumps({"chat_id": chat_id, "canonical_key": ck, "zalo_id": chat_id}),
-                    "e": emb,
-                },
-            )
-            existing.add(ck)
-            saved += 1
+                "e": vec_literal(emb),
+            }
+            for fact, emb in zip(new_facts, embeddings)
+        ]
+        await db.execute(
+            text(
+                "INSERT INTO memories(content, metadata, embedding) "
+                "VALUES (:c, CAST(:m AS jsonb), CAST(:e AS vector))"
+            ),
+            rows_to_write,
+        )
         await db.commit()
-        return saved
+        return len(rows_to_write)
 
     @staticmethod
-    async def persist(db: AsyncSession, embedder: Embedder, extractor: Extractor, chat_id: str, user_text: str, bot_output: str) -> int:
+    async def persist(
+        db: AsyncSession,
+        embed_batch: BatchEmbedder,
+        extractor: Extractor,
+        chat_id: str,
+        user_text: str,
+        bot_output: str,
+    ) -> int:
         if not greeting_gate(user_text):
             return 0
         facts = await MemoryService.extract(extractor, user_text, bot_output)
         if not facts:
             return 0
-        return await MemoryService.save(db, embedder, chat_id, facts)
+        return await MemoryService.save(db, embed_batch, chat_id, facts)

@@ -61,6 +61,26 @@ async def list_conversations(
     return ConversationListResponse(data=[ConversationOut.model_validate(r) for r in rows], total=total)
 
 
+@router.get("/last-messages/batch")
+async def last_messages_batch(
+    ids: str = Query(..., description="Comma-separated conversation UUIDs (max 200)"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Latest message snippet per conversation (inbox row previews) in ONE request.
+
+    Replaces the client-side N-fanout over GET /{conv_id}/last-messages. Returns
+    ``{"snippets": {conversation_id: body}}`` for the conversations the viewer can
+    see; missing conversations are simply absent from the map.
+
+    Registered BEFORE the ``/{conv_id}`` routes so the literal ``last-messages``
+    segment can never be shadowed by the uuid path param (defensive against a
+    future retyping of conv_id to str).
+    """
+    snippets = await ConversationService(db).last_messages_batch(viewer=user, ids_str=ids)
+    return {"snippets": snippets}
+
+
 @router.get("/{conv_id}", response_model=ConversationOut)
 async def get_conversation(
     conv_id: uuid.UUID, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)

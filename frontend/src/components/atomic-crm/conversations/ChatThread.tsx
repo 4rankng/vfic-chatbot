@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useDataProvider, useNotify, useTranslate } from "ra-core";
 import type { Conversation, Message } from "../types";
-import { CrmDataProvider } from "../providers/supabase/dataProvider";
+import { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { chatRepository } from "./chatRepository";
