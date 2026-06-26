@@ -5,7 +5,7 @@ import type { Conversation, Message } from "../types";
 import { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
-import { chatRepository } from "./chatRepository";
+import { useConversationRealtime } from "./useConversationRealtime";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
 // the realtime subscription, the virtualised scroller (with all the snap /
@@ -33,100 +33,6 @@ const formatTime = (iso?: string) => {
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
-};
-
-const useConversationRealtime = (conversationId?: string) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const isFetchingRef = useRef(false);
-
-  const fetchInitial = async () => {
-    if (!conversationId) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const { messages: mapped, hasMore: apiHasMore } =
-        await chatRepository.getConversationMessages(conversationId, {
-          limit: 10,
-        });
-      // Merge, don't replace: a realtime INSERT between subscribe() and this
-      // resolve is already in state, and a blind setMessages(mapped) would
-      // drop it (the fetch predates the insert). Union by id, fetched-first.
-      setMessages((prev) => {
-        if (prev.length === 0) return mapped;
-        const fetchedIds = new Set(mapped.map((m) => m.id));
-        const realtimeOnly = prev.filter((m) => !fetchedIds.has(m.id));
-        return realtimeOnly.length > 0 ? [...mapped, ...realtimeOnly] : mapped;
-      });
-      setHasMore(apiHasMore);
-    } catch {
-      setMessages([]);
-      setHasMore(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setMessages([]);
-    setHasMore(false);
-    fetchInitial();
-
-    if (!conversationId) return;
-
-    let cleanup: (() => void) | undefined;
-    try {
-      cleanup = chatRepository.subscribeToMessages(conversationId, (newMsg) => {
-        setMessages((prev) =>
-          prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg],
-        );
-      });
-    } catch {}
-
-    return () => {
-      cleanup?.();
-    };
-  }, [conversationId]);
-
-  // Stable identity so the consumer's useCallback(handleStartReached) memo
-  // holds across renders — without this the startReached handler is rebuilt
-  // every keystroke and Virtuoso re-binds the scroll listener.
-  const loadMore = useCallback(
-    async (earliestId: string): Promise<number> => {
-      if (isFetchingRef.current || !hasMore || !conversationId) {
-        return 0;
-      }
-      isFetchingRef.current = true;
-      setIsLoadingMore(true);
-
-      try {
-        const { messages: older, hasMore: apiHasMore } =
-          await chatRepository.getConversationMessages(conversationId, {
-            limit: 10,
-            beforeId: earliestId,
-          });
-        setHasMore(apiHasMore);
-        setMessages((prev) => [...older, ...prev]);
-        return older.length;
-      } catch {
-        // A failed load-more must not keep re-firing on every scroll-to-top
-        // (hasMore stays true -> the backend gets spammed with failing
-        // requests). Stop the loop; reopening the conversation retries.
-        setHasMore(false);
-        return 0;
-      } finally {
-        setIsLoadingMore(false);
-        isFetchingRef.current = false;
-      }
-    },
-    [hasMore, conversationId],
-  );
-
-  return { messages, isLoading, isLoadingMore, hasMore, loadMore };
 };
 
 export interface ChatThreadProps {

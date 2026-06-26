@@ -3,15 +3,12 @@ import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import react from "@vitejs/plugin-react";
 
-// Three test projects (https://vitest.dev/guide/projects.html):
-//   - "app":       React/DOM unit tests, run in a real browser (Playwright/Chromium).
-//   - "claude":    agent-harness hook tests, plain Node integration tests that spawn
-//                  the .claude/hooks/*.mjs hooks as subprocesses. No DOM, no browser.
-//   - "functions": Supabase Edge Function tests. Written for Deno with JSR imports;
-//                  Node-only here, with the jsr:/npm: specifiers aliased to their
-//                  installed npm equivalents. Aliases are scoped to this project.
+// Two test projects (https://vitest.dev/guide/projects.html):
+//   - "app":    React/DOM unit tests, run in a real browser (Playwright/Chromium).
+//   - "claude": agent-harness hook tests, plain Node integration tests that spawn
+//               the .claude/hooks/*.mjs hooks as subprocesses. No DOM, no browser.
 // Run everything with `npm run test:unit:app`, or a single suite with
-// `npm run test:unit:claude` / `npm run test:unit:functions` (neither boots a browser).
+// `npm run test:unit:claude` (neither boots a browser).
 export default defineConfig({
   test: {
     projects: [

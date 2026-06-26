@@ -1,13 +1,10 @@
 """POST /webhooks/zalo — Zalo OA inbound. Acks synchronously (<1s) after the
 guard chain; the bot run is enqueued to RQ.
 
-Inbound authenticity is verified when a secret is configured:
-  * OA platform  -> HMAC over the raw body via the X-Zevent-Signature header
-                    (zalo_oa_secret). This is the current live inbound path.
-  * Bot Platform -> shared-secret echo via the X-Bot-Api-Secret-Token header
-                    (zalo_bot_webhook_secret); used once the OA->Bot cutover lands.
+Inbound authenticity is HMAC-verified via the X-Zevent-Signature header when
+``zalo_oa_secret`` is configured (the live Zalo OA inbound path).
 
-Outside development, a request with NEITHER secret configured is rejected (503)
+Outside development, a request with NO OA secret configured is rejected (503)
 rather than accepted blind — an unauthenticated inbound endpoint would let
 anyone inject messages that trigger bot turns + lead extraction. Dev/test keeps
 the accept-unsigned behavior for ergonomics.
@@ -48,13 +45,8 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
         # OA platform: HMAC-SHA256 over the raw body (X-Zevent-Signature).
         if not _verify_signature(raw, request.headers.get("x-zevent-signature")):
             return JSONResponse({"detail": "invalid signature"}, status_code=401)
-    elif _settings.zalo_bot_webhook_secret:
-        # Bot Platform: shared-secret echo (X-Bot-Api-Secret-Token).
-        token = request.headers.get("x-bot-api-secret-token") or ""
-        if not hmac.compare_digest(token, _settings.zalo_bot_webhook_secret):
-            return JSONResponse({"detail": "invalid secret token"}, status_code=401)
     elif _settings.app_env != "development":
-        # Neither secret configured in non-dev -> refuse rather than accept blind.
+        # No OA secret configured in non-dev -> refuse rather than accept blind.
         return JSONResponse(
             {"detail": "webhook verification not configured"}, status_code=503
         )

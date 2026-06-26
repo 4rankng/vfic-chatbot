@@ -138,7 +138,6 @@ async def test_webhook_rejects_unsigned_in_nondev_without_secret(client, monkeyp
     s = get_settings()
     monkeypatch.setattr(s, "app_env", "production")
     monkeypatch.setattr(s, "zalo_oa_secret", "")
-    monkeypatch.setattr(s, "zalo_bot_webhook_secret", "")
     monkeypatch.setattr(wh, "enqueue_chat_run", lambda job: None)
     r = await client.post("/webhooks/zalo", json=_payload("sig-3", chat_id="z-sig3"))
     assert r.status_code == 503

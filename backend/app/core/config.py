@@ -47,9 +47,6 @@ class Settings(BaseSettings):
     # Per-call HTTP timeout (s). Zalo recommends 30s for getUpdates long-polling;
     # sender methods usually complete in <5s, but we leave headroom.
     zalo_bot_request_timeout: int = 30
-    # Inbound webhook secret (8-256 chars). Zalo echoes this back in the
-    # `X-Bot-Api-Secret-Token` header on every inbound POST so we can verify.
-    zalo_bot_webhook_secret: str = ""
     # The webhook URL currently registered with Zalo (used for self-tests / status).
     zalo_bot_webhook_url: str = ""
 

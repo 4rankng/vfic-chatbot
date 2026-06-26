@@ -37,7 +37,6 @@ def settings() -> Settings:
         zalo_bot_platform_token="test-token-xyz",
         zalo_bot_api_base="https://bot-api.zaloplatforms.com",
         zalo_bot_request_timeout=5,
-        zalo_bot_webhook_secret="super-secret-12345678",
         zalo_bot_webhook_url="https://bot.tingting.vip/api/v1/webhooks/zalo-bot",
     )
 
