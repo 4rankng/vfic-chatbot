@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 14
 
-    # Zalo bot token (sends replies; server-side only). a.k.a. OA access token.
+    # Zalo OA (legacy): sends replies via openapi.zalo.me + HMAC-verifies inbound.
+    # `zalo_bot_token` is the OA access token (server-side only). The current
+    # production bot still uses the OA API; do not delete these fields.
     zalo_bot_token: str = ""
     zalo_oa_oaid: str = ""
     # OA verification secret used to HMAC-verify inbound webhook signatures.
@@ -36,6 +38,20 @@ class Settings(BaseSettings):
     zalo_oa_secret: str = ""
     zalo_api_base: str = "https://openapi.zalo.me"
     zalo_request_timeout: int = 10
+
+    # Zalo Bot Platform (new platform — bot-api.zaloplatforms.com/bot{TOKEN}/...).
+    # Token is passed in the URL path, NOT a header. Distinct from `zalo_bot_token`
+    # above (that's the OA access token for the legacy platform).
+    zalo_bot_platform_token: str = ""
+    zalo_bot_api_base: str = "https://bot-api.zaloplatforms.com"
+    # Per-call HTTP timeout (s). Zalo recommends 30s for getUpdates long-polling;
+    # sender methods usually complete in <5s, but we leave headroom.
+    zalo_bot_request_timeout: int = 30
+    # Inbound webhook secret (8-256 chars). Zalo echoes this back in the
+    # `X-Bot-Api-Secret-Token` header on every inbound POST so we can verify.
+    zalo_bot_webhook_secret: str = ""
+    # The webhook URL currently registered with Zalo (used for self-tests / status).
+    zalo_bot_webhook_url: str = ""
 
     # LLM: MiniMax (OpenAI-compatible). Agent + safety. KEPT from n8n, prompts ported verbatim.
     minimax_api_key: str = ""
