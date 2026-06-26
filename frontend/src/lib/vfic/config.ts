@@ -9,6 +9,7 @@
 type VficWindowConfig = {
   API_BASE?: string;
   REALTIME_URL?: string;
+  SOCKET_URL?: string;
   HUMAN_REPLY_WEBHOOK?: string;
 };
 
@@ -36,6 +37,15 @@ export const vficConfig = {
       env.VITE_REALTIME_URL ??
       `${this.apiBaseUrl}/realtime/events`
     );
+  },
+  /**
+   * Socket.IO origin for realtime chat (replaces the SSE EventSource). Defaults
+   * to the backend origin (apiBaseUrl; empty = same-origin, co-served by Caddy);
+   * the socket path is the server default /socket.io/. Socket.IO prefers
+   * WebSocket and falls back to HTTP long-polling automatically.
+   */
+  get socketUrl(): string {
+    return win.SOCKET_URL ?? env.VITE_SOCKET_URL ?? this.apiBaseUrl;
   },
   /** Legacy n8n human-reply webhook — optional, superseded by the REST endpoint. */
   get humanReplyWebhookUrl(): string | null {

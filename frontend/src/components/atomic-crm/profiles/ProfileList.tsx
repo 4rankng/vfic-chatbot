@@ -1,4 +1,4 @@
-import { CanAccess, ListBase, useTranslate } from "ra-core";
+import { CanAccess, ListBase, useRecordContext, useTranslate } from "ra-core";
 import { CreateButton } from "@/components/admin/create-button";
 import { DataTable } from "@/components/admin/data-table";
 import { TextField } from "@/components/admin/text-field";
@@ -13,11 +13,15 @@ const ROLE_LABELS: Record<string, string> = {
   recruiter: "Nhân viên",
 };
 
-const RoleBadge = ({ record }: any) => {
-  if (!record) return null;
+// Reads the current row via useRecordContext — DataTableCell renders column
+// children without cloning the record into them as a prop, so a `record` prop
+// would always be undefined here.
+const RoleBadge = () => {
+  const record = useRecordContext();
+  if (!record?.role) return null;
   return (
     <Badge variant={record.role === "admin" ? "default" : "secondary"}>
-      {ROLE_LABELS[record.role] ?? record.role}
+      {ROLE_LABELS[record.role as string] ?? record.role}
     </Badge>
   );
 };
@@ -59,7 +63,7 @@ export const ProfileList = () => {
             </DataTable.Col>
             <DataTable.Col source="email" label="Email" />
             <DataTable.Col source="role" label="Vai trò">
-              <RoleBadge source="role" label="Vai trò" />
+              <RoleBadge />
             </DataTable.Col>
             <DataTable.Col source="created_at" label="Ngày tạo">
               <DateField source="created_at" showTime />

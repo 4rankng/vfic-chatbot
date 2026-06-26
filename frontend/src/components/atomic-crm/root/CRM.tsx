@@ -80,31 +80,22 @@ const ProfilePage = lazy(async () => {
   const mod = await import("../settings/ProfilePage");
   return { default: mod.ProfilePage as ComponentType };
 });
-const SettingsPage = lazy(async () => {
-  const mod = await import("../settings/SettingsPage");
-  return { default: mod.SettingsPage as ComponentType };
-});
-const SettingsPageMobile = lazy(async () => {
-  const mod = await import("../settings/SettingsPageMobile");
-  return { default: mod.SettingsPageMobile as ComponentType };
-});
 // NOTE: ChangelogPage is imported statically (top of file) rather than lazy
-// here — Header.tsx and SettingsPageMobile.tsx already import it eagerly, so
-// a lazy() wrapper would be a no-op (Vite keeps it in the main chunk and
-// warns). Keeping it static is consistent and avoids the misleading split.
+// here — Header.tsx already imports it eagerly, so a lazy() wrapper would be
+// a no-op (Vite keeps it in the main chunk and warns). Keeping it static is
+// consistent and avoids the misleading split.
 
 // Static path constants — React.lazy wrappers do not expose the original
 // component's static `.path` property, so we mirror the values here.
 // Source of truth remains the static assignment in each page module; if a
 // path changes there, update this constant too.
 const PROFILE_PATH = "/profile";
-const SETTINGS_PATH = "/settings";
 const CHANGELOG_PATH = "/changelog";
 
 const RouteFallback = () => null;
 
-// Lazy route chunks (ProfilePage, SettingsPage*) can fail to load after a
-// deploy (stale chunk hash) or on a flaky connection. A rejected React.lazy
+// Lazy route chunks (ProfilePage) can fail to load after a deploy (stale
+// chunk hash) or on a flaky connection. A rejected React.lazy
 // import throws during render and — with no boundary — would unmount the
 // entire <Admin>. This isolates the failure to the route pane and offers a
 // reload, which re-fetches the current valid chunk.
@@ -233,20 +224,6 @@ export const CRM = ({
   dashboard,
   ...rest
 }: CRMProps) => {
-  useEffect(() => {
-    if (
-      disableTelemetry ||
-      process.env.NODE_ENV !== "production" ||
-      typeof window === "undefined" ||
-      typeof window.location === "undefined" ||
-      typeof Image === "undefined"
-    ) {
-      return;
-    }
-    const img = new Image();
-    img.src = `https://atomic-crm-telemetry.marmelab.com/atomic-crm-telemetry?domain=${window.location.hostname}`;
-  }, [disableTelemetry]);
-
   // Seed the store with CRM prop values if not already stored
   // (backwards compatibility for prop-based config)
   useEffect(() => {
@@ -352,26 +329,6 @@ export const CRM = ({
               element={
                 <RouteBoundary>
                   <ProfilePage />
-                </RouteBoundary>
-              }
-            />
-          )}
-          {!isMobile && (
-            <Route
-              path={SETTINGS_PATH}
-              element={
-                <RouteBoundary>
-                  <SettingsPage />
-                </RouteBoundary>
-              }
-            />
-          )}
-          {isMobile && (
-            <Route
-              path={SETTINGS_PATH}
-              element={
-                <RouteBoundary>
-                  <SettingsPageMobile />
                 </RouteBoundary>
               }
             />

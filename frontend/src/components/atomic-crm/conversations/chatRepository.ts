@@ -1,4 +1,4 @@
-import { vficConfig } from "@/lib/vfic/config";
+import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import type { Lead, Message } from "../types";
 import {
   apiJson,
@@ -130,34 +130,32 @@ export const chatRepository = {
   },
 
   /**
-   * Subscribe to new messages for a conversation over the SSE realtime stream.
-   * EventSource cannot set headers, so the access JWT rides in `?token=`. The
-   * stream is global (one channel); we filter `message.created` events by
-   * `conversation_id`. The event payload carries only ids, so on a match we
-   * refetch the latest page and merge — the consumer dedups by message id.
-   * Returns an unsubscribe fn (no-op when there is no session token).
+   * Subscribe to new messages for a conversation over the Socket.IO realtime
+   * transport (per-conversation rooms replace the SSE firehose). The access
+   * JWT rides in the socket `auth` handshake, verified server-side on connect.
+   * Joining the `conv:<id>` room scopes delivery to this conversation; the
+   * `message.created` payload carries only ids, so on a match we refetch the
+   * latest page and merge — the consumer dedups by message id. Returns an
+   * unsubscribe fn (no-op when there is no session token or conversation id)
+   * which leaves the room and detaches the handler.
    */
   subscribeToMessages(
     conversationId: string,
     onNewMessage: (msg: Message) => void,
   ): () => void {
-    const token = getAccessToken();
-    if (!token || !conversationId) {
+    if (!conversationId || !getAccessToken()) {
       return () => {
         /* nothing to clean up */
       };
     }
-    const url = `${vficConfig.realtimeUrl}?token=${encodeURIComponent(token)}`;
-    let closed = false;
-    const es = new EventSource(url);
+    const socket = getRealtimeSocket();
 
-    es.addEventListener("message.created", (event) => {
-      const payload = JSON.parse((event as MessageEvent).data) as {
-        conversation_id?: string;
-      };
-      if (payload.conversation_id !== conversationId) return;
-      // Refetch + merge (SSE carries ids only). Ignore failures — the next
-      // event/list refresh reconciles.
+    const handler = (payload: { conversation_id?: string } | undefined) => {
+      // The server emits to conv:<id>, but the socket may be in several rooms,
+      // so keep a defensive conversation_id check (parity with the SSE path).
+      if (payload?.conversation_id !== conversationId) return;
+      // Refetch + merge (the event carries ids only). Ignore failures — the
+      // next event / list refresh reconciles.
       chatRepository
         .getConversationMessages(conversationId, { limit: 25 })
         .then(({ messages }) => {
@@ -166,16 +164,22 @@ export const chatRepository = {
         .catch(() => {
           /* best-effort */
         });
-    });
-
-    es.onerror = () => {
-      // EventSource auto-reconnects; nothing to do here.
     };
 
+    socket.on("message.created", handler);
+    // Connect lazily (autoConnect is false). Emits made before connect are
+    // buffered and flushed once the server accepts the auth handshake.
+    if (!socket.connected) {
+      socket.connect();
+    }
+    socket.emit("join conversation", { conversation_id: conversationId });
+
+    let closed = false;
     return () => {
       if (closed) return;
       closed = true;
-      es.close();
+      socket.off("message.created", handler);
+      socket.emit("leave conversation", { conversation_id: conversationId });
     };
   },
 };

@@ -61,3 +61,17 @@ app.include_router(webhooks.router)
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "env": settings.app_env}
+
+
+# Socket.IO realtime: mount the AsyncServer at the ASGI root so /socket.io/ is
+# served alongside the REST API (Caddy forwards WebSocket upgrades by default,
+# so wss://<origin>/socket.io/ works with no edge change). The FastAPI app
+# becomes the fallback for every non-Socket.IO request, and its lifespan
+# (startup seeder) is forwarded by the ASGIApp. Importing the server here (after
+# all routers/middleware are registered) keeps the construction cost out of test
+# collection's import path.
+import socketio  # noqa: E402
+
+from app.realtime.socketio import sio as _vfic_sio  # noqa: E402
+
+app = socketio.ASGIApp(_vfic_sio, other_asgi_app=app)

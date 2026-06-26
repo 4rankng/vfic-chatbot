@@ -1,4 +1,4 @@
-import { FileText, Settings, User, Users } from "lucide-react";
+import { FileText, User, Users } from "lucide-react";
 import { useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
@@ -108,22 +108,6 @@ export const ProfileMenu = () => {
       <Link to="/profile" className="flex items-center gap-2">
         <User />
         {translate("crm.profile.title")}
-      </Link>
-    </DropdownMenuItem>
-  );
-};
-
-export const SettingsMenu = () => {
-  const translate = useTranslate();
-  const userMenuContext = useUserMenu();
-  if (!userMenuContext) {
-    throw new Error("<SettingsMenu> must be used inside <UserMenu>");
-  }
-  return (
-    <DropdownMenuItem asChild onClick={userMenuContext.onClose}>
-      <Link to="/settings" className="flex items-center gap-2">
-        <Settings />
-        {translate("crm.settings.title")}
       </Link>
     </DropdownMenuItem>
   );

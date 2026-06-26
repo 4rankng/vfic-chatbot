@@ -21,6 +21,9 @@ dependencies = [
     "rq-scheduler>=0.14",
     "httpx>=0.28",
     "sse-starlette>=2.1",
+    # Realtime: Socket.IO server + cross-process emit bridge (replaces the SSE
+    # firehose for chat). Async support is built in (no extra needed as of 5.x).
+    "python-socketio>=5.11",
     "python-multipart>=0.0.17",
     "langgraph>=0.2",
     "langchain-core>=0.3",

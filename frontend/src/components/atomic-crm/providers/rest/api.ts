@@ -130,6 +130,40 @@ export const apiRequest = async (
   return response;
 };
 
+/**
+ * Map a non-2xx response to a short Vietnamese message. A server-provided
+ * plain-string detail wins (it is already a human message); the FastAPI 422
+ * validation array and other structured errors collapse to a status-based
+ * string so raw English like `[{"type":"less_than_equal",...}]` never reaches
+ * a toast. The numeric status is preserved on {@link ApiError} for callers
+ * (e.g. humanReplyService) that branch on it.
+ */
+const friendlyApiMessage = (status: number, rawDetail: unknown): string => {
+  if (typeof rawDetail === "string" && rawDetail.trim()) return rawDetail;
+  switch (status) {
+    case 400:
+      return "Yêu cầu không hợp lệ, vui lòng kiểm tra lại.";
+    case 401:
+      return "Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.";
+    case 403:
+      return "Bạn không có quyền thực hiện hành động này.";
+    case 404:
+      return "Không tìm thấy dữ liệu.";
+    case 405:
+      return "Thao tác này chưa được hỗ trợ.";
+    case 409:
+      return "Dữ liệu đã tồn tại hoặc xung đột, vui lòng làm mới và thử lại.";
+    case 422:
+      return "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.";
+    case 429:
+      return "Thao tác quá nhanh, vui lòng thử lại sau.";
+    default:
+      return status >= 500
+        ? "Lỗi máy chủ, vui lòng thử lại sau."
+        : `Yêu cầu thất bại (mã ${status}), vui lòng thử lại.`;
+  }
+};
+
 /** Authenticated fetch + JSON parse. Throws {@link ApiError} on non-2xx. */
 export const apiJson = async <T>(
   path: string,
@@ -138,19 +172,16 @@ export const apiJson = async <T>(
   const response = await apiRequest(path, options);
   if (response.status === 204) return undefined as unknown as T;
   if (!response.ok) {
-    let detail = `HTTP ${response.status}`;
+    let rawDetail: unknown;
     try {
-      const body = (await response.json()) as { detail?: unknown };
-      detail =
-        typeof body.detail === "string"
-          ? body.detail
-          : body.detail !== undefined
-            ? JSON.stringify(body.detail)
-            : detail;
+      rawDetail = ((await response.json()) as { detail?: unknown }).detail;
     } catch {
-      /* keep status-only detail */
+      /* response had no JSON body — fall back to a status-based message */
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(
+      response.status,
+      friendlyApiMessage(response.status, rawDetail),
+    );
   }
   // Some endpoints (e.g. last-messages) return a bare array, others an object.
   return (await response.json()) as T;

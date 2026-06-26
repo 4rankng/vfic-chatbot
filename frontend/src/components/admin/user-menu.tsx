@@ -1,12 +1,14 @@
 import { useCallback, useState } from "react";
 import {
-  Translate,
   useAuthProvider,
   useGetIdentity,
   useLogout,
+  usePermissions,
+  useTranslate,
   UserMenuContext,
 } from "ra-core";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Users } from "lucide-react";
+import { Link } from "react-router";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,20 +20,20 @@ import { Button } from "@/components/ui/button";
 export type UserMenuProps = {};
 
 /**
- * A user menu component displayed in the top right corner of the admin layout.
- *
- * Provides access to user-related actions such as profile, settings, and logout.
- * Displays the user's avatar and name from the identity provider, and includes a logout option.
- * Only displays in applications using authentication.
- *
- * @see {@link https://marmelab.com/shadcn-admin-kit/docs/usermenu UserMenu documentation}
+ * User menu shown in the top-right of the admin layout. Surfaces the signed-in
+ * user's avatar/name and links to their own profile, the users admin (admin
+ * only), and logout. Profile/Users items render only on desktop layouts — the
+ * matching routes are themselves desktop-gated in CRM.tsx.
  */
 export function UserMenu() {
   const authProvider = useAuthProvider();
   const { data: identity } = useGetIdentity();
+  const { permissions } = usePermissions();
   const logout = useLogout();
+  const translate = useTranslate();
 
   const [open, setOpen] = useState(false);
+  const isAdmin = permissions === "admin";
 
   const handleToggleOpen = useCallback(() => {
     setOpen((prevOpen) => !prevOpen);
@@ -56,17 +58,39 @@ export function UserMenu() {
               <img
                 src={identity.avatar}
                 className="h-5 w-5 rounded-full object-cover"
-                alt="Profile"
+                alt={translate("crm.profile.title", { _: "Profile" })}
               />
             ) : (
               <User className="h-5 w-5" />
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-32" align="end" forceMount>
+        <DropdownMenuContent className="w-40" align="end" forceMount>
+          <DropdownMenuItem asChild>
+            <Link
+              to="/profile"
+              onClick={handleClose}
+              className="flex items-center gap-2"
+            >
+              <User className="h-4 w-4" />
+              {translate("crm.profile.title")}
+            </Link>
+          </DropdownMenuItem>
+          {isAdmin && (
+            <DropdownMenuItem asChild>
+              <Link
+                to="/users"
+                onClick={handleClose}
+                className="flex items-center gap-2"
+              >
+                <Users className="h-4 w-4" />
+                {translate("resources.users.name", { smart_count: 2 })}
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => logout()} className="cursor-pointer">
             <LogOut className="mr-2 h-4 w-4" />
-            <Translate i18nKey="ra.auth.logout">Log out</Translate>
+            {translate("ra.auth.logout")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -1,5 +1,4 @@
 import { ListBase, useListContext } from "ra-core";
-import { CreateButton } from "@/components/admin/create-button";
 
 import { LeadListContent } from "./LeadListContent";
 import { LeadsSummaryHeader } from "./LeadsSummaryHeader";
@@ -12,7 +11,6 @@ const LeadPageHeader = () => {
       <h1 className="text-xl font-semibold text-foreground">
         Ứng viên tiềm năng <span className="text-muted-foreground font-normal">({total ?? 0})</span>
       </h1>
-      <CreateButton label="Thêm ứng viên" />
     </div>
   );
 };

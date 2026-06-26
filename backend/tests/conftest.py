@@ -94,6 +94,37 @@ async def clean_kb(db_session):
     await db_session.commit()
 
 
+# Per-turn business tables wiped before every test. This dev Postgres persists
+# across runs, and many tests seed rows with hardcoded ids or assert on mutex
+# state (bot_locked_until / version), so residue from a prior run or test
+# collides (UniqueViolation / stale state) and the suite looks flaky. Reference
+# + seed tables (users, jobs, projects, companies, personas, bus_*,
+# system_settings) are deliberately preserved; KB tables stay owned by clean_kb.
+_TRANSIENT_TABLES = (
+    "audit_events",
+    "message_dedup",
+    "outbound_messages",
+    "messages",
+    "bot_runs",
+    "follow_up_tasks",
+    "lead_events",
+    "leads",
+    "memories",
+    "conversations",
+)
+_TRUNCATE_TRANSIENT = _sa_text(
+    "TRUNCATE TABLE " + ", ".join(_TRANSIENT_TABLES) + " RESTART IDENTITY CASCADE"
+)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _isolate_transient_tables():
+    async with _test_sessionmaker() as db:
+        await db.execute(_TRUNCATE_TRANSIENT)
+        await db.commit()
+    yield
+
+
 @pytest_asyncio.fixture
 async def seed():
     await _seed_users()

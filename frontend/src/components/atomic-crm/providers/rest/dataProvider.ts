@@ -195,8 +195,8 @@ const getDataProviderWithCustomMethods = () => ({
     return {} as ConfigurationContextValue;
   },
 
-  // No-op so legacy callers (SettingsPage) keep typechecking without writing to
-  // a dead endpoint.
+  // No-op: VFIC has no configuration endpoint to write to. Kept to satisfy the
+  // data-provider interface (useConfigurationLoader invokes it on saves).
   async updateConfiguration(
     config: ConfigurationContextValue,
   ): Promise<ConfigurationContextValue> {
