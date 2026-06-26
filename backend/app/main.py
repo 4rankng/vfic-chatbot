@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, bot_runs, conversations, dashboard, jobs, knowledge, leads, realtime, users, webhooks
+from app.api import auth, bot_runs, conversations, dashboard, jobs, knowledge, leads, personas, projects, realtime, users, webhooks
 from app.core.config import get_settings
 from app.core.db import engine
 from app.core.logging import setup_logging
@@ -18,6 +18,16 @@ logger = logging.getLogger("app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("vfic backend starting env=%s", settings.app_env)
+    # Ensure the canonical 'vfic' project + a default persona exist (idempotent,
+    # non-fatal). resolve_persona falls back to persona.md regardless.
+    try:
+        from app.core.db import async_session
+        from app.services.seeder import ensure_defaults
+
+        async with async_session() as db:
+            await ensure_defaults(db)
+    except Exception:  # noqa: BLE001
+        logger.exception("startup seeder failed (non-fatal)")
     yield
     await engine.dispose()
     logger.info("vfic backend stopped")
@@ -40,6 +50,8 @@ app.include_router(conversations.router, prefix=API_V1_PREFIX)
 app.include_router(leads.router, prefix=API_V1_PREFIX)
 app.include_router(bot_runs.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge.router, prefix=API_V1_PREFIX)
+app.include_router(projects.router, prefix=API_V1_PREFIX)
+app.include_router(personas.router, prefix=API_V1_PREFIX)
 app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
 app.include_router(realtime.router, prefix="/realtime")

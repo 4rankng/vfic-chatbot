@@ -46,6 +46,14 @@ export const vietnameseCrmMessages = {
       name: "Nguồn kiến thức |||| Nguồn kiến thức",
       forcedCaseName: "Nguồn kiến thức",
     },
+    projects: {
+      name: "Dự án |||| Dự án",
+      forcedCaseName: "Dự án",
+    },
+    personas: {
+      name: "Persona |||| Persona",
+      forcedCaseName: "Persona",
+    },
     users: {
       name: "Tài khoản |||| Tài khoản",
       forcedCaseName: "Tài khoản",
@@ -213,7 +221,7 @@ export const vietnameseCrmMessages = {
         "Chỉ quản trị viên mới được quản lý người dùng. Hãy nhờ quản trị viên cấp quyền truy cập.",
     },
   },
-  "ra-supabase": {
+  "ra-auth": {
     auth: {
       forgot_password: "Quên mật khẩu?",
     },

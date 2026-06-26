@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,6 +20,13 @@ class KnowledgeDocumentOut(BaseModel):
     status: KnowledgeStatus
     created_at: datetime
     updated_at: datetime
+    # 0003 extensions
+    project_id: uuid.UUID | None = None
+    mime_type: str | None = None
+    stage: str = "UPLOADED"
+    digest_summary: str | None = None
+    digest_meta: dict[str, Any] = {}
+    error: str | None = None
 
 
 class KnowledgeDocumentListResponse(BaseModel):
@@ -27,16 +35,21 @@ class KnowledgeDocumentListResponse(BaseModel):
 
 
 class UploadRequest(BaseModel):
+    """JSON text upload (kept for the Drive path / programmatic clients)."""
+
     file_name: str
     content: str
     drive_file_id: str | None = None
+    project_id: uuid.UUID | None = None
 
 
 class SearchTestRequest(BaseModel):
     query: str
     top_k: int = 10
+    project_id: uuid.UUID | None = None
 
 
 class SearchTestResult(BaseModel):
     content: str
     similarity: float
+

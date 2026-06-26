@@ -18,6 +18,8 @@ import profiles from "../profiles";
 import conversations from "../conversations";
 import automation from "../automation";
 import knowledge from "../knowledge";
+import projects from "../projects";
+import personas from "../personas";
 import { Dashboard } from "../dashboard/Dashboard";
 import { MobileDashboard } from "../dashboard/MobileDashboard";
 import { Layout } from "../layout/Layout";
@@ -26,7 +28,7 @@ import { ChangelogPage } from "../misc/ChangelogPage";
 import {
   getAuthProvider as defaultAuthProviderBuilder,
   getDataProvider as defaultDataProviderBuilder,
-} from "../providers/supabase";
+} from "../providers/rest";
 import {
   CONFIGURATION_STORE_KEY,
   type ConfigurationContextValue,
@@ -380,6 +382,8 @@ export const CRM = ({
         <Resource name="conversations" {...conversations} />
         <Resource name="bot_runs" {...automation} />
         <Resource name="knowledge_sources" {...knowledge} />
+        <Resource name="projects" {...projects} />
+        <Resource name="personas" {...personas} />
         {/* Users admin: always registered so /users resolves.
             Access is gated inside ProfileList (CanAccess) and via Header
             menu visibility — ra-core's static-children walker does not

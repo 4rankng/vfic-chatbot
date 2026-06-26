@@ -86,7 +86,9 @@ export type Message = {
   conversation_id: string;
   type: "inbound" | "outbound" | "system";
   content: string;
-  data: any;
+  // Backend `data` jsonb. Carries recruiter_id on recruiter-sent messages
+  // (the direction discriminator read in ChatThread). Narrowed from `any`.
+  data: { recruiter_id?: string | null } | null;
   created_at: string;
 } & Pick<RaRecord, "id">;
 
@@ -103,9 +105,10 @@ export type BotRun = {
   outcome: "sent" | "suppressed" | "error";
 } & Pick<RaRecord, "id">;
 
-// Knowledge document (Drive-ingested RAG doc). Mirrors the backend
-// KnowledgeDocumentOut shape served at /api/v1/knowledge/documents. Read-only
-// admin view (ingestion is bot-side via the Drive-sync workflow).
+// Knowledge document (per-project RAG doc). Mirrors the backend
+// KnowledgeDocumentOut shape served at /api/v1/knowledge/documents. `stage` is the
+// fine-grained training-pipeline progress (UPLOADED -> ... -> READY_FOR_REVIEW);
+// `digest_meta` carries unit/flagged counts from the LLM digest.
 export type KnowledgeSource = {
   id: string;
   drive_file_id: string | null;
@@ -113,6 +116,46 @@ export type KnowledgeSource = {
   source: string;
   version: string | null;
   status: string;
+  created_at: string;
+  updated_at: string;
+  project_id?: string | null;
+  mime_type?: string | null;
+  stage?: string;
+  digest_summary?: string | null;
+  digest_meta?: { unit_count?: number; section_count?: number; flagged_unit_indexes?: number[] };
+  error?: string | null;
+} & Pick<RaRecord, "id">;
+
+// A "project" = a product in the agent's master index (e.g. the LG Display factory).
+// index_card is the LLM-generated catalog entry (summary/roles/location/highlights).
+export interface ProjectIndexCard {
+  summary?: string;
+  key_roles?: string[];
+  location?: string;
+  highlights?: string[];
+}
+export type Project = {
+  id: string;
+  slug: string;
+  name: string;
+  is_active: boolean;
+  summary?: string | null;
+  index_card?: ProjectIndexCard;
+  default_persona_id?: string | null;
+  created_at: string;
+  updated_at: string;
+} & Pick<RaRecord, "id">;
+
+// An agent persona (free-form markdown). Several stored; one global persona active.
+export type Persona = {
+  id: string;
+  project_id?: string | null;
+  name: string;
+  slug: string;
+  body_md: string;
+  is_active: boolean;
+  notes?: string | null;
+  created_by?: string | null;
   created_at: string;
   updated_at: string;
 } & Pick<RaRecord, "id">;
@@ -167,38 +210,6 @@ export interface Deal {
   updated_at?: string;
 }
 
-export interface DealNote {
-  id: Identifier;
-  deal_id: Identifier;
-  sales_id: Identifier;
-  text: string;
-  status?: string;
-  attachments?: RAFile[];
-  date?: string;
-}
-
-export interface ContactNote {
-  id: Identifier;
-  contact_id: Identifier;
-  sales_id: Identifier;
-  text: string;
-  status?: string;
-  attachments?: RAFile[];
-  date?: string;
-}
-
-export interface Sale {
-  id: Identifier;
-  user_id?: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  password?: string;
-  administrator?: boolean;
-  disabled?: boolean;
-  avatar?: { src?: string };
-}
-
 export interface Tag {
   id: Identifier;
   name: string;
@@ -214,21 +225,6 @@ export interface Task {
   due_date?: string;
   done_date?: string;
   created_at?: string;
-}
-
-export interface SignUpData {
-  email: string;
-  password: string;
-  first_name: string;
-  last_name: string;
-}
-
-export interface RAFile {
-  src: string;
-  title: string;
-  path?: string;
-  rawFile: File;
-  type?: string;
 }
 
 export interface LabeledValue {
@@ -247,10 +243,6 @@ export type Activity = {
   date: string;
   text?: string;
 };
-
-// Email + type alias used by avatar helpers.
-export type EmailAndType = { email: string | null; type: string | null };
-export type PhoneAndType = { number: string | null; type: string | null };
 
 // Lead stages — DB-CHECK canonical values (leads.lead_stage CHECK constraint).
 // Order = recruitment funnel. Used across LeadShow, LeadCard, LeadColumn, Dashboard.

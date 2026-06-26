@@ -1,13 +1,19 @@
-import { ListBase, useListContext, useRedirect } from "ra-core";
+import { useState } from "react";
+import { ListBase, useListContext, useRedirect, useRefresh } from "ra-core";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, FileText } from "lucide-react";
+import { BookOpen, FileText, RefreshCw, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
 import { getRelativeTimeString } from "../leads/leadUtils";
 import type { KnowledgeSource } from "../types";
-import { statusTone } from "./statusTone";
+import { stageLabel, stageTone } from "./stageTone";
+import { KnowledgeUpload } from "./KnowledgeUpload";
+
+const flaggedCount = (s: KnowledgeSource): number =>
+  s.digest_meta?.flagged_unit_indexes?.length ?? 0;
 
 const KnowledgeSourceRow = ({ source }: { source: KnowledgeSource }) => {
   const redirect = useRedirect();
@@ -33,20 +39,25 @@ const KnowledgeSourceRow = ({ source }: { source: KnowledgeSource }) => {
           <span
             className={cn(
               "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              statusTone(source.status),
+              stageTone(source.stage, source.status),
             )}
           >
-            {source.status || "—"}
+            {stageLabel(source.stage ?? source.status)}
           </span>
           {source.source && (
             <Badge variant="outline" className="text-[10px]">
               {source.source}
             </Badge>
           )}
-          {source.version && (
+          {source.digest_meta?.unit_count != null && (
             <span className="text-[10px] text-muted-foreground">
-              v{source.version}
+              {source.digest_meta.unit_count} đơn vị
             </span>
+          )}
+          {flaggedCount(source) > 0 && (
+            <Badge variant="destructive" className="text-[10px]">
+              {flaggedCount(source)} cần xem lại
+            </Badge>
           )}
         </div>
       </div>
@@ -56,6 +67,8 @@ const KnowledgeSourceRow = ({ source }: { source: KnowledgeSource }) => {
 
 const KnowledgeSourceListContent = () => {
   const { data, isPending } = useListContext<KnowledgeSource>();
+  const refresh = useRefresh();
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   return (
     <>
@@ -63,7 +76,20 @@ const KnowledgeSourceListContent = () => {
         <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
           Cơ sở kiến thức
         </h2>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => refresh()}
+          title="Làm mới (xem tiến trình huấn luyện)"
+        >
+          <RefreshCw className="size-4" />
+        </Button>
+        <Button size="sm" onClick={() => setUploadOpen(true)}>
+          <Upload className="size-4" />
+          Tải lên
+        </Button>
       </TopToolbar>
+      <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
       <Card className="mt-4 overflow-hidden p-0 py-0">
         <div className="flex h-[calc(100vh-220px)] min-h-[400px] flex-col rounded-[inherit] overflow-hidden">
           {isPending ? (
@@ -81,9 +107,9 @@ const KnowledgeSourceListContent = () => {
           ) : !data || data.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
               <BookOpen className="size-10 opacity-50" />
-              <p className="text-sm font-medium">Chưa có nguồn kiến thức</p>
+              <p className="text-sm font-medium">Chưa có cơ sở kiến thức</p>
               <p className="text-xs">
-                Tài liệu được nhập từ Drive sẽ hiển thị tại đây.
+                Tải lên tài liệu (PDF, DOCX, XLSX...) để huấn luyện chatbot.
               </p>
             </div>
           ) : (

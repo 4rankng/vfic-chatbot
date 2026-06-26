@@ -34,7 +34,15 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+    volumes: [vfic_kb_uploads:/data/kb_uploads]
     expose: ["8000"]
+    healthcheck:
+      # uvicorn serves /health on :8000. Python is guaranteed in the image (no curl dep).
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
 
   # RQ worker: chatbot runs (user-facing latency) + lead/memory persistence.
@@ -60,6 +68,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+    volumes: [vfic_kb_uploads:/data/kb_uploads]
     command: ["rq", "worker", "ingest", "--url", "${REDIS_URL}"]
     healthcheck:
       test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
@@ -99,7 +108,9 @@ services:
 
   caddy:
     image: caddy:2
-    depends_on: [web, frontend]
+    depends_on:
+      web: { condition: service_healthy }
+      frontend: { condition: service_started }
     ports: ["80:80", "443:443"]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -112,3 +123,4 @@ volumes:
   vfic_redisdata:
   vfic_caddy_data:
   vfic_caddy_config:
+  vfic_kb_uploads:

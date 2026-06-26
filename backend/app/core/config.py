@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 14
 
-    # Zalo OA (webhook verify + send) — server-side only
-    zalo_oa_token: str = ""
+    # Zalo bot token (sends replies; server-side only). a.k.a. OA access token.
+    zalo_bot_token: str = ""
     zalo_oa_oaid: str = ""
     # OA verification secret used to HMAC-verify inbound webhook signatures.
     # Empty in dev/test -> signature verification is skipped (webhook accepted).
@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_embedding_model: str = "gemini-embedding-2"
     embedding_dim: int = 3072
+
+    # LLM "training pipeline" — MiniMax digests raw KB files into RAG units + builds
+    # the per-project catalog card. Falls back to the agent model when unset.
+    minimax_digest_model: str = ""
+    kb_storage_path: str = "/data/kb_uploads"
+    digest_section_chars: int = 6000
+    digest_max_sections: int = 20
 
     # Google Drive (knowledge ingest)
     google_drive_credentials_json: str = ""

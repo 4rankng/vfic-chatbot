@@ -8,6 +8,7 @@ from app.models.company import Company, Project
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeStatus
 from app.models.lead import FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage, FollowUpTask
 from app.models.job import Job, JobStatus
+from app.models.persona import Persona
 from app.models.conversation import (
     BotRun,
     BotRunOutcome,
@@ -39,6 +40,7 @@ __all__ = [
     "FollowUpTask",
     "Job",
     "JobStatus",
+    "Persona",
     "Conversation",
     "ConversationMode",
     "ConversationStatus",

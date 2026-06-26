@@ -38,22 +38,67 @@ async def search_user_memory(
     return "\n".join(f"- {r.content} (sim={r.similarity:.2f})" for r in rows)
 
 
+async def search_knowledge(
+    db: AsyncSession, embedder: Embedder, query: str, project_slug: str | None = None, top_k: int = 25
+) -> str:
+    """Project-scoped semantic search over APPROVED knowledge (the `documents` VIEW).
+
+    ``project_slug`` (from the master index) scopes retrieval to one product; omit it
+    to search across all active projects. The agent is told to advise ONLY from this.
+    """
+    project_ids: list[str] | None = None
+    if project_slug:
+        pid_rows = (
+            await db.execute(
+                text("SELECT id FROM projects WHERE slug = :s AND is_active"), {"s": project_slug}
+            )
+        ).all()
+        project_ids = [str(r[0]) for r in pid_rows] or None
+    emb = vec_literal(await embedder(query))
+    if project_ids:
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT id, content, similarity FROM match_documents("
+                    "CAST(:emb AS vector), :k, CAST(:filter AS jsonb), CAST(:pids AS uuid[]))"
+                ),
+                {"emb": emb, "k": top_k, "filter": "{}", "pids": project_ids},
+            )
+        ).all()
+    else:
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT id, content, similarity FROM match_documents("
+                    "CAST(:emb AS vector), :k, CAST(:filter AS jsonb))"
+                ),
+                {"emb": emb, "k": top_k, "filter": "{}"},
+            )
+        ).all()
+    if not rows:
+        return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
+    return "\n".join(f"- {str(r.content)[:300]}" for r in rows)
+
+
 async def search_jobs(
     db: AsyncSession, embedder: Embedder, query: str, top_k: int = 25
 ) -> str:
-    emb = vec_literal(await embedder(query))
+    """Back-compat unscoped search (delegates to search_knowledge)."""
+    return await search_knowledge(db, embedder, query, top_k=top_k)
+
+
+async def list_active_projects(db: AsyncSession) -> str:
+    """Return the active-product catalog (name/slug/summary) for the agent."""
     rows = (
         await db.execute(
-            text(
-                "SELECT id, content, similarity FROM match_documents("
-                "CAST(:emb AS vector), :k, CAST(:filter AS jsonb))"
-            ),
-            {"emb": emb, "k": top_k, "filter": "{}"},
+            text("SELECT name, slug, summary FROM projects WHERE is_active ORDER BY name")
         )
     ).all()
     if not rows:
-        return "Không tìm thấy công việc phù hợp trong cơ sở dữ liệu VFIC."
-    return "\n".join(f"- {str(r.content)[:300]}" for r in rows)
+        return "Hiện chưa có dự án/sản phẩm nào đang hoạt động."
+    return "\n".join(
+        f"- {r.slug} ({r.name})" + (f": {r.summary}" if r.summary else "") for r in rows
+    )
 
 
 async def search_bus_timetable(
@@ -95,5 +140,7 @@ async def search_bus_timetable(
 TOOLS_REGISTRY = {
     "search_user_memory": search_user_memory,
     "search_jobs": search_jobs,
+    "search_knowledge": search_knowledge,
+    "list_active_projects": list_active_projects,
     "search_bus_timetable": search_bus_timetable,
 }

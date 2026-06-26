@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
-from app.graph.prompts import AGENT_SYSTEM_PROMPT, ERROR_REPLY
+from app.graph.prompts import ERROR_REPLY
 from app.graph.safety import (
     build_retry_prompt,
     fast_safety_filter,
@@ -64,8 +64,13 @@ def _now() -> datetime:
 
 
 async def _agent_turn(state: BotRunState, deps: GraphDeps, user_text: str) -> str:
+    # System prompt = active persona + master index of active products (best-effort;
+    # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
+    from app.graph.context import build_system_prompt
+
+    system = await build_system_prompt(deps.db)
     return await deps.agent.agent(
-        user_text, system=AGENT_SYSTEM_PROMPT, db=deps.db, embedder=deps.embedder
+        user_text, system=system, db=deps.db, embedder=deps.embedder
     )
 
 

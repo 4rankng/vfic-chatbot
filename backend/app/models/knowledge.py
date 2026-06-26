@@ -1,11 +1,18 @@
-"""Knowledge document + chunk ORM models (mirror Alembic baseline)."""
+"""Knowledge document + chunk ORM models (mirror Alembic baseline + 0003 extensions).
+
+``KnowledgeDocument.stage`` tracks fine-grained training-pipeline progress
+(``UPLOADED → EXTRACTED → DIGESTING → EMBEDDING → INDEXING → READY_FOR_REVIEW``);
+the high-level ``status`` enum is the approval lifecycle. Chunks carry the
+LLM-digest payload (``source_quote``/``summary``/``questions``/``category``/
+``entities``/``confidence``) plus a denormalised ``project_id`` for scoped retrieval.
+"""
 from __future__ import annotations
 
 import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, text
+from sqlalchemy import ARRAY, DateTime, Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +44,16 @@ class KnowledgeDocument(Base):
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    # --- 0003: project scope + upload + training-pipeline progress ---
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL")
+    )
+    mime_type: Mapped[str | None] = mapped_column(String)
+    storage_path: Mapped[str | None] = mapped_column(String)
+    stage: Mapped[str] = mapped_column(String, nullable=False, default="UPLOADED", server_default="UPLOADED")
+    digest_summary: Mapped[str | None] = mapped_column(Text)
+    digest_meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    error: Mapped[str | None] = mapped_column(Text)
 
 
 class KnowledgeChunk(Base):
@@ -49,3 +66,11 @@ class KnowledgeChunk(Base):
     embedding: Mapped[object] = mapped_column("embedding", Text)  # vector(3072) at DB; only written via raw SQL
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    # --- 0003: project scope (denormalised) + LLM-digest payload ---
+    project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    source_quote: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
+    questions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
+    category: Mapped[str | None] = mapped_column(String)
+    entities: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    confidence: Mapped[str | None] = mapped_column(String)
