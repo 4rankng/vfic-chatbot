@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from "react";
+import { useNotify } from "ra-core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "../misc/Markdown";
+import { generatePersona } from "@/lib/vfic/knowledgeService";
 
 // 7-section persona scaffold (mirrors kb/ChatBotGuideline.md). Seeds the editor
 // so new personas "follow the format"; the admin edits/extends each section and
@@ -50,10 +52,13 @@ export const PersonaForm = ({
   onSubmit,
   extraActions,
 }: PersonaFormProps) => {
+  const notify = useNotify();
   const [name, setName] = useState(initial.name);
   const [bodyMd, setBodyMd] = useState(initial.body_md || PERSONA_TEMPLATE);
   const [notes, setNotes] = useState(initial.notes ?? "");
   const [submitting, setSubmitting] = useState(false);
+  const [genDesc, setGenDesc] = useState("");
+  const [generating, setGenerating] = useState(false);
 
   const submit = async () => {
     setSubmitting(true);
@@ -61,6 +66,23 @@ export const PersonaForm = ({
       await onSubmit({ name, body_md: bodyMd, notes });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onGenerate = async () => {
+    const desc = genDesc.trim();
+    if (!desc || generating) return;
+    setGenerating(true);
+    try {
+      const res = await generatePersona(desc);
+      setBodyMd(res.body_md);
+      notify("Đã sinh persona bằng AI. Hãy rà soát và chỉnh sửa trước khi lưu.", {
+        type: "success",
+      });
+    } catch (e) {
+      notify((e as Error).message, { type: "error" });
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -76,6 +98,33 @@ export const PersonaForm = ({
             placeholder="VD: Trợ lý tuyển dụng LG Display"
           />
         </div>
+
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col gap-2 pt-4">
+            <Label htmlFor="persona-gen-desc">Sinh persona bằng AI</Label>
+            <div className="flex gap-2">
+              <Input
+                id="persona-gen-desc"
+                value={genDesc}
+                onChange={(e) => setGenDesc(e.target.value)}
+                placeholder="VD: Trợ lý tuyển dụng LG Display, thân thiện, cho lao động phổ thông"
+                disabled={generating}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onGenerate}
+                disabled={generating || !genDesc.trim()}
+                className="shrink-0"
+              >
+                {generating ? "Đang sinh..." : "Sinh persona"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Nhập mô tả ngắn — AI sẽ mở rộng thành persona 7 phần. Luôn rà soát kết quả trước khi lưu.
+            </p>
+          </CardContent>
+        </Card>
 
         <div className="flex items-center justify-between">
           <Label htmlFor="persona-body">Nội dung persona (markdown)</Label>

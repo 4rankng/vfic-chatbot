@@ -49,3 +49,13 @@ class PersonaUpdate(BaseModel):
     name: str | None = None
     body_md: str | None = None
     notes: str | None = None
+
+
+class PersonaGenerateRequest(BaseModel):
+    """Short description the rule-expander LLM expands into a full persona body_md."""
+
+    description: str = Field(min_length=1, max_length=2000)
+
+
+class PersonaGenerateResponse(BaseModel):
+    body_md: str

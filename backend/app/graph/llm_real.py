@@ -197,6 +197,29 @@ def build_minimax_extractor():
     return extractor
 
 
+def build_persona_expander():
+    """Persona expander: async (user) -> full persona body_md.
+
+    Uses the rule-expander system prompt (rule_expander.md) as the system message
+    and the agent model (M2.7) at temperature 0.4 so generation has mild creativity.
+    A top-level def mirroring build_minimax_extractor: langchain_openai imports
+    lazily inside _minimax_chat, so defining this here does NOT pull langchain into
+    the web-process import path. The endpoint calls build_persona_expander() on
+    demand, and the system prompt (RULE_EXPANDER_PROMPT) is imported inside the
+    function body for the same reason.
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from app.graph.prompts import RULE_EXPANDER_PROMPT
+
+    llm = _minimax_chat(get_settings().minimax_agent_model, temperature=0.4)
+
+    async def expand(user: str) -> str:
+        return (await llm.ainvoke([SystemMessage(content=RULE_EXPANDER_PROMPT), HumanMessage(content=user)])).content
+
+    return expand
+
+
 def make_minimax_llm_json():
     """(system, user) -> json_text callable for the LLM training pipeline.
 

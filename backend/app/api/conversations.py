@@ -81,6 +81,22 @@ async def last_messages_batch(
     return {"snippets": snippets}
 
 
+@router.get("/needs-attention")
+async def needs_attention(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Count of conversations needing a human (mode=HUMAN or unread_count>0),
+    scoped to the viewer. Lightweight count for the topbar notification badge —
+    replaces the previous useGetList(perPage=500) + client-side filter.
+
+    Registered BEFORE the ``/{conv_id}`` routes so the literal ``needs-attention``
+    segment is never shadowed by the uuid path param.
+    """
+    count = await ConversationService(db).needs_attention_count(viewer=user)
+    return {"count": count}
+
+
 @router.get("/{conv_id}", response_model=ConversationOut)
 async def get_conversation(
     conv_id: uuid.UUID, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)

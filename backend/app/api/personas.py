@@ -8,6 +8,7 @@ persona.md when none is active.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,8 +19,18 @@ from app.api.dependencies import require_admin
 from app.core.db import get_db
 from app.models.persona import Persona
 from app.models.user import User
-from app.schemas.personas import PersonaCreate, PersonaListResponse, PersonaOut, PersonaUpdate, _slugify
+from app.schemas.personas import (
+    PersonaCreate,
+    PersonaGenerateRequest,
+    PersonaGenerateResponse,
+    PersonaListResponse,
+    PersonaOut,
+    PersonaUpdate,
+    _slugify,
+)
 from app.services.audit_service import record_audit
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
 
@@ -109,3 +120,88 @@ async def _activate(persona: Persona, db: AsyncSession) -> Persona:
     await db.commit()
     await db.refresh(persona)
     return persona
+
+
+# --- LLM-assisted persona generation --------------------------------------
+# Admin enters a short description -> MiniMax (rule-expander prompt) expands it
+# into a full 7-part persona body_md. Admin previews/edits in the UI before
+# saving; nothing here auto-activates or persists a persona.
+
+_PERSONA_USER_TEMPLATE = (
+    "Mở rộng mô tả sau thành một persona HOÀN CHỈNH cho chatbot VFIC, theo ĐÚNG 7 phần "
+    "với giữ nguyên các tiêu đề tiếng Việt sau:\n"
+    "### Vai trò của tôi là gì?\n"
+    "### Ai cần tôi giúp?\n"
+    "### Tôi hoàn thành công việc thế nào?\n"
+    "### Tôi nên tránh điều gì?\n"
+    "### Kết quả nào cần theo dõi?\n"
+    "### Tôi nên giao tiếp thế nào?\n"
+    "### Mẹo bổ sung?\n\n"
+    "Yêu cầu đầu ra:\n"
+    "- Chỉ xuất persona 7 phần, KHÔNG thêm mục 'NGUỒN', 'BẢNG TRUY VẤN Ý NGHĨA', "
+    "citations hay ghi chú kiểm tra trung thành.\n"
+    "- Giữ nguyên ý mô tả; làm rõ + thêm ví dụ/edge case ở các phần khi phù hợp; tiếng Việt chuẩn.\n\n"
+    "Mô tả: {desc}"
+)
+
+
+def _persona_user_message(description: str) -> str:
+    return _PERSONA_USER_TEMPLATE.format(desc=description.strip())
+
+
+# Best-effort per-admin throttle: a stuck retry loop or double-click must not
+# starve the 1-vCPU droplet's ASGI worker (each generate holds it up to the
+# MiniMax timeout). Fail-open: a redis hiccup never blocks the feature.
+_RATE_KEY = "persona_gen:{admin_id}"
+_RATE_LIMIT = 5  # max generates ...
+_RATE_WINDOW = 600  # ... per 600s per admin
+
+
+async def _enforce_generate_rate_limit(admin_id: uuid.UUID) -> None:
+    try:
+        from app.core.redis import get_redis
+
+        r = get_redis()
+        key = _RATE_KEY.format(admin_id=admin_id)
+        count = await r.incr(key)
+        if count == 1:
+            await r.expire(key, _RATE_WINDOW)
+        if count > _RATE_LIMIT:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Bạn đã sinh persona quá nhiều lần. Vui lòng thử lại sau vài phút.",
+            )
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001 — redis unavailable -> fail open
+        logger.warning("persona-generate rate-limit check skipped (redis unavailable)")
+
+
+@router.post("/generate", response_model=PersonaGenerateResponse)
+async def generate_persona(
+    body: PersonaGenerateRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PersonaGenerateResponse:
+    await _enforce_generate_rate_limit(admin.id)
+    # Imported lazily so langchain_openai is pulled in only when generation
+    # actually runs, keeping the web-process import path langchain-free.
+    from app.graph.llm_real import build_persona_expander
+
+    try:
+        expand = build_persona_expander()
+        body_md = (await expand(_persona_user_message(body.description))).strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("persona generation failed")
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Sinh persona thất bại. Vui lòng thử lại."
+        ) from exc
+    if not body_md:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Sinh persona thất bại. Vui lòng thử lại."
+        )
+    await record_audit(
+        db, action="generate_persona", actor_id=admin.id, target_type="persona", target_id=None
+    )
+    await db.commit()  # record_audit only flushes
+    return PersonaGenerateResponse(body_md=body_md)

@@ -156,6 +156,26 @@ class ConversationService:
         ).all()
         return list(rows), int(total or 0)
 
+    async def needs_attention_count(self, *, viewer: User) -> int:
+        """Conversations the topbar bell should ring for: in recruiter takeover
+        (mode=HUMAN) OR with unread inbound (unread_count > 0). Scoped like
+        ``list`` (admin = all, recruiter = own + unassigned). Backs the
+        notification badge so it never downloads conversation rows."""
+        stmt = select(func.count()).select_from(Conversation).where(
+            or_(
+                Conversation.mode == ConversationMode.HUMAN,
+                Conversation.unread_count > 0,
+            )
+        )
+        if viewer.role != Role.admin:
+            stmt = stmt.where(
+                or_(
+                    Conversation.assigned_recruiter_id == viewer.id,
+                    Conversation.assigned_recruiter_id.is_(None),
+                )
+            )
+        return int((await self.db.scalar(stmt)) or 0)
+
     async def last_messages(self, conv: Conversation, limit: int = 50) -> list[Message]:
         rows = (
             await self.db.scalars(

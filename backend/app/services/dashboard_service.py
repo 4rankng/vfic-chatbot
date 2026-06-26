@@ -9,6 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import Role, User
 from app.schemas.job import DashboardMetrics
 
+# Canonical recruitment-funnel order (mirrors the leads.lead_stage CHECK
+# constraint + the frontend LEAD_STAGES list). Used to emit stage_breakdown in a
+# stable order including zero-count stages, so the client never has to sort.
+_LEAD_STAGE_ORDER = (
+    "NEW",
+    "ENGAGED",
+    "QUALIFIED",
+    "APPLIED",
+    "HIRED",
+    "LOST",
+    "UNQUALIFIED",
+)
+
 
 class DashboardService:
     def __init__(self, db: AsyncSession) -> None:
@@ -75,6 +88,46 @@ class DashboardService:
                 )
             ).scalar()
 
+        # Lead funnel + human-takeover count, scoped identically to the tiles
+        # above (admin = global, recruiter = assigned-or-unassigned). One GROUP
+        # BY replaces the client-side dump-and-count over the whole pipeline.
+        if viewer.role == Role.admin:
+            lead_where = ""
+            lead_params: dict = {}
+            human_where = "WHERE mode = 'HUMAN'"
+            human_params: dict = {}
+        else:
+            uid = str(viewer.id)
+            lead_scope = "(assigned_recruiter_id = :uid OR assigned_recruiter_id IS NULL)"
+            lead_where = f"WHERE {lead_scope}"
+            lead_params = {"uid": uid}
+            human_where = f"WHERE mode = 'HUMAN' AND {lead_scope}"
+            human_params = {"uid": uid}
+
+        stage_rows = (
+            await self.db.execute(
+                text(f"SELECT lead_stage, count(*) FROM leads {lead_where} GROUP BY lead_stage"),
+                lead_params,
+            )
+        ).all()
+        counts_by_stage: dict[str, int] = {r[0]: int(r[1]) for r in stage_rows}
+        total_leads = sum(counts_by_stage.values())
+        qualified_count = counts_by_stage.get("QUALIFIED", 0)
+        hired_count = counts_by_stage.get("HIRED", 0)
+        human_convs = await self.db.scalar(
+            text(f"SELECT count(*) FROM conversations {human_where}"), human_params
+        )
+        stage_breakdown = [
+            {
+                "value": stage,
+                "count": counts_by_stage.get(stage, 0),
+                "percentage": round(counts_by_stage.get(stage, 0) / total_leads * 100)
+                if total_leads
+                else 0,
+            }
+            for stage in _LEAD_STAGE_ORDER
+        ]
+
         return DashboardMetrics(
             open_conversations=int(open_convs or 0),
             hot_leads=int(hot_leads or 0),
@@ -82,4 +135,10 @@ class DashboardService:
             bot_suppression_rate=float(suppression or 0.0),
             failed_zalo_sends=int(failed_sends or 0),
             bot_errors=int(bot_errors or 0),
+            total_leads=total_leads,
+            qualified_count=qualified_count,
+            hired_count=hired_count,
+            hired_rate=round(hired_count / total_leads * 100) if total_leads else 0.0,
+            unread_conversation_count=int(human_convs or 0),
+            stage_breakdown=stage_breakdown,
         )

@@ -69,6 +69,16 @@ class JobSearchRequest(BaseModel):
     top_k: int = 25
 
 
+class StageBreakdownItem(BaseModel):
+    """One row of the recruitment funnel: a lead stage with its scoped count and
+    share of the in-scope pipeline. Order/label/color are fixed client-side from
+    the canonical LEAD_STAGES list; the backend only reports value + count +
+    percentage so it never downloads lead rows just to count them."""
+    value: str
+    count: int
+    percentage: int
+
+
 class DashboardMetrics(BaseModel):
     open_conversations: int
     hot_leads: int
@@ -76,3 +86,15 @@ class DashboardMetrics(BaseModel):
     bot_suppression_rate: float
     failed_zalo_sends: int = 0
     bot_errors: int = 0
+    # Funnel aggregates (server-side COUNT/GROUP BY, scoped like the tiles
+    # above). Replaces the previous client-side useGetList(perPage=1000)
+    # aggregation in useDashboardStats, which exceeded the per_page<=200 list
+    # cap (422) and scaled linearly with pipeline size.
+    total_leads: int = 0
+    qualified_count: int = 0
+    hired_count: int = 0
+    hired_rate: float = 0.0
+    # Conversations currently in recruiter takeover (mode=HUMAN). Preserves the
+    # dashboard's existing "needs a human reply" KPI semantics verbatim.
+    unread_conversation_count: int = 0
+    stage_breakdown: list[StageBreakdownItem] = []

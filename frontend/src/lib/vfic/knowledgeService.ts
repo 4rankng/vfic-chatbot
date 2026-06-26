@@ -41,6 +41,16 @@ export const activatePersona = (id: string) =>
     method: "POST",
   });
 
+/**
+ * Expand a short description into a full 7-part persona body via the
+ * rule-expander LLM. Admin-only; the caller previews/edits before saving.
+ */
+export const generatePersona = (description: string) =>
+  apiJson<{ body_md: string }>(`${BASE}/knowledge/personas/generate`, {
+    method: "POST",
+    body: { description },
+  });
+
 export const reindexProject = (id: string) =>
   apiJson<ApiRecord>(`${BASE}/knowledge/projects/${encodeURIComponent(id)}/reindex`, {
     method: "POST",

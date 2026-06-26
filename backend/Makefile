@@ -6,6 +6,14 @@ IMAGE_NAME  := franknguyenvd/vfic-backend
 GIT_SHA     := $(shell git rev-parse --short HEAD)
 BUILDER     := bb
 
+# Deploy opens ~9 sequential SSH sessions. Reuse ONE master connection
+# (ControlMaster) so a single transient refusal ("ssh: connect to host ...
+# Connection refused") on the droplet can't abort the deploy mid-step, and
+# ControlPersist keeps that socket warm across commands without re-handshaking.
+SSH_MUX     := -o ControlMaster=auto -o ControlPath=/tmp/vfic-deploy-%r@%h:%p -o ControlPersist=600
+SSH         := ssh $(SSH_MUX)
+SCP         := scp $(SSH_MUX)
+
 # ---- Local dev: DB/Redis/Adminer in docker, backend + frontend on host (hot-reload). ----
 dev:
 	@echo "==> Starting dev stack (postgres + redis + adminer)..."
@@ -44,24 +52,30 @@ push:
 # ---- Deploy to prod. Assumes `push` already ran (root Makefile runs both). ----
 deploy:
 	@echo "==> Syncing compose + Caddyfile to $(PROD_SERVER):$(PROD_DIR)..."
-	ssh root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)"
-	scp docker-compose.yml Caddyfile root@$(PROD_SERVER):$(PROD_DIR)/
+	$(SSH) root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)"
+	$(SCP) docker-compose.yml Caddyfile root@$(PROD_SERVER):$(PROD_DIR)/
 	@echo "==> Generating $(PROD_DIR)/.env if missing (infra secrets filled, API keys blank)..."
-	ssh root@$(PROD_SERVER) 'bash -s' < scripts/prod-env.sh
+	$(SSH) root@$(PROD_SERVER) 'bash -s' < scripts/prod-env.sh
 	@echo "==> Pulling images..."
-	ssh root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull"
 	@echo "==> Tearing down n8n (big-bang) to free :80/:443..."
-	-ssh root@$(PROD_SERVER) "cd /opt/n8n-docker-caddy && docker compose down -v" 2>/dev/null || true
+	-$(SSH) root@$(PROD_SERVER) "cd /opt/n8n-docker-caddy && docker compose down -v" 2>/dev/null || true
 	@echo "==> Starting Postgres + Redis..."
-	ssh root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d postgres redis"
-	@echo "==> Waiting for Postgres healthy..."
-	@timeout 90 sh -c "ssh root@$(PROD_SERVER) 'cd $(PROD_DIR) && until docker compose exec -T postgres pg_isready -U vfic >/dev/null 2>&1; do sleep 2; done'" || echo "  Postgres slow to come up"
-	@echo "==> Applying Alembic baseline..."
-	ssh root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web alembic upgrade head"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d postgres redis"
+	@echo "==> Waiting for Postgres healthy (retries transient SSH refusals)..."
+	@ok=0; for i in 1 2 3 4 5; do \
+		timeout 60 sh -c "$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && until docker compose exec -T postgres pg_isready -U vfic >/dev/null 2>&1; do sleep 2; done'" && { ok=1; break; }; \
+		echo "  SSH/pg_isready refused (attempt $$i/5), retrying in 4s..."; sleep 4; \
+	done; [ $$ok -eq 1 ] || echo "  Postgres slow to come up"
+	@echo "==> Applying Alembic baseline (retries transient SSH refusals)..."
+	@ok=0; for i in 1 2 3 4 5; do \
+		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web alembic upgrade head" && { ok=1; break; }; \
+		echo "  alembic SSH refused (attempt $$i/5), retrying in 4s..."; sleep 4; \
+	done; [ $$ok -eq 1 ]
 	@echo "==> Creating bootstrap admin (idempotent)..."
-	@ssh root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose run --rm web python -m scripts.create_admin --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin' || true
+	@$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose run --rm web python -m scripts.create_admin --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin' || true
 	@echo "==> Bringing up full stack..."
-	ssh root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d"
 	@echo "==============================================================="
 	@echo " Deploy done."
 	@echo "   health : https://$(PROD_SERVER)/health"
