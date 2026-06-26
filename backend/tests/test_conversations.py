@@ -20,7 +20,7 @@ from app.models.conversation import (
     MessageSender,
 )
 from app.services.conversation_service import ConversationService
-from app.services.zalo_service import SendResult, ZaloMessageService
+from app.services.zalo_bot_service import SendResult, ZaloBotSender
 from tests.conftest import ADMIN_EMAIL, PASSWORD, RECRUITER_EMAIL
 
 pytestmark = pytest.mark.asyncio
@@ -31,7 +31,7 @@ def _mock_zalo(monkeypatch):
     async def fake_send(self, zalo_chat_id, text):
         return SendResult(ok=True, msg_id="zalo-mock-1")
 
-    monkeypatch.setattr(ZaloMessageService, "send", fake_send)
+    monkeypatch.setattr(ZaloBotSender, "send", fake_send)
 
 
 def _bearer(tok: dict) -> dict:
@@ -171,13 +171,13 @@ async def test_recruiter_reply_flow(client, db_session):
 
 async def test_recruiter_reply_failed_delivery_returns_502(client, db_session, monkeypatch):
     """A failed Zalo delivery still records the FAILED message but returns 5xx."""
-    from app.services.zalo_service import SendResult, ZaloMessageService
+    from app.services.zalo_bot_service import SendResult, ZaloBotSender
 
     async def fail_send(self, zalo_chat_id, text):
         return SendResult(ok=False, error="upstream zalo timeout")
 
     # override the autouse _mock_zalo ok-send with a failing one for this test
-    monkeypatch.setattr(ZaloMessageService, "send", fail_send)
+    monkeypatch.setattr(ZaloBotSender, "send", fail_send)
 
     rec_tok = await _recruiter_token(client)
     rec_h = {"Authorization": f"Bearer {rec_tok}"}

@@ -21,7 +21,7 @@ from app.schemas.conversation import (
     SendMessageRequest,
 )
 from app.services.conversation_service import ConversationConflict, ConversationService
-from app.services.zalo_service import ZaloMessageService
+from app.services.zalo_bot_service import ZaloBotSender
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -177,7 +177,7 @@ async def send_recruiter_message(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Bạn cần tiếp nhận hội thoại trước khi trả lời"
         )
-    result = await ZaloMessageService().send(conv.zalo_chat_id, body.body)
+    result = await ZaloBotSender().send(conv.zalo_chat_id, body.body)
     # The RECRUITER message is persisted in both outcomes (FAILED rows are the
     # audit trail and surface in the thread via SSE); the HTTP status reports
     # whether the upstream Zalo delivery itself succeeded.

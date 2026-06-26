@@ -1,17 +1,19 @@
-"""POST /webhooks/zalo — Zalo OA inbound. Acks synchronously (<1s) after the
-guard chain; the bot run is enqueued to RQ.
+"""POST /webhooks/zalo — Zalo Bot Platform inbound. Acks synchronously (<1s)
+after the guard chain; the bot run is enqueued to RQ.
 
-Inbound authenticity is HMAC-verified via the X-Zevent-Signature header when
-``zalo_oa_secret`` is configured (the live Zalo OA inbound path).
+Inbound authenticity is verified via the X-Bot-Api-Secret-Token shared secret
+echoed by Zalo on every POST (the value passed to setWebhook as ``secret_token``).
+Outside development, a request with NO secret configured is rejected (503) rather
+than accepted blind — an unauthenticated inbound endpoint would let anyone inject
+messages that trigger bot turns + lead extraction. Dev/test keeps the
+accept-unsigned behavior for ergonomics.
 
-Outside development, a request with NO OA secret configured is rejected (503)
-rather than accepted blind — an unauthenticated inbound endpoint would let
-anyone inject messages that trigger bot turns + lead extraction. Dev/test keeps
-the accept-unsigned behavior for ergonomics.
+The raw body is logged at INFO so the Bot Platform payload shape is observable
+during bring-up.
 """
-import hashlib
 import hmac
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -22,31 +24,24 @@ from app.core.db import get_db
 from app.services.webhook import ZaloWebhookService
 from app.workers.chatbot_worker import enqueue_chat_run
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 _settings = get_settings()
 
 
-def _verify_signature(raw: bytes, header: str | None) -> bool:
-    """Zalo OA event webhook signs the raw body: X-Zevent-Signature: mac=<hex>,
-    where hex = HMAC-SHA256(oa_secret, raw_body). Constant-time compared."""
-    expected = "mac=" + hmac.new(
-        _settings.zalo_oa_secret.encode(), raw, hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(header or "", expected)
-
-
 @router.post("/zalo")
 async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
-    # Read the RAW body so signature verification matches the exact bytes Zalo
-    # signed (a re-serialized JSON object would not match).
+    # Read the RAW body so logging shows the exact bytes Zalo sent.
     raw = await request.body()
+    logger.info("zalo webhook inbound bytes=%d body=%s", len(raw), raw.decode("utf-8", "replace")[:1000])
 
-    if _settings.zalo_oa_secret:
-        # OA platform: HMAC-SHA256 over the raw body (X-Zevent-Signature).
-        if not _verify_signature(raw, request.headers.get("x-zevent-signature")):
-            return JSONResponse({"detail": "invalid signature"}, status_code=401)
+    if _settings.zalo_bot_webhook_secret:
+        # Bot Platform: shared-secret echo (X-Bot-Api-Secret-Token).
+        token = request.headers.get("x-bot-api-secret-token") or ""
+        if not hmac.compare_digest(token, _settings.zalo_bot_webhook_secret):
+            return JSONResponse({"detail": "invalid secret token"}, status_code=401)
     elif _settings.app_env != "development":
-        # No OA secret configured in non-dev -> refuse rather than accept blind.
+        # No secret configured in non-dev -> refuse rather than accept blind.
         return JSONResponse(
             {"detail": "webhook verification not configured"}, status_code=503
         )

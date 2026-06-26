@@ -32,7 +32,7 @@ from app.graph.safety import (
     retry_exhausted_fallback,
 )
 from app.services.conversation_service import ConversationService
-from app.services.zalo_service import ZaloMessageService
+from app.services.zalo_bot_service import ZaloBotSender
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class GraphDeps:
     agent: AgentModel
     safety: SafetyModel
     embedder: Embedder
-    zalo: ZaloMessageService
+    zalo: ZaloBotSender
     # Fire-and-forget lead/memory extraction after a SENT reply (port of the n8n
     # Persist Lead / Persist Memories nodes). None in tests -> persistence is skipped.
     persist: Callable[[dict], None] | None = None

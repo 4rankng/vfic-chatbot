@@ -32,22 +32,29 @@ class NormalizedMessage:
 class ZaloWebhookService:
     @staticmethod
     def normalize(payload: dict) -> NormalizedMessage | None:
-        """Extract a text message from a Zalo OA receive event. Returns None if not
-        a processable text message."""
+        """Extract a text message from a Zalo Bot Platform receive event.
+        Returns None if not a processable text message.
+
+        Bot Platform payload (Telegram-style):
+          {"update_id": ..., "message": {"message_id": ..., "date": ...,
+            "chat": {"id": "<chat_id>", ...}, "from": {"id": ..., "name": ...},
+            "text": "..."}}
+        ``chat.id`` is the conversation id (a.k.a. zalo_chat_id).
+        """
         if not isinstance(payload, dict):
             return None
-        # Zalo may wrap a batch; handle the single-event object.
-        sender = payload.get("sender") or {}
         msg = payload.get("message") or {}
+        chat = msg.get("chat") or {}
         text_body = msg.get("text")
-        chat_id = sender.get("id")
+        chat_id = chat.get("id") or msg.get("chat_id")
         if not text_body or not chat_id:
             return None
-        msg_id = str(msg.get("msg_id") or f"{chat_id}:{str(text_body)[:40]}")
+        msg_id = str(msg.get("message_id") or f"{chat_id}:{str(text_body)[:40]}")
+        sender = msg.get("from") or {}
         return NormalizedMessage(
             zalo_chat_id=str(chat_id),
             user_text=str(text_body),
-            user_name=str(sender.get("name") or ""),
+            user_name=str(sender.get("display_name") or sender.get("name") or ""),
             msg_id=msg_id,
             msg_hash=hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:32],
         )

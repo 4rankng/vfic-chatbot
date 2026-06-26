@@ -248,7 +248,7 @@ def make_minimax_llm_json():
 
 async def build_deps(db):
     from app.graph.runner import GraphDeps
-    from app.services.zalo_service import ZaloMessageService
+    from app.services.zalo_bot_service import ZaloBotSender
 
     s = get_settings()
     agent_llm = _minimax_chat(s.minimax_agent_model, temperature=0.3)
@@ -259,5 +259,5 @@ async def build_deps(db):
         agent=MiniMaxAgent(agent_llm, embedder),
         safety=MiniMaxSafety(safety_llm),
         embedder=embedder,
-        zalo=ZaloMessageService(),
+        zalo=ZaloBotSender(),
     )

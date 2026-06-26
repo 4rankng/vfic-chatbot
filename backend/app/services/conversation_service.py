@@ -30,7 +30,7 @@ from app.models.user import Role, User
 from app.schemas.conversation import ConversationOut
 from app.services.audit_service import record_audit
 from app.services.realtime import publish_event
-from app.services.zalo_service import SendResult
+from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
 

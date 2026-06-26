@@ -11,10 +11,16 @@ pytestmark = pytest.mark.asyncio
 
 
 def _payload(msg_id, text="hi", chat_id="z-1", name="Worker"):
+    # Bot Platform receive-event shape (Telegram-style).
     return {
-        "event_name": "user_send_text",
-        "sender": {"id": chat_id, "name": name},
-        "message": {"text": text, "msg_id": msg_id},
+        "update_id": msg_id,
+        "message": {
+            "message_id": msg_id,
+            "date": 1700000000,
+            "chat": {"id": chat_id},
+            "from": {"id": chat_id, "name": name},
+            "text": text,
+        },
     }
 
 
@@ -90,31 +96,27 @@ async def test_webhook_http_endpoint(client, monkeypatch):
 
 
 async def test_webhook_rejects_unsigned_when_secret_set(client, monkeypatch):
-    """With zalo_oa_secret configured, only a correctly-signed body is accepted."""
-    import hashlib
-    import hmac
-    import json as _json
-
+    """With zalo_bot_webhook_secret configured, only a request bearing the correct
+    X-Bot-Api-Secret-Token header is accepted."""
     from app.core.config import get_settings
     import app.api.webhooks as wh
 
-    monkeypatch.setattr(get_settings(), "zalo_oa_secret", "test-secret")
+    monkeypatch.setattr(get_settings(), "zalo_bot_webhook_secret", "test-secret")
     monkeypatch.setattr(wh, "enqueue_chat_run", lambda job: None)
 
-    body = _json.dumps(_payload("sig-1", chat_id="z-sig")).encode()
-    good_sig = "mac=" + hmac.new(b"test-secret", body, hashlib.sha256).hexdigest()
+    body = _payload("sig-1", chat_id="z-sig")
     ct = {"Content-Type": "application/json"}
 
-    unsigned = await client.post("/webhooks/zalo", content=body, headers=ct)
+    unsigned = await client.post("/webhooks/zalo", json=body, headers=ct)
     assert unsigned.status_code == 401
 
-    tampered = await client.post(
-        "/webhooks/zalo", content=body, headers={**ct, "X-Zevent-Signature": "mac=deadbeef"}
+    wrong = await client.post(
+        "/webhooks/zalo", json=body, headers={**ct, "X-Bot-Api-Secret-Token": "wrong-value"}
     )
-    assert tampered.status_code == 401
+    assert wrong.status_code == 401
 
     ok = await client.post(
-        "/webhooks/zalo", content=body, headers={**ct, "X-Zevent-Signature": good_sig}
+        "/webhooks/zalo", json=body, headers={**ct, "X-Bot-Api-Secret-Token": "test-secret"}
     )
     assert ok.status_code == 200
     assert ok.json()["status"] == "queued"
@@ -130,14 +132,14 @@ async def test_webhook_accepts_unsigned_when_no_secret(client, monkeypatch):
 
 
 async def test_webhook_rejects_unsigned_in_nondev_without_secret(client, monkeypatch):
-    """Non-dev with NEITHER secret configured must fail-closed (503), not accept
+    """Non-dev with NO webhook secret configured must fail-closed (503), not accept
     blind — otherwise anyone could inject inbound messages."""
     import app.api.webhooks as wh
     from app.core.config import get_settings
 
     s = get_settings()
     monkeypatch.setattr(s, "app_env", "production")
-    monkeypatch.setattr(s, "zalo_oa_secret", "")
+    monkeypatch.setattr(s, "zalo_bot_webhook_secret", "")
     monkeypatch.setattr(wh, "enqueue_chat_run", lambda job: None)
     r = await client.post("/webhooks/zalo", json=_payload("sig-3", chat_id="z-sig3"))
     assert r.status_code == 503

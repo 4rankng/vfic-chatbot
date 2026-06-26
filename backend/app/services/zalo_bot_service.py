@@ -1,19 +1,14 @@
-"""Zalo Bot Platform API client (bot-api.zaloplatforms.com).
+"""Zalo Bot Platform client (bot-api.zaloplatforms.com) — the single Zalo
+integration for inbound + outbound. Docs: https://bot.zaloplatforms.com/docs/apis/
 
-This is a SEPARATE platform from the legacy Zalo OA API used by
-``app.services.zalo_service``. The Bot Platform is documented at
-https://bot.zaloplatforms.com/docs/apis/. The two coexist intentionally:
+Auth model: the bot token rides in the URL path (``/bot{TOKEN}/{method}``); there
+is no Authorization header. Inbound webhook authenticity is verified via the
+``X-Bot-Api-Secret-Token`` shared secret (see ``app.api.webhooks``) — NOT the
+Zalo OA HMAC scheme.
 
-* Legacy OA API (``zalo_service.ZaloMessageService``) — used by the current
-  production bot to send replies + verify inbound HMAC signatures on
-  ``POST /webhooks/zalo``.
-* Bot Platform API (``zalo_bot_service`` — this module) — newer platform
-  with webhook-secret verification, long-polling, and richer sender
-  methods (photo / sticker / voice / chat action).
-
-Both share the same ``zalo_chat_id`` (a.k.a. user/conversation id in Zalo's
-nomenclature), so this module is a drop-in where ``ZaloMessageService`` is
-currently used once we cut over.
+``ZaloBotSender.send`` / ``.typing`` are OA-era compatibility shims used by the
+graph runner + conversations router; the richer ``send_message`` / ``send_photo``
+/ ``send_sticker`` / ``send_voice`` methods are available for future use.
 
 Response envelope (per Zalo Bot Platform docs):
 
@@ -47,10 +42,9 @@ logger = logging.getLogger(__name__)
 class SendResult:
     """Uniform result returned by every sender method.
 
-    Mirrors the shape of ``zalo_service.SendResult`` so call sites can swap
-    implementations without touching downstream persistence code. ``raw``
-    carries the full upstream envelope when the caller wants more than the
-    parsed fields (e.g. for logging or feature flagging).
+    ``ok``/``msg_id``/``error`` match the shape downstream persistence (and the
+    OA-era call sites) expect; ``raw`` carries the full upstream envelope when
+    the caller wants more than the parsed fields (e.g. for logging).
     """
 
     ok: bool
@@ -112,7 +106,7 @@ def _method_url(settings: Settings, method: str) -> str:
     The token is a URL-path component; callers MUST treat it as a secret
     even though it never reaches a header (never log the full URL).
     """
-    return f"{_build_base_url(settings)}/bot{settings.zalo_bot_platform_token}/{method}"
+    return f"{_build_base_url(settings)}/bot{settings.zalo_bot_token}/{method}"
 
 
 async def _post(settings: Settings, method: str, body: dict[str, Any] | None) -> dict[str, Any]:
@@ -123,8 +117,8 @@ async def _post(settings: Settings, method: str, body: dict[str, Any] | None) ->
     injected via URL path, NOT an ``access_token`` header (different from
     the OA API).
     """
-    if not settings.zalo_bot_platform_token:
-        return {"ok": False, "description": "zalo_bot_platform_token not configured"}
+    if not settings.zalo_bot_token:
+        return {"ok": False, "description": "zalo_bot_token not configured"}
     if not body:
         body = {}
     url = _method_url(settings, method)
@@ -173,6 +167,15 @@ class ZaloBotSender:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
+
+    async def send(self, chat_id: str, text: str) -> SendResult:
+        """OA-era compatibility shim: ``send(chat_id, text)`` -> sendMessage.
+        Used by the graph runner + conversations router."""
+        return await self.send_message(chat_id, text)
+
+    async def typing(self, chat_id: str) -> SendResult:
+        """Show a typing indicator. Best-effort; callers swallow errors."""
+        return await self.send_chat_action(chat_id, "typing")
 
     async def send_message(
         self,

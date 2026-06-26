@@ -47,10 +47,11 @@ REFRESH_TOKEN_EXPIRE_DAYS=14
 VFIC_BOOTSTRAP_ADMIN_EMAIL=admin@vfic.vn
 VFIC_BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASS
 
-# ---- Zalo bot (send replies + optional inbound HMAC verify). NEVER exposed to frontend. ----
+# ---- Zalo Bot Platform (bot-api.zaloplatforms.com) — the single Zalo integration. ----
+# ZALO_BOT_TOKEN: Bot Platform bot token (rides in the URL path /bot{TOKEN}/{method}).
+# ZALO_BOT_WEBHOOK_SECRET: the secret_token passed to setWebhook; verified via X-Bot-Api-Secret-Token.
 ZALO_BOT_TOKEN=
-ZALO_OA_SECRET=
-ZALO_API_BASE=https://openapi.zalo.me
+ZALO_BOT_WEBHOOK_SECRET=
 
 # ---- LLM: MiniMax (OpenAI-compatible). Agent + safety. ----
 MINIMAX_API_KEY=

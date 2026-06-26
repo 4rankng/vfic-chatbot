@@ -34,7 +34,7 @@ def settings() -> Settings:
     """
     return Settings(
         app_env="development",
-        zalo_bot_platform_token="test-token-xyz",
+        zalo_bot_token="test-token-xyz",
         zalo_bot_api_base="https://bot-api.zaloplatforms.com",
         zalo_bot_request_timeout=5,
         zalo_bot_webhook_url="https://bot.tingting.vip/api/v1/webhooks/zalo-bot",
@@ -44,7 +44,7 @@ def settings() -> Settings:
 @pytest.fixture
 def unconfigured_settings() -> Settings:
     """Settings with an empty Bot Platform token — sender/admin should no-op."""
-    return Settings(app_env="development", zalo_bot_platform_token="")
+    return Settings(app_env="development", zalo_bot_token="")
 
 
 @dataclass

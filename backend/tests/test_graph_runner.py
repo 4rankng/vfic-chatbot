@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 
 from app.graph.runner import BotRunState, GraphDeps, run_turn
 from app.models.conversation import BotRun, BotRunOutcome, Conversation
-from app.services.zalo_service import SendResult
+from app.services.zalo_bot_service import SendResult
 
 pytestmark = pytest.mark.asyncio
 
