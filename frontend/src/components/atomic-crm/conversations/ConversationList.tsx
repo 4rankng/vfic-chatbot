@@ -411,7 +411,10 @@ const ConversationListContent = () => {
 };
 
 export const ConversationList = () => (
-  <ListBase perPage={500} sort={{ field: "updated_at", order: "DESC" }}>
+  // Real pagination (react-admin <Pagination>): the backend caps per_page at
+  // 200, and the inbox must page instead of "load everyone". Row previews come
+  // from /conversations/last-messages/batch regardless of page size.
+  <ListBase perPage={25} sort={{ field: "updated_at", order: "DESC" }}>
     <ConversationListContent />
   </ListBase>
 );
