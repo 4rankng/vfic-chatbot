@@ -34,6 +34,17 @@ def test_fast_safety_too_long_flagged():
     assert out["needs_llm_safety"] is True
 
 
+def test_fast_safety_strips_minimax_think_reasoning():
+    # MiniMax M2 reasoning models emit <think>…</think>; the deliberation must
+    # never reach the user — only the reply after </think> is sent.
+    out = fast_safety_filter(
+        "<think>internal reasoning SECRETKEY here</think>Chào bạn! 😊"
+    )
+    assert "SECRETKEY" not in out["output"]
+    assert "<think>" not in out["output"]
+    assert out["output"].startswith("Chào bạn")
+
+
 def test_parse_verdict_clean_json():
     v = parse_verdict('{"safe_to_send": true, "issue_found": false, "issue_type": "none", "final_answer": "ok"}')
     assert v["safe_to_send"] is True

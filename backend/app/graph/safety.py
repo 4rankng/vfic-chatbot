@@ -27,6 +27,11 @@ def fast_safety_filter(raw: str) -> dict:
     """Port of the 'Fast Safety Filter' code node. Returns whether the M2.5 LLM
     safety check is needed, plus a markdown-cleaned version of the reply."""
     raw = (raw or "").strip()
+    # MiniMax M2 reasoning models wrap deliberation in <think>…</think>; the
+    # user-facing reply is what follows the last </think>. Never send reasoning.
+    if re.search(r"</think\s*>", raw, flags=re.IGNORECASE):
+        raw = re.split(r"</think\s*>", raw, flags=re.IGNORECASE)[-1]
+    raw = re.sub(r"<think\b[^>]*>", "", raw, flags=re.IGNORECASE)
     cleaned = re.sub(r"```[\s\S]*?```", "", raw)
     cleaned = re.sub(r"<\/?minimax:[^>]+>", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"(\*\*|__|###?|---)", "", cleaned)
