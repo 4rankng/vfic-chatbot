@@ -91,28 +91,6 @@ export default defineConfig({
           hookTimeout: 30000,
         },
       },
-      {
-        // Map the Deno imports to the installed npm packages so Vitest can run
-        // these Deno-targeted tests in Node without a Deno runtime. These aliases
-        // only apply to this project.
-        resolve: {
-          alias: {
-            "jsr:@supabase/supabase-js@2": path.resolve(
-              __dirname,
-              "node_modules/@supabase/supabase-js",
-            ),
-            "npm:tldts": path.resolve(__dirname, "node_modules/tldts"),
-            "npm:pgsql-ast-parser@^12": "pgsql-ast-parser",
-          },
-        },
-        test: {
-          name: "functions",
-          globals: true,
-          environment: "node",
-          include: ["supabase/functions/**/*.test.ts"],
-          exclude: ["**/node_modules/**", ".supabase-e2e/**"],
-        },
-      },
     ],
   },
 });

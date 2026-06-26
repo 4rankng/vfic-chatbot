@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Check, CircleX, Copy, Pencil, Save } from "lucide-react";
+import { CircleX, Pencil, Save } from "lucide-react";
 import {
   Form,
   useDataProvider,
@@ -23,13 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
 import type { CrmDataProvider } from "../providers/types";
 import type { Profile } from "../types";
 
@@ -162,27 +155,6 @@ const ProfileForm = ({
           </div>
         </CardContent>
       </Card>
-      {import.meta.env.VITE_INBOUND_EMAIL && (
-        <Card className="border border-border bg-card shadow-xs hover:shadow-sm transition-all duration-300">
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-4.5 bg-primary rounded-full" />
-                <span className="font-display text-lg font-bold tracking-wider uppercase text-foreground">
-                  {translate("crm.profile.inbound.title")}
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {translate("crm.profile.inbound.description", {
-                  _: "You can start sending emails to your server's inbound email address, e.g. by adding it to the Cc: field. Atomic CRM will process the emails and add notes to the corresponding contacts.",
-                  field: "Cc:",
-                })}
-              </p>
-              <CopyPaste value={import.meta.env.VITE_INBOUND_EMAIL} />
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
@@ -241,46 +213,6 @@ const TextRender = ({
     <div className={className}>
       <RecordField source={source} label={label} />
     </div>
-  );
-};
-
-const CopyPaste = ({ value }: { value: string }) => {
-  const translate = useTranslate();
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    setCopied(true);
-    navigator.clipboard.writeText(value);
-    setTimeout(() => {
-      setCopied(false);
-    }, 1500);
-  };
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            onClick={handleCopy}
-            variant="ghost"
-            className="normal-case justify-between w-full"
-          >
-            <span className="overflow-hidden text-ellipsis">{value}</span>
-            {copied ? (
-              <Check className="h-4 w-4 ml-2" />
-            ) : (
-              <Copy className="h-4 w-4 ml-2" />
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>
-            {copied
-              ? translate("crm.common.copied")
-              : translate("crm.common.copy")}
-          </p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 };
 

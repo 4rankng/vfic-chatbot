@@ -32,26 +32,6 @@ export default defineConfig({
       manifest: false, // Use existing manifest.json from public/
     }),
   ],
-  define:
-    process.env.NODE_ENV === "production" && process.env.VITE_SUPABASE_URL
-      ? {
-          "import.meta.env.VITE_IS_DEMO": JSON.stringify(
-            process.env.VITE_IS_DEMO,
-          ),
-          "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
-            process.env.VITE_SUPABASE_URL,
-          ),
-          "import.meta.env.VITE_SB_PUBLISHABLE_KEY": JSON.stringify(
-            process.env.VITE_SB_PUBLISHABLE_KEY,
-          ),
-          "import.meta.env.VITE_INBOUND_EMAIL": JSON.stringify(
-            process.env.VITE_INBOUND_EMAIL,
-          ),
-          "import.meta.env.VITE_ATTACHMENTS_BUCKET": JSON.stringify(
-            process.env.VITE_ATTACHMENTS_BUCKET,
-          ),
-        }
-      : undefined,
   base: "./",
   esbuild: {
     keepNames: true,

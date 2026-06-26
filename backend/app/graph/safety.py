@@ -5,7 +5,7 @@
   * Try Again           (retry_prompt builder + retry-exhausted fallback)
 
 These are the deterministic guards around the LLM; ported char-for-char from
-VFIC Chatbot.json so behavior matches the live bot exactly.
+the original VFIC Chatbot n8n workflow (now retired) so the behavior is preserved.
 """
 from __future__ import annotations
 

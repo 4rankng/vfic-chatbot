@@ -18,7 +18,6 @@
     "registry:build": "npx shadcn build",
     "registry:gen": "node ./scripts/generate-registry.mjs",
     "ghpages:deploy": "node ./scripts/ghpages-deploy.mjs",
-    "supabase:remote:init": "node ./scripts/supabase-remote-init.mjs",
     "prepare": "husky",
     "update-changelog": "gh api 'repos/{owner}/{repo}/releases' --paginate -q '.[] | \"## \\(.tag_name) - \\(.published_at[:10])\\n\\n\\(.body)\\n\"' > CHANGELOG.md"
   },

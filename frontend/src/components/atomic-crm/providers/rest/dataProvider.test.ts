@@ -5,24 +5,26 @@ import { getDataProvider } from "./dataProvider";
 
 /**
  * The REST dataProvider had zero tests. These cover the query-translation
- * contract that every react-admin <List> depends on: page/per_page/sort/order
+ * contract every react-admin <List> depends on: page/per_page/sort/order
  * mapping, the id-sort skip, conversation mode normalization, and the
  * knowledge_sources -> knowledge/documents path alias.
  */
 const provider = getDataProvider();
 
-const lastUrl = (): string => {
-  const calls = vi.mocked(globalThis.fetch).mock.calls;
-  const input = calls[calls.length - 1]?.[0];
-  return typeof input === "string" ? input : (input as URL | Request).toString();
+// vi.fn() stub so .mock.calls is available; the URL is captured in a closure
+// for assertions (avoids reading vi.mocked(globalThis.fetch).mock, which is
+// undefined when fetch is replaced with a plain function).
+const stubList = (
+  data: unknown[],
+  total = data.length,
+): { fetch: typeof globalThis.fetch; lastUrl: () => string } => {
+  let url = "";
+  const fn = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+    url = typeof input === "string" ? input : (input as URL).toString();
+    return { ok: true, status: 200, json: async () => ({ data, total }) } as unknown as Response;
+  });
+  return { fetch: fn as unknown as typeof globalThis.fetch, lastUrl: () => url };
 };
-
-const stubEnvelope = (data: unknown[], total = data.length): typeof globalThis.fetch =>
-  ((async (): Promise<Response> => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ data, total }),
-  })) as unknown) as typeof globalThis.fetch;
 
 describe("restProvider.getList", () => {
   const originalFetch = globalThis.fetch;
@@ -34,7 +36,8 @@ describe("restProvider.getList", () => {
   });
 
   it("translates pagination + sort into page/per_page/sort/order and unwraps {data,total}", async () => {
-    globalThis.fetch = stubEnvelope([{ id: 1, name: "A" }, { id: 2, name: "B" }], 2);
+    const { fetch, lastUrl } = stubList([{ id: 1, name: "A" }, { id: 2, name: "B" }], 2);
+    globalThis.fetch = fetch;
     const res = await provider.getList("leads", {
       pagination: { page: 2, perPage: 25 },
       sort: { field: "updated_at", order: "ASC" },
@@ -51,7 +54,8 @@ describe("restProvider.getList", () => {
   });
 
   it("omits sort when the field is id (the backend default)", async () => {
-    globalThis.fetch = stubEnvelope([]);
+    const { fetch, lastUrl } = stubList([]);
+    globalThis.fetch = fetch;
     await provider.getList("leads", {
       pagination: { page: 1, perPage: 10 },
       sort: { field: "id", order: "DESC" },
@@ -61,7 +65,8 @@ describe("restProvider.getList", () => {
   });
 
   it("normalizes conversation mode to lowercase for the render layer", async () => {
-    globalThis.fetch = stubEnvelope([{ id: "c1", mode: "HUMAN" }], 1);
+    const { fetch } = stubList([{ id: "c1", mode: "HUMAN" }], 1);
+    globalThis.fetch = fetch;
     const res = await provider.getList("conversations", {
       pagination: { page: 1, perPage: 10 },
       sort: { field: "id", order: "DESC" },
@@ -71,7 +76,8 @@ describe("restProvider.getList", () => {
   });
 
   it("maps the knowledge_sources resource to the knowledge/documents route", async () => {
-    globalThis.fetch = stubEnvelope([]);
+    const { fetch, lastUrl } = stubList([]);
+    globalThis.fetch = fetch;
     await provider.getList("knowledge_sources", {
       pagination: { page: 1, perPage: 10 },
       sort: { field: "id", order: "DESC" },
@@ -81,7 +87,8 @@ describe("restProvider.getList", () => {
   });
 
   it("passes filter values through as query params", async () => {
-    globalThis.fetch = stubEnvelope([]);
+    const { fetch, lastUrl } = stubList([]);
+    globalThis.fetch = fetch;
     await provider.getList("leads", {
       pagination: { page: 1, perPage: 10 },
       sort: { field: "id", order: "DESC" },

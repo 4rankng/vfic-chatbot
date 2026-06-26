@@ -9,7 +9,7 @@ droplet (`bot.tingting.vip`) behind Caddy; **the repo is the source of truth**
 
 > **History:** until 2026-06-26 the brain was **n8n** and the data layer was
 > **Supabase**. Both were decommissioned in a big-bang cutover. They are now
-> **legacy / disaster-recovery only** (see `legacy/` and `n8n-workflows/`).
+> **legacy / disaster-recovery only** (see `legacy/`).
 > Any instruction elsewhere that treats n8n or Supabase as live is stale.
 
 ## ⚑ The repo IS the source of truth (disaster-recovery rule)
@@ -28,7 +28,7 @@ service (`alembic/` for schema, `backend/` + `frontend/` for code,
 | **Infra topology** | `backend/docker-compose.yml`, `backend/Caddyfile`, root + `backend/Makefile` |
 
 Do not consider a task done until the change is committed. The `supabase/`
-and `n8n-workflows/` trees are **not** live — do not "sync" to them.
+tree is **not** live — do not "sync" to it.
 
 ## Infrastructure references (live)
 
@@ -57,11 +57,9 @@ and `n8n-workflows/` trees are **not** live — do not "sync" to them.
 - **`legacy/supabase-pre-rewrite/`** — the decommissioned Supabase schema
   (`schema.sql`, migrations, edge function, seed). Project ref was
   `vichwmxeptglqmzefsiq`. Kept for history only; the live DDL is alembic.
-- **`n8n-workflows/`** — exported n8n workflow JSON (5 workflows). n8n is
-  torn down on the droplet. **These files are still read by
-  `backend/tests/test_prompts_byte_equal.py` and
-  `backend/scripts/gen_lead_memory_prompts.py`** as the prompt ground truth —
-  do not delete them, but do not edit them expecting a live effect.
+- **`n8n-workflows/`** — exported n8n workflow JSON (5 workflows). Removed in
+  the post-cutover cleanup; n8n is fully severed. The ported prompts now live
+  as the canonical source in `backend/app/graph/lead_memory_prompts.py`.
 
 ## Repo layout
 
@@ -70,7 +68,6 @@ backend/          FastAPI + LangGraph backend (api / services / models / graph /
                   alembic/ = live DDL (0001_baseline.py + successors); Dockerfile + compose
 frontend/         React + react-admin console (Atomic-CRM-derived, vi-only). See frontend/CLAUDE.md.
 legacy/           decommissioned Supabase layer (DR/history only)
-n8n-workflows/    legacy n8n JSON (DR + still read by backend tests/scripts)
 kb/               knowledge-base source docs (LGDisplay bus timetable, guidelines)
 .omc/             OMC state, runbooks, plans, specs (gitignored operational artifacts)
 ```

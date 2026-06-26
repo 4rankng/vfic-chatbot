@@ -160,30 +160,6 @@ export type Persona = {
   updated_at: string;
 } & Pick<RaRecord, "id">;
 
-export interface Company {
-  id: Identifier;
-  name: string;
-  logo?: { src?: string; title?: string };
-  sector?: string;
-  size?: number;
-  website?: string;
-  linkedin_url?: string;
-  phone_number?: string;
-  address?: string;
-  zipcode?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  description?: string;
-  context_links?: Array<{ label: string; url: string }>;
-  nb_contacts?: number;
-  nb_deals?: number;
-  sales_id?: Identifier;
-  revenue?: string | number;
-  created_at?: string;
-  updated_at?: string;
-}
-
 export type DealStage = {
   value: string;
   label: string;
@@ -196,53 +172,10 @@ export type NoteStatus = {
   color: string;
 };
 
-export interface Deal {
-  id: Identifier;
-  name: string;
-  stage: string;
-  amount?: number;
-  company_id?: Identifier | null;
-  company_name?: string;
-  sales_id?: Identifier;
-  index?: number;
-  archived_at?: string | null;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface Tag {
-  id: Identifier;
-  name: string;
-  color?: string;
-}
-
-export interface Task {
-  id: Identifier;
-  contact_id: Identifier;
-  sales_id?: Identifier;
-  type?: string;
-  text: string;
-  due_date?: string;
-  done_date?: string;
-  created_at?: string;
-}
-
 export interface LabeledValue {
   value: string;
   label: string;
 }
-
-// Legacy Activity log type alias — referenced by the activity provider.
-export type Activity = {
-  id: Identifier;
-  company_id?: Identifier | null;
-  sales_id?: Identifier | null;
-  contact_id?: Identifier | null;
-  deal_id?: Identifier | null;
-  type: string;
-  date: string;
-  text?: string;
-};
 
 // Lead stages — DB-CHECK canonical values (leads.lead_stage CHECK constraint).
 // Order = recruitment funnel. Used across LeadShow, LeadCard, LeadColumn, Dashboard.
