@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useDataProvider, useNotify, useTranslate } from "ra-core";
 import type { Conversation, Message } from "../types";
-import { CrmDataProvider } from "../providers/rest/dataProvider";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
@@ -255,23 +255,21 @@ export const ChatThread = ({ conversationId, conversation }: ChatThreadProps) =>
       />
 
       <footer className="composer-wrap">
-        <div className="handoff-note">
-          {isBotMode && (
-            <>
-              <svg className="icon">
-                <use href="#i-bot" />
-              </svg>
-              <span>AI đang trả lời cuộc trò chuyện này.</span>
-              <button
-                type="button"
-                className="inline-takeover-btn"
-                onClick={handleTakeover}
-              >
-                Tiếp quản
-              </button>
-            </>
-          )}
-        </div>
+        {isBotMode && (
+          <div className="handoff-note">
+            <svg className="icon">
+              <use href="#i-bot" />
+            </svg>
+            <span>AI đang trả lời cuộc trò chuyện này.</span>
+            <button
+              type="button"
+              className="inline-takeover-btn"
+              onClick={handleTakeover}
+            >
+              Tiếp quản
+            </button>
+          </div>
+        )}
         <form
           className={`composer ${isBotMode ? "disabled" : ""}`}
           onSubmit={handleSend}
