@@ -27,7 +27,7 @@ db:
 	@echo "==> Applying Alembic baseline (idempotent)..."
 	@. .venv/bin/activate && alembic upgrade head || echo "  (alembic skipped — ensure backend/.venv exists: pip install -e .[dev])"
 	@. .venv/bin/activate && python -m scripts.create_admin --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true
-	@echo "==> Dev DB ready. Adminer: http://localhost:8081 (server: postgres, db: vfic, user/pass: vfic/vfic)"
+	@echo "==> Dev DB ready. Adminer: http://localhost:8082 (server: postgres, db: vfic, user/pass: vfic/vfic)"
 
 # ---- Local dev: DB + backend (uvicorn) + frontend (vite) in ONE terminal. ----
 # Ctrl+C stops both app servers (the DB containers stay running). Backend and
