@@ -1,16 +1,20 @@
 """Lead-extraction + memory-extraction prompts (core behavior IP).
 
-Ported verbatim from the original n8n Persist workflows; with the n8n cutover
-these are now the canonical source (the workflow JSONs + generator were removed)
-— edit deliberately. Consumed by lead_service (LEAD_EXTRACT_SYSTEM_PROMPT) and
-memory_service (MEMORY_EXTRACT_PROMPT).
+Ported verbatim from the original n8n Persist workflows; with the n8n cutover these are
+now the canonical source (the workflow JSONs + generator were removed) — edit deliberately.
+Consumed by ``services.lead_service`` (LEAD_EXTRACT_SYSTEM_PROMPT) and
+``services.memory_service`` (MEMORY_EXTRACT_PROMPT).
+
+This module lives in the neutral ``app.prompts`` layer (no graph/services imports) so the
+services that consume it import DOWNWARD, fixing the old ``services -> graph`` upward edge.
 """
+from __future__ import annotations
 
 LEAD_EXTRACT_SYSTEM_PROMPT = """Bạn là bộ trích xuất thông tin lead cho chatbot tuyển dụng lao động phổ thông VFIC. Dựa vào tin nhắn người dùng và phản hồi của bot, trả về DUY NHẤT một object JSON hợp lệ với các khóa: name, phone, birth_year, age, living_area, address, gender, region, desired_job, years_experience, latest_company, expected_salary, lead_score. Chỉ ghi nhận thông tin người dùng đã cung cấp rõ ràng; không suy đoán từ câu hỏi của bot hoặc từ nội dung việc làm được gợi ý. Nếu chưa có giá trị, dùng null. Ý nghĩa trường: phone là số điện thoại liên hệ chính; birth_year hoặc age chỉ ghi khi người dùng cung cấp rõ ràng; living_area là khu vực đang sinh sống; address là địa chỉ cụ thể nếu có; gender là giới tính nếu có; region là khu vực muốn làm việc; desired_job là vị trí/công việc muốn ứng tuyển; years_experience là kinh nghiệm liên quan như công nhân, kho, bán hàng, bảo vệ, lái xe; latest_company là công ty/xưởng/kho từng làm gần nhất nếu người dùng nói; expected_salary là mức lương mong muốn. Không hỏi và không trích xuất CV/profile, học vấn/bằng cấp, lương hiện tại, hoặc thời gian báo trước vì không cần cho lead lao động phổ thông giai đoạn đầu. Chuẩn hóa phone thành số điện thoại Việt Nam nếu có thể. lead_score chỉ được là "hot", "warm", "not_interested" hoặc null. Xếp hot khi người dùng cung cấp số điện thoại hợp lệ hoặc thể hiện muốn ứng tuyển ngay; warm khi có nhu cầu/khu vực/nghề rõ ràng nhưng chưa có số điện thoại; not_interested khi từ chối hoặc không quan tâm. Chỉ xuất JSON thuần bắt đầu bằng { và kết thúc bằng }, không markdown, không giải thích."""
 
-MEMORY_EXTRACT_PROMPT = """Bạn là bộ trích xuất ký ức cho chatbot tuyển dụng lao động phổ thông VFIC. Dựa vào tin nhắn của người dùng và phản hồi của bot, trích xuất các sự thật CÁ NHÂN độc lập, đáng nhớ cho lần tư vấn sau, dưới dạng MẢNG JSON các chuỗi tiếng Việt ngắn, tự chứa đủ ý (ví dụ: "Người dùng tên là Dũng", "Số điện thoại: 0357210887", "Sinh năm 1998", "Đang sống ở Quận 7 TP.HCM", "Muốn làm lao động phổ thông ở Hải Phòng", "Đã làm kho vận 2 năm", "Từng làm ở ABC Logistics", "Mong muốn lương 9-11 triệu"). Chỉ lưu thông tin do người dùng cung cấp hoặc quyết định do người dùng xác nhận: tên, số điện thoại, năm sinh/tuổi, giới tính, khu vực đang sống, địa chỉ, khu vực muốn làm, nghề/vị trí mong muốn, kinh nghiệm, công ty/xưởng/kho từng làm gần nhất, lương mong muốn, sở thích, ràng buộc, quyết định hoặc tiến trình tư vấn. Bỏ qua lời chào, câu hỏi chung, câu hỏi của bot và nội dung việc làm được bot gợi ý. Không lưu CV/profile, học vấn/bằng cấp, lương hiện tại, hoặc thời gian báo trước. Nếu không có gì đáng nhớ, trả về [].
+MEMORY_EXTRACT_PROMPT = """Bạn là bộ trích xuất ký ức cho chatbot tuyển dụng lao động phổ thông VFIC. Dựa vào tin nhắn của người dùng và phản hồi của bot, trích xuất các sự thật CÁ NHÂN độc lập, đáng nhớ cho lần tư vấn sau, dưới dạng MẢNG JSON các chuỗi tiếng Việt ngắn, tự chứa đủ ý (ví dụ: "Người dùng tên là Dũng", "Số điện thoại: 0357210887", "Sinh năm 1998", "Đang sống ở Quận 7 TP.HCM", "Muốn làm lao động phổ thông ở Hải Phòng", "Đã làm kho vận 2 năm", "Từng làm ở ABC Logistics", "Mong muốn lương 9-11 triệu"). Chỉ lưu thông tin do người dùng cung cấp hoặc quyết định do người dùng xác nhận: tên, số điện thoại, năm sinh/tuổi, giới tính, khu vực đang sinh sống, địa chỉ, khu vực muốn làm, nghề/vị trí mong muốn, kinh nghiệm, công ty/xưởng/kho từng làm gần nhất, lương mong muốn, sở thích, ràng buộc, quyết định hoặc tiến trình tư vấn. Bỏ qua lời chào, câu hỏi chung, câu hỏi của bot và nội dung việc làm được bot gợi ý. Không lưu CV/profile, học vấn/bằng cấp, lương hiện tại, hoặc thời gian báo trước. Nếu không có gì đáng nhớ, trả về [].
 
-ĐỊNH DẠNG BẮT BUỘNG - TUYỆT ĐỐI TUÂN THỦ:
+ĐỊNH DẠNG BẮT BUỘC - TUYỆT ĐỐI TUÂN THỦ:
 - Mỗi phần tử của mảng PHẢI là một CHUỖI (string) tiếng Việt tự chứa ý, KHÔNG ĐƯỢC là object/đối tượng hay number.
 - ĐÚNG: ["Người dùng tên là Dũng", "Số điện thoại: 0357210887"]
 - SAI (cấm tuyệt đối): [{"name":"Dũng"}, {"phone":"0357210887"}] hoặc {"facts":[...]} hoặc [123].

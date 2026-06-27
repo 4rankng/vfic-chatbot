@@ -13,6 +13,9 @@ import { TextInput } from "@/components/admin/text-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
 import { TopToolbar } from "../layout/TopToolbar";
 import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
+import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
+import { ProjectFeatures } from "./ProjectFeatures";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
 
@@ -22,6 +25,7 @@ const ProjectEditContent = () => {
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   if (!project) return null;
 
   const onSubmit = async (data: Record<string, unknown>) => {
@@ -68,7 +72,18 @@ const ProjectEditContent = () => {
 
       <Card className="mt-4 max-w-2xl">
         <CardHeader>
-          <CardTitle className="text-base">Thẻ danh mục (master index)</CardTitle>
+          <CardTitle className="flex items-center justify-between text-base">
+            <span>Thẻ danh mục (master index)</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUploadOpen(true)}
+              title="Tải tin tuyển dụng lên cho dự án này"
+            >
+              <Upload className="size-4" />
+              Tải tin lên
+            </Button>
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 pt-2 text-sm">
           <p>
@@ -84,11 +99,20 @@ const ProjectEditContent = () => {
             {(card.key_roles ?? []).join(", ") || "—"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Thẻ được LLM tạo tự động khi huấn luyện cơ sở kiến thức của dự án. Bấm
-            "Làm mới thẻ" trong danh sách để tạo lại.
+            Thẻ được LLM tạo tự động khi huấn luyện cơ sở kiến thức của dự án.
+            Bấm "Làm mới thẻ" trong danh sách để tạo lại.
           </p>
         </CardContent>
       </Card>
+
+      <ProjectFeatures projectId={project.id} />
+
+      <KnowledgeUpload
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        initialProjectId={project.id}
+        lockProject
+      />
     </>
   );
 };

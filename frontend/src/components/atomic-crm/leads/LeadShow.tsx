@@ -136,7 +136,10 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
     // /conversations. Same <ChatThread> the inbox uses, so behaviour is
     // identical (realtime, reply, takeover, markAsRead).
     <div className="chat-surface grid h-[calc(100vh-220px)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden rounded-xl border border-border bg-card">
-      <ChatThread conversationId={conversation?.id ?? ""} conversation={conversation} />
+      <ChatThread
+        conversationId={conversation?.id ?? ""}
+        conversation={conversation}
+      />
     </div>
   );
 };

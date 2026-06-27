@@ -15,7 +15,8 @@ const compareMessages = (a: Message, b: Message) => {
   if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt;
   const aid = Number(a.id);
   const bid = Number(b.id);
-  if (Number.isFinite(aid) && Number.isFinite(bid) && aid !== bid) return aid - bid;
+  if (Number.isFinite(aid) && Number.isFinite(bid) && aid !== bid)
+    return aid - bid;
   return String(a.id).localeCompare(String(b.id));
 };
 
@@ -32,6 +33,15 @@ export const useConversationRealtime = (conversationId?: string) => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const isFetchingRef = useRef(false);
+  // Mirror `messages` into a ref so loadMore can read the latest set
+  // synchronously. A setMessages functional updater runs later (during render),
+  // so it can't itself return the count of newly-prepended rows; the ref lets
+  // loadMore compute that count against state that already reflects any realtime
+  // INSERT that landed during its await.
+  const messagesRef = useRef<Message[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const fetchInitial = useCallback(async () => {
     if (!conversationId) {
@@ -99,8 +109,19 @@ export const useConversationRealtime = (conversationId?: string) => {
             beforeId: earliestId,
           });
         setHasMore(apiHasMore);
+        // Return the number of fetched messages that are genuinely new vs current
+        // state — NOT older.length. subscribeToMessages unions the newest page on
+        // every realtime event and can land during the await above, so some of
+        // `older` may already be in state; mergeChronological dedups those. If we
+        // returned older.length we would over-count the prepend and inflate
+        // Virtuoso's firstItemIndex, shifting every visible row to the wrong message.
+        const existingIds = new Set(messagesRef.current.map((m) => m.id));
+        const added = older.reduce(
+          (n, m) => n + (existingIds.has(m.id) ? 0 : 1),
+          0,
+        );
         setMessages((prev) => mergeChronological(prev, older));
-        return older.length;
+        return added;
       } catch {
         // A failed load-more must not keep re-firing on every scroll-to-top
         // (hasMore stays true -> the backend gets spammed with failing

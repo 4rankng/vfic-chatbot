@@ -1,5 +1,11 @@
 import { type ReactNode } from "react";
-import { ShowBase, useGetList, useNotify, useRecordContext, useRefresh } from "ra-core";
+import {
+  ShowBase,
+  useGetList,
+  useNotify,
+  useRecordContext,
+  useRefresh,
+} from "ra-core";
 import { TopToolbar } from "../layout/TopToolbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,7 +78,10 @@ const KnowledgeSourceShowContent = () => {
           <Field label="Nguồn" value={source.source} />
           <Field label="Dự án" value={projectName ?? source.project_id} />
           <Field label="Loại tệp" value={source.mime_type} />
-          <Field label="Giai đoạn huấn luyện" value={stageLabel(source.stage)} />
+          <Field
+            label="Giai đoạn huấn luyện"
+            value={stageLabel(source.stage)}
+          />
           {source.digest_summary && (
             <Field label="Tóm tắt (LLM)" value={source.digest_summary} />
           )}
@@ -89,13 +98,21 @@ const KnowledgeSourceShowContent = () => {
             />
           )}
           <Field label="Ngày tạo" value={formatDateTime(source.created_at)} />
-          <Field label="Ngày cập nhật" value={formatDateTime(source.updated_at)} />
+          <Field
+            label="Ngày cập nhật"
+            value={formatDateTime(source.updated_at)}
+          />
 
           <div className="flex flex-wrap gap-2 py-3">
             <Button
               size="sm"
               variant="outline"
-              onClick={() => run(() => reindexKnowledge(source.id), "Đã đưa vào hàng huấn luyện lại.")}
+              onClick={() =>
+                run(
+                  () => reindexKnowledge(source.id),
+                  "Đã đưa vào hàng huấn luyện lại.",
+                )
+              }
             >
               <RefreshCw className="size-4" />
               Huấn luyện lại
@@ -103,7 +120,9 @@ const KnowledgeSourceShowContent = () => {
             {source.status !== "APPROVED" && (
               <Button
                 size="sm"
-                onClick={() => run(() => approveKnowledge(source.id), "Đã duyệt.")}
+                onClick={() =>
+                  run(() => approveKnowledge(source.id), "Đã duyệt.")
+                }
               >
                 <CheckCircle2 className="size-4" />
                 Duyệt
@@ -112,7 +131,9 @@ const KnowledgeSourceShowContent = () => {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => run(() => rejectKnowledge(source.id), "Đã từ chối.")}
+              onClick={() =>
+                run(() => rejectKnowledge(source.id), "Đã từ chối.")
+              }
             >
               <XCircle className="size-4" />
               Từ chối

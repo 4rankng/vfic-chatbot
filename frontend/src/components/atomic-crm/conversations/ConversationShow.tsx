@@ -74,7 +74,10 @@ export const ConversationShowContent = ({
         <div className="header-actions">
           {isBotMode && (
             <>
-              <span className="chat-mode-chip" title="AI đang trả lời cuộc trò chuyện này">
+              <span
+                className="chat-mode-chip"
+                title="AI đang trả lời cuộc trò chuyện này"
+              >
                 <svg className="icon">
                   <use href="#i-bot" />
                 </svg>

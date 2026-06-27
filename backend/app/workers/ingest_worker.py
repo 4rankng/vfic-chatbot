@@ -35,9 +35,10 @@ async def _run_job_async(doc_id: str) -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run.
     from app.core.db import async_session
-    from app.graph.llm_real import GeminiEmbedder, make_minimax_llm_json
+    from app.graph.clients import GeminiEmbedder
+    from app.graph.factories import make_minimax_llm_json
     from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
-    from app.services.knowledge_pipeline import DigestError, KnowledgePipeline
+    from app.services.knowledge import DigestError, KnowledgePipeline
 
     async with async_session() as db:
         doc = await db.get(KnowledgeDocument, uuid.UUID(doc_id))

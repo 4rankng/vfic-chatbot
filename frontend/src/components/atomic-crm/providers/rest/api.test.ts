@@ -63,7 +63,9 @@ describe("apiJson error mapping", () => {
     // fetch call is made.
     globalThis.fetch = stub(401, {});
     const err = await expectApiError("/api/v1/leads", 401);
-    expect(err.message).toBe("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
+    expect(err.message).toBe(
+      "Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.",
+    );
   });
 
   it("preserves the numeric status so callers can branch on it", async () => {

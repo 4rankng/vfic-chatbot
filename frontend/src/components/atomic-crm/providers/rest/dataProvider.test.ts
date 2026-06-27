@@ -21,9 +21,16 @@ const stubList = (
   let url = "";
   const fn = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
     url = typeof input === "string" ? input : (input as URL).toString();
-    return { ok: true, status: 200, json: async () => ({ data, total }) } as unknown as Response;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data, total }),
+    } as unknown as Response;
   });
-  return { fetch: fn as unknown as typeof globalThis.fetch, lastUrl: () => url };
+  return {
+    fetch: fn as unknown as typeof globalThis.fetch,
+    lastUrl: () => url,
+  };
 };
 
 describe("restProvider.getList", () => {
@@ -36,7 +43,13 @@ describe("restProvider.getList", () => {
   });
 
   it("translates pagination + sort into page/per_page/sort/order and unwraps {data,total}", async () => {
-    const { fetch, lastUrl } = stubList([{ id: 1, name: "A" }, { id: 2, name: "B" }], 2);
+    const { fetch, lastUrl } = stubList(
+      [
+        { id: 1, name: "A" },
+        { id: 2, name: "B" },
+      ],
+      2,
+    );
     globalThis.fetch = fetch;
     const res = await provider.getList("leads", {
       pagination: { page: 2, perPage: 25 },

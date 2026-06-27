@@ -1,0 +1,202 @@
+"""Data-access layer for the knowledge training pipeline.
+
+Encapsulates raw SQL the ORM cannot express cleanly:
+- vector-column writes (``CAST(:emb AS vector)``; ``KnowledgeChunk.embedding`` is
+  ``Text``-typed on purpose, see ``app.models.knowledge``)
+- ``jsonb_set`` mutations on ``projects.index_card``
+- the ``rebuild_bus_timetable_from_documents()`` DB function
+
+NO business logic, NO LLM calls. Repositories take a ``db: AsyncSession`` and execute
+SQL; coercion/orchestration live in ``coercion.py`` / ``pipeline.py``.
+"""
+from __future__ import annotations
+
+import json
+import uuid
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.vector import vec_literal
+
+
+class KnowledgeChunkRepo:
+    """Read/write the ``knowledge_chunks`` table (RAG units + embeddings)."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def replace_for_doc(self, doc, units_with_vectors: list[tuple[dict, list[float]]]) -> None:
+        """Delete a document's existing chunks, then insert one row per (unit, vector).
+
+        ``units_with_vectors`` is a list of ``(coerced_unit_dict, embedding_vector)`` in the
+        order chunks should be indexed. An empty list simply clears the document's chunks.
+        """
+        await self.db.execute(
+            text("DELETE FROM knowledge_chunks WHERE document_id = :did"), {"did": str(doc.id)}
+        )
+        for idx, (u, vec) in enumerate(units_with_vectors):
+            await self.db.execute(
+                text(
+                    "INSERT INTO knowledge_chunks "
+                    "(document_id, chunk_index, content, embedding, metadata, project_id, "
+                    " source_quote, summary, questions, category, entities, confidence) "
+                    "VALUES (:did, :ci, :content, CAST(:emb AS vector), CAST(:meta AS jsonb), CAST(:pid AS uuid), "
+                    "        :sq, :sm, CAST(:q AS text[]), :cat, CAST(:ent AS jsonb), :conf)"
+                ),
+                {
+                    "did": str(doc.id),
+                    "ci": idx,
+                    "content": u["content"],
+                    "emb": vec_literal(vec),
+                    "meta": json.dumps(
+                        {"source_anchor": u["source_anchor"], "is_inference": u["is_inference"]},
+                        ensure_ascii=False,
+                    ),
+                    "pid": str(doc.project_id) if doc.project_id else None,
+                    "sq": u["source_quote"],
+                    "sm": u["summary"],
+                    "q": u["questions"],
+                    "cat": u["category"],
+                    "ent": json.dumps(u["entities"], ensure_ascii=False),
+                    "conf": u["confidence"],
+                },
+            )
+        await self.db.commit()
+
+
+class JobFeatureValueRepo:
+    """Read/write the ``job_feature_values`` + ``worker_feature_catalog`` tables."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def fetch_catalog(self) -> list:
+        """Return the live 16-feature catalog ordered by importance then key."""
+        return (
+            await self.db.execute(
+                text(
+                    "SELECT id, feature_key, name_vi, worker_question_vi, default_importance_score "
+                    "FROM worker_feature_catalog ORDER BY default_importance_score DESC, feature_key"
+                )
+            )
+        ).all()
+
+    async def replace_for_project(
+        self,
+        project_id: uuid.UUID,
+        doc_id: uuid.UUID,
+        rows: list[tuple[Any, dict]],
+    ) -> None:
+        """Overwrite a project's feature values (delete-then-insert, one row per catalog feature).
+
+        ``rows`` is a list of ``(catalog_row, coerced_feature_dict)`` in display order; the
+        enumerate index becomes ``display_priority``.
+        """
+        await self.db.execute(
+            text("DELETE FROM job_feature_values WHERE project_id = :pid"),
+            {"pid": str(project_id)},
+        )
+        for priority, (c, coerced) in enumerate(rows):
+            await self.db.execute(
+                text(
+                    "INSERT INTO job_feature_values "
+                    "(project_id, feature_id, value_text, value_json, strength_score, display_priority, "
+                    " is_highlight, is_missing, needs_clarification, evidence_text, source_document_id) "
+                    "VALUES (CAST(:pid AS uuid), CAST(:fid AS uuid), :vtext, CAST(:vjson AS jsonb), "
+                    "        :strength, :prio, :hl, :missing, :clarify, :evidence, CAST(:did AS uuid))"
+                ),
+                {
+                    "pid": str(project_id),
+                    "fid": str(c.id),
+                    "vtext": coerced["value_text"],
+                    "vjson": json.dumps(coerced["value_json"], ensure_ascii=False),
+                    "strength": coerced["strength_score"],
+                    "prio": priority,
+                    "hl": coerced["is_highlight"],
+                    "missing": coerced["is_missing"],
+                    "clarify": coerced["needs_clarification"],
+                    "evidence": coerced["evidence_text"],
+                    "did": str(doc_id),
+                },
+            )
+        await self.db.commit()
+
+
+class ProjectIndexRepo:
+    """Read/write the project catalog card (``projects.summary`` / ``index_card``)."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def fetch_approved_corpus(self, project_id: uuid.UUID) -> list:
+        """Approved-unit content+category, newest-first, capped at 200 (master-index input)."""
+        return (
+            await self.db.execute(
+                text(
+                    "SELECT kc.content, kc.category FROM knowledge_chunks kc "
+                    "JOIN knowledge_documents kd ON kd.id = kc.document_id "
+                    "WHERE kd.project_id = :pid AND kd.status = 'APPROVED' "
+                    "ORDER BY kc.created_at DESC LIMIT 200"
+                ),
+                {"pid": str(project_id)},
+            )
+        ).all()
+
+    async def update_card(self, project_id: uuid.UUID, summary: str | None, card: dict) -> None:
+        """Overwrite the project's summary + LLM-generated catalog card (JSONB)."""
+        await self.db.execute(
+            text(
+                "UPDATE projects SET summary = :summary, index_card = CAST(:card AS jsonb) "
+                "WHERE id = :pid"
+            ),
+            {
+                "summary": summary,
+                "card": json.dumps(card, ensure_ascii=False),
+                "pid": str(project_id),
+            },
+        )
+        await self.db.commit()
+
+    async def sync_highlights(self, project_id: uuid.UUID) -> None:
+        """Mirror the project's is_highlight feature values into ``index_card.highlights``.
+
+        Feature-derived highlights are authoritative when present (override the LLM card).
+        No-op when the project has no highlighted features.
+        """
+        rows = (
+            await self.db.execute(
+                text(
+                    "SELECT value_text FROM job_feature_values "
+                    "WHERE project_id = :pid AND is_highlight "
+                    "ORDER BY display_priority ASC, strength_score DESC LIMIT 6"
+                ),
+                {"pid": str(project_id)},
+            )
+        ).all()
+        if not rows:
+            return
+        await self.db.execute(
+            text(
+                "UPDATE projects SET index_card = "
+                "jsonb_set(COALESCE(index_card, '{}'::jsonb), '{highlights}', CAST(:hl AS jsonb)) "
+                "WHERE id = :pid"
+            ),
+            {"hl": json.dumps([r.value_text for r in rows], ensure_ascii=False), "pid": str(project_id)},
+        )
+        await self.db.commit()
+
+
+async def rebuild_bus_timetable(db: AsyncSession) -> None:
+    """Rebuild the structured bus-timetable graph from the ``documents`` VIEW (verbatim SQL fn)."""
+    await db.execute(text("SELECT rebuild_bus_timetable_from_documents()"))
+    await db.commit()
+
+
+__all__ = [
+    "JobFeatureValueRepo",
+    "KnowledgeChunkRepo",
+    "ProjectIndexRepo",
+    "rebuild_bus_timetable",
+]

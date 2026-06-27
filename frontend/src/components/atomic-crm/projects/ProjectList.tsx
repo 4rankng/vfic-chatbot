@@ -1,4 +1,10 @@
-import { ListBase, useListContext, useNotify, useRedirect, useRefresh } from "ra-core";
+import {
+  ListBase,
+  useListContext,
+  useNotify,
+  useRedirect,
+  useRefresh,
+} from "ra-core";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,19 +43,31 @@ const ProjectRow = ({ project }: { project: Project }) => {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate text-sm font-semibold">{project.name}</span>
-          <Badge variant={project.is_active ? "default" : "outline"} className="text-[10px]">
+          <Badge
+            variant={project.is_active ? "default" : "outline"}
+            className="text-[10px]"
+          >
             {project.is_active ? "Đang hoạt động" : "Tắt"}
           </Badge>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span className="font-mono">{project.slug}</span>
-          {project.index_card?.location && <span>• {project.index_card.location}</span>}
+          {project.index_card?.location && (
+            <span>• {project.index_card.location}</span>
+          )}
         </div>
         {project.summary && (
-          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{project.summary}</p>
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            {project.summary}
+          </p>
         )}
         <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onReindex}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onReindex}
+          >
             <RefreshCw className="size-3.5" />
             Làm mới thẻ
           </Button>
@@ -74,7 +92,11 @@ const ProjectListContent = () => {
         </Button>
       </TopToolbar>
       <Card className="mt-4 overflow-hidden p-0 py-0">
-        <div className={cn("flex h-[calc(100vh-220px)] min-h-[400px] flex-col rounded-[inherit] overflow-hidden")}>
+        <div
+          className={cn(
+            "flex h-[calc(100vh-220px)] min-h-[400px] flex-col rounded-[inherit] overflow-hidden",
+          )}
+        >
           {isPending ? (
             <div className="flex flex-col">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -91,7 +113,9 @@ const ProjectListContent = () => {
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
               <Boxes className="size-10 opacity-50" />
               <p className="text-sm font-medium">Chưa có dự án nào</p>
-              <p className="text-xs">Tạo một dự án (sản phẩm) để tải cơ sở kiến thức lên.</p>
+              <p className="text-xs">
+                Tạo một dự án (sản phẩm) để tải cơ sở kiến thức lên.
+              </p>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">

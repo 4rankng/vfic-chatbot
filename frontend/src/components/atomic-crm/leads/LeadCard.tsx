@@ -34,7 +34,11 @@ interface LeadCardProps {
 // change. The list passes a stable onClick (useCallback in LeadListContent)
 // and a boolean showStageBadge, so the only driver of re-renders is the lead
 // object reference itself — exactly what we want.
-const LeadCardContentBase = ({ lead, showStageBadge, onClick }: LeadCardProps) => {
+const LeadCardContentBase = ({
+  lead,
+  showStageBadge,
+  onClick,
+}: LeadCardProps) => {
   const redirect = useRedirect();
   const handleClick = () => {
     if (onClick) {
@@ -50,10 +54,13 @@ const LeadCardContentBase = ({ lead, showStageBadge, onClick }: LeadCardProps) =
     ? getRelativeTimeString(lead.updated_at, "vi")
     : null;
 
-  const stageLabel = LEAD_STAGES.find((s) => s.value === lead.lead_stage)?.label || lead.lead_stage;
+  const stageLabel =
+    LEAD_STAGES.find((s) => s.value === lead.lead_stage)?.label ||
+    lead.lead_stage;
 
   const identifier = lead.phone || lead.zalo_id || "";
-  const maskedId = identifier.length > 4 ? `•••• ${identifier.slice(-4)}` : identifier;
+  const maskedId =
+    identifier.length > 4 ? `•••• ${identifier.slice(-4)}` : identifier;
 
   // Derived tag stack from existing lead signals (no tags backend needed).
   // Score + region/living_area — these aren't surfaced elsewhere in the row, so
@@ -65,7 +72,10 @@ const LeadCardContentBase = ({ lead, showStageBadge, onClick }: LeadCardProps) =
   ].filter((t): t is TagStackTag => t !== null);
 
   return (
-    <div className="cursor-pointer select-none bg-card hover:bg-accent/50 transition-colors" onClick={handleClick}>
+    <div
+      className="cursor-pointer select-none bg-card hover:bg-accent/50 transition-colors"
+      onClick={handleClick}
+    >
       <RecordContextProvider value={lead}>
         <div className="flex items-center gap-4 px-4 py-3 min-h-[64px]">
           <LeadAvatar record={lead} size="sm" className="size-10 shrink-0" />
@@ -91,20 +101,20 @@ const LeadCardContentBase = ({ lead, showStageBadge, onClick }: LeadCardProps) =
           </div>
 
           <div className="min-w-0 flex-[2] hidden md:block">
-             <div className="truncate text-[14px] text-foreground font-medium">
+            <div className="truncate text-[14px] text-foreground font-medium">
               {lead.desired_job || "Chưa rõ công việc"}
-             </div>
-             {showStageBadge && (
-               <div className="mt-0.5 text-[13px] text-muted-foreground">
-                 Giai đoạn: {stageLabel}
-               </div>
-             )}
+            </div>
+            {showStageBadge && (
+              <div className="mt-0.5 text-[13px] text-muted-foreground">
+                Giai đoạn: {stageLabel}
+              </div>
+            )}
           </div>
 
           <div className="min-w-0 flex-[2] hidden lg:block text-[13px]">
-             <div className="text-muted-foreground">
-               Liên hệ cuối: {updatedAt || "Chưa rõ"}
-             </div>
+            <div className="text-muted-foreground">
+              Liên hệ cuối: {updatedAt || "Chưa rõ"}
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
@@ -120,7 +130,15 @@ export const LeadCardContent = memo(LeadCardContentBase);
 
 // Thin null-guard wrapper. Also memoized so a stable onClick + unchanged lead
 // reference from the list doesn't needlessly re-render the guard layer either.
-export const LeadCard = memo(({ lead, showStageBadge, onClick }: LeadCardProps) => {
-  if (!lead) return null;
-  return <LeadCardContent lead={lead} showStageBadge={showStageBadge} onClick={onClick} />;
-});
+export const LeadCard = memo(
+  ({ lead, showStageBadge, onClick }: LeadCardProps) => {
+    if (!lead) return null;
+    return (
+      <LeadCardContent
+        lead={lead}
+        showStageBadge={showStageBadge}
+        onClick={onClick}
+      />
+    );
+  },
+);

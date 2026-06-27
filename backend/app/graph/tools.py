@@ -137,10 +137,58 @@ async def search_bus_timetable(
     return "\n".join(lines)
 
 
+async def get_product_features(db: AsyncSession, project_slug: str) -> str:
+    """Return the project's 16 structured worker product features (catalog order).
+
+    No embeddings — pure SQL over ``job_feature_values``. Precedent: ``search_bus_timetable``
+    (structured, non-RAG data reaching the agent). The agent is told to advise ONLY from
+    this and to answer "chưa ghi rõ" for missing features rather than invent.
+    """
+    pid = (
+        await db.execute(text("SELECT id FROM projects WHERE slug = :s"), {"s": project_slug})
+    ).scalar_one_or_none()
+    if pid is None:
+        return f"Không tìm thấy dự án/sản phẩm với slug '{project_slug}'."
+    rows = (
+        await db.execute(
+            text(
+                "SELECT jfv.value_text, jfv.value_json, jfv.is_highlight, jfv.is_missing, "
+                "       jfv.needs_clarification, jfv.evidence_text, "
+                "       wfc.name_vi, wfc.feature_key "
+                "FROM job_feature_values jfv "
+                "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
+                "WHERE jfv.project_id = :pid "
+                "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
+            ),
+            {"pid": str(pid)},
+        )
+    ).all()
+    if not rows:
+        return (
+            f"Chưa có đặc điểm sản phẩm cho dự án '{project_slug}' "
+            "(cần tải tin tuyển dụng lên và trích xuất đặc điểm)."
+        )
+    lines: list[str] = [f"Đặc điểm sản phẩm — dự án '{project_slug}':"]
+    for r in rows:
+        if r.is_missing or r.needs_clarification:
+            flag = " [CHƯA RÕ — trả lời là 'chưa ghi rõ', không bịa]"
+        elif r.is_highlight:
+            flag = " [NỔI BẬT]"
+        else:
+            flag = ""
+        lines.append(f"- {r.name_vi}: {r.value_text}{flag}")
+    lines.append(
+        "QUY TẮC: chỉ tư vấn dựa trên dữ liệu trên. Với mục [CHƯA RÕ], "
+        "trả lời 'tin tuyển dụng chưa ghi rõ', tuyệt đối không bịa."
+    )
+    return "\n".join(lines)
+
+
 TOOLS_REGISTRY = {
     "search_user_memory": search_user_memory,
     "search_jobs": search_jobs,
     "search_knowledge": search_knowledge,
     "list_active_projects": list_active_projects,
     "search_bus_timetable": search_bus_timetable,
+    "get_product_features": get_product_features,
 }

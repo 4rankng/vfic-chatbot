@@ -6,24 +6,22 @@
                          no  -> combine_for_presend
                          yes -> llm_safety_check -> safe_to_send?
                                    yes -> combine_for_presend
-                                   no  -> retry_rewrite? (attempt<1) -> agent | combine_for_presend
+                                   no -> retry_rewrite? (attempt<1) -> agent | combine_for_presend
       combine_for_presend -> pre_send_guard -> ownership_ok?
                                 yes -> send_message -> log_sent
-                                no  -> log_suppressed
+                                no -> log_suppressed
 
-LLM/embedder/Zalo/DB are injected via GraphDeps, so the safety/ownership/suppress
-branches are unit-testable with fakes (no API keys needed). Live parity (acceptance
-#4 grounding / #5 off-topic via real MiniMax) is exercised through graph/llm_real.py.
+LLM/embedder/Zalo/DB are injected via GraphDeps (now defined in ``app.graph.types``), so
+the safety/ownership/suppress branches are unit-testable with fakes (no API keys needed).
+Live parity (acceptance #4 grounding / #5 off-topic via real MiniMax) is exercised through
+graph/factories.py + graph/clients.py. ``BotRunState`` / ``GraphDeps`` are re-exported here
+for backward-compatible imports.
 """
 from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime, timezone
 
-from app.graph.llm import AgentModel, Embedder, SafetyModel
 from app.graph.prompts import ERROR_REPLY
 from app.graph.safety import (
     build_retry_prompt,
@@ -31,36 +29,10 @@ from app.graph.safety import (
     parse_verdict,
     retry_exhausted_fallback,
 )
-from app.services.conversation_service import ConversationService
-from app.services.zalo_bot_service import ZaloBotSender
+from app.graph.types import BotRunState, GraphDeps, _now
+from app.services.conversation import ConversationService
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class BotRunState:
-    conversation_id: str
-    version_at_start: int
-    user_text: str
-    user_name: str = ""
-    attempt: int = 0
-    reply: str = ""
-
-
-@dataclass
-class GraphDeps:
-    db: object  # AsyncSession
-    agent: AgentModel
-    safety: SafetyModel
-    embedder: Embedder
-    zalo: ZaloBotSender
-    # Fire-and-forget lead/memory extraction after a SENT reply (port of the n8n
-    # Persist Lead / Persist Memories nodes). None in tests -> persistence is skipped.
-    persist: Callable[[dict], None] | None = None
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 async def _agent_turn(state: BotRunState, deps: GraphDeps, user_text: str) -> str:

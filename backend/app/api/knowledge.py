@@ -113,7 +113,7 @@ async def reindex(doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: 
 
 @router.post("/search-test", response_model=list[SearchTestResult])
 async def search_test(body: SearchTestRequest, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> list[SearchTestResult]:
-    from app.graph.llm_real import GeminiEmbedder
+    from app.graph.clients import GeminiEmbedder
 
     rows = await KnowledgeService(db).search_test(GeminiEmbedder(), body.query, body.top_k, project_id=body.project_id)
     return [SearchTestResult(**r) for r in rows]

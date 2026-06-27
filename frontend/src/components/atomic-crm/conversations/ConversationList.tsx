@@ -82,7 +82,12 @@ type ConversationListItemProps = {
 // Set identity that only changes when a read is committed, and `conversation`
 // objects come from a memoized `rows` array.
 const ConversationListItem = memo(
-  ({ conversation, isActive, onSelect, readIds }: ConversationListItemProps) => {
+  ({
+    conversation,
+    isActive,
+    onSelect,
+    readIds,
+  }: ConversationListItemProps) => {
     const lead = conversation._lead;
     const time = getRelativeTimeString(
       conversation.last_inbound_at ?? conversation.updated_at,
@@ -100,7 +105,7 @@ const ConversationListItem = memo(
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
     const unread = readIds.has(conversation.id)
       ? 0
-      : conversation.unread_count ?? 0;
+      : (conversation.unread_count ?? 0);
 
     return (
       <button
@@ -125,9 +130,7 @@ const ConversationListItem = memo(
             <span
               aria-label={`${unread} tin nhắn chưa đọc`}
               style={
-                unread === 1
-                  ? UNREAD_BADGE_DOT_STYLE
-                  : UNREAD_BADGE_COUNT_STYLE
+                unread === 1 ? UNREAD_BADGE_DOT_STYLE : UNREAD_BADGE_COUNT_STYLE
               }
             >
               {unread > 1 ? (unread > 9 ? "9+" : unread) : ""}

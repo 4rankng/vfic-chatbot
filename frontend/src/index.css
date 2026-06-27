@@ -53,13 +53,17 @@
      --background are real :root vars (not @theme inline), so this resolves
      per-theme at runtime. NOTE: this is the one intended visible change — the
      tint is now theme-aware instead of a fixed alpha over an unknown surface. */
-  --color-amber-soft: color-mix(in oklab, var(--primary) 13%, var(--background));
-  --color-ember: oklch(0.5785 0.1984 29.0); /* #d6362a */
+  --color-amber-soft: color-mix(
+    in oklab,
+    var(--primary) 13%,
+    var(--background)
+  );
+  --color-ember: oklch(0.5785 0.1984 29); /* #d6362a */
   /* Tier B — perceptual tint (was rgba(214,54,42,0.12)). Raw OKLCH because
      --color-ember is an @theme inline token (not a runtime var). */
   --color-ember-soft: color-mix(
     in oklab,
-    oklch(0.5785 0.1984 29.0) 12%,
+    oklch(0.5785 0.1984 29) 12%,
     var(--background)
   );
   --color-muted-dim: oklch(0.7157 0.0171 239.2); /* #9aa5ad */
@@ -68,7 +72,7 @@
 
 :root {
   --radius: 14px;
-  --background: oklch(0.9632 0.0034 247.9); /* #f1f3f5 */
+  --background: oklch(0.984 0.003 95); /* #faf9f7 */
   --foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
   --card: oklch(1 0 0); /* #ffffff */
   --card-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
@@ -82,16 +86,18 @@
   --muted-foreground: oklch(0.5208 0.0235 243.7); /* #5e6b76 */
   --accent: oklch(0.9903 0.0011 197.1); /* #fbfcfc */
   --accent-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --destructive: oklch(0.5785 0.1984 29.0); /* #d6362a */
-  --border: oklch(0.2372 0.0257 244.3 / 0.09); /* rgba(20,32,42,0.09) */
-  --input: oklch(0.2372 0.0257 244.3 / 0.09); /* rgba(20,32,42,0.09) */
+  --destructive: oklch(0.5785 0.1984 29); /* #d6362a */
+  --border: oklch(0.918 0.004 106); /* #e7e7e5 */
+  --input: oklch(0.918 0.004 106); /* #e7e7e5 */
   --ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
   --grid-color: oklch(0.2372 0.0257 244.3 / 0.025); /* rgba(20,32,42,0.025) */
-  --shimmer-highlight: oklch(0.2372 0.0257 244.3 / 0.06); /* rgba(20,32,42,0.06) */
+  --shimmer-highlight: oklch(
+    0.2372 0.0257 244.3 / 0.06
+  ); /* rgba(20,32,42,0.06) */
 
   --chart-1: oklch(0.4554 0.0537 245.4); /* #3d5a73 */
   --chart-2: oklch(0.6652 0.1634 50.3); /* #e0701f */
-  --chart-3: oklch(0.5785 0.1984 29.0); /* #d6362a */
+  --chart-3: oklch(0.5785 0.1984 29); /* #d6362a */
   --chart-4: oklch(0.6222 0.1338 155.6); /* #2e9e63 */
   --chart-5: oklch(0.5208 0.0235 243.7); /* #5e6b76 */
 
@@ -120,9 +126,9 @@
   --muted-foreground: oklch(0.6778 0.0342 255.6); /* #8a99ad */
   --accent: oklch(0.2394 0.0354 262.6); /* #161f30 */
   --accent-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --destructive: oklch(0.6117 0.1934 28.0); /* #e0453b */
-  --border: oklch(0.7107 0.0351 256.8 / 0.1); /* rgba(148,163,184,0.1) */
-  --input: oklch(0.7107 0.0351 256.8 / 0.1); /* rgba(148,163,184,0.1) */
+  --destructive: oklch(0.6117 0.1934 28); /* #e0453b */
+  --border: oklch(0.33 0.02 263); /* dark hairline */
+  --input: oklch(0.33 0.02 263); /* dark hairline */
   --ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
   --grid-color: oklch(1 0 0 / 0.015); /* rgba(255,255,255,0.015) */
   --shimmer-highlight: oklch(1 0 0 / 0.06); /* rgba(255,255,255,0.06) */
@@ -134,7 +140,9 @@
   --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
   --sidebar-accent: oklch(0.2394 0.0354 262.6); /* #161f30 */
   --sidebar-accent-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --sidebar-border: oklch(0.7107 0.0351 256.8 / 0.08); /* rgba(148,163,184,0.08) */
+  --sidebar-border: oklch(
+    0.7107 0.0351 256.8 / 0.08
+  ); /* rgba(148,163,184,0.08) */
   --sidebar-ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
 }
 
@@ -192,32 +200,6 @@ input[type="time"] {
 body {
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   background-color: var(--background);
-  background-image:
-    linear-gradient(var(--grid-color) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
-  background-size: 32px 32px;
-  position: relative;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(
-    circle at 50% 0%,
-    oklch(1 0 0 / 0.8) 0%,
-    oklch(0.9632 0.0034 247.9 / 0) 70%
-  );
-}
-
-.dark body::before {
-  background: radial-gradient(
-    circle at 50% 0%,
-    oklch(0.71 0.1649 50.8 / 0.05) 0%,
-    oklch(0.1542 0.0185 263.2 / 0) 70%
-  );
 }
 
 /* Hide scrollbars on mobile viewports */

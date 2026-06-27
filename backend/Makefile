@@ -1,4 +1,4 @@
-.PHONY: dev push deploy adminer
+.PHONY: dev db push deploy adminer
 
 PROD_SERVER := bot.tingting.vip
 PROD_DIR    := /opt/vfic
@@ -14,24 +14,30 @@ SSH_MUX     := -o ControlMaster=auto -o ControlPath=/tmp/vfic-deploy-%r@%h:%p -o
 SSH         := ssh $(SSH_MUX)
 SCP         := scp $(SSH_MUX)
 
-# ---- Local dev: DB/Redis/Adminer in docker, backend + frontend on host (hot-reload). ----
-dev:
+# ---- Local dev DB: Postgres+pgvector, Redis, Adminer in docker (+ migrate + seed). ----
+db:
 	@echo "==> Starting dev stack (postgres + redis + adminer)..."
 	docker compose -f docker-compose.dev.yml up -d
 	@echo "==> Waiting for Postgres..."
-	@timeout 60 sh -c 'until docker compose -f docker-compose.dev.yml exec -T postgres pg_isready -U vfic >/dev/null 2>&1; do sleep 1; done' || echo "  Postgres slow to start"
+	@timeout 60 sh -c 'until [ "$$(docker inspect --format "{{.State.Health.Status}}" "$$(docker compose -f docker-compose.dev.yml ps -q postgres)" 2>/dev/null)" = healthy ]; do sleep 1; done' || echo "  Postgres slow to start"
 	@if [ ! -f .env ]; then \
-		sed -e 's#@postgres:#@localhost:#g' -e 's#redis://redis:#redis://localhost:#g' .env.example > .env; \
+		sed -e 's#@postgres:#@localhost:#g' -e 's#redis://redis:6379#redis://localhost:6382#g' .env.example > .env; \
 		echo "==> Created backend/.env from .env.example (localhost dev URLs). Set API keys to exercise the bot."; \
 	fi
 	@echo "==> Applying Alembic baseline (idempotent)..."
 	@. .venv/bin/activate && alembic upgrade head || echo "  (alembic skipped — ensure backend/.venv exists: pip install -e .[dev])"
 	@. .venv/bin/activate && python -m scripts.create_admin --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true
+	@echo "==> Dev DB ready. Adminer: http://localhost:8081 (server: postgres, db: vfic, user/pass: vfic/vfic)"
+
+# ---- Local dev: DB + backend (uvicorn) + frontend (vite) in ONE terminal. ----
+# Ctrl+C stops both app servers (the DB containers stay running). Backend and
+# frontend run on the host for fast hot-reload; Vite proxies /api, /realtime and
+# /socket.io to the backend (see frontend/vite.config.ts), so just open the app.
+dev: db
 	@echo ""
-	@echo "==> Dev DB ready. Start the app on the host:"
-	@echo "    frontend : cd ../frontend && npm run dev        -> http://localhost:5173"
-	@echo "    backend  : . .venv/bin/activate && uvicorn app.main:app --reload  -> http://localhost:8000"
-	@echo "    adminer  : http://localhost:8081  (server: postgres, db: vfic, user/pass: vfic/vfic)"
+	@echo "==> Starting backend (:8000) + frontend (:5173) — Ctrl+C stops both."
+	@echo "    App : http://localhost:5173   Login: admin@vfic.dev / admin123"
+	@bash -c 'trap "kill 0" INT TERM EXIT; (. .venv/bin/activate && exec uvicorn app.main:app --reload --port 8000) & (cd ../frontend && exec npm run dev) & wait'
 
 # ---- Build & push the AMD64 backend image to DockerHub. ----
 push:

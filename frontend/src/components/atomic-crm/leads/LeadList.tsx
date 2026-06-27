@@ -9,7 +9,10 @@ const LeadPageHeader = () => {
   return (
     <div className="flex items-center justify-between mb-4">
       <h1 className="text-xl font-semibold text-foreground">
-        Ứng viên tiềm năng <span className="text-muted-foreground font-normal">({total ?? 0})</span>
+        Ứng viên tiềm năng{" "}
+        <span className="text-muted-foreground font-normal">
+          ({total ?? 0})
+        </span>
       </h1>
     </div>
   );

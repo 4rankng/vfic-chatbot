@@ -11,7 +11,7 @@ function Skeleton({
       className={cn(
         "bg-accent rounded-md",
         shimmer ? "animate-shimmer" : "animate-pulse",
-        className,
+        className
       )}
       {...props}
     />

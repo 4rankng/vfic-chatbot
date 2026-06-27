@@ -38,7 +38,8 @@ const RESOURCE_PATH: Record<string, string> = {
   personas: "knowledge/personas",
 };
 
-const pathFor = (resource: string): string => `${BASE}/${RESOURCE_PATH[resource] ?? resource}`;
+const pathFor = (resource: string): string =>
+  `${BASE}/${RESOURCE_PATH[resource] ?? resource}`;
 const onePath = (resource: string, id: Identifier): string =>
   `${pathFor(resource)}/${encodeURIComponent(String(id))}`;
 
@@ -68,9 +69,12 @@ const normalize = (resource: string, record: ApiRecord): ApiRecord => {
 // concrete `RaRecord[]` is not assignable to an invariant `RecordType[]`. This
 // matches react-admin's own loosely-typed provider seam.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toRec = (resource: string, record: ApiRecord): any => normalize(resource, record);
+const toRec = (resource: string, record: ApiRecord): any =>
+  normalize(resource, record);
 
-const buildListQuery = (params: GetListParams | GetManyReferenceParams): string => {
+const buildListQuery = (
+  params: GetListParams | GetManyReferenceParams,
+): string => {
   const sp = new URLSearchParams();
   const pagination = params.pagination ?? { page: 1, perPage: 25 };
   sp.set("page", String(pagination.page ?? 1));
@@ -98,7 +102,10 @@ const restProvider: DataProvider = {
     const body = await apiJson<ListEnvelope>(
       `${pathFor(resource)}?${buildListQuery(params)}`,
     );
-    return { data: body.data.map((r) => toRec(resource, r)), total: body.total };
+    return {
+      data: body.data.map((r) => toRec(resource, r)),
+      total: body.total,
+    };
   },
 
   async getOne(resource: string, params: GetOneParams) {
@@ -129,7 +136,10 @@ const restProvider: DataProvider = {
     const body = await apiJson<ListEnvelope>(
       `${pathFor(resource)}?${buildListQuery(merged)}`,
     );
-    return { data: body.data.map((r) => toRec(resource, r)), total: body.total };
+    return {
+      data: body.data.map((r) => toRec(resource, r)),
+      total: body.total,
+    };
   },
 
   async create(resource: string, params: CreateParams) {
@@ -174,7 +184,9 @@ const restProvider: DataProvider = {
   async deleteMany(resource: string, params: DeleteManyParams) {
     await Promise.all(
       params.ids.map((id) =>
-        apiJson<void>(onePath(resource, id), { method: "DELETE" }).catch(() => null),
+        apiJson<void>(onePath(resource, id), { method: "DELETE" }).catch(
+          () => null,
+        ),
       ),
     );
     return { data: params.ids };
@@ -249,7 +261,9 @@ const getDataProviderWithCustomMethods = () => ({
   },
 });
 
-export type CrmDataProvider = ReturnType<typeof getDataProviderWithCustomMethods>;
+export type CrmDataProvider = ReturnType<
+  typeof getDataProviderWithCustomMethods
+>;
 
 export const getDataProvider = (): CrmDataProvider =>
   getDataProviderWithCustomMethods();

@@ -44,7 +44,7 @@ def _build_extractor():
     Thin wrapper over the shared factory in llm_real so the lead and memory
     paths reuse the exact same safety-LLM wiring as the chatbot agent.
     """
-    from app.graph.llm_real import build_minimax_extractor
+    from app.graph.factories import build_minimax_extractor
 
     return build_minimax_extractor()
 
@@ -63,7 +63,7 @@ async def _persist_lead_async(job: dict) -> None:
 
 async def _persist_memory_async(job: dict) -> None:
     from app.core.db import async_session
-    from app.graph.llm_real import GeminiEmbedder
+    from app.graph.clients import GeminiEmbedder
     from app.services.memory_service import MemoryService
 
     async with async_session() as db:

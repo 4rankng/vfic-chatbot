@@ -18,7 +18,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    # Host port 6382 (not 6379) to avoid clashing with the payroll project's
+    # redis on the same dev machine. backend/.env's REDIS_URL must match.
+    ports: ["6382:6379"]
     volumes: [vfic_dev_redisdata:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

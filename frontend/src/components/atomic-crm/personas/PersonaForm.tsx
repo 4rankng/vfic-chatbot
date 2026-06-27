@@ -76,9 +76,12 @@ export const PersonaForm = ({
     try {
       const res = await generatePersona(desc);
       setBodyMd(res.body_md);
-      notify("Đã sinh persona bằng AI. Hãy rà soát và chỉnh sửa trước khi lưu.", {
-        type: "success",
-      });
+      notify(
+        "Đã sinh persona bằng AI. Hãy rà soát và chỉnh sửa trước khi lưu.",
+        {
+          type: "success",
+        },
+      );
     } catch (e) {
       notify((e as Error).message, { type: "error" });
     } finally {
@@ -121,7 +124,8 @@ export const PersonaForm = ({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Nhập mô tả ngắn — AI sẽ mở rộng thành persona 7 phần. Luôn rà soát kết quả trước khi lưu.
+              Nhập mô tả ngắn — AI sẽ mở rộng thành persona 7 phần. Luôn rà soát
+              kết quả trước khi lưu.
             </p>
           </CardContent>
         </Card>
@@ -158,7 +162,9 @@ export const PersonaForm = ({
         </Card>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="persona-notes">Ghi chú (riêng tư, không gửi cho LLM)</Label>
+          <Label htmlFor="persona-notes">
+            Ghi chú (riêng tư, không gửi cho LLM)
+          </Label>
           <Input
             id="persona-notes"
             value={notes}
@@ -167,7 +173,11 @@ export const PersonaForm = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button type="button" onClick={submit} disabled={submitting || !name.trim()}>
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={submitting || !name.trim()}
+          >
             {submitting ? "Đang lưu..." : submitLabel}
           </Button>
           {extraActions}

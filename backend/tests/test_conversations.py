@@ -19,7 +19,7 @@ from app.models.conversation import (
     Message,
     MessageSender,
 )
-from app.services.conversation_service import ConversationService
+from app.services.conversation import ConversationService
 from app.services.zalo_bot_service import SendResult, ZaloBotSender
 from tests.conftest import ADMIN_EMAIL, PASSWORD, RECRUITER_EMAIL
 

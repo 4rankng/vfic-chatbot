@@ -33,10 +33,8 @@ import { SSOAuthButton } from "./SSOAuthButton";
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/security Security documentation}
  */
 export const LoginPage = (props: { redirectTo?: string }) => {
-  const {
-    googleWorkplaceDomain,
-    disableEmailPasswordAuthentication,
-  } = useConfigurationContext();
+  const { googleWorkplaceDomain, disableEmailPasswordAuthentication } =
+    useConfigurationContext();
   const { redirectTo } = props;
   const [loading, setLoading] = useState(false);
   const hasDisplayedRecoveryNotification = useRef(false);
@@ -179,7 +177,9 @@ export const LoginPage = (props: { redirectTo?: string }) => {
 
           <p className="text-center text-xs text-muted-foreground lg:text-left">
             &copy; {new Date().getFullYear()}{" "}
-            {translate("crm.auth.footer_tagline", { _: "Ting Ting Software Solution" })}
+            {translate("crm.auth.footer_tagline", {
+              _: "Ting Ting Software Solution",
+            })}
           </p>
         </div>
 

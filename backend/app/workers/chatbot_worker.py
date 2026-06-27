@@ -36,7 +36,7 @@ async def _run_job_async(job: dict) -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run.
     from app.core.db import async_session
-    from app.graph.llm_real import build_deps
+    from app.graph.factories import build_deps
     from app.graph.runner import BotRunState, run_turn
 
     state = BotRunState(

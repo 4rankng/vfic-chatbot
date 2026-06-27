@@ -71,7 +71,7 @@ async def search_jobs(
     _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[JobSearchResult]:
-    from app.graph.llm_real import GeminiEmbedder
+    from app.graph.clients import GeminiEmbedder
 
     rows = await JobService(db).search(GeminiEmbedder(), body.query, body.top_k)
     return [JobSearchResult(content=r["content"], similarity=r["similarity"]) for r in rows]

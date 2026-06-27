@@ -67,7 +67,11 @@ const PersonaEditContent = () => {
               Kích hoạt
             </Button>
           )}
-          <Button type="button" variant="ghost" onClick={() => redirect("/personas")}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => redirect("/personas")}
+          >
             Hủy
           </Button>
         </>

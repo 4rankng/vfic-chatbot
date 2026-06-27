@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { CreateBase, Form, useDataProvider, useNotify, useRedirect } from "ra-core";
+import {
+  CreateBase,
+  Form,
+  useDataProvider,
+  useNotify,
+  useRedirect,
+} from "ra-core";
 import { Card, CardContent } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
@@ -41,7 +47,11 @@ export const ProjectCreate = () => {
                 label="Slug (không dấu, không khoảng cách)"
                 isRequired
               />
-              <BooleanInput source="is_active" label="Đang hoạt động" defaultValue={true} />
+              <BooleanInput
+                source="is_active"
+                label="Đang hoạt động"
+                defaultValue={true}
+              />
               <Button type="submit" disabled={submitting}>
                 Tạo dự án
               </Button>

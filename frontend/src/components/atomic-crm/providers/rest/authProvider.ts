@@ -33,7 +33,8 @@ interface MeResponse {
 const IDENTITY_KEY = "RaStore.auth.identity";
 
 function storage(): Storage | null {
-  if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  if (typeof window !== "undefined" && window.localStorage)
+    return window.localStorage;
   return null;
 }
 

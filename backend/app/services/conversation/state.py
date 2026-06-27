@@ -1,20 +1,19 @@
-"""Conversation lifecycle + ownership (the core of the takeover race-guard).
+"""Conversation state mutations + orchestration (the takeover race-guard core).
 
-This replaces the n8n Ensure/Run-Start-Guard/Acquire-Lock/Recheck-Ownership nodes
-and the vfic_take_over/release/mark_read edge functions. All state changes bump
-`version` (the optimistic-lock token) and fan out a realtime event.
+Replaces the n8n Ensure / Run-Start-Guard / Acquire-Lock / Recheck-Ownership nodes and
+the vfic_take_over / release / mark_read edge functions. All state changes bump
+``version`` (the optimistic-lock token) and fan out a realtime event via the event bus.
 
-NOTE: `from __future__ import annotations` is required because this module defines a
-method named `list`, which would otherwise shadow the builtin `list` during class-body
-annotation evaluation.
+Reads live in ``repository.py``; realtime publishing in ``events.py``.
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import desc, func, or_, select, text, update
+from sqlalchemy import or_, update
 
+from app.core.config import get_settings
 from app.models.conversation import (
     BotRun,
     BotRunOutcome,
@@ -25,11 +24,8 @@ from app.models.conversation import (
     Message,
     MessageSender,
 )
-from app.core.config import get_settings
-from app.models.user import Role, User
-from app.schemas.conversation import ConversationOut
+from app.models.user import User
 from app.services.audit_service import record_audit
-from app.services.realtime import publish_event
 from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
@@ -43,171 +39,22 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# Whitelist of sortable conversation columns. Unknown / absent sort keys fall
-# back to updated_at (the default inbox ordering).
-_CONVERSATION_SORT = {
-    "updated_at": Conversation.updated_at,
-    "created_at": Conversation.created_at,
-    "last_inbound_at": Conversation.last_inbound_at,
-}
+class ConversationState:
+    """Mutates conversation/message rows + records audit + publishes realtime events.
 
+    Composes a ``ConversationRepository`` (for reads within mutations) and a
+    ``ConversationEventBus`` (for publishing). Pure orchestration — no new business
+    rules vs. the legacy single class.
+    """
 
-def _conv_payload(conv: Conversation) -> dict:
-    return ConversationOut.model_validate(conv).model_dump(mode="json")
-
-
-class ConversationService:
-    def __init__(self, db) -> None:
+    def __init__(self, db, repo, events) -> None:
         self.db = db
-
-    # --- read ---
-    async def get(self, conv_id: uuid.UUID) -> Conversation | None:
-        return await self.db.get(Conversation, conv_id)
-
-    async def get_by_zalo(self, zalo_chat_id: str) -> Conversation | None:
-        return (
-            await self.db.scalars(
-                select(Conversation).where(Conversation.zalo_chat_id == zalo_chat_id)
-            )
-        ).first()
-
-    async def last_messages_batch(self, *, viewer: User, ids_str: str) -> dict[str, str]:
-        """Latest message body per conversation, in ONE set-based query.
-
-        Replaces the client-side N-fanout (one GET /conversations/{id}/last-messages
-        per inbox row). Scope-filtered to the viewer (admin = all, recruiter = their
-        own + unassigned), id list parsed + capped at 200.
-        """
-        # Parse comma-separated UUIDs; ignore garbage; cap to 200.
-        ids: list[str] = []
-        for token in (ids_str or "").split(","):
-            s = token.strip()
-            if not s:
-                continue
-            try:
-                ids.append(str(uuid.UUID(s)))
-            except ValueError:
-                continue
-            if len(ids) >= 200:
-                break
-        if not ids:
-            return {}
-
-        params: dict = {"ids": ids}
-        scope = ""
-        if viewer.role != Role.admin:
-            scope = "AND (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
-            params["uid"] = str(viewer.id)
-
-        rows = (
-            await self.db.execute(
-                text(
-                    f"""
-                    SELECT DISTINCT ON (m.conversation_id)
-                           m.conversation_id::text AS cid, m.body AS content
-                      FROM messages m
-                      JOIN conversations c ON c.id = m.conversation_id
-                     WHERE m.conversation_id = ANY(:ids) {scope}
-                     ORDER BY m.conversation_id, m.created_at DESC, m.id DESC
-                    """
-                ),
-                params,
-            )
-        ).all()
-        return {r.cid: (r.content or "") for r in rows}
-
-    async def list(
-        self,
-        *,
-        viewer: User,
-        page: int = 1,
-        per_page: int = 25,
-        mode: ConversationMode | None = None,
-        status: ConversationStatus | None = None,
-        zalo_chat_id: str | None = None,
-        q: str | None = None,
-        sort_by: str | None = None,
-        order: str | None = "desc",
-    ) -> tuple[list[Conversation], int]:
-        base = select(Conversation)
-        if viewer.role != Role.admin:
-            # recruiters see their own + unassigned
-            base = base.where(
-                or_(
-                    Conversation.assigned_recruiter_id == viewer.id,
-                    Conversation.assigned_recruiter_id.is_(None),
-                )
-            )
-        if mode is not None:
-            base = base.where(Conversation.mode == mode)
-        if status is not None:
-            base = base.where(Conversation.status == status)
-        if zalo_chat_id:
-            base = base.where(Conversation.zalo_chat_id == zalo_chat_id)
-        if q:
-            base = base.where(Conversation.zalo_chat_id.ilike(f"%{q}%"))
-        total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
-        sort_col = _CONVERSATION_SORT.get((sort_by or "").lower()) or Conversation.updated_at
-        order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
-        rows = (
-            await self.db.scalars(
-                base.order_by(order_expr).offset((page - 1) * per_page).limit(per_page)
-            )
-        ).all()
-        return list(rows), int(total or 0)
-
-    async def needs_attention_count(self, *, viewer: User) -> int:
-        """Conversations the topbar bell should ring for: in recruiter takeover
-        (mode=HUMAN) OR with unread inbound (unread_count > 0). Scoped like
-        ``list`` (admin = all, recruiter = own + unassigned). Backs the
-        notification badge so it never downloads conversation rows."""
-        stmt = select(func.count()).select_from(Conversation).where(
-            or_(
-                Conversation.mode == ConversationMode.HUMAN,
-                Conversation.unread_count > 0,
-            )
-        )
-        if viewer.role != Role.admin:
-            stmt = stmt.where(
-                or_(
-                    Conversation.assigned_recruiter_id == viewer.id,
-                    Conversation.assigned_recruiter_id.is_(None),
-                )
-            )
-        return int((await self.db.scalar(stmt)) or 0)
-
-    async def last_messages(self, conv: Conversation, limit: int = 50) -> list[Message]:
-        rows = (
-            await self.db.scalars(
-                select(Message)
-                .where(Message.conversation_id == conv.id)
-                .order_by(desc(Message.created_at), desc(Message.id))
-                .limit(limit)
-            )
-        ).all()
-        return list(reversed(rows))
-
-    async def messages_page(
-        self, conv: Conversation, limit: int = 50, before_id: int | None = None
-    ) -> list[Message]:
-        """Newest-first page of a conversation's messages; when `before_id` (the
-        integer message id of the oldest currently-visible message) is set, return
-        the page older than that cursor. Results are reversed to chronological
-        order for the chat scroller. Used for cursor-based load-more."""
-        stmt = (
-            select(Message)
-            .where(Message.conversation_id == conv.id)
-            .order_by(desc(Message.created_at), desc(Message.id))
-            .limit(limit)
-        )
-        if before_id is not None:
-            stmt = stmt.where(Message.id < before_id)
-        rows = (await self.db.scalars(stmt)).all()
-        return list(reversed(rows))
+        self.repo = repo
+        self.events = events
 
     # --- webhook-side primitives (used by US-006 chatbot) ---
     async def ensure(self, zalo_chat_id: str) -> Conversation:
-        conv = await self.get_by_zalo(zalo_chat_id)
+        conv = await self.repo.get_by_zalo(zalo_chat_id)
         if conv is None:
             conv = Conversation(zalo_chat_id=zalo_chat_id)
             self.db.add(conv)
@@ -239,8 +86,8 @@ class ConversationService:
         await self.db.flush()
         await self.db.commit()
         await self.db.refresh(msg)
-        await publish_event("message.created", {"message_id": msg.id, "conversation_id": str(conv.id)})
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
         return msg
 
     async def acquire_lock(self, conv_id: uuid.UUID, ttl_seconds: int | None = None) -> bool:
@@ -312,8 +159,8 @@ class ConversationService:
             conv.last_outbound_at = utcnow()
         await self.db.commit()
         await self.db.refresh(msg)
-        await publish_event("message.created", {"message_id": msg.id, "conversation_id": str(conv.id)})
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
         return msg
 
     # --- recruiter-side state transitions ---
@@ -348,7 +195,7 @@ class ConversationService:
         )
         await self.db.commit()
         await self.db.refresh(conv)
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.conversation_updated(conv)
         return conv
 
     async def release(self, conv: Conversation, actor: User) -> Conversation:
@@ -366,7 +213,7 @@ class ConversationService:
         await record_audit(self.db, action="release_to_bot", actor_id=actor.id, target_type="conversation", target_id=str(conv.id))
         await self.db.commit()
         await self.db.refresh(conv)
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.conversation_updated(conv)
         return conv
 
     async def close(self, conv: Conversation, actor: User) -> Conversation:
@@ -376,7 +223,7 @@ class ConversationService:
         await record_audit(self.db, action="close_conversation", actor_id=actor.id, target_type="conversation", target_id=str(conv.id))
         await self.db.commit()
         await self.db.refresh(conv)
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.conversation_updated(conv)
         return conv
 
     async def reopen(self, conv: Conversation, actor: User) -> Conversation:
@@ -386,14 +233,14 @@ class ConversationService:
         await record_audit(self.db, action="reopen_conversation", actor_id=actor.id, target_type="conversation", target_id=str(conv.id))
         await self.db.commit()
         await self.db.refresh(conv)
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.conversation_updated(conv)
         return conv
 
     async def mark_read(self, conv: Conversation) -> Conversation:
         conv.unread_count = 0
         await self.db.commit()
         await self.db.refresh(conv)
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.conversation_updated(conv)
         return conv
 
     async def record_recruiter_message(
@@ -421,6 +268,6 @@ class ConversationService:
         )
         await self.db.commit()
         await self.db.refresh(msg)
-        await publish_event("message.created", {"message_id": msg.id, "conversation_id": str(conv.id)})
-        await publish_event("conversation.updated", _conv_payload(conv))
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
         return msg

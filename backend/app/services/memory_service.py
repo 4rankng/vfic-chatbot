@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.vector import vec_literal
-from app.graph.lead_memory_prompts import MEMORY_EXTRACT_PROMPT
+from app.prompts.lead_memory import MEMORY_EXTRACT_PROMPT
 
 Extractor = Callable[[str, str], Awaitable[str]]
 # Batch embedder: many texts -> many vectors in one call (avoids the per-fact N+1).

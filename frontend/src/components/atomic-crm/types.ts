@@ -122,7 +122,11 @@ export type KnowledgeSource = {
   mime_type?: string | null;
   stage?: string;
   digest_summary?: string | null;
-  digest_meta?: { unit_count?: number; section_count?: number; flagged_unit_indexes?: number[] };
+  digest_meta?: {
+    unit_count?: number;
+    section_count?: number;
+    flagged_unit_indexes?: number[];
+  };
   error?: string | null;
 } & Pick<RaRecord, "id">;
 
@@ -145,6 +149,31 @@ export type Project = {
   created_at: string;
   updated_at: string;
 } & Pick<RaRecord, "id">;
+
+// A worker product feature value (one row per catalog feature per project), joined with
+// the catalog metadata. Populated by the LLM extraction step in the ingest pipeline and
+// surfaced in the admin "Đặc điểm sản phẩm" panel + the agent's get_product_features tool.
+export type ProductFeature = {
+  id: string;
+  project_id: string;
+  feature_id: string;
+  feature_key: string;
+  name_vi: string;
+  category: string;
+  worker_question_vi: string | null;
+  value_text: string;
+  value_json: Record<string, unknown>;
+  strength_score: number;
+  display_priority: number;
+  is_highlight: boolean;
+  is_missing: boolean;
+  needs_clarification: boolean;
+  evidence_text: string | null;
+  source_document_id: string | null;
+  updated_at: string;
+} & Pick<RaRecord, "id">;
+
+export type ProductFeatureList = { data: ProductFeature[]; total: number };
 
 // An agent persona (free-form markdown). Several stored; one global persona active.
 export type Persona = {

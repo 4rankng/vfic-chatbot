@@ -1,6 +1,6 @@
 """US-006 graph runner tests with a MOCKED LLM: clean-reply send, takeover
 suppression, and off-topic refusal via the safety->retry path. (Acceptance #4/#5
-live parity is exercised through graph/llm_real.py with real MiniMax keys.)"""
+live parity is exercised through graph/factories.py + clients.py with real MiniMax keys.)"""
 
 import pytest
 from sqlalchemy import select, text

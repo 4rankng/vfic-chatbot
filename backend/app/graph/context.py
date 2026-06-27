@@ -63,8 +63,10 @@ async def active_projects_index(db: AsyncSession) -> str:
     return (
         _INDEX_HEADER
         + "\n" + "\n".join(lines)
-        + "\nKhi ứng viên quan tâm một dự án cụ thể, hãy gọi search_knowledge với project_slug"
-          " tương ứng (slug ở trên). TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về."
+        + "\nKhi ứng viên quan tâm một dự án cụ thể: với câu hỏi về thu nhập/lương, ca làm, tăng ca, "
+          "phụ cấp, KTX, xe đưa đón, thưởng, hồ sơ... hãy gọi get_product_features(project_slug) để lấy "
+          "16 đặc điểm sản phẩm; với câu hỏi mở/tìm thêm chi tiết, gọi search_knowledge(project_slug). "
+          "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."
     )
 
 

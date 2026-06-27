@@ -182,7 +182,10 @@ export const ChatThread = ({
               </svg>
             </span>
           ) : kind === "user" && isGrouped ? (
-            <span className="message-avatar-placeholder" style={{ width: 32 }} />
+            <span
+              className="message-avatar-placeholder"
+              style={{ width: 32 }}
+            />
           ) : null}
           <div className="bubble">
             <div className="bubble-content">
@@ -199,7 +202,10 @@ export const ChatThread = ({
               </svg>
             </span>
           ) : kind !== "user" && isGrouped ? (
-            <span className="message-avatar-placeholder" style={{ width: 32 }} />
+            <span
+              className="message-avatar-placeholder"
+              style={{ width: 32 }}
+            />
           ) : null}
         </div>
       );

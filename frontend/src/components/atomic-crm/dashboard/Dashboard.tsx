@@ -32,7 +32,7 @@ export const Dashboard = () => {
     <div className="flex flex-col gap-6 mx-auto w-full pb-8">
       <TopToolbar className="flex-col items-start md:flex-row md:items-end gap-4 pb-5 mb-2">
         <div className="mr-auto">
-          <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
             Tổng quan phân tích
           </h2>
           <p className="text-muted-foreground text-sm font-medium mt-1">
@@ -62,9 +62,7 @@ export const Dashboard = () => {
         />
         <KpiCard
           title="Cần phản hồi"
-          value={
-            isLoading ? "..." : unreadConvs.toString().padStart(2, "0")
-          }
+          value={isLoading ? "..." : unreadConvs.toString().padStart(2, "0")}
           description="Đợi nhân viên phản hồi"
           icon={<AlertCircle className="w-4 h-4" />}
           trend={unreadConvs > 0 ? `${unreadConvs} đang xử lý` : undefined}
@@ -73,9 +71,7 @@ export const Dashboard = () => {
         />
         <KpiCard
           title="Ứng viên đạt chuẩn"
-          value={
-            isLoading ? "..." : qualifiedLeads.toString().padStart(2, "0")
-          }
+          value={isLoading ? "..." : qualifiedLeads.toString().padStart(2, "0")}
           description="Sẵn sàng tuyển dụng"
           icon={<UserCheck className="w-4 h-4" />}
           trend="+5%"
@@ -93,7 +89,7 @@ export const Dashboard = () => {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main Chart */}
-        <Card className="md:col-span-2 border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300">
+        <Card className="md:col-span-2 bg-card">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
@@ -151,7 +147,7 @@ export const Dashboard = () => {
         </Card>
 
         {/* Side Panel */}
-        <Card className="border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col">
+        <Card className="bg-card flex flex-col">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <span className="w-1.5 h-4.5 bg-primary rounded-full" />
@@ -223,7 +219,7 @@ const KpiCard = ({
   trendUp?: boolean;
   neutral?: boolean;
 }) => (
-  <Card className="border-0 bg-card shadow-sm hover:shadow-md transition-all duration-300 group overflow-hidden relative">
+  <Card className="bg-card transition-colors duration-300 group overflow-hidden relative">
     <CardHeader className="flex flex-row items-center justify-between pb-3">
       <CardTitle className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
         {title}

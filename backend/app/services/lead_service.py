@@ -15,7 +15,7 @@ from typing import Awaitable, Callable
 from sqlalchemy import desc, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.graph.lead_memory_prompts import LEAD_EXTRACT_SYSTEM_PROMPT
+from app.prompts.lead_memory import LEAD_EXTRACT_SYSTEM_PROMPT
 from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadStage
 from app.models.user import Role, User
 from app.services.audit_service import record_audit

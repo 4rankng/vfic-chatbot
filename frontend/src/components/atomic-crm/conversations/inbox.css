@@ -993,7 +993,8 @@
   color: white;
   box-shadow: none;
 }
-:is(.inbox-bg-container, .chat-surface) .composer-action.send:hover:not(:disabled) {
+:is(.inbox-bg-container, .chat-surface)
+  .composer-action.send:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: none;
 }

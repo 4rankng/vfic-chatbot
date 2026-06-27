@@ -13,7 +13,8 @@ const ACCESS_KEY = "RaStore.auth.access_token";
 const REFRESH_KEY = "RaStore.auth.refresh_token";
 
 function storage(): Storage | null {
-  if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  if (typeof window !== "undefined" && window.localStorage)
+    return window.localStorage;
   return null;
 }
 
@@ -34,17 +35,27 @@ export const clearTokens = (): void => {
 };
 
 /** Build a full URL from a path that already starts with "/api/v1/..." (or "/realtime/..."). */
-export const apiUrl = (path: string): string => `${vficConfig.apiBaseUrl}${path}`;
+export const apiUrl = (path: string): string =>
+  `${vficConfig.apiBaseUrl}${path}`;
 
 /** Error carrying the HTTP status so callers (e.g. humanReplyService) can map it. */
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-type Json = Record<string, unknown> | unknown[] | string | number | boolean | null;
+type Json =
+  | Record<string, unknown>
+  | unknown[]
+  | string
+  | number
+  | boolean
+  | null;
 
 interface RequestOptions {
   method?: string;
@@ -59,7 +70,10 @@ interface RequestOptions {
 const isFormData = (body: unknown): body is FormData =>
   typeof FormData !== "undefined" && body instanceof FormData;
 
-const send = async (path: string, options: RequestOptions): Promise<Response> => {
+const send = async (
+  path: string,
+  options: RequestOptions,
+): Promise<Response> => {
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...options.headers,
@@ -96,7 +110,10 @@ const refreshOnce = async (): Promise<boolean> => {
   try {
     const response = await fetch(apiUrl("/api/v1/auth/refresh"), {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     if (!response.ok) return false;

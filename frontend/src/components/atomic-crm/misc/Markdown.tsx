@@ -41,9 +41,7 @@ async function getMarkdownParser(): Promise<ParseFn> {
               raw: match[0],
               href: match[0],
               text: match[0],
-              tokens: [
-                { type: "text", raw: match[0], text: match[0] },
-              ],
+              tokens: [{ type: "text", raw: match[0], text: match[0] }],
             };
           }
         },

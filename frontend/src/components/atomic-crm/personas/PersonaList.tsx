@@ -52,7 +52,12 @@ const PersonaRow = ({ persona }: { persona: Persona }) => {
       </div>
       {!persona.is_active && (
         <div onClick={(e) => e.stopPropagation()}>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onActivate}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onActivate}
+          >
             <Zap className="size-3.5" />
             Kích hoạt
           </Button>

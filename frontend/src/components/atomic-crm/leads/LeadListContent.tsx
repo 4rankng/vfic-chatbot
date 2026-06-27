@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useListContext, useRefresh, ShowBase } from "ra-core";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,10 +34,18 @@ const compareLeads =
   };
 
 export const LeadListContent = () => {
-  const { data: leads, isPending, error, sort, filterValues } = useListContext<Lead>();
-  const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(null);
+  const {
+    data: leads,
+    isPending,
+    error,
+    sort,
+    filterValues,
+  } = useListContext<Lead>();
+  const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(
+    null,
+  );
   const refresh = useRefresh();
-  
+
   const filters = filterValues ?? {};
   const hasActiveStage = Boolean(filters.lead_stage);
 
@@ -96,7 +109,10 @@ export const LeadListContent = () => {
         ))}
       </div>
       <ListPagination rowsPerPageOptions={[20, 50, 100]} className="pt-4" />
-      <Sheet open={!!selectedLeadId} onOpenChange={(open) => !open && setSelectedLeadId(null)}>
+      <Sheet
+        open={!!selectedLeadId}
+        onOpenChange={(open) => !open && setSelectedLeadId(null)}
+      >
         <SheetContent
           side="right"
           className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px] lg:max-w-[600px] border-l"

@@ -36,3 +36,45 @@ class ProjectUpdate(BaseModel):
     name: str | None = None
     is_active: bool | None = None
     default_persona_id: uuid.UUID | None = None
+
+
+# --- Worker product features (one row per catalog feature per project) ---
+
+
+class FeatureOut(BaseModel):
+    """A job_feature_values row joined with its catalog metadata (worker-facing)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    project_id: uuid.UUID
+    feature_id: uuid.UUID
+    feature_key: str
+    name_vi: str
+    category: str
+    worker_question_vi: str | None = None
+    value_text: str
+    value_json: dict[str, Any] = {}
+    strength_score: float
+    display_priority: int
+    is_highlight: bool
+    is_missing: bool
+    needs_clarification: bool
+    evidence_text: str | None = None
+    source_document_id: uuid.UUID | None = None
+    updated_at: datetime
+
+
+class FeatureListResponse(BaseModel):
+    data: list[FeatureOut]
+    total: int
+
+
+class FeatureUpdate(BaseModel):
+    """Admin review/edit of a single extracted feature value."""
+
+    value_text: str | None = None
+    value_json: dict[str, Any] | None = None
+    is_highlight: bool | None = None
+    is_missing: bool | None = None
+    needs_clarification: bool | None = None
+    evidence_text: str | None = None

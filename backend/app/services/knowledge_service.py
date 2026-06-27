@@ -24,7 +24,7 @@ from app.core.vector import vec_literal
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import User
 from app.services.audit_service import record_audit
-from app.services.knowledge_pipeline import LLMJson, extract_text
+from app.services.knowledge import LLMJson, extract_text
 
 Embedder = Callable[[str], Awaitable[list[float]]]
 FileProvider = Callable[[str], Awaitable[bytes]]
@@ -90,7 +90,7 @@ class KnowledgeService:
         Without -> mechanical 1-chunk fallback (legacy/tests).
         """
         if llm_json is not None:
-            from app.services.knowledge_pipeline import KnowledgePipeline
+            from app.services.knowledge import KnowledgePipeline
 
             await KnowledgePipeline(self.db, embedder, llm_json).run(doc)
             await self.db.refresh(doc)

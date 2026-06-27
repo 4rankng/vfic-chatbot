@@ -69,29 +69,21 @@ export const MobileDashboard = () => {
           <MobileKpiCard
             title="Tổng khách hàng"
             value={
-              isLoading
-                ? "..."
-                : totalLeadsCount.toString().padStart(2, "0")
+              isLoading ? "..." : totalLeadsCount.toString().padStart(2, "0")
             }
             icon={<Users className="size-4" />}
             description="Tất cả quy trình"
           />
           <MobileKpiCard
             title="Cần phản hồi"
-            value={
-              isLoading
-                ? "..."
-                : unreadConvs.toString().padStart(2, "0")
-            }
+            value={isLoading ? "..." : unreadConvs.toString().padStart(2, "0")}
             icon={<AlertCircle className="size-4" />}
             description="Đợi phản hồi"
           />
           <MobileKpiCard
             title="Đạt chuẩn"
             value={
-              isLoading
-                ? "..."
-                : qualifiedLeads.toString().padStart(2, "0")
+              isLoading ? "..." : qualifiedLeads.toString().padStart(2, "0")
             }
             icon={<UserCheck className="size-4" />}
             description="Sẵn sàng tuyển dụng"

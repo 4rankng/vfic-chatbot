@@ -20,8 +20,7 @@ from app.schemas.conversation import (
     MessageOut,
     SendMessageRequest,
 )
-from app.services.conversation_service import ConversationConflict, ConversationService
-from app.services.zalo_bot_service import ZaloBotSender
+from app.services.conversation import ConversationConflict, ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -177,10 +176,9 @@ async def send_recruiter_message(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Bạn cần tiếp nhận hội thoại trước khi trả lời"
         )
-    result = await ZaloBotSender().send(conv.zalo_chat_id, body.body)
     # The RECRUITER message is persisted in both outcomes (FAILED rows are the
     # audit trail and surface in the thread via SSE); the HTTP status reports
     # whether the upstream Zalo delivery itself succeeded.
-    msg = await ConversationService(db).record_recruiter_message(conv, user, body.body, result)
-    response.status_code = status.HTTP_201_CREATED if result.ok else status.HTTP_502_BAD_GATEWAY
+    msg, delivered = await ConversationService(db).deliver_recruiter_message(conv, user, body.body)
+    response.status_code = status.HTTP_201_CREATED if delivered else status.HTTP_502_BAD_GATEWAY
     return MessageOut.model_validate(msg)

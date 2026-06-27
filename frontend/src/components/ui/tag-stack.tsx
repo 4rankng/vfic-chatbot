@@ -47,7 +47,7 @@ function TagStack({
           variant="secondary"
           className={cn(
             "max-w-[160px] truncate",
-            toneClass[tag.tone ?? "default"],
+            toneClass[tag.tone ?? "default"]
           )}
         >
           {tag.label}

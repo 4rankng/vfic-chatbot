@@ -43,7 +43,11 @@ describe("apiJson 401 refresh-retry", () => {
       // The original request 401s while the stale token is attached, then 200s
       // once the retry carries the refreshed token.
       if (headers.Authorization?.includes("expired-access")) {
-        return { ok: false, status: 401, json: async () => ({}) } as unknown as Response;
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+        } as unknown as Response;
       }
       return {
         ok: true,
@@ -66,7 +70,11 @@ describe("apiJson 401 refresh-retry", () => {
     let count = 0;
     globalThis.fetch = (async (): Promise<Response> => {
       count += 1;
-      return { ok: false, status: 401, json: async () => ({}) } as unknown as Response;
+      return {
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      } as unknown as Response;
     }) as unknown as typeof globalThis.fetch;
 
     await expect(apiJson("/api/v1/leads")).rejects.toThrow();
@@ -76,15 +84,21 @@ describe("apiJson 401 refresh-retry", () => {
   it("surfaces the original error when the refresh itself fails", async () => {
     setTokens("expired-access", "bad-refresh");
     let count = 0;
-    globalThis.fetch = (async (
-      input: RequestInfo | URL,
-    ): Promise<Response> => {
+    globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
       count += 1;
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/auth/refresh")) {
-        return { ok: false, status: 401, json: async () => ({}) } as unknown as Response;
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+        } as unknown as Response;
       }
-      return { ok: false, status: 401, json: async () => ({}) } as unknown as Response;
+      return {
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      } as unknown as Response;
     }) as unknown as typeof globalThis.fetch;
 
     await expect(apiJson("/api/v1/leads")).rejects.toThrow();

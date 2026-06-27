@@ -22,7 +22,7 @@ function EmptyState({
       data-slot="empty-state"
       className={cn(
         "flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center",
-        className,
+        className
       )}
       {...props}
     >

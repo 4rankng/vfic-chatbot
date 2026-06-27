@@ -1,9 +1,6 @@
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import type { Lead, Message } from "../types";
-import {
-  apiJson,
-  getAccessToken,
-} from "../providers/rest/api";
+import { apiJson, getAccessToken } from "../providers/rest/api";
 
 // Chat data access over the FastAPI REST + SSE backend (replaces the Supabase
 // client + postgres_changes realtime). Conversations are keyed by their UUID
@@ -16,8 +13,20 @@ interface ListEnvelope {
   total: number;
 }
 
-const INBOUND_SENDERS = new Set(["WORKER", "CANDIDATE", "USER", "LEAD", "APPLICANT"]);
-const OUTBOUND_SENDERS = new Set(["BOT", "RECRUITER", "ADMIN", "AGENT", "HUMAN"]);
+const INBOUND_SENDERS = new Set([
+  "WORKER",
+  "CANDIDATE",
+  "USER",
+  "LEAD",
+  "APPLICANT",
+]);
+const OUTBOUND_SENDERS = new Set([
+  "BOT",
+  "RECRUITER",
+  "ADMIN",
+  "AGENT",
+  "HUMAN",
+]);
 
 // Map a typed backend MessageOut to the CRM's Message view model.
 //   sender WORKER/CANDIDATE/USER/LEAD/APPLICANT -> inbound (candidate)
@@ -26,7 +35,8 @@ const OUTBOUND_SENDERS = new Set(["BOT", "RECRUITER", "ADMIN", "AGENT", "HUMAN"]
 const toMessage = (row: ApiRecord): Message => {
   const sender = String(row.sender ?? "").toUpperCase();
   const direction = String(row.direction ?? row.type ?? "").toLowerCase();
-  const recruiterId = row.recruiter_id != null ? String(row.recruiter_id) : null;
+  const recruiterId =
+    row.recruiter_id != null ? String(row.recruiter_id) : null;
   const type: Message["type"] =
     sender === "SYSTEM" || direction === "system"
       ? "system"
@@ -128,7 +138,10 @@ export const chatRepository = {
    */
   async getMessageCount(zaloChatId: string): Promise<number> {
     if (!zaloChatId) return 0;
-    const convSp = new URLSearchParams({ zalo_chat_id: zaloChatId, per_page: "1" });
+    const convSp = new URLSearchParams({
+      zalo_chat_id: zaloChatId,
+      per_page: "1",
+    });
     const conv = await apiJson<ListEnvelope>(
       `/api/v1/conversations?${convSp.toString()}`,
     );

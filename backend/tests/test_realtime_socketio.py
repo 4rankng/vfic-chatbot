@@ -14,7 +14,7 @@ from socketio.exceptions import ConnectionRefusedError
 
 from app.realtime.emitter import emit_event as real_emit_event
 from app.realtime.socketio import _room_for_payload, authenticate_socket_token
-from app.services.conversation_service import ConversationService
+from app.services.conversation import ConversationService
 from tests.conftest import ADMIN_EMAIL, PASSWORD
 
 pytestmark = pytest.mark.asyncio

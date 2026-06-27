@@ -41,7 +41,7 @@ def _patch_llm(monkeypatch, *, return_value="### Vai trò của tôi là gì?\n(
     def fake_builder():
         return fake_expand
 
-    monkeypatch.setattr("app.graph.llm_real.build_persona_expander", fake_builder)
+    monkeypatch.setattr("app.graph.factories.build_persona_expander", fake_builder)
     return captured
 
 
@@ -49,7 +49,7 @@ async def _allow_rate_limit(monkeypatch):
     async def _noop(_admin_id):
         return None
 
-    monkeypatch.setattr("app.api.personas._enforce_generate_rate_limit", _noop)
+    monkeypatch.setattr("app.services.ratelimit.enforce_persona_generate_rate_limit", _noop)
 
 
 async def test_generate_requires_auth(client):
@@ -121,7 +121,10 @@ async def test_generate_502_on_empty_output(client, monkeypatch):
 
 async def test_generate_rate_limit_enforced(client, monkeypatch, _reset_redis):
     """6th call within the window is rejected with 429 (exercises the real throttle)."""
-    from app.api.personas import _RATE_KEY, _enforce_generate_rate_limit
+    from app.services.ratelimit import (
+        PERSONA_GEN_RATE_KEY as _RATE_KEY,
+        enforce_persona_generate_rate_limit as _enforce_generate_rate_limit,
+    )
     from app.core.redis import get_redis
 
     admin_id = uuid.uuid4()

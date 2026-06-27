@@ -31,9 +31,16 @@ const stubJson = (
   let url = "";
   const fn = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
     url = typeof input === "string" ? input : (input as URL).toString();
-    return { ok: true, status: 200, json: json as () => Promise<unknown> } as unknown as Response;
+    return {
+      ok: true,
+      status: 200,
+      json: json as () => Promise<unknown>,
+    } as unknown as Response;
   });
-  return { fetch: fn as unknown as typeof globalThis.fetch, lastUrl: () => url };
+  return {
+    fetch: fn as unknown as typeof globalThis.fetch,
+    lastUrl: () => url,
+  };
 };
 
 describe("chatRepository.getConversationMessages", () => {
@@ -55,9 +62,12 @@ describe("chatRepository.getConversationMessages", () => {
       total: 3,
     }));
     globalThis.fetch = fetch;
-    const { messages, hasMore } = await chatRepository.getConversationMessages("c1", {
-      limit: 3,
-    });
+    const { messages, hasMore } = await chatRepository.getConversationMessages(
+      "c1",
+      {
+        limit: 3,
+      },
+    );
     expect(messages.map((m) => m.id)).toEqual(["1", "2", "3"]); // reversed to chronological
     // Server order is newest-first [id3,id2,id1]; after reverse the oldest (id1)
     // is first. Mapping: SYSTEM->system, BOT->outbound, WORKER->inbound.
@@ -71,7 +81,12 @@ describe("chatRepository.getConversationMessages", () => {
     const { fetch } = stubJson(async () => ({
       data: [
         { id: 4, body: "fallback inbound", sender: null, created_at: "t4" },
-        { id: 3, body: "direction inbound", direction: "inbound", created_at: "t3" },
+        {
+          id: 3,
+          body: "direction inbound",
+          direction: "inbound",
+          created_at: "t3",
+        },
         { id: 2, body: "candidate", sender: "CANDIDATE", created_at: "t2" },
         { id: 1, body: "worker", sender: "WORKER", created_at: "t1" },
       ],
@@ -92,16 +107,24 @@ describe("chatRepository.getConversationMessages", () => {
   });
 
   it("reports hasMore=false on a partial page", async () => {
-    const { fetch } = stubJson(async () => ({ data: [{ id: 1, body: "x", sender: "WORKER" }], total: 1 }));
+    const { fetch } = stubJson(async () => ({
+      data: [{ id: 1, body: "x", sender: "WORKER" }],
+      total: 1,
+    }));
     globalThis.fetch = fetch;
-    const { hasMore } = await chatRepository.getConversationMessages("c1", { limit: 10 });
+    const { hasMore } = await chatRepository.getConversationMessages("c1", {
+      limit: 10,
+    });
     expect(hasMore).toBe(false);
   });
 
   it("sends before_id cursor when loading older history", async () => {
     const { fetch, lastUrl } = stubJson(async () => ({ data: [], total: 0 }));
     globalThis.fetch = fetch;
-    await chatRepository.getConversationMessages("c1", { limit: 10, beforeId: "42" });
+    await chatRepository.getConversationMessages("c1", {
+      limit: 10,
+      beforeId: "42",
+    });
     expect(lastUrl()).toContain("before_id=42");
   });
 });
@@ -114,7 +137,9 @@ describe("chatRepository.getLastMessages", () => {
   });
 
   it("re-keys the snippet map by zalo_chat_id", async () => {
-    const { fetch } = stubJson(async () => ({ snippets: { "conv-1": "hello" } }));
+    const { fetch } = stubJson(async () => ({
+      snippets: { "conv-1": "hello" },
+    }));
     globalThis.fetch = fetch;
     const out = await chatRepository.getLastMessages([
       { id: "conv-1", zalo_chat_id: "z-1" },
@@ -150,14 +175,20 @@ describe("chatRepository.subscribeToMessages", () => {
     setTokens("access", "refresh");
     const unsub = chatRepository.subscribeToMessages("c1", () => {});
 
-    expect(mockSocket.on).toHaveBeenCalledWith("message.created", expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith(
+      "message.created",
+      expect.any(Function),
+    );
     expect(mockSocket.connect).toHaveBeenCalled();
     expect(mockSocket.emit).toHaveBeenCalledWith("join conversation", {
       conversation_id: "c1",
     });
 
     unsub();
-    expect(mockSocket.off).toHaveBeenCalledWith("message.created", expect.any(Function));
+    expect(mockSocket.off).toHaveBeenCalledWith(
+      "message.created",
+      expect.any(Function),
+    );
     expect(mockSocket.emit).toHaveBeenCalledWith("leave conversation", {
       conversation_id: "c1",
     });

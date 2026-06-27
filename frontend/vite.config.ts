@@ -33,6 +33,16 @@ export default defineConfig({
     }),
   ],
   base: "./",
+  // Dev server: proxy backend endpoints to uvicorn (:8000) so the SPA stays
+  // same-origin (apiBaseUrl="") in local dev — no VITE_API_BASE or CORS needed.
+  // Covers REST (/api), SSE (/realtime) and Socket.IO (WebSocket upgrade).
+  server: {
+    proxy: {
+      "/api": "http://localhost:8000",
+      "/realtime": "http://localhost:8000",
+      "/socket.io": { target: "http://localhost:8000", ws: true },
+    },
+  },
   esbuild: {
     keepNames: true,
   },

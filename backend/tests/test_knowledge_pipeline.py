@@ -14,7 +14,7 @@ from sqlalchemy import text
 
 from app.models.company import Project
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
-from app.services.knowledge_pipeline import (
+from app.services.knowledge import (
     DigestError,
     KnowledgePipeline,
     extract_text,

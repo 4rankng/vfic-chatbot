@@ -42,7 +42,9 @@ export const LeadStageMenu = () => {
   const handleSelect = (stage: string) => {
     if (isPending || stage === lead.lead_stage) return;
 
-    let updateData: Partial<Lead> & { closed_reason?: string } = { lead_stage: stage };
+    let updateData: Partial<Lead> & { closed_reason?: string } = {
+      lead_stage: stage,
+    };
 
     if (stage === "CLOSED") {
       const reason = window.prompt("Lý do đóng ứng viên này?");
@@ -59,7 +61,8 @@ export const LeadStageMenu = () => {
       },
       {
         mutationMode: "optimistic",
-        onSuccess: () => notify("Đã cập nhật giai đoạn", { type: "success", undoable: true }),
+        onSuccess: () =>
+          notify("Đã cập nhật giai đoạn", { type: "success", undoable: true }),
         onError: (error) =>
           notify(
             isRlsError(error)

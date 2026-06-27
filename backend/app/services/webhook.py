@@ -16,7 +16,7 @@ from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.conversation_service import ConversationService
+from app.services.conversation import ConversationService
 from app.services.dedup import MessageDedupService
 
 
