@@ -67,6 +67,30 @@ describe("chatRepository.getConversationMessages", () => {
     expect(hasMore).toBe(true); // full page (3 >= 3)
   });
 
+  it("treats candidate sender variants and inbound direction as inbound", async () => {
+    const { fetch } = stubJson(async () => ({
+      data: [
+        { id: 4, body: "fallback inbound", sender: null, created_at: "t4" },
+        { id: 3, body: "direction inbound", direction: "inbound", created_at: "t3" },
+        { id: 2, body: "candidate", sender: "CANDIDATE", created_at: "t2" },
+        { id: 1, body: "worker", sender: "WORKER", created_at: "t1" },
+      ],
+      total: 4,
+    }));
+    globalThis.fetch = fetch;
+
+    const { messages } = await chatRepository.getConversationMessages("c1", {
+      limit: 10,
+    });
+
+    expect(messages.map((m) => m.type)).toEqual([
+      "inbound",
+      "inbound",
+      "inbound",
+      "inbound",
+    ]);
+  });
+
   it("reports hasMore=false on a partial page", async () => {
     const { fetch } = stubJson(async () => ({ data: [{ id: 1, body: "x", sender: "WORKER" }], total: 1 }));
     globalThis.fetch = fetch;

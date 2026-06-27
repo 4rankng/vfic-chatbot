@@ -3,8 +3,9 @@ correctly dedup / starve-in-human-mode / respect the per-chat lock."""
 import time
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 
+from app.models.conversation import Conversation, Message, MessageSender
 from app.services.webhook import ZaloWebhookService
 
 pytestmark = pytest.mark.asyncio
@@ -41,11 +42,30 @@ async def test_webhook_queues_then_dedups_and_acks_fast(db_session):
     assert r1["status"] == "queued"
     assert len(captured) == 1
     assert elapsed < 1.5, f"webhook ack took {elapsed:.2f}s"
+    conv = (
+        await db_session.scalars(
+            select(Conversation).where(Conversation.zalo_chat_id == "z-1")
+        )
+    ).one()
+    msg = (
+        await db_session.scalars(
+            select(Message).where(Message.conversation_id == conv.id)
+        )
+    ).one()
+    assert msg.sender == MessageSender.WORKER
+    assert msg.body == "hi"
+    assert msg.zalo_message_id == "m1"
 
     # same msg_id within the 8s window -> duplicate, not re-enqueued
     r2 = await ZaloWebhookService.handle(db_session, _payload("m1", chat_id="z-1"), enqueue=eq)
     assert r2["status"] == "duplicate"
     assert len(captured) == 1
+    msgs = (
+        await db_session.scalars(
+            select(Message).where(Message.conversation_id == conv.id)
+        )
+    ).all()
+    assert len(msgs) == 1
 
 
 async def test_webhook_starves_in_human_mode(db_session):
@@ -53,7 +73,10 @@ async def test_webhook_starves_in_human_mode(db_session):
     eq = await _enqueue(captured)
     await ZaloWebhookService.handle(db_session, _payload("m2", chat_id="z-2"), enqueue=eq)
     await db_session.execute(
-        text("UPDATE conversations SET mode='HUMAN', version=version+1 WHERE zalo_chat_id='z-2'")
+        text(
+            "UPDATE conversations SET mode='HUMAN', bot_locked_until=NULL, "
+            "version=version+1 WHERE zalo_chat_id='z-2'"
+        )
     )
     await db_session.commit()
 
@@ -61,6 +84,12 @@ async def test_webhook_starves_in_human_mode(db_session):
     r = await ZaloWebhookService.handle(db_session, _payload("m3", chat_id="z-2"), enqueue=eq)
     assert r["status"] == "starved_human_mode"
     assert len(captured) == n_before  # the HUMAN-mode inbound did NOT enqueue a bot run
+    worker_msgs = (
+        await db_session.scalars(
+            select(Message).where(Message.sender == MessageSender.WORKER)
+        )
+    ).all()
+    assert [m.body for m in worker_msgs] == ["hi", "hi"]
 
 
 async def test_webhook_locked_when_mutex_held(db_session):
@@ -143,4 +172,3 @@ async def test_webhook_rejects_unsigned_in_nondev_without_secret(client, monkeyp
     monkeypatch.setattr(wh, "enqueue_chat_run", lambda job: None)
     r = await client.post("/webhooks/zalo", json=_payload("sig-3", chat_id="z-sig3"))
     assert r.status_code == 503
-

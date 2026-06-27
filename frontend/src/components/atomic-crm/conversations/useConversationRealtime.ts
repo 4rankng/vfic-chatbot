@@ -9,6 +9,23 @@ import { chatRepository } from "./chatRepository";
 // Merge semantics matter: a realtime INSERT that lands between subscribe() and
 // the initial fetch resolve is already in state, so the fetch result is merged
 // (union by id, fetched-first) rather than blindly replacing state.
+const compareMessages = (a: Message, b: Message) => {
+  const at = Date.parse(a.created_at);
+  const bt = Date.parse(b.created_at);
+  if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt;
+  const aid = Number(a.id);
+  const bid = Number(b.id);
+  if (Number.isFinite(aid) && Number.isFinite(bid) && aid !== bid) return aid - bid;
+  return String(a.id).localeCompare(String(b.id));
+};
+
+const mergeChronological = (current: Message[], incoming: Message[]) => {
+  const byId = new Map<string, Message>();
+  for (const msg of current) byId.set(msg.id, msg);
+  for (const msg of incoming) byId.set(msg.id, msg);
+  return Array.from(byId.values()).sort(compareMessages);
+};
+
 export const useConversationRealtime = (conversationId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -16,7 +33,7 @@ export const useConversationRealtime = (conversationId?: string) => {
   const [hasMore, setHasMore] = useState(false);
   const isFetchingRef = useRef(false);
 
-  const fetchInitial = async () => {
+  const fetchInitial = useCallback(async () => {
     if (!conversationId) {
       setIsLoading(false);
       return;
@@ -32,9 +49,7 @@ export const useConversationRealtime = (conversationId?: string) => {
       // drop it (the fetch predates the insert). Union by id, fetched-first.
       setMessages((prev) => {
         if (prev.length === 0) return mapped;
-        const fetchedIds = new Set(mapped.map((m) => m.id));
-        const realtimeOnly = prev.filter((m) => !fetchedIds.has(m.id));
-        return realtimeOnly.length > 0 ? [...mapped, ...realtimeOnly] : mapped;
+        return mergeChronological(prev, mapped);
       });
       setHasMore(apiHasMore);
     } catch {
@@ -43,7 +58,7 @@ export const useConversationRealtime = (conversationId?: string) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [conversationId]);
 
   useEffect(() => {
     setMessages([]);
@@ -55,16 +70,16 @@ export const useConversationRealtime = (conversationId?: string) => {
     let cleanup: (() => void) | undefined;
     try {
       cleanup = chatRepository.subscribeToMessages(conversationId, (newMsg) => {
-        setMessages((prev) =>
-          prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg],
-        );
+        setMessages((prev) => mergeChronological(prev, [newMsg]));
       });
-    } catch {}
+    } catch {
+      // Realtime is best-effort; the initial REST fetch still renders history.
+    }
 
     return () => {
       cleanup?.();
     };
-  }, [conversationId]);
+  }, [conversationId, fetchInitial]);
 
   // Stable identity so the consumer's useCallback(handleStartReached) memo
   // holds across renders — without this the startReached handler is rebuilt
@@ -84,7 +99,7 @@ export const useConversationRealtime = (conversationId?: string) => {
             beforeId: earliestId,
           });
         setHasMore(apiHasMore);
-        setMessages((prev) => [...older, ...prev]);
+        setMessages((prev) => mergeChronological(prev, older));
         return older.length;
       } catch {
         // A failed load-more must not keep re-firing on every scroll-to-top

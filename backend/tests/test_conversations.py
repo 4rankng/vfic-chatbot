@@ -114,9 +114,15 @@ async def test_human_mode_inbound_starves_bot(client, db_session):
     assert svc.run_start_guard(conv) is False
 
     before = conv.unread_count
-    await svc.record_inbound(conv)
+    await svc.record_inbound(conv, body="Ứng viên trả lời", zalo_message_id="zin-1")
     await db_session.refresh(conv)
     assert conv.unread_count == before + 1  # recruiter sees unread bump
+    inbound_msgs = (
+        await db_session.scalars(
+            select(Message).where(Message.conversation_id == conv.id, Message.sender == MessageSender.WORKER)
+        )
+    ).all()
+    assert [m.body for m in inbound_msgs] == ["Ứng viên trả lời"]
 
     # no bot_run was created for this inbound
     runs = (await db_session.scalars(select(BotRun).where(BotRun.conversation_id == conv.id))).all()

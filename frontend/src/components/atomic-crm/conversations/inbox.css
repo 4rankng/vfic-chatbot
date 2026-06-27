@@ -768,6 +768,7 @@
   align-items: flex-end;
   gap: 12px;
   margin-bottom: 20px;
+  min-width: 0;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
   margin-top: -16px;
@@ -803,11 +804,14 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble {
-  max-width: 70%;
+  max-width: min(70%, 760px);
+  min-width: 0;
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 14.2px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   box-shadow: var(--chat-shadow);
 }
 :is(.inbox-bg-container, .chat-surface) .bubble p {
@@ -863,6 +867,7 @@
   padding: 12px 24px;
   background: var(--chat-header-bg);
   border-top: 1px solid var(--border);
+  min-width: 0;
 }
 
 :is(.inbox-bg-container, .chat-surface) .handoff-note {
@@ -877,6 +882,9 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--ink-muted);
+}
+:is(.inbox-bg-container, .chat-surface) .handoff-note:empty {
+  display: none;
 }
 :is(.inbox-bg-container, .chat-surface) .handoff-note .icon {
   color: var(--brand);
@@ -907,6 +915,7 @@
   align-items: flex-end;
   gap: 12px;
   padding: 6px;
+  min-width: 0;
   background: var(--surface-solid);
   border: 1px solid var(--border-strong);
   border-radius: 24px;
@@ -925,6 +934,7 @@
 
 :is(.inbox-bg-container, .chat-surface) .composer textarea {
   flex: 1;
+  min-width: 0;
   min-height: 44px;
   max-height: 120px;
   padding: 12px 8px;

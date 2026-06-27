@@ -218,14 +218,30 @@ class ConversationService:
         """True only when the bot may run (mode == BOT). HUMAN/CLOSED starves it."""
         return conv.mode == ConversationMode.BOT
 
-    async def record_inbound(self, conv: Conversation) -> Conversation:
-        """An inbound worker message arrived: stamp time, bump unread if not bot-owned."""
+    async def record_inbound(
+        self,
+        conv: Conversation,
+        *,
+        body: str,
+        zalo_message_id: str | None = None,
+    ) -> Message:
+        """Persist an inbound worker message and update conversation attention state."""
+        msg = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.WORKER,
+            body=body,
+            zalo_message_id=zalo_message_id,
+        )
+        self.db.add(msg)
         conv.last_inbound_at = utcnow()
         if conv.mode != ConversationMode.BOT:
             conv.unread_count = (conv.unread_count or 0) + 1
+        await self.db.flush()
         await self.db.commit()
+        await self.db.refresh(msg)
+        await publish_event("message.created", {"message_id": msg.id, "conversation_id": str(conv.id)})
         await publish_event("conversation.updated", _conv_payload(conv))
-        return conv
+        return msg
 
     async def acquire_lock(self, conv_id: uuid.UUID, ttl_seconds: int | None = None) -> bool:
         """Per-chat mutex via bot_locked_until. Atomic: only one run holds it at a time.

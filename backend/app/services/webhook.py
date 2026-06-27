@@ -76,7 +76,12 @@ class ZaloWebhookService:
 
         svc = ConversationService(db)
         conv = await svc.ensure(norm.zalo_chat_id)
-        await svc.record_inbound(conv)  # stamps last_inbound_at; bumps unread if HUMAN
+        await db.refresh(conv)
+        await svc.record_inbound(
+            conv,
+            body=norm.user_text,
+            zalo_message_id=norm.msg_id,
+        )  # persists candidate message; stamps last_inbound_at; bumps unread if HUMAN
 
         # reload to read committed mode/version
         conv = await svc.get(conv.id)

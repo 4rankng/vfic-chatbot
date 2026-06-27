@@ -16,15 +16,27 @@ interface ListEnvelope {
   total: number;
 }
 
+const INBOUND_SENDERS = new Set(["WORKER", "CANDIDATE", "USER", "LEAD", "APPLICANT"]);
+const OUTBOUND_SENDERS = new Set(["BOT", "RECRUITER", "ADMIN", "AGENT", "HUMAN"]);
+
 // Map a typed backend MessageOut to the CRM's Message view model.
-//   sender WORKER  -> inbound (candidate)
-//   sender BOT/RECRUITER -> outbound
-//   sender SYSTEM  -> system
+//   sender WORKER/CANDIDATE/USER/LEAD/APPLICANT -> inbound (candidate)
+//   sender BOT/RECRUITER/ADMIN/AGENT/HUMAN      -> outbound
+//   sender SYSTEM                               -> system
 const toMessage = (row: ApiRecord): Message => {
   const sender = String(row.sender ?? "").toUpperCase();
+  const direction = String(row.direction ?? row.type ?? "").toLowerCase();
   const recruiterId = row.recruiter_id != null ? String(row.recruiter_id) : null;
   const type: Message["type"] =
-    sender === "SYSTEM" ? "system" : sender === "WORKER" ? "inbound" : "outbound";
+    sender === "SYSTEM" || direction === "system"
+      ? "system"
+      : INBOUND_SENDERS.has(sender) || direction === "inbound"
+        ? "inbound"
+        : OUTBOUND_SENDERS.has(sender) || direction === "outbound"
+          ? "outbound"
+          : recruiterId
+            ? "outbound"
+            : "inbound";
   return {
     id: String(row.id),
     zalo_message_id: String(row.zalo_message_id ?? row.id),
