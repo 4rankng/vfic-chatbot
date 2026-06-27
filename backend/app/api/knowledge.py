@@ -1,4 +1,4 @@
-"""Knowledge admin API: upload/process/approve/reject/archive/reindex/search-test/list.
+"""Knowledge admin API: upload/process/archive/reindex/search-test/list.
 
 Two upload routes:
   * ``POST /documents/upload``       — JSON text upload (programmatic / legacy). No training.
@@ -87,16 +87,6 @@ async def process(doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: 
     doc = await _load(doc_id, db)
     enqueue_ingest(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
-
-
-@router.post("/documents/{doc_id}/approve", response_model=KnowledgeDocumentOut)
-async def approve(doc_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> KnowledgeDocumentOut:
-    return KnowledgeDocumentOut.model_validate(await KnowledgeService(db).approve(await _load(doc_id, db), actor=admin))
-
-
-@router.post("/documents/{doc_id}/reject", response_model=KnowledgeDocumentOut)
-async def reject(doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> KnowledgeDocumentOut:
-    return KnowledgeDocumentOut.model_validate(await KnowledgeService(db).reject(await _load(doc_id, db)))
 
 
 @router.post("/documents/{doc_id}/archive", response_model=KnowledgeDocumentOut)

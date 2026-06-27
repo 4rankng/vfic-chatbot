@@ -1,10 +1,12 @@
 .PHONY: dev db push deploy adminer
 
-PROD_SERVER := bot.tingting.vip
-PROD_DIR    := /opt/vfic
-IMAGE_NAME  := franknguyenvd/vfic-backend
-GIT_SHA     := $(shell git rev-parse --short HEAD)
-BUILDER     := bb
+BACKEND_PORT  ?= 8000
+FRONTEND_PORT ?= 5173
+PROD_SERVER   := bot.tingting.vip
+PROD_DIR      := /opt/vfic
+IMAGE_NAME    := franknguyenvd/vfic-backend
+GIT_SHA       := $(shell git rev-parse --short HEAD)
+BUILDER       := bb
 
 # Deploy opens ~9 sequential SSH sessions. Reuse ONE master connection
 # (ControlMaster) so a single transient refusal ("ssh: connect to host ...
@@ -29,15 +31,29 @@ db:
 	@. .venv/bin/activate && python -m scripts.create_admin --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true
 	@echo "==> Dev DB ready. Adminer: http://localhost:8082 (server: postgres, db: vfic, user/pass: vfic/vfic)"
 
+# ---- Kill any process bound to $(1) (a port number). ----
+# Runs before `dev` so a stale uvicorn / vite from a previous Ctrl-C, crash or
+# a stray `npm run dev` on another terminal can never block startup. lsof works
+# on macOS and Linux; safe to run when the port is already free (no-op).
+# Uses a bash while-read loop (not xargs -r) so it works with BSD xargs on macOS.
+define kill-port
+	@echo "==> Freeing port $(1) (if occupied)..."
+	@bash -c 'lsof -ti :$(1) 2>/dev/null | while read pid; do kill -9 "$$pid" 2>/dev/null || true; done; exit 0'
+endef
+
 # ---- Local dev: DB + backend (uvicorn) + frontend (vite) in ONE terminal. ----
-# Ctrl+C stops both app servers (the DB containers stay running). Backend and
-# frontend run on the host for fast hot-reload; Vite proxies /api, /realtime and
-# /socket.io to the backend (see frontend/vite.config.ts), so just open the app.
+# Each server has its own port (BACKEND_PORT / FRONTEND_PORT); `kill-port` (above)
+# frees both before binding so a stale process can never block startup. BACKEND_PORT
+# is exported into the vite subprocess so its dev-server proxy target tracks it (see
+# frontend/vite.config.ts) — override both together, e.g. `make dev BACKEND_PORT=8001`.
+# Ctrl+C stops both app servers (the DB containers stay running).
 dev: db
+	$(call kill-port,$(BACKEND_PORT))
+	$(call kill-port,$(FRONTEND_PORT))
 	@echo ""
-	@echo "==> Starting backend (:8000) + frontend (:5173) — Ctrl+C stops both."
-	@echo "    App : http://localhost:5173   Login: admin@vfic.dev / admin123"
-	@bash -c 'trap "kill 0" INT TERM EXIT; (. .venv/bin/activate && exec uvicorn app.main:app --reload --port 8000) & (cd ../frontend && exec npm run dev) & wait'
+	@echo "==> Starting backend (:$(BACKEND_PORT)) + frontend (:$(FRONTEND_PORT)) — Ctrl+C stops both."
+	@echo "    App : http://localhost:$(FRONTEND_PORT)   Login: admin@vfic.dev / admin123"
+	@bash -c 'trap "kill 0" INT TERM EXIT; export BACKEND_PORT="$(BACKEND_PORT)"; (. .venv/bin/activate && exec uvicorn app.main:app --reload --port $(BACKEND_PORT)) & (cd ../frontend && exec npm run dev -- --port $(FRONTEND_PORT) --strictPort) & wait'
 
 # ---- Build & push the AMD64 backend image to DockerHub. ----
 push:

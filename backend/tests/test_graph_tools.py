@@ -35,7 +35,7 @@ async def test_search_user_memory_and_jobs(db_session):
             "VALUES (CAST(:id AS uuid), :df, :fn, :src, :status, :raw, CAST('{}' AS jsonb))"
         ),
         {"id": "22222222-2222-2222-2222-000000000001", "df": "f1", "fn": "jobs.pdf",
-         "src": "google_drive", "status": "APPROVED", "raw": "x"},
+         "src": "google_drive", "status": "PUBLISHED", "raw": "x"},
     )
     await db_session.execute(
         text(

@@ -77,6 +77,9 @@ class ProjectService:
             q = q.where(Project.is_active == is_active)
         return list((await self.db.scalars(q)).all())
 
+    async def get(self, project_id: uuid.UUID) -> Project:
+        return await self._require_project(project_id)
+
     async def create(self, body: ProjectCreate, admin: User) -> Project:
         proj = Project(slug=body.slug.strip(), name=body.name.strip(), is_active=body.is_active)
         self.db.add(proj)
@@ -108,7 +111,7 @@ class ProjectService:
         return proj
 
     async def reindex(self, project_id: uuid.UUID) -> Project:
-        """Rebuild this project's catalog card (the master-index entry) from approved units."""
+        """Rebuild this project's catalog card (the master-index entry) from usable units."""
         proj = await self._require_project(project_id)
         # Imported lazily so langchain/google deps stay out of the web-process import path.
         from app.graph.clients import GeminiEmbedder
@@ -140,7 +143,7 @@ class ProjectService:
     async def update_feature(
         self, project_id: uuid.UUID, feature_id: uuid.UUID, body: FeatureUpdate, admin: User
     ) -> FeatureOut:
-        """Admin review/edit of one extracted feature value; re-syncs product highlights."""
+        """Admin edit of one extracted feature value; re-syncs product highlights."""
         found = (
             await self.db.execute(
                 text("SELECT 1 FROM job_feature_values WHERE id = :fid AND project_id = :pid"),

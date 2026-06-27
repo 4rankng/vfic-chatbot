@@ -9,16 +9,12 @@ import {
 import { TopToolbar } from "../layout/TopToolbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { Archive, BookOpen, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
 import { formatDateTime } from "../automation/botRunMeta";
 import { stageLabel, stageTone } from "./stageTone";
-import {
-  approveKnowledge,
-  rejectKnowledge,
-  reindexKnowledge,
-} from "@/lib/vfic/knowledgeService";
+import { archiveKnowledge, reindexKnowledge } from "@/lib/vfic/knowledgeService";
 
 const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
   <div className="flex flex-col gap-1 border-b py-3 last:border-0">
@@ -117,26 +113,18 @@ const KnowledgeSourceShowContent = () => {
               <RefreshCw className="size-4" />
               Huấn luyện lại
             </Button>
-            {source.status !== "APPROVED" && (
-              <Button
-                size="sm"
-                onClick={() =>
-                  run(() => approveKnowledge(source.id), "Đã duyệt.")
-                }
-              >
-                <CheckCircle2 className="size-4" />
-                Duyệt
-              </Button>
-            )}
             <Button
               size="sm"
               variant="outline"
               onClick={() =>
-                run(() => rejectKnowledge(source.id), "Đã từ chối.")
+                run(
+                  () => archiveKnowledge(source.id),
+                  "Đã lưu trữ. Agent sẽ không dùng nguồn này nữa.",
+                )
               }
             >
-              <XCircle className="size-4" />
-              Từ chối
+              <Archive className="size-4" />
+              Lưu trữ
             </Button>
           </div>
         </CardContent>

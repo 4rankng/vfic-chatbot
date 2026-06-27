@@ -2,8 +2,7 @@
 // Unknown values fall back to muted.
 export const stageTone = (stage?: string | null, status?: string): string => {
   const s = (status ?? stage ?? "").toUpperCase();
-  if (s === "APPROVED") return "bg-emerald-500 text-white";
-  if (s === "READY_FOR_REVIEW") return "bg-amber-500 text-white";
+  if (s === "PUBLISHED") return "bg-emerald-500 text-white";
   if (s === "FAILED") return "bg-rose-500 text-white";
   if (
     s === "DIGESTING" ||
@@ -28,14 +27,10 @@ export const stageLabel = (stage?: string | null): string => {
       return "Đang nhúng vector";
     case "INDEXING":
       return "Đang lập chỉ mục";
-    case "READY_FOR_REVIEW":
-      return "Chờ duyệt";
-    case "APPROVED":
-      return "Đã duyệt";
+    case "PUBLISHED":
+      return "Đã xuất bản";
     case "FAILED":
       return "Lỗi";
-    case "REJECTED":
-      return "Đã từ chối";
     case "ARCHIVED":
       return "Đã lưu trữ";
     default:

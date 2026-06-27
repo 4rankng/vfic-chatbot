@@ -41,7 +41,7 @@ async def search_user_memory(
 async def search_knowledge(
     db: AsyncSession, embedder: Embedder, query: str, project_slug: str | None = None, top_k: int = 25
 ) -> str:
-    """Project-scoped semantic search over APPROVED knowledge (the `documents` VIEW).
+    """Project-scoped semantic search over usable knowledge (the `documents` VIEW).
 
     ``project_slug`` (from the master index) scopes retrieval to one product; omit it
     to search across all active projects. The agent is told to advise ONLY from this.

@@ -7,6 +7,14 @@ import createHtmlPlugin from "vite-plugin-simple-html";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
+
+// Dev backend port — tracks `make dev`'s BACKEND_PORT (default 8000) so the
+// dev-server proxy below stays in sync when the port is overridden to dodge
+// collisions with other local stacks. Read at config-eval time (Node), not
+// client-side, so it does not need the VITE_ prefix.
+const backendPort = process.env.BACKEND_PORT ?? "8000";
+const backendUrl = `http://localhost:${backendPort}`;
+
 export default defineConfig({
   plugins: [
     react(),
@@ -33,14 +41,15 @@ export default defineConfig({
     }),
   ],
   base: "./",
-  // Dev server: proxy backend endpoints to uvicorn (:8000) so the SPA stays
-  // same-origin (apiBaseUrl="") in local dev — no VITE_API_BASE or CORS needed.
-  // Covers REST (/api), SSE (/realtime) and Socket.IO (WebSocket upgrade).
+  // Dev server: proxy backend endpoints to uvicorn so the SPA stays same-origin
+  // (apiBaseUrl="") in local dev — no VITE_API_BASE or CORS needed. Covers REST
+  // (/api), SSE (/realtime) and Socket.IO (WebSocket upgrade). The target tracks
+  // backendUrl (= BACKEND_PORT) so `make dev BACKEND_PORT=8001` stays in sync.
   server: {
     proxy: {
-      "/api": "http://localhost:8000",
-      "/realtime": "http://localhost:8000",
-      "/socket.io": { target: "http://localhost:8000", ws: true },
+      "/api": backendUrl,
+      "/realtime": backendUrl,
+      "/socket.io": { target: backendUrl, ws: true },
     },
   },
   esbuild: {

@@ -135,8 +135,8 @@ async def test_pipeline_run_writes_rich_chunks(db_session, clean_kb):
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
     await db_session.refresh(doc)
 
-    assert doc.status == KnowledgeStatus.READY_FOR_REVIEW
-    assert doc.stage == "READY_FOR_REVIEW"
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert doc.stage == "PUBLISHED"
     assert doc.digest_meta["unit_count"] == 1
     assert doc.digest_meta["flagged_unit_indexes"] == []
     rows = (
@@ -180,7 +180,7 @@ async def test_pipeline_retries_on_malformed_then_succeeds(db_session, clean_kb)
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
     assert calls["n"] == 2  # one malformed, one good
     await db_session.refresh(doc)
-    assert doc.status == KnowledgeStatus.READY_FOR_REVIEW
+    assert doc.status == KnowledgeStatus.PUBLISHED
 
 
 async def test_pipeline_raises_after_retry_failure(db_session, clean_kb):
@@ -202,7 +202,7 @@ async def test_mechanical_fallback_one_chunk(db_session, clean_kb):
             text("SELECT count(*) FROM knowledge_chunks WHERE document_id = :d"), {"d": str(doc.id)}
         )
     ).scalar()
-    assert n == 1 and doc.status == KnowledgeStatus.READY_FOR_REVIEW
+    assert n == 1 and doc.status == KnowledgeStatus.PUBLISHED
 
 
 # --------------------------------------------------------------------------- project index
@@ -219,12 +219,6 @@ async def test_build_project_index_card(db_session, clean_kb):
     svc = KnowledgeService(db_session)
     doc = await svc.upload("lg.txt", "LG Display tuyển operator", project_id=proj.id)
     await svc.process(_FakeEmbedder(), doc)  # chunk it
-    admin_id = (
-        await db_session.execute(text("SELECT id FROM users WHERE email=:e"), {"e": ADMIN_EMAIL})
-    ).scalar()
-    from types import SimpleNamespace
-
-    await svc.approve(doc, actor=SimpleNamespace(id=admin_id))
 
     async def llm_json(system, user):
         return json.dumps({"summary": "Nhà máy LG Display", "key_roles": ["operator"], "location": "Hải Phòng", "highlights": ["lương cao"]})
@@ -242,13 +236,6 @@ async def test_search_test_scoped_to_project(db_session, clean_kb):
     d_out = await svc.upload("out.txt", "Samsung tuyển thợ điện")  # project_id NULL
     await svc.process(_FakeEmbedder(), d_in)
     await svc.process(_FakeEmbedder(), d_out)
-    admin_id = (
-        await db_session.execute(text("SELECT id FROM users WHERE email=:e"), {"e": ADMIN_EMAIL})
-    ).scalar()
-    from types import SimpleNamespace
-
-    await svc.approve(d_in, actor=SimpleNamespace(id=admin_id))
-    await svc.approve(d_out, actor=SimpleNamespace(id=admin_id))
 
     scoped = await svc.search_test(_FakeEmbedder(), "tuyển", top_k=10, project_id=proj.id)
     assert any("LG Display" in r["content"] for r in scoped)

@@ -83,7 +83,7 @@ async def test_build_system_prompt_combines_persona_and_index(db_session):
 async def _seed_doc_chunk(db, doc_id, chunk_content, *, project_id=None):
     await db.execute(
         text("INSERT INTO knowledge_documents(id,file_name,source,status,raw_text,metadata,project_id) "
-             "VALUES (CAST(:id AS uuid),'f','google_drive','APPROVED','x','{}'::jsonb,CAST(:pid AS uuid))"),
+             "VALUES (CAST(:id AS uuid),'f','google_drive','PUBLISHED','x','{}'::jsonb,CAST(:pid AS uuid))"),
         {"id": doc_id, "pid": str(project_id) if project_id else None},
     )
     await db.execute(

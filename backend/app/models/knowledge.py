@@ -1,8 +1,8 @@
 """Knowledge document + chunk ORM models (mirror Alembic baseline + 0003 extensions).
 
 ``KnowledgeDocument.stage`` tracks fine-grained training-pipeline progress
-(``UPLOADED → EXTRACTED → DIGESTING → EMBEDDING → INDEXING → READY_FOR_REVIEW``);
-the high-level ``status`` enum is the approval lifecycle. Chunks carry the
+(``UPLOADED → EXTRACTED → DIGESTING → EMBEDDING → INDEXING → PUBLISHED``);
+the high-level ``status`` enum controls publishing/removal. Chunks carry the
 LLM-digest payload (``source_quote``/``summary``/``questions``/``category``/
 ``entities``/``confidence``) plus a denormalised ``project_id`` for scoped retrieval.
 """
@@ -22,9 +22,7 @@ from app.models.base import Base
 class KnowledgeStatus(str, enum.Enum):
     UPLOADED = "UPLOADED"
     PROCESSING = "PROCESSING"
-    READY_FOR_REVIEW = "READY_FOR_REVIEW"
-    APPROVED = "APPROVED"
-    REJECTED = "REJECTED"
+    PUBLISHED = "PUBLISHED"
     ARCHIVED = "ARCHIVED"
     FAILED = "FAILED"
 

@@ -1,4 +1,4 @@
-"""Knowledge ingest + approval (port of VFIC Knowledge Ingest + LLM training pipeline).
+"""Knowledge ingest + publishing (port of VFIC Knowledge Ingest + LLM training pipeline).
 
 Two ingest paths:
   * ``process(embedder, doc, llm_json=None)`` — mechanical 1-chunk fallback (legacy,
@@ -8,7 +8,8 @@ Two ingest paths:
     persist the original to a volume, create the doc (stage=UPLOADED); the caller
     then enqueues the async ingest job for the real LLM pipeline.
 
-Approval gates bot usage (only APPROVED docs surface in search).
+Successful ingest publishes bot-usable knowledge immediately. Admins remove bad
+sources by archiving/replacing them rather than approving a review queue.
 """
 from __future__ import annotations
 
@@ -111,8 +112,8 @@ class KnowledgeService:
             ),
             {"did": str(doc.id), "content": content, "emb": emb},
         )
-        doc.status = KnowledgeStatus.READY_FOR_REVIEW
-        doc.stage = "READY_FOR_REVIEW"
+        doc.status = KnowledgeStatus.PUBLISHED
+        doc.stage = "PUBLISHED"
         await self.db.commit()
         # rebuild the structured bus graph from the `documents` VIEW (verbatim SQL fn)
         try:
@@ -120,19 +121,6 @@ class KnowledgeService:
             await self.db.commit()
         except Exception:  # noqa: BLE001 — rebuild is best-effort; never block ingest
             pass
-        await self.db.refresh(doc)
-        return doc
-
-    async def approve(self, doc: KnowledgeDocument, *, actor: User) -> KnowledgeDocument:
-        doc.status = KnowledgeStatus.APPROVED
-        await record_audit(self.db, action="approve_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=str(doc.id))
-        await self.db.commit()
-        await self.db.refresh(doc)
-        return doc
-
-    async def reject(self, doc: KnowledgeDocument) -> KnowledgeDocument:
-        doc.status = KnowledgeStatus.REJECTED
-        await self.db.commit()
         await self.db.refresh(doc)
         return doc
 
@@ -154,7 +142,8 @@ class KnowledgeService:
             sql = (
                 "SELECT c.content, 1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
                 "FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id "
-                "WHERE d.status = 'APPROVED' AND c.embedding IS NOT NULL "
+                "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
+                "AND c.embedding IS NOT NULL "
                 "AND d.project_id = CAST(:pid AS uuid) "
                 "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
             )
@@ -163,7 +152,8 @@ class KnowledgeService:
             sql = (
                 "SELECT c.content, 1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
                 "FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id "
-                "WHERE d.status = 'APPROVED' AND c.embedding IS NOT NULL "
+                "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
+                "AND c.embedding IS NOT NULL "
                 "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
             )
             params = {"emb": emb, "k": top_k}

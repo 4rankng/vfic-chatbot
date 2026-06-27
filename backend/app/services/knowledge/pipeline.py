@@ -98,14 +98,14 @@ class KnowledgePipeline:
             except Exception as exc:  # noqa: BLE001 — extraction is best-effort
                 logger.warning("product feature extraction failed for doc %s: %s", doc.id, exc)
 
-        await self._set_stage(doc, "INDEXING")
+        await self._set_stage(doc, "INDEXING", status="PUBLISHED")
         if doc.project_id is not None:
             try:
                 await self.build_project_index(doc.project_id)
             except Exception as exc:  # noqa: BLE001 — index refresh is best-effort
                 logger.warning("project index refresh failed: %s", exc)
 
-        await self._set_stage(doc, "READY_FOR_REVIEW", status="READY_FOR_REVIEW")
+        await self._set_stage(doc, "PUBLISHED", status="PUBLISHED")
         # rebuild the structured bus graph from the `documents` VIEW (verbatim SQL fn)
         try:
             await rebuild_bus_timetable(self.db)
@@ -151,8 +151,8 @@ class KnowledgePipeline:
         return [await self.embedder(t) for t in texts]
 
     async def build_project_index(self, project_id: uuid.UUID) -> None:
-        """Regenerate the project's catalog card from its APPROVED units (master index)."""
-        rows = await self.index.fetch_approved_corpus(project_id)
+        """Regenerate the project's catalog card from usable units (master index)."""
+        rows = await self.index.fetch_usable_corpus(project_id)
         if not rows:
             return
         corpus = "\n".join(f"- [{r.category}] {r.content}" for r in rows)

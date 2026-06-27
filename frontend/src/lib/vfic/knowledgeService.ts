@@ -29,11 +29,8 @@ export const uploadKnowledgeFile = async (
 export const processKnowledge = (id: string) =>
   apiJson<ApiRecord>(`${doc(id)}/process`, { method: "POST" });
 
-export const approveKnowledge = (id: string) =>
-  apiJson<ApiRecord>(`${doc(id)}/approve`, { method: "POST" });
-
-export const rejectKnowledge = (id: string) =>
-  apiJson<ApiRecord>(`${doc(id)}/reject`, { method: "POST" });
+export const archiveKnowledge = (id: string) =>
+  apiJson<ApiRecord>(`${doc(id)}/archive`, { method: "POST" });
 
 export const reindexKnowledge = (id: string) =>
   apiJson<ApiRecord>(`${doc(id)}/reindex`, { method: "POST" });

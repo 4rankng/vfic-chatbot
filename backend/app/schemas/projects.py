@@ -70,7 +70,7 @@ class FeatureListResponse(BaseModel):
 
 
 class FeatureUpdate(BaseModel):
-    """Admin review/edit of a single extracted feature value."""
+    """Admin edit of a single extracted feature value."""
 
     value_text: str | None = None
     value_json: dict[str, Any] | None = None

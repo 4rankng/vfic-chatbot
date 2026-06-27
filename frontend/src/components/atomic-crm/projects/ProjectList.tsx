@@ -2,6 +2,7 @@ import {
   ListBase,
   useListContext,
   useNotify,
+  usePermissions,
   useRedirect,
   useRefresh,
 } from "ra-core";
@@ -19,6 +20,8 @@ const ProjectRow = ({ project }: { project: Project }) => {
   const redirect = useRedirect();
   const notify = useNotify();
   const refresh = useRefresh();
+  const { permissions } = usePermissions();
+  const isAdmin = permissions === "admin";
 
   const onReindex = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -34,7 +37,7 @@ const ProjectRow = ({ project }: { project: Project }) => {
   return (
     <button
       type="button"
-      onClick={() => redirect("edit", "projects", project.id)}
+      onClick={() => redirect("show", "projects", project.id)}
       className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:outline-none"
     >
       <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
@@ -61,17 +64,19 @@ const ProjectRow = ({ project }: { project: Project }) => {
             {project.summary}
           </p>
         )}
-        <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={onReindex}
-          >
-            <RefreshCw className="size-3.5" />
-            Làm mới thẻ
-          </Button>
-        </div>
+        {isAdmin && (
+          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={onReindex}
+            >
+              <RefreshCw className="size-3.5" />
+              Làm mới thẻ
+            </Button>
+          </div>
+        )}
       </div>
     </button>
   );
@@ -114,7 +119,7 @@ const ProjectListContent = () => {
               <Boxes className="size-10 opacity-50" />
               <p className="text-sm font-medium">Chưa có dự án nào</p>
               <p className="text-xs">
-                Tạo một dự án (sản phẩm) để tải cơ sở kiến thức lên.
+                Chưa có dự án để hiển thị đặc điểm sản phẩm.
               </p>
             </div>
           ) : (

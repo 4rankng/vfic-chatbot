@@ -59,7 +59,7 @@ def upgrade() -> None:
         CREATE TYPE lead_score          AS ENUM ('hot','warm','not_interested');
         CREATE TYPE lead_stage          AS ENUM ('NEW','ENGAGED','QUALIFIED','APPLIED','HIRED','LOST','UNQUALIFIED');
         CREATE TYPE job_status          AS ENUM ('DRAFT','ACTIVE','PAUSED','FULL','EXPIRED','ARCHIVED');
-        CREATE TYPE knowledge_status    AS ENUM ('UPLOADED','PROCESSING','READY_FOR_REVIEW','APPROVED','REJECTED','ARCHIVED','FAILED');
+        CREATE TYPE knowledge_status    AS ENUM ('UPLOADED','PROCESSING','PUBLISHED','ARCHIVED','FAILED');
         CREATE TYPE followup_status     AS ENUM ('PENDING','DONE','SKIPPED','CANCELLED');
         """
     )
@@ -437,7 +437,7 @@ def upgrade() -> None:
           kd.source        AS source
         FROM public.knowledge_documents kd
         JOIN public.knowledge_chunks kc ON kc.document_id = kd.id
-        WHERE kd.status = 'APPROVED';
+        WHERE kd.status NOT IN ('ARCHIVED', 'FAILED');
         """
     )
 

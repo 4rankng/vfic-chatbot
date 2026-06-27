@@ -1,7 +1,7 @@
 """AuditEvent model — append-only audit log (replaces bridge_event_log).
 
 Security-critical: every privileged action (login, create/disable user, takeover,
-lead stage change, knowledge approve, ...) appends a row here. See spec §17.
+lead stage change, knowledge publish/archive, ...) appends a row here. See spec §17.
 """
 import uuid
 from datetime import datetime

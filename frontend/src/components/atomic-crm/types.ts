@@ -107,7 +107,7 @@ export type BotRun = {
 
 // Knowledge document (per-project RAG doc). Mirrors the backend
 // KnowledgeDocumentOut shape served at /api/v1/knowledge/documents. `stage` is the
-// fine-grained training-pipeline progress (UPLOADED -> ... -> READY_FOR_REVIEW);
+// fine-grained training-pipeline progress (UPLOADED -> ... -> PUBLISHED);
 // `digest_meta` carries unit/flagged counts from the LLM digest.
 export type KnowledgeSource = {
   id: string;

@@ -17,6 +17,7 @@ from app.models.company import Project
 from app.models.knowledge import KnowledgeStatus
 from app.services.knowledge import KnowledgePipeline
 from app.services.knowledge_service import KnowledgeService
+from tests.conftest import PASSWORD, RECRUITER_EMAIL
 
 pytestmark = pytest.mark.asyncio
 
@@ -187,7 +188,7 @@ async def test_pipeline_run_extracts_features(db_session, clean_kb, clean_featur
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
     await db_session.refresh(doc)
 
-    assert doc.status == KnowledgeStatus.READY_FOR_REVIEW
+    assert doc.status == KnowledgeStatus.PUBLISHED
     assert (await _count_features(db_session, proj.id)).scalar() == 16
 
 
@@ -204,7 +205,7 @@ async def test_pipeline_run_survives_bad_extraction(db_session, clean_kb, clean_
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
     await db_session.refresh(doc)
 
-    assert doc.status == KnowledgeStatus.READY_FOR_REVIEW  # ingest NOT blocked
+    assert doc.status == KnowledgeStatus.PUBLISHED  # ingest NOT blocked
     assert (await _count_features(db_session, proj.id)).scalar() == 0  # nothing written
 
 
@@ -227,3 +228,42 @@ async def test_get_product_features_tool(db_session, clean_kb, clean_features):
 
     miss = await get_product_features(db_session, "does-not-exist-slug")
     assert "Không tìm thấy" in miss
+
+
+async def test_recruiter_can_read_project_features_api(client, db_session, clean_kb, clean_features):
+    proj = await _seed_project(db_session)
+    doc = await _make_doc(db_session, "LG Display.", project_id=proj.id)
+
+    async def llm_json(system, user):
+        return json.dumps(_features_payload())
+
+    await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).extract_product_features(doc, [])
+
+    token = (
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": RECRUITER_EMAIL, "password": PASSWORD},
+        )
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    listed = await client.get("/api/v1/knowledge/projects", headers=headers)
+    assert listed.status_code == 200
+    assert any(p["id"] == str(proj.id) for p in listed.json()["data"])
+
+    one = await client.get(f"/api/v1/knowledge/projects/{proj.id}", headers=headers)
+    assert one.status_code == 200
+    assert one.json()["id"] == str(proj.id)
+
+    features = await client.get(f"/api/v1/knowledge/projects/{proj.id}/features", headers=headers)
+    assert features.status_code == 200
+    body = features.json()
+    assert body["total"] == 16
+    feature_id = body["data"][0]["id"]
+
+    edit = await client.patch(
+        f"/api/v1/knowledge/projects/{proj.id}/features/{feature_id}",
+        json={"value_text": "recruiter edit should fail"},
+        headers=headers,
+    )
+    assert edit.status_code == 403

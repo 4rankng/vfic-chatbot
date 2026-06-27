@@ -105,7 +105,7 @@ const ProjectEditContent = () => {
         </CardContent>
       </Card>
 
-      <ProjectFeatures projectId={project.id} />
+      <ProjectFeatures projectId={project.id} editable />
 
       <KnowledgeUpload
         open={uploadOpen}

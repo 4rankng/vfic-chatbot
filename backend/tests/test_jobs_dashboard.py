@@ -52,7 +52,7 @@ async def test_jobs_crud(client, db_session):
 
 
 async def test_job_semantic_search_runs(db_session, clean_kb):
-    # match_documents needs APPROVED knowledge chunks; seed one via KnowledgeService
+    # match_documents indexes usable knowledge chunks; seed one via KnowledgeService.
     from app.services.knowledge_service import KnowledgeService
 
     async def emb(_):
@@ -60,11 +60,7 @@ async def test_job_semantic_search_runs(db_session, clean_kb):
 
     svc = KnowledgeService(db_session)
     doc = await svc.upload("jobs.pdf", "LG Display tuyển công nhân lương 15 triệu", drive_file_id="js-1")
-    from types import SimpleNamespace
-
-    admin_id = (await db_session.execute(text("SELECT id FROM users WHERE email=:e"), {"e": ADMIN_EMAIL})).scalar()
     await svc.process(emb, doc)
-    await svc.approve(doc, actor=SimpleNamespace(id=admin_id))
 
     rows = await JobService(db_session).search(emb, "LG Display", top_k=5)
     assert any("LG Display" in r["content"] for r in rows)

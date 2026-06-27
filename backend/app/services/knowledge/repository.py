@@ -130,14 +130,15 @@ class ProjectIndexRepo:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def fetch_approved_corpus(self, project_id: uuid.UUID) -> list:
-        """Approved-unit content+category, newest-first, capped at 200 (master-index input)."""
+    async def fetch_usable_corpus(self, project_id: uuid.UUID) -> list:
+        """Usable-unit content+category, newest-first, capped at 200 (master-index input)."""
         return (
             await self.db.execute(
                 text(
                     "SELECT kc.content, kc.category FROM knowledge_chunks kc "
                     "JOIN knowledge_documents kd ON kd.id = kc.document_id "
-                    "WHERE kd.project_id = :pid AND kd.status = 'APPROVED' "
+                    "WHERE kd.project_id = :pid "
+                    "AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
                     "ORDER BY kc.created_at DESC LIMIT 200"
                 ),
                 {"pid": str(project_id)},

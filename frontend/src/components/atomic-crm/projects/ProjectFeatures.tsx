@@ -16,7 +16,13 @@ import type { ProductFeature } from "../types";
 // "Đặc điểm sản phẩm" panel: the 16 worker product features extracted from the project's
 // posting. Admin can re-extract (sync MiniMax call, persona pattern) and inline-edit each
 // value. Mirrors the agent's get_product_features tool output.
-export const ProjectFeatures = ({ projectId }: { projectId: string }) => {
+export const ProjectFeatures = ({
+  projectId,
+  editable = false,
+}: {
+  projectId: string;
+  editable?: boolean;
+}) => {
   const notify = useNotify();
   const [features, setFeatures] = useState<ProductFeature[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,23 +69,27 @@ export const ProjectFeatures = ({ projectId }: { projectId: string }) => {
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-base">
           <span>Đặc điểm sản phẩm ({features?.length ?? 0}/16)</span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onExtract}
-            disabled={extracting}
-            title="Trích xuất lại 16 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
-          >
-            <Sparkles className="size-4" />
-            {extracting ? "Đang trích xuất..." : "Trích xuất lại"}
-          </Button>
+          {editable && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExtract}
+              disabled={extracting}
+              title="Trích xuất lại 16 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
+            >
+              <Sparkles className="size-4" />
+              {extracting ? "Đang trích xuất..." : "Trích xuất lại"}
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 pt-2">
         <p className="text-xs text-muted-foreground">
           {highlightCount > 0
-            ? `${highlightCount} điểm nổi bật sẽ hiển thị trong thẻ danh mục.`
-            : "Chưa có điểm nổi bật. Sửa đặc điểm và đánh dấu 'Nổi bật' để đưa vào thẻ."}
+            ? `${highlightCount} điểm nổi bật của dự án.`
+            : editable
+              ? "Chưa có điểm nổi bật. Sửa đặc điểm và đánh dấu 'Nổi bật' để đưa vào thẻ."
+              : "Chưa có điểm nổi bật cho dự án này."}
         </p>
         {loading ? (
           <div className="flex flex-col gap-2">
@@ -92,7 +102,9 @@ export const ProjectFeatures = ({ projectId }: { projectId: string }) => {
             <RefreshCw className="size-6 opacity-50" />
             <p className="text-sm font-medium">Chưa có đặc điểm sản phẩm</p>
             <p className="text-xs">
-              Tải tin tuyển dụng lên rồi bấm "Trích xuất lại" để LLM trích 16 đặc điểm.
+              {editable
+                ? 'Tải tin tuyển dụng lên rồi bấm "Trích xuất lại" để LLM trích 16 đặc điểm.'
+                : "Dự án này chưa có đặc điểm sản phẩm để hiển thị."}
             </p>
           </div>
         ) : (
@@ -102,6 +114,7 @@ export const ProjectFeatures = ({ projectId }: { projectId: string }) => {
                 key={f.id}
                 projectId={projectId}
                 feature={f}
+                editable={editable}
                 onUpdate={onUpdate}
               />
             ))}
@@ -115,10 +128,12 @@ export const ProjectFeatures = ({ projectId }: { projectId: string }) => {
 const FeatureCard = ({
   projectId,
   feature,
+  editable,
   onUpdate,
 }: {
   projectId: string;
   feature: ProductFeature;
+  editable: boolean;
   onUpdate: (f: ProductFeature) => void;
 }) => {
   const notify = useNotify();
@@ -193,7 +208,7 @@ const FeatureCard = ({
             </>
           )}
         </div>
-        {editing ? (
+        {editable && editing ? (
           <div className="flex shrink-0 gap-1">
             <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}>
               <X className="size-3.5" />
@@ -202,7 +217,7 @@ const FeatureCard = ({
               {saving ? "..." : "Lưu"}
             </Button>
           </div>
-        ) : (
+        ) : editable ? (
           <Button
             size="sm"
             variant="ghost"
@@ -211,7 +226,7 @@ const FeatureCard = ({
           >
             <Pencil className="size-3.5" />
           </Button>
-        )}
+        ) : null}
       </div>
     </div>
   );

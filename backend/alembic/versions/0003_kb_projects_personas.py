@@ -137,7 +137,7 @@ def upgrade() -> None:
           kd.project_id    AS project_id
         FROM public.knowledge_documents kd
         JOIN public.knowledge_chunks kc ON kc.document_id = kd.id
-        WHERE kd.status = 'APPROVED';
+        WHERE kd.status NOT IN ('ARCHIVED', 'FAILED');
 
         DROP FUNCTION IF EXISTS public.match_documents(vector, integer, jsonb);
 
@@ -204,7 +204,7 @@ def downgrade() -> None:
           kd.source        AS source
         FROM public.knowledge_documents kd
         JOIN public.knowledge_chunks kc ON kc.document_id = kd.id
-        WHERE kd.status = 'APPROVED';
+        WHERE kd.status NOT IN ('ARCHIVED', 'FAILED');
         """
     )
     op.execute("DROP INDEX IF EXISTS public.knowledge_chunks_project_idx")
