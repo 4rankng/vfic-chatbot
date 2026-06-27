@@ -637,7 +637,25 @@
 .inbox-bg-container .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+}
+.inbox-bg-container .chat-mode-chip {
+  height: 32px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--brand) 24%, transparent);
+  border-radius: var(--rad-sm);
+  background: color-mix(in srgb, var(--brand-light) 70%, white);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.inbox-bg-container .chat-mode-chip .icon {
+  width: 15px;
+  height: 15px;
 }
 .inbox-bg-container .icon-btn {
   width: 40px;
@@ -690,6 +708,11 @@
   box-shadow: none;
   cursor: default;
   transform: none;
+}
+.inbox-bg-container .takeover-btn--header {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
 }
 
 /* Chat Content */
@@ -1382,11 +1405,24 @@
   .inbox-bg-container .header-avatar {
     display: none;
   }
+  .inbox-bg-container .chat-mode-chip {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .inbox-bg-container .chat-mode-chip span {
+    display: none;
+  }
   .inbox-bg-container .takeover-btn {
     min-width: 48px;
     width: 48px;
     padding: 0;
     justify-content: center;
+  }
+  .inbox-bg-container .takeover-btn--header {
+    min-width: 78px;
+    width: auto;
+    padding: 0 12px;
   }
   .inbox-bg-container .takeover-btn span {
     display: none;

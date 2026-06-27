@@ -4,6 +4,7 @@ import type { Conversation, Lead } from "../types";
 import { getLeadStatusColor } from "./ConversationList";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 import { ChatThread } from "./ChatThread";
+import { useConversationActions } from "./useConversationActions";
 
 /**
  * Inbox center pane: the conversation header (mobile list-toggle + person →
@@ -34,6 +35,7 @@ export const ConversationShowContent = ({
   const name =
     lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
+  const { isBotMode, handleTakeover } = useConversationActions(record);
 
   return (
     <section className="panel center-panel" aria-label="Nội dung trò chuyện">
@@ -70,6 +72,23 @@ export const ConversationShowContent = ({
           </div>
         </div>
         <div className="header-actions">
+          {isBotMode && (
+            <>
+              <span className="chat-mode-chip" title="AI đang trả lời cuộc trò chuyện này">
+                <svg className="icon">
+                  <use href="#i-bot" />
+                </svg>
+                <span>AI đang trả lời</span>
+              </span>
+              <button
+                type="button"
+                className="takeover-btn takeover-btn--header"
+                onClick={handleTakeover}
+              >
+                Tiếp quản
+              </button>
+            </>
+          )}
           <button
             className="icon-btn small mobile-toggle profile-toggle"
             onClick={() => setIsProfileOpen(true)}
@@ -85,6 +104,9 @@ export const ConversationShowContent = ({
       <ChatThread
         conversationId={record?.id ?? ""}
         conversation={record}
+        isBotModeOverride={isBotMode}
+        onTakeoverOverride={handleTakeover}
+        showComposerTakeoverNotice={false}
       />
 
       <LeadProfilePanel

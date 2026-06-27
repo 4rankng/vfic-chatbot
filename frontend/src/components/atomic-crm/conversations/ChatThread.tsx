@@ -41,9 +41,18 @@ export interface ChatThreadProps {
    * Omitted on surfaces that only display the thread (none today, but the
    * thread degrades gracefully: no takeover, no markAsRead). */
   conversation?: Conversation;
+  isBotModeOverride?: boolean;
+  onTakeoverOverride?: () => void;
+  showComposerTakeoverNotice?: boolean;
 }
 
-export const ChatThread = ({ conversationId, conversation }: ChatThreadProps) => {
+export const ChatThread = ({
+  conversationId,
+  conversation,
+  isBotModeOverride,
+  onTakeoverOverride,
+  showComposerTakeoverNotice = true,
+}: ChatThreadProps) => {
   const { messages, isLoading, isLoadingMore, hasMore, loadMore } =
     useConversationRealtime(conversationId);
   const dataProvider = useDataProvider<CrmDataProvider>();
@@ -62,7 +71,12 @@ export const ChatThread = ({ conversationId, conversation }: ChatThreadProps) =>
   const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null);
   const readyForMoreRef = useRef(false);
 
-  const { isBotMode, handleTakeover } = useConversationActions(conversation);
+  const {
+    isBotMode: internalIsBotMode,
+    handleTakeover: internalHandleTakeover,
+  } = useConversationActions(conversation);
+  const isBotMode = isBotModeOverride ?? internalIsBotMode;
+  const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
 
   // Server-confirm the optimistic unread clear from the inbox list. Skips the
   // round-trip when nothing is unread, and re-fires if a realtime inbound bumps
@@ -255,7 +269,7 @@ export const ChatThread = ({ conversationId, conversation }: ChatThreadProps) =>
       />
 
       <footer className="composer-wrap">
-        {isBotMode && (
+        {showComposerTakeoverNotice && isBotMode && (
           <div className="handoff-note">
             <svg className="icon">
               <use href="#i-bot" />
