@@ -15,7 +15,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import require_admin
+from app.api.dependencies import get_embedder, require_admin
 from app.core.db import get_db
 from app.models.knowledge import KnowledgeStatus
 from app.models.user import User
@@ -139,10 +139,8 @@ async def reindex(doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: 
 
 
 @router.post("/search-test", response_model=list[SearchTestResult])
-async def search_test(body: SearchTestRequest, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> list[SearchTestResult]:
-    from app.graph.clients import GeminiEmbedder
-
-    rows = await KnowledgeService(db).search_test(GeminiEmbedder(), body.query, body.top_k, project_id=body.project_id)
+async def search_test(body: SearchTestRequest, embedder=Depends(get_embedder), _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> list[SearchTestResult]:
+    rows = await KnowledgeService(db).search_test(embedder, body.query, body.top_k, project_id=body.project_id)
     return [SearchTestResult(**r) for r in rows]
 
 

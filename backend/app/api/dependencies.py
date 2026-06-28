@@ -64,3 +64,16 @@ def require_recruiter(user: User = Depends(get_current_user)) -> User:
     if user.role not in (Role.admin, Role.recruiter):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="recruiter only")
     return user
+
+
+def get_embedder():
+    """DI provider for the Gemini embedder.
+
+    Centralises ``app.graph.clients.GeminiEmbedder`` construction so routes (and the
+    services they call) depend on this provider instead of reaching up into the graph
+    layer. Imported lazily so langchain/google deps stay out of the web-process import
+    path, matching the previous in-handler lazy import.
+    """
+    from app.graph.clients import GeminiEmbedder
+
+    return GeminiEmbedder()

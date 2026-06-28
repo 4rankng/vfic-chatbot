@@ -6,7 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user, require_admin
+from app.api.dependencies import get_current_user, get_embedder, require_admin
 from app.core.db import get_db
 from app.models.job import JobStatus
 from app.models.user import User
@@ -68,10 +68,9 @@ async def mark_full(job_id: uuid.UUID, _admin: User = Depends(require_admin), db
 @router.post("/search", response_model=list[JobSearchResult])
 async def search_jobs(
     body: JobSearchRequest,
+    embedder=Depends(get_embedder),
     _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[JobSearchResult]:
-    from app.graph.clients import GeminiEmbedder
-
-    rows = await JobService(db).search(GeminiEmbedder(), body.query, body.top_k)
+    rows = await JobService(db).search(embedder, body.query, body.top_k)
     return [JobSearchResult(content=r["content"], similarity=r["similarity"]) for r in rows]
