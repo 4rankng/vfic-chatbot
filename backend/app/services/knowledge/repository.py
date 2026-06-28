@@ -161,6 +161,15 @@ class KnowledgeChunkRepo:
         return [{"content": r.content, "similarity": float(r.similarity)} for r in rows]
 
 
+_FEATURE_COLUMNS = (
+    "jfv.id, jfv.project_id, jfv.feature_id, jfv.value_text, jfv.value_json, "
+    "jfv.strength_score, jfv.display_priority, jfv.is_highlight, jfv.is_missing, "
+    "jfv.needs_clarification, jfv.evidence_text, jfv.source_document_id, jfv.updated_at, "
+    "wfc.feature_key, wfc.name_vi, wfc.category, wfc.worker_question_vi"
+)
+_FEATURE_FROM = "job_feature_values jfv JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id"
+
+
 class JobFeatureValueRepo:
     """Read/write the ``job_feature_values`` + ``worker_feature_catalog`` tables."""
 
@@ -217,6 +226,46 @@ class JobFeatureValueRepo:
                 },
             )
         await self.db.commit()
+
+    async def list_for_project(self, project_id: uuid.UUID) -> list:
+        """A project's 16 feature values joined to the catalog (catalog display order)."""
+        return (
+            await self.db.execute(
+                text(
+                    f"SELECT {_FEATURE_COLUMNS} FROM {_FEATURE_FROM} "  # noqa: S608 — static f-string
+                    "WHERE jfv.project_id = :pid "
+                    "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
+                ),
+                {"pid": str(project_id)},
+            )
+        ).all()
+
+    async def exists_for_project(self, feature_id: uuid.UUID, project_id: uuid.UUID) -> bool:
+        """True if the feature value belongs to the project."""
+        return (
+            await self.db.execute(
+                text("SELECT 1 FROM job_feature_values WHERE id = :fid AND project_id = :pid"),
+                {"fid": str(feature_id), "pid": str(project_id)},
+            )
+        ).first() is not None
+
+    async def update_fields(self, assignments: list[str], params: dict) -> None:
+        """Apply a dynamically-built SET clause (admin feature edit). No-op if no assignments."""
+        if not assignments:
+            return
+        await self.db.execute(
+            text(f"UPDATE job_feature_values SET {', '.join(assignments)} WHERE id = :fid"),  # noqa: S608 — built from a fixed field whitelist in the service
+            params,
+        )
+
+    async def get(self, feature_id: uuid.UUID):
+        """One feature value joined to the catalog, or None."""
+        return (
+            await self.db.execute(
+                text(f"SELECT {_FEATURE_COLUMNS} FROM {_FEATURE_FROM} WHERE jfv.id = :fid"),  # noqa: S608 — static f-string
+                {"fid": str(feature_id)},
+            )
+        ).first()
 
 
 class ProjectIndexRepo:

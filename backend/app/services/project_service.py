@@ -18,7 +18,7 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
@@ -33,17 +33,9 @@ from app.schemas.projects import (
 )
 from app.services.audit_service import record_audit
 from app.services.knowledge import sync_project_highlights
+from app.services.knowledge.repository import JobFeatureValueRepo
 
 logger = logging.getLogger(__name__)
-
-_FEATURE_COLUMNS = (
-    "jfv.id, jfv.project_id, jfv.feature_id, jfv.value_text, jfv.value_json, "
-    "jfv.strength_score, jfv.display_priority, jfv.is_highlight, jfv.is_missing, "
-    "jfv.needs_clarification, jfv.evidence_text, jfv.source_document_id, jfv.updated_at, "
-    "wfc.feature_key, wfc.name_vi, wfc.category, wfc.worker_question_vi"
-)
-_FEATURE_FROM = "job_feature_values jfv JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id"
-
 
 def _feature_from_row(r: Any) -> FeatureOut:
     return FeatureOut(
@@ -136,29 +128,15 @@ class ProjectService:
     async def list_features(self, project_id: uuid.UUID) -> FeatureListResponse:
         """List the project's 16 extracted worker product features (catalog order)."""
         await self._require_project(project_id)
-        rows = (
-            await self.db.execute(
-                text(
-                    f"SELECT {_FEATURE_COLUMNS} FROM {_FEATURE_FROM} "  # noqa: S608 — static f-string
-                    "WHERE jfv.project_id = :pid "
-                    "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
-                ),
-                {"pid": str(project_id)},
-            )
-        ).all()
+        rows = await JobFeatureValueRepo(self.db).list_for_project(project_id)
         return FeatureListResponse(data=[_feature_from_row(r) for r in rows], total=len(rows))
 
     async def update_feature(
         self, project_id: uuid.UUID, feature_id: uuid.UUID, body: FeatureUpdate, admin: User
     ) -> FeatureOut:
         """Admin edit of one extracted feature value; re-syncs product highlights."""
-        found = (
-            await self.db.execute(
-                text("SELECT 1 FROM job_feature_values WHERE id = :fid AND project_id = :pid"),
-                {"fid": str(feature_id), "pid": str(project_id)},
-            )
-        ).first()
-        if found is None:
+        repo = JobFeatureValueRepo(self.db)
+        if not await repo.exists_for_project(feature_id, project_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "feature value not found")
 
         sets: list[str] = []
@@ -184,7 +162,7 @@ class ProjectService:
             params["evidence_text"] = body.evidence_text
 
         if sets:
-            await self.db.execute(text(f"UPDATE job_feature_values SET {', '.join(sets)} WHERE id = :fid"), params)  # noqa: S608
+            await repo.update_fields(sets, params)
             await record_audit(
                 self.db,
                 action="update_project_feature",
@@ -195,12 +173,7 @@ class ProjectService:
             await self.db.commit()
             await sync_project_highlights(self.db, project_id)
 
-        row = (
-            await self.db.execute(
-                text(f"SELECT {_FEATURE_COLUMNS} FROM {_FEATURE_FROM} WHERE jfv.id = :fid"),  # noqa: S608
-                {"fid": str(feature_id)},
-            )
-        ).first()
+        row = await repo.get(feature_id)
         assert row is not None  # noqa: S101 — just verified existence above
         return _feature_from_row(row)
 
