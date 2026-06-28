@@ -149,11 +149,7 @@ export const ProjectFeatures = ({
           </div>
         ) : (
           <>
-            <ReadinessHero
-              readyCount={readyCount}
-              gapCount={gapCount}
-              extracting={extracting}
-            />
+            <ReadinessHero readyCount={readyCount} extracting={extracting} />
 
             {hasFeatures ? (
               <div className="space-y-3">
@@ -248,11 +244,9 @@ export const ProjectFeatures = ({
 // ~5-10s call.
 const ReadinessHero = ({
   readyCount,
-  gapCount,
   extracting,
 }: {
   readyCount: number;
-  gapCount: number;
   extracting: boolean;
 }) => {
   const pct = Math.round((readyCount / FEATURE_SLOTS) * 100);
