@@ -50,10 +50,10 @@ def _build_extractor():
 
 
 async def _persist_lead_async(job: dict) -> None:
-    from app.core.db import async_session
+    from app.workers._db import worker_session
     from app.services.lead_service import LeadExtractionService
 
-    async with async_session() as db:
+    async with worker_session() as db:
         lead = await LeadExtractionService.extract(
             _build_extractor(), job["user_text"], job.get("bot_output", ""), job["chat_id"]
         )
@@ -62,11 +62,11 @@ async def _persist_lead_async(job: dict) -> None:
 
 
 async def _persist_memory_async(job: dict) -> None:
-    from app.core.db import async_session
+    from app.workers._db import worker_session
     from app.graph.clients import GeminiEmbedder
     from app.services.memory_service import MemoryService
 
-    async with async_session() as db:
+    async with worker_session() as db:
         await MemoryService.persist(
             db, GeminiEmbedder().batch, _build_extractor(),
             job["chat_id"], job["user_text"], job.get("bot_output", ""),

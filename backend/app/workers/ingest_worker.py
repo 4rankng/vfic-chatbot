@@ -43,36 +43,33 @@ def run_ingest_job(doc_id: str) -> None:
         logger.exception("ingest job crashed for document %s", doc_id)
         _mark_doc_failed_sync(doc_id, exc)
         raise
-    finally:
-        _dispose_async_engine_best_effort()
 
 
-async def _run_job_async(doc_id: str) -> None:
+async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
-    # heavy LLM/Google deps — those are only needed for a real run.
-    from app.core.db import async_session
+    # heavy LLM/Google deps — those are only needed for a real run. ``_embed``/``_llm``
+    # are injectable so the cross-loop regression test can run the pipeline with fakes.
     from app.graph.clients import GeminiEmbedder
     from app.graph.factories import make_minimax_llm_json
     from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
-    from app.services.knowledge import DigestError, KnowledgePipeline
+    from app.services.knowledge import KnowledgePipeline
+    from app.workers._db import worker_session
 
-    try:
-        async with async_session() as db:
-            doc = await db.get(KnowledgeDocument, uuid.UUID(doc_id))
-            if doc is None:
-                logger.warning("ingest job: document %s not found", doc_id)
-                return
-            try:
-                pipeline = KnowledgePipeline(db, GeminiEmbedder(), make_minimax_llm_json())
-                await pipeline.run(doc)
-            except (DigestError, Exception) as exc:  # noqa: BLE001 — record + survive
-                logger.exception("ingest pipeline failed for document %s", doc_id)
-                doc.status = KnowledgeStatus.FAILED
-                doc.stage = "FAILED"
-                doc.error = f"{type(exc).__name__}: {exc}"[:1000]
-                await db.commit()
-    finally:
-        await _dispose_async_engine()
+    embed = _embed if _embed is not None else GeminiEmbedder()
+    llm = _llm if _llm is not None else make_minimax_llm_json()
+    async with worker_session() as db:
+        doc = await db.get(KnowledgeDocument, uuid.UUID(doc_id))
+        if doc is None:
+            logger.warning("ingest job: document %s not found", doc_id)
+            return
+        try:
+            await KnowledgePipeline(db, embed, llm).run(doc)
+        except Exception as exc:  # noqa: BLE001 — record + survive
+            logger.exception("ingest pipeline failed for document %s", doc_id)
+            doc.status = KnowledgeStatus.FAILED
+            doc.stage = "FAILED"
+            doc.error = f"{type(exc).__name__}: {exc}"[:1000]
+            await db.commit()
 
 
 def _mark_doc_failed_sync(doc_id: str, exc: Exception) -> None:
@@ -98,17 +95,3 @@ def _mark_doc_failed_sync(doc_id: str, exc: Exception) -> None:
             engine.dispose()
     except Exception:  # noqa: BLE001 — do not mask the original RQ failure
         logger.exception("failed to mark ingest document %s as FAILED", doc_id)
-
-
-def _dispose_async_engine_best_effort() -> None:
-    try:
-        asyncio.run(_dispose_async_engine())
-    except Exception:  # noqa: BLE001 — cleanup must not mask the original outcome
-        logger.debug("failed to dispose async DB engine after ingest job", exc_info=True)
-
-
-async def _dispose_async_engine() -> None:
-    """Close pooled asyncpg connections before RQ starts a fresh asyncio.run loop."""
-    from app.core.db import engine
-
-    await engine.dispose()

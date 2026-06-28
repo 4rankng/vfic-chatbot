@@ -209,6 +209,67 @@ async def test_ingest_worker_crash_marks_document_failed(db_session, clean_kb):
     assert "TimeoutError: rq timeout" in (doc.error or "")
 
 
+async def _run_in_fresh_loop(factory):
+    """Run ``factory()`` via ``asyncio.run`` in a worker thread.
+
+    Each call gets a fresh, isolated event loop — mirroring how RQ's SimpleWorker runs
+    each job (``asyncio.run`` per job). ``asyncio.run`` cannot be called directly inside
+    an async test because pytest-asyncio already has a loop running, so we hop to a
+    worker thread which has no running loop.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    loop = asyncio.get_running_loop()
+
+    def _sync() -> None:
+        asyncio.run(factory())
+
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        await loop.run_in_executor(ex, _sync)
+
+
+async def test_worker_session_is_loop_safe_across_jobs():
+    """Two consecutive fresh event loops using worker_session() must not raise
+    'Future attached to a different loop', and the module-global engine must still
+    serve a query afterward — proves the per-job NullPool helper does not disturb the
+    web app's engine. Covers all four adoption sites at once (they share the helper)."""
+    from app.core import db as db_module
+    from app.workers._db import worker_session
+
+    async def _helper() -> None:
+        async with worker_session() as s:
+            await s.execute(text("SELECT 1"))
+
+    async def _global() -> None:
+        async with db_module.async_session() as s:
+            await s.execute(text("SELECT 1"))
+
+    await _run_in_fresh_loop(_helper)
+    await _run_in_fresh_loop(_helper)  # second fresh loop reuses nothing
+    await _run_in_fresh_loop(_global)  # web-app invariant: global engine still serves a query
+
+
+async def test_ingest_job_runs_twice_across_loops(db_session, clean_kb):
+    """The full ingest pipeline runs twice across two fresh event loops (fakes injected)
+    without a cross-loop error and reaches PUBLISHED — the RC2 regression that previously
+    killed every retry in 0.025s."""
+    from app.workers.ingest_worker import _run_job_async
+
+    doc = await _make_doc(db_session, "LG Display tuyển operator ca đêm lương 10 triệu.")
+    await db_session.commit()
+
+    async def fake_llm(system, user):
+        return json.dumps(_units_payload("LG Display Hải Phòng tuyển operator ca đêm."))
+
+    embed = _FakeEmbedder()
+    await _run_in_fresh_loop(lambda: _run_job_async(str(doc.id), _embed=embed, _llm=fake_llm))
+    await _run_in_fresh_loop(lambda: _run_job_async(str(doc.id), _embed=embed, _llm=fake_llm))
+
+    await db_session.refresh(doc)
+    assert doc.status == KnowledgeStatus.PUBLISHED
+
+
 async def test_mechanical_fallback_one_chunk(db_session, clean_kb):
     """process() without an llm_json keeps the legacy 1-chunk behaviour."""
     doc = await _make_doc(db_session, "toàn bộ nội dung thành một chunk")

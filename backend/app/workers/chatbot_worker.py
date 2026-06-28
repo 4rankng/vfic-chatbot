@@ -35,7 +35,7 @@ def _enqueue_persist(persist_job: dict) -> None:
 async def _run_job_async(job: dict) -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run.
-    from app.core.db import async_session
+    from app.workers._db import worker_session
     from app.graph.factories import build_deps
     from app.graph.runner import BotRunState, run_turn
 
@@ -45,7 +45,7 @@ async def _run_job_async(job: dict) -> None:
         user_text=job["user_text"],
         user_name=job.get("user_name", ""),
     )
-    async with async_session() as db:
+    async with worker_session() as db:
         deps = await build_deps(db)
         deps.persist = _enqueue_persist  # wire lead/memory extraction on SENT
         await run_turn(state, deps)
