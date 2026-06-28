@@ -38,6 +38,7 @@ from app.services.knowledge.coercion import (
 )
 from app.services.knowledge.canonical import (
     SCHEMA_VERSION,
+    ParsedKnowledgeDocument,
     checksum_text,
     parse_canonical_markdown,
 )
@@ -118,10 +119,9 @@ class KnowledgePipeline:
             "flagged_unit_indexes": flagged,
         }
 
-        # Legacy/freeform product-feature extraction is best-effort. Canonical
-        # Markdown already contains curated worker-feature chunks, so keep that path
-        # deterministic and avoid MiniMax enrichment entirely.
-        if doc.project_id is not None and canonical_doc is None:
+        if doc.project_id is not None and canonical_doc is not None:
+            await self.sync_canonical_product_features(doc, canonical_doc)
+        elif doc.project_id is not None:
             try:
                 await self.extract_product_features(doc, all_units)
             except Exception as exc:  # noqa: BLE001 — extraction is best-effort
@@ -130,7 +130,9 @@ class KnowledgePipeline:
         await self._set_stage(doc, "INDEXING", status="PUBLISHED")
         if canonical_doc is not None and canonical_doc.bus_timetable.routes:
             await self._persist_canonical_bus_timetable(doc, canonical_doc)
-        if doc.project_id is not None and canonical_doc is None:
+        if doc.project_id is not None and canonical_doc is not None:
+            await self._update_canonical_project_card(doc, canonical_doc)
+        elif doc.project_id is not None:
             try:
                 await self.build_project_index(doc.project_id)
             except Exception as exc:  # noqa: BLE001 — index refresh is best-effort
@@ -276,6 +278,59 @@ class KnowledgePipeline:
         await self.features.replace_for_project(doc.project_id, doc.id, rows)
         await self.index.sync_highlights(doc.project_id)
 
+    async def sync_canonical_product_features(
+        self, doc, canonical_doc: ParsedKnowledgeDocument
+    ) -> None:
+        """Copy canonical Worker Features into the project feature read model.
+
+        The canonical format is already curated and validator-gated, so this mirrors
+        it directly into ``job_feature_values`` without MiniMax extraction.
+        """
+        if doc.project_id is None:
+            return
+        catalog = await self.features.fetch_catalog()
+        if not catalog:
+            return
+        by_key = _canonical_feature_answers(canonical_doc)
+        rows = []
+        for priority, c in enumerate(catalog):
+            answer = by_key.get(c.feature_key)
+            raw = None
+            if answer:
+                raw = {
+                    "feature_key": c.feature_key,
+                    "value_text": answer,
+                    "value_json": {},
+                    "strength_score": float(c.default_importance_score or 0.85),
+                    "is_highlight": priority < 6,
+                    "is_missing": False,
+                    "needs_clarification": False,
+                    "evidence_text": answer[:1000],
+                }
+            rows.append((c, _coerce_feature(raw, c)))
+        await self.features.replace_for_project(doc.project_id, doc.id, rows)
+        await self.index.sync_highlights(doc.project_id)
+
+    async def _update_canonical_project_card(
+        self, doc, canonical_doc: ParsedKnowledgeDocument
+    ) -> None:
+        if doc.project_id is None:
+            return
+        meta = canonical_doc.metadata
+        company = str(meta.get("company_name") or "").strip()
+        summary = _canonical_project_summary(canonical_doc)
+        card = {
+            "summary": summary,
+            "key_roles": [],
+            "location": _canonical_location(canonical_doc),
+            "highlights": [],
+            "company_name": company,
+            "source_document_id": str(doc.id),
+            "canonical": True,
+        }
+        await self.index.update_card(doc.project_id, summary, card)
+        await self.index.sync_highlights(doc.project_id)
+
     async def _llm_json_with_timeout(self, system: str, user: str, *, purpose: str) -> str:
         timeout = (
             self._call_timeout
@@ -327,6 +382,53 @@ def _fallback_blocks(section: str) -> list[str]:
         if current:
             blocks.append(current)
     return [b for b in blocks if b]
+
+
+def _canonical_feature_answers(canonical_doc: ParsedKnowledgeDocument) -> dict[str, str]:
+    answers: dict[str, str] = {}
+    for chunk in canonical_doc.chunks:
+        if chunk.category != "feature":
+            continue
+        match = re.match(r"^Feature:\s*([a-z0-9_]+)\s*$", chunk.section_title, flags=re.IGNORECASE)
+        if match is None:
+            continue
+        answer = _canonical_field_block(chunk.content, "Answer") or chunk.content
+        answer = _compact_text(answer)
+        if answer:
+            answers[match.group(1)] = answer
+    return answers
+
+
+def _canonical_project_summary(canonical_doc: ParsedKnowledgeDocument) -> str:
+    overview = next(
+        (chunk.content for chunk in canonical_doc.chunks if chunk.section_title == "Company Overview"),
+        "",
+    )
+    return _compact_text(overview) or canonical_doc.document_summary
+
+
+def _canonical_location(canonical_doc: ParsedKnowledgeDocument) -> str:
+    overview = next(
+        (chunk.content for chunk in canonical_doc.chunks if chunk.section_title == "Company Overview"),
+        "",
+    )
+    match = re.search(r"\bat\s+(.+?)(?:\.|$)", overview, flags=re.IGNORECASE)
+    return _compact_text(match.group(1)) if match else ""
+
+
+def _canonical_field_block(content: str, field: str) -> str | None:
+    match = re.search(
+        rf"^{re.escape(field)}:\s*(.*?)(?=\n[A-Z][A-Za-z _-]*:\s*|\Z)",
+        content,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        return None
+    return match.group(1).strip()
+
+
+def _compact_text(value: str | None) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
 
 
 def _fallback_unit(block: str, index: int) -> dict:

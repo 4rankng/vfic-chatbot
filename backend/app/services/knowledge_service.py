@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from typing import Awaitable, Callable
 
-from sqlalchemy import desc, select, text
+from sqlalchemy import desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.vector import vec_literal
@@ -84,6 +84,18 @@ class KnowledgeService:
         metadata = {}
         version = None
         if canonical is not None:
+            if project_id is None:
+                project_slug = str(canonical.metadata.get("project_slug") or "").strip()
+                if project_slug:
+                    project = (
+                        await self.db.scalars(
+                            select(Project)
+                            .where(func.lower(Project.slug) == project_slug.lower())
+                            .limit(1)
+                        )
+                    ).first()
+                    if project is not None:
+                        project_id = project.id
             version = str(canonical.metadata.get("doc_version") or "")
             canonical_meta = {
                 "document": canonical.metadata,

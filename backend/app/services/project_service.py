@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
-from app.models.knowledge import KnowledgeDocument
+from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import User
 from app.schemas.projects import (
     FeatureListResponse,
@@ -83,9 +83,11 @@ class ProjectService:
         repo = JobFeatureValueRepo(self.db)
         ready = await repo.readiness_by_project([p.id for p in rows])
         total = await repo.active_catalog_size()
+        doc_counts = await self._knowledge_document_counts([p.id for p in rows])
         out: list[ProjectOut] = []
         for p in rows:
             o = ProjectOut.model_validate(p)
+            o.knowledge_document_count = doc_counts.get(p.id, 0)
             o.feature_readiness = FeatureReadiness(
                 ready=ready.get(p.id, 0), total=total
             )
@@ -101,11 +103,30 @@ class ProjectService:
         repo = JobFeatureValueRepo(self.db)
         ready = await repo.readiness_by_project([proj.id])
         total = await repo.active_catalog_size()
+        doc_counts = await self._knowledge_document_counts([proj.id])
         o = ProjectOut.model_validate(proj)
+        o.knowledge_document_count = doc_counts.get(proj.id, 0)
         o.feature_readiness = FeatureReadiness(
             ready=ready.get(proj.id, 0), total=total
         )
         return o
+
+    async def _knowledge_document_counts(
+        self, project_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, int]:
+        if not project_ids:
+            return {}
+        rows = (
+            await self.db.execute(
+                select(KnowledgeDocument.project_id, func.count(KnowledgeDocument.id))
+                .where(
+                    KnowledgeDocument.project_id.in_(project_ids),
+                    KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
+                )
+                .group_by(KnowledgeDocument.project_id)
+            )
+        ).all()
+        return {row[0]: int(row[1]) for row in rows if row[0] is not None}
 
     async def create(self, body: ProjectCreate, admin: User) -> Project:
         name = body.name.strip()

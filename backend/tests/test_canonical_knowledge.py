@@ -18,6 +18,7 @@ from app.services.knowledge.canonical import (
 )
 from app.services.knowledge.pipeline import KnowledgePipeline
 from app.services.knowledge_service import KnowledgeService
+from app.services.project_service import ProjectService
 from app.graph.tools import search_knowledge
 from tests.conftest import ADMIN_EMAIL, PASSWORD
 
@@ -260,6 +261,30 @@ async def test_upload_file_accepts_canonical_and_stores_metadata(client, db_sess
 
 
 @pytest.mark.asyncio
+async def test_canonical_upload_auto_links_project_by_frontmatter_slug(db_session, clean_kb):
+    slug = f"canonical-autolink-{uuid.uuid4().hex[:8]}"
+    project_id = (
+        await db_session.execute(
+            text("INSERT INTO projects(slug,name,is_active) VALUES (:slug,'Auto Link',true) RETURNING id"),
+            {"slug": slug},
+        )
+    ).scalar_one()
+    await db_session.commit()
+    payload = load_template().replace('project_slug: "lg-display"', f'project_slug: "{slug}"')
+
+    doc = await KnowledgeService(db_session).upload_bytes(
+        "canonical-autolink.md",
+        "text/markdown",
+        payload.encode("utf-8"),
+        require_canonical=True,
+    )
+
+    assert doc.project_id == project_id
+    project = await ProjectService(db_session).get_with_readiness(project_id)
+    assert project.knowledge_document_count == 1
+
+
+@pytest.mark.asyncio
 async def test_upload_file_auto_repairs_canonical_bus_formatting(client, db_session, monkeypatch, clean_kb):
     enqueued: list[str] = []
     monkeypatch.setattr(
@@ -379,6 +404,39 @@ async def test_canonical_pipeline_skips_llm_enrichment_even_with_project(db_sess
     assert doc.stage == "PUBLISHED"
     assert doc.digest_meta["unit_count"] == 16
     assert llm_calls == []
+    feature_count = (
+        await db_session.execute(
+            text("SELECT count(*) FROM job_feature_values WHERE project_id = :pid"),
+            {"pid": str(project_id)},
+        )
+    ).scalar_one()
+    ready_count = (
+        await db_session.execute(
+            text(
+                "SELECT count(*) FROM job_feature_values "
+                "WHERE project_id = :pid AND is_missing = false AND needs_clarification = false "
+                "AND btrim(value_text) <> ''"
+            ),
+            {"pid": str(project_id)},
+        )
+    ).scalar_one()
+    take_home_income = (
+        await db_session.execute(
+            text(
+                "SELECT jfv.value_text FROM job_feature_values jfv "
+                "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
+                "WHERE jfv.project_id = :pid AND wfc.feature_key = 'take_home_income'"
+            ),
+            {"pid": str(project_id)},
+        )
+    ).scalar_one()
+    project = await ProjectService(db_session).get_with_readiness(project_id)
+    assert feature_count == 11
+    assert ready_count == 11
+    assert project.feature_readiness.ready == 11
+    assert project.knowledge_document_count == 1
+    assert "10-13 triệu" in take_home_income
+    assert project.summary
 
 
 @pytest.mark.asyncio

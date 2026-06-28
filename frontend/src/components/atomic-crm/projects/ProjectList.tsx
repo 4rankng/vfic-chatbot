@@ -119,9 +119,12 @@ const ProjectListContent = () => {
     filteredProjects[0] ??
     null;
   const activeCount = projects.filter((project) => project.is_active).length;
-  const totalDocs = knowledgeSources?.length ?? 0;
+  const totalDocs = projects.reduce(
+    (sum, project) => sum + (project.knowledge_document_count ?? 0),
+    0,
+  );
   const projectWithDocs = projects.filter(
-    (project) => (projectDocs.get(String(project.id)) ?? []).length > 0,
+    (project) => (project.knowledge_document_count ?? 0) > 0,
   ).length;
 
   return (
@@ -582,6 +585,10 @@ const ProjectDetailPanel = ({
   const refresh = useRefresh();
   const highlights = getProjectHighlights(project);
   const card = project.index_card ?? {};
+  const linkedDocCount = Math.max(
+    docs.length,
+    project.knowledge_document_count ?? 0,
+  );
 
   const retrySource = async (source: KnowledgeSource) => {
     try {
@@ -655,7 +662,7 @@ const ProjectDetailPanel = ({
                 />
                 <InfoBlock
                   label="Nguồn kiến thức"
-                  value={`${docs.length} tài liệu`}
+                  value={`${linkedDocCount} tài liệu`}
                 />
               </div>
               <section>
@@ -729,6 +736,11 @@ const ProjectDetailPanel = ({
                         )}
                       </div>
                     ))}
+                  </div>
+                ) : linkedDocCount > 0 ? (
+                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    Có {linkedDocCount} tài liệu đã gắn với dự án. Bấm làm mới
+                    nếu danh sách chưa hiện.
                   </div>
                 ) : (
                   <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">

@@ -27,6 +27,7 @@ class ProjectOut(BaseModel):
     summary: str | None = None
     index_card: dict[str, Any] = {}
     default_persona_id: uuid.UUID | None = None
+    knowledge_document_count: int = 0
     feature_readiness: FeatureReadiness = Field(
         default_factory=lambda: FeatureReadiness(ready=0, total=11)
     )
