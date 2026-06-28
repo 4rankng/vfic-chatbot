@@ -248,6 +248,37 @@ async def test_ingest_job_falls_back_when_digest_times_out(
     assert rows >= 1  # fallback produced source-grounded units, not 0
 
 
+async def test_ingest_job_uses_canonical_fast_path_without_llm(db_session, clean_kb):
+    from app.services.knowledge.canonical import load_template
+    from app.workers.ingest_worker import _run_job_async
+
+    project_id = (
+        await db_session.execute(
+            text(
+                "INSERT INTO projects(slug,name,is_active) "
+                "VALUES (:slug,'Canonical Worker',true) RETURNING id"
+            ),
+            {"slug": f"canonical-worker-{uuid.uuid4().hex[:8]}"},
+        )
+    ).scalar_one()
+    await db_session.commit()
+    doc = await KnowledgeService(db_session).upload_bytes(
+        "canonical-worker.md",
+        "text/markdown",
+        load_template().encode("utf-8"),
+        project_id=project_id,
+        require_canonical=True,
+    )
+
+    await _run_in_fresh_loop(lambda: _run_job_async(str(doc.id), _embed=_FakeEmbedder()))
+
+    await db_session.refresh(doc)
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert doc.stage == "PUBLISHED"
+    assert doc.error is None
+    assert doc.digest_meta["unit_count"] == 16
+
+
 async def _run_in_fresh_loop(factory):
     """Run ``factory()`` via ``asyncio.run`` in a worker thread.
 

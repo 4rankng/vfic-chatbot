@@ -35,6 +35,16 @@ class _FakeEmbedder:
     __call__ = embed
 
 
+class _CollapsingBatchEmbedder:
+    async def embed(self, _t):
+        return list(VEC)
+
+    async def batch(self, texts):
+        return [list(VEC)] if texts else []
+
+    __call__ = embed
+
+
 async def _admin_token(client) -> str:
     response = await client.post(
         "/api/v1/auth/login", json={"email": ADMIN_EMAIL, "password": PASSWORD}
@@ -241,6 +251,7 @@ async def test_upload_file_accepts_canonical_and_stores_metadata(client, db_sess
     )
     assert response.status_code == 201, response.text
     body = response.json()
+    assert body["is_canonical"] is True
     assert enqueued == [body["id"]]
     doc = await db_session.get(KnowledgeDocument, uuid.UUID(body["id"]))
     assert doc is not None
@@ -287,6 +298,7 @@ service_days:
     )
     assert response.status_code == 201, response.text
     body = response.json()
+    assert body["is_canonical"] is True
     assert enqueued == [body["id"]]
     doc = await db_session.get(KnowledgeDocument, uuid.UUID(body["id"]))
     assert doc is not None
@@ -333,6 +345,63 @@ async def test_canonical_pipeline_publishes_chunks_and_bus_without_filename_depe
         )
     ).scalar()
     assert route_count == 1
+
+
+@pytest.mark.asyncio
+async def test_canonical_pipeline_skips_llm_enrichment_even_with_project(db_session, clean_kb):
+    project_id = (
+        await db_session.execute(
+            text(
+                "INSERT INTO projects(slug,name,is_active) "
+                "VALUES (:slug,'Canonical Fast Path',true) RETURNING id"
+            ),
+            {"slug": f"canonical-fast-{uuid.uuid4().hex[:8]}"},
+        )
+    ).scalar_one()
+    await db_session.commit()
+    doc = await KnowledgeService(db_session).upload_bytes(
+        "canonical-fast.md",
+        "text/markdown",
+        load_template().encode("utf-8"),
+        project_id=project_id,
+        require_canonical=True,
+    )
+    llm_calls: list[str] = []
+
+    async def exploding_llm(system, user):
+        llm_calls.append(system)
+        raise AssertionError("canonical ingest should not call LLM")
+
+    await KnowledgePipeline(db_session, _FakeEmbedder(), exploding_llm).run(doc)
+    await db_session.refresh(doc)
+
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert doc.stage == "PUBLISHED"
+    assert doc.digest_meta["unit_count"] == 16
+    assert llm_calls == []
+
+
+@pytest.mark.asyncio
+async def test_canonical_pipeline_stores_all_units_when_batch_embedder_collapses(db_session, clean_kb):
+    doc = await KnowledgeService(db_session).upload_bytes(
+        "canonical-collapsed-batch.md",
+        "text/markdown",
+        load_template().encode("utf-8"),
+        require_canonical=True,
+    )
+
+    await KnowledgePipeline(db_session, _CollapsingBatchEmbedder(), _noop_llm).run(doc)
+    await db_session.refresh(doc)
+
+    chunk_count = (
+        await db_session.execute(
+            text("SELECT count(*) FROM knowledge_chunks WHERE document_id = :did"),
+            {"did": str(doc.id)},
+        )
+    ).scalar_one()
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert doc.digest_meta["unit_count"] == 16
+    assert chunk_count == doc.digest_meta["unit_count"]
 
 
 @pytest.mark.asyncio

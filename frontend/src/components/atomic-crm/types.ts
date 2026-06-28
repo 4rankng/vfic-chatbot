@@ -108,7 +108,7 @@ export type BotRun = {
 // Knowledge document (per-project RAG doc). Mirrors the backend
 // KnowledgeDocumentOut shape served at /api/v1/knowledge/documents. `stage` is the
 // fine-grained training-pipeline progress (UPLOADED -> ... -> PUBLISHED);
-// `digest_meta` carries unit/flagged counts from the LLM digest.
+// `digest_meta` carries unit/flagged counts from the ingest run.
 export type KnowledgeSource = {
   id: string;
   drive_file_id: string | null;
@@ -127,6 +127,7 @@ export type KnowledgeSource = {
     section_count?: number;
     flagged_unit_indexes?: number[];
   };
+  is_canonical?: boolean;
   error?: string | null;
 } & Pick<RaRecord, "id">;
 

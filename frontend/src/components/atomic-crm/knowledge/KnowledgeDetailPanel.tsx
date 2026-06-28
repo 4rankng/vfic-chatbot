@@ -19,6 +19,7 @@ import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";
 import {
   flaggedCount,
+  isCanonicalSource,
   isFailed,
   isProcessing,
   isPublished,
@@ -169,7 +170,9 @@ export const KnowledgeDetailPanel = ({
 
       {/* Digest ticket */}
       <div>
-        <h4 className="kb-display text-sm text-foreground">Tóm tắt digest</h4>
+        <h4 className="kb-display text-sm text-foreground">
+          {isCanonicalSource(source) ? "Tóm tắt nguồn" : "Tóm tắt digest"}
+        </h4>
         {source.digest_summary ? (
           <div className="mt-2 rounded-[10px] border border-dashed border-[var(--kb-line-strong)] bg-background p-4">
             <p
@@ -201,7 +204,9 @@ export const KnowledgeDetailPanel = ({
               ? "Lỗi"
               : isPublished(source)
                 ? "Sẵn sàng"
-                : stageLabel(sourceStage(source))}
+                : stageLabel(sourceStage(source), {
+                    isCanonical: isCanonicalSource(source),
+                  })}
           </span>
         </button>
         {showPipeline && (
@@ -233,7 +238,9 @@ const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
     return (
       <div className="mt-2 flex items-center gap-2 rounded-[10px] bg-[var(--kb-teal-soft)] p-3 text-sm text-[var(--kb-teal)]">
         <RefreshCw className="size-4 animate-spin" />
-        Đang xử lý trong pipeline. Tóm tắt sẽ xuất hiện sau khi digest hoàn tất.
+        {isCanonicalSource(source)
+          ? "Đang chuẩn hóa Markdown và tạo đơn vị truy xuất."
+          : "Đang xử lý trong pipeline. Tóm tắt sẽ xuất hiện sau khi digest hoàn tất."}
       </div>
     );
   }
@@ -254,7 +261,7 @@ const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
         style={{ fontFamily: "var(--kb-font-display)" }}
       >
         Pipeline chưa trả về tóm tắt cho nguồn này. Tóm tắt sẽ hiện ra ở đây sau
-        khi digest xử lý xong.
+        khi xử lý xong.
       </p>
     </div>
   );

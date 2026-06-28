@@ -84,10 +84,11 @@ class KnowledgePipeline:
 
     async def run(self, doc) -> None:
         """Full pipeline for ``doc`` (KnowledgeDocument). Mutates + commits."""
-        await self._set_stage(doc, "DIGESTING", status="PROCESSING", error=None)
         raw = doc.raw_text or ""
         canonical_doc = None
-        if (doc.metadata_ or {}).get("schema_version") == SCHEMA_VERSION:
+        is_canonical = (doc.metadata_ or {}).get("schema_version") == SCHEMA_VERSION
+        await self._set_stage(doc, "DIGESTING", status="PROCESSING", error=None)
+        if is_canonical:
             stored_checksum = (doc.metadata_ or {}).get("checksum")
             current_checksum = checksum_text(raw)
             if stored_checksum and stored_checksum != current_checksum:
@@ -117,11 +118,10 @@ class KnowledgePipeline:
             "flagged_unit_indexes": flagged,
         }
 
-        # Product-feature extraction (best-effort): turn the posting into the 11 worker
-        # product features the agent answers from. Runs before build_project_index so the
-        # derived highlights flow into the catalog card. A failure must never block RAG
-        # indexing — the run() try/except below keeps ingest healthy.
-        if doc.project_id is not None:
+        # Legacy/freeform product-feature extraction is best-effort. Canonical
+        # Markdown already contains curated worker-feature chunks, so keep that path
+        # deterministic and avoid MiniMax enrichment entirely.
+        if doc.project_id is not None and canonical_doc is None:
             try:
                 await self.extract_product_features(doc, all_units)
             except Exception as exc:  # noqa: BLE001 — extraction is best-effort
@@ -130,7 +130,7 @@ class KnowledgePipeline:
         await self._set_stage(doc, "INDEXING", status="PUBLISHED")
         if canonical_doc is not None and canonical_doc.bus_timetable.routes:
             await self._persist_canonical_bus_timetable(doc, canonical_doc)
-        if doc.project_id is not None:
+        if doc.project_id is not None and canonical_doc is None:
             try:
                 await self.build_project_index(doc.project_id)
             except Exception as exc:  # noqa: BLE001 — index refresh is best-effort
@@ -217,7 +217,14 @@ class KnowledgePipeline:
         """Embed many texts; prefer a batch call when the embedder supports it."""
         batch = getattr(self.embedder, "batch", None)
         if callable(batch):
-            return await batch(texts)  # type: ignore[misc]
+            vectors = await batch(texts)  # type: ignore[misc]
+            if len(vectors) == len(texts):
+                return vectors
+            logger.warning(
+                "embedder batch returned %d vectors for %d texts; retrying one-by-one",
+                len(vectors),
+                len(texts),
+            )
         return [await self.embedder(t) for t in texts]
 
     async def build_project_index(self, project_id: uuid.UUID) -> None:

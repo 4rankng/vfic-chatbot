@@ -10,6 +10,7 @@ import {
   PIPELINE_STEPS,
   isFailed,
   isPublished,
+  pipelineStepCopy,
   pipelineStepIndex,
 } from "./knowledgePipelineUtils";
 export const PipelineTimeline = ({ source }: { source: KnowledgeSource }) => {
@@ -18,6 +19,7 @@ export const PipelineTimeline = ({ source }: { source: KnowledgeSource }) => {
   return (
     <ol className="grid gap-2">
       {PIPELINE_STEPS.map((step, index) => {
+        const copy = pipelineStepCopy(source, step);
         const done = isPublished(source) || index < currentIndex;
         const current = !isPublished(source) && index === currentIndex;
         const failedHere = isFailed(source) && index === currentIndex;
@@ -57,10 +59,10 @@ export const PipelineTimeline = ({ source }: { source: KnowledgeSource }) => {
             </span>
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-foreground">
-                {step.label}
+                {copy.label}
               </span>
               <span className="mt-0.5 block break-words text-xs leading-5 text-muted-foreground">
-                {step.description}
+                {copy.description}
               </span>
             </span>
           </li>

@@ -109,11 +109,19 @@ class RetrievalRepository:
         ).scalar_one_or_none()
 
     async def search_bus_timetable(self, company: str, question: str, limit: int) -> list:
-        """Rows from the ``search_bus_timetable`` SQL fn (one row per stop)."""
+        """Rows from the ``search_bus_timetable`` SQL fn (one row per stop).
+
+        ``p_project_slug`` is passed as NULL so the search spans all projects --
+        the deployment is single-tenant and the ``company`` filter already scopes
+        the rows. Migration 0011 made the SQL fn NULL-tolerant; passing a slug
+        here would re-introduce the unreachable-canonical-timetable bug, since
+        canonical Markdown is persisted under the frontmatter ``project_slug``
+        (e.g. 'lg-display'), not 'vfic'.
+        """
         return (
             await self.db.execute(
                 text(
-                    "SELECT * FROM search_bus_timetable('vfic', :company, :question, NULL, NULL, :limit)"
+                    "SELECT * FROM search_bus_timetable(NULL, :company, :question, NULL, NULL, :limit)"
                 ),
                 {"company": company, "question": question, "limit": limit},
             )

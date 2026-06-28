@@ -26,6 +26,7 @@ class KnowledgeDocumentOut(BaseModel):
     stage: str = "UPLOADED"
     digest_summary: str | None = None
     digest_meta: dict[str, Any] = {}
+    is_canonical: bool = False
     error: str | None = None
 
 

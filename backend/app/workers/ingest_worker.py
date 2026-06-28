@@ -1,7 +1,8 @@
-"""RQ worker: enqueue + run the LLM training pipeline on the `ingest` queue.
+"""RQ worker: enqueue + run the knowledge ingest pipeline on the `ingest` queue.
 
-Consumed by the `worker-ingest` service (``rq worker ingest``). Each job runs the full
-KnowledgePipeline for one document: digest (MiniMax) -> embed (Gemini) -> index.
+Consumed by the `worker-ingest` service (``rq worker ingest``). Canonical Markdown jobs
+use the deterministic parse -> embed -> index path; legacy/freeform jobs use the full
+digest (MiniMax) -> embed (Gemini) -> index path.
 Failures are recorded on the document (status=FAILED, error=...) so the UI can surface
 them; they never crash the worker.
 """
@@ -50,18 +51,27 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
     # heavy LLM/Google deps — those are only needed for a real run. ``_embed``/``_llm``
     # are injectable so the cross-loop regression test can run the pipeline with fakes.
     from app.graph.clients import GeminiEmbedder
-    from app.graph.factories import make_minimax_llm_json
     from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
+    from app.services.knowledge.canonical import SCHEMA_VERSION
     from app.services.knowledge import KnowledgePipeline
     from app.workers._db import worker_session
 
     embed = _embed if _embed is not None else GeminiEmbedder()
-    llm = _llm if _llm is not None else make_minimax_llm_json()
     async with worker_session() as db:
         doc = await db.get(KnowledgeDocument, uuid.UUID(doc_id))
         if doc is None:
             logger.warning("ingest job: document %s not found", doc_id)
             return
+        is_canonical = (doc.metadata_ or {}).get("schema_version") == SCHEMA_VERSION
+        if _llm is not None:
+            llm = _llm
+        elif is_canonical:
+            async def llm(_system: str, _user: str) -> str:
+                raise RuntimeError("canonical ingest should not call MiniMax")
+        else:
+            from app.graph.factories import make_minimax_llm_json
+
+            llm = make_minimax_llm_json()
         try:
             await KnowledgePipeline(db, embed, llm).run(doc)
         except Exception as exc:  # noqa: BLE001 — record + survive

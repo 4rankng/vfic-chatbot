@@ -5,6 +5,7 @@ import type { KnowledgeSource } from "../types";
 import {
   PIPELINE_STEPS,
   flaggedCount,
+  isCanonicalSource,
   isFailed,
   isPipelineActive,
   isPossiblyStuck,
@@ -14,6 +15,8 @@ import {
   isWaitingForWorker,
   needsReview,
   pipelinePercent,
+  pipelineStateCopy,
+  pipelineStepCopy,
   pipelineStepIndex,
   sourceStage,
 } from "./knowledgePipelineUtils";
@@ -64,6 +67,36 @@ describe("isPublished / isFailed", () => {
     expect(isFailed(makeSource({ stage: "FAILED" }))).toBe(true);
     expect(isFailed(makeSource({ stage: "error" }))).toBe(true);
     expect(isFailed(makeSource({ stage: "PUBLISHED" }))).toBe(false);
+  });
+});
+
+describe("canonical source copy", () => {
+  it("detects canonical Markdown sources", () => {
+    expect(isCanonicalSource(makeSource({ is_canonical: true }))).toBe(true);
+    expect(isCanonicalSource(makeSource({ is_canonical: false }))).toBe(false);
+    expect(isCanonicalSource(makeSource())).toBe(false);
+  });
+
+  it("renames the digest step for canonical sources", () => {
+    const digestStep = PIPELINE_STEPS.find((step) => step.key === "DIGESTING");
+    expect(digestStep).toBeDefined();
+    expect(
+      pipelineStepCopy(makeSource({ is_canonical: true }), digestStep!).label,
+    ).toBe("Chuẩn hóa");
+    expect(
+      pipelineStepCopy(makeSource({ is_canonical: false }), digestStep!).label,
+    ).toBe("Digest");
+  });
+
+  it("uses canonical processing copy for the active digest slot", () => {
+    expect(
+      pipelineStateCopy(
+        makeSource({ stage: "DIGESTING", is_canonical: true }),
+      ),
+    ).toContain("Markdown canonical");
+    expect(pipelineStateCopy(makeSource({ stage: "DIGESTING" }))).toContain(
+      "LLM",
+    );
   });
 });
 

@@ -23,6 +23,7 @@ import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";
 import {
   flaggedCount,
+  isCanonicalSource,
   isFailed,
   isProcessing,
   isPossiblyStuck,
@@ -151,7 +152,11 @@ export const SourceStamp = ({ source }: { source: KnowledgeSource }) => {
       </Stamp>
     );
   if (needsReview(source)) return <Stamp tone="pending">Cần xem lại</Stamp>;
-  return <Stamp tone="pending">{stageLabel(sourceStage(source))}</Stamp>;
+  return (
+    <Stamp tone="pending">
+      {stageLabel(sourceStage(source), { isCanonical: isCanonicalSource(source) })}
+    </Stamp>
+  );
 };
 
 // Slim transient progress — only mounted while a source is actively processing.
@@ -169,7 +174,9 @@ export const PipelineMiniProgress = ({
             ? "Đang chờ worker"
             : isPublished(source)
               ? "Sẵn sàng trả lời"
-              : stageLabel(sourceStage(source))}
+              : stageLabel(sourceStage(source), {
+                  isCanonical: isCanonicalSource(source),
+                })}
         </span>
         <span className="text-muted-foreground">{percent}%</span>
       </div>

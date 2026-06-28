@@ -53,6 +53,10 @@ class KnowledgeDocument(Base):
     digest_meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
     error: Mapped[str | None] = mapped_column(Text)
 
+    @property
+    def is_canonical(self) -> bool:
+        return (self.metadata_ or {}).get("schema_version") == "vfic-knowledge-v1"
+
 
 class KnowledgeChunk(Base):
     __tablename__ = "knowledge_chunks"

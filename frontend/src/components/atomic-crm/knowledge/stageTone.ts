@@ -15,14 +15,17 @@ export const stageTone = (stage?: string | null, status?: string): string => {
 };
 
 // Vietnamese label for a pipeline stage.
-export const stageLabel = (stage?: string | null): string => {
+export const stageLabel = (
+  stage?: string | null,
+  options?: { isCanonical?: boolean },
+): string => {
   switch ((stage ?? "").toUpperCase()) {
     case "UPLOADED":
       return "Đã tải lên";
     case "EXTRACTED":
       return "Đã trích văn bản";
     case "DIGESTING":
-      return "Đang phân tích (LLM)";
+      return options?.isCanonical ? "Đang chuẩn hóa" : "Đang phân tích (LLM)";
     case "EMBEDDING":
       return "Đang nhúng vector";
     case "INDEXING":

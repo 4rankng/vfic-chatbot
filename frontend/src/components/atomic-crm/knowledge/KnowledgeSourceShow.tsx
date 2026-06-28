@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
 import { formatDateTime } from "../automation/botRunMeta";
 import { stageLabel, stageTone } from "./stageTone";
+import { isCanonicalSource } from "./knowledgePipelineUtils";
 import { archiveKnowledge, reindexKnowledge } from "@/lib/vfic/knowledgeService";
 import { DeleteButton } from "@/components/admin";
 
@@ -68,7 +69,9 @@ const KnowledgeSourceShowContent = () => {
                 stageTone(source.stage, source.status),
               )}
             >
-              {stageLabel(source.stage ?? source.status)}
+              {stageLabel(source.stage ?? source.status, {
+                isCanonical: isCanonicalSource(source),
+              })}
             </span>
           </div>
         </CardHeader>
@@ -79,10 +82,15 @@ const KnowledgeSourceShowContent = () => {
           <Field label="Loại tệp" value={source.mime_type} />
           <Field
             label="Giai đoạn huấn luyện"
-            value={stageLabel(source.stage)}
+            value={stageLabel(source.stage, {
+              isCanonical: isCanonicalSource(source),
+            })}
           />
           {source.digest_summary && (
-            <Field label="Tóm tắt (LLM)" value={source.digest_summary} />
+            <Field
+              label={isCanonicalSource(source) ? "Tóm tắt nguồn" : "Tóm tắt (LLM)"}
+              value={source.digest_summary}
+            />
           )}
           {source.digest_meta?.unit_count != null && (
             <Field

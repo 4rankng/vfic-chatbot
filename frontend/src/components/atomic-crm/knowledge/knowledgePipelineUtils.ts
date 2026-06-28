@@ -43,6 +43,9 @@ export const PIPELINE_STEPS = [
 export const flaggedCount = (source: KnowledgeSource): number =>
   source.digest_meta?.flagged_unit_indexes?.length ?? 0;
 
+export const isCanonicalSource = (source: KnowledgeSource): boolean =>
+  source.is_canonical === true;
+
 export const sourceStage = (source: KnowledgeSource) =>
   source.stage ?? source.status ?? "UNKNOWN";
 
@@ -108,6 +111,19 @@ export const pipelinePercent = (source: KnowledgeSource) => {
   );
 };
 
+export const pipelineStepCopy = (
+  source: KnowledgeSource,
+  step: (typeof PIPELINE_STEPS)[number],
+) => {
+  if (step.key !== "DIGESTING" || !isCanonicalSource(source)) return step;
+  return {
+    ...step,
+    label: "Chuẩn hóa",
+    description:
+      "Markdown canonical đang được kiểm tra, sửa lỗi định dạng an toàn và chia đơn vị truy xuất.",
+  };
+};
+
 export const pipelineStateCopy = (source: KnowledgeSource) => {
   if (isFailed(source)) {
     return "Pipeline dừng vì lỗi. Hãy huấn luyện lại sau khi kiểm tra định dạng hoặc nội dung nguồn.";
@@ -121,7 +137,7 @@ export const pipelineStateCopy = (source: KnowledgeSource) => {
   if (isWaitingForWorker(source)) {
     return "Nguồn đã trích văn bản và đang chờ worker ingest nhận việc. Nếu đứng ở đây lâu, hãy kiểm tra tiến trình rq worker ingest.";
   }
-  const current = PIPELINE_STEPS[pipelineStepIndex(source)];
+  const current = pipelineStepCopy(source, PIPELINE_STEPS[pipelineStepIndex(source)]);
   return current?.description ?? "Nguồn đang được xử lý trong pipeline.";
 };
 
