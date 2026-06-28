@@ -2,7 +2,9 @@
 import pytest
 from sqlalchemy import text
 
+from app.models.company import Project
 from app.models.knowledge import KnowledgeStatus
+from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.knowledge_service import KnowledgeService
 from tests.conftest import ADMIN_EMAIL, PASSWORD
 
@@ -57,6 +59,34 @@ async def test_reconcile_drops_removed_files(db_session, clean_kb):
     assert deleted == 1
     remaining = [d.drive_file_id for d in await svc.list()]
     assert "keep-1" in remaining and "gone-1" not in remaining
+
+
+async def test_update_project_id_propagates_to_existing_chunks(db_session, clean_kb):
+    svc = KnowledgeService(db_session)
+    project = Project(slug="u-cafe", name="Chunk Project", is_active=True)
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+
+    doc = await svc.upload("jobs.pdf", "LG Display tuyển công nhân lương 15 triệu")
+    await svc.process(_emb, doc)
+
+    from types import SimpleNamespace
+
+    admin_id = (await db_session.execute(text("SELECT id FROM users WHERE email=:e"), {"e": ADMIN_EMAIL})).scalar()
+    await svc.update(
+        doc,
+        KnowledgeDocumentUpdate(project_id=project.id),
+        actor=SimpleNamespace(id=admin_id),
+    )
+
+    chunk_project_id = (
+        await db_session.execute(
+            text("SELECT project_id FROM knowledge_chunks WHERE document_id = :d"),
+            {"d": str(doc.id)},
+        )
+    ).scalar_one()
+    assert chunk_project_id == project.id
 
 
 async def test_knowledge_api_admin_only(client, clean_kb):

@@ -34,8 +34,8 @@ async def list_projects(
     _user: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectListResponse:
-    rows = await ProjectService(db).list(is_active)
-    return ProjectListResponse(data=[ProjectOut.model_validate(p) for p in rows], total=len(rows))
+    data = await ProjectService(db).list_with_readiness(is_active)
+    return ProjectListResponse(data=data, total=len(data))
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -44,7 +44,7 @@ async def get_project(
     _user: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectOut:
-    return ProjectOut.model_validate(await ProjectService(db).get(project_id))
+    return await ProjectService(db).get_with_readiness(project_id)
 
 
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)

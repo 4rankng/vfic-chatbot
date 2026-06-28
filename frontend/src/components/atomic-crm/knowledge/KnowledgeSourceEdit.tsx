@@ -21,8 +21,6 @@ import { TopToolbar } from "../layout/TopToolbar";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { KnowledgeSource, Project } from "../types";
 
-const UNASSIGNED_PROJECT = "__none__";
-
 const KnowledgeSourceEditContent = () => {
   const source = useRecordContext<KnowledgeSource>();
   const notify = useNotify();
@@ -34,13 +32,13 @@ const KnowledgeSourceEditContent = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [fileName, setFileName] = useState("");
-  const [projectId, setProjectId] = useState(UNASSIGNED_PROJECT);
+  const [projectId, setProjectId] = useState("");
 
   useEffect(() => {
     if (!source) return;
     setFileName(source.file_name);
-    setProjectId(source.project_id ?? UNASSIGNED_PROJECT);
-  }, [source]);
+    setProjectId(source.project_id ?? projects?.[0]?.id ?? "");
+  }, [projects, source]);
 
   if (!source) return null;
 
@@ -53,7 +51,7 @@ const KnowledgeSourceEditContent = () => {
         previousData: source,
         data: {
           file_name: fileName,
-          project_id: projectId === UNASSIGNED_PROJECT ? null : projectId,
+          project_id: projectId,
         },
       });
       notify("Đã lưu cơ sở kiến thức.", { type: "success" });
@@ -84,12 +82,9 @@ const KnowledgeSourceEditContent = () => {
             Dự án
             <Select value={projectId} onValueChange={setProjectId}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Chọn dự án" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={UNASSIGNED_PROJECT}>
-                  Không chọn (chung)
-                </SelectItem>
                 {(projects ?? []).map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name} ({project.slug})
@@ -98,7 +93,7 @@ const KnowledgeSourceEditContent = () => {
               </SelectContent>
             </Select>
           </label>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || !projectId}>
             {submitting ? "Đang lưu..." : "Lưu"}
           </Button>
         </form>

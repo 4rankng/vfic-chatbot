@@ -32,7 +32,8 @@ async def test_search_user_memory_and_jobs(db_session):
     await db_session.execute(
         text(
             "INSERT INTO knowledge_documents(id, drive_file_id, file_name, source, status, raw_text, metadata) "
-            "VALUES (CAST(:id AS uuid), :df, :fn, :src, :status, :raw, CAST('{}' AS jsonb))"
+            "VALUES (CAST(:id AS uuid), :df, :fn, :src, :status, :raw, CAST('{}' AS jsonb)) "
+            "ON CONFLICT (id) DO NOTHING"
         ),
         {"id": "22222222-2222-2222-2222-000000000001", "df": "f1", "fn": "jobs.pdf",
          "src": "google_drive", "status": "PUBLISHED", "raw": "x"},
@@ -40,7 +41,8 @@ async def test_search_user_memory_and_jobs(db_session):
     await db_session.execute(
         text(
             "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata) "
-            "VALUES (CAST(:did AS uuid), 0, :content, CAST(:e AS vector), CAST('{}' AS jsonb))"
+            "VALUES (CAST(:did AS uuid), 0, :content, CAST(:e AS vector), CAST('{}' AS jsonb)) "
+            "ON CONFLICT (document_id, chunk_index) DO NOTHING"
         ),
         {"did": "22222222-2222-2222-2222-000000000001",
          "content": "LG Display lương 15 triệu/tháng", "e": VEC},

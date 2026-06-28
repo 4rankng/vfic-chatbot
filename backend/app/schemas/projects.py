@@ -5,7 +5,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class FeatureReadiness(BaseModel):
+    """Per-project feature readiness: how many of the fixed 16 catalog features
+    have enough info for the agent to advise on (vs. need more info supplied).
+    """
+
+    ready: int
+    total: int
 
 
 class ProjectOut(BaseModel):
@@ -17,6 +26,9 @@ class ProjectOut(BaseModel):
     summary: str | None = None
     index_card: dict[str, Any] = {}
     default_persona_id: uuid.UUID | None = None
+    feature_readiness: FeatureReadiness = Field(
+        default_factory=lambda: FeatureReadiness(ready=0, total=16)
+    )
     created_at: datetime
     updated_at: datetime
 

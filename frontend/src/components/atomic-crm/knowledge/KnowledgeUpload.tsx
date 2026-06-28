@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useGetList, useNotify, useRefresh } from "ra-core";
 import {
   CheckCircle2,
@@ -67,7 +67,14 @@ export const KnowledgeUpload = ({
 
   const effectiveProjectId = lockProject ? (initialProjectId ?? "") : projectId;
   const canSubmit =
-    !busy && (mode === "paste" ? pasteText.trim().length > 0 : file !== null);
+    !busy &&
+    !!effectiveProjectId &&
+    (mode === "paste" ? pasteText.trim().length > 0 : file !== null);
+
+  useEffect(() => {
+    if (!open || lockProject || projectId || !projects?.[0]?.id) return;
+    setProjectId(projects[0].id);
+  }, [lockProject, open, projectId, projects]);
 
   const reset = () => {
     setFile(null);
@@ -112,9 +119,13 @@ export const KnowledgeUpload = ({
       notify("Vui lòng chọn tệp hoặc dán nội dung.", { type: "warning" });
       return;
     }
+    if (!effectiveProjectId) {
+      notify("Vui lòng chọn dự án trước khi tải lên.", { type: "warning" });
+      return;
+    }
     setBusy(true);
     try {
-      await uploadKnowledgeFile(payload, effectiveProjectId || null);
+      await uploadKnowledgeFile(payload, effectiveProjectId);
       notify(
         "Đã tải lên. Đang huấn luyện + trích xuất đặc điểm (chạy ở nền).",
         {
@@ -149,7 +160,7 @@ export const KnowledgeUpload = ({
               </label>
               <Select value={effectiveProjectId} onValueChange={setProjectId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Không chọn (dùng chung)" />
+                  <SelectValue placeholder="Chọn dự án" />
                 </SelectTrigger>
                 <SelectContent>
                   {(projects ?? []).map((p) => (

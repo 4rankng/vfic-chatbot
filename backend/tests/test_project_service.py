@@ -51,6 +51,24 @@ async def test_create_slug_collision_returns_409(db_session, seed):
     assert exc.value.status_code == 409
 
 
+async def test_create_same_name_returns_existing_project(db_session, seed):
+    db = db_session
+    admin = await _admin(db)
+    svc = ProjectService(db)
+
+    first = await svc.create(
+        ProjectCreate(slug="u-a1b2", name="Duplicate Project", is_active=True), admin
+    )
+    second = await svc.create(
+        ProjectCreate(slug="u-d4e5", name="  duplicate project  ", is_active=True), admin
+    )
+
+    assert second.id == first.id
+    rows = [row for row in await svc.list() if row.name.lower() == "duplicate project"]
+    assert len(rows) == 1
+    assert rows[0].slug == "u-a1b2"
+
+
 async def test_update_unknown_project_returns_404(db_session, seed):
     db = db_session
     admin = await _admin(db)

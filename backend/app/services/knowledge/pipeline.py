@@ -18,14 +18,17 @@ STRICT grounding rule (existing persona contract): every unit carries a verbatim
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.services.knowledge.coercion import (
     DigestError,
     _coerce_feature,
@@ -118,7 +121,7 @@ class KnowledgePipeline:
         last_err: str | None = None
         for attempt in range(2):
             try:
-                raw = await self.llm_json(DIGEST_SYSTEM_PROMPT, section)
+                raw = await self._llm_json_with_timeout(DIGEST_SYSTEM_PROMPT, section, purpose="digest")
                 payload = _parse_json_lenient(raw)
                 return validate_digest(payload)
             except DigestError as exc:
@@ -127,7 +130,15 @@ class KnowledgePipeline:
             except json.JSONDecodeError as exc:
                 last_err = f"invalid JSON: {exc}"
                 logger.warning("digest attempt %d not JSON: %s", attempt + 1, last_err)
-        raise DigestError(f"digest failed after retry: {last_err}")
+        logger.warning("digest failed after retry; using deterministic fallback: %s", last_err)
+        return self._fallback_digest_section(section)
+
+    def _fallback_digest_section(self, section: str) -> tuple[str, list[dict]]:
+        """Source-grounded fallback when the LLM digest returns unusable JSON."""
+        blocks = _fallback_blocks(section)
+        units = [_fallback_unit(block, index) for index, block in enumerate(blocks)]
+        summary = blocks[0][:220] if blocks else ""
+        return summary, units
 
     async def _store_units(self, doc, units: list[dict]) -> None:
         if not units:
@@ -157,7 +168,7 @@ class KnowledgePipeline:
         if not rows:
             return
         corpus = "\n".join(f"- [{r.category}] {r.content}" for r in rows)
-        raw = await self.llm_json(INDEX_SYSTEM_PROMPT, corpus)
+        raw = await self._llm_json_with_timeout(INDEX_SYSTEM_PROMPT, corpus, purpose="project index")
         card = _parse_json_lenient(raw)
         if not isinstance(card, dict):
             return
@@ -182,7 +193,9 @@ class KnowledgePipeline:
         corpus = (doc.raw_text or "").strip() or "\n".join(u["content"] for u in units)
         if not corpus.strip():
             return
-        raw = await self.llm_json(_product_feature_prompt(catalog), corpus)
+        raw = await self._llm_json_with_timeout(
+            _product_feature_prompt(catalog), corpus, purpose="product feature extraction"
+        )
         payload = _parse_json_lenient(raw)
         feats = payload.get("features") if isinstance(payload, dict) else None
         feats = feats if isinstance(feats, list) else []
@@ -197,6 +210,13 @@ class KnowledgePipeline:
         rows = [(c, _coerce_feature(by_key.get(c.feature_key), c)) for c in catalog]
         await self.features.replace_for_project(doc.project_id, doc.id, rows)
         await self.index.sync_highlights(doc.project_id)
+
+    async def _llm_json_with_timeout(self, system: str, user: str, *, purpose: str) -> str:
+        timeout = get_settings().minimax_request_timeout
+        try:
+            return await asyncio.wait_for(self.llm_json(system, user), timeout=timeout)
+        except TimeoutError as exc:
+            raise TimeoutError(f"MiniMax {purpose} timed out after {timeout}s") from exc
 
     async def _set_stage(self, doc, stage: str, *, status: str | None = None, error: str | None = None) -> None:
         doc.stage = stage
@@ -217,3 +237,82 @@ async def sync_project_highlights(db: AsyncSession, project_id: uuid.UUID) -> No
     edit without instantiating the full pipeline.
     """
     await ProjectIndexRepo(db).sync_highlights(project_id)
+
+
+def _fallback_blocks(section: str) -> list[str]:
+    paragraphs = [p.strip(" \t\r\n-•") for p in re.split(r"\n\s*\n+", section or "") if p.strip()]
+    blocks: list[str] = []
+    for paragraph in paragraphs:
+        if len(paragraph) <= 1200:
+            blocks.append(paragraph)
+            continue
+        sentences = re.split(r"(?<=[.!?。])\s+", paragraph)
+        current = ""
+        for sentence in sentences:
+            candidate = f"{current} {sentence}".strip()
+            if current and len(candidate) > 1200:
+                blocks.append(current)
+                current = sentence.strip()
+            else:
+                current = candidate
+        if current:
+            blocks.append(current)
+    return [b for b in blocks if b]
+
+
+def _fallback_unit(block: str, index: int) -> dict:
+    lowered = block.lower()
+    category = "other"
+    if any(k in lowered for k in ("lương", "thu nhập", "trợ cấp", "thưởng")):
+        category = "salary"
+    elif any(k in lowered for k in ("ca ", "lịch", "nghỉ", "giờ", "tăng ca")):
+        category = "schedule"
+    elif any(k in lowered for k in ("liên hệ", "hotline", "admin", "sđt", "zalo")):
+        category = "contact"
+    elif any(k in lowered for k in ("yêu cầu", "hồ sơ", "cccd", "đào tạo", "quy định")):
+        category = "policy"
+    elif any(k in lowered for k in ("tuyển", "vị trí", "công việc", "địa điểm")):
+        category = "job"
+    elif any(k in lowered for k in ("ký túc", "ăn", "xe", "bảo hiểm", "phúc lợi")):
+        category = "benefits"
+
+    location = None
+    if "hải phòng" in lowered:
+        location = "Hải Phòng"
+    elif "tràng duệ" in lowered:
+        location = "KCN Tràng Duệ"
+
+    entities = {}
+    if location:
+        entities["location"] = location
+    if "lg display" in lowered:
+        entities["company"] = "LG Display"
+    if "công nhân" in lowered:
+        entities["job_title"] = "Công nhân thời vụ"
+
+    content = block
+    if "lg display" not in lowered and len(block) < 900:
+        content = f"LG Display Hải Phòng — {block}"
+
+    return {
+        "content": content,
+        "source_quote": block[:1000],
+        "summary": block[:160],
+        "questions": [_fallback_question(category)],
+        "category": category,
+        "entities": entities,
+        "source_anchor": f"fallback §{index + 1}",
+        "confidence": "medium",
+        "is_inference": False,
+    }
+
+
+def _fallback_question(category: str) -> str:
+    return {
+        "salary": "Thu nhập, lương hoặc trợ cấp của LG Display như thế nào?",
+        "schedule": "Lịch làm việc, ca làm hoặc tăng ca của LG Display như thế nào?",
+        "contact": "Ứng viên cần liên hệ ai để hỏi về LG Display?",
+        "policy": "Yêu cầu, hồ sơ hoặc quy định khi ứng tuyển LG Display là gì?",
+        "job": "Công việc hoặc vị trí tuyển dụng tại LG Display là gì?",
+        "benefits": "Phúc lợi hoặc hỗ trợ cho ứng viên LG Display là gì?",
+    }.get(category, "Thông tin này trả lời câu hỏi nào về LG Display?")

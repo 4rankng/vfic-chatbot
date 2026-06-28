@@ -27,24 +27,11 @@ import { cn } from "@/lib/utils";
 // worker_feature_catalog). The gauge is positional across these slots.
 const FEATURE_SLOTS = 16;
 
-type FeatureState = "data" | "highlight" | "gap" | "empty";
-
-const STATE_LABEL_VI: Record<FeatureState, string> = {
-  data: "Đã có dữ liệu",
-  highlight: "Nổi bật",
-  gap: "Cần bổ sung",
-  empty: "Chưa trích xuất",
-};
-
-// Derive a tick state from a feature row. Highlight wins over gap (a standout
-// is a standout even if imperfect); a missing/unclear row is a gap; otherwise
-// the slot has data. An absent row (catalog slot not yet filled) is empty.
-const featureState = (f: ProductFeature | null | undefined): FeatureState => {
-  if (!f) return "empty";
-  if (f.is_highlight) return "highlight";
-  if (f.is_missing || f.needs_clarification) return "gap";
-  return "data";
-};
+// Binary readiness derivation. A feature is "đủ thông tin" (ready) when the
+// agent has a non-empty value_text and the row is not flagged missing/unclear.
+// Empty slots are NOT ready.
+const isReady = (f: ProductFeature | null | undefined): boolean =>
+  !!f && !!f.value_text?.trim() && !f.is_missing && !f.needs_clarification;
 
 // Canonical 1..16 positional view: sort by the catalog display_priority and
 // pad to FEATURE_SLOTS so the gauge is always positional regardless of how many
@@ -60,18 +47,9 @@ const orderedSlots = (
   return slots;
 };
 
-const tickClass = (state: FeatureState): string =>
-  state === "data"
-    ? "border-emerald-500 bg-emerald-500"
-    : state === "highlight"
-      ? "border-primary bg-primary"
-      : state === "gap"
-        ? "border-destructive border-dashed bg-destructive/10"
-        : "border-border bg-muted";
-
 // "Đặc điểm sản phẩm" panel: the 16 worker product features extracted from the project's
-// posting. Admin can re-extract (sync MiniMax call, persona pattern) and inline-edit each
-// value. Mirrors the agent's get_product_features tool output.
+// posting. Reframed as a per-project readiness view: across the fixed 16 catalog features,
+// whether the agent has enough info to advise on each criterion, or needs more supplied.
 export const ProjectFeatures = ({
   projectId,
   editable = false,
@@ -126,14 +104,14 @@ export const ProjectFeatures = ({
   };
 
   const slots = orderedSlots(features);
-  const states = slots.map(featureState);
-  const dataCount = states.filter(
-    (s) => s === "data" || s === "highlight",
-  ).length;
-  const highlightCount = states.filter((s) => s === "highlight").length;
-  const gapCount = states.filter((s) => s === "gap").length;
-  const completion = Math.round((dataCount / FEATURE_SLOTS) * 100);
+  const readySlots = slots.filter(isReady);
+  const gapSlots = slots.filter((s) => !isReady(s));
+  const readyCount = readySlots.length;
+  const gapCount = FEATURE_SLOTS - readyCount;
   const hasFeatures = (features?.length ?? 0) > 0;
+
+  // Detailed editable cards stay category-grouped inside the disclosure (cleaner
+  // for 16-card grids), but the collapsed summary is the binary hero above it.
   const groupedFeatures = (features ?? []).reduce<
     Record<string, ProductFeature[]>
   >((acc, feature) => {
@@ -163,23 +141,6 @@ export const ProjectFeatures = ({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 pt-2">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <FeatureStat
-            icon={<CheckCircle2 className="size-4" />}
-            label="Đã có dữ liệu"
-            value={`${dataCount}/${FEATURE_SLOTS}`}
-          />
-          <FeatureStat
-            icon={<Star className="size-4" />}
-            label="Nổi bật"
-            value={String(highlightCount)}
-          />
-          <FeatureStat
-            icon={<AlertCircle className="size-4" />}
-            label="Cần bổ sung"
-            value={String(gapCount)}
-          />
-        </div>
         {loading ? (
           <div className="flex flex-col gap-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -188,19 +149,21 @@ export const ProjectFeatures = ({
           </div>
         ) : (
           <>
-            <FeatureGauge
-              slots={slots}
-              states={states}
-              dataCount={dataCount}
-              highlightCount={highlightCount}
+            <ReadinessHero
+              readyCount={readyCount}
               gapCount={gapCount}
-              completion={completion}
               extracting={extracting}
             />
 
             {hasFeatures ? (
               <div className="space-y-3">
-                <FeatureLegendGrid slots={slots} states={states} />
+                <FeatureGroup
+                  tone="ready"
+                  count={readyCount}
+                  slots={readySlots}
+                />
+                <FeatureGroup tone="gap" count={gapCount} slots={gapSlots} />
+
                 <Button
                   variant="ghost"
                   size="sm"
@@ -280,158 +243,128 @@ export const ProjectFeatures = ({
   );
 };
 
-// Signature 16-tick positional gauge. Each tick maps to one catalog slot in
-// display_priority order; colour encodes the slot's state. While the LLM
-// extract is in flight, all ticks pulse indeterminate — we do not fake
-// sequential progress over the real ~5-10s call.
-const FeatureGauge = ({
-  slots,
-  states,
-  dataCount,
-  highlightCount,
+// Readiness hero: "{n}/16 CÓ THỂ TƯ VẤN" + an indeterminate-pulsing bar while
+// the LLM extract is in flight. We do NOT fake sequential ticks over the real
+// ~5-10s call.
+const ReadinessHero = ({
+  readyCount,
   gapCount,
-  completion,
   extracting,
 }: {
-  slots: (ProductFeature | null)[];
-  states: FeatureState[];
-  dataCount: number;
-  highlightCount: number;
+  readyCount: number;
   gapCount: number;
-  completion: number;
   extracting: boolean;
 }) => {
+  const pct = Math.round((readyCount / FEATURE_SLOTS) * 100);
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs">
+      <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono uppercase tracking-wide text-muted-foreground">
-          Bộ 16 đặc điểm
+          Sẵn sàng tư vấn
         </span>
-        <span className="font-medium tabular-nums">
-          {dataCount}/{FEATURE_SLOTS} · {completion}%
+        <span className="text-sm font-semibold tabular-nums">
+          {readyCount}/{FEATURE_SLOTS} có thể tư vấn
         </span>
       </div>
-      <div className="flex items-center gap-1">
-        <span className="w-4 shrink-0 text-center font-mono text-[10px] text-muted-foreground">
-          01
-        </span>
-        <div
-          className="flex flex-1 gap-1"
-          role="img"
-          aria-label={`16 đặc điểm: ${dataCount} đã có dữ liệu, ${highlightCount} nổi bật, ${gapCount} cần bổ sung`}
-        >
-          {slots.map((f, i) => {
-            const state = states[i];
-            const label = `${String(i + 1).padStart(2, "0")}${f ? ` · ${f.name_vi}` : ""} · ${STATE_LABEL_VI[state]}`;
-            return (
-              <span
-                key={i}
-                title={label}
-                className={cn(
-                  "h-[26px] min-w-[14px] flex-1 rounded-[3px] border transition-colors",
-                  extracting
-                    ? "animate-pulse border-border bg-muted"
-                    : tickClass(state),
-                )}
-              />
-            );
-          })}
-        </div>
-        <span className="w-4 shrink-0 text-center font-mono text-[10px] text-muted-foreground">
-          16
-        </span>
+      {/* Decorative bar — the visible "{n}/16 có thể tư vấn" text above is the
+          canonical label; the gap count is announced by the group headings below. */}
+      <div
+        aria-hidden="true"
+        className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted"
+      >
+        {extracting ? (
+          // Indeterminate pulse — no fake sequential progress.
+          <div className="absolute inset-y-0 left-0 w-1/3 animate-pulse rounded-full bg-primary/60" />
+        ) : (
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        )}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
-        <LegendSwatch swatchClass="bg-emerald-500" label="Đã có dữ liệu" />
-        <LegendSwatch swatchClass="bg-primary" label="Nổi bật" />
-        <LegendSwatch
-          swatchClass="border-destructive border-dashed bg-destructive/10"
-          label="Cần bổ sung"
-        />
-        <LegendSwatch
-          swatchClass="border border-border bg-muted"
-          label="Chưa trích xuất"
-        />
+        <span className="inline-flex items-center gap-1.5">
+          <i className="size-2.5 rounded-[3px] bg-primary" />
+          Đủ thông tin
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="size-2.5 rounded-[3px] border border-destructive border-dashed bg-destructive/10" />
+          Cần bổ sung
+        </span>
       </div>
     </div>
   );
 };
 
-const LegendSwatch = ({
-  swatchClass,
-  label,
-}: {
-  swatchClass: string;
-  label: string;
-}) => (
-  <span className="inline-flex items-center gap-1.5">
-    <i className={cn("size-2.5 rounded-[3px]", swatchClass)} />
-    {label}
-  </span>
-);
-
-// Compact at-a-glance index: one row per slot, bridging the abstract gauge and
-// the detailed editable cards behind the disclosure toggle.
-const FeatureLegendGrid = ({
+// One of the two readiness groups. Highlights are NOT a separate group — a
+// ready + is_highlight slot shows a small ⭐ accent next to its name.
+const FeatureGroup = ({
+  tone,
+  count,
   slots,
-  states,
 }: {
+  tone: "ready" | "gap";
+  count: number;
   slots: (ProductFeature | null)[];
-  states: FeatureState[];
-}) => (
-  <div className="grid gap-2 xl:grid-cols-2">
-    {slots.map((f, i) => {
-      const state = states[i];
-      return (
-        <div
-          key={f?.id ?? `slot-${i}`}
-          className="flex items-center gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs"
-        >
-          <span className="font-mono text-[10px] text-muted-foreground">
-            {String(i + 1).padStart(2, "0")}
-          </span>
-          <span
-            className={cn(
-              "h-[18px] w-1 shrink-0 rounded-full",
-              state === "data" && "bg-emerald-500",
-              state === "highlight" && "bg-primary",
-              state === "gap" && "bg-destructive",
-              state === "empty" && "bg-border",
-            )}
-          />
-          <span className="flex-1 truncate text-foreground">
-            {f?.name_vi ?? "—"}
-          </span>
-          {state === "highlight" ? (
-            <Star className="size-3.5 text-primary" />
-          ) : state === "gap" ? (
-            <AlertCircle className="size-3.5 text-destructive" />
-          ) : state === "data" ? (
-            <CheckCircle2 className="size-3.5 text-emerald-500" />
-          ) : null}
+}) => {
+  const ready = tone === "ready";
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          {ready ? (
+            <CheckCircle2 className="size-4 text-primary" />
+          ) : (
+            <AlertCircle className="size-4 text-destructive" />
+          )}
+          {ready ? "Đủ thông tin" : "Cần bổ sung"}
+        </h3>
+        <span className="text-xs text-muted-foreground">{count} mục</span>
+      </div>
+      {count > 0 ? (
+        <div className="grid gap-2 xl:grid-cols-2">
+          {slots.map((f, i) => {
+            const name = f?.name_vi ?? "Chưa trích xuất";
+            const highlighted = ready && !!f?.is_highlight;
+            return (
+              <div
+                key={f?.id ?? `slot-${i}`}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs",
+                  ready
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-destructive/30 border-dashed bg-destructive/5",
+                )}
+              >
+                <span
+                  className={cn(
+                    "h-[18px] w-1 shrink-0 rounded-full",
+                    ready ? "bg-primary" : "bg-destructive",
+                  )}
+                />
+                <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-foreground">
+                  <span className="truncate">{name}</span>
+                  {highlighted && (
+                    <Star
+                      className="size-3.5 shrink-0 text-primary"
+                      aria-label="Nổi bật"
+                    />
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
-      );
-    })}
-  </div>
-);
-
-const FeatureStat = ({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) => (
-  <div className="rounded-md border bg-muted/20 p-3">
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-muted-foreground">{icon}</span>
-    </div>
-    <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
-  </div>
-);
+      ) : (
+        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          {ready
+            ? "Chưa có đặc điểm đủ thông tin."
+            : "Không còn mục cần bổ sung."}
+        </p>
+      )}
+    </section>
+  );
+};
 
 const FeatureCard = ({
   projectId,

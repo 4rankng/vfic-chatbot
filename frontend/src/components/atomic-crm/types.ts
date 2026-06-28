@@ -146,6 +146,7 @@ export type Project = {
   summary?: string | null;
   index_card?: ProjectIndexCard;
   default_persona_id?: string | null;
+  feature_readiness?: { ready: number; total: number };
   created_at: string;
   updated_at: string;
 } & Pick<RaRecord, "id">;

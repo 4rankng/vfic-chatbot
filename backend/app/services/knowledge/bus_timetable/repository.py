@@ -189,15 +189,9 @@ class BusTimetableRepo:
                 },
             )
 
-        # --- post-fix: fill any null/empty route_group_key (mirrors SQL lines 1060-1063) ---
-        await db.execute(
-            text(
-                "UPDATE bus_routes SET route_group_key = normalize_bus_route_key(route_name) "
-                "WHERE company_id = CAST(:cid AS uuid) "
-                "AND (route_group_key IS NULL OR route_group_key = '')"
-            ),
-            {"cid": cid},
-        )
+        # route_group_key is already set per-route by the parser (Python
+        # normalize_bus_route_key), so the SQL fn's null/empty post-fix
+        # (alembic 0001_baseline.py:1060-1063) is a no-op here — nothing to fix up.
 
         await db.commit()
         routes_rebuilt = (

@@ -4,7 +4,8 @@ Encapsulates raw SQL the ORM cannot express cleanly:
 - vector-column writes (``CAST(:emb AS vector)``; ``KnowledgeChunk.embedding`` is
   ``Text``-typed on purpose, see ``app.models.knowledge``)
 - ``jsonb_set`` mutations on ``projects.index_card``
-- the ``rebuild_bus_timetable_from_documents()`` DB function
+- the bus-timetable rebuild (parsed in pure Python; see
+  ``app.services.knowledge.bus_timetable``)
 
 NO business logic, NO LLM calls. Repositories take a ``db: AsyncSession`` and execute
 SQL; coercion/orchestration live in ``coercion.py`` / ``pipeline.py``.
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
+from typing import Any, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -249,6 +250,35 @@ class JobFeatureValueRepo:
             )
         ).first() is not None
 
+    async def readiness_by_project(
+        self, project_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, int]:
+        """Batched ready-feature count per project.
+
+        Ready = a value row exists, is not missing/unclear, and has non-empty
+        ``value_text``. One batched query (``= ANY(:ids)``); projects with no
+        ready features are simply absent from the dict (caller treats missing
+        as 0). Uses the same text/param style as :meth:`list_for_project`.
+        """
+        if not project_ids:
+            return {}
+        rows = (
+            await self.db.execute(
+                text(
+                    "SELECT project_id, COUNT(*) AS ready "
+                    "FROM job_feature_values "
+                    "WHERE project_id = ANY(:ids) "
+                    "  AND COALESCE(is_missing, false) = false "
+                    "  AND COALESCE(needs_clarification, false) = false "
+                    "  AND value_text IS NOT NULL "
+                    "  AND btrim(value_text) <> '' "
+                    "GROUP BY project_id"
+                ),
+                {"ids": [str(pid) for pid in project_ids]},
+            )
+        ).all()
+        return {r.project_id: int(r.ready) for r in rows}
+
     async def update_fields(self, assignments: list[str], params: dict) -> None:
         """Apply a dynamically-built SET clause (admin feature edit). No-op if no assignments."""
         if not assignments:
@@ -333,10 +363,37 @@ class ProjectIndexRepo:
         await self.db.commit()
 
 
-async def rebuild_bus_timetable(db: AsyncSession) -> None:
-    """Rebuild the structured bus-timetable graph from the ``documents`` VIEW (verbatim SQL fn)."""
-    await db.execute(text("SELECT rebuild_bus_timetable_from_documents()"))
-    await db.commit()
+async def rebuild_bus_timetable(db: AsyncSession) -> tuple[int, int]:
+    """Rebuild the structured bus-timetable graph from the parsed ``LGDisplay`` document.
+
+    Reads the canonical ``LGDisplay.txt`` content from the ``documents`` VIEW, parses it
+    in pure Python (``app.services.knowledge.bus_timetable``), and persists via
+    ``BusTimetableRepo``. Behaviour-identical to the former
+    ``rebuild_bus_timetable_from_documents()`` SQL function (golden-gated). Best-effort:
+    callers wrap in ``try/except``; returns ``(0, 0)`` when no source document is present
+    (matches the SQL fn's empty loop — does NOT scan unrelated documents).
+    """
+    # Lazy import keeps this data-access module free of a load-time dependency on the
+    # parser package.
+    from app.services.knowledge.bus_timetable import parse_bus_timetable
+    from app.services.knowledge.bus_timetable.repository import BusTimetableRepo
+
+    contents = (
+        await db.execute(
+            text(
+                "SELECT kc.content "
+                "FROM knowledge_documents kd JOIN knowledge_chunks kc ON kc.document_id = kd.id "
+                "WHERE kd.file_name = :fn "
+                "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
+                "ORDER BY kd.id, kc.chunk_index"
+            ),
+            {"fn": "LGDisplay.txt"},
+        )
+    ).scalars().all()
+    if not contents:
+        return (0, 0)
+    parsed = parse_bus_timetable("\n".join(contents))
+    return await BusTimetableRepo(db).upsert(parsed)
 
 
 __all__ = [

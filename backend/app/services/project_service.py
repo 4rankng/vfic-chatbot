@@ -18,7 +18,7 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
@@ -27,9 +27,11 @@ from app.models.user import User
 from app.schemas.projects import (
     FeatureListResponse,
     FeatureOut,
-    FeatureUpdate,
+    FeatureReadiness,
     ProjectCreate,
+    ProjectOut,
     ProjectUpdate,
+    FeatureUpdate,
 )
 from app.services.audit_service import record_audit
 from app.services.knowledge import sync_project_highlights
@@ -69,11 +71,54 @@ class ProjectService:
             q = q.where(Project.is_active == is_active)
         return list((await self.db.scalars(q)).all())
 
+    async def list_with_readiness(
+        self, is_active: bool | None = None
+    ) -> list[ProjectOut]:
+        """List projects with per-project feature readiness attached.
+
+        One batched ``readiness_by_project`` query — no N+1. The fixed 16-feature
+        catalog total is hardcoded (migration 0004).
+        """
+        rows = await self.list(is_active)
+        ready = await JobFeatureValueRepo(self.db).readiness_by_project(
+            [p.id for p in rows]
+        )
+        out: list[ProjectOut] = []
+        for p in rows:
+            o = ProjectOut.model_validate(p)
+            o.feature_readiness = FeatureReadiness(
+                ready=ready.get(p.id, 0), total=16
+            )
+            out.append(o)
+        return out
+
     async def get(self, project_id: uuid.UUID) -> Project:
         return await self._require_project(project_id)
 
+    async def get_with_readiness(self, project_id: uuid.UUID) -> ProjectOut:
+        """Single-project get with feature readiness attached."""
+        proj = await self._require_project(project_id)
+        ready = await JobFeatureValueRepo(self.db).readiness_by_project([proj.id])
+        o = ProjectOut.model_validate(proj)
+        o.feature_readiness = FeatureReadiness(
+            ready=ready.get(proj.id, 0), total=16
+        )
+        return o
+
     async def create(self, body: ProjectCreate, admin: User) -> Project:
-        proj = Project(slug=body.slug.strip(), name=body.name.strip(), is_active=body.is_active)
+        name = body.name.strip()
+        existing = (
+            await self.db.scalars(
+                select(Project)
+                .where(func.lower(func.trim(Project.name)) == name.lower())
+                .order_by(Project.created_at.asc())
+                .limit(1)
+            )
+        ).first()
+        if existing is not None:
+            return existing
+
+        proj = Project(slug=body.slug.strip(), name=name, is_active=body.is_active)
         self.db.add(proj)
         try:
             await self.db.commit()

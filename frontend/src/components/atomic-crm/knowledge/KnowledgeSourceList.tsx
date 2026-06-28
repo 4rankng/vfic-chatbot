@@ -85,7 +85,6 @@ import {
 
 const ALL_PROJECTS = "__all__";
 const ALL_STAGES = "__all__";
-const UNASSIGNED_PROJECT = "__unassigned__";
 
 const PIPELINE_STEPS = [
   {
@@ -246,8 +245,10 @@ const KnowledgeSourceListContent = () => {
   const filteredSources = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return sources.filter((source) => {
-      const projectId = source.project_id ?? UNASSIGNED_PROJECT;
-      if (projectFilter !== ALL_PROJECTS && projectFilter !== projectId)
+      if (
+        projectFilter !== ALL_PROJECTS &&
+        String(source.project_id ?? "") !== projectFilter
+      )
         return false;
       if (stageFilter !== ALL_STAGES && stageFilter !== sourceStage(source))
         return false;
@@ -255,9 +256,7 @@ const KnowledgeSourceListContent = () => {
       if (!needle) return true;
       return sourceSearchText(
         source,
-        source.project_id
-          ? projectById.get(String(source.project_id))?.name
-          : "Nguồn chung",
+        source.project_id ? projectById.get(String(source.project_id))?.name : "",
       ).includes(needle);
     });
   }, [projectById, projectFilter, query, reviewOnly, sources, stageFilter]);
@@ -362,7 +361,6 @@ const KnowledgeSourceListContent = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL_PROJECTS}>Tất cả dự án</SelectItem>
-              <SelectItem value={UNASSIGNED_PROJECT}>Nguồn chung</SelectItem>
               {(projects ?? []).map((project) => (
                 <SelectItem key={project.id} value={String(project.id)}>
                   {project.name}
@@ -489,9 +487,13 @@ const SourceSkeleton = () => (
 const InlineKnowledgeUploader = ({ projects }: { projects: Project[] }) => {
   const notify = useNotify();
   const refresh = useRefresh();
-  const [projectChoice, setProjectChoice] = useState(UNASSIGNED_PROJECT);
+  const [projectChoice, setProjectChoice] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!projectChoice && projects[0]?.id) setProjectChoice(String(projects[0].id));
+  }, [projectChoice, projects]);
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
@@ -517,12 +519,13 @@ const InlineKnowledgeUploader = ({ projects }: { projects: Project[] }) => {
       notify("Vui lòng chọn tệp trước khi tải lên.", { type: "warning" });
       return;
     }
+    if (!projectChoice) {
+      notify("Vui lòng chọn dự án trước khi tải lên.", { type: "warning" });
+      return;
+    }
     setBusy(true);
     try {
-      await uploadKnowledgeFile(
-        file,
-        projectChoice === UNASSIGNED_PROJECT ? null : projectChoice,
-      );
+      await uploadKnowledgeFile(file, projectChoice);
       notify("Đã tải lên. Pipeline đang xử lý ở nền.", { type: "success" });
       setFile(null);
       refresh();
@@ -534,22 +537,29 @@ const InlineKnowledgeUploader = ({ projects }: { projects: Project[] }) => {
   };
 
   return (
-    <div className="m-4 flex min-h-[420px] flex-col justify-center rounded-[14px] border border-dashed border-border bg-card p-5">
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
-        <div className="text-center">
-          <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <BookOpen className="size-7" />
+    <div className="flex min-h-[420px] flex-col p-5">
+      <div className="rounded-[12px] border border-border bg-background/70 p-4">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--kb-teal-soft)] text-[var(--kb-teal)]">
+            <BookOpen className="size-5" />
           </span>
-          <h4 className="kb-display mt-4 text-xl text-foreground">
-            Chưa có cơ sở kiến thức
-          </h4>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Chọn dự án, kéo thả tài liệu vào đây, rồi tải lên để huấn luyện
-            agent.
-          </p>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-base font-semibold text-foreground">
+              Bắt đầu bằng một nguồn kiến thức
+            </h4>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Chọn dự án, thêm một tệp, rồi tải lên để pipeline xuất bản đơn vị
+              truy xuất cho agent.
+            </p>
+          </div>
+          <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">
+            0 nguồn
+          </Badge>
         </div>
+      </div>
 
-        <div className="grid gap-2 sm:grid-cols-[120px_1fr] sm:items-center">
+      <div className="mt-4 grid gap-3 rounded-[12px] border border-border bg-card p-4">
+        <div className="grid gap-2 md:grid-cols-[104px_minmax(0,1fr)] md:items-center">
           <label className="kb-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Dự án
           </label>
@@ -563,7 +573,7 @@ const InlineKnowledgeUploader = ({ projects }: { projects: Project[] }) => {
         <div
           {...getRootProps({
             className: cn(
-              "group flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-[12px] border border-dashed bg-background px-5 py-6 text-center transition-colors outline-none",
+              "group grid min-h-32 cursor-pointer grid-cols-[40px_minmax(0,1fr)] items-center gap-4 rounded-[12px] border border-dashed bg-background px-4 py-5 text-left transition-colors outline-none",
               "hover:border-primary/50 hover:bg-primary/5 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
               isDragActive && "border-primary bg-primary/10",
               isDragReject && "border-destructive bg-destructive/10",
@@ -572,22 +582,26 @@ const InlineKnowledgeUploader = ({ projects }: { projects: Project[] }) => {
           })}
         >
           <input {...getInputProps()} />
-          <UploadCloud className="size-8 text-primary transition-transform group-hover:scale-105" />
-          <p className="mt-3 text-sm font-semibold text-foreground">
-            {isDragActive ? "Thả tệp vào đây" : "Kéo thả hoặc bấm để chọn tệp"}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            PDF, DOCX, XLSX, CSV, TXT, MD. Một tệp mỗi lần tải.
-          </p>
+          <span className="flex size-10 items-center justify-center rounded-[10px] bg-muted text-primary">
+            <UploadCloud className="size-5 transition-transform group-hover:-translate-y-0.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">
+              {isDragActive ? "Thả tệp vào đây" : "Kéo thả hoặc bấm để chọn tệp"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              PDF, DOCX, XLSX, CSV, TXT hoặc MD. Một tệp mỗi lần tải.
+            </p>
+          </div>
         </div>
 
-        {file && (
-          <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border bg-background p-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-muted text-muted-foreground">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {file ? (
+            <div className="flex min-w-0 flex-1 items-center gap-3 rounded-[10px] border border-border bg-background px-3 py-2">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground">
                 <FileText className="size-4" />
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">
                   {file.name}
                 </p>
@@ -595,34 +609,38 @@ const InlineKnowledgeUploader = ({ projects }: { projects: Project[] }) => {
                   {formatFileSize(file.size)}
                 </p>
               </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 rounded-[9px]"
+                onClick={() => setFile(null)}
+                disabled={busy}
+                aria-label="Xóa tệp đã chọn"
+              >
+                <X className="size-4" />
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0 rounded-[9px]"
-              onClick={() => setFile(null)}
-              disabled={busy}
-              aria-label="Xóa tệp đã chọn"
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-        )}
-
-        <Button
-          type="button"
-          onClick={submit}
-          disabled={!file || busy}
-          className="h-10 self-center rounded-[9px] px-5"
-        >
-          {busy ? (
-            <RefreshCw className="size-4 animate-spin" />
           ) : (
-            <Upload className="size-4" />
+            <p className="text-xs leading-5 text-muted-foreground">
+              Chọn tệp và dự án trước khi tải lên.
+            </p>
           )}
-          {busy ? "Đang tải lên..." : "Tải lên"}
-        </Button>
+
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={!file || !projectChoice || busy}
+            className="h-10 shrink-0 rounded-[9px] px-4"
+          >
+            {busy ? (
+              <RefreshCw className="size-4 animate-spin" />
+            ) : (
+              <Upload className="size-4" />
+            )}
+            {busy ? "Đang tải lên..." : "Tải lên"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -670,6 +688,11 @@ const ProjectPicker = ({
     (project) => normalizeSearch(project.name) === normalizedSearch,
   );
   const canCreate = trimmedSearch.length > 0 && !exactMatch;
+  const createHelpText = !trimmedSearch
+    ? "Nhập tên dự án để tạo mới."
+    : exactMatch
+      ? "Dự án này đã tồn tại."
+      : `Tạo dự án "${trimmedSearch}"`;
 
   const selectProject = (projectId: string) => {
     onChange(projectId);
@@ -715,7 +738,7 @@ const ProjectPicker = ({
           className="h-10 w-full justify-between rounded-[9px] border-border bg-background px-3 text-sm font-normal"
         >
           <span className="truncate">
-            {selectedProject?.name ?? "Nguồn chung"}
+            {selectedProject?.name ?? "Chọn dự án"}
           </span>
           <ChevronsUpDown className="size-4 opacity-50" />
         </Button>
@@ -724,7 +747,19 @@ const ProjectPicker = ({
         align="start"
         className="w-[min(420px,calc(100vw-3rem))] p-0"
       >
-        <Command shouldFilter={false}>
+        <Command
+          shouldFilter={false}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              canCreate &&
+              filteredProjects.length === 0
+            ) {
+              event.preventDefault();
+              void createProject();
+            }
+          }}
+        >
           <CommandInput
             value={search}
             onValueChange={setSearch}
@@ -732,21 +767,11 @@ const ProjectPicker = ({
           />
           <CommandList>
             <CommandGroup heading="Lựa chọn">
-              <CommandItem
-                value={UNASSIGNED_PROJECT}
-                onSelect={() => selectProject(UNASSIGNED_PROJECT)}
-              >
-                <Check
-                  className={cn(
-                    "size-4",
-                    value !== UNASSIGNED_PROJECT && "opacity-0",
-                  )}
-                />
-                Nguồn chung
-              </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
-            <CommandGroup heading="Dự án">
+              {(filteredProjects.length > 0 || !trimmedSearch) && (
+                <span className="px-2 py-1.5 text-xs text-muted-foreground">
+                  Chọn một dự án để gắn nguồn kiến thức.
+                </span>
+              )}
               {filteredProjects.length > 0 ? (
                 filteredProjects.map((project) => (
                   <CommandItem
@@ -770,7 +795,9 @@ const ProjectPicker = ({
                 ))
               ) : (
                 <div className="px-2 py-3 text-sm text-muted-foreground">
-                  Không tìm thấy dự án.
+                  {trimmedSearch
+                    ? "Không tìm thấy dự án."
+                    : "Chưa có dự án nào."}
                 </div>
               )}
             </CommandGroup>
@@ -797,6 +824,22 @@ const ProjectPicker = ({
             )}
           </CommandList>
         </Command>
+        <div className="border-t border-border p-2">
+          <Button
+            type="button"
+            variant={canCreate ? "default" : "ghost"}
+            className="h-9 w-full justify-start rounded-[8px] px-2 text-sm"
+            disabled={!canCreate || creating}
+            onClick={() => void createProject()}
+          >
+            {creating ? (
+              <RefreshCw className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+            <span className="truncate">{createHelpText}</span>
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -853,7 +896,7 @@ const KnowledgeSourceRow = ({
               {source.file_name}
             </div>
             <div className="kb-mono mt-1 break-words text-[11.5px] text-muted-foreground">
-              {project?.name ?? "Nguồn chung"} ·{" "}
+              {project?.name ?? "Chưa gắn dự án"} ·{" "}
               {getRelativeTimeString(source.updated_at ?? source.created_at)} ·{" "}
               {source.digest_meta?.unit_count ?? 0} đơn vị
             </div>
@@ -1070,7 +1113,7 @@ const KnowledgeDetailPanel = ({
             {source.file_name}
           </h3>
           <p className="kb-mono mt-1 break-words text-[12.5px] text-muted-foreground">
-            {project?.name ?? "Nguồn chung"} · {source.mime_type || "Tài liệu"}{" "}
+            {project?.name ?? "Chưa gắn dự án"} · {source.mime_type || "Tài liệu"}{" "}
             · Cập nhật{" "}
             {getRelativeTimeString(source.updated_at ?? source.created_at)}
           </p>

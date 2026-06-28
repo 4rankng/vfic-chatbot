@@ -119,14 +119,25 @@ _TRANSIENT_TABLES = (
 _TRUNCATE_TRANSIENT = _sa_text(
     "TRUNCATE TABLE " + ", ".join(_TRANSIENT_TABLES) + " RESTART IDENTITY CASCADE"
 )
+_DELETE_TEST_PROJECTS = _sa_text(
+    """
+    DELETE FROM projects
+    WHERE slug ~ '^(lg|u|dup|p)-[0-9a-f]{4,6}$'
+       OR slug ~ '^(a|b|n|s)-[0-9a-f]{4}$'
+    """
+)
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def _isolate_transient_tables():
     async with _test_sessionmaker() as db:
         await db.execute(_TRUNCATE_TRANSIENT)
+        await db.execute(_DELETE_TEST_PROJECTS)
         await db.commit()
     yield
+    async with _test_sessionmaker() as db:
+        await db.execute(_DELETE_TEST_PROJECTS)
+        await db.commit()
 
 
 @pytest_asyncio.fixture

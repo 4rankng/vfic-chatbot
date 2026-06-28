@@ -11,6 +11,7 @@ import {
 import {
   Activity,
   Boxes,
+  ChevronDown,
   FileText,
   MapPin,
   MoreHorizontal,
@@ -35,7 +36,6 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { KnowledgeSource, Project } from "../types";
@@ -43,8 +43,6 @@ import { reindexKnowledge, reindexProject } from "@/lib/vfic/knowledgeService";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { stageLabel, stageTone } from "../knowledge/stageTone";
 import { ProjectFeatures } from "./ProjectFeatures";
-
-type StatusFilter = "all" | "active" | "inactive";
 
 const getProjectLocation = (project: Project) =>
   project.index_card?.location?.trim() || "Chưa có địa điểm";
@@ -62,7 +60,6 @@ const ProjectListContent = () => {
   const refresh = useRefresh();
   const redirect = useRedirect();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -88,8 +85,6 @@ const ProjectListContent = () => {
   const filteredProjects = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return projects.filter((project) => {
-      if (status === "active" && !project.is_active) return false;
-      if (status === "inactive" && project.is_active) return false;
       if (!needle) return true;
       const haystack = [
         project.name,
@@ -104,7 +99,7 @@ const ProjectListContent = () => {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [projects, query, status]);
+  }, [projects, query]);
 
   useEffect(() => {
     if (filteredProjects.length === 0) {
@@ -214,16 +209,6 @@ const ProjectListContent = () => {
                   className="pl-9"
                 />
               </div>
-              <Tabs
-                value={status}
-                onValueChange={(value) => setStatus(value as StatusFilter)}
-              >
-                <TabsList className="grid w-full grid-cols-3 bg-muted/80 p-1 shadow-inner">
-                  <TabsTrigger value="all">Tất cả</TabsTrigger>
-                  <TabsTrigger value="active">Đang bật</TabsTrigger>
-                  <TabsTrigger value="inactive">Tắt</TabsTrigger>
-                </TabsList>
-              </Tabs>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -242,7 +227,6 @@ const ProjectListContent = () => {
                   <ProjectManagementRow
                     key={project.id}
                     project={project}
-                    docs={projectDocs.get(String(project.id)) ?? []}
                     selected={selectedProject?.id === project.id}
                     onSelect={() => setSelectedId(String(project.id))}
                     isAdmin={isAdmin}
@@ -279,6 +263,59 @@ const ProjectListContent = () => {
 
 // Circumference of the StatsRibbon progress ring (r=15 in a 36×36 viewBox).
 const RING_CIRCUMFERENCE = 2 * Math.PI * 15;
+
+// Shared readiness ring: reuses the exact SVG ring math from StatsRibbon
+// (viewBox 0 0 36 36, r=15, -rotate-90, primary stroke over border track).
+// Renders a muted dash when readiness is undefined (e.g. older API response).
+const ReadinessRing = ({
+  ready,
+  total,
+  size = "size-9",
+}: {
+  ready: number | undefined;
+  total: number;
+  size?: string;
+}) => {
+  const known = typeof ready === "number";
+  const pct = known ? Math.max(0, Math.min(100, (ready as number) / total)) : 0;
+  const dash = pct * RING_CIRCUMFERENCE;
+  return (
+    <svg
+      viewBox="0 0 36 36"
+      className={cn(size, "shrink-0 -rotate-90")}
+      role="img"
+      aria-label={
+        known
+          ? `${ready}/${total} có thể tư vấn`
+          : "Chưa có dữ liệu sẵn sàng tư vấn"
+      }
+    >
+      <circle
+        cx="18"
+        cy="18"
+        r="15"
+        fill="none"
+        strokeWidth="3.5"
+        stroke="var(--border)"
+      />
+      <circle
+        cx="18"
+        cy="18"
+        r="15"
+        fill="none"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+        stroke="var(--primary)"
+        strokeDasharray={
+          known
+            ? `${dash} ${RING_CIRCUMFERENCE}`
+            : `${RING_CIRCUMFERENCE / 8} ${RING_CIRCUMFERENCE / 4}`
+        }
+        className={cn("transition-all duration-500", !known && "opacity-40")}
+      />
+    </svg>
+  );
+};
 
 const StatsRibbon = ({
   stats,
@@ -389,13 +426,11 @@ const ProjectStatusBadge = ({
 
 const ProjectManagementRow = ({
   project,
-  docs,
   selected,
   onSelect,
   isAdmin,
 }: {
   project: Project;
-  docs: KnowledgeSource[];
   selected: boolean;
   onSelect: () => void;
   isAdmin: boolean;
@@ -462,14 +497,16 @@ const ProjectManagementRow = ({
               {project.summary}
             </p>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <FileText className="size-3.5" />
-              {docs.length} tài liệu
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Star className="size-3.5" />
-              {getProjectHighlights(project).length} điểm nổi bật
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <ReadinessRing
+              ready={project.feature_readiness?.ready}
+              total={project.feature_readiness?.total ?? 16}
+              size="size-7"
+            />
+            <span className="truncate tabular-nums">
+              {typeof project.feature_readiness?.ready === "number"
+                ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16} có thể tư vấn`
+                : "—"}
             </span>
           </div>
         </div>
@@ -558,140 +595,151 @@ const ProjectDetailPanel = ({
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="gap-3 border-b">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <CardTitle className="truncate text-lg">{project.name}</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {project.slug} • {getProjectLocation(project)}
-              </p>
-            </div>
-            <ProjectStatusBadge active={project.is_active} />
-          </div>
-          {isAdmin && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => redirect("edit", "projects", project.id)}
-              >
-                <Pencil className="size-4" />
-                Cập nhật
-              </Button>
-              <Button variant="outline" size="sm" onClick={onUpload}>
-                <Upload className="size-4" />
-                Thêm kiến thức
-              </Button>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4 pt-4">
-          <section>
-            <h3 className="text-sm font-semibold">Product card</h3>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {project.summary ??
-                "Chưa có tóm tắt. Tải tin tuyển dụng rồi làm mới thẻ danh mục."}
-            </p>
-          </section>
-          <div className="grid gap-3 md:grid-cols-2">
-            <InfoBlock
-              label="Vị trí tuyển"
-              value={(card.key_roles ?? []).join(", ") || "Chưa có"}
-            />
-            <InfoBlock
-              label="Nguồn kiến thức"
-              value={`${docs.length} tài liệu`}
-            />
-          </div>
-          <section>
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Điểm nổi bật</h3>
-              <span className="text-xs text-muted-foreground">
-                {highlights.length} mục
-              </span>
-            </div>
-            {highlights.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {highlights.map((highlight) => (
-                  <Badge key={highlight} variant="secondary">
-                    {highlight}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Chưa có điểm nổi bật để agent ưu tiên khi tư vấn.
-              </p>
-            )}
-          </section>
-          <section>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Tài liệu liên kết</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => redirect("/knowledge_sources")}
-              >
-                Xem kho kiến thức
-              </Button>
-            </div>
-            {docs.length > 0 ? (
-              <div className="space-y-2">
-                {docs.slice(0, 4).map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        redirect("show", "knowledge_sources", doc.id)
-                      }
-                      className="min-w-0 flex-1 truncate text-left"
-                    >
-                      {doc.file_name}
-                    </button>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                        stageTone(doc.stage, doc.status),
-                      )}
-                    >
-                      {stageLabel(doc.stage ?? doc.status)}
-                    </span>
-                    {isFailedSource(doc) && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => retrySource(doc)}
-                        title="Thử xử lý lại tài liệu"
-                      >
-                        <RefreshCw className="size-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                Chưa có tài liệu nào gắn với dự án này.
-              </div>
-            )}
-          </section>
-        </CardContent>
-      </Card>
-
       {/* key on project.id so the whole panel (incl. disclosure + FeatureCard
-          local draft state) resets when the recruiter selects another project */}
+          local draft state) resets when the recruiter selects another project.
+          Rendered FIRST so readiness is the unmistakable hero of the detail. */}
       <ProjectFeatures
         key={String(project.id)}
         projectId={String(project.id)}
         editable={isAdmin}
       />
+
+      <details className="group rounded-lg border bg-card text-card-foreground shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 border-b px-4 py-3 text-sm font-semibold transition-colors group-open:[&>svg]:rotate-180 hover:bg-muted/50">
+          <span>Thông tin thêm</span>
+          <ChevronDown className="size-4 text-muted-foreground transition-transform" />
+        </summary>
+        <div className="space-y-4 px-4 py-4">
+          <Card className="border-0 shadow-none">
+            <CardHeader className="gap-3 border-b px-0">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-lg">
+                    {project.name}
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {project.slug} • {getProjectLocation(project)}
+                  </p>
+                </div>
+                <ProjectStatusBadge active={project.is_active} />
+              </div>
+              {isAdmin && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => redirect("edit", "projects", project.id)}
+                  >
+                    <Pencil className="size-4" />
+                    Cập nhật
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={onUpload}>
+                    <Upload className="size-4" />
+                    Thêm kiến thức
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4 px-0 pt-4">
+              <section>
+                <h3 className="text-sm font-semibold">Product card</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {project.summary ??
+                    "Chưa có tóm tắt. Tải tin tuyển dụng rồi làm mới thẻ danh mục."}
+                </p>
+              </section>
+              <div className="grid gap-3 md:grid-cols-2">
+                <InfoBlock
+                  label="Vị trí tuyển"
+                  value={(card.key_roles ?? []).join(", ") || "Chưa có"}
+                />
+                <InfoBlock
+                  label="Nguồn kiến thức"
+                  value={`${docs.length} tài liệu`}
+                />
+              </div>
+              <section>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">Điểm nổi bật</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {highlights.length} mục
+                  </span>
+                </div>
+                {highlights.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {highlights.map((highlight) => (
+                      <Badge key={highlight} variant="secondary">
+                        {highlight}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Chưa có điểm nổi bật để agent ưu tiên khi tư vấn.
+                  </p>
+                )}
+              </section>
+              <section>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">Tài liệu liên kết</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => redirect("/knowledge_sources")}
+                  >
+                    Xem kho kiến thức
+                  </Button>
+                </div>
+                {docs.length > 0 ? (
+                  <div className="space-y-2">
+                    {docs.slice(0, 4).map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            redirect("show", "knowledge_sources", doc.id)
+                          }
+                          className="min-w-0 flex-1 truncate text-left"
+                        >
+                          {doc.file_name}
+                        </button>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                            stageTone(doc.stage, doc.status),
+                          )}
+                        >
+                          {stageLabel(doc.stage ?? doc.status)}
+                        </span>
+                        {isFailedSource(doc) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => retrySource(doc)}
+                            title="Thử xử lý lại tài liệu"
+                          >
+                            <RefreshCw className="size-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    Chưa có tài liệu nào gắn với dự án này.
+                  </div>
+                )}
+              </section>
+            </CardContent>
+          </Card>
+        </div>
+      </details>
     </div>
   );
 };

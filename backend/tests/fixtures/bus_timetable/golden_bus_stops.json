@@ -961,15 +961,6 @@
     "stop_order": 1
   },
   {
-    "raw_stop_text": "Bệnh viện Phụ sản@07:00",
-    "scheduled_time": "07:00:00",
-    "stop_aliases": [
-      "Bệnh viện Phụ sản"
-    ],
-    "stop_name": "Bệnh viện Phụ sản",
-    "stop_order": 2
-  },
-  {
     "raw_stop_text": "Chợ An Dương@07:05",
     "scheduled_time": "07:05:00",
     "stop_aliases": [
@@ -980,13 +971,13 @@
     "stop_order": 2
   },
   {
-    "raw_stop_text": "Điện máy Trần Anh@07:10",
-    "scheduled_time": "07:10:00",
+    "raw_stop_text": "Bệnh viện Phụ sản@07:00",
+    "scheduled_time": "07:00:00",
     "stop_aliases": [
-      "Điện máy Trần Anh"
+      "Bệnh viện Phụ sản"
     ],
-    "stop_name": "Điện máy Trần Anh",
-    "stop_order": 3
+    "stop_name": "Bệnh viện Phụ sản",
+    "stop_order": 2
   },
   {
     "raw_stop_text": "Ngã tư Cơ Điện@07:10",
@@ -998,13 +989,13 @@
     "stop_order": 3
   },
   {
-    "raw_stop_text": "Khu đô thị Pruksa@07:15",
-    "scheduled_time": "07:15:00",
+    "raw_stop_text": "Điện máy Trần Anh@07:10",
+    "scheduled_time": "07:10:00",
     "stop_aliases": [
-      "Khu đô thị Pruksa"
+      "Điện máy Trần Anh"
     ],
-    "stop_name": "Khu đô thị Pruksa",
-    "stop_order": 4
+    "stop_name": "Điện máy Trần Anh",
+    "stop_order": 3
   },
   {
     "raw_stop_text": "LGD",
@@ -1013,6 +1004,15 @@
       "LGD"
     ],
     "stop_name": "LGD",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Khu đô thị Pruksa@07:15",
+    "scheduled_time": "07:15:00",
+    "stop_aliases": [
+      "Khu đô thị Pruksa"
+    ],
+    "stop_name": "Khu đô thị Pruksa",
     "stop_order": 4
   },
   {

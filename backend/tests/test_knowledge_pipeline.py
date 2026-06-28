@@ -5,8 +5,10 @@ upload decode, digest schema validation + retry-on-malformed, the full run() (di
 embed -> index) writing rich chunks, project index-card build, scoped search, and the
 multipart upload-file endpoint (with enqueue stubbed).
 """
+import asyncio
 import json
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import text
@@ -149,14 +151,24 @@ async def test_pipeline_retries_on_malformed_then_succeeds(db_session, clean_kb)
     assert doc.status == KnowledgeStatus.PUBLISHED
 
 
-async def test_pipeline_raises_after_retry_failure(db_session, clean_kb):
+async def test_pipeline_falls_back_after_retry_failure(db_session, clean_kb):
     doc = await _make_doc(db_session, "nội dung")
 
     async def llm_json(system, user):
         return "still not json"
 
-    with pytest.raises(DigestError):
-        await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
+    await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
+
+    await db_session.refresh(doc)
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert doc.digest_meta["unit_count"] == 1
+    rows = (
+        await db_session.execute(
+            text("SELECT content, source_quote FROM knowledge_chunks WHERE document_id = :d"),
+            {"d": str(doc.id)},
+        )
+    ).all()
+    assert rows[0].source_quote == "nội dung"
 
 
 async def test_ingest_worker_crash_marks_document_failed(db_session, clean_kb):
@@ -173,6 +185,34 @@ async def test_ingest_worker_crash_marks_document_failed(db_session, clean_kb):
     assert doc.status == KnowledgeStatus.FAILED
     assert doc.stage == "FAILED"
     assert "TimeoutError: rq timeout" in (doc.error or "")
+
+
+async def test_ingest_job_marks_document_failed_when_digest_times_out(
+    db_session, clean_kb, monkeypatch
+):
+    from app.services.knowledge import pipeline as pipeline_module
+    from app.workers.ingest_worker import _run_job_async
+
+    doc = await _make_doc(db_session, "nội dung khiến MiniMax treo")
+    await db_session.commit()
+    monkeypatch.setattr(
+        pipeline_module,
+        "get_settings",
+        lambda: SimpleNamespace(minimax_request_timeout=0.01),
+    )
+
+    async def hanging_llm(system, user):
+        await asyncio.sleep(10)
+        return json.dumps(_units_payload("không bao giờ tới đây"))
+
+    await _run_in_fresh_loop(
+        lambda: _run_job_async(str(doc.id), _embed=_FakeEmbedder(), _llm=hanging_llm)
+    )
+
+    await db_session.refresh(doc)
+    assert doc.status == KnowledgeStatus.FAILED
+    assert doc.stage == "FAILED"
+    assert "MiniMax digest timed out after 0.01s" in (doc.error or "")
 
 
 async def _run_in_fresh_loop(factory):

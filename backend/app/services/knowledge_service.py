@@ -125,6 +125,13 @@ class KnowledgeService:
 
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "project not found")
             doc.project_id = body.project_id
+            await self.db.execute(
+                text("UPDATE knowledge_chunks SET project_id = :pid WHERE document_id = :did"),
+                {
+                    "pid": str(body.project_id) if body.project_id is not None else None,
+                    "did": str(doc.id),
+                },
+            )
         await record_audit(self.db, action="update_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=str(doc.id))
         await self.db.commit()
         await self.db.refresh(doc)
