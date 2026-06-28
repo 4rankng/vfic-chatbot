@@ -60,10 +60,6 @@ class Settings(BaseSettings):
     digest_max_sections: int = 20
     ingest_job_timeout_seconds: int = 1800
 
-    # Google Drive (knowledge ingest)
-    google_drive_credentials_json: str = ""
-    google_drive_folder_id: str = ""
-
     web_concurrency: int = 2
 
     # Per-chat bot mutex TTL. Must comfortably exceed the worst-case single turn

@@ -2,7 +2,7 @@
 
 Two ingest paths:
   * ``process(embedder, doc, llm_json=None)`` — mechanical 1-chunk fallback (legacy,
-    tests, Drive path). When ``llm_json`` is supplied it runs the full LLM
+    tests). When ``llm_json`` is supplied it runs the full LLM
     ``KnowledgePipeline`` (digest -> embed -> index).
   * ``upload_bytes(...)`` — multipart upload: extract text from Office/PDF/text,
     persist the original to a volume, create the doc (stage=UPLOADED); the caller
@@ -30,7 +30,6 @@ from app.services.audit_service import record_audit
 from app.services.knowledge import LLMJson, extract_text
 
 Embedder = Callable[[str], Awaitable[list[float]]]
-FileProvider = Callable[[str], Awaitable[bytes]]
 
 
 class KnowledgeService:
@@ -110,16 +109,6 @@ class KnowledgeService:
         await self.db.commit()
         await self.db.refresh(doc)
         return doc
-
-    async def ingest_from_drive(self, embedder: Embedder, file_provider: FileProvider, drive_file_id: str, file_name: str) -> KnowledgeDocument:
-        """Fetch a Drive file's bytes, parse to text, and run process()."""
-        raw = await file_provider(drive_file_id)
-        content = raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
-        doc = KnowledgeDocument(file_name=file_name, drive_file_id=drive_file_id, raw_text=content, status=KnowledgeStatus.PROCESSING)
-        self.db.add(doc)
-        await self.db.commit()
-        await self.db.refresh(doc)
-        return await self.process(embedder, doc)
 
     async def process(self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None) -> KnowledgeDocument:
         """Run the ingest pipeline.
