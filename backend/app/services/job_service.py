@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable
 
-from sqlalchemy import desc, func, select, text
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.vector import vec_literal
 from app.models.job import Job, JobStatus
+from app.services.retrieval import RetrievalRepository
 
 Embedder = Callable[[str], Awaitable[list[float]]]
 
@@ -45,13 +46,5 @@ class JobService:
 
     async def search(self, embedder: Embedder, query: str, top_k: int = 25) -> list[dict]:
         emb = vec_literal(await embedder(query))
-        rows = (
-            await self.db.execute(
-                text(
-                    "SELECT id, content, similarity FROM match_documents("
-                    "CAST(:emb AS vector), :k, CAST('{}' AS jsonb))"
-                ),
-                {"emb": emb, "k": top_k},
-            )
-        ).all()
+        rows = await RetrievalRepository(self.db).match_documents(emb, top_k, "{}")
         return [{"id": str(r.id), "content": r.content, "similarity": float(r.similarity)} for r in rows]

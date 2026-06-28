@@ -12,13 +12,14 @@ import uuid
 from datetime import datetime
 from typing import Awaitable, Callable
 
-from sqlalchemy import desc, func, or_, select, text
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.prompts.lead_memory import LEAD_EXTRACT_SYSTEM_PROMPT
 from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadStage
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
+from app.services.lead_repository import LeadRepository
 
 Extractor = Callable[[str, str], Awaitable[str]]
 
@@ -110,32 +111,6 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
     }
 
 
-_UPSQL = text(
-    """
-    INSERT INTO leads (zalo_id, name, phone, birth_year, age, living_area, address, gender,
-        region, desired_job, years_experience, latest_company, expected_salary, lead_score)
-    VALUES (:zalo_id, :name, :phone, :birth_year, :age, :living_area, :address, :gender,
-        :region, :desired_job, :years_experience, :latest_company, :expected_salary, :lead_score)
-    ON CONFLICT (zalo_id) DO UPDATE SET
-        name = COALESCE(NULLIF(EXCLUDED.name,''), leads.name),
-        phone = COALESCE(NULLIF(EXCLUDED.phone,''), leads.phone),
-        birth_year = COALESCE(EXCLUDED.birth_year, leads.birth_year),
-        age = COALESCE(EXCLUDED.age, leads.age),
-        living_area = COALESCE(NULLIF(EXCLUDED.living_area,''), leads.living_area),
-        address = COALESCE(NULLIF(EXCLUDED.address,''), leads.address),
-        gender = COALESCE(NULLIF(EXCLUDED.gender,''), leads.gender),
-        region = COALESCE(NULLIF(EXCLUDED.region,''), leads.region),
-        desired_job = COALESCE(NULLIF(EXCLUDED.desired_job,''), leads.desired_job),
-        years_experience = COALESCE(NULLIF(EXCLUDED.years_experience,''), leads.years_experience),
-        latest_company = COALESCE(NULLIF(EXCLUDED.latest_company,''), leads.latest_company),
-        expected_salary = COALESCE(NULLIF(EXCLUDED.expected_salary,''), leads.expected_salary),
-        lead_score = COALESCE(EXCLUDED.lead_score, leads.lead_score),
-        updated_at = now()
-    RETURNING id
-    """
-)
-
-
 # Whitelist of sortable lead columns. Unknown / absent sort keys fall back to
 # updated_at (the default inbox ordering). Keys are lower-cased to match the
 # dataProvider which upper-cases the order dir but leaves the field as-is.
@@ -160,9 +135,7 @@ class LeadExtractionService:
 
     @staticmethod
     async def upsert(db: AsyncSession, lead: dict) -> int | None:
-        row = await db.execute(_UPSQL, lead)
-        await db.commit()
-        return row.scalar()
+        return await LeadRepository(db).upsert(lead)
 
 
 class LeadService:
