@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     kb_storage_path: str = "/data/kb_uploads"
     digest_section_chars: int = 6000
     digest_max_sections: int = 20
+    ingest_job_timeout_seconds: int = 1800
 
     # Google Drive (knowledge ingest)
     google_drive_credentials_json: str = ""

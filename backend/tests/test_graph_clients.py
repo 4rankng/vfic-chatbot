@@ -5,8 +5,18 @@ clients.py + schemas.py so the split cannot regress it.
 """
 import pytest
 
-from app.graph.clients import GeminiEmbedder
+import pytest
+
+from app.graph.clients import GeminiEmbedder, _minimax_chat
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
+
+
+class _Settings:
+    gemini_api_key = ""
+    gemini_embedding_model = "gemini-embedding-2"
+    minimax_api_key = ""
+    minimax_base_url = "https://api.minimax.io/v1"
+    minimax_request_timeout = 60
 
 # Tool names _dispatch_tool knows how to route (search_jobs is a back-compat alias with
 # no schema entry).
@@ -36,3 +46,15 @@ def test_every_tool_schema_name_is_dispatchable():
 async def test_gemini_embedder_empty_batch_returns_empty_without_sdk():
     # Empty-input early-returns [] before touching google.genai — no API key needed.
     assert await GeminiEmbedder().batch([]) == []
+
+
+@pytest.mark.asyncio
+async def test_gemini_embedder_missing_key_names_gemini():
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        await GeminiEmbedder(_Settings()).batch(["hello"])
+
+
+def test_minimax_chat_missing_key_names_minimax(monkeypatch):
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
+    with pytest.raises(RuntimeError, match="MINIMAX_API_KEY"):
+        _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)

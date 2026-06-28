@@ -5,6 +5,7 @@ recheck_ownership, record_bot_outcome, close/reopen) so the services/conversatio
 split (repository + state + events facade) cannot regress them. Exercises the public
 ConversationService facade — which also validates the delegation wiring.
 """
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -35,9 +36,7 @@ async def _make_conv(db_session, zalo="state-1") -> Conversation:
 
 
 async def _recruiter(db_session) -> User:
-    return (
-        await db_session.scalars(select(User).where(User.email == RECRUITER_EMAIL))
-    ).first()
+    return (await db_session.scalars(select(User).where(User.email == RECRUITER_EMAIL))).first()
 
 
 # --------------------------------------------------------------------------- ensure
@@ -84,6 +83,25 @@ async def test_recheck_ownership_predicates(db_session, seed):
     assert await svc.recheck_ownership(conv, v) is False  # no longer BOT
 
 
+async def test_semi_auto_guard_waits_for_five_minutes_of_human_inactivity(db_session, seed):
+    svc = ConversationService(db_session)
+    conv = await _make_conv(db_session, zalo="semi-guard-1")
+    conv.mode = ConversationMode.SEMI_AUTO
+    conv.taken_over_at = datetime.now(timezone.utc) - timedelta(minutes=4)
+    await db_session.commit()
+    await db_session.refresh(conv)
+
+    assert svc.run_start_guard(conv) is False
+    assert await svc.recheck_ownership(conv, conv.version) is False
+
+    conv.taken_over_at = datetime.now(timezone.utc) - timedelta(minutes=6)
+    await db_session.commit()
+    await db_session.refresh(conv)
+
+    assert svc.run_start_guard(conv) is True
+    assert await svc.recheck_ownership(conv, conv.version) is True
+
+
 # ------------------------------------------------------------------ record_bot_outcome
 async def test_record_bot_outcome_sent_and_suppressed(db_session, seed):
     svc = ConversationService(db_session)
@@ -99,9 +117,7 @@ async def test_record_bot_outcome_sent_and_suppressed(db_session, seed):
     )
     assert sent.delivery_status == DeliveryStatus.SENT
     assert sent.sender == MessageSender.BOT
-    runs = (
-        await db_session.scalars(select(BotRun).where(BotRun.conversation_id == conv.id))
-    ).all()
+    runs = (await db_session.scalars(select(BotRun).where(BotRun.conversation_id == conv.id))).all()
     assert len(runs) == 1 and runs[0].outcome == BotRunOutcome.SENT
     await db_session.refresh(conv)
     assert conv.bot_locked_until is None  # lock cleared after outcome

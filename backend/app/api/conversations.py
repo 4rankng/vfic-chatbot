@@ -1,9 +1,11 @@
-"""Conversation API: list/get/messages + takeover/release/close/reopen/read + recruiter reply.
+"""Conversation API: list/get/messages + mode changes/close/reopen/read + recruiter reply.
 
 The recruiter-reply endpoint (POST /{id}/messages) is the replacement for the n8n
-"Human Reply" webhook: it enforces JWT + ownership + mode=HUMAN, sends via Zalo
-(server-side token), inserts the RECRUITER message + audit, and fans out events.
+"Human Reply" webhook: it enforces JWT + ownership + human-capable mode, sends
+via Zalo (server-side token), inserts the RECRUITER message + audit, and fans
+out events.
 """
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -40,7 +42,9 @@ async def list_conversations(
     status_: ConversationStatus | None = Query(None, alias="status"),
     zalo_chat_id: str | None = None,
     q: str | None = Query(None, description="Case-insensitive search over zalo_chat_id"),
-    sort: str | None = Query(None, description="Sort field (updated_at, created_at, last_inbound_at)"),
+    sort: str | None = Query(
+        None, description="Sort field (updated_at, created_at, last_inbound_at)"
+    ),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -57,7 +61,9 @@ async def list_conversations(
         sort_by=sort,
         order=order,
     )
-    return ConversationListResponse(data=[ConversationOut.model_validate(r) for r in rows], total=total)
+    return ConversationListResponse(
+        data=[ConversationOut.model_validate(r) for r in rows], total=total
+    )
 
 
 @router.get("/last-messages/batch")
@@ -119,7 +125,9 @@ async def last_messages(
 async def list_messages(
     conv_id: uuid.UUID,
     per_page: int = Query(50, ge=1, le=200),
-    before_id: int | None = Query(None, description="Cursor: return messages older than this message id (load-more)"),
+    before_id: int | None = Query(
+        None, description="Cursor: return messages older than this message id (load-more)"
+    ),
     _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageListResponse:
@@ -137,28 +145,60 @@ async def take_over(
     try:
         conv = await ConversationService(db).take_over(conv, user)
     except ConversationConflict:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Hội thoại đã được tiếp nhận bởi nhân viên khác")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Hội thoại đã được tiếp nhận bởi nhân viên khác"
+        )
     return ConversationOut.model_validate(conv)
 
 
 @router.post("/{conv_id}/release", response_model=ConversationOut)
-async def release(conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> ConversationOut:
-    return ConversationOut.model_validate(await ConversationService(db).release(await _load(conv_id, db), user))
+async def release(
+    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> ConversationOut:
+    return ConversationOut.model_validate(
+        await ConversationService(db).release(await _load(conv_id, db), user)
+    )
+
+
+@router.post("/{conv_id}/semi-auto", response_model=ConversationOut)
+async def semi_auto(
+    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> ConversationOut:
+    conv = await _load(conv_id, db)
+    try:
+        conv = await ConversationService(db).semi_auto(conv, user)
+    except ConversationConflict:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Hội thoại đã được tiếp nhận bởi nhân viên khác"
+        )
+    return ConversationOut.model_validate(conv)
 
 
 @router.post("/{conv_id}/close", response_model=ConversationOut)
-async def close(conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> ConversationOut:
-    return ConversationOut.model_validate(await ConversationService(db).close(await _load(conv_id, db), user))
+async def close(
+    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> ConversationOut:
+    return ConversationOut.model_validate(
+        await ConversationService(db).close(await _load(conv_id, db), user)
+    )
 
 
 @router.post("/{conv_id}/reopen", response_model=ConversationOut)
-async def reopen(conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> ConversationOut:
-    return ConversationOut.model_validate(await ConversationService(db).reopen(await _load(conv_id, db), user))
+async def reopen(
+    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> ConversationOut:
+    return ConversationOut.model_validate(
+        await ConversationService(db).reopen(await _load(conv_id, db), user)
+    )
 
 
 @router.post("/{conv_id}/read", response_model=ConversationOut)
-async def mark_read(conv_id: uuid.UUID, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> ConversationOut:
-    return ConversationOut.model_validate(await ConversationService(db).mark_read(await _load(conv_id, db)))
+async def mark_read(
+    conv_id: uuid.UUID, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> ConversationOut:
+    return ConversationOut.model_validate(
+        await ConversationService(db).mark_read(await _load(conv_id, db))
+    )
 
 
 @router.post("/{conv_id}/messages", response_model=MessageOut)
@@ -171,7 +211,10 @@ async def send_recruiter_message(
 ) -> MessageOut:
     conv = await _load(conv_id, db)
     owns = conv.assigned_recruiter_id == user.id
-    allowed = conv.mode == ConversationMode.HUMAN and (owns or user.role == Role.admin)
+    allowed = conv.mode in (
+        ConversationMode.HUMAN,
+        ConversationMode.SEMI_AUTO,
+    ) and (owns or user.role == Role.admin)
     if not allowed:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Bạn cần tiếp nhận hội thoại trước khi trả lời"

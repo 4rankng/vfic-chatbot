@@ -110,6 +110,14 @@ class ProjectService:
         await self.db.refresh(proj)
         return proj
 
+    async def delete(self, project_id: uuid.UUID, admin: User) -> None:
+        proj = await self._require_project(project_id)
+        await record_audit(
+            self.db, action="delete_project", actor_id=admin.id, target_type="project", target_id=str(proj.id)
+        )
+        await self.db.delete(proj)
+        await self.db.commit()
+
     async def reindex(self, project_id: uuid.UUID) -> Project:
         """Rebuild this project's catalog card (the master-index entry) from usable units."""
         proj = await self._require_project(project_id)

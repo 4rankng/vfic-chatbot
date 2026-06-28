@@ -41,7 +41,7 @@ define kill-port
 	@bash -c 'lsof -ti :$(1) 2>/dev/null | while read pid; do kill -9 "$$pid" 2>/dev/null || true; done; exit 0'
 endef
 
-# ---- Local dev: DB + backend (uvicorn) + frontend (vite) in ONE terminal. ----
+# ---- Local dev: DB + backend (uvicorn) + ingest worker + frontend (vite) in ONE terminal. ----
 # Each server has its own port (BACKEND_PORT / FRONTEND_PORT); `kill-port` (above)
 # frees both before binding so a stale process can never block startup. BACKEND_PORT
 # is exported into the vite subprocess so its dev-server proxy target tracks it (see
@@ -51,9 +51,9 @@ dev: db
 	$(call kill-port,$(BACKEND_PORT))
 	$(call kill-port,$(FRONTEND_PORT))
 	@echo ""
-	@echo "==> Starting backend (:$(BACKEND_PORT)) + frontend (:$(FRONTEND_PORT)) — Ctrl+C stops both."
+	@echo "==> Starting backend (:$(BACKEND_PORT)) + ingest worker + frontend (:$(FRONTEND_PORT)) — Ctrl+C stops all."
 	@echo "    App : http://localhost:$(FRONTEND_PORT)   Login: admin@vfic.dev / admin123"
-	@bash -c 'trap "kill 0" INT TERM EXIT; export BACKEND_PORT="$(BACKEND_PORT)"; (. .venv/bin/activate && exec uvicorn app.main:app --reload --port $(BACKEND_PORT)) & (cd ../frontend && exec npm run dev -- --port $(FRONTEND_PORT) --strictPort) & wait'
+	@bash -c 'trap "kill 0" INT TERM EXIT; export BACKEND_PORT="$(BACKEND_PORT)"; REDIS_URL="$$(grep "^REDIS_URL=" .env | cut -d= -f2-)"; (. .venv/bin/activate && exec uvicorn app.main:app --reload --port $(BACKEND_PORT)) & (. .venv/bin/activate && exec rq worker ingest --worker-class rq.SimpleWorker --url "$$REDIS_URL") & (cd ../frontend && exec npm run dev -- --port $(FRONTEND_PORT) --strictPort) & wait'
 
 # ---- Build & push the AMD64 backend image to DockerHub. ----
 push:

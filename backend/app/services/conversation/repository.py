@@ -5,6 +5,7 @@ viewer role (admin = all, recruiter = own + unassigned) is applied here so calle
 thin. Raw SQL stays where the ORM can't express it cleanly (``last_messages_batch`` uses
 ``DISTINCT ON`` + ``ANY(:ids)``).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -129,13 +130,18 @@ class ConversationRepository:
 
     async def needs_attention_count(self, *, viewer: User) -> int:
         """Conversations the topbar bell should ring for: in recruiter takeover
-        (mode=HUMAN) OR with unread inbound (unread_count > 0). Scoped like
+        (manual/semi-auto) OR with unread inbound (unread_count > 0). Scoped like
         ``list`` (admin = all, recruiter = own + unassigned). Backs the
         notification badge so it never downloads conversation rows."""
-        stmt = select(func.count()).select_from(Conversation).where(
-            or_(
-                Conversation.mode == ConversationMode.HUMAN,
-                Conversation.unread_count > 0,
+        stmt = (
+            select(func.count())
+            .select_from(Conversation)
+            .where(
+                or_(
+                    Conversation.mode == ConversationMode.HUMAN,
+                    Conversation.mode == ConversationMode.SEMI_AUTO,
+                    Conversation.unread_count > 0,
+                )
             )
         )
         if viewer.role != Role.admin:

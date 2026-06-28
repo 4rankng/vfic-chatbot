@@ -64,6 +64,15 @@ async def update_project(
     return ProjectOut.model_validate(await ProjectService(db).update(project_id, body, admin))
 
 
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(
+    project_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await ProjectService(db).delete(project_id, admin)
+
+
 @router.post("/{project_id}/reindex", response_model=ProjectOut)
 async def reindex_project(
     project_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)

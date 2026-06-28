@@ -29,6 +29,26 @@ class KnowledgeDocumentOut(BaseModel):
     error: str | None = None
 
 
+class KnowledgeChunkOut(BaseModel):
+    id: uuid.UUID
+    chunk_index: int
+    content: str
+    source_quote: str | None = None
+    summary: str | None = None
+    questions: list[str] = []
+    category: str | None = None
+    entities: dict[str, Any] = {}
+    confidence: str | None = None
+    is_inference: bool = False
+    source_anchor: str | None = None
+    created_at: datetime
+
+
+class KnowledgeChunkListResponse(BaseModel):
+    data: list[KnowledgeChunkOut]
+    total: int
+
+
 class KnowledgeDocumentListResponse(BaseModel):
     data: list[KnowledgeDocumentOut]
     total: int
@@ -43,6 +63,13 @@ class UploadRequest(BaseModel):
     project_id: uuid.UUID | None = None
 
 
+class KnowledgeDocumentUpdate(BaseModel):
+    """Admin-editable document metadata."""
+
+    file_name: str | None = None
+    project_id: uuid.UUID | None = None
+
+
 class SearchTestRequest(BaseModel):
     query: str
     top_k: int = 10
@@ -52,4 +79,3 @@ class SearchTestRequest(BaseModel):
 class SearchTestResult(BaseModel):
     content: str
     similarity: float
-

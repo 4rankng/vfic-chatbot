@@ -18,3 +18,6 @@ htmlcov/
 # Editor
 .vscode/
 .idea/
+
+# Local dev data (e.g. KB upload originals via KB_STORAGE_PATH=.data/kb_uploads)
+.data/

@@ -80,3 +80,23 @@ async def test_knowledge_api_upload_archive(client, clean_kb):
 
     arch = await client.post(f"/api/v1/knowledge/documents/{doc_id}/archive", headers=h)
     assert arch.json()["status"] == "ARCHIVED"
+
+
+async def test_knowledge_api_lists_stored_units(client, db_session, clean_kb):
+    svc = KnowledgeService(db_session)
+    doc = await svc.upload(
+        "jobs.pdf",
+        "LG Display tuyển công nhân lương 15 triệu",
+        drive_file_id="chunk-api-f1",
+    )
+    await svc.process(_emb, doc)
+
+    admin = await _admin_tok(client)
+    h = {"Authorization": f"Bearer {admin}"}
+    res = await client.get(f"/api/v1/knowledge/documents/{doc.id}/chunks", headers=h)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] == 1
+    assert body["data"][0]["content"] == "LG Display tuyển công nhân lương 15 triệu"
+    assert body["data"][0]["chunk_index"] == 0

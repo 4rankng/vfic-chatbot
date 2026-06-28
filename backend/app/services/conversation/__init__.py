@@ -8,6 +8,7 @@ NOTE: ``from __future__ import annotations`` is required because this module def
 method named ``list``, which would otherwise shadow the builtin ``list`` during class-body
 annotation evaluation.
 """
+
 from __future__ import annotations
 
 from app.services.conversation.events import ConversationEventBus
@@ -63,6 +64,9 @@ class ConversationService:
     def run_start_guard(self, *args, **kwargs):
         return self.state.run_start_guard(*args, **kwargs)
 
+    def semi_auto_inactive(self, *args, **kwargs):
+        return self.state.semi_auto_inactive(*args, **kwargs)
+
     async def record_inbound(self, *args, **kwargs):
         return await self.state.record_inbound(*args, **kwargs)
 
@@ -83,6 +87,9 @@ class ConversationService:
 
     async def release(self, *args, **kwargs):
         return await self.state.release(*args, **kwargs)
+
+    async def semi_auto(self, *args, **kwargs):
+        return await self.state.semi_auto(*args, **kwargs)
 
     async def close(self, *args, **kwargs):
         return await self.state.close(*args, **kwargs)

@@ -4,7 +4,49 @@ import type { Conversation, Lead } from "../types";
 import { getLeadStatusColor } from "./ConversationList";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 import { ChatThread } from "./ChatThread";
-import { useConversationActions } from "./useConversationActions";
+import {
+  type ConversationMode,
+  useConversationActions,
+} from "./useConversationActions";
+
+type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
+
+const MODE_OPTIONS: Array<{
+  mode: ReplyMode;
+  label: string;
+  hint: string;
+  title: string;
+  icon: string;
+}> = [
+  {
+    mode: "human",
+    label: "Manual",
+    hint: "Human only",
+    title: "Manual mode - only human can chat to candidate",
+    icon: "i-user",
+  },
+  {
+    mode: "semi_auto",
+    label: "Semi auto",
+    hint: "5 min fallback",
+    title: "Semi auto - chatbot takes over if human is inactive for 5 minutes",
+    icon: "i-sparkles",
+  },
+  {
+    mode: "bot",
+    label: "Auto",
+    hint: "Bot handles",
+    title: "Auto - chatbot handles the conversation",
+    icon: "i-bot",
+  },
+];
+
+const MODE_STATUS: Record<ConversationMode, string> = {
+  human: "Manual mode: only recruiter replies are enabled",
+  semi_auto: "Semi auto: bot answers after 5 minutes of recruiter inactivity",
+  bot: "Auto mode: chatbot is handling replies",
+  closed: "Conversation closed",
+};
 
 /**
  * Inbox center pane: the conversation header (mobile list-toggle + person →
@@ -35,7 +77,14 @@ export const ConversationShowContent = ({
   const name =
     lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
-  const { isBotMode, handleTakeover } = useConversationActions(record);
+  const {
+    effectiveMode,
+    isBotMode,
+    canHumanReply,
+    setConversationMode,
+    handleTakeover,
+  } = useConversationActions(record);
+  const activeMode = effectiveMode ?? record?.mode ?? "bot";
 
   return (
     <section className="panel center-panel" aria-label="Nội dung trò chuyện">
@@ -69,28 +118,51 @@ export const ConversationShowContent = ({
             <div className="person-name-row">
               <span className="person-name">{name}</span>
             </div>
+            <div className="person-meta">
+              <span className={`mode-dot ${activeMode}`} />
+              <span>{MODE_STATUS[activeMode]}</span>
+            </div>
           </div>
         </div>
         <div className="header-actions">
-          {isBotMode && (
-            <>
-              <span
-                className="chat-mode-chip"
-                title="AI đang trả lời cuộc trò chuyện này"
-              >
-                <svg className="icon">
-                  <use href="#i-bot" />
-                </svg>
-                <span>AI đang trả lời</span>
-              </span>
-              <button
-                type="button"
-                className="takeover-btn takeover-btn--header"
-                onClick={handleTakeover}
-              >
-                Tiếp quản
-              </button>
-            </>
+          <div
+            className="mode-control"
+            role="radiogroup"
+            aria-label="Chế độ trả lời hội thoại"
+          >
+            {MODE_OPTIONS.map((option) => {
+              const isActive = activeMode === option.mode;
+              return (
+                <button
+                  key={option.mode}
+                  type="button"
+                  className={`mode-segment ${option.mode} ${
+                    isActive ? "active" : ""
+                  }`}
+                  role="radio"
+                  aria-checked={isActive}
+                  title={option.title}
+                  disabled={activeMode === "closed" || isActive}
+                  onClick={() => setConversationMode(option.mode)}
+                >
+                  <svg className="icon">
+                    <use href={`#${option.icon}`} />
+                  </svg>
+                  <span className="mode-segment-copy">
+                    <span className="mode-segment-label">{option.label}</span>
+                    <span className="mode-segment-hint">{option.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {activeMode === "closed" && (
+            <span className="chat-mode-chip" title="Hội thoại đã đóng">
+              <svg className="icon">
+                <use href="#i-bot" />
+              </svg>
+              <span>Đã đóng</span>
+            </span>
           )}
           <button
             className="icon-btn small mobile-toggle profile-toggle"
@@ -108,6 +180,7 @@ export const ConversationShowContent = ({
         conversationId={record?.id ?? ""}
         conversation={record}
         isBotModeOverride={isBotMode}
+        canHumanReplyOverride={canHumanReply}
         onTakeoverOverride={handleTakeover}
         showComposerTakeoverNotice={false}
       />

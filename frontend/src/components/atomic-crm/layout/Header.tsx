@@ -1,12 +1,14 @@
-import { FileText, User, Users } from "lucide-react";
-import { useTranslate, useUserMenu } from "ra-core";
+import { FileText, Upload, User, Users } from "lucide-react";
+import { usePermissions, useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
 import { UserMenu } from "@/components/admin/user-menu";
+import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
+import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { ChangelogPage } from "../misc/ChangelogPage";
 import { NavPill } from "./topbar/NavPills";
 import { NotificationsBell } from "./topbar/NotificationsBell";
@@ -15,12 +17,18 @@ const Header = () => {
   const { title } = useConfigurationContext();
   const location = useLocation();
   const translate = useTranslate();
+  const { permissions } = usePermissions();
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const isAdmin = permissions === "admin";
 
   const currentPath = useMemo<string | false>(() => {
     if (matchPath("/", location.pathname)) return "/";
     if (matchPath("/leads/*", location.pathname)) return "/leads";
     if (matchPath("/conversations/*", location.pathname))
       return "/conversations";
+    if (matchPath("/projects/*", location.pathname)) return "/projects";
+    if (matchPath("/knowledge_sources/*", location.pathname))
+      return "/knowledge_sources";
     // Unmatched secondary routes (e.g. /settings, /profile, /users) leave no
     // pill highlighted, matching the prior behavior.
     return false;
@@ -29,7 +37,7 @@ const Header = () => {
   return (
     <div className="sticky top-0 z-40 px-4 pt-3 md:px-6 md:pt-4">
       <div className="mx-auto max-w-[1440px]">
-        <header className="flex h-14 items-center justify-between gap-3 rounded-2xl border border-border/70 bg-white/70 px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:bg-card/60 md:px-4">
+        <header className="flex h-14 items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:bg-card/60 md:px-4">
           {/* Brand */}
           <Link
             to="/"
@@ -49,7 +57,7 @@ const Header = () => {
           </Link>
 
           {/* Pill nav */}
-          <nav className="hidden flex-1 items-center justify-center gap-8 md:flex">
+          <nav className="hidden flex-1 items-center justify-center gap-1 md:flex lg:gap-2">
             <NavPill
               label={translate("ra.page.dashboard")}
               to="/"
@@ -67,16 +75,41 @@ const Header = () => {
               to="/conversations"
               isActive={currentPath === "/conversations"}
             />
+            <NavPill
+              label="Dự án"
+              to="/projects"
+              isActive={currentPath === "/projects"}
+            />
+            <NavPill
+              label="Kiến thức"
+              to="/knowledge_sources"
+              isActive={currentPath === "/knowledge_sources"}
+            />
           </nav>
 
           {/* Actions */}
           <div className="flex items-center gap-1 md:gap-2">
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden lg:inline-flex"
+                onClick={() => setUploadOpen(true)}
+                title="Tải tài liệu hoặc dán tin tuyển dụng để huấn luyện agent"
+              >
+                <Upload className="size-4" />
+                Tải kiến thức
+              </Button>
+            )}
             <NotificationsBell />
             <ThemeModeToggle />
             <UserMenu />
           </div>
         </header>
       </div>
+      {isAdmin && (
+        <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
+      )}
     </div>
   );
 };

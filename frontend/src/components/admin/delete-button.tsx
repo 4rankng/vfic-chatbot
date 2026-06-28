@@ -2,7 +2,7 @@ import * as React from "react";
 import { Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { humanize, singularize } from "inflection";
-import type { UseDeleteOptions, RedirectionSideEffect } from "ra-core";
+import type { RaRecord, UseDeleteOptions, RedirectionSideEffect } from "ra-core";
 import {
   useDeleteWithUndoController,
   useGetRecordRepresentation,
@@ -13,6 +13,7 @@ import {
 } from "ra-core";
 
 export type DeleteButtonProps = {
+  record?: RaRecord;
   label?: string;
   size?: "default" | "sm" | "lg" | "icon";
   onClick?: React.ReactEventHandler<HTMLButtonElement>;

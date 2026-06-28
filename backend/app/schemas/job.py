@@ -79,6 +79,33 @@ class StageBreakdownItem(BaseModel):
     percentage: int
 
 
+class KnowledgeIngestStageMetric(BaseModel):
+    stage: str
+    count: int
+
+
+class KnowledgeIngestIssue(BaseModel):
+    id: uuid.UUID
+    file_name: str
+    project_id: uuid.UUID | None = None
+    status: str
+    stage: str
+    minutes_since_update: int
+    error: str | None = None
+
+
+class KnowledgeIngestHealth(BaseModel):
+    queue_depth: int = 0
+    failed_job_count: int = 0
+    worker_count: int = 0
+    processing_count: int = 0
+    stuck_count: int = 0
+    failed_document_count: int = 0
+    published_document_count: int = 0
+    stage_breakdown: list[KnowledgeIngestStageMetric] = []
+    recent_issues: list[KnowledgeIngestIssue] = []
+
+
 class DashboardMetrics(BaseModel):
     open_conversations: int
     hot_leads: int
@@ -98,3 +125,6 @@ class DashboardMetrics(BaseModel):
     # dashboard's existing "needs a human reply" KPI semantics verbatim.
     unread_conversation_count: int = 0
     stage_breakdown: list[StageBreakdownItem] = []
+    # Admin-only operational diagnostics for knowledge ingest. Recruiters receive
+    # null; backend role checks remain the source of truth.
+    knowledge_ingest: KnowledgeIngestHealth | None = None

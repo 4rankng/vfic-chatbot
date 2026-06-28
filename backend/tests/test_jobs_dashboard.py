@@ -146,6 +146,33 @@ async def test_dashboard_metrics_funnel_aggregates(client, db_session):
     assert q_after >= q_before + 1
 
 
+async def test_dashboard_knowledge_ingest_health_is_admin_only(client, db_session, clean_kb):
+    h_admin = {"Authorization": f"Bearer {await _admin_tok(client)}"}
+    h_rec = {"Authorization": f"Bearer {await _recruiter_tok(client)}"}
+
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_documents(file_name,source,status,stage,raw_text,error,updated_at) "
+            "VALUES ('bad.txt','upload','FAILED','FAILED','x','MiniMax timeout',now() - interval '20 minutes'), "
+            "('slow.txt','upload','PROCESSING','DIGESTING','x',NULL,now() - interval '20 minutes'), "
+            "('ok.txt','upload','PUBLISHED','PUBLISHED','x',NULL,now())"
+        )
+    )
+    await db_session.commit()
+
+    admin_body = (await client.get("/api/v1/dashboard/metrics", headers=h_admin)).json()
+    rec_body = (await client.get("/api/v1/dashboard/metrics", headers=h_rec)).json()
+
+    health = admin_body["knowledge_ingest"]
+    assert health["failed_document_count"] >= 1
+    assert health["published_document_count"] >= 1
+    assert health["processing_count"] >= 1
+    assert health["stuck_count"] >= 1
+    assert any(issue["file_name"] == "bad.txt" for issue in health["recent_issues"])
+    assert any(row["stage"] == "DIGESTING" for row in health["stage_breakdown"])
+    assert rec_body["knowledge_ingest"] is None
+
+
 async def test_conversations_needs_attention_is_scoped(client, db_session):
     """The bell count endpoint is viewer-scoped: admin sees every human-takeover
     conversation; a recruiter sees only their own + unassigned (NOT another

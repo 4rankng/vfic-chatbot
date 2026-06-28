@@ -22,8 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.vector import vec_literal
+from app.models.company import Project
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import User
+from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
 from app.services.knowledge import LLMJson, extract_text
 
@@ -37,6 +39,41 @@ class KnowledgeService:
 
     async def get(self, doc_id: uuid.UUID) -> KnowledgeDocument | None:
         return await self.db.get(KnowledgeDocument, doc_id)
+
+    async def list_chunks(self, doc_id: uuid.UUID, *, limit: int = 50) -> list[dict]:
+        rows = (
+            await self.db.execute(
+                text(
+                    "SELECT id, chunk_index, content, source_quote, summary, questions, "
+                    "category, entities, confidence, metadata, created_at "
+                    "FROM knowledge_chunks "
+                    "WHERE document_id = :did "
+                    "ORDER BY chunk_index ASC "
+                    "LIMIT :limit"
+                ),
+                {"did": str(doc_id), "limit": limit},
+            )
+        ).mappings()
+        chunks: list[dict] = []
+        for row in rows:
+            metadata = row.get("metadata") or {}
+            chunks.append(
+                {
+                    "id": row["id"],
+                    "chunk_index": row["chunk_index"],
+                    "content": row["content"],
+                    "source_quote": row["source_quote"],
+                    "summary": row["summary"],
+                    "questions": row["questions"] or [],
+                    "category": row["category"],
+                    "entities": row["entities"] or {},
+                    "confidence": row["confidence"],
+                    "is_inference": bool(metadata.get("is_inference", False)),
+                    "source_anchor": metadata.get("source_anchor"),
+                    "created_at": row["created_at"],
+                }
+            )
+        return chunks
 
     async def upload(self, file_name: str, content: str, drive_file_id: str | None = None, project_id: uuid.UUID | None = None) -> KnowledgeDocument:
         doc = KnowledgeDocument(
@@ -130,6 +167,26 @@ class KnowledgeService:
         await self.db.commit()
         await self.db.refresh(doc)
         return doc
+
+    async def update(self, doc: KnowledgeDocument, body: KnowledgeDocumentUpdate, *, actor: User) -> KnowledgeDocument:
+        if body.file_name is not None:
+            doc.file_name = body.file_name.strip()
+        if "project_id" in body.model_fields_set:
+            if body.project_id is not None and await self.db.get(Project, body.project_id) is None:
+                from fastapi import HTTPException, status
+
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "project not found")
+            doc.project_id = body.project_id
+        await record_audit(self.db, action="update_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=str(doc.id))
+        await self.db.commit()
+        await self.db.refresh(doc)
+        return doc
+
+    async def delete(self, doc: KnowledgeDocument, *, actor: User) -> None:
+        target_id = str(doc.id)
+        await record_audit(self.db, action="delete_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=target_id)
+        await self.db.delete(doc)
+        await self.db.commit()
 
     async def reindex(self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None) -> KnowledgeDocument:
         return await self.process(embedder, doc, llm_json=llm_json)

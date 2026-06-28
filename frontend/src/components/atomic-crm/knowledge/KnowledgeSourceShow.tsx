@@ -4,17 +4,19 @@ import {
   useGetList,
   useNotify,
   useRecordContext,
+  useRedirect,
   useRefresh,
 } from "ra-core";
 import { TopToolbar } from "../layout/TopToolbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Archive, BookOpen, RefreshCw } from "lucide-react";
+import { Archive, BookOpen, Pencil, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
 import { formatDateTime } from "../automation/botRunMeta";
 import { stageLabel, stageTone } from "./stageTone";
 import { archiveKnowledge, reindexKnowledge } from "@/lib/vfic/knowledgeService";
+import { DeleteButton } from "@/components/admin";
 
 const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
   <div className="flex flex-col gap-1 border-b py-3 last:border-0">
@@ -29,6 +31,7 @@ const KnowledgeSourceShowContent = () => {
   const source = useRecordContext<KnowledgeSource>();
   const notify = useNotify();
   const refresh = useRefresh();
+  const redirect = useRedirect();
   const { data: projects } = useGetList<Project>("projects", {
     pagination: { page: 1, perPage: 100 },
   });
@@ -103,6 +106,14 @@ const KnowledgeSourceShowContent = () => {
             <Button
               size="sm"
               variant="outline"
+              onClick={() => redirect("edit", "knowledge_sources", source.id)}
+            >
+              <Pencil className="size-4" />
+              Sửa
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() =>
                 run(
                   () => reindexKnowledge(source.id),
@@ -126,6 +137,12 @@ const KnowledgeSourceShowContent = () => {
               <Archive className="size-4" />
               Lưu trữ
             </Button>
+            <DeleteButton
+              label="Xóa"
+              size="sm"
+              successMessage="Đã xóa tài liệu."
+              redirect="list"
+            />
           </div>
         </CardContent>
       </Card>

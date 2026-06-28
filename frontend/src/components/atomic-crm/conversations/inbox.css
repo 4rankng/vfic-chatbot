@@ -1,16 +1,16 @@
 /* inbox.css - Overhauled UI/UX */
 :root {
-  --surface: #faf9f5;
-  --surface-solid: #faf9f5;
-  --surface-hover: #f5f2eb;
+  --surface: var(--background);
+  --surface-solid: var(--background);
+  --surface-hover: var(--secondary);
 
   --ink: var(--foreground);
   --ink-muted: var(--muted-foreground);
   --ink-faint: var(--muted-foreground);
 
-  --border: #e6e3dc;
-  --border-strong: #dedbd3;
-  --border-glass: rgba(230, 227, 220, 0.4);
+  --border: #dee2d8;
+  --border-strong: #c7cdbc;
+  --border-glass: rgba(222, 226, 216, 0.4);
 
   --brand: var(--primary);
   --brand-hover: var(--primary);
@@ -34,10 +34,10 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --transition: 0.3s var(--ease);
 
-  --chat-bg: #efeae2;
+  --chat-bg: var(--background);
   --chat-bubble-in: #ffffff;
   --chat-bubble-out: #d9fdd3;
-  --chat-header-bg: #f3f0e8;
+  --chat-header-bg: var(--background);
   --chat-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.08);
 }
 
@@ -504,6 +504,22 @@
   color: var(--accent);
   background: var(--accent-light);
 }
+.inbox-bg-container .mini-chip.manual {
+  color: var(--accent);
+  background: var(--accent-light);
+}
+.inbox-bg-container .mini-chip.semi {
+  color: var(--brand);
+  background: var(--brand-light);
+}
+.inbox-bg-container .mini-chip.auto {
+  color: var(--success);
+  background: var(--success-light);
+}
+.inbox-bg-container .mini-chip.closed {
+  color: var(--ink-muted);
+  background: var(--surface-hover);
+}
 .inbox-bg-container .mini-chip .icon {
   width: 12px;
   height: 12px;
@@ -562,7 +578,7 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  height: 52px;
+  min-height: 76px;
   border-bottom: 1px solid var(--border);
   background: var(--chat-header-bg);
 }
@@ -632,12 +648,105 @@
   align-items: center;
   gap: 6px;
   margin-top: 4px;
+  min-width: 0;
+}
+.inbox-bg-container .person-meta span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-bg-container .mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex: 0 0 auto;
+}
+.inbox-bg-container .mode-dot.human {
+  background: var(--accent);
+}
+.inbox-bg-container .mode-dot.semi_auto {
+  background: var(--brand);
+}
+.inbox-bg-container .mode-dot.bot {
+  background: var(--success);
+}
+.inbox-bg-container .mode-dot.closed {
+  background: var(--ink-faint);
 }
 
 .inbox-bg-container .header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+.inbox-bg-container .mode-control {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--rad-md);
+  background: color-mix(in srgb, var(--surface-solid) 82%, transparent);
+}
+.inbox-bg-container .mode-segment {
+  min-width: 108px;
+  min-height: 44px;
+  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--rad-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  transition: var(--transition);
+}
+.inbox-bg-container .mode-segment:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+.inbox-bg-container .mode-segment.active {
+  color: var(--ink);
+  background: var(--surface-solid);
+  box-shadow: 0 1px 2px rgba(11, 20, 26, 0.08);
+}
+.inbox-bg-container .mode-segment.active.human {
+  color: var(--accent);
+}
+.inbox-bg-container .mode-segment.active.semi_auto {
+  color: var(--brand);
+}
+.inbox-bg-container .mode-segment.active.bot {
+  color: var(--success);
+}
+.inbox-bg-container .mode-segment:disabled {
+  cursor: default;
+}
+.inbox-bg-container .mode-segment .icon {
+  width: 16px;
+  height: 16px;
+}
+.inbox-bg-container .mode-segment-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+}
+.inbox-bg-container .mode-segment-label {
+  font-size: 12px;
+  line-height: 1.05;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.inbox-bg-container .mode-segment-hint {
+  color: var(--ink-faint);
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .inbox-bg-container .chat-mode-chip {
   height: 32px;
@@ -1342,6 +1451,12 @@
   .inbox-bg-container .mobile-toggle.profile-toggle {
     display: inline-grid;
   }
+  .inbox-bg-container .mode-segment {
+    min-width: 88px;
+  }
+  .inbox-bg-container .mode-segment-hint {
+    display: none;
+  }
 }
 
 /* ---- Mobile (<= 767px): list-first master/detail ----
@@ -1402,6 +1517,22 @@
   }
   .inbox-bg-container .chat-header {
     padding: 0 16px;
+  }
+  .inbox-bg-container .header-actions {
+    gap: 6px;
+  }
+  .inbox-bg-container .mode-control {
+    gap: 2px;
+    padding: 3px;
+  }
+  .inbox-bg-container .mode-segment {
+    width: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    padding: 0;
+  }
+  .inbox-bg-container .mode-segment-copy {
+    display: none;
   }
   .inbox-bg-container .header-avatar {
     display: none;

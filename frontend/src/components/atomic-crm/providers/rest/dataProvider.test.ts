@@ -112,3 +112,35 @@ describe("restProvider.getList", () => {
     expect(url).toContain("zalo_id=z-1");
   });
 });
+
+describe("restProvider custom conversation actions", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    clearTokens();
+    vi.restoreAllMocks();
+  });
+
+  it("maps semi-auto mode to the semi-auto action route", async () => {
+    let url = "";
+    const fetch = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+      url = typeof input === "string" ? input : (input as URL).toString();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: "c1", mode: "SEMI_AUTO" }),
+      } as unknown as Response;
+    });
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+
+    const res = await provider.setConversationMode("c1", "semi_auto");
+
+    expect(url).toContain("/api/v1/conversations/c1/semi-auto");
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/conversations/c1/semi-auto"),
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect((res as Record<string, unknown>).mode).toBe("semi_auto");
+  });
+});

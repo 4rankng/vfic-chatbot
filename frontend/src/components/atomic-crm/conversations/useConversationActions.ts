@@ -24,34 +24,45 @@ export const useConversationActions = (record?: Conversation) => {
 
   const effectiveMode: ConversationMode | undefined = localMode ?? record?.mode;
   const isBotMode = effectiveMode === "bot";
+  const canHumanReply =
+    effectiveMode === "human" || effectiveMode === "semi_auto";
 
-  const handleTakeover = async () => {
-    if (!record) return;
+  const setConversationMode = async (
+    nextMode: Extract<ConversationMode, "bot" | "human" | "semi_auto">,
+  ) => {
+    if (!record || effectiveMode === nextMode) return;
     try {
-      await dataProvider.takeOverConversation(record.id);
-      setLocalMode("human");
-      notify("conversations.takeover.success", { type: "success" });
+      await dataProvider.setConversationMode(record.id, nextMode);
+      setLocalMode(nextMode);
+      const key =
+        nextMode === "human"
+          ? "conversations.takeover.success"
+          : nextMode === "semi_auto"
+            ? "Đã bật chế độ bán tự động"
+            : "conversations.release.success";
+      notify(key, { type: "success" });
       refresh();
     } catch (e: unknown) {
-      notify(e instanceof Error ? e.message : "conversations.takeover.error", {
+      notify(e instanceof Error ? e.message : "Không thể đổi chế độ hội thoại", {
         type: "error",
       });
     }
+  };
+
+  const handleTakeover = async () => {
+    await setConversationMode("human");
   };
 
   const handleRelease = async () => {
-    if (!record) return;
-    try {
-      await dataProvider.releaseConversation(record.id);
-      setLocalMode("bot");
-      notify("conversations.release.success", { type: "success" });
-      refresh();
-    } catch (e: unknown) {
-      notify(e instanceof Error ? e.message : "conversations.release.error", {
-        type: "error",
-      });
-    }
+    await setConversationMode("bot");
   };
 
-  return { effectiveMode, isBotMode, handleTakeover, handleRelease };
+  return {
+    effectiveMode,
+    isBotMode,
+    canHumanReply,
+    setConversationMode,
+    handleTakeover,
+    handleRelease,
+  };
 };

@@ -8,10 +8,29 @@ import type { ProductFeature, ProductFeatureList } from "@/components/atomic-crm
 
 const BASE = "/api/v1";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ApiRecord = Record<string, any>;
 const doc = (id: string) => `${BASE}/knowledge/documents/${encodeURIComponent(id)}`;
 const proj = (id: string) => `${BASE}/knowledge/projects/${encodeURIComponent(id)}`;
+
+export type KnowledgeUnit = {
+  id: string;
+  chunk_index: number;
+  content: string;
+  source_quote?: string | null;
+  summary?: string | null;
+  questions: string[];
+  category?: string | null;
+  entities: Record<string, unknown>;
+  confidence?: string | null;
+  is_inference: boolean;
+  source_anchor?: string | null;
+  created_at: string;
+};
+
+export type KnowledgeUnitList = {
+  data: KnowledgeUnit[];
+  total: number;
+};
 
 export const uploadKnowledgeFile = async (
   file: File,
@@ -34,6 +53,9 @@ export const archiveKnowledge = (id: string) =>
 
 export const reindexKnowledge = (id: string) =>
   apiJson<ApiRecord>(`${doc(id)}/reindex`, { method: "POST" });
+
+export const getKnowledgeUnits = (id: string, limit = 50) =>
+  apiJson<KnowledgeUnitList>(`${doc(id)}/chunks?limit=${limit}`);
 
 export const activatePersona = (id: string) =>
   apiJson<ApiRecord>(`${BASE}/knowledge/personas/${encodeURIComponent(id)}/activate`, {

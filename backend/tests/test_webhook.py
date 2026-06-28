@@ -1,11 +1,13 @@
 """US-006 webhook tests: the synchronous guard chain must ack fast (<1s) and
 correctly dedup / starve-in-human-mode / respect the per-chat lock."""
+
 import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select, text
 
-from app.models.conversation import Conversation, Message, MessageSender
+from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
 from app.services.webhook import ZaloWebhookService
 
 pytestmark = pytest.mark.asyncio
@@ -43,14 +45,10 @@ async def test_webhook_queues_then_dedups_and_acks_fast(db_session):
     assert len(captured) == 1
     assert elapsed < 1.5, f"webhook ack took {elapsed:.2f}s"
     conv = (
-        await db_session.scalars(
-            select(Conversation).where(Conversation.zalo_chat_id == "z-1")
-        )
+        await db_session.scalars(select(Conversation).where(Conversation.zalo_chat_id == "z-1"))
     ).one()
     msg = (
-        await db_session.scalars(
-            select(Message).where(Message.conversation_id == conv.id)
-        )
+        await db_session.scalars(select(Message).where(Message.conversation_id == conv.id))
     ).one()
     assert msg.sender == MessageSender.WORKER
     assert msg.body == "hi"
@@ -61,9 +59,7 @@ async def test_webhook_queues_then_dedups_and_acks_fast(db_session):
     assert r2["status"] == "duplicate"
     assert len(captured) == 1
     msgs = (
-        await db_session.scalars(
-            select(Message).where(Message.conversation_id == conv.id)
-        )
+        await db_session.scalars(select(Message).where(Message.conversation_id == conv.id))
     ).all()
     assert len(msgs) == 1
 
@@ -85,11 +81,42 @@ async def test_webhook_starves_in_human_mode(db_session):
     assert r["status"] == "starved_human_mode"
     assert len(captured) == n_before  # the HUMAN-mode inbound did NOT enqueue a bot run
     worker_msgs = (
-        await db_session.scalars(
-            select(Message).where(Message.sender == MessageSender.WORKER)
-        )
+        await db_session.scalars(select(Message).where(Message.sender == MessageSender.WORKER))
     ).all()
     assert [m.body for m in worker_msgs] == ["hi", "hi"]
+
+
+async def test_webhook_queues_in_semi_auto_after_human_inactivity(db_session):
+    captured = []
+    eq = await _enqueue(captured)
+    await ZaloWebhookService.handle(db_session, _payload("m-semi-1", chat_id="z-semi"), enqueue=eq)
+    conv = (
+        await db_session.scalars(select(Conversation).where(Conversation.zalo_chat_id == "z-semi"))
+    ).one()
+
+    conv.mode = ConversationMode.SEMI_AUTO
+    conv.taken_over_at = datetime.now(timezone.utc)
+    conv.bot_locked_until = None
+    conv.version += 1
+    await db_session.commit()
+
+    n_before = len(captured)
+    active = await ZaloWebhookService.handle(
+        db_session, _payload("m-semi-2", chat_id="z-semi"), enqueue=eq
+    )
+    assert active["status"] == "starved_human_mode"
+    assert len(captured) == n_before
+
+    await db_session.refresh(conv)
+    conv.taken_over_at = datetime.now(timezone.utc) - timedelta(minutes=6)
+    conv.bot_locked_until = None
+    await db_session.commit()
+
+    inactive = await ZaloWebhookService.handle(
+        db_session, _payload("m-semi-3", chat_id="z-semi"), enqueue=eq
+    )
+    assert inactive["status"] == "queued"
+    assert len(captured) == n_before + 1
 
 
 async def test_webhook_locked_when_mutex_held(db_session):

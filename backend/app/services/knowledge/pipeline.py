@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from datetime import UTC, datetime
 from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -199,6 +200,7 @@ class KnowledgePipeline:
 
     async def _set_stage(self, doc, stage: str, *, status: str | None = None, error: str | None = None) -> None:
         doc.stage = stage
+        doc.updated_at = datetime.now(UTC)
         if status is not None:
             # late import to avoid a circular at module load
             from app.models.knowledge import KnowledgeStatus

@@ -30,6 +30,7 @@ interface DashboardMetrics {
   hired_rate: number;
   unread_conversation_count: number;
   stage_breakdown: StageBreakdownItem[];
+  knowledge_ingest: KnowledgeIngestHealth | null;
 }
 
 export interface StageBreakdown {
@@ -40,12 +41,40 @@ export interface StageBreakdown {
   percentage: number;
 }
 
+export interface KnowledgeIngestStageMetric {
+  stage: string;
+  count: number;
+}
+
+export interface KnowledgeIngestIssue {
+  id: string;
+  file_name: string;
+  project_id?: string | null;
+  status: string;
+  stage: string;
+  minutes_since_update: number;
+  error?: string | null;
+}
+
+export interface KnowledgeIngestHealth {
+  queue_depth: number;
+  failed_job_count: number;
+  worker_count: number;
+  processing_count: number;
+  stuck_count: number;
+  failed_document_count: number;
+  published_document_count: number;
+  stage_breakdown: KnowledgeIngestStageMetric[];
+  recent_issues: KnowledgeIngestIssue[];
+}
+
 export interface DashboardStats {
   totalLeads: number;
   qualifiedCount: number;
   unreadConversationCount: number;
   hiredRate: number;
   stageBreakdown: StageBreakdown[];
+  knowledgeIngest: KnowledgeIngestHealth | null;
   isPending: boolean;
 }
 
@@ -64,6 +93,7 @@ export const useDashboardStats = (): DashboardStats => {
         unreadConversationCount: 0,
         hiredRate: 0,
         stageBreakdown: [],
+        knowledgeIngest: null,
         isPending,
       };
     }
@@ -76,6 +106,7 @@ export const useDashboardStats = (): DashboardStats => {
       qualifiedCount: data.qualified_count,
       unreadConversationCount: data.unread_conversation_count,
       hiredRate: data.hired_rate,
+      knowledgeIngest: data.knowledge_ingest,
       stageBreakdown: LEAD_STAGES.map((stage) => {
         const row = byValue.get(stage.value);
         return {

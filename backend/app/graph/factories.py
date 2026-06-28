@@ -69,6 +69,8 @@ def make_minimax_llm_json():
     from langchain_openai import ChatOpenAI
 
     s = get_settings()
+    if not s.minimax_api_key:
+        raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
     llm = ChatOpenAI(
         model=s.minimax_digest_model or s.minimax_agent_model,
         api_key=s.minimax_api_key,

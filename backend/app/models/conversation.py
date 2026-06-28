@@ -1,4 +1,5 @@
 """Conversation / message / bot-run / outbound ORM models (mirror Alembic baseline)."""
+
 import enum
 import uuid
 from datetime import datetime
@@ -24,6 +25,7 @@ from app.models.base import Base
 class ConversationMode(str, enum.Enum):
     BOT = "BOT"
     HUMAN = "HUMAN"
+    SEMI_AUTO = "SEMI_AUTO"
     CLOSED = "CLOSED"
 
 
@@ -71,18 +73,28 @@ class Conversation(Base):
         default=ConversationStatus.OPEN,
         server_default="OPEN",
     )
-    needs_human: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    needs_human: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
     taken_over_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     assigned_recruiter_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    unread_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    unread_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     bot_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_outbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
 
 class BotRun(Base):
@@ -92,7 +104,9 @@ class BotRun(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
     )
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     version_at_start: Mapped[int] = mapped_column(Integer, nullable=False)
     proposed_reply: Mapped[str | None] = mapped_column(Text)
@@ -126,7 +140,9 @@ class Message(Base):
     )
     zalo_message_id: Mapped[str | None] = mapped_column(String)
     external_error: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
 
 class OutboundMessage(Base):
@@ -138,8 +154,12 @@ class OutboundMessage(Base):
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
     expected_conversation_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
-    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default=text("3"))
+    attempt: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, server_default=text("3")
+    )
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     delivered_message_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("messages.id"))
@@ -149,5 +169,9 @@ class OutboundMessage(Base):
         default=DeliveryStatus.PENDING,
         server_default="PENDING",
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )

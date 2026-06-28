@@ -7,6 +7,7 @@ Port + ordering of the n8n trigger chain:
 Everything from Typing onward runs on an RQ worker (injectable `enqueue`). No LLM
 and no Zalo send happen here.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -86,7 +87,7 @@ class ZaloWebhookService:
         # reload to read committed mode/version
         conv = await svc.get(conv.id)
 
-        if not svc.run_start_guard(conv):  # HUMAN/CLOSED -> starve the bot
+        if not svc.run_start_guard(conv):  # HUMAN/active SEMI_AUTO/CLOSED -> starve the bot
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}
 
         version_at_start = conv.version

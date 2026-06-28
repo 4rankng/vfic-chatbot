@@ -20,6 +20,9 @@ from app.core.db import get_db
 from app.models.knowledge import KnowledgeStatus
 from app.models.user import User
 from app.schemas.knowledge import (
+    KnowledgeChunkListResponse,
+    KnowledgeChunkOut,
+    KnowledgeDocumentUpdate,
     KnowledgeDocumentListResponse,
     KnowledgeDocumentOut,
     SearchTestRequest,
@@ -55,6 +58,40 @@ async def get_document(
     doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> KnowledgeDocumentOut:
     return KnowledgeDocumentOut.model_validate(await _load(doc_id, db))
+
+
+@router.get("/documents/{doc_id}/chunks", response_model=KnowledgeChunkListResponse)
+async def list_document_chunks(
+    doc_id: uuid.UUID,
+    limit: int = Query(50, ge=1, le=200),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KnowledgeChunkListResponse:
+    await _load(doc_id, db)
+    rows = await KnowledgeService(db).list_chunks(doc_id, limit=limit)
+    return KnowledgeChunkListResponse(
+        data=[KnowledgeChunkOut.model_validate(row) for row in rows],
+        total=len(rows),
+    )
+
+
+@router.patch("/documents/{doc_id}", response_model=KnowledgeDocumentOut)
+async def update_document(
+    doc_id: uuid.UUID,
+    body: KnowledgeDocumentUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KnowledgeDocumentOut:
+    service = KnowledgeService(db)
+    return KnowledgeDocumentOut.model_validate(await service.update(await _load(doc_id, db), body, actor=admin))
+
+
+@router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    doc_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+) -> None:
+    service = KnowledgeService(db)
+    await service.delete(await _load(doc_id, db), actor=admin)
 
 
 @router.post("/documents/upload", response_model=KnowledgeDocumentOut, status_code=status.HTTP_201_CREATED)

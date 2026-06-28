@@ -34,6 +34,15 @@ const getRelativeTimeString = (dateStr?: string) => {
   return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 };
 
+const conversationModeMeta = (mode: Conversation["mode"]) => {
+  if (mode === "human")
+    return { label: "Manual", icon: "i-user", tone: "manual" };
+  if (mode === "semi_auto")
+    return { label: "Semi auto", icon: "i-sparkles", tone: "semi" };
+  if (mode === "bot") return { label: "Auto", icon: "i-bot", tone: "auto" };
+  return { label: "Closed", icon: "i-bot", tone: "closed" };
+};
+
 // Hoisted static style objects so list rows don't allocate brand-new objects on
 // every render (defeats React.memo). These have no per-row variance.
 const UNREAD_BADGE_DOT_STYLE: React.CSSProperties = {
@@ -100,7 +109,7 @@ const ConversationListItem = memo(
     // back to the contact's phone when no snippet is available yet.
     const subtitle = conversation._snippet || lead?.phone || "";
 
-    const statusLabel = conversation.mode === "human" ? "Cần tiếp quản" : "";
+    const modeMeta = conversationModeMeta(conversation.mode);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
     const unread = readIds.has(conversation.id)
@@ -143,16 +152,14 @@ const ConversationListItem = memo(
             <span className="conv-time">{time}</span>
           </span>
           {subtitle && <span className="conv-preview">{subtitle}</span>}
-          {conversation.mode === "human" && (
-            <span className="conv-bottom">
-              <span className={`mini-chip handoff`}>
-                <svg className="icon">
-                  <use href="#i-user" />
-                </svg>
-                {statusLabel}
-              </span>
+          <span className="conv-bottom">
+            <span className={`mini-chip ${modeMeta.tone}`}>
+              <svg className="icon">
+                <use href={`#${modeMeta.icon}`} />
+              </svg>
+              {modeMeta.label}
             </span>
-          )}
+          </span>
         </span>
       </button>
     );

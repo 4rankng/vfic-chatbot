@@ -28,6 +28,8 @@ class GeminiEmbedder:
 
         if not texts:
             return []
+        if not self.s.gemini_api_key:
+            raise RuntimeError("GEMINI_API_KEY is required for Gemini embeddings")
         if self._client is None:
             self._client = genai.Client(api_key=self.s.gemini_api_key)
         resp = await self._client.aio.models.embed_content(
@@ -97,6 +99,8 @@ def _minimax_chat(model: str, *, temperature: float):
     from langchain_openai import ChatOpenAI
 
     s = get_settings()
+    if not s.minimax_api_key:
+        raise RuntimeError("MINIMAX_API_KEY is required for MiniMax chat")
     return ChatOpenAI(
         model=model,
         api_key=s.minimax_api_key,

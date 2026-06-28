@@ -237,6 +237,22 @@ const getDataProviderWithCustomMethods = () => ({
     ).then((r) => normalize("conversations", r));
   },
 
+  async setConversationMode(
+    conversationId: string,
+    mode: "bot" | "human" | "semi_auto",
+  ) {
+    const action =
+      mode === "human"
+        ? "take-over"
+        : mode === "semi_auto"
+          ? "semi-auto"
+          : "release";
+    return apiJson<ApiRecord>(
+      `${BASE}/conversations/${encodeURIComponent(conversationId)}/${action}`,
+      { method: "POST" },
+    ).then((r) => normalize("conversations", r));
+  },
+
   // Reset unread_count to 0. Returns the updated conversation (callers refresh).
   async markAsRead(conversationId: string) {
     return apiJson<ApiRecord>(

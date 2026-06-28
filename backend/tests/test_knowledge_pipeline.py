@@ -193,6 +193,22 @@ async def test_pipeline_raises_after_retry_failure(db_session, clean_kb):
         await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
 
 
+async def test_ingest_worker_crash_marks_document_failed(db_session, clean_kb):
+    from app.workers.ingest_worker import _mark_doc_failed_sync
+
+    doc = await _make_doc(db_session, "nội dung")
+    doc.status = KnowledgeStatus.PROCESSING
+    doc.stage = "DIGESTING"
+    await db_session.commit()
+
+    _mark_doc_failed_sync(str(doc.id), TimeoutError("rq timeout"))
+
+    await db_session.refresh(doc)
+    assert doc.status == KnowledgeStatus.FAILED
+    assert doc.stage == "FAILED"
+    assert "TimeoutError: rq timeout" in (doc.error or "")
+
+
 async def test_mechanical_fallback_one_chunk(db_session, clean_kb):
     """process() without an llm_json keeps the legacy 1-chunk behaviour."""
     doc = await _make_doc(db_session, "toàn bộ nội dung thành một chunk")

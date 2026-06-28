@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Home, ListTodo, Users } from "lucide-react";
+import { BookOpen, Home, ListTodo, Users } from "lucide-react";
 import { useTranslate } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
@@ -22,6 +22,8 @@ export const MobileNavigation = () => {
     if (matchPath("/leads/*", location.pathname)) return "/leads";
     if (matchPath("/conversations/*", location.pathname))
       return "/conversations";
+    if (matchPath("/knowledge_sources/*", location.pathname))
+      return "/knowledge_sources";
     return false;
   }, [location.pathname]);
 
@@ -56,6 +58,12 @@ export const MobileNavigation = () => {
               smart_count: 2,
             })}
             isActive={currentPath === "/conversations"}
+          />
+          <NavigationButton
+            href="/knowledge_sources"
+            Icon={BookOpen}
+            label="Kiến thức"
+            isActive={currentPath === "/knowledge_sources"}
           />
         </>
       </div>

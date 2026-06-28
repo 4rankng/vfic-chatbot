@@ -6,6 +6,7 @@ the vfic_take_over / release / mark_read edge functions. All state changes bump
 
 Reads live in ``repository.py``; realtime publishing in ``events.py``.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -29,6 +30,7 @@ from app.services.audit_service import record_audit
 from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
+_SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
 
 
 class ConversationConflict(Exception):
@@ -61,9 +63,25 @@ class ConversationState:
             await self.db.flush()
         return conv
 
+    def semi_auto_inactive(self, conv: Conversation) -> bool:
+        reference = conv.taken_over_at or conv.updated_at
+        if reference is None:
+            return True
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=timezone.utc)
+        return utcnow() - reference >= _SEMI_AUTO_INACTIVITY
+
     def run_start_guard(self, conv: Conversation) -> bool:
-        """True only when the bot may run (mode == BOT). HUMAN/CLOSED starves it."""
-        return conv.mode == ConversationMode.BOT
+        """True only when the bot may run.
+
+        BOT is always eligible. SEMI_AUTO is eligible after the assigned human has
+        been inactive for five minutes. HUMAN/CLOSED starve the bot.
+        """
+        if conv.mode == ConversationMode.BOT:
+            return True
+        if conv.mode == ConversationMode.SEMI_AUTO:
+            return self.semi_auto_inactive(conv)
+        return False
 
     async def record_inbound(
         self,
@@ -119,11 +137,9 @@ class ConversationState:
         conv.bot_locked_until = None
         await self.db.commit()
 
-    async def recheck_ownership(
-        self, conv: Conversation, version_at_start: int
-    ) -> bool:
-        """Pre-send guard: bot may send only if still BOT and version unchanged."""
-        return conv.mode == ConversationMode.BOT and conv.version == version_at_start
+    async def recheck_ownership(self, conv: Conversation, version_at_start: int) -> bool:
+        """Pre-send guard: bot may send only if eligible and version unchanged."""
+        return self.run_start_guard(conv) and conv.version == version_at_start
 
     async def record_bot_outcome(
         self,
@@ -210,7 +226,47 @@ class ConversationState:
                 body="Hội thoại đã được trả lại cho chatbot.",
             )
         )
-        await record_audit(self.db, action="release_to_bot", actor_id=actor.id, target_type="conversation", target_id=str(conv.id))
+        await record_audit(
+            self.db,
+            action="release_to_bot",
+            actor_id=actor.id,
+            target_type="conversation",
+            target_id=str(conv.id),
+        )
+        await self.db.commit()
+        await self.db.refresh(conv)
+        await self.events.conversation_updated(conv)
+        return conv
+
+    async def semi_auto(self, conv: Conversation, recruiter: User) -> Conversation:
+        if conv.assigned_recruiter_id not in (None, recruiter.id):
+            raise ConversationConflict("conversation is owned by another recruiter")
+        conv.mode = ConversationMode.SEMI_AUTO
+        conv.status = ConversationStatus.OPEN
+        conv.assigned_recruiter_id = recruiter.id
+        conv.taken_over_at = utcnow()
+        conv.needs_human = False
+        conv.unread_count = 0
+        conv.bot_locked_until = None
+        conv.version += 1
+        self.db.add(
+            Message(
+                conversation_id=conv.id,
+                sender=MessageSender.SYSTEM,
+                body=(
+                    f"{recruiter.full_name or 'Nhân viên'} đã bật chế độ bán tự động. "
+                    "Chatbot sẽ trả lời nếu nhân viên không hoạt động trong 5 phút."
+                ),
+            )
+        )
+        await record_audit(
+            self.db,
+            action="semi_auto_conversation",
+            actor_id=recruiter.id,
+            target_type="conversation",
+            target_id=str(conv.id),
+            payload={"version": conv.version, "inactive_after_seconds": 300},
+        )
         await self.db.commit()
         await self.db.refresh(conv)
         await self.events.conversation_updated(conv)
@@ -220,7 +276,13 @@ class ConversationState:
         conv.status = ConversationStatus.CLOSED
         conv.mode = ConversationMode.CLOSED
         conv.version += 1
-        await record_audit(self.db, action="close_conversation", actor_id=actor.id, target_type="conversation", target_id=str(conv.id))
+        await record_audit(
+            self.db,
+            action="close_conversation",
+            actor_id=actor.id,
+            target_type="conversation",
+            target_id=str(conv.id),
+        )
         await self.db.commit()
         await self.db.refresh(conv)
         await self.events.conversation_updated(conv)
@@ -230,7 +292,13 @@ class ConversationState:
         conv.status = ConversationStatus.OPEN
         conv.mode = ConversationMode.BOT
         conv.version += 1
-        await record_audit(self.db, action="reopen_conversation", actor_id=actor.id, target_type="conversation", target_id=str(conv.id))
+        await record_audit(
+            self.db,
+            action="reopen_conversation",
+            actor_id=actor.id,
+            target_type="conversation",
+            target_id=str(conv.id),
+        )
         await self.db.commit()
         await self.db.refresh(conv)
         await self.events.conversation_updated(conv)
@@ -257,6 +325,7 @@ class ConversationState:
         )
         self.db.add(msg)
         conv.last_outbound_at = utcnow()
+        conv.taken_over_at = utcnow()
         conv.version += 1
         await record_audit(
             self.db,

@@ -4,6 +4,7 @@ Covers acceptance #1 (takeover race), #2 (human-mode inbound starves bot),
 #3 (recruiter reply + non-owner 409), plus take_over/release/close/mark_read/
 last_messages and the SSE stream.
 """
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 
@@ -45,7 +46,9 @@ async def _admin_token(client) -> str:
 
 
 async def _recruiter_token(client) -> str:
-    r = await client.post("/api/v1/auth/login", json={"email": RECRUITER_EMAIL, "password": PASSWORD})
+    r = await client.post(
+        "/api/v1/auth/login", json={"email": RECRUITER_EMAIL, "password": PASSWORD}
+    )
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
 
@@ -81,7 +84,11 @@ async def test_takeover_race_suppresses_bot(client, db_session):
 
     started = datetime.now(timezone.utc) - timedelta(seconds=2)
     await svc.record_bot_outcome(
-        conv, version_at_start=version_at_start, reply="bot intended reply", started_at=started, sent=False
+        conv,
+        version_at_start=version_at_start,
+        reply="bot intended reply",
+        started_at=started,
+        sent=False,
     )
 
     runs = (await db_session.scalars(select(BotRun).where(BotRun.conversation_id == conv.id))).all()
@@ -90,7 +97,9 @@ async def test_takeover_race_suppresses_bot(client, db_session):
     assert runs[0].version_at_start == version_at_start
     bot_msgs = (
         await db_session.scalars(
-            select(Message).where(Message.conversation_id == conv.id, Message.sender == MessageSender.BOT)
+            select(Message).where(
+                Message.conversation_id == conv.id, Message.sender == MessageSender.BOT
+            )
         )
     ).all()
     assert len(bot_msgs) == 1 and bot_msgs[0].delivery_status == DeliveryStatus.SUPPRESSED
@@ -106,7 +115,9 @@ async def test_human_mode_inbound_starves_bot(client, db_session):
     conv = await _make_conv(db_session, "human-1")
 
     # take over -> HUMAN
-    assert (await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=h)).status_code == 200
+    assert (
+        await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=h)
+    ).status_code == 200
     await db_session.refresh(conv)
     assert conv.mode == ConversationMode.HUMAN
 
@@ -119,7 +130,9 @@ async def test_human_mode_inbound_starves_bot(client, db_session):
     assert conv.unread_count == before + 1  # recruiter sees unread bump
     inbound_msgs = (
         await db_session.scalars(
-            select(Message).where(Message.conversation_id == conv.id, Message.sender == MessageSender.WORKER)
+            select(Message).where(
+                Message.conversation_id == conv.id, Message.sender == MessageSender.WORKER
+            )
         )
     ).all()
     assert [m.body for m in inbound_msgs] == ["Ứng viên trả lời"]
@@ -147,7 +160,9 @@ async def test_recruiter_reply_flow(client, db_session):
     assert r0.status_code == 409
 
     # recruiter takes over, then replies -> 201
-    assert (await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=rec_h)).status_code == 200
+    assert (
+        await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=rec_h)
+    ).status_code == 200
     r1 = await client.post(
         f"/api/v1/conversations/{conv.id}/messages", json={"body": "Chào bạn"}, headers=rec_h
     )
@@ -170,9 +185,29 @@ async def test_recruiter_reply_flow(client, db_session):
     )
     other_h = {"Authorization": f"Bearer {other_login.json()['access_token']}"}
     r2 = await client.post(
-        f"/api/v1/conversations/{conv.id}/messages", json={"body": "xin chen ngang"}, headers=other_h
+        f"/api/v1/conversations/{conv.id}/messages",
+        json={"body": "xin chen ngang"},
+        headers=other_h,
     )
     assert r2.status_code == 409
+
+
+async def test_semi_auto_mode_allows_recruiter_reply(client, db_session):
+    rec_tok = await _recruiter_token(client)
+    rec_h = {"Authorization": f"Bearer {rec_tok}"}
+    conv = await _make_conv(db_session, "semi-api-1")
+
+    mode = await client.post(f"/api/v1/conversations/{conv.id}/semi-auto", headers=rec_h)
+    assert mode.status_code == 200, mode.text
+    assert mode.json()["mode"] == "SEMI_AUTO"
+
+    reply = await client.post(
+        f"/api/v1/conversations/{conv.id}/messages",
+        json={"body": "Mình đang xem hồ sơ của bạn"},
+        headers=rec_h,
+    )
+    assert reply.status_code == 201, reply.text
+    assert reply.json()["sender"] == "RECRUITER"
 
 
 async def test_recruiter_reply_failed_delivery_returns_502(client, db_session, monkeypatch):
@@ -211,7 +246,9 @@ async def test_takeover_conflict(client, db_session):
     rec1_h = {"Authorization": f"Bearer {rec1_tok}"}
     conv = await _make_conv(db_session, "conflict-1")
 
-    assert (await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=rec1_h)).status_code == 200
+    assert (
+        await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=rec1_h)
+    ).status_code == 200
 
     # second recruiter tries the same conversation -> 409
     other_email = f"r2.{asyncio.get_running_loop().time():.0f}@example.com"
@@ -221,10 +258,13 @@ async def test_takeover_conflict(client, db_session):
         headers=admin_h,
     )
     other_tok = (
-        await client.post("/api/v1/auth/login", json={"email": other_email, "password": "Abcd1234!"})
+        await client.post(
+            "/api/v1/auth/login", json={"email": other_email, "password": "Abcd1234!"}
+        )
     ).json()["access_token"]
     conflict = await client.post(
-        f"/api/v1/conversations/{conv.id}/take-over", headers={"Authorization": f"Bearer {other_tok}"}
+        f"/api/v1/conversations/{conv.id}/take-over",
+        headers={"Authorization": f"Bearer {other_tok}"},
     )
     assert conflict.status_code == 409
 
@@ -239,10 +279,12 @@ async def test_mark_read_and_release(client, db_session):
     conv = await _make_conv(db_session, "read-1")
     # seed some unread + a couple messages
     conv.unread_count = 3
-    db_session.add_all([
-        Message(conversation_id=conv.id, sender=MessageSender.WORKER, body="a"),
-        Message(conversation_id=conv.id, sender=MessageSender.BOT, body="b"),
-    ])
+    db_session.add_all(
+        [
+            Message(conversation_id=conv.id, sender=MessageSender.WORKER, body="a"),
+            Message(conversation_id=conv.id, sender=MessageSender.BOT, body="b"),
+        ]
+    )
     await db_session.commit()
     await db_session.refresh(conv)
 
@@ -262,11 +304,13 @@ async def test_last_messages_batch_returns_latest_per_conversation(client, db_se
     conv_a = await _make_conv(db_session, "batch-a")
     conv_b = await _make_conv(db_session, "batch-b")
     # two messages on a (second has the higher id -> latest); one on b.
-    db_session.add_all([
-        Message(conversation_id=conv_a.id, sender=MessageSender.BOT, body="old a"),
-        Message(conversation_id=conv_a.id, sender=MessageSender.BOT, body="new a"),
-        Message(conversation_id=conv_b.id, sender=MessageSender.BOT, body="only b"),
-    ])
+    db_session.add_all(
+        [
+            Message(conversation_id=conv_a.id, sender=MessageSender.BOT, body="old a"),
+            Message(conversation_id=conv_a.id, sender=MessageSender.BOT, body="new a"),
+            Message(conversation_id=conv_b.id, sender=MessageSender.BOT, body="only b"),
+        ]
+    )
     await db_session.commit()
 
     tok = await _admin_token(client)

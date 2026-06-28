@@ -7,8 +7,16 @@ out of llm_real.py into factories.py.
 import pytest
 
 from app.graph.clients import GeminiEmbedder, MiniMaxAgent, MiniMaxSafety
-from app.graph.factories import build_deps
+from app.graph.factories import build_deps, make_minimax_llm_json
 from app.graph.types import GraphDeps
+
+
+class _Settings:
+    minimax_api_key = ""
+    minimax_base_url = "https://api.minimax.io/v1"
+    minimax_agent_model = "MiniMax-M2.7-highspeed"
+    minimax_digest_model = ""
+    minimax_request_timeout = 60
 
 
 @pytest.mark.asyncio
@@ -24,3 +32,9 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     assert isinstance(deps.safety, MiniMaxSafety)
     assert isinstance(deps.embedder, GeminiEmbedder)
     assert deps.zalo is not None
+
+
+def test_minimax_json_missing_key_names_minimax(monkeypatch):
+    monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
+    with pytest.raises(RuntimeError, match="MINIMAX_API_KEY"):
+        make_minimax_llm_json()

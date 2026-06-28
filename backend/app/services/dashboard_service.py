@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import Role, User
-from app.schemas.job import DashboardMetrics
+from app.schemas.job import DashboardMetrics, KnowledgeIngestHealth
 
 # Canonical recruitment-funnel order (mirrors the leads.lead_stage CHECK
 # constraint + the frontend LEAD_STAGES list). Used to emit stage_breakdown in a
@@ -141,4 +141,80 @@ class DashboardService:
             hired_rate=round(hired_count / total_leads * 100) if total_leads else 0.0,
             unread_conversation_count=int(human_convs or 0),
             stage_breakdown=stage_breakdown,
+            knowledge_ingest=await self._knowledge_ingest_health() if viewer.role == Role.admin else None,
         )
+
+    async def _knowledge_ingest_health(self) -> KnowledgeIngestHealth:
+        """Admin-only health snapshot for the async knowledge ingest pipeline."""
+        stage_rows = (
+            await self.db.execute(
+                text(
+                    "SELECT stage, count(*) "
+                    "FROM knowledge_documents "
+                    "GROUP BY stage ORDER BY stage"
+                )
+            )
+        ).all()
+        counts = {str(row[0]): int(row[1]) for row in stage_rows}
+        processing_stages = ("UPLOADED", "EXTRACTED", "DIGESTING", "EMBEDDING", "INDEXING", "PROCESSING")
+        processing_count = sum(counts.get(stage, 0) for stage in processing_stages)
+        stuck_count = int(
+            await self.db.scalar(
+                text(
+                    "SELECT count(*) FROM knowledge_documents "
+                    "WHERE stage = ANY(CAST(:stages AS text[])) "
+                    "AND updated_at < now() - interval '10 minutes'"
+                ),
+                {"stages": list(processing_stages)},
+            )
+            or 0
+        )
+        issue_rows = (
+            await self.db.execute(
+                text(
+                    "SELECT id, file_name, project_id, status, stage, "
+                    "GREATEST(0, floor(extract(epoch from (now() - updated_at)) / 60))::int AS minutes_since_update, "
+                    "left(coalesce(error, ''), 240) AS error "
+                    "FROM knowledge_documents "
+                    "WHERE status = 'FAILED' "
+                    "OR (stage = ANY(CAST(:stages AS text[])) AND updated_at < now() - interval '10 minutes') "
+                    "ORDER BY updated_at DESC LIMIT 6"
+                ),
+                {"stages": list(processing_stages)},
+            )
+        ).mappings()
+        queue_depth, failed_job_count, worker_count = self._rq_ingest_counts()
+        return KnowledgeIngestHealth(
+            queue_depth=queue_depth,
+            failed_job_count=failed_job_count,
+            worker_count=worker_count,
+            processing_count=processing_count,
+            stuck_count=stuck_count,
+            failed_document_count=counts.get("FAILED", 0),
+            published_document_count=counts.get("PUBLISHED", 0),
+            stage_breakdown=[{"stage": stage, "count": count} for stage, count in counts.items()],
+            recent_issues=[
+                {
+                    "id": row["id"],
+                    "file_name": row["file_name"],
+                    "project_id": row["project_id"],
+                    "status": row["status"],
+                    "stage": row["stage"],
+                    "minutes_since_update": int(row["minutes_since_update"] or 0),
+                    "error": row["error"] or None,
+                }
+                for row in issue_rows
+            ],
+        )
+
+    def _rq_ingest_counts(self) -> tuple[int, int, int]:
+        try:
+            from app.core.redis import get_redis_sync
+
+            redis = get_redis_sync()
+            queue_depth = int(redis.llen("rq:queue:ingest") or 0)
+            failed_job_count = int(redis.zcard("rq:failed:ingest") or 0)
+            worker_count = int(redis.scard("rq:workers:ingest") or 0)
+            return queue_depth, failed_job_count, worker_count
+        except Exception:  # noqa: BLE001 — Redis telemetry must not break dashboard
+            return 0, 0, 0

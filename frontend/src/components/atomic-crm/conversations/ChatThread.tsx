@@ -42,6 +42,7 @@ export interface ChatThreadProps {
    * thread degrades gracefully: no takeover, no markAsRead). */
   conversation?: Conversation;
   isBotModeOverride?: boolean;
+  canHumanReplyOverride?: boolean;
   onTakeoverOverride?: () => void;
   showComposerTakeoverNotice?: boolean;
 }
@@ -50,6 +51,7 @@ export const ChatThread = ({
   conversationId,
   conversation,
   isBotModeOverride,
+  canHumanReplyOverride,
   onTakeoverOverride,
   showComposerTakeoverNotice = true,
 }: ChatThreadProps) => {
@@ -73,9 +75,11 @@ export const ChatThread = ({
 
   const {
     isBotMode: internalIsBotMode,
+    canHumanReply: internalCanHumanReply,
     handleTakeover: internalHandleTakeover,
   } = useConversationActions(conversation);
   const isBotMode = isBotModeOverride ?? internalIsBotMode;
+  const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
 
   // Server-confirm the optimistic unread clear from the inbox list. Skips the
@@ -215,7 +219,7 @@ export const ChatThread = ({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reply.trim() || isBotMode) return;
+    if (!reply.trim() || !canHumanReply) return;
 
     setIsSending(true);
     try {
@@ -291,14 +295,14 @@ export const ChatThread = ({
           </div>
         )}
         <form
-          className={`composer ${isBotMode ? "disabled" : ""}`}
+          className={`composer ${!canHumanReply ? "disabled" : ""}`}
           onSubmit={handleSend}
         >
           <button
             type="button"
             className="composer-action"
             aria-label="Đính kèm"
-            disabled={isBotMode}
+            disabled={!canHumanReply}
           >
             <svg className="icon">
               <use href="#i-paperclip" />
@@ -307,11 +311,13 @@ export const ChatThread = ({
           <textarea
             rows={1}
             placeholder={
-              isBotMode
-                ? "Tiếp nhận cuộc trò chuyện để trả lời…"
-                : "Nhập tin nhắn..."
+              canHumanReply
+                ? "Nhập tin nhắn..."
+                : isBotMode
+                  ? "Chuyển sang Manual hoặc Semi auto để trả lời..."
+                  : "Hội thoại chưa sẵn sàng để trả lời..."
             }
-            disabled={isBotMode || isSending}
+            disabled={!canHumanReply || isSending}
             value={reply}
             onChange={(e) => setReply(e.target.value)}
             onKeyDown={(e) => {
@@ -325,7 +331,7 @@ export const ChatThread = ({
             type="button"
             className="composer-action"
             aria-label="Biểu tượng cảm xúc"
-            disabled={isBotMode}
+            disabled={!canHumanReply}
           >
             <svg className="icon">
               <use href="#i-smile" />
@@ -335,7 +341,7 @@ export const ChatThread = ({
             type="submit"
             className="composer-action send"
             aria-label="Gửi tin nhắn"
-            disabled={isBotMode || isSending || !reply.trim()}
+            disabled={!canHumanReply || isSending || !reply.trim()}
           >
             <svg className="icon">
               <use href="#i-send" />

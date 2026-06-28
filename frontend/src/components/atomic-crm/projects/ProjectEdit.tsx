@@ -18,6 +18,7 @@ import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { ProjectFeatures } from "./ProjectFeatures";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
+import { DeleteButton } from "@/components/admin";
 
 const ProjectEditContent = () => {
   const project = useRecordContext<Project>();
@@ -52,7 +53,14 @@ const ProjectEditContent = () => {
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
             <span>{project.name}</span>
-            <Badge variant={project.is_active ? "default" : "outline"}>
+            <Badge
+              variant="outline"
+              className={
+                project.is_active
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-border bg-muted/40 text-muted-foreground"
+              }
+            >
               {project.is_active ? "Đang hoạt động" : "Tắt"}
             </Badge>
           </CardTitle>
@@ -121,6 +129,11 @@ export const ProjectEdit = () => (
   <EditBase>
     <TopToolbar>
       <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa dự án</h2>
+      <DeleteButton
+        label="Xóa dự án"
+        successMessage="Đã xóa dự án."
+        redirect="list"
+      />
     </TopToolbar>
     <ProjectEditContent />
   </EditBase>
