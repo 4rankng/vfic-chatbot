@@ -8,11 +8,7 @@ import {
   useRefresh,
 } from "ra-core";
 import {
-  Activity,
-  AlertTriangle,
   Archive,
-  CheckCircle2,
-  CircleDashed,
   FileText,
   MoreHorizontal,
   Pencil,
@@ -48,7 +44,6 @@ import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";
 import { KnowledgeUpload } from "./KnowledgeUpload";
 import {
-  PIPELINE_STEPS,
   flaggedCount,
   isFailed,
   isPipelineActive,
@@ -58,7 +53,6 @@ import {
   needsReview,
   pipelinePercent,
   pipelineStateCopy,
-  pipelineStepIndex,
   sourceSearchText,
   sourceStage,
 } from "./knowledgePipelineUtils";
@@ -69,6 +63,7 @@ import {
   SourceStamp,
 } from "./KnowledgeSourceRow";
 import { StoredKnowledgePanel } from "./StoredKnowledgePanel";
+import { PipelineTimeline } from "./PipelineTimeline";
 
 const ALL_PROJECTS = "__all__";
 const ALL_STAGES = "__all__";
@@ -543,64 +538,6 @@ const InfoBlock = ({ label, value }: { label: string; value: string }) => (
     </div>
   </div>
 );
-
-const PipelineTimeline = ({ source }: { source: KnowledgeSource }) => {
-  const currentIndex = pipelineStepIndex(source);
-
-  return (
-    <ol className="grid gap-2">
-      {PIPELINE_STEPS.map((step, index) => {
-        const done = isPublished(source) || index < currentIndex;
-        const current = !isPublished(source) && index === currentIndex;
-        const failedHere = isFailed(source) && index === currentIndex;
-
-        return (
-          <li
-            key={step.key}
-            className={cn(
-              "grid grid-cols-[28px_minmax(0,1fr)] gap-3 rounded-[10px] p-2",
-              current && !failedHere && "bg-[var(--kb-teal-soft)]",
-              failedHere && "bg-[var(--kb-rust-soft)]",
-            )}
-          >
-            <span
-              className={cn(
-                "mt-0.5 flex size-7 items-center justify-center rounded-full",
-                done && "bg-[var(--kb-teal)] text-[var(--kb-teal-soft)]",
-                current &&
-                  !failedHere &&
-                  "bg-[var(--kb-teal)] text-[var(--kb-teal-soft)]",
-                failedHere && "bg-[var(--kb-rust)] text-white",
-                !done &&
-                  !current &&
-                  !failedHere &&
-                  "bg-secondary text-muted-foreground",
-              )}
-            >
-              {failedHere ? (
-                <AlertTriangle className="size-4" />
-              ) : done ? (
-                <CheckCircle2 className="size-4" />
-              ) : current ? (
-                <Activity className="size-4" />
-              ) : (
-                <CircleDashed className="size-4" />
-              )}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-foreground">
-                {step.label}
-              </span>
-              <span className="mt-0.5 block break-words text-xs leading-5 text-muted-foreground">
-                {step.description}
-              </span>
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-};
 
 const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
   if (isRunning(source)) {
