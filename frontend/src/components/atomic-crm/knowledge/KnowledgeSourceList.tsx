@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ListBase, useGetList, useListContext, useRefresh } from "ra-core";
+import { useEffect, useRef, useState } from "react";
+import { ListBase, useRefresh } from "ra-core";
 import { FileText, RefreshCw, Search } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -12,71 +12,42 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";
 import { KnowledgeUpload } from "./KnowledgeUpload";
-import {
-  isPipelineActive,
-  needsReview,
-  sourceSearchText,
-  sourceStage,
-} from "./knowledgePipelineUtils";
+import { isPipelineActive } from "./knowledgePipelineUtils";
 import { InlineKnowledgeUploader } from "./InlineKnowledgeUploader";
 import { KnowledgeSourceRow } from "./KnowledgeSourceRow";
 import { KnowledgeDetailPanel } from "./KnowledgeDetailPanel";
-
-const ALL_PROJECTS = "__all__";
-const ALL_STAGES = "__all__";
+import {
+  ALL_PROJECTS,
+  ALL_STAGES,
+  useKnowledgeSourceFilters,
+} from "./useKnowledgeSourceFilters";
 
 const KnowledgeSourceListContent = () => {
-  const { data, isPending } = useListContext<KnowledgeSource>();
   const refresh = useRefresh();
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS);
-  const [stageFilter, setStageFilter] = useState(ALL_STAGES);
-  const [reviewOnly, setReviewOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Mobile master-detail: 'list' shows the list, 'detail' shows the detail pane.
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
-  const { data: projects } = useGetList<Project>("projects", {
-    pagination: { page: 1, perPage: 100 },
-    sort: { field: "name", order: "ASC" },
-  });
-
-  const projectById = useMemo(() => {
-    const map = new Map<string, Project>();
-    for (const project of projects ?? []) map.set(String(project.id), project);
-    return map;
-  }, [projects]);
-
-  const sources = useMemo(() => data ?? [], [data]);
-  const stages = useMemo(
-    () => Array.from(new Set(sources.map(sourceStage))).sort(),
-    [sources],
-  );
-
-  const filteredSources = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return sources.filter((source) => {
-      if (
-        projectFilter !== ALL_PROJECTS &&
-        String(source.project_id ?? "") !== projectFilter
-      )
-        return false;
-      if (stageFilter !== ALL_STAGES && stageFilter !== sourceStage(source))
-        return false;
-      if (reviewOnly && !needsReview(source)) return false;
-      if (!needle) return true;
-      return sourceSearchText(
-        source,
-        source.project_id
-          ? projectById.get(String(source.project_id))?.name
-          : "",
-      ).includes(needle);
-    });
-  }, [projectById, projectFilter, query, reviewOnly, sources, stageFilter]);
+  const {
+    isPending,
+    projects,
+    projectById,
+    sources,
+    stages,
+    filteredSources,
+    query,
+    setQuery,
+    projectFilter,
+    stageFilter,
+    reviewOnly,
+    setProjectFilter,
+    setStageFilter,
+    setReviewOnly,
+    selectProject,
+  } = useKnowledgeSourceFilters();
 
   // Keep the selection valid as the filtered list changes; default to the top.
   useEffect(() => {
@@ -122,12 +93,6 @@ const KnowledgeSourceListContent = () => {
     const timer = window.setInterval(() => refresh(), 5000);
     return () => window.clearInterval(timer);
   }, [refresh, sources]);
-
-  const selectProject = (projectId: string) => {
-    setProjectFilter(projectId);
-    setStageFilter(ALL_STAGES);
-    setReviewOnly(false);
-  };
 
   const handleRowSelect = (id: string) => {
     setSelectedId(id);
