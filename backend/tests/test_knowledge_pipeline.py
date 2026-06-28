@@ -171,6 +171,29 @@ async def test_pipeline_falls_back_after_retry_failure(db_session, clean_kb):
     assert rows[0].source_quote == "nội dung"
 
 
+async def test_digest_strips_m27_think_leak_into_real_units(db_session, clean_kb):
+    """M2.7 leaks `<think>…</think>` before the JSON; the pipeline must strip it so the
+    digest yields the REAL LLM units instead of degrading to the deterministic fallback."""
+    doc = await _make_doc(db_session, "nội dung gốc của tài liệu")
+
+    async def llm_json(system, user):
+        payload = _units_payload("LG Display Hải Phòng tuyển operator ca đêm lương 10 triệu.")
+        return f"<think>\nreasoning about the document\n</think>\n{json.dumps(payload)}"
+
+    await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
+    await db_session.refresh(doc)
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    # the LLM payload's summary (not the fallback's block[:220]) proves the strip worked
+    assert doc.digest_summary == "tóm tắt tài liệu"
+    rows = (
+        await db_session.execute(
+            text("SELECT content FROM knowledge_chunks WHERE document_id = :d"),
+            {"d": str(doc.id)},
+        )
+    ).all()
+    assert len(rows) == 1 and rows[0].content == "LG Display Hải Phòng tuyển operator ca đêm lương 10 triệu."
+
+
 async def test_ingest_worker_crash_marks_document_failed(db_session, clean_kb):
     from app.workers.ingest_worker import _mark_doc_failed_sync
 
@@ -187,9 +210,12 @@ async def test_ingest_worker_crash_marks_document_failed(db_session, clean_kb):
     assert "TimeoutError: rq timeout" in (doc.error or "")
 
 
-async def test_ingest_job_marks_document_failed_when_digest_times_out(
+async def test_ingest_job_falls_back_when_digest_times_out(
     db_session, clean_kb, monkeypatch
 ):
+    """A digest timeout degrades to the deterministic fallback instead of failing the
+    document — provider slowness must never leave the project with 0 đơn vị. (The
+    timeout is still recoverable: retry once, then source-grounded fallback units.)"""
     from app.services.knowledge import pipeline as pipeline_module
     from app.workers.ingest_worker import _run_job_async
 
@@ -198,7 +224,7 @@ async def test_ingest_job_marks_document_failed_when_digest_times_out(
     monkeypatch.setattr(
         pipeline_module,
         "get_settings",
-        lambda: SimpleNamespace(minimax_request_timeout=0.01),
+        lambda: SimpleNamespace(minimax_digest_timeout=0.01),
     )
 
     async def hanging_llm(system, user):
@@ -210,9 +236,16 @@ async def test_ingest_job_marks_document_failed_when_digest_times_out(
     )
 
     await db_session.refresh(doc)
-    assert doc.status == KnowledgeStatus.FAILED
-    assert doc.stage == "FAILED"
-    assert "MiniMax digest timed out after 0.01s" in (doc.error or "")
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert doc.stage == "PUBLISHED"
+    assert doc.error is None
+    rows = (
+        await db_session.execute(
+            text("SELECT count(*) FROM knowledge_chunks WHERE document_id = :d"),
+            {"d": str(doc.id)},
+        )
+    ).scalar()
+    assert rows >= 1  # fallback produced source-grounded units, not 0
 
 
 async def _run_in_fresh_loop(factory):
@@ -326,7 +359,7 @@ async def test_search_test_scoped_to_project(db_session, clean_kb):
 
 
 # --------------------------------------------------------------------------- multipart API
-async def test_upload_file_endpoint_decodes_text_and_enqueues(client, db_session, clean_kb, monkeypatch):
+async def test_upload_file_endpoint_accepts_canonical_markdown_and_enqueues(client, db_session, clean_kb, monkeypatch):
     # Stub enqueue so the test doesn't drop a real job onto the RQ queue.
     enqueued: list[str] = []
     monkeypatch.setattr(
@@ -337,18 +370,20 @@ async def test_upload_file_endpoint_decodes_text_and_enqueues(client, db_session
     ).json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
 
-    # Uploads are raw text now (no Office parsing): send Vietnamese UTF-8 bytes as a .txt.
-    payload = "Nội dung text LG Display — lương 10 triệu".encode("utf-8")
+    from app.services.knowledge.canonical import load_template
+
+    payload = load_template().encode("utf-8")
 
     r = await client.post(
         "/api/v1/knowledge/documents/upload-file",
-        files={"file": ("lg.txt", payload, "text/plain")},
+        files={"file": ("lg.md", payload, "text/markdown")},
         headers=h,
     )
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["stage"] in {"EXTRACTED", "UPLOADED"}
     assert len(enqueued) == 1 and enqueued[0] == body["id"]
-    # raw_text is decoded verbatim from the uploaded bytes and persisted on the doc
+    # raw_text is decoded verbatim from the uploaded bytes and persisted on the doc.
     doc = await db_session.get(KnowledgeDocument, uuid.UUID(body["id"]))
     assert doc is not None and "LG Display" in (doc.raw_text or "")
+    assert doc.metadata_["schema_version"] == "vfic-knowledge-v1"

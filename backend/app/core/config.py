@@ -55,10 +55,15 @@ class Settings(BaseSettings):
     # LLM "training pipeline" — MiniMax digests raw KB files into RAG units + builds
     # the per-project catalog card. Falls back to the agent model when unset.
     minimax_digest_model: str = ""
+    # Generous per-call ceiling for the BACKGROUND digest. M2.7 always reasons, so a
+    # digest section legitimately takes longer than a chat turn; the chat/agent/safety
+    # paths keep using minimax_request_timeout (60s). On timeout the pipeline falls back
+    # to source-grounded units instead of failing the document (see KnowledgePipeline).
+    minimax_digest_timeout: int = 180
     kb_storage_path: str = "/data/kb_uploads"
     digest_section_chars: int = 6000
     digest_max_sections: int = 20
-    ingest_job_timeout_seconds: int = 1800
+    ingest_job_timeout_seconds: int = 3600
 
     web_concurrency: int = 2
 

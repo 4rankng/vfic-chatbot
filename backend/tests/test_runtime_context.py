@@ -106,6 +106,11 @@ async def test_search_knowledge_scoped_by_project_slug(db_session, clean_kb):
     assert "LG Display" in scoped
     assert "Samsung" not in scoped
 
+    missing = await search_knowledge(db_session, emb, "tuyển", project_slug="unknown")
+    assert "Không tìm thấy" in missing
+    assert "LG Display" not in missing
+    assert "Samsung" not in missing
+
     allhits = await search_knowledge(db_session, emb, "tuyển")
     assert "LG Display" in allhits and "Samsung" in allhits
 
@@ -120,14 +125,14 @@ async def test_list_active_projects(db_session):
 # --------------------------------------------------------------------------- seeder
 async def test_seeder_creates_defaults_idempotently(db_session):
     await ensure_defaults(db_session)
-    n_proj = (await db_session.execute(text("SELECT count(*) FROM projects WHERE slug='vfic'"))).scalar()
     n_persona = (await db_session.execute(text("SELECT count(*) FROM personas WHERE project_id IS NULL"))).scalar()
-    assert n_proj == 1 and n_persona == 1
+    assert n_persona == 1
+    assert (await db_session.execute(text("SELECT count(*) FROM projects WHERE slug='vfic'"))).scalar() == 0
     active_body = (await db_session.execute(
         text("SELECT body_md FROM personas WHERE is_active AND project_id IS NULL LIMIT 1")
     )).scalar()
     assert active_body == AGENT_SYSTEM_PROMPT
-    # second run is a no-op (still exactly 1 global persona, 1 vfic project)
+    # second run is a no-op (still exactly 1 global persona, no synthetic vfic project)
     await ensure_defaults(db_session)
     assert (await db_session.execute(text("SELECT count(*) FROM personas WHERE project_id IS NULL"))).scalar() == 1
-    assert (await db_session.execute(text("SELECT count(*) FROM projects WHERE slug='vfic'"))).scalar() == 1
+    assert (await db_session.execute(text("SELECT count(*) FROM projects WHERE slug='vfic'"))).scalar() == 0

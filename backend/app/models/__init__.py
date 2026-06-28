@@ -19,7 +19,6 @@ from app.models.conversation import (
     DeliveryStatus,
     Message,
     MessageSender,
-    OutboundMessage,
 )
 from app.models.user import Role, User
 
@@ -52,5 +51,4 @@ __all__ = [
     "DeliveryStatus",
     "BotRun",
     "BotRunOutcome",
-    "OutboundMessage",
 ]

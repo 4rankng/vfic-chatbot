@@ -55,10 +55,10 @@ Chỉ dựa vào dữ liệu cung cấp, không bịa."""
 
 
 PRODUCT_FEATURE_SYSTEM_PROMPT = """Bạn là chuyên gia phân tích tin tuyển dụng cho chatbot VFIC. \
-Từ MỘT tin tuyển dụng (tiếng Việt), trích xuất đúng 16 "đặc điểm sản phẩm" mà người lao động \
+Từ MỘT tin tuyển dụng (tiếng Việt), trích xuất đúng {{COUNT}} "đặc điểm sản phẩm" mà người lao động \
 quan tâm, để agent trả lời như một chuyên viên tư vấn tuyển dụng.
 
-Danh sách 16 đặc điểm (feature_key) cần trích xuất — đúng các key này:
+Danh sách {{COUNT}} đặc điểm (feature_key) cần trích xuất — đúng các key này:
 {{FEATURES}}
 
 Với MỖI đặc điểm, trả về:
@@ -80,4 +80,4 @@ Trả về ĐÚNG MỘT JSON object, không kèm markdown/code fence:
     {"feature_key":"take_home_income","value_text":"...","value_json":{},"is_highlight":false,"is_missing":false,"needs_clarification":false,"evidence_text":"...","strength_score":0.8}
   ]
 }
-Phải có đúng 16 phần tử, một cho mỗi feature_key đã liệt kê."""
+Phải có đúng {{COUNT}} phần tử, một cho mỗi feature_key đã liệt kê."""

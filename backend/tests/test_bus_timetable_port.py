@@ -34,6 +34,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_PATH = _REPO_ROOT / "kb" / "LGDisplay" / "LGDisplay.txt"
 _FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "bus_timetable"
 _SOURCE_FILTER = "source_name = 'LGDisplay.txt' AND document_type = 'bus_schedule'"
+_LEGACY_PROJECT_SLUG = "lg-display-bus-test"
 
 # Curated Vietnamese probes (input -> expected normalize_search_text output),
 # captured empirically from the SQL fn. Covers đ/Đ, every diacritic vowel, and the
@@ -114,6 +115,7 @@ async def _cleanup_lgdisplay(db) -> None:
     await db.execute(text("DELETE FROM knowledge_sources WHERE source_name = 'LGDisplay.txt'"))
     await db.execute(text("DELETE FROM knowledge_documents WHERE file_name = 'LGDisplay.txt'"))
     await db.execute(text("DELETE FROM companies WHERE name = 'LG Display'"))
+    await db.execute(text("DELETE FROM projects WHERE slug = :slug"), {"slug": _LEGACY_PROJECT_SLUG})
     await db.commit()
 
 
@@ -166,18 +168,27 @@ async def test_t2_rebuild_matches_golden(db_session) -> None:
     """End-to-end: ingest a single whole-file doc -> rebuild -> bus tables == golden."""
     content = _SOURCE_PATH.read_text(encoding="utf-8")
     await _cleanup_lgdisplay(db_session)  # clean slate (idempotent)
+    project_id = (
+        await db_session.execute(
+            text(
+                "INSERT INTO projects(slug, name, is_active) "
+                "VALUES (:slug, 'LG Display Bus Test', true) RETURNING id"
+            ),
+            {"slug": _LEGACY_PROJECT_SLUG},
+        )
+    ).scalar()
     doc_id = (
         await db_session.execute(
             text(
-                "INSERT INTO knowledge_documents(file_name, source, status, raw_text) "
-                "VALUES ('LGDisplay.txt', 'upload', 'PUBLISHED', :raw) RETURNING id"
+                "INSERT INTO knowledge_documents(file_name, source, status, raw_text, project_id) "
+                "VALUES ('LGDisplay.txt', 'upload', 'PUBLISHED', :raw, :pid) RETURNING id"
             ),
-            {"raw": content},
+            {"raw": content, "pid": project_id},
         )
     ).scalar()
     await db_session.execute(
         text("INSERT INTO knowledge_chunks(document_id, chunk_index, content) VALUES (:did, 0, :c)"),
-        {"did": str(doc_id), "c": content},
+        {"did": str(doc_id), "c": "LLM digest text without structured bus headings"},
     )
     await db_session.commit()
 

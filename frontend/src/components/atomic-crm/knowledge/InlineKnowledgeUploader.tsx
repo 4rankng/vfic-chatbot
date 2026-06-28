@@ -3,6 +3,7 @@ import { useNotify, useRefresh } from "ra-core";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import {
   BookOpen,
+  Download,
   FileText,
   RefreshCw,
   Upload,
@@ -12,7 +13,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { uploadKnowledgeFile } from "@/lib/vfic/knowledgeService";
+import {
+  saveKnowledgeTemplate,
+  uploadKnowledgeFile,
+} from "@/lib/vfic/knowledgeService";
 import {
   ACCEPTED_KNOWLEDGE_TYPES,
   formatFileSize,
@@ -29,6 +33,7 @@ export const InlineKnowledgeUploader = ({
   const [projectChoice, setProjectChoice] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   useEffect(() => {
     if (!projectChoice && projects[0]?.id)
@@ -37,7 +42,7 @@ export const InlineKnowledgeUploader = ({
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
-    notify("Tệp không hợp lệ. Hỗ trợ PDF, DOCX, XLSX, CSV, TXT và MD.", {
+    notify("Tệp không hợp lệ. Chỉ hỗ trợ VFIC Knowledge Markdown v1 (.md/.txt).", {
       type: "warning",
     });
   };
@@ -64,15 +69,26 @@ export const InlineKnowledgeUploader = ({
       return;
     }
     setBusy(true);
+    setValidationErrors([]);
     try {
       await uploadKnowledgeFile(file, projectChoice);
       notify("Đã tải lên. Pipeline đang xử lý ở nền.", { type: "success" });
       setFile(null);
       refresh();
     } catch (err) {
-      notify(`Tải lên thất bại: ${(err as Error).message}`, { type: "error" });
+      const errors = (err as Error & { validationErrors?: string[] }).validationErrors ?? [];
+      setValidationErrors(errors);
+      notify(`Tải lên thất bại: ${(err as Error).message.split("\n")[0]}`, { type: "error" });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      await saveKnowledgeTemplate();
+    } catch (err) {
+      notify(`Không tải được mẫu: ${(err as Error).message}`, { type: "error" });
     }
   };
 
@@ -88,8 +104,8 @@ export const InlineKnowledgeUploader = ({
               Bắt đầu bằng một nguồn kiến thức
             </h4>
             <p className="mt-1 max-w-[34rem] text-sm leading-6 text-muted-foreground">
-              Gắn tài liệu vào dự án để agent có thể truy xuất nội dung sau khi
-              pipeline xử lý xong.
+              Gắn tệp VFIC Knowledge Markdown v1 vào dự án để agent có thể truy
+              xuất nội dung có trích dẫn sau khi pipeline xử lý xong.
             </p>
           </div>
         </div>
@@ -119,7 +135,7 @@ export const InlineKnowledgeUploader = ({
               2. Tệp nguồn
             </label>
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              PDF, DOCX, XLSX, CSV, TXT, MD
+              VFIC Knowledge Markdown v1
             </span>
           </div>
           <div
@@ -145,11 +161,22 @@ export const InlineKnowledgeUploader = ({
                   : "Kéo thả hoặc bấm để chọn tệp"}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground sm:hidden">
-                PDF, DOCX, XLSX, CSV, TXT hoặc MD.
+                Tệp Markdown/TXT theo mẫu VFIC Knowledge Markdown v1.
               </p>
             </div>
           </div>
         </div>
+
+        {validationErrors.length > 0 && (
+          <div className="rounded-[10px] border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            <p className="font-medium">Tệp chưa đúng định dạng:</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {validationErrors.map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           {file ? (
@@ -179,10 +206,19 @@ export const InlineKnowledgeUploader = ({
             </div>
           ) : (
             <p className="text-xs leading-5 text-muted-foreground">
-              Chọn dự án và một tệp để bật nút tải lên.
+              Chọn dự án và một tệp đúng mẫu để bật nút tải lên.
             </p>
           )}
 
+          <Button
+            type="button"
+            variant="outline"
+            onClick={downloadTemplate}
+            className="h-10 w-full rounded-[9px] px-4 sm:w-auto"
+          >
+            <Download className="size-4" />
+            Tải mẫu
+          </Button>
           <Button
             type="button"
             onClick={submit}

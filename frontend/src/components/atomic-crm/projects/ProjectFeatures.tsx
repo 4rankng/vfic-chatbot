@@ -23,9 +23,10 @@ import {
 import type { ProductFeature } from "../types";
 import { cn } from "@/lib/utils";
 
-// The fixed worker product-feature catalogue size (see migration 0004:
-// worker_feature_catalog). The gauge is positional across these slots.
-const FEATURE_SLOTS = 16;
+// Active worker product-feature catalogue size. Migration 0009 disabled 5 white-collar /
+// meta criteria for manual-labour scope, leaving 11 active rows in worker_feature_catalog.
+// The gauge is positional across these slots.
+const FEATURE_SLOTS = 11;
 
 // Binary readiness derivation. A feature is "đủ thông tin" (ready) when the
 // agent has a non-empty value_text and the row is not flagged missing/unclear.
@@ -47,9 +48,9 @@ const orderedSlots = (
   return slots;
 };
 
-// "Đặc điểm sản phẩm" panel: the 16 worker product features extracted from the project's
-// posting. Reframed as a per-project readiness view: across the fixed 16 catalog features,
-// whether the agent has enough info to advise on each criterion, or needs more supplied.
+// "Đặc điểm sản phẩm" panel: the 11 active worker product features extracted from the
+// project's posting. Reframed as a per-project readiness view: across the active catalog
+// features, whether the agent has enough info to advise on each criterion, or needs more.
 export const ProjectFeatures = ({
   projectId,
   editable = false,
@@ -87,7 +88,7 @@ export const ProjectFeatures = ({
     try {
       const res = await extractProjectFeatures(projectId);
       setFeatures(res.data);
-      notify("Đã trích xuất 16 đặc điểm sản phẩm.", { type: "success" });
+      notify("Đã trích xuất 11 đặc điểm sản phẩm.", { type: "success" });
     } catch (err) {
       notify(`Trích xuất thất bại: ${(err as Error).message}`, {
         type: "error",
@@ -132,7 +133,7 @@ export const ProjectFeatures = ({
               size="sm"
               onClick={onExtract}
               disabled={extracting}
-              title="Trích xuất lại 16 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
+              title="Trích xuất lại 11 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
             >
               <Sparkles className="size-4" />
               {extracting ? "Đang trích xuất..." : "Trích xuất lại"}
@@ -215,7 +216,7 @@ export const ProjectFeatures = ({
                 <p className="text-sm font-medium">Chưa có đặc điểm sản phẩm</p>
                 <p className="text-xs">
                   {editable
-                    ? 'Tải tin tuyển dụng lên rồi bấm "Trích xuất lại" để LLM trích 16 đặc điểm.'
+                    ? 'Tải tin tuyển dụng lên rồi bấm "Trích xuất lại" để LLM trích 11 đặc điểm.'
                     : "Dự án này chưa có đặc điểm sản phẩm để hiển thị."}
                 </p>
                 {editable && (
@@ -224,7 +225,7 @@ export const ProjectFeatures = ({
                     size="sm"
                     onClick={onExtract}
                     disabled={extracting}
-                    title="Trích xuất lại 16 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
+                    title="Trích xuất lại 11 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
                   >
                     <Sparkles className="size-4" />
                     {extracting ? "Đang trích xuất..." : "Trích xuất lại"}
@@ -239,7 +240,7 @@ export const ProjectFeatures = ({
   );
 };
 
-// Readiness hero: "{n}/16 CÓ THỂ TƯ VẤN" + an indeterminate-pulsing bar while
+// Readiness hero: "{n}/11 CÓ THỂ TƯ VẤN" + an indeterminate-pulsing bar while
 // the LLM extract is in flight. We do NOT fake sequential ticks over the real
 // ~5-10s call.
 const ReadinessHero = ({
@@ -260,7 +261,7 @@ const ReadinessHero = ({
           {readyCount}/{FEATURE_SLOTS} có thể tư vấn
         </span>
       </div>
-      {/* Decorative bar — the visible "{n}/16 có thể tư vấn" text above is the
+      {/* Decorative bar — the visible "{n}/11 có thể tư vấn" text above is the
           canonical label; the gap count is announced by the group headings below. */}
       <div
         aria-hidden="true"

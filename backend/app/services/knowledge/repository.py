@@ -38,6 +38,9 @@ class KnowledgeChunkRepo:
             text("DELETE FROM knowledge_chunks WHERE document_id = :did"), {"did": str(doc.id)}
         )
         for idx, (u, vec) in enumerate(units_with_vectors):
+            metadata = dict(u.get("metadata") or {})
+            metadata.setdefault("source_anchor", u["source_anchor"])
+            metadata.setdefault("is_inference", u["is_inference"])
             await self.db.execute(
                 text(
                     "INSERT INTO knowledge_chunks "
@@ -51,10 +54,7 @@ class KnowledgeChunkRepo:
                     "ci": idx,
                     "content": u["content"],
                     "emb": vec_literal(vec),
-                    "meta": json.dumps(
-                        {"source_anchor": u["source_anchor"], "is_inference": u["is_inference"]},
-                        ensure_ascii=False,
-                    ),
+                    "meta": json.dumps(metadata, ensure_ascii=False),
                     "pid": str(doc.project_id) if doc.project_id else None,
                     "sq": u["source_quote"],
                     "sm": u["summary"],
@@ -101,6 +101,11 @@ class KnowledgeChunkRepo:
                     "confidence": row["confidence"],
                     "is_inference": bool(metadata.get("is_inference", False)),
                     "source_anchor": metadata.get("source_anchor"),
+                    "citation_label": (metadata.get("citation") or {}).get("label"),
+                    "content_type": (metadata.get("chunk_metadata") or {}).get("content_type"),
+                    "route_id": (metadata.get("chunk_metadata") or {}).get("route_id"),
+                    "effective_from": (metadata.get("document_metadata") or {}).get("effective_from"),
+                    "effective_to": (metadata.get("document_metadata") or {}).get("effective_to"),
                     "created_at": row["created_at"],
                 }
             )
@@ -178,15 +183,35 @@ class JobFeatureValueRepo:
         self.db = db
 
     async def fetch_catalog(self) -> list:
-        """Return the live 16-feature catalog ordered by importance then key."""
+        """Return the active catalog (11 manual-labour features) ordered by importance then key.
+
+        Drives both the extraction prompt and the one-row-per-feature write, so inactive
+        criteria (migration 0009) drop out of extraction entirely.
+        """
         return (
             await self.db.execute(
                 text(
                     "SELECT id, feature_key, name_vi, worker_question_vi, default_importance_score "
-                    "FROM worker_feature_catalog ORDER BY default_importance_score DESC, feature_key"
+                    "FROM worker_feature_catalog WHERE is_active = true "
+                    "ORDER BY default_importance_score DESC, feature_key"
                 )
             )
         ).all()
+
+    async def active_catalog_size(self) -> int:
+        """Count of active catalog features — the readiness denominator (11 for manual-labour scope).
+
+        Derived rather than hardcoded so reactivating a criterion stays consistent with the
+        extraction prompt and list query without a code edit.
+        """
+        return int(
+            (
+                await self.db.execute(
+                    text("SELECT count(*) FROM worker_feature_catalog WHERE is_active = true")
+                )
+            ).scalar()
+            or 0
+        )
 
     async def replace_for_project(
         self,
@@ -229,7 +254,7 @@ class JobFeatureValueRepo:
         await self.db.commit()
 
     async def list_for_project(self, project_id: uuid.UUID) -> list:
-        """A project's 16 feature values joined to the catalog (catalog display order)."""
+        """A project's feature values joined to the catalog (catalog display order)."""
         return (
             await self.db.execute(
                 text(
@@ -265,14 +290,16 @@ class JobFeatureValueRepo:
         rows = (
             await self.db.execute(
                 text(
-                    "SELECT project_id, COUNT(*) AS ready "
-                    "FROM job_feature_values "
-                    "WHERE project_id = ANY(:ids) "
-                    "  AND COALESCE(is_missing, false) = false "
-                    "  AND COALESCE(needs_clarification, false) = false "
-                    "  AND value_text IS NOT NULL "
-                    "  AND btrim(value_text) <> '' "
-                    "GROUP BY project_id"
+                    "SELECT jfv.project_id, COUNT(*) AS ready "
+                    "FROM job_feature_values jfv "
+                    "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
+                    "WHERE jfv.project_id = ANY(:ids) "
+                    "  AND wfc.is_active = true "
+                    "  AND COALESCE(jfv.is_missing, false) = false "
+                    "  AND COALESCE(jfv.needs_clarification, false) = false "
+                    "  AND jfv.value_text IS NOT NULL "
+                    "  AND btrim(jfv.value_text) <> '' "
+                    "GROUP BY jfv.project_id"
                 ),
                 {"ids": [str(pid) for pid in project_ids]},
             )
@@ -366,8 +393,8 @@ class ProjectIndexRepo:
 async def rebuild_bus_timetable(db: AsyncSession) -> tuple[int, int]:
     """Rebuild the structured bus-timetable graph from the parsed ``LGDisplay`` document.
 
-    Reads the canonical ``LGDisplay.txt`` content from the ``documents`` VIEW, parses it
-    in pure Python (``app.services.knowledge.bus_timetable``), and persists via
+    Reads the legacy ``LGDisplay.txt`` raw text, parses it in pure Python
+    (``app.services.knowledge.bus_timetable``), and persists via
     ``BusTimetableRepo``. Behaviour-identical to the former
     ``rebuild_bus_timetable_from_documents()`` SQL function (golden-gated). Best-effort:
     callers wrap in ``try/except``; returns ``(0, 0)`` when no source document is present
@@ -378,22 +405,30 @@ async def rebuild_bus_timetable(db: AsyncSession) -> tuple[int, int]:
     from app.services.knowledge.bus_timetable import parse_bus_timetable
     from app.services.knowledge.bus_timetable.repository import BusTimetableRepo
 
-    contents = (
+    source = (
         await db.execute(
             text(
-                "SELECT kc.content "
-                "FROM knowledge_documents kd JOIN knowledge_chunks kc ON kc.document_id = kd.id "
+                "SELECT kd.raw_text, p.slug AS project_slug "
+                "FROM knowledge_documents kd "
+                "JOIN projects p ON p.id = kd.project_id "
                 "WHERE kd.file_name = :fn "
                 "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
-                "ORDER BY kd.id, kc.chunk_index"
+                "  AND kd.raw_text IS NOT NULL "
+                "ORDER BY kd.updated_at DESC, kd.created_at DESC "
+                "LIMIT 1"
             ),
             {"fn": "LGDisplay.txt"},
         )
-    ).scalars().all()
-    if not contents:
+    ).mappings().first()
+    if source is None:
         return (0, 0)
-    parsed = parse_bus_timetable("\n".join(contents))
-    return await BusTimetableRepo(db).upsert(parsed)
+    parsed = parse_bus_timetable(source["raw_text"])
+    return await BusTimetableRepo(db).upsert(
+        parsed,
+        project_slug=source["project_slug"],
+        company_name="LG Display",
+        source_name="LGDisplay.txt",
+    )
 
 
 __all__ = [

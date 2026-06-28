@@ -132,7 +132,7 @@ const ProjectListContent = () => {
             Quản lý dự án
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Theo dõi product card, nguồn kiến thức và 16 đặc điểm sản phẩm mà
+            Theo dõi product card, nguồn kiến thức và 11 đặc điểm sản phẩm mà
             agent dùng khi tư vấn ứng viên.
           </p>
         </div>

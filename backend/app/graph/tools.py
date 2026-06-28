@@ -47,12 +47,34 @@ async def search_knowledge(
     project_ids: list[str] | None = None
     if project_slug:
         pid = await repo.project_id_by_slug(project_slug, active_only=True)
-        project_ids = [str(pid)] if pid else None
+        if pid is None:
+            return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
+        project_ids = [str(pid)]
     emb = vec_literal(await embedder(query))
     rows = await repo.match_documents(emb, top_k, "{}", project_ids=project_ids)
     if not rows:
         return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
-    return "\n".join(f"- {str(r.content)[:300]}" for r in rows)
+    lines: list[str] = []
+    for r in rows:
+        metadata = getattr(r, "metadata", None) or {}
+        citation = metadata.get("citation") or {}
+        document_meta = metadata.get("document_metadata") or {}
+        chunk_meta = metadata.get("chunk_metadata") or {}
+        source = citation.get("label") or document_meta.get("title") or "Nguồn kiến thức"
+        anchor = citation.get("source_anchor") or metadata.get("source_anchor")
+        effective = document_meta.get("effective_from")
+        if document_meta.get("effective_to"):
+            effective = f"{effective} đến {document_meta.get('effective_to')}" if effective else document_meta.get("effective_to")
+        route = chunk_meta.get("route_id")
+        suffix = f" Nguồn: {source}"
+        if anchor:
+            suffix += f" ({anchor})"
+        if effective:
+            suffix += f"; hiệu lực: {effective}"
+        if route:
+            suffix += f"; route_id: {route}"
+        lines.append(f"- {str(r.content)[:300]}\n  {suffix}")
+    return "\n".join(lines)
 
 
 async def search_jobs(
@@ -104,7 +126,7 @@ async def search_bus_timetable(
 
 
 async def get_product_features(db: AsyncSession, project_slug: str) -> str:
-    """Return the project's 16 structured worker product features (catalog order).
+    """Return the project's active structured worker product features (catalog order).
 
     No embeddings — pure SQL over ``job_feature_values``. Precedent: ``search_bus_timetable``
     (structured, non-RAG data reaching the agent). The agent is told to advise ONLY from

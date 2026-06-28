@@ -1,0 +1,38 @@
+{
+  "doc_id": "lg_display_worker_guide_2026_06",
+  "schema_version": "vfic-knowledge-v1",
+  "chunk_count": 16,
+  "chunk_labels": [
+    "LG Display Worker Guide, Company Overview",
+    "LG Display Worker Guide, Feature: take_home_income",
+    "LG Display Worker Guide, Feature: pay_frequency",
+    "LG Display Worker Guide, Feature: salary_transparency",
+    "LG Display Worker Guide, Feature: shift_schedule",
+    "LG Display Worker Guide, Feature: overtime_rate",
+    "LG Display Worker Guide, Feature: housing",
+    "LG Display Worker Guide, Feature: job_difficulty",
+    "LG Display Worker Guide, Feature: commute_support",
+    "LG Display Worker Guide, Feature: application_simplicity",
+    "LG Display Worker Guide, Feature: joining_bonus",
+    "LG Display Worker Guide, Feature: daily_cost_benefits",
+    "LG Display Worker Guide, Rules/Policies",
+    "LG Display Worker Guide, Contacts",
+    "LG Display Worker Guide, FAQ: VFIC có trả lương theo tuần không?",
+    "LG Display Worker Guide, Bus Routes"
+  ],
+  "route_count": 1,
+  "routes": [
+    {
+      "route_name": "TD Plaza",
+      "route_group_key": "td plaza",
+      "shift": "day",
+      "direction": "outbound",
+      "stop_count": 2,
+      "first_stop": "TD Plaza",
+      "first_time": "06:15"
+    }
+  ],
+  "service_day_count": 20,
+  "effective_from": "2026-06-01",
+  "effective_to": null
+}

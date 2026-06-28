@@ -69,7 +69,7 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "get_product_features",
             "description": (
-                "Lấy 16 đặc điểm sản phẩm (lương, ca làm, tăng ca, KTX, xe đưa đón, thưởng...) "
+                "Lấy các đặc điểm sản phẩm (lương, ca làm, tăng ca, KTX, xe đưa đón, thưởng...) "
                 "của một dự án/sản phẩm để tư vấn chính xác. Dùng khi ứng viên hỏi về thu nhập, "
                 "lịch ca, phụ cấp, nhà ở, hồ sơ... của một dự án cụ thể."
             ),

@@ -159,6 +159,13 @@ def test_parse_json_lenient_empty_returns_empty_dict():
     assert _parse_json_lenient("") == {}
 
 
+def test_parse_json_lenient_strips_m27_think_leak():
+    """M2.7 leaks `<think>…</think>` reasoning before the JSON; the parser must strip it
+    (closed block — the form the live digest actually emits)."""
+    leaked = "<think>\nThe user wants structured units.\n</think>\n" + json.dumps({"a": 1})
+    assert _parse_json_lenient(leaked) == {"a": 1}
+
+
 # --------------------------------------------------------------------------- prompt/text helpers
 def test_missing_feature_text_prefers_worker_question():
     # Template is `Tin tuyển dụng chưa ghi rõ: <q>.` — q keeps its own trailing punctuation.

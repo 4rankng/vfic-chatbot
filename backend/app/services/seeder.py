@@ -1,9 +1,8 @@
 """Idempotent startup seeder for defaults that the live bot assumes.
 
-Ensures the canonical 'vfic' project exists and that there is at least one global
-persona (seeded from the committed persona.md) so resolve_persona always has something
-to return. Safe to run on every startup; never throws (a seeding failure is logged but
-non-fatal — the app still boots).
+Ensures there is at least one global persona (seeded from the committed persona.md) so
+resolve_persona always has something to return. Safe to run on every startup; never
+throws (a seeding failure is logged but non-fatal — the app still boots).
 """
 from __future__ import annotations
 
@@ -16,12 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 async def ensure_defaults(db: AsyncSession) -> None:
-    # 1. Canonical 'vfic' project (bus functions + the default product).
-    await db.execute(
-        text("INSERT INTO projects(slug, name, is_active) VALUES ('vfic', 'VFIC', true) "
-             "ON CONFLICT (slug) DO NOTHING")
-    )
-    # 2. Default global persona from persona.md if NO global persona exists yet.
+    # Default global persona from persona.md if NO global persona exists yet.
     has_global = (await db.execute(
         text("SELECT 1 FROM personas WHERE project_id IS NULL LIMIT 1")
     )).first()

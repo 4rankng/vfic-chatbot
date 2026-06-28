@@ -84,7 +84,7 @@ async def reindex_project(
 async def list_project_features(
     project_id: uuid.UUID, _user: User = Depends(require_recruiter), db: AsyncSession = Depends(get_db)
 ) -> FeatureListResponse:
-    """List the project's 16 extracted worker product features (catalog order)."""
+    """List the project's 11 extracted worker product features (catalog order)."""
     return await ProjectService(db).list_features(project_id)
 
 
@@ -104,5 +104,5 @@ async def update_project_feature(
 async def extract_project_features(
     project_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> FeatureListResponse:
-    """Synchronously re-extract the 16 product features from the project's latest posting."""
+    """Synchronously re-extract the 11 product features from the project's latest posting."""
     return await ProjectService(db).extract_features(project_id, admin)

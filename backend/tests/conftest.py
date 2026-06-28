@@ -98,8 +98,8 @@ async def clean_kb(db_session):
 # across runs, and many tests seed rows with hardcoded ids or assert on mutex
 # state (bot_locked_until / version), so residue from a prior run or test
 # collides (UniqueViolation / stale state) and the suite looks flaky. Reference
-# + seed tables (users, jobs, projects, companies, personas, bus_*,
-# system_settings) are deliberately preserved; KB tables stay owned by clean_kb.
+# + seed tables (users, jobs, projects, companies, personas, bus_*)
+# are deliberately preserved; KB tables stay owned by clean_kb.
 #
 # Keep this as ONE multi-table TRUNCATE statement: leads <-> conversations share
 # a circular FK (leads.zalo_id -> conversations.zalo_chat_id) that only resolves
@@ -107,7 +107,6 @@ async def clean_kb(db_session):
 _TRANSIENT_TABLES = (
     "audit_events",
     "message_dedup",
-    "outbound_messages",
     "messages",
     "bot_runs",
     "follow_up_tasks",

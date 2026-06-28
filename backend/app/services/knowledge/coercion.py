@@ -7,6 +7,7 @@ orchestrator stay free of inline parsing/normalisation.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from app.services.knowledge.prompts import PRODUCT_FEATURE_SYSTEM_PROMPT
@@ -70,16 +71,20 @@ def validate_digest(payload: Any) -> tuple[str, list[dict]]:
 
 # ------------------------------------------------------------ product features
 def _product_feature_prompt(catalog_rows: Any) -> str:
-    """Build the extraction system prompt with the live 16-feature catalog inlined.
+    """Build the extraction system prompt with the live catalog inlined.
 
-    Inlining the catalog (rather than hard-coding keys) keeps prompt + seed in sync.
+    Inlining the catalog (rather than hard-coding keys) keeps prompt + seed in sync; the
+    count is interpolated from the rows so disabling a criterion (migration 0009) flows
+    through without a prompt edit.
     """
     lines = []
     for c in catalog_rows:
         q = (c.worker_question_vi or "").strip()
         suffix = f' — câu hỏi ứng viên: "{q}"' if q else ""
         lines.append(f"- {c.feature_key}: {c.name_vi}{suffix}")
-    return PRODUCT_FEATURE_SYSTEM_PROMPT.replace("{{FEATURES}}", "\n".join(lines))
+    return PRODUCT_FEATURE_SYSTEM_PROMPT.replace("{{FEATURES}}", "\n".join(lines)).replace(
+        "{{COUNT}}", str(len(catalog_rows))
+    )
 
 
 def _missing_feature_text(catalog_row: Any) -> str:
@@ -126,8 +131,19 @@ def _coerce_feature(raw: Any, catalog_row: Any) -> dict:
 
 
 def _parse_json_lenient(raw: str) -> Any:
-    """Parse JSON, tolerating a surrounding ```json fence (some models add it)."""
+    """Parse JSON, tolerating model-output quirks: a surrounding ```json fence, and
+    M2.7 ``<think>…</think>`` reasoning leaked into the content before the JSON.
+
+    MiniMax's M2 reasoning models always emit chain-of-thought; when it is routed into
+    ``content`` (rather than a separate reasoning field) it prefixes the JSON object and
+    breaks ``json.loads``. Strip closed blocks first, then a trailing unclosed block
+    (truncated output) so a half-finished reasoning block cannot shadow the JSON.
+    """
     s = (raw or "").strip()
+    if "<think" in s.lower():
+        s = re.sub(r"<think\b[^>]*>[\s\S]*?</think\s*>", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"<think\b[^>]*>[\s\S]*$", "", s, flags=re.IGNORECASE)
+        s = s.strip()
     if s.startswith("```"):
         s = s.split("```", 2)
         # s == ['', 'json\n...body...', ' maybe trailing']  or  ['', '\nbody\n','...']

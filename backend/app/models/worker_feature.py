@@ -1,8 +1,9 @@
-"""Worker product-feature ORM models (mirror Alembic migration 0004).
+"""Worker product-feature ORM models (mirror Alembic migration 0004 + 0009).
 
-``WorkerFeatureCatalog`` is the seeded list of 16 worker-interest product features.
-``JobFeatureValue`` holds the per-project, LLM-extracted value (text + structured JSON)
-the chatbot grounds answers on via the ``get_product_features`` tool.
+``WorkerFeatureCatalog`` is the seeded catalog of worker-interest product features; 11 are
+``is_active`` for VFIC's manual-labour scope (migration 0009 disabled the 5 white-collar /
+meta criteria). ``JobFeatureValue`` holds the per-project, LLM-extracted value (text +
+structured JSON) the chatbot grounds answers on via the ``get_product_features`` tool.
 """
 from __future__ import annotations
 
@@ -28,6 +29,9 @@ class WorkerFeatureCatalog(Base):
     description: Mapped[str | None] = mapped_column(Text)
     default_importance_score: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), nullable=False, default=Decimal("0.50"), server_default=text("0.50")
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 

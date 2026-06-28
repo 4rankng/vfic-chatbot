@@ -76,18 +76,18 @@ class ProjectService:
     ) -> list[ProjectOut]:
         """List projects with per-project feature readiness attached.
 
-        One batched ``readiness_by_project`` query — no N+1. The fixed 16-feature
-        catalog total is hardcoded (migration 0004).
+        One batched ``readiness_by_project`` query — no N+1. The catalog total is the
+        active-feature count (11 for manual-labour scope; migration 0009).
         """
         rows = await self.list(is_active)
-        ready = await JobFeatureValueRepo(self.db).readiness_by_project(
-            [p.id for p in rows]
-        )
+        repo = JobFeatureValueRepo(self.db)
+        ready = await repo.readiness_by_project([p.id for p in rows])
+        total = await repo.active_catalog_size()
         out: list[ProjectOut] = []
         for p in rows:
             o = ProjectOut.model_validate(p)
             o.feature_readiness = FeatureReadiness(
-                ready=ready.get(p.id, 0), total=16
+                ready=ready.get(p.id, 0), total=total
             )
             out.append(o)
         return out
@@ -98,10 +98,12 @@ class ProjectService:
     async def get_with_readiness(self, project_id: uuid.UUID) -> ProjectOut:
         """Single-project get with feature readiness attached."""
         proj = await self._require_project(project_id)
-        ready = await JobFeatureValueRepo(self.db).readiness_by_project([proj.id])
+        repo = JobFeatureValueRepo(self.db)
+        ready = await repo.readiness_by_project([proj.id])
+        total = await repo.active_catalog_size()
         o = ProjectOut.model_validate(proj)
         o.feature_readiness = FeatureReadiness(
-            ready=ready.get(proj.id, 0), total=16
+            ready=ready.get(proj.id, 0), total=total
         )
         return o
 
@@ -159,19 +161,28 @@ class ProjectService:
         """Rebuild this project's catalog card (the master-index entry) from usable units."""
         proj = await self._require_project(project_id)
         # Imported lazily so langchain/google deps stay out of the web-process import path.
+        from app.core.config import get_settings
         from app.graph.clients import GeminiEmbedder
         from app.graph.factories import make_minimax_llm_json
         from app.services.knowledge import KnowledgePipeline
 
         try:
-            await KnowledgePipeline(self.db, GeminiEmbedder(), make_minimax_llm_json()).build_project_index(proj.id)
+            # Web sync path: cap the LLM call at the request timeout (60s), NOT the digest
+            # ceiling (180s) — this runs in the web process (web_concurrency=2), so a slow
+            # MiniMax index rebuild must not stall the API.
+            await KnowledgePipeline(
+                self.db,
+                GeminiEmbedder(),
+                make_minimax_llm_json(),
+                call_timeout=get_settings().minimax_request_timeout,
+            ).build_project_index(proj.id)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"index rebuild failed: {exc}") from exc
         await self.db.refresh(proj)
         return proj
 
     async def list_features(self, project_id: uuid.UUID) -> FeatureListResponse:
-        """List the project's 16 extracted worker product features (catalog order)."""
+        """List the project's 11 extracted worker product features (catalog order)."""
         await self._require_project(project_id)
         rows = await JobFeatureValueRepo(self.db).list_for_project(project_id)
         return FeatureListResponse(data=[_feature_from_row(r) for r in rows], total=len(rows))
@@ -223,10 +234,10 @@ class ProjectService:
         return _feature_from_row(row)
 
     async def extract_features(self, project_id: uuid.UUID, admin: User) -> FeatureListResponse:
-        """Synchronously re-extract the 16 product features from the project's latest posting.
+        """Synchronously re-extract the 11 product features from the project's latest posting.
 
         Persona-pattern: one blocking MiniMax call in the web process (~5-10s). Overwrites the
-        project's 16 feature values. Requires a source document with extracted text.
+        project's 11 feature values. Requires a source document with extracted text.
         """
         await self._require_project(project_id)
         doc = (
@@ -243,13 +254,21 @@ class ProjectService:
                 "no source document with text for this project — upload a posting first",
             )
         # Imported lazily (langchain/google deps kept out of the web-process import path).
+        from app.core.config import get_settings
         from app.graph.clients import GeminiEmbedder
         from app.graph.factories import make_minimax_llm_json
         from app.services.knowledge import KnowledgePipeline
 
         try:
             # Reuses the exact ingest extraction path so manual + automatic extraction stay identical.
-            await KnowledgePipeline(self.db, GeminiEmbedder(), make_minimax_llm_json()).extract_product_features(doc, [])
+            # Web sync path: cap at the request timeout (60s), not the digest ceiling (180s) —
+            # this blocking call runs in the web process (web_concurrency=2).
+            await KnowledgePipeline(
+                self.db,
+                GeminiEmbedder(),
+                make_minimax_llm_json(),
+                call_timeout=get_settings().minimax_request_timeout,
+            ).extract_product_features(doc, [])
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"feature extraction failed: {exc}") from exc
         await record_audit(

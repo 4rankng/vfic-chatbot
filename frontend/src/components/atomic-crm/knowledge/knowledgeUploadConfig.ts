@@ -1,5 +1,4 @@
 export const ACCEPTED_KNOWLEDGE_TYPES: Record<string, string[]> = {
-  "text/csv": [".csv"],
   "text/markdown": [".md"],
   "text/plain": [".txt", ".md"],
 };

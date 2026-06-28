@@ -38,28 +38,40 @@ class RetrievalRepository:
     async def match_documents(
         self, emb: str, top_k: int, filter_json: str, *, project_ids: list[str] | None = None
     ) -> list:
-        """Top-k knowledge rows over the ``documents`` VIEW (``match_documents`` fn).
+        """Top-k usable knowledge rows directly from chunks + documents.
 
-        ``project_ids`` scopes retrieval to one or more products; the 3-arg (unscoped)
-        form is used when it is empty/None — matching the inline call the tool made.
+        The old path called the ``documents`` compatibility view. Migration 0010 removes
+        that view, so the app now owns the explicit query and returns namespaced
+        metadata for citations/effective-date handling.
         """
+        project_clause = ""
+        params: dict[str, object] = {"emb": emb, "k": top_k, "filter": filter_json}
         if project_ids:
-            return (
-                await self.db.execute(
-                    text(
-                        "SELECT id, content, similarity FROM match_documents("
-                        "CAST(:emb AS vector), :k, CAST(:filter AS jsonb), CAST(:pids AS uuid[]))"
-                    ),
-                    {"emb": emb, "k": top_k, "filter": filter_json, "pids": project_ids},
-                )
-            ).all()
+            project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
+            params["pids"] = project_ids
         return (
             await self.db.execute(
                 text(
-                    "SELECT id, content, similarity FROM match_documents("
-                    "CAST(:emb AS vector), :k, CAST(:filter AS jsonb))"
+                    "SELECT c.id, c.content, c.metadata, "
+                    "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
+                    "FROM knowledge_chunks c "
+                    "JOIN knowledge_documents d ON d.id = c.document_id "
+                    "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
+                    "  AND c.embedding IS NOT NULL "
+                    "  AND (CAST(:filter AS jsonb) = '{}'::jsonb OR c.metadata @> CAST(:filter AS jsonb)) "
+                    f"  {project_clause} "  # noqa: S608 - clause is fixed above
+                    "  AND ("
+                    "    c.metadata #>> '{document_metadata,schema_version}' IS NULL "
+                    "    OR ("
+                    "      COALESCE(c.metadata #>> '{document_metadata,effective_from}', '0001-01-01')::date <= CURRENT_DATE "
+                    "      AND (c.metadata #>> '{document_metadata,effective_to}' IS NULL "
+                    "           OR (c.metadata #>> '{document_metadata,effective_to}')::date >= CURRENT_DATE)"
+                    "    )"
+                    "  ) "
+                    "ORDER BY c.embedding <=> CAST(:emb AS vector) "
+                    "LIMIT :k"
                 ),
-                {"emb": emb, "k": top_k, "filter": filter_json},
+                params,
             )
         ).all()
 
@@ -108,7 +120,11 @@ class RetrievalRepository:
         ).all()
 
     async def job_features_for_project(self, project_id: uuid.UUID) -> list:
-        """A project's 16 structured worker features in catalog display order."""
+        """A project's active worker features in catalog display order.
+
+        Filtered to ``is_active`` catalog rows so disabled criteria (migration 0009) are
+        hidden from the agent tool and readiness gauge without re-extraction.
+        """
         return (
             await self.db.execute(
                 text(
@@ -117,7 +133,7 @@ class RetrievalRepository:
                     "       wfc.name_vi, wfc.feature_key "
                     "FROM job_feature_values jfv "
                     "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
-                    "WHERE jfv.project_id = :pid "
+                    "WHERE jfv.project_id = :pid AND wfc.is_active = true "
                     "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
                 ),
                 {"pid": str(project_id)},

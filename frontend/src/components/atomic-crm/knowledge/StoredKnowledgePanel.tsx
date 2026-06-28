@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { HelpCircle, Quote, RefreshCw, Tags } from "lucide-react";
+import { CalendarDays, HelpCircle, Quote, RefreshCw, Tags } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -95,6 +95,8 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
           Tin cậy {unit.confidence || "medium"}
         </Chip>
         {unit.is_inference && <Chip tone="warning">Suy luận</Chip>}
+        {unit.content_type && <Chip>{unit.content_type}</Chip>}
+        {unit.route_id && <Chip>{unit.route_id}</Chip>}
         <span className="kb-mono ml-auto text-[11px] text-muted-foreground">
           #{unit.chunk_index + 1}
         </span>
@@ -114,6 +116,31 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
         <div className="mt-3 flex gap-2 rounded-lg border border-border bg-secondary p-3 text-xs leading-5 text-muted-foreground">
           <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-ink-300)]" />
           <span className="break-words">{unit.source_quote}</span>
+        </div>
+      )}
+
+      {(unit.citation_label || unit.source_anchor || unit.effective_from) && (
+        <div className="mt-3 grid gap-2 rounded-lg border border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
+          {unit.citation_label && (
+            <div className="flex gap-2">
+              <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
+              <span className="break-words">Nguồn: {unit.citation_label}</span>
+            </div>
+          )}
+          {unit.source_anchor && (
+            <div className="kb-mono break-words text-[11px]">
+              Anchor: {unit.source_anchor}
+            </div>
+          )}
+          {unit.effective_from && (
+            <div className="flex gap-2">
+              <CalendarDays className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
+              <span>
+                Hiệu lực: {unit.effective_from}
+                {unit.effective_to ? ` - ${unit.effective_to}` : ""}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

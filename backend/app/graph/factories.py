@@ -75,7 +75,7 @@ def make_minimax_llm_json():
         model=s.minimax_digest_model or s.minimax_agent_model,
         api_key=s.minimax_api_key,
         base_url=s.minimax_base_url,
-        timeout=s.minimax_request_timeout,
+        timeout=s.minimax_digest_timeout,
         temperature=0.1,
         model_kwargs={"response_format": {"type": "json_object"}},
     )

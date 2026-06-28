@@ -3,6 +3,7 @@ import { useGetList, useNotify, useRefresh } from "ra-core";
 import {
   CheckCircle2,
   ClipboardList,
+  Download,
   FileText,
   RefreshCw,
   UploadCloud,
@@ -27,7 +28,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { uploadKnowledgeFile } from "@/lib/vfic/knowledgeService";
+import {
+  saveKnowledgeTemplate,
+  uploadKnowledgeFile,
+} from "@/lib/vfic/knowledgeService";
 import type { Project } from "../types";
 import { cn } from "@/lib/utils";
 import {
@@ -64,6 +68,7 @@ export const KnowledgeUpload = ({
   const [file, setFile] = useState<File | null>(null);
   const [pasteText, setPasteText] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const effectiveProjectId = lockProject ? (initialProjectId ?? "") : projectId;
   const canSubmit =
@@ -81,11 +86,12 @@ export const KnowledgeUpload = ({
     setPasteText("");
     setMode("file");
     setProjectId(initialProjectId ?? "");
+    setValidationErrors([]);
   };
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
-    notify("Tệp không hợp lệ. Chỉ hỗ trợ tệp văn bản: TXT, MD và CSV.", {
+    notify("Tệp không hợp lệ. Chỉ hỗ trợ VFIC Knowledge Markdown v1 (.md/.txt).", {
       type: "warning",
     });
   };
@@ -124,6 +130,7 @@ export const KnowledgeUpload = ({
       return;
     }
     setBusy(true);
+    setValidationErrors([]);
     try {
       await uploadKnowledgeFile(payload, effectiveProjectId);
       notify(
@@ -136,9 +143,19 @@ export const KnowledgeUpload = ({
       onOpenChange(false);
       refresh();
     } catch (err) {
-      notify(`Tải lên thất bại: ${(err as Error).message}`, { type: "error" });
+      const errors = (err as Error & { validationErrors?: string[] }).validationErrors ?? [];
+      setValidationErrors(errors);
+      notify(`Tải lên thất bại: ${(err as Error).message.split("\n")[0]}`, { type: "error" });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      await saveKnowledgeTemplate();
+    } catch (err) {
+      notify(`Không tải được mẫu: ${(err as Error).message}`, { type: "error" });
     }
   };
 
@@ -148,11 +165,22 @@ export const KnowledgeUpload = ({
         <DialogHeader className="border-b px-6 py-5 pr-12">
           <DialogTitle>Tải kiến thức</DialogTitle>
           <DialogDescription>
-            Đưa tài liệu hoặc nội dung tuyển dụng vào pipeline để agent có thể
-            truy xuất trong hội thoại.
+            Tải tệp theo VFIC Knowledge Markdown v1 để agent truy xuất đúng
+            nguồn, hiệu lực và lịch xe trong hội thoại.
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+            <p className="text-sm text-muted-foreground">
+              Dùng đúng mẫu trước khi tải lên để pipeline có thể kiểm tra và
+              trích xuất có trích dẫn.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
+              <Download className="size-4" />
+              Tải mẫu
+            </Button>
+          </div>
+
           {!lockProject && (
             <div className="grid gap-2 sm:grid-cols-[180px_1fr] sm:items-center">
               <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -211,7 +239,7 @@ export const KnowledgeUpload = ({
                   {isDragActive ? "Thả tệp vào đây" : "Kéo thả tệp vào đây"}
                 </p>
                 <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                  hoặc bấm để chọn PDF, DOCX, XLSX, CSV, TXT, MD từ máy của bạn.
+                  hoặc bấm để chọn tệp Markdown/TXT theo VFIC Knowledge Markdown v1.
                 </p>
                 <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Một tệp mỗi lần tải
@@ -264,6 +292,17 @@ export const KnowledgeUpload = ({
             </TabsContent>
           </Tabs>
 
+          {validationErrors.length > 0 && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              <p className="font-medium">Tệp chưa đúng định dạng:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {validationErrors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="rounded-lg border bg-muted/30 p-3">
             <div className="flex items-start gap-3">
               <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border">
@@ -281,7 +320,7 @@ export const KnowledgeUpload = ({
                 </p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   Nhận tệp, trích văn bản, tạo digest, nhúng vector và xuất bản
-                  nguồn cho agent truy xuất.
+                  nguồn có trích dẫn cho agent truy xuất.
                 </p>
               </div>
             </div>

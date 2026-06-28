@@ -13,6 +13,12 @@ Layering inside this package:
 from __future__ import annotations
 
 from app.services.knowledge.coercion import DigestError, validate_digest
+from app.services.knowledge.canonical import (
+    CanonicalValidationError,
+    SCHEMA_VERSION,
+    load_template,
+    parse_canonical_markdown,
+)
 from app.services.knowledge.extraction import split_for_digest
 from app.services.knowledge.pipeline import (
     Embedder,
@@ -26,6 +32,10 @@ __all__ = [
     "Embedder",
     "KnowledgePipeline",
     "LLMJson",
+    "CanonicalValidationError",
+    "SCHEMA_VERSION",
+    "load_template",
+    "parse_canonical_markdown",
     "split_for_digest",
     "sync_project_highlights",
     "validate_digest",

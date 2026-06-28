@@ -21,3 +21,8 @@ htmlcov/
 
 # Local dev data (e.g. KB upload originals via KB_STORAGE_PATH=.data/kb_uploads)
 .data/
+
+# Local one-off debug / probe scripts (hardcoded dev paths; not rebuildable in the
+# Docker image, so they must never ship — repo is the source of truth).
+/probe_minimax_digest.py
+/retry_lgdisplay.py

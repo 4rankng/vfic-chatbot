@@ -20,8 +20,8 @@ logger = logging.getLogger("app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("vfic backend starting env=%s", settings.app_env)
-    # Ensure the canonical 'vfic' project + a default persona exist (idempotent,
-    # non-fatal). resolve_persona falls back to persona.md regardless.
+    # Ensure a default persona exists (idempotent, non-fatal). resolve_persona falls
+    # back to persona.md regardless.
     try:
         from app.core.db import async_session
         from app.services.seeder import ensure_defaults

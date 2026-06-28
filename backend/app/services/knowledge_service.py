@@ -26,6 +26,12 @@ from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
 from app.services.knowledge import LLMJson
+from app.services.knowledge.canonical import (
+    SCHEMA_VERSION,
+    checksum_text,
+    parse_canonical_markdown,
+    repair_canonical_markdown,
+)
 from app.services.knowledge.repository import KnowledgeChunkRepo, rebuild_bus_timetable
 from app.services.storage import persist_original_upload
 
@@ -58,17 +64,55 @@ class KnowledgeService:
         return doc
 
     async def upload_bytes(
-        self, file_name: str, content_type: str, data: bytes, *, project_id: uuid.UUID | None = None
+        self,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+        *,
+        project_id: uuid.UUID | None = None,
+        require_canonical: bool = False,
     ) -> KnowledgeDocument:
         """Multipart upload: decode the file as raw text, persist the original, create doc."""
-        raw_text = data.decode("utf-8", errors="replace")
+        original_text = data.decode("utf-8", errors="replace")
+        raw_text = original_text
+        repair = None
+        if require_canonical:
+            repair = repair_canonical_markdown(original_text)
+            raw_text = repair.text
+        canonical = parse_canonical_markdown(raw_text) if require_canonical else None
         storage_path = persist_original_upload(file_name, data)
+        metadata = {}
+        version = None
+        if canonical is not None:
+            version = str(canonical.metadata.get("doc_version") or "")
+            canonical_meta = {
+                "document": canonical.metadata,
+                "validation": {
+                    "chunk_count": len(canonical.chunks),
+                    "bus_route_count": len(canonical.bus_timetable.routes),
+                    "bus_stop_count": sum(len(route.stops) for route in canonical.bus_timetable.routes),
+                },
+            }
+            if repair is not None and repair.changed:
+                canonical_meta["repair"] = {
+                    "applied": True,
+                    "count": len(repair.repairs),
+                    "fixes": repair.repairs,
+                    "original_checksum": checksum_text(original_text),
+                }
+            metadata = {
+                "schema_version": SCHEMA_VERSION,
+                "checksum": checksum_text(raw_text),
+                "canonical": canonical_meta,
+            }
         doc = KnowledgeDocument(
             file_name=file_name,
             source="upload",
+            version=version,
             mime_type=content_type or None,
             storage_path=storage_path,
             raw_text=raw_text,
+            metadata_=metadata,
             project_id=project_id,
             status=KnowledgeStatus.UPLOADED,
             stage="EXTRACTED" if raw_text.strip() else "UPLOADED",

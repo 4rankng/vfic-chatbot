@@ -1,9 +1,10 @@
-"""Worker product-feature tests: the 16-feature extraction step + agent tool.
+"""Worker product-feature tests: the 11-feature extraction step + agent tool.
 
 Exercises KnowledgePipeline.extract_product_features with an injected fake LLM (no
-MiniMax key): exactly-16-rows-per-project, highlight/missing/value_json coercion,
-idempotent re-run, best-effort (never blocks ingest), and the get_product_features
-agent tool (structured, non-RAG — precedent: search_bus_timetable).
+MiniMax key): exactly-11-rows-per-project (active catalog only; migration 0009),
+highlight/missing/value_json coercion, idempotent re-run, best-effort (never blocks
+ingest), and the get_product_features agent tool (structured, non-RAG — precedent:
+search_bus_timetable).
 """
 import json
 import uuid
@@ -53,7 +54,7 @@ def _units_payload(*contents):
 
 
 def _features_payload():
-    """LLM returns 3 features; the other 13 catalog features become is_missing=true."""
+    """LLM returns 3 features; the other 8 active catalog features become is_missing=true."""
     return {
         "features": [
             {
@@ -74,7 +75,7 @@ def _features_payload():
 async def clean_features(db_session):
     """job_feature_values are per-project and accumulate across runs; wipe them.
 
-    worker_feature_catalog (the 16-feature seed) is deliberately NOT truncated — tests
+    worker_feature_catalog (the 11-active seed) is deliberately NOT truncated — tests
     rely on those rows being present.
     """
     await db_session.execute(text("TRUNCATE job_feature_values"))
@@ -103,7 +104,7 @@ def _count_features(db, project_id) -> ...:
 
 
 # --------------------------------------------------------------------------- extraction
-async def test_extract_writes_exactly_16_rows(db_session, clean_kb, clean_features):
+async def test_extract_writes_exactly_11_rows(db_session, clean_kb, clean_features):
     proj = await _seed_project(db_session)
     doc = await _make_doc(db_session, "LG Display tuyển operator lương 10-13 triệu.", project_id=proj.id)
 
@@ -113,7 +114,7 @@ async def test_extract_writes_exactly_16_rows(db_session, clean_kb, clean_featur
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).extract_product_features(doc, [])
 
     n = (await _count_features(db_session, proj.id)).scalar()
-    assert n == 16  # one row per catalog feature, regardless of how many the LLM returned
+    assert n == 11  # one row per catalog feature, regardless of how many the LLM returned
 
     hi = (
         await db_session.execute(
@@ -134,7 +135,7 @@ async def test_extract_writes_exactly_16_rows(db_session, clean_kb, clean_featur
             text(
                 "SELECT jfv.is_missing, jfv.value_text FROM job_feature_values jfv "
                 "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
-                "WHERE jfv.project_id = :p AND wfc.feature_key = 'contract_security'"
+                "WHERE jfv.project_id = :p AND wfc.feature_key = 'housing'"
             ),
             {"p": str(proj.id)},
         )
@@ -155,7 +156,7 @@ async def test_extract_is_idempotent_on_rerun(db_session, clean_kb, clean_featur
     await pipe.extract_product_features(doc, [])  # re-extract: delete-then-insert
 
     n = (await _count_features(db_session, proj.id)).scalar()
-    assert n == 16  # no duplicates
+    assert n == 11  # no duplicates
 
 
 async def test_extract_syncs_project_highlights(db_session, clean_kb, clean_features):
@@ -189,7 +190,7 @@ async def test_pipeline_run_extracts_features(db_session, clean_kb, clean_featur
     await db_session.refresh(doc)
 
     assert doc.status == KnowledgeStatus.PUBLISHED
-    assert (await _count_features(db_session, proj.id)).scalar() == 16
+    assert (await _count_features(db_session, proj.id)).scalar() == 11
 
 
 async def test_pipeline_run_survives_bad_extraction(db_session, clean_kb, clean_features):
@@ -258,7 +259,7 @@ async def test_recruiter_can_read_project_features_api(client, db_session, clean
     features = await client.get(f"/api/v1/knowledge/projects/{proj.id}/features", headers=headers)
     assert features.status_code == 200
     body = features.json()
-    assert body["total"] == 16
+    assert body["total"] == 11
     feature_id = body["data"][0]["id"]
 
     edit = await client.patch(

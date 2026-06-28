@@ -41,6 +41,11 @@ class KnowledgeChunkOut(BaseModel):
     confidence: str | None = None
     is_inference: bool = False
     source_anchor: str | None = None
+    citation_label: str | None = None
+    content_type: str | None = None
+    route_id: str | None = None
+    effective_from: str | None = None
+    effective_to: str | None = None
     created_at: datetime
 
 

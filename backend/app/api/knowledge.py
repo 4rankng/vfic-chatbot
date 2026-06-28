@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_embedder, require_admin
@@ -30,9 +31,19 @@ from app.schemas.knowledge import (
     UploadRequest,
 )
 from app.services.knowledge_service import KnowledgeService
+from app.services.knowledge.canonical import CanonicalValidationError, load_template
 from app.workers.ingest_worker import enqueue_ingest
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+
+
+@router.get("/format/template", response_class=PlainTextResponse)
+async def get_knowledge_format_template(_admin: User = Depends(require_admin)) -> PlainTextResponse:
+    return PlainTextResponse(
+        load_template(),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="vfic-knowledge-v1-template.md"'},
+    )
 
 
 async def _load(doc_id: uuid.UUID, db: AsyncSession):
@@ -110,9 +121,16 @@ async def upload_file(
 ) -> KnowledgeDocumentOut:
     """Multipart upload: extract text, store original, enqueue the training pipeline."""
     data = await file.read()
-    doc = await KnowledgeService(db).upload_bytes(
-        file.filename or "upload", file.content_type or "", data, project_id=project_id
-    )
+    try:
+        doc = await KnowledgeService(db).upload_bytes(
+            file.filename or "upload",
+            file.content_type or "",
+            data,
+            project_id=project_id,
+            require_canonical=True,
+        )
+    except CanonicalValidationError as exc:
+        raise HTTPException(422, {"errors": exc.errors}) from exc
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
     enqueue_ingest(doc.id)  # async LLM digest -> embed -> index
     return KnowledgeDocumentOut.model_validate(doc)

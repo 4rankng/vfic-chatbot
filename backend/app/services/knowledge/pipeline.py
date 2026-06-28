@@ -7,7 +7,7 @@ For one document it runs: extract -> digest -> embed -> index -> product feature
               metadata + retrieval questions, and flags faithfulness for each unit
   embed    -> GeminiEmbedder.batch over the digested units
   index    -> regenerate the project's catalog card (the agent's master-index entry)
-  features -> LLM-extract the 16 worker "product features" for the project (best-effort)
+  features -> LLM-extract the 11 worker "product features" for the project (best-effort)
 
 This module is the ORCHESTRATOR only: LLM/embed calls + business flow. SQL lives in
 ``repository.py`` and coercion in ``coercion.py``. The LLM step is injected (``llm_json``)
@@ -36,6 +36,11 @@ from app.services.knowledge.coercion import (
     _product_feature_prompt,
     validate_digest,
 )
+from app.services.knowledge.canonical import (
+    SCHEMA_VERSION,
+    checksum_text,
+    parse_canonical_markdown,
+)
 from app.services.knowledge.extraction import split_for_digest
 from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
 from app.services.knowledge.repository import (
@@ -57,13 +62,22 @@ class KnowledgePipeline:
     """Orchestrates digest -> embed -> index for one document.
 
     Injected deps (testable): ``embedder`` (GeminiEmbedder-compatible) and
-    ``llm_json`` ((system, user) -> json text). Both run inside the RQ worker.
+    ``llm_json`` ((system, user) -> json text). Runs in the RQ ingest worker by default
+    (``call_timeout`` unset -> the generous digest ceiling); web-process callers
+    (``reindex``, feature re-extract) pass ``call_timeout`` = the tighter request timeout
+    so a slow MiniMax call cannot stall the 2-worker API.
     """
 
-    def __init__(self, db: AsyncSession, embedder: Embedder, llm_json: LLMJson) -> None:
+    def __init__(
+        self, db: AsyncSession, embedder: Embedder, llm_json: LLMJson, *, call_timeout: int | None = None
+    ) -> None:
         self.db = db
         self.embedder = embedder
         self.llm_json = llm_json
+        # Per-instance LLM ceiling. None (background ingest) -> minimax_digest_timeout;
+        # web-process callers pass minimax_request_timeout so they don't hold a web worker
+        # for the full digest ceiling.
+        self._call_timeout = call_timeout
         self.chunks = KnowledgeChunkRepo(db)
         self.features = JobFeatureValueRepo(db)
         self.index = ProjectIndexRepo(db)
@@ -72,14 +86,25 @@ class KnowledgePipeline:
         """Full pipeline for ``doc`` (KnowledgeDocument). Mutates + commits."""
         await self._set_stage(doc, "DIGESTING", status="PROCESSING", error=None)
         raw = doc.raw_text or ""
-        sections = split_for_digest(raw)
-        all_units: list[dict] = []
-        summary_parts: list[str] = []
-        for section in sections:
-            summary, units = await self._digest_section(section)
-            all_units.extend(units)
-            if summary:
-                summary_parts.append(summary)
+        canonical_doc = None
+        if (doc.metadata_ or {}).get("schema_version") == SCHEMA_VERSION:
+            stored_checksum = (doc.metadata_ or {}).get("checksum")
+            current_checksum = checksum_text(raw)
+            if stored_checksum and stored_checksum != current_checksum:
+                raise ValueError("canonical document checksum changed after upload validation")
+            canonical_doc = parse_canonical_markdown(raw)
+            all_units = [chunk.to_unit(canonical_doc) for chunk in canonical_doc.chunks]
+            summary_parts = [canonical_doc.document_summary]
+            sections = [raw] if raw.strip() else []
+        else:
+            sections = split_for_digest(raw)
+            all_units = []
+            summary_parts = []
+            for section in sections:
+                summary, units = await self._digest_section(section)
+                all_units.extend(units)
+                if summary:
+                    summary_parts.append(summary)
 
         await self._set_stage(doc, "EMBEDDING")
         await self._store_units(doc, all_units)
@@ -92,7 +117,7 @@ class KnowledgePipeline:
             "flagged_unit_indexes": flagged,
         }
 
-        # Product-feature extraction (best-effort): turn the posting into the 16 worker
+        # Product-feature extraction (best-effort): turn the posting into the 11 worker
         # product features the agent answers from. Runs before build_project_index so the
         # derived highlights flow into the catalog card. A failure must never block RAG
         # indexing — the run() try/except below keeps ingest healthy.
@@ -103,6 +128,8 @@ class KnowledgePipeline:
                 logger.warning("product feature extraction failed for doc %s: %s", doc.id, exc)
 
         await self._set_stage(doc, "INDEXING", status="PUBLISHED")
+        if canonical_doc is not None and canonical_doc.bus_timetable.routes:
+            await self._persist_canonical_bus_timetable(doc, canonical_doc)
         if doc.project_id is not None:
             try:
                 await self.build_project_index(doc.project_id)
@@ -110,14 +137,22 @@ class KnowledgePipeline:
                 logger.warning("project index refresh failed: %s", exc)
 
         await self._set_stage(doc, "PUBLISHED", status="PUBLISHED")
-        # rebuild the structured bus graph from the `documents` VIEW (verbatim SQL fn)
-        try:
-            await rebuild_bus_timetable(self.db)
-        except Exception:  # noqa: BLE001 — rebuild is best-effort; never block ingest
-            pass
+        if canonical_doc is None:
+            # Legacy LGDisplay parser fallback.
+            try:
+                await rebuild_bus_timetable(self.db)
+            except Exception:  # noqa: BLE001 — rebuild is best-effort; never block ingest
+                pass
 
     async def _digest_section(self, section: str) -> tuple[str, list[dict]]:
-        """Call the LLM once per section; retry once on a malformed response."""
+        """Call the LLM once per section; retry once on a malformed/empty response.
+
+        A *timeout* is NOT retried: at the digest-timeout ceiling (180s) a retry is
+        futile (in practice both attempts time out) and would burn the RQ job budget on
+        multi-section docs, so it falls back at once. Empty/malformed JSON is retried
+        once (transient emptiness can recover) before falling back. Either way the
+        document keeps source-grounded units instead of failing at 0.
+        """
         last_err: str | None = None
         for attempt in range(2):
             try:
@@ -130,6 +165,13 @@ class KnowledgePipeline:
             except json.JSONDecodeError as exc:
                 last_err = f"invalid JSON: {exc}"
                 logger.warning("digest attempt %d not JSON: %s", attempt + 1, last_err)
+            except TimeoutError as exc:
+                # Provider slowness (M2.7 always reasons) must never fail the document.
+                # Retry is futile here and would risk the RQ job budget on multi-section
+                # docs, so fall back at once to source-grounded units.
+                last_err = str(exc)
+                logger.warning("digest timed out, using deterministic fallback: %s", last_err)
+                return self._fallback_digest_section(section)
         logger.warning("digest failed after retry; using deterministic fallback: %s", last_err)
         return self._fallback_digest_section(section)
 
@@ -147,13 +189,29 @@ class KnowledgePipeline:
         # Batch-embed one combined string per unit (content + summary + questions).
         embed_inputs = []
         for u in units:
-            pieces = [u["content"]]
+            pieces = [u.get("contextual_text") or u["content"]]
             if u["summary"]:
                 pieces.append(u["summary"])
             pieces.extend(u["questions"])
             embed_inputs.append("\n".join(pieces))
         vectors = await self._embed_batch(embed_inputs)
         await self.chunks.replace_for_doc(doc, list(zip(units, vectors)))
+
+    async def _persist_canonical_bus_timetable(self, doc, canonical_doc) -> None:
+        from app.services.knowledge.bus_timetable.repository import BusTimetableRepo
+
+        meta = canonical_doc.metadata
+        project_slug = str(meta["project_slug"])
+        company_name = str(meta.get("company_name") or "VFIC")
+        await BusTimetableRepo(self.db).upsert(
+            canonical_doc.bus_timetable,
+            project_slug=project_slug,
+            company_name=company_name,
+            source_name=doc.file_name,
+            source_ref=str(doc.id),
+            version=str(meta.get("doc_version") or ""),
+            source_type="canonical_markdown",
+        )
 
     async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts; prefer a batch call when the embedder supports it."""
@@ -179,10 +237,10 @@ class KnowledgePipeline:
         await self.index.sync_highlights(project_id)
 
     async def extract_product_features(self, doc, units: list[dict]) -> None:
-        """LLM-extract the 16 worker product features for ``doc.project_id`` (best-effort).
+        """LLM-extract the 11 worker product features for ``doc.project_id`` (best-effort).
 
-        Always writes exactly one job_feature_values row per catalog feature — features the
-        posting omits get ``is_missing=true`` — so the project has a stable 16-row set.
+        Always writes exactly one job_feature_values row per active catalog feature — features the
+        posting omits get ``is_missing=true`` — so the project has a stable 11-row set.
         Idempotent: deletes the project's existing rows before inserting.
         """
         if doc.project_id is None:
@@ -212,7 +270,11 @@ class KnowledgePipeline:
         await self.index.sync_highlights(doc.project_id)
 
     async def _llm_json_with_timeout(self, system: str, user: str, *, purpose: str) -> str:
-        timeout = get_settings().minimax_request_timeout
+        timeout = (
+            self._call_timeout
+            if self._call_timeout is not None
+            else get_settings().minimax_digest_timeout
+        )
         try:
             return await asyncio.wait_for(self.llm_json(system, user), timeout=timeout)
         except TimeoutError as exc:
