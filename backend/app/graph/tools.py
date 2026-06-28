@@ -6,6 +6,9 @@
 
 Each takes an injected embedder (Gemini) + async db session, so they are testable
 without an LLM. STRICT rule (from the agent prompt): advise only from returned data.
+
+All SQL lives in ``app.services.retrieval.RetrievalRepository``; these functions own
+the embedding (a graph-layer concern) + the Vietnamese formatting only.
 """
 from __future__ import annotations
 
@@ -13,26 +16,20 @@ import json
 from collections import OrderedDict
 from typing import Any
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.vector import vec_literal
 from app.graph.llm import Embedder
+from app.services.retrieval import RetrievalRepository
 
 
 async def search_user_memory(
     db: AsyncSession, embedder: Embedder, chat_id: str, query: str, top_k: int = 5
 ) -> str:
     emb = vec_literal(await embedder(query))
-    rows = (
-        await db.execute(
-            text(
-                "SELECT content, similarity FROM match_memories("
-                "CAST(:emb AS vector), :k, CAST(:filter AS jsonb))"
-            ),
-            {"emb": emb, "k": top_k, "filter": json.dumps({"chat_id": chat_id})},
-        )
-    ).all()
+    rows = await RetrievalRepository(db).match_memories(
+        emb, top_k, json.dumps({"chat_id": chat_id})
+    )
     if not rows:
         return "Không có thông tin ghi nhớ về người dùng này."
     return "\n".join(f"- {r.content} (sim={r.similarity:.2f})" for r in rows)
@@ -46,35 +43,13 @@ async def search_knowledge(
     ``project_slug`` (from the master index) scopes retrieval to one product; omit it
     to search across all active projects. The agent is told to advise ONLY from this.
     """
+    repo = RetrievalRepository(db)
     project_ids: list[str] | None = None
     if project_slug:
-        pid_rows = (
-            await db.execute(
-                text("SELECT id FROM projects WHERE slug = :s AND is_active"), {"s": project_slug}
-            )
-        ).all()
-        project_ids = [str(r[0]) for r in pid_rows] or None
+        pid = await repo.project_id_by_slug(project_slug, active_only=True)
+        project_ids = [str(pid)] if pid else None
     emb = vec_literal(await embedder(query))
-    if project_ids:
-        rows = (
-            await db.execute(
-                text(
-                    "SELECT id, content, similarity FROM match_documents("
-                    "CAST(:emb AS vector), :k, CAST(:filter AS jsonb), CAST(:pids AS uuid[]))"
-                ),
-                {"emb": emb, "k": top_k, "filter": "{}", "pids": project_ids},
-            )
-        ).all()
-    else:
-        rows = (
-            await db.execute(
-                text(
-                    "SELECT id, content, similarity FROM match_documents("
-                    "CAST(:emb AS vector), :k, CAST(:filter AS jsonb))"
-                ),
-                {"emb": emb, "k": top_k, "filter": "{}"},
-            )
-        ).all()
+    rows = await repo.match_documents(emb, top_k, "{}", project_ids=project_ids)
     if not rows:
         return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
     return "\n".join(f"- {str(r.content)[:300]}" for r in rows)
@@ -89,11 +64,7 @@ async def search_jobs(
 
 async def list_active_projects(db: AsyncSession) -> str:
     """Return the active-product catalog (name/slug/summary) for the agent."""
-    rows = (
-        await db.execute(
-            text("SELECT name, slug, summary FROM projects WHERE is_active ORDER BY name")
-        )
-    ).all()
+    rows = await RetrievalRepository(db).list_active_projects()
     if not rows:
         return "Hiện chưa có dự án/sản phẩm nào đang hoạt động."
     return "\n".join(
@@ -104,12 +75,7 @@ async def list_active_projects(db: AsyncSession) -> str:
 async def search_bus_timetable(
     db: AsyncSession, company: str, question: str, limit: int = 20
 ) -> str:
-    rows = (
-        await db.execute(
-            text("SELECT * FROM search_bus_timetable('vfic', :company, :question, NULL, NULL, :limit)"),
-            {"company": company, "question": question, "limit": limit},
-        )
-    ).all()
+    rows = await RetrievalRepository(db).search_bus_timetable(company, question, limit)
     if not rows:
         return "Không tìm thấy lịch xe phù hợp."
     # The SQL fn returns one row per stop; group into one line per route and surface
@@ -144,25 +110,11 @@ async def get_product_features(db: AsyncSession, project_slug: str) -> str:
     (structured, non-RAG data reaching the agent). The agent is told to advise ONLY from
     this and to answer "chưa ghi rõ" for missing features rather than invent.
     """
-    pid = (
-        await db.execute(text("SELECT id FROM projects WHERE slug = :s"), {"s": project_slug})
-    ).scalar_one_or_none()
+    repo = RetrievalRepository(db)
+    pid = await repo.project_id_by_slug(project_slug)
     if pid is None:
         return f"Không tìm thấy dự án/sản phẩm với slug '{project_slug}'."
-    rows = (
-        await db.execute(
-            text(
-                "SELECT jfv.value_text, jfv.value_json, jfv.is_highlight, jfv.is_missing, "
-                "       jfv.needs_clarification, jfv.evidence_text, "
-                "       wfc.name_vi, wfc.feature_key "
-                "FROM job_feature_values jfv "
-                "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
-                "WHERE jfv.project_id = :pid "
-                "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
-            ),
-            {"pid": str(pid)},
-        )
-    ).all()
+    rows = await repo.job_features_for_project(pid)
     if not rows:
         return (
             f"Chưa có đặc điểm sản phẩm cho dự án '{project_slug}' "

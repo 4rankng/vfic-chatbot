@@ -8,14 +8,15 @@ appended to the prompt so the agent always knows the catalog + slugs, and scopes
 ``search_knowledge`` to the relevant project.
 
 All DB lookups are best-effort: any failure collapses to ``AGENT_SYSTEM_PROMPT`` so a
-persona/index hiccup can never break a chat turn.
+persona/index hiccup can never break a chat turn. SQL lives in
+``app.services.retrieval.RetrievalRepository``; this module only assembles the prompt.
 """
 from __future__ import annotations
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
+from app.services.retrieval import RetrievalRepository
 
 _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ==="
 
@@ -23,13 +24,9 @@ _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG =
 async def resolve_persona(db: AsyncSession) -> str:
     """Return the active global persona body, or persona.md if none is active."""
     try:
-        row = (
-            await db.execute(
-                text("SELECT body_md FROM personas WHERE is_active AND project_id IS NULL LIMIT 1")
-            )
-        ).first()
-        if row is not None and (row.body_md or "").strip():
-            return row.body_md.strip()
+        body = await RetrievalRepository(db).active_persona_body()
+        if body and body.strip():
+            return body.strip()
     except Exception:  # noqa: BLE001
         pass
     return AGENT_SYSTEM_PROMPT
@@ -38,11 +35,7 @@ async def resolve_persona(db: AsyncSession) -> str:
 async def active_projects_index(db: AsyncSession) -> str:
     """Compact catalog of active projects (the agent's master index). '' if none/err."""
     try:
-        rows = (
-            await db.execute(
-                text("SELECT name, slug, summary, index_card FROM projects WHERE is_active ORDER BY name")
-            )
-        ).all()
+        rows = await RetrievalRepository(db).active_projects_with_card()
     except Exception:  # noqa: BLE001
         return ""
     if not rows:
