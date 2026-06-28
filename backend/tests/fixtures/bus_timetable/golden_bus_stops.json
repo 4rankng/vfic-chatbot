@@ -1,0 +1,2959 @@
+[
+  {
+    "raw_stop_text": "Chợ An Dương@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Chợ An Dương",
+      "An Dương"
+    ],
+    "stop_name": "Chợ An Dương",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Ngã tư Cơ Điện@07:10",
+    "scheduled_time": "07:10:00",
+    "stop_aliases": [
+      "Ngã tư Cơ Điện"
+    ],
+    "stop_name": "Ngã tư Cơ Điện",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Khu đô thị Pruksa@07:15",
+    "scheduled_time": "07:15:00",
+    "stop_aliases": [
+      "Khu đô thị Pruksa"
+    ],
+    "stop_name": "Khu đô thị Pruksa",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cầu Rế@07:20",
+    "scheduled_time": "07:20:00",
+    "stop_aliases": [
+      "Cầu Rế"
+    ],
+    "stop_name": "Cầu Rế",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cty TNHH Hào Quang@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Cty TNHH Hào Quang"
+    ],
+    "stop_name": "Cty TNHH Hào Quang",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "BV An Lão 2@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "BV An Lão 2",
+      "An Lão"
+    ],
+    "stop_name": "BV An Lão 2",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Trung tâm giống cây trồng@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Trung tâm giống cây trồng"
+    ],
+    "stop_name": "Trung tâm giống cây trồng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã 5 Kiến An@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Ngã 5 Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Ngã 5 Kiến An",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cống Đôi Kiến An@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Cống Đôi Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Cống Đôi Kiến An",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Quân đoàn 679@07:10",
+    "scheduled_time": "07:10:00",
+    "stop_aliases": [
+      "Quân đoàn 679"
+    ],
+    "stop_name": "Quân đoàn 679",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Cty TNHH Hào Quang@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Cty TNHH Hào Quang"
+    ],
+    "stop_name": "Cty TNHH Hào Quang",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "BV An Lão 2@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "BV An Lão 2",
+      "An Lão"
+    ],
+    "stop_name": "BV An Lão 2",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Trung tâm giống cây trồng@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "Trung tâm giống cây trồng"
+    ],
+    "stop_name": "Trung tâm giống cây trồng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã 5 Kiến An@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Ngã 5 Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Ngã 5 Kiến An",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cống Đôi Kiến An@19:05",
+    "scheduled_time": "19:05:00",
+    "stop_aliases": [
+      "Cống Đôi Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Cống Đôi Kiến An",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Quân đoàn 679@19:10",
+    "scheduled_time": "19:10:00",
+    "stop_aliases": [
+      "Quân đoàn 679"
+    ],
+    "stop_name": "Quân đoàn 679",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Bến xe Vĩnh Bảo@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Bến xe Vĩnh Bảo",
+      "Vĩnh Bảo"
+    ],
+    "stop_name": "Bến xe Vĩnh Bảo",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Vĩnh An@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "Cây xăng Vĩnh An"
+    ],
+    "stop_name": "Cây xăng Vĩnh An",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Trạm xăng Quý Cao@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Trạm xăng Quý Cao"
+    ],
+    "stop_name": "Trạm xăng Quý Cao",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Chợ Hòa Bình@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Chợ Hòa Bình"
+    ],
+    "stop_name": "Chợ Hòa Bình",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Bến xe Vĩnh Bảo@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Bến xe Vĩnh Bảo",
+      "Vĩnh Bảo"
+    ],
+    "stop_name": "Bến xe Vĩnh Bảo",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Vĩnh An@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "Cây xăng Vĩnh An"
+    ],
+    "stop_name": "Cây xăng Vĩnh An",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Trạm xăng Quý Cao@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Trạm xăng Quý Cao"
+    ],
+    "stop_name": "Trạm xăng Quý Cao",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Chợ Hòa Bình@19:05",
+    "scheduled_time": "19:05:00",
+    "stop_aliases": [
+      "Chợ Hòa Bình"
+    ],
+    "stop_name": "Chợ Hòa Bình",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cát Bi Plaza@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Cát Bi Plaza"
+    ],
+    "stop_name": "Cát Bi Plaza",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cổng Cảng@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Cổng Cảng"
+    ],
+    "stop_name": "Cổng Cảng",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "386 Văn Cao@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "386 Văn Cao"
+    ],
+    "stop_name": "386 Văn Cao",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cầu vượt Lạch Tray@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Cầu vượt Lạch Tray"
+    ],
+    "stop_name": "Cầu vượt Lạch Tray",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Siêu thị Hà Cường@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Siêu thị Hà Cường"
+    ],
+    "stop_name": "Siêu thị Hà Cường",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Điện máy Trần Anh@07:10",
+    "scheduled_time": "07:10:00",
+    "stop_aliases": [
+      "Điện máy Trần Anh"
+    ],
+    "stop_name": "Điện máy Trần Anh",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "386 Văn Cao@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "386 Văn Cao"
+    ],
+    "stop_name": "386 Văn Cao",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cầu vượt Lạch Tray@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "Cầu vượt Lạch Tray"
+    ],
+    "stop_name": "Cầu vượt Lạch Tray",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Siêu thị Hà Cường@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Siêu thị Hà Cường"
+    ],
+    "stop_name": "Siêu thị Hà Cường",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Điện máy Trần Anh@19:10",
+    "scheduled_time": "19:10:00",
+    "stop_aliases": [
+      "Điện máy Trần Anh"
+    ],
+    "stop_name": "Điện máy Trần Anh",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "386 Văn Cao@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "386 Văn Cao"
+    ],
+    "stop_name": "386 Văn Cao",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cổng tỉnh@06:10",
+    "scheduled_time": "06:10:00",
+    "stop_aliases": [
+      "Cổng tỉnh"
+    ],
+    "stop_name": "Cổng tỉnh",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Quán Cát@06:15",
+    "scheduled_time": "06:15:00",
+    "stop_aliases": [
+      "Quán Cát"
+    ],
+    "stop_name": "Quán Cát",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã 6@06:20",
+    "scheduled_time": "06:20:00",
+    "stop_aliases": [
+      "Ngã 6"
+    ],
+    "stop_name": "Ngã 6",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cây xăng Hải Tân@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Cây xăng Hải Tân"
+    ],
+    "stop_name": "Cây xăng Hải Tân",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 4 Đường mới@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "Ngã 4 Đường mới"
+    ],
+    "stop_name": "Ngã 4 Đường mới",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Đông Đô@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Đông Đô"
+    ],
+    "stop_name": "Đông Đô",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Lan Chi Mart Kinh Môn@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "Lan Chi Mart Kinh Môn"
+    ],
+    "stop_name": "Lan Chi Mart Kinh Môn",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Cây xăng Hải Huệ@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Cây xăng Hải Huệ"
+    ],
+    "stop_name": "Cây xăng Hải Huệ",
+    "stop_order": 8
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 9
+  },
+  {
+    "raw_stop_text": "Cổng tỉnh@18:10",
+    "scheduled_time": "18:10:00",
+    "stop_aliases": [
+      "Cổng tỉnh"
+    ],
+    "stop_name": "Cổng tỉnh",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Quán Cát@18:15",
+    "scheduled_time": "18:15:00",
+    "stop_aliases": [
+      "Quán Cát"
+    ],
+    "stop_name": "Quán Cát",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã 6@18:20",
+    "scheduled_time": "18:20:00",
+    "stop_aliases": [
+      "Ngã 6"
+    ],
+    "stop_name": "Ngã 6",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cây xăng Hải Tân@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Cây xăng Hải Tân"
+    ],
+    "stop_name": "Cây xăng Hải Tân",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 4 Đường mới@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "Ngã 4 Đường mới"
+    ],
+    "stop_name": "Ngã 4 Đường mới",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Đông Đô@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Đông Đô"
+    ],
+    "stop_name": "Đông Đô",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Lan Chi Mart Kinh Môn@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "Lan Chi Mart Kinh Môn"
+    ],
+    "stop_name": "Lan Chi Mart Kinh Môn",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Cây xăng Hải Huệ@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "Cây xăng Hải Huệ"
+    ],
+    "stop_name": "Cây xăng Hải Huệ",
+    "stop_order": 8
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 9
+  },
+  {
+    "raw_stop_text": "SVĐ Đồ Sơn@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "SVĐ Đồ Sơn",
+      "Đồ Sơn"
+    ],
+    "stop_name": "SVĐ Đồ Sơn",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Chợ Đồn Riêng@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Chợ Đồn Riêng"
+    ],
+    "stop_name": "Chợ Đồn Riêng",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã 3 Ninh Hải@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Ngã 3 Ninh Hải"
+    ],
+    "stop_name": "Ngã 3 Ninh Hải",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã 3 Đa Phúc@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Ngã 3 Đa Phúc"
+    ],
+    "stop_name": "Ngã 3 Đa Phúc",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 5 Kiến An@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Ngã 5 Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Ngã 5 Kiến An",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cống Đôi Kiến An@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Cống Đôi Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Cống Đôi Kiến An",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "SVĐ Đồ Sơn@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "SVĐ Đồ Sơn",
+      "Đồ Sơn"
+    ],
+    "stop_name": "SVĐ Đồ Sơn",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Chợ Đồn Riêng@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Chợ Đồn Riêng"
+    ],
+    "stop_name": "Chợ Đồn Riêng",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã 3 Ninh Hải@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Ngã 3 Ninh Hải"
+    ],
+    "stop_name": "Ngã 3 Ninh Hải",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã 3 Đa Phúc@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "Ngã 3 Đa Phúc"
+    ],
+    "stop_name": "Ngã 3 Đa Phúc",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 5 Kiến An@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Ngã 5 Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Ngã 5 Kiến An",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cống Đôi Kiến An@19:05",
+    "scheduled_time": "19:05:00",
+    "stop_aliases": [
+      "Cống Đôi Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Cống Đôi Kiến An",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "CV Bạch Đằng@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "CV Bạch Đằng"
+    ],
+    "stop_name": "CV Bạch Đằng",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "ga Tiền Trung@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "ga Tiền Trung"
+    ],
+    "stop_name": "ga Tiền Trung",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "ga Lai Khê@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "ga Lai Khê"
+    ],
+    "stop_name": "ga Lai Khê",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "ga Phạm Xá@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "ga Phạm Xá"
+    ],
+    "stop_name": "ga Phạm Xá",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "ga Phú Thái@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "ga Phú Thái"
+    ],
+    "stop_name": "ga Phú Thái",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "CV Bạch Đằng@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "CV Bạch Đằng"
+    ],
+    "stop_name": "CV Bạch Đằng",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "ga Tiền Trung@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "ga Tiền Trung"
+    ],
+    "stop_name": "ga Tiền Trung",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "ga Lai Khê@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "ga Lai Khê"
+    ],
+    "stop_name": "ga Lai Khê",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "ga Phạm Xá@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "ga Phạm Xá"
+    ],
+    "stop_name": "ga Phạm Xá",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "ga Phú Thái@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "ga Phú Thái"
+    ],
+    "stop_name": "ga Phú Thái",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Keangnam@05:25",
+    "scheduled_time": "05:25:00",
+    "stop_aliases": [
+      "Keangnam"
+    ],
+    "stop_name": "Keangnam",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Ngã 3 Duy Tân@05:35",
+    "scheduled_time": "05:35:00",
+    "stop_aliases": [
+      "Ngã 3 Duy Tân"
+    ],
+    "stop_name": "Ngã 3 Duy Tân",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Đầu đường Hoàng Quốc Việt@05:42",
+    "scheduled_time": "05:42:00",
+    "stop_aliases": [
+      "Đầu đường Hoàng Quốc Việt"
+    ],
+    "stop_name": "Đầu đường Hoàng Quốc Việt",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Chân cầu Cầu Nhật Tân@05:52",
+    "scheduled_time": "05:52:00",
+    "stop_aliases": [
+      "Chân cầu Cầu Nhật Tân"
+    ],
+    "stop_name": "Chân cầu Cầu Nhật Tân",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 4 Vạn Lộc (Đông Anh)@06:00",
+    "scheduled_time": "06:00:00",
+    "stop_aliases": [
+      "Ngã 4 Vạn Lộc (Đông Anh)"
+    ],
+    "stop_name": "Ngã 4 Vạn Lộc (Đông Anh)",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cầu Chui Gia Lâm@06:10",
+    "scheduled_time": "06:10:00",
+    "stop_aliases": [
+      "Cầu Chui Gia Lâm",
+      "Gia Lâm"
+    ],
+    "stop_name": "Cầu Chui Gia Lâm",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Sài Đồng@06:15",
+    "scheduled_time": "06:15:00",
+    "stop_aliases": [
+      "Sài Đồng"
+    ],
+    "stop_name": "Sài Đồng",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Cầu Thanh Trì@06:20",
+    "scheduled_time": "06:20:00",
+    "stop_aliases": [
+      "Cầu Thanh Trì"
+    ],
+    "stop_name": "Cầu Thanh Trì",
+    "stop_order": 8
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 9
+  },
+  {
+    "raw_stop_text": "Trường Hoa Lan@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Trường Hoa Lan"
+    ],
+    "stop_name": "Trường Hoa Lan",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cổng trường Đảng@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Cổng trường Đảng"
+    ],
+    "stop_name": "Cổng trường Đảng",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Trường Hoa Lan@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Trường Hoa Lan"
+    ],
+    "stop_name": "Trường Hoa Lan",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cổng trường Đảng@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Cổng trường Đảng"
+    ],
+    "stop_name": "Cổng trường Đảng",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Hồ Sen@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Hồ Sen"
+    ],
+    "stop_name": "Hồ Sen",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Hồ Sen@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Hồ Sen"
+    ],
+    "stop_name": "Hồ Sen",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Bệnh viện Phụ sản@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Bệnh viện Phụ sản"
+    ],
+    "stop_name": "Bệnh viện Phụ sản",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Chợ An Dương@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Chợ An Dương",
+      "An Dương"
+    ],
+    "stop_name": "Chợ An Dương",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Điện máy Trần Anh@07:10",
+    "scheduled_time": "07:10:00",
+    "stop_aliases": [
+      "Điện máy Trần Anh"
+    ],
+    "stop_name": "Điện máy Trần Anh",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã tư Cơ Điện@07:10",
+    "scheduled_time": "07:10:00",
+    "stop_aliases": [
+      "Ngã tư Cơ Điện"
+    ],
+    "stop_name": "Ngã tư Cơ Điện",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Khu đô thị Pruksa@07:15",
+    "scheduled_time": "07:15:00",
+    "stop_aliases": [
+      "Khu đô thị Pruksa"
+    ],
+    "stop_name": "Khu đô thị Pruksa",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cầu Rế@07:20",
+    "scheduled_time": "07:20:00",
+    "stop_aliases": [
+      "Cầu Rế"
+    ],
+    "stop_name": "Cầu Rế",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Hồ Sen@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "Hồ Sen"
+    ],
+    "stop_name": "Hồ Sen",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Chợ An Dương@19:05",
+    "scheduled_time": "19:05:00",
+    "stop_aliases": [
+      "Chợ An Dương",
+      "An Dương"
+    ],
+    "stop_name": "Chợ An Dương",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã tư Cơ Điện@19:10",
+    "scheduled_time": "19:10:00",
+    "stop_aliases": [
+      "Ngã tư Cơ Điện"
+    ],
+    "stop_name": "Ngã tư Cơ Điện",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Khu đô thị Pruksa@19:15",
+    "scheduled_time": "19:15:00",
+    "stop_aliases": [
+      "Khu đô thị Pruksa"
+    ],
+    "stop_name": "Khu đô thị Pruksa",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cầu Rế@19:20",
+    "scheduled_time": "19:20:00",
+    "stop_aliases": [
+      "Cầu Rế"
+    ],
+    "stop_name": "Cầu Rế",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Cây xăng Phú Sơn@06:00",
+    "scheduled_time": "06:00:00",
+    "stop_aliases": [
+      "Cây xăng Phú Sơn"
+    ],
+    "stop_name": "Cây xăng Phú Sơn",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Hải Trình@06:05",
+    "scheduled_time": "06:05:00",
+    "stop_aliases": [
+      "Cây xăng Hải Trình"
+    ],
+    "stop_name": "Cây xăng Hải Trình",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Vòng xuyến Đồng Tu@06:10",
+    "scheduled_time": "06:10:00",
+    "stop_aliases": [
+      "Vòng xuyến Đồng Tu"
+    ],
+    "stop_name": "Vòng xuyến Đồng Tu",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã tư Đa Phú@06:15",
+    "scheduled_time": "06:15:00",
+    "stop_aliases": [
+      "Ngã tư Đa Phú"
+    ],
+    "stop_name": "Ngã tư Đa Phú",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã tư Đông Đô@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Ngã tư Đông Đô"
+    ],
+    "stop_name": "Ngã tư Đông Đô",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Cây xăng Phú Sơn@18:00",
+    "scheduled_time": "18:00:00",
+    "stop_aliases": [
+      "Cây xăng Phú Sơn"
+    ],
+    "stop_name": "Cây xăng Phú Sơn",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Hải Trình@18:05",
+    "scheduled_time": "18:05:00",
+    "stop_aliases": [
+      "Cây xăng Hải Trình"
+    ],
+    "stop_name": "Cây xăng Hải Trình",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Vòng xuyến Đồng Tu@18:10",
+    "scheduled_time": "18:10:00",
+    "stop_aliases": [
+      "Vòng xuyến Đồng Tu"
+    ],
+    "stop_name": "Vòng xuyến Đồng Tu",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã tư Đa Phú@18:20",
+    "scheduled_time": "18:20:00",
+    "stop_aliases": [
+      "Ngã tư Đa Phú"
+    ],
+    "stop_name": "Ngã tư Đa Phú",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã tư Đông Đô@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Ngã tư Đông Đô"
+    ],
+    "stop_name": "Ngã tư Đông Đô",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Ngã tư Đại Hà@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Ngã tư Đại Hà"
+    ],
+    "stop_name": "Ngã tư Đại Hà",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Ngã ba Thanh Sơn@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Ngã ba Thanh Sơn"
+    ],
+    "stop_name": "Ngã ba Thanh Sơn",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Thị trấn Núi Đối@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Thị trấn Núi Đối"
+    ],
+    "stop_name": "Thị trấn Núi Đối",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cầu Đức Phong@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "Cầu Đức Phong"
+    ],
+    "stop_name": "Cầu Đức Phong",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 5 Kiến An@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Ngã 5 Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Ngã 5 Kiến An",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Ngã tư Đại Hà@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Ngã tư Đại Hà"
+    ],
+    "stop_name": "Ngã tư Đại Hà",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Ngã ba Thanh Sơn@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Ngã ba Thanh Sơn"
+    ],
+    "stop_name": "Ngã ba Thanh Sơn",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Thị trấn Núi Đối@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Thị trấn Núi Đối"
+    ],
+    "stop_name": "Thị trấn Núi Đối",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cầu Đức Phong@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "Cầu Đức Phong"
+    ],
+    "stop_name": "Cầu Đức Phong",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 5 Kiến An@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Ngã 5 Kiến An",
+      "Kiến An"
+    ],
+    "stop_name": "Ngã 5 Kiến An",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "KTX CĐ Bắc Bộ@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "KTX CĐ Bắc Bộ"
+    ],
+    "stop_name": "KTX CĐ Bắc Bộ",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "KTX CĐ Bắc Bộ@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "KTX CĐ Bắc Bộ"
+    ],
+    "stop_name": "KTX CĐ Bắc Bộ",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "KTX Thủy Sản@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "KTX Thủy Sản"
+    ],
+    "stop_name": "KTX Thủy Sản",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "KTX Thủy Sản@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "KTX Thủy Sản"
+    ],
+    "stop_name": "KTX Thủy Sản",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "KTX VMU@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "KTX VMU"
+    ],
+    "stop_name": "KTX VMU",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "KTX VMU@19:05",
+    "scheduled_time": "19:05:00",
+    "stop_aliases": [
+      "KTX VMU"
+    ],
+    "stop_name": "KTX VMU",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cầu vượt Lạch Tray@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Cầu vượt Lạch Tray"
+    ],
+    "stop_name": "Cầu vượt Lạch Tray",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Siêu thị Hà Cường@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Siêu thị Hà Cường"
+    ],
+    "stop_name": "Siêu thị Hà Cường",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "BVĐK Minh Đức@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "BVĐK Minh Đức"
+    ],
+    "stop_name": "BVĐK Minh Đức",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Minh Đức@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Cây xăng Minh Đức"
+    ],
+    "stop_name": "Cây xăng Minh Đức",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cổng chào làng Kinh Triều@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Cổng chào làng Kinh Triều"
+    ],
+    "stop_name": "Cổng chào làng Kinh Triều",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Thị trấn Núi Đèo@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "Thị trấn Núi Đèo"
+    ],
+    "stop_name": "Thị trấn Núi Đèo",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 4 Quán Toan@07:15",
+    "scheduled_time": "07:15:00",
+    "stop_aliases": [
+      "Ngã 4 Quán Toan",
+      "Quán Toan"
+    ],
+    "stop_name": "Ngã 4 Quán Toan",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "BVĐK Minh Đức@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "BVĐK Minh Đức"
+    ],
+    "stop_name": "BVĐK Minh Đức",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Minh Đức@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Cây xăng Minh Đức"
+    ],
+    "stop_name": "Cây xăng Minh Đức",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cổng chào làng Kinh Triều@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Cổng chào làng Kinh Triều"
+    ],
+    "stop_name": "Cổng chào làng Kinh Triều",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Thị trấn Núi Đèo@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "Thị trấn Núi Đèo"
+    ],
+    "stop_name": "Thị trấn Núi Đèo",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã 4 Quán Toan@19:15",
+    "scheduled_time": "19:15:00",
+    "stop_aliases": [
+      "Ngã 4 Quán Toan",
+      "Quán Toan"
+    ],
+    "stop_name": "Ngã 4 Quán Toan",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Cầu xóm 16@06:20",
+    "scheduled_time": "06:20:00",
+    "stop_aliases": [
+      "Cầu xóm 16"
+    ],
+    "stop_name": "Cầu xóm 16",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cầu Trạng@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "Cầu Trạng"
+    ],
+    "stop_name": "Cầu Trạng",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Vinh Quang (Cầu Rùa)@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Vinh Quang (Cầu Rùa)"
+    ],
+    "stop_name": "Vinh Quang (Cầu Rùa)",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cầu xóm 16@18:20",
+    "scheduled_time": "18:20:00",
+    "stop_aliases": [
+      "Cầu xóm 16"
+    ],
+    "stop_name": "Cầu xóm 16",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cầu Trạng@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "Cầu Trạng"
+    ],
+    "stop_name": "Cầu Trạng",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Vinh Quang (Cầu Rùa)@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Vinh Quang (Cầu Rùa)"
+    ],
+    "stop_name": "Vinh Quang (Cầu Rùa)",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã ba Đợi@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Ngã ba Đợi"
+    ],
+    "stop_name": "Ngã ba Đợi",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Đại lý gạch Hồng Huyền@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Đại lý gạch Hồng Huyền"
+    ],
+    "stop_name": "Đại lý gạch Hồng Huyền",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Bến xe Vĩnh Bảo@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Bến xe Vĩnh Bảo",
+      "Vĩnh Bảo"
+    ],
+    "stop_name": "Bến xe Vĩnh Bảo",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã ba Đợi@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Ngã ba Đợi"
+    ],
+    "stop_name": "Ngã ba Đợi",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Đại lý gạch Hồng Huyền@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Đại lý gạch Hồng Huyền"
+    ],
+    "stop_name": "Đại lý gạch Hồng Huyền",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Bến xe Vĩnh Bảo@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Bến xe Vĩnh Bảo",
+      "Vĩnh Bảo"
+    ],
+    "stop_name": "Bến xe Vĩnh Bảo",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Ngã ba Hưng Thái@06:20",
+    "scheduled_time": "06:20:00",
+    "stop_aliases": [
+      "Ngã ba Hưng Thái"
+    ],
+    "stop_name": "Ngã ba Hưng Thái",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Hồng Phong@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Cây xăng Hồng Phong"
+    ],
+    "stop_name": "Cây xăng Hồng Phong",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cây xăng xã Hồng Thái@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "Cây xăng xã Hồng Thái"
+    ],
+    "stop_name": "Cây xăng xã Hồng Thái",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cổng Đền Tranh@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Cổng Đền Tranh"
+    ],
+    "stop_name": "Cổng Đền Tranh",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Chợ Gạch@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Chợ Gạch"
+    ],
+    "stop_name": "Chợ Gạch",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cổng làng An Thổ@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "Cổng làng An Thổ"
+    ],
+    "stop_name": "Cổng làng An Thổ",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Ngã ba Hưng Thái@18:20",
+    "scheduled_time": "18:20:00",
+    "stop_aliases": [
+      "Ngã ba Hưng Thái"
+    ],
+    "stop_name": "Ngã ba Hưng Thái",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cây xăng Hồng Phong@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Cây xăng Hồng Phong"
+    ],
+    "stop_name": "Cây xăng Hồng Phong",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cây xăng xã Hồng Thái@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "Cây xăng xã Hồng Thái"
+    ],
+    "stop_name": "Cây xăng xã Hồng Thái",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cổng Đền Tranh@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Cổng Đền Tranh"
+    ],
+    "stop_name": "Cổng Đền Tranh",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Chợ Gạch@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Chợ Gạch"
+    ],
+    "stop_name": "Chợ Gạch",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cổng làng An Thổ@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "Cổng làng An Thổ"
+    ],
+    "stop_name": "Cổng làng An Thổ",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Cái Re@06:20",
+    "scheduled_time": "06:20:00",
+    "stop_aliases": [
+      "Cái Re"
+    ],
+    "stop_name": "Cái Re",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Chân cầu vượt đường sắt@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "Chân cầu vượt đường sắt"
+    ],
+    "stop_name": "Chân cầu vượt đường sắt",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã ba đường 10@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Ngã ba đường 10"
+    ],
+    "stop_name": "Ngã ba đường 10",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Chợ Phương Nam@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Chợ Phương Nam"
+    ],
+    "stop_name": "Chợ Phương Nam",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Bến xe phía Bắc@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Bến xe phía Bắc"
+    ],
+    "stop_name": "Bến xe phía Bắc",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Nhà hàng Phố Trịnh@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Nhà hàng Phố Trịnh"
+    ],
+    "stop_name": "Nhà hàng Phố Trịnh",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Ngã tư Quán Toan@07:15",
+    "scheduled_time": "07:15:00",
+    "stop_aliases": [
+      "Ngã tư Quán Toan",
+      "Quán Toan"
+    ],
+    "stop_name": "Ngã tư Quán Toan",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 8
+  },
+  {
+    "raw_stop_text": "Cái Re@18:20",
+    "scheduled_time": "18:20:00",
+    "stop_aliases": [
+      "Cái Re"
+    ],
+    "stop_name": "Cái Re",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Chân cầu vượt đường sắt@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "Chân cầu vượt đường sắt"
+    ],
+    "stop_name": "Chân cầu vượt đường sắt",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã ba đường 10@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Ngã ba đường 10"
+    ],
+    "stop_name": "Ngã ba đường 10",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Chợ Phương Nam@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Chợ Phương Nam"
+    ],
+    "stop_name": "Chợ Phương Nam",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Bến xe phía Bắc@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Bến xe phía Bắc"
+    ],
+    "stop_name": "Bến xe phía Bắc",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Nhà hàng Phố Trịnh@19:05",
+    "scheduled_time": "19:05:00",
+    "stop_aliases": [
+      "Nhà hàng Phố Trịnh"
+    ],
+    "stop_name": "Nhà hàng Phố Trịnh",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Ngã tư Quán Toan@19:15",
+    "scheduled_time": "19:15:00",
+    "stop_aliases": [
+      "Ngã tư Quán Toan",
+      "Quán Toan"
+    ],
+    "stop_name": "Ngã tư Quán Toan",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 8
+  },
+  {
+    "raw_stop_text": "Cây xăng Hoàng Trọng@06:10",
+    "scheduled_time": "06:10:00",
+    "stop_aliases": [
+      "Cây xăng Hoàng Trọng"
+    ],
+    "stop_name": "Cây xăng Hoàng Trọng",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cầu Mỹ Hà@06:15",
+    "scheduled_time": "06:15:00",
+    "stop_aliases": [
+      "Cầu Mỹ Hà"
+    ],
+    "stop_name": "Cầu Mỹ Hà",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã ba Chợ Quỳnh Minh@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Ngã ba Chợ Quỳnh Minh"
+    ],
+    "stop_name": "Ngã ba Chợ Quỳnh Minh",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Đền A Sào@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "Đền A Sào"
+    ],
+    "stop_name": "Đền A Sào",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cây xăng An Ninh@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Cây xăng An Ninh"
+    ],
+    "stop_name": "Cây xăng An Ninh",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Cây xăng Hoàng Trọng@18:10",
+    "scheduled_time": "18:10:00",
+    "stop_aliases": [
+      "Cây xăng Hoàng Trọng"
+    ],
+    "stop_name": "Cây xăng Hoàng Trọng",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cầu Mỹ Hà@18:15",
+    "scheduled_time": "18:15:00",
+    "stop_aliases": [
+      "Cầu Mỹ Hà"
+    ],
+    "stop_name": "Cầu Mỹ Hà",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã ba Chợ Quỳnh Minh@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Ngã ba Chợ Quỳnh Minh"
+    ],
+    "stop_name": "Ngã ba Chợ Quỳnh Minh",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Đền A Sào@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "Đền A Sào"
+    ],
+    "stop_name": "Đền A Sào",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cây xăng An Ninh@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Cây xăng An Ninh"
+    ],
+    "stop_name": "Cây xăng An Ninh",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "TD Plaza@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "TD Plaza"
+    ],
+    "stop_name": "TD Plaza",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "TD Plaza@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "TD Plaza"
+    ],
+    "stop_name": "TD Plaza",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cát Bi Plaza@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Cát Bi Plaza"
+    ],
+    "stop_name": "Cát Bi Plaza",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Vinhomes@07:10",
+    "scheduled_time": "07:10:00",
+    "stop_aliases": [
+      "Vinhomes"
+    ],
+    "stop_name": "Vinhomes",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cổng Cảng@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Cổng Cảng"
+    ],
+    "stop_name": "Cổng Cảng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Vinhomes@07:10",
+    "scheduled_time": "07:10:00",
+    "stop_aliases": [
+      "Vinhomes"
+    ],
+    "stop_name": "Vinhomes",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "TD Plaza@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "TD Plaza"
+    ],
+    "stop_name": "TD Plaza",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Cát Bi Plaza@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "Cát Bi Plaza"
+    ],
+    "stop_name": "Cát Bi Plaza",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cổng Cảng@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Cổng Cảng"
+    ],
+    "stop_name": "Cổng Cảng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Vinhomes@19:10",
+    "scheduled_time": "19:10:00",
+    "stop_aliases": [
+      "Vinhomes"
+    ],
+    "stop_name": "Vinhomes",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Vincom Thái Bình@06:00",
+    "scheduled_time": "06:00:00",
+    "stop_aliases": [
+      "Vincom Thái Bình",
+      "Thái Bình"
+    ],
+    "stop_name": "Vincom Thái Bình",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Ngã 4 Gia Lễ@06:10",
+    "scheduled_time": "06:10:00",
+    "stop_aliases": [
+      "Ngã 4 Gia Lễ"
+    ],
+    "stop_name": "Ngã 4 Gia Lễ",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã Ba Đợi@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Ngã Ba Đợi"
+    ],
+    "stop_name": "Ngã Ba Đợi",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Đại lý gạch Hồng Huyền@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Đại lý gạch Hồng Huyền"
+    ],
+    "stop_name": "Đại lý gạch Hồng Huyền",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Vincom Thái Bình@18:00",
+    "scheduled_time": "18:00:00",
+    "stop_aliases": [
+      "Vincom Thái Bình",
+      "Thái Bình"
+    ],
+    "stop_name": "Vincom Thái Bình",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Ngã 4 Gia Lễ@18:10",
+    "scheduled_time": "18:10:00",
+    "stop_aliases": [
+      "Ngã 4 Gia Lễ"
+    ],
+    "stop_name": "Ngã 4 Gia Lễ",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Ngã Ba Đợi@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Ngã Ba Đợi"
+    ],
+    "stop_name": "Ngã Ba Đợi",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Đại lý gạch Hồng Huyền@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Đại lý gạch Hồng Huyền"
+    ],
+    "stop_name": "Đại lý gạch Hồng Huyền",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Chợ Tây@05:55",
+    "scheduled_time": "05:55:00",
+    "stop_aliases": [
+      "Chợ Tây"
+    ],
+    "stop_name": "Chợ Tây",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Chợ Lục@06:00",
+    "scheduled_time": "06:00:00",
+    "stop_aliases": [
+      "Chợ Lục"
+    ],
+    "stop_name": "Chợ Lục",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cây xăng Thái Thượng@06:05",
+    "scheduled_time": "06:05:00",
+    "stop_aliases": [
+      "Cây xăng Thái Thượng"
+    ],
+    "stop_name": "Cây xăng Thái Thượng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Bệnh viện đa khoa huyện Thái Thụy@06:10",
+    "scheduled_time": "06:10:00",
+    "stop_aliases": [
+      "Bệnh viện đa khoa huyện Thái Thụy"
+    ],
+    "stop_name": "Bệnh viện đa khoa huyện Thái Thụy",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cầu An Bái@06:15",
+    "scheduled_time": "06:15:00",
+    "stop_aliases": [
+      "Cầu An Bái"
+    ],
+    "stop_name": "Cầu An Bái",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Chợ Tây@17:55",
+    "scheduled_time": "17:55:00",
+    "stop_aliases": [
+      "Chợ Tây"
+    ],
+    "stop_name": "Chợ Tây",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Chợ Lục@18:00",
+    "scheduled_time": "18:00:00",
+    "stop_aliases": [
+      "Chợ Lục"
+    ],
+    "stop_name": "Chợ Lục",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cây xăng Thái Thượng@18:05",
+    "scheduled_time": "18:05:00",
+    "stop_aliases": [
+      "Cây xăng Thái Thượng"
+    ],
+    "stop_name": "Cây xăng Thái Thượng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Bệnh viện đa khoa huyện Thái Thụy@18:10",
+    "scheduled_time": "18:10:00",
+    "stop_aliases": [
+      "Bệnh viện đa khoa huyện Thái Thụy"
+    ],
+    "stop_name": "Bệnh viện đa khoa huyện Thái Thụy",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Cầu An Bái@18:15",
+    "scheduled_time": "18:15:00",
+    "stop_aliases": [
+      "Cầu An Bái"
+    ],
+    "stop_name": "Cầu An Bái",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Cty TNHH Hải Hà@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "Cty TNHH Hải Hà"
+    ],
+    "stop_name": "Cty TNHH Hải Hà",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "THPT Thanh Hà@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "THPT Thanh Hà"
+    ],
+    "stop_name": "THPT Thanh Hà",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Bãi xe chợ Lại@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Bãi xe chợ Lại"
+    ],
+    "stop_name": "Bãi xe chợ Lại",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã tư Hợp Đức@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Ngã tư Hợp Đức"
+    ],
+    "stop_name": "Ngã tư Hợp Đức",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "THPT Hà Đông@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "THPT Hà Đông"
+    ],
+    "stop_name": "THPT Hà Đông",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Cty TNHH Hải Hà@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "Cty TNHH Hải Hà"
+    ],
+    "stop_name": "Cty TNHH Hải Hà",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "THPT Thanh Hà@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "THPT Thanh Hà"
+    ],
+    "stop_name": "THPT Thanh Hà",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Bãi xe chợ Lại@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Bãi xe chợ Lại"
+    ],
+    "stop_name": "Bãi xe chợ Lại",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã tư Hợp Đức@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Ngã tư Hợp Đức"
+    ],
+    "stop_name": "Ngã tư Hợp Đức",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "THPT Hà Đông@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "THPT Hà Đông"
+    ],
+    "stop_name": "THPT Hà Đông",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Cầu Đầm@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Cầu Đầm"
+    ],
+    "stop_name": "Cầu Đầm",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Cầu Đầm@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Cầu Đầm"
+    ],
+    "stop_name": "Cầu Đầm",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Quyết Tiến@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Quyết Tiến"
+    ],
+    "stop_name": "Quyết Tiến",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Quyết Tiến@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Quyết Tiến"
+    ],
+    "stop_name": "Quyết Tiến",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "THPT Hùng Thắng@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "THPT Hùng Thắng"
+    ],
+    "stop_name": "THPT Hùng Thắng",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Quán Cháy@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Quán Cháy"
+    ],
+    "stop_name": "Quán Cháy",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "THPT Toàn Thắng@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "THPT Toàn Thắng"
+    ],
+    "stop_name": "THPT Toàn Thắng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cầu Đen@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "Cầu Đen"
+    ],
+    "stop_name": "Cầu Đen",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "THPT Hùng Thắng@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "THPT Hùng Thắng"
+    ],
+    "stop_name": "THPT Hùng Thắng",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Quán Cháy@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Quán Cháy"
+    ],
+    "stop_name": "Quán Cháy",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "THPT Toàn Thắng@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "THPT Toàn Thắng"
+    ],
+    "stop_name": "THPT Toàn Thắng",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Cầu Đen@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "Cầu Đen"
+    ],
+    "stop_name": "Cầu Đen",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cầu Di Linh@06:20",
+    "scheduled_time": "06:20:00",
+    "stop_aliases": [
+      "Cầu Di Linh"
+    ],
+    "stop_name": "Cầu Di Linh",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Hội trường xã Hồng Đức@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Hội trường xã Hồng Đức"
+    ],
+    "stop_name": "Hội trường xã Hồng Đức",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Trạm Y tế xã Nghĩa An@06:35",
+    "scheduled_time": "06:35:00",
+    "stop_aliases": [
+      "Trạm Y tế xã Nghĩa An"
+    ],
+    "stop_name": "Trạm Y tế xã Nghĩa An",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Đền liệt sĩ Tứ Kỳ@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Đền liệt sĩ Tứ Kỳ"
+    ],
+    "stop_name": "Đền liệt sĩ Tứ Kỳ",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Đập Đống@06:50",
+    "scheduled_time": "06:50:00",
+    "stop_aliases": [
+      "Đập Đống"
+    ],
+    "stop_name": "Đập Đống",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cầu Xe@06:55",
+    "scheduled_time": "06:55:00",
+    "stop_aliases": [
+      "Cầu Xe"
+    ],
+    "stop_name": "Cầu Xe",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Cầu Di Linh@18:20",
+    "scheduled_time": "18:20:00",
+    "stop_aliases": [
+      "Cầu Di Linh"
+    ],
+    "stop_name": "Cầu Di Linh",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Hội trường xã Hồng Đức@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Hội trường xã Hồng Đức"
+    ],
+    "stop_name": "Hội trường xã Hồng Đức",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Trạm Y tế xã Nghĩa An@18:35",
+    "scheduled_time": "18:35:00",
+    "stop_aliases": [
+      "Trạm Y tế xã Nghĩa An"
+    ],
+    "stop_name": "Trạm Y tế xã Nghĩa An",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Đền liệt sĩ Tứ Kỳ@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Đền liệt sĩ Tứ Kỳ"
+    ],
+    "stop_name": "Đền liệt sĩ Tứ Kỳ",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Đập Đống@18:50",
+    "scheduled_time": "18:50:00",
+    "stop_aliases": [
+      "Đập Đống"
+    ],
+    "stop_name": "Đập Đống",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Cầu Xe@18:55",
+    "scheduled_time": "18:55:00",
+    "stop_aliases": [
+      "Cầu Xe"
+    ],
+    "stop_name": "Cầu Xe",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Ngã 3 Quảng Yên (Km11)@06:20",
+    "scheduled_time": "06:20:00",
+    "stop_aliases": [
+      "Ngã 3 Quảng Yên (Km11)",
+      "Quảng Yên"
+    ],
+    "stop_name": "Ngã 3 Quảng Yên (Km11)",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Bưu điện Nam Khê@06:25",
+    "scheduled_time": "06:25:00",
+    "stop_aliases": [
+      "Bưu điện Nam Khê"
+    ],
+    "stop_name": "Bưu điện Nam Khê",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Chân cầu vượt đường sắt@06:30",
+    "scheduled_time": "06:30:00",
+    "stop_aliases": [
+      "Chân cầu vượt đường sắt"
+    ],
+    "stop_name": "Chân cầu vượt đường sắt",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã ba đường 10@06:40",
+    "scheduled_time": "06:40:00",
+    "stop_aliases": [
+      "Ngã ba đường 10"
+    ],
+    "stop_name": "Ngã ba đường 10",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Chợ Phương Nam@06:45",
+    "scheduled_time": "06:45:00",
+    "stop_aliases": [
+      "Chợ Phương Nam"
+    ],
+    "stop_name": "Chợ Phương Nam",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Bến xe phía Bắc@07:00",
+    "scheduled_time": "07:00:00",
+    "stop_aliases": [
+      "Bến xe phía Bắc"
+    ],
+    "stop_name": "Bến xe phía Bắc",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Nhà hàng Phố Trịnh@07:05",
+    "scheduled_time": "07:05:00",
+    "stop_aliases": [
+      "Nhà hàng Phố Trịnh"
+    ],
+    "stop_name": "Nhà hàng Phố Trịnh",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Ngã tư Quán Toan@07:15",
+    "scheduled_time": "07:15:00",
+    "stop_aliases": [
+      "Ngã tư Quán Toan",
+      "Quán Toan"
+    ],
+    "stop_name": "Ngã tư Quán Toan",
+    "stop_order": 8
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 9
+  },
+  {
+    "raw_stop_text": "Ngã 3 Quảng Yên (Km11)@18:20",
+    "scheduled_time": "18:20:00",
+    "stop_aliases": [
+      "Ngã 3 Quảng Yên (Km11)",
+      "Quảng Yên"
+    ],
+    "stop_name": "Ngã 3 Quảng Yên (Km11)",
+    "stop_order": 1
+  },
+  {
+    "raw_stop_text": "Bưu điện Nam Khê@18:25",
+    "scheduled_time": "18:25:00",
+    "stop_aliases": [
+      "Bưu điện Nam Khê"
+    ],
+    "stop_name": "Bưu điện Nam Khê",
+    "stop_order": 2
+  },
+  {
+    "raw_stop_text": "Chân cầu vượt đường sắt@18:30",
+    "scheduled_time": "18:30:00",
+    "stop_aliases": [
+      "Chân cầu vượt đường sắt"
+    ],
+    "stop_name": "Chân cầu vượt đường sắt",
+    "stop_order": 3
+  },
+  {
+    "raw_stop_text": "Ngã ba đường 10@18:40",
+    "scheduled_time": "18:40:00",
+    "stop_aliases": [
+      "Ngã ba đường 10"
+    ],
+    "stop_name": "Ngã ba đường 10",
+    "stop_order": 4
+  },
+  {
+    "raw_stop_text": "Chợ Phương Nam@18:45",
+    "scheduled_time": "18:45:00",
+    "stop_aliases": [
+      "Chợ Phương Nam"
+    ],
+    "stop_name": "Chợ Phương Nam",
+    "stop_order": 5
+  },
+  {
+    "raw_stop_text": "Bến xe phía Bắc@19:00",
+    "scheduled_time": "19:00:00",
+    "stop_aliases": [
+      "Bến xe phía Bắc"
+    ],
+    "stop_name": "Bến xe phía Bắc",
+    "stop_order": 6
+  },
+  {
+    "raw_stop_text": "Nhà hàng Phố Trịnh@19:05",
+    "scheduled_time": "19:05:00",
+    "stop_aliases": [
+      "Nhà hàng Phố Trịnh"
+    ],
+    "stop_name": "Nhà hàng Phố Trịnh",
+    "stop_order": 7
+  },
+  {
+    "raw_stop_text": "Ngã tư Quán Toan@19:15",
+    "scheduled_time": "19:15:00",
+    "stop_aliases": [
+      "Ngã tư Quán Toan",
+      "Quán Toan"
+    ],
+    "stop_name": "Ngã tư Quán Toan",
+    "stop_order": 8
+  },
+  {
+    "raw_stop_text": "LGD",
+    "scheduled_time": null,
+    "stop_aliases": [
+      "LGD"
+    ],
+    "stop_name": "LGD",
+    "stop_order": 9
+  }
+]

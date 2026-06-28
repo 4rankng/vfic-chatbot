@@ -1,0 +1,947 @@
+[
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Chợ An Dương@07:05 -> Ngã tư Cơ Điện@07:10 -> Khu đô thị Pruksa@07:15 -> Cầu Rế@07:20 -> LGD"
+    },
+    "mode": "normal_inner_city",
+    "notes": null,
+    "route_group_key": "an duong",
+    "route_name": "An Dương",
+    "route_no": "6",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cty TNHH Hào Quang@06:35 -> BV An Lão 2@06:50 -> Trung tâm giống cây trồng@06:55 -> Ngã 5 Kiến An@07:00 -> Cống Đôi Kiến An@07:05 -> Quân đoàn 679@07:10 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "an lao",
+    "route_name": "An Lão",
+    "route_no": "9",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cty TNHH Hào Quang@18:35 -> BV An Lão 2@18:50 -> Trung tâm giống cây trồng@18:55 -> Ngã 5 Kiến An@19:00 -> Cống Đôi Kiến An@19:05 -> Quân đoàn 679@19:10 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "an lao",
+    "route_name": "An Lão",
+    "route_no": "6",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Bến xe Vĩnh Bảo@06:45 -> Cây xăng Vĩnh An@06:50 -> Trạm xăng Quý Cao@07:00 -> Chợ Hòa Bình@07:05 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "ben xe vinh bao",
+    "route_name": "Bến xe Vĩnh Bảo",
+    "route_no": "14",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Bến xe Vĩnh Bảo@18:45 -> Cây xăng Vĩnh An@18:50 -> Trạm xăng Quý Cao@19:00 -> Chợ Hòa Bình@19:05 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "ben xe vinh bao",
+    "route_name": "Bến xe Vĩnh Bảo",
+    "route_no": "11",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cát Bi Plaza@07:00 -> Cổng Cảng@07:05 -> LGD"
+    },
+    "mode": "normal_inner_city",
+    "notes": null,
+    "route_group_key": "cat bi plaza",
+    "route_name": "Cát Bi Plaza",
+    "route_no": "4",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "386 Văn Cao@06:50 -> Cầu vượt Lạch Tray@06:55 -> Siêu thị Hà Cường@07:00 -> Điện máy Trần Anh@07:10 -> LGD"
+    },
+    "mode": "merged_inner_city",
+    "notes": null,
+    "route_group_key": "cau rao",
+    "route_name": "Cầu Rào",
+    "route_no": "2",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "386 Văn Cao@18:50 -> Cầu vượt Lạch Tray@18:55 -> Siêu thị Hà Cường@19:00 -> Điện máy Trần Anh@19:10 -> LGD"
+    },
+    "mode": "merged_inner_city",
+    "notes": null,
+    "route_group_key": "cau rao",
+    "route_name": "Cầu Rào",
+    "route_no": "2",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "7"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "386 Văn Cao@06:55 -> LGD"
+    },
+    "mode": "normal_inner_city",
+    "notes": null,
+    "route_group_key": "cau rao",
+    "route_name": "Cầu Rào 1",
+    "route_no": "2",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Quảng Ninh",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cổng tỉnh@06:10 -> Quán Cát@06:15 -> Ngã 6@06:20 -> Cây xăng Hải Tân@06:25 -> Ngã 4 Đường mới@06:30 -> Đông Đô@06:35 -> Lan Chi Mart Kinh Môn@06:50 -> Cây xăng Hải Huệ@06:55 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "dong trieu",
+    "route_name": "Đông Triều",
+    "route_no": "25",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "5"
+  },
+  {
+    "area": "Quảng Ninh",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cổng tỉnh@18:10 -> Quán Cát@18:15 -> Ngã 6@18:20 -> Cây xăng Hải Tân@18:25 -> Ngã 4 Đường mới@18:30 -> Đông Đô@18:35 -> Lan Chi Mart Kinh Môn@18:50 -> Cây xăng Hải Huệ@18:55 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "dong trieu",
+    "route_name": "Đông Triều",
+    "route_no": "22",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "10"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "SVĐ Đồ Sơn@06:25 -> Chợ Đồn Riêng@06:35 -> Ngã 3 Ninh Hải@06:45 -> Ngã 3 Đa Phúc@06:55 -> Ngã 5 Kiến An@07:00 -> Cống Đôi Kiến An@07:05 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "do son",
+    "route_name": "Đồ Sơn",
+    "route_no": "10",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "SVĐ Đồ Sơn@18:25 -> Chợ Đồn Riêng@18:35 -> Ngã 3 Ninh Hải@18:45 -> Ngã 3 Đa Phúc@18:55 -> Ngã 5 Kiến An@19:00 -> Cống Đôi Kiến An@19:05 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "do son",
+    "route_name": "Đồ Sơn",
+    "route_no": "7",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "CV Bạch Đằng@06:30 -> ga Tiền Trung@06:40 -> ga Lai Khê@06:45 -> ga Phạm Xá@06:50 -> ga Phú Thái@07:00 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "hai duong",
+    "route_name": "Hải Dương",
+    "route_no": "21",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "CV Bạch Đằng@18:30 -> ga Tiền Trung@18:40 -> ga Lai Khê@18:45 -> ga Phạm Xá@18:50 -> ga Phú Thái@19:00 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "hai duong",
+    "route_name": "Hải Dương",
+    "route_no": "18",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Hà Nội",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Keangnam@05:25 -> Ngã 3 Duy Tân@05:35 -> Đầu đường Hoàng Quốc Việt@05:42 -> Chân cầu Cầu Nhật Tân@05:52 -> Ngã 4 Vạn Lộc (Đông Anh)@06:00 -> Cầu Chui Gia Lâm@06:10 -> Sài Đồng@06:15 -> Cầu Thanh Trì@06:20 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "ha noi",
+    "route_name": "Hà Nội",
+    "route_no": "18",
+    "route_variant": "1",
+    "shift": "admin",
+    "source_page": "6"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Trường Hoa Lan@06:35 -> Cổng trường Đảng@06:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "ha phuong",
+    "route_name": "Hà Phương",
+    "route_no": "15",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Trường Hoa Lan@18:35 -> Cổng trường Đảng@18:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "ha phuong",
+    "route_name": "Hà Phương",
+    "route_no": "12",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Hồ Sen@06:55 -> Chợ An Dương@07:05 -> Ngã tư Cơ Điện@07:10 -> Khu đô thị Pruksa@07:15 -> Cầu Rế@07:20 -> LGD"
+    },
+    "mode": "merged_inner_city",
+    "notes": null,
+    "route_group_key": "ho sen",
+    "route_name": "Hồ Sen",
+    "route_no": "3",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Hồ Sen@06:55 -> Bệnh viện Phụ sản@07:00 -> Điện máy Trần Anh@07:10 -> LGD"
+    },
+    "mode": "normal_inner_city",
+    "notes": null,
+    "route_group_key": "ho sen",
+    "route_name": "Hồ Sen",
+    "route_no": "3",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Hồ Sen@18:55 -> Chợ An Dương@19:05 -> Ngã tư Cơ Điện@19:10 -> Khu đô thị Pruksa@19:15 -> Cầu Rế@19:20 -> LGD"
+    },
+    "mode": "merged_inner_city",
+    "notes": null,
+    "route_group_key": "ho sen",
+    "route_name": "Hồ Sen",
+    "route_no": "3",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "7"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cây xăng Phú Sơn@06:00 -> Cây xăng Hải Trình@06:05 -> Vòng xuyến Đồng Tu@06:10 -> Ngã tư Đa Phú@06:15 -> Ngã tư Đông Đô@06:25 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Ghi chú: Không có xe về lượt hành chính.",
+    "route_group_key": "hung ha",
+    "route_name": "Hưng Hà",
+    "route_no": "20",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cây xăng Phú Sơn@18:00 -> Cây xăng Hải Trình@18:05 -> Vòng xuyến Đồng Tu@18:10 -> Ngã tư Đa Phú@18:20 -> Ngã tư Đông Đô@18:25 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "hung ha",
+    "route_name": "Hưng Hà",
+    "route_no": "17",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã tư Đại Hà@06:35 -> Ngã ba Thanh Sơn@06:40 -> Thị trấn Núi Đối@06:45 -> Cầu Đức Phong@06:50 -> Ngã 5 Kiến An@07:00 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "kien thuy",
+    "route_name": "Kiến Thụy",
+    "route_no": "11",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã tư Đại Hà@18:35 -> Ngã ba Thanh Sơn@18:40 -> Thị trấn Núi Đối@18:45 -> Cầu Đức Phong@18:50 -> Ngã 5 Kiến An@19:00 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "kien thuy",
+    "route_name": "Kiến Thụy",
+    "route_no": "8",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Ký túc xá bên ngoài",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "KTX CĐ Bắc Bộ@07:00 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Điều kiện: Dành riêng cho thực tập sinh.",
+    "route_group_key": "ktx cao dang bac bo",
+    "route_name": "KTX Cao Đẳng Bắc Bộ",
+    "route_no": "30",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "5"
+  },
+  {
+    "area": "Ký túc xá bên ngoài",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "KTX CĐ Bắc Bộ@19:00 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Điều kiện: Dành riêng cho thực tập sinh.",
+    "route_group_key": "ktx cao dang bac bo",
+    "route_name": "KTX Cao Đẳng Bắc Bộ",
+    "route_no": "27",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "10"
+  },
+  {
+    "area": "Ký túc xá bên ngoài",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "KTX Thủy Sản@06:55 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Điều kiện: Dành riêng cho thực tập sinh.",
+    "route_group_key": "ktx thuy san",
+    "route_name": "KTX Thủy Sản",
+    "route_no": "29",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "5"
+  },
+  {
+    "area": "Ký túc xá bên ngoài",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "KTX Thủy Sản@18:55 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Điều kiện: Dành riêng cho thực tập sinh.",
+    "route_group_key": "ktx thuy san",
+    "route_name": "KTX Thủy Sản",
+    "route_no": "26",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "10"
+  },
+  {
+    "area": "Ký túc xá bên ngoài",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "KTX VMU@07:05 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Điều kiện: Dành riêng cho thực tập sinh.",
+    "route_group_key": "ktx vmu",
+    "route_name": "KTX VMU",
+    "route_no": "28",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "5"
+  },
+  {
+    "area": "Ký túc xá bên ngoài",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "KTX VMU@19:05 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Điều kiện: Dành riêng cho thực tập sinh.",
+    "route_group_key": "ktx vmu",
+    "route_name": "KTX VMU",
+    "route_no": "25",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "10"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cầu vượt Lạch Tray@06:55 -> Siêu thị Hà Cường@07:00 -> LGD"
+    },
+    "mode": "normal_inner_city",
+    "notes": null,
+    "route_group_key": "lach tray",
+    "route_name": "Lạch Tray",
+    "route_no": "5",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "BVĐK Minh Đức@06:30 -> Cây xăng Minh Đức@06:35 -> Cổng chào làng Kinh Triều@06:40 -> Thị trấn Núi Đèo@06:50 -> Ngã 4 Quán Toan@07:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "minh duc",
+    "route_name": "Minh Đức",
+    "route_no": "12",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "BVĐK Minh Đức@18:30 -> Cây xăng Minh Đức@18:35 -> Cổng chào làng Kinh Triều@18:40 -> Thị trấn Núi Đèo@18:50 -> Ngã 4 Quán Toan@19:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "minh duc",
+    "route_name": "Minh Đức",
+    "route_no": "9",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cầu xóm 16@06:20 -> Cầu Trạng@06:30 -> Vinh Quang (Cầu Rùa)@06:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "nam am",
+    "route_name": "Nam Am",
+    "route_no": "13",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cầu xóm 16@18:20 -> Cầu Trạng@18:30 -> Vinh Quang (Cầu Rùa)@18:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "nam am",
+    "route_name": "Nam Am",
+    "route_no": "10",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã ba Đợi@06:25 -> Đại lý gạch Hồng Huyền@06:40 -> Bến xe Vĩnh Bảo@06:45 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Ghi chú: Không có xe về lượt hành chính.",
+    "route_group_key": "nga ba doi",
+    "route_name": "Ngã ba Đợi",
+    "route_no": "17",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã ba Đợi@18:25 -> Đại lý gạch Hồng Huyền@18:40 -> Bến xe Vĩnh Bảo@18:45 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "nga ba doi",
+    "route_name": "Ngã ba Đợi",
+    "route_no": "14",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã ba Hưng Thái@06:20 -> Cây xăng Hồng Phong@06:25 -> Cây xăng xã Hồng Thái@06:30 -> Cổng Đền Tranh@06:40 -> Chợ Gạch@06:45 -> Cổng làng An Thổ@06:50 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "ninh giang",
+    "route_name": "Ninh Giang",
+    "route_no": "23",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã ba Hưng Thái@18:20 -> Cây xăng Hồng Phong@18:25 -> Cây xăng xã Hồng Thái@18:30 -> Cổng Đền Tranh@18:40 -> Chợ Gạch@18:45 -> Cổng làng An Thổ@18:50 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "ninh giang",
+    "route_name": "Ninh Giang",
+    "route_no": "20",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Quảng Ninh",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cái Re@06:20 -> Chân cầu vượt đường sắt@06:30 -> Ngã ba đường 10@06:40 -> Chợ Phương Nam@06:45 -> Bến xe phía Bắc@07:00 -> Nhà hàng Phố Trịnh@07:05 -> Ngã tư Quán Toan@07:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": "Ghi chú: Không có xe về lượt hành chính.",
+    "route_group_key": "quang yen",
+    "route_name": "Quảng Yên",
+    "route_no": "27",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "5"
+  },
+  {
+    "area": "Quảng Ninh",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cái Re@18:20 -> Chân cầu vượt đường sắt@18:30 -> Ngã ba đường 10@18:40 -> Chợ Phương Nam@18:45 -> Bến xe phía Bắc@19:00 -> Nhà hàng Phố Trịnh@19:05 -> Ngã tư Quán Toan@19:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "quang yen",
+    "route_name": "Quảng Yên",
+    "route_no": "24",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "10"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cây xăng Hoàng Trọng@06:10 -> Cầu Mỹ Hà@06:15 -> Ngã ba Chợ Quỳnh Minh@06:25 -> Đền A Sào@06:30 -> Cây xăng An Ninh@06:35 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "quynh coi",
+    "route_name": "Quỳnh Côi",
+    "route_no": "18",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cây xăng Hoàng Trọng@18:10 -> Cầu Mỹ Hà@18:15 -> Ngã ba Chợ Quỳnh Minh@18:25 -> Đền A Sào@18:30 -> Cây xăng An Ninh@18:35 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "quynh coi",
+    "route_name": "Quỳnh Côi",
+    "route_no": "15",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "TD Plaza@06:55 -> Cát Bi Plaza@07:00 -> Cổng Cảng@07:05 -> Vinhomes@07:10 -> LGD"
+    },
+    "mode": "merged_inner_city",
+    "notes": null,
+    "route_group_key": "td plaza",
+    "route_name": "TD Plaza",
+    "route_no": "1",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "TD Plaza@06:55 -> Vinhomes@07:10 -> LGD"
+    },
+    "mode": "normal_inner_city",
+    "notes": null,
+    "route_group_key": "td plaza",
+    "route_name": "TD Plaza",
+    "route_no": "1",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "2"
+  },
+  {
+    "area": "Nội thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "TD Plaza@18:50 -> Cát Bi Plaza@18:55 -> Cổng Cảng@19:00 -> Vinhomes@19:10 -> LGD"
+    },
+    "mode": "merged_inner_city",
+    "notes": null,
+    "route_group_key": "td plaza",
+    "route_name": "TD Plaza",
+    "route_no": "1",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "7"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Vincom Thái Bình@06:00 -> Ngã 4 Gia Lễ@06:10 -> Ngã Ba Đợi@06:25 -> Đại lý gạch Hồng Huyền@06:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "thai binh",
+    "route_name": "Thái Bình",
+    "route_no": "16",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Vincom Thái Bình@18:00 -> Ngã 4 Gia Lễ@18:10 -> Ngã Ba Đợi@18:25 -> Đại lý gạch Hồng Huyền@18:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "thai binh",
+    "route_name": "Thái Bình",
+    "route_no": "13",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Chợ Tây@05:55 -> Chợ Lục@06:00 -> Cây xăng Thái Thượng@06:05 -> Bệnh viện đa khoa huyện Thái Thụy@06:10 -> Cầu An Bái@06:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "thai thuy",
+    "route_name": "Thái Thụy",
+    "route_no": "19",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Thái Bình",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Chợ Tây@17:55 -> Chợ Lục@18:00 -> Cây xăng Thái Thượng@18:05 -> Bệnh viện đa khoa huyện Thái Thụy@18:10 -> Cầu An Bái@18:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "thai thuy",
+    "route_name": "Thái Thụy",
+    "route_no": "16",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cty TNHH Hải Hà@06:30 -> THPT Thanh Hà@06:35 -> Bãi xe chợ Lại@06:40 -> Ngã tư Hợp Đức@06:45 -> THPT Hà Đông@06:50 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "thanh ha",
+    "route_name": "Thanh Hà",
+    "route_no": "22",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cty TNHH Hải Hà@18:30 -> THPT Thanh Hà@18:35 -> Bãi xe chợ Lại@18:40 -> Ngã tư Hợp Đức@18:45 -> THPT Hà Đông@18:50 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "thanh ha",
+    "route_name": "Thanh Hà",
+    "route_no": "19",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cầu Đầm@06:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tien lang cau dam",
+    "route_name": "Tiên Lãng - Cầu Đầm",
+    "route_no": "7",
+    "route_variant": "1 (Cầu Đầm origin)",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cầu Đầm@18:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tien lang cau dam",
+    "route_name": "Tiên Lãng - Cầu Đầm",
+    "route_no": "4",
+    "route_variant": "1 (Cầu Đầm origin)",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Quyết Tiến@06:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tien lang cau dam",
+    "route_name": "Tiên Lãng - Cầu Đầm",
+    "route_no": "7",
+    "route_variant": "2 (Quyết Tiến origin)",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Quyết Tiến@18:40 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tien lang cau dam",
+    "route_name": "Tiên Lãng - Cầu Đầm",
+    "route_no": "4",
+    "route_variant": "2 (Quyết Tiến origin)",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "THPT Hùng Thắng@06:30 -> Quán Cháy@06:35 -> THPT Toàn Thắng@06:40 -> Cầu Đen@06:50 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tien lang hung thang",
+    "route_name": "Tiên Lãng - Hùng Thắng",
+    "route_no": "8",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "3"
+  },
+  {
+    "area": "Ngoại thành Hải Phòng",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "THPT Hùng Thắng@18:30 -> Quán Cháy@18:35 -> THPT Toàn Thắng@18:40 -> Cầu Đen@18:50 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tien lang hung thang",
+    "route_name": "Tiên Lãng - Hùng Thắng",
+    "route_no": "5",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "8"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cầu Di Linh@06:20 -> Hội trường xã Hồng Đức@06:25 -> Trạm Y tế xã Nghĩa An@06:35 -> Đền liệt sĩ Tứ Kỳ@06:40 -> Đập Đống@06:50 -> Cầu Xe@06:55 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tu ky",
+    "route_name": "Tứ Kỳ",
+    "route_no": "24",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "4"
+  },
+  {
+    "area": "Hải Dương",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Cầu Di Linh@18:20 -> Hội trường xã Hồng Đức@18:25 -> Trạm Y tế xã Nghĩa An@18:35 -> Đền liệt sĩ Tứ Kỳ@18:40 -> Đập Đống@18:50 -> Cầu Xe@18:55 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "tu ky",
+    "route_name": "Tứ Kỳ",
+    "route_no": "21",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "9"
+  },
+  {
+    "area": "Quảng Ninh",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã 3 Quảng Yên (Km11)@06:20 -> Bưu điện Nam Khê@06:25 -> Chân cầu vượt đường sắt@06:30 -> Ngã ba đường 10@06:40 -> Chợ Phương Nam@06:45 -> Bến xe phía Bắc@07:00 -> Nhà hàng Phố Trịnh@07:05 -> Ngã tư Quán Toan@07:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "uong bi",
+    "route_name": "Uông Bí",
+    "route_no": "26",
+    "route_variant": "1",
+    "shift": "day",
+    "source_page": "5"
+  },
+  {
+    "area": "Quảng Ninh",
+    "direction": "outbound",
+    "metadata": {
+      "route_text": "Ngã 3 Quảng Yên (Km11)@18:20 -> Bưu điện Nam Khê@18:25 -> Chân cầu vượt đường sắt@18:30 -> Ngã ba đường 10@18:40 -> Chợ Phương Nam@18:45 -> Bến xe phía Bắc@19:00 -> Nhà hàng Phố Trịnh@19:05 -> Ngã tư Quán Toan@19:15 -> LGD"
+    },
+    "mode": "standard",
+    "notes": null,
+    "route_group_key": "uong bi",
+    "route_name": "Uông Bí",
+    "route_no": "23",
+    "route_variant": "1",
+    "shift": "night",
+    "source_page": "10"
+  }
+]

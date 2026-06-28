@@ -1,0 +1,7042 @@
+[
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an duong",
+    "route_group_name": "An Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "an lao",
+    "route_group_name": "An Lão",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ben xe vinh bao",
+    "route_group_name": "Bến xe Vĩnh Bảo",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cat bi plaza",
+    "route_group_name": "Cát Bi Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "cau rao",
+    "route_group_name": "Cầu Rào",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "dong trieu",
+    "route_group_name": "Đông Triều",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "do son",
+    "route_group_name": "Đồ Sơn",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hai duong",
+    "route_group_name": "Hải Dương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha noi",
+    "route_group_name": "Hà Nội",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ha phuong",
+    "route_group_name": "Hà Phương",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ho sen",
+    "route_group_name": "Hồ Sen",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "hung ha",
+    "route_group_name": "Hưng Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "kien thuy",
+    "route_group_name": "Kiến Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx cao dang bac bo",
+    "route_group_name": "KTX CĐ Bắc Bộ",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx thuy san",
+    "route_group_name": "KTX Thủy Sản",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ktx vmu",
+    "route_group_name": "KTX VMU",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "lach tray",
+    "route_group_name": "Lạch Tray",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "minh duc",
+    "route_group_name": "Minh Đức",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am",
+    "route_group_name": "Nam Am",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nam am b16",
+    "route_group_name": "Nam Am - B16",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "nga ba doi",
+    "route_group_name": "Ngã Ba Đợi",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "ninh giang 45s",
+    "route_group_name": "Ninh Giang (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quang yen",
+    "route_group_name": "Quảng Yên",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "quynh coi an dong",
+    "route_group_name": "Quỳnh Côi - An Đồng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "M",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "td plaza",
+    "route_group_name": "TD Plaza",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai binh",
+    "route_group_name": "Thái Bình",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thai thuy",
+    "route_group_name": "Thái Thụy",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "thanh ha",
+    "route_group_name": "Thanh Hà",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang cau dam",
+    "route_group_name": "TL Cầu Đầm",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tien lang hung thang",
+    "route_group_name": "TL Hùng Thắng",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "tu ky 45s",
+    "route_group_name": "Tứ Kỳ (45s)",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "fri",
+    "day_label": "Thứ Sáu",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "mon_thu",
+    "day_label": "Thứ Hai đến Thứ Năm",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sat",
+    "day_label": "Thứ Bảy",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_night"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_admin_and_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "outbound_night"
+  },
+  {
+    "availability_code": "X",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_admin"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_day"
+  },
+  {
+    "availability_code": "A",
+    "day_group": "sun",
+    "day_label": "Chủ Nhật",
+    "metadata": {
+      "parsed_from": "weekly_matrix"
+    },
+    "route_group_key": "uong bi",
+    "route_group_name": "Uông Bí",
+    "service_type": "return_night"
+  }
+]
