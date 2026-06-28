@@ -15,8 +15,13 @@ COMP = "bbbbbbbb-0000-0000-0000-000000000001"
 
 
 async def _seed_company(db_session):
-    await db_session.execute(text("INSERT INTO projects(id,slug,name) VALUES (:i,'vfic','VFIC') ON CONFLICT DO NOTHING"), {"i": PROJ})
-    await db_session.execute(text("INSERT INTO companies(id,project_id,name,aliases) VALUES (:i,:p,'LG Display',ARRAY[]::text[]) ON CONFLICT DO NOTHING"), {"i": COMP, "p": PROJ})
+    # `projects.slug` is UNIQUE and the canonical 'vfic' project is also created by the
+    # app seeder with an auto-generated id, so a fixed-id seed with ON CONFLICT DO NOTHING
+    # can silently no-op on the slug conflict — leaving the companies FK dangling and the
+    # test flaking in-suite. Resolve the real project id by slug instead.
+    await db_session.execute(text("INSERT INTO projects(id,slug,name) VALUES (:i,'vfic','VFIC') ON CONFLICT (slug) DO NOTHING"), {"i": PROJ})
+    proj_id = (await db_session.execute(text("SELECT id FROM projects WHERE slug='vfic'"))).scalar()
+    await db_session.execute(text("INSERT INTO companies(id,project_id,name,aliases) VALUES (:i,:p,'LG Display',ARRAY[]::text[]) ON CONFLICT (id) DO UPDATE SET project_id=EXCLUDED.project_id"), {"i": COMP, "p": proj_id})
     await db_session.commit()
 
 
