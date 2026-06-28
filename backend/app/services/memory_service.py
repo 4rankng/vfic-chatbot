@@ -12,11 +12,11 @@ import re
 import unicodedata
 from typing import Awaitable, Callable
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.vector import vec_literal
 from app.prompts.lead_memory import MEMORY_EXTRACT_PROMPT
+from app.services.memory_repository import MemoryRepository
 
 Extractor = Callable[[str, str], Awaitable[str]]
 # Batch embedder: many texts -> many vectors in one call (avoids the per-fact N+1).
@@ -93,13 +93,8 @@ class MemoryService:
 
     @staticmethod
     async def save(db: AsyncSession, embed_batch: BatchEmbedder, chat_id: str, facts: list[str]) -> int:
-        rows = (
-            await db.execute(
-                text("SELECT metadata->>'canonical_key' AS ck FROM memories WHERE metadata->>'chat_id' = :c"),
-                {"c": chat_id},
-            )
-        ).all()
-        existing = {r.ck for r in rows if r.ck}
+        repo = MemoryRepository(db)
+        existing = await repo.fetch_canonical_keys(chat_id)
 
         # Dedup first (intra-batch + vs stored), then ONE batched embed + ONE
         # executemany INSERT. Previously this looped embedder()+INSERT per fact (N+N).
@@ -114,25 +109,17 @@ class MemoryService:
             return 0
 
         embeddings = await embed_batch(new_facts)
-        rows_to_write = [
-            {
-                "c": fact,
-                "m": json.dumps(
-                    {"chat_id": chat_id, "canonical_key": canonical_key(fact), "zalo_id": chat_id}
-                ),
-                "e": vec_literal(emb),
-            }
+        rows = [
+            (
+                fact,
+                json.dumps({"chat_id": chat_id, "canonical_key": canonical_key(fact), "zalo_id": chat_id}),
+                vec_literal(emb),
+            )
             for fact, emb in zip(new_facts, embeddings)
         ]
-        await db.execute(
-            text(
-                "INSERT INTO memories(content, metadata, embedding) "
-                "VALUES (:c, CAST(:m AS jsonb), CAST(:e AS vector))"
-            ),
-            rows_to_write,
-        )
+        await repo.insert_memories(rows)
         await db.commit()
-        return len(rows_to_write)
+        return len(rows)
 
     @staticmethod
     async def persist(
