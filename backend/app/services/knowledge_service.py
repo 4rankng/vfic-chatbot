@@ -14,13 +14,11 @@ sources by archiving/replacing them rather than approving a review queue.
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 from typing import Awaitable, Callable
 
 from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.core.vector import vec_literal
 from app.models.company import Project
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
@@ -28,6 +26,8 @@ from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
 from app.services.knowledge import LLMJson, extract_text
+from app.services.knowledge.repository import KnowledgeChunkRepo, rebuild_bus_timetable
+from app.services.storage import persist_original_upload
 
 Embedder = Callable[[str], Awaitable[list[float]]]
 
@@ -40,39 +40,7 @@ class KnowledgeService:
         return await self.db.get(KnowledgeDocument, doc_id)
 
     async def list_chunks(self, doc_id: uuid.UUID, *, limit: int = 50) -> list[dict]:
-        rows = (
-            await self.db.execute(
-                text(
-                    "SELECT id, chunk_index, content, source_quote, summary, questions, "
-                    "category, entities, confidence, metadata, created_at "
-                    "FROM knowledge_chunks "
-                    "WHERE document_id = :did "
-                    "ORDER BY chunk_index ASC "
-                    "LIMIT :limit"
-                ),
-                {"did": str(doc_id), "limit": limit},
-            )
-        ).mappings()
-        chunks: list[dict] = []
-        for row in rows:
-            metadata = row.get("metadata") or {}
-            chunks.append(
-                {
-                    "id": row["id"],
-                    "chunk_index": row["chunk_index"],
-                    "content": row["content"],
-                    "source_quote": row["source_quote"],
-                    "summary": row["summary"],
-                    "questions": row["questions"] or [],
-                    "category": row["category"],
-                    "entities": row["entities"] or {},
-                    "confidence": row["confidence"],
-                    "is_inference": bool(metadata.get("is_inference", False)),
-                    "source_anchor": metadata.get("source_anchor"),
-                    "created_at": row["created_at"],
-                }
-            )
-        return chunks
+        return await KnowledgeChunkRepo(self.db).list_for_doc(doc_id, limit=limit)
 
     async def upload(self, file_name: str, content: str, drive_file_id: str | None = None, project_id: uuid.UUID | None = None) -> KnowledgeDocument:
         doc = KnowledgeDocument(
@@ -94,7 +62,7 @@ class KnowledgeService:
     ) -> KnowledgeDocument:
         """Multipart upload: parse the file to text, persist the original, create doc."""
         raw_text = extract_text(file_name, content_type, data)
-        storage_path = _persist_original(file_name, data)
+        storage_path = persist_original_upload(file_name, data)
         doc = KnowledgeDocument(
             file_name=file_name,
             source="upload",
@@ -126,26 +94,17 @@ class KnowledgeService:
         # --- mechanical fallback: embed 1 chunk-per-doc (whole content) ---
         doc.status = KnowledgeStatus.PROCESSING
         doc.stage = "PROCESSING"
-        await self.db.execute(
-            text("DELETE FROM knowledge_chunks WHERE document_id = :did"), {"did": str(doc.id)}
-        )
         content = doc.raw_text or ""
         emb = vec_literal(await embedder(content))
-        await self.db.execute(
-            text(
-                "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata) "
-                "VALUES (:did, 0, :content, CAST(:emb AS vector), CAST('{}' AS jsonb))"
-            ),
-            {"did": str(doc.id), "content": content, "emb": emb},
-        )
+        await KnowledgeChunkRepo(self.db).replace_with_single_chunk(doc, content, emb)
         doc.status = KnowledgeStatus.PUBLISHED
         doc.stage = "PUBLISHED"
         await self.db.commit()
-        # rebuild the structured bus graph from the `documents` VIEW (verbatim SQL fn)
+        # rebuild the structured bus graph from the `documents` VIEW (best-effort;
+        # never block ingest). The repo helper owns the SQL + commit.
         try:
-            await self.db.execute(text("SELECT rebuild_bus_timetable_from_documents()"))
-            await self.db.commit()
-        except Exception:  # noqa: BLE001 — rebuild is best-effort; never block ingest
+            await rebuild_bus_timetable(self.db)
+        except Exception:  # noqa: BLE001
             pass
         await self.db.refresh(doc)
         return doc
@@ -182,29 +141,7 @@ class KnowledgeService:
 
     async def search_test(self, embedder: Embedder, query: str, top_k: int = 10, *, project_id: uuid.UUID | None = None) -> list[dict]:
         emb = vec_literal(await embedder(query))
-        # Branch in Python rather than `(:pid IS NULL OR ...)` — asyncpg cannot infer
-        # the type of a NULL placeholder used only in an IS-NULL expression.
-        if project_id is not None:
-            sql = (
-                "SELECT c.content, 1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
-                "FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id "
-                "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
-                "AND c.embedding IS NOT NULL "
-                "AND d.project_id = CAST(:pid AS uuid) "
-                "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
-            )
-            params: dict = {"emb": emb, "k": top_k, "pid": str(project_id)}
-        else:
-            sql = (
-                "SELECT c.content, 1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
-                "FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id "
-                "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
-                "AND c.embedding IS NOT NULL "
-                "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
-            )
-            params = {"emb": emb, "k": top_k}
-        rows = (await self.db.execute(text(sql), params)).all()
-        return [{"content": r.content, "similarity": float(r.similarity)} for r in rows]
+        return await KnowledgeChunkRepo(self.db).search_similar(emb, top_k, project_id=project_id)
 
     async def list(self, *, status_: KnowledgeStatus | None = None, project_id: uuid.UUID | None = None) -> list[KnowledgeDocument]:
         q = select(KnowledgeDocument)
@@ -225,16 +162,3 @@ class KnowledgeService:
         )
         await self.db.commit()
         return res.rowcount or 0
-
-
-def _persist_original(file_name: str, data: bytes) -> str | None:
-    """Best-effort: write the original upload to the KB volume; return its path."""
-    try:
-        base = Path(get_settings().kb_storage_path)
-        (base).mkdir(parents=True, exist_ok=True)
-        safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in file_name)[:120] or "upload"
-        path = base / f"{uuid.uuid4().hex}_{safe}"
-        path.write_bytes(data)
-        return str(path)
-    except Exception:  # noqa: BLE001 — storage is best-effort; raw_text is the source of truth
-        return None

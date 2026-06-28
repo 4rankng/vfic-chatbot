@@ -65,6 +65,101 @@ class KnowledgeChunkRepo:
             )
         await self.db.commit()
 
+    async def list_for_doc(self, doc_id: uuid.UUID, *, limit: int = 50) -> list[dict]:
+        """A document's chunks (catalog order) as ready-to-serialize dicts.
+
+        Reshapes the LLM-digest payload + ``metadata`` flags (``is_inference`` /
+        ``source_anchor``) the admin chunks endpoint validates against.
+        """
+        rows = (
+            await self.db.execute(
+                text(
+                    "SELECT id, chunk_index, content, source_quote, summary, questions, "
+                    "category, entities, confidence, metadata, created_at "
+                    "FROM knowledge_chunks "
+                    "WHERE document_id = :did "
+                    "ORDER BY chunk_index ASC "
+                    "LIMIT :limit"
+                ),
+                {"did": str(doc_id), "limit": limit},
+            )
+        ).mappings()
+        chunks: list[dict] = []
+        for row in rows:
+            metadata = row.get("metadata") or {}
+            chunks.append(
+                {
+                    "id": row["id"],
+                    "chunk_index": row["chunk_index"],
+                    "content": row["content"],
+                    "source_quote": row["source_quote"],
+                    "summary": row["summary"],
+                    "questions": row["questions"] or [],
+                    "category": row["category"],
+                    "entities": row["entities"] or {},
+                    "confidence": row["confidence"],
+                    "is_inference": bool(metadata.get("is_inference", False)),
+                    "source_anchor": metadata.get("source_anchor"),
+                    "created_at": row["created_at"],
+                }
+            )
+        return chunks
+
+    async def replace_with_single_chunk(self, doc, content: str, emb: str) -> None:
+        """Mechanical fallback: drop the doc's chunks and insert one whole-content chunk.
+
+        Does not commit — the caller (the mechanical ingest path) commits once after
+        also flipping the document status. ``emb`` is a pgvector literal.
+        """
+        await self.db.execute(
+            text("DELETE FROM knowledge_chunks WHERE document_id = :did"), {"did": str(doc.id)}
+        )
+        await self.db.execute(
+            text(
+                "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata) "
+                "VALUES (:did, 0, :content, CAST(:emb AS vector), CAST('{}' AS jsonb))"
+            ),
+            {"did": str(doc.id), "content": content, "emb": emb},
+        )
+
+    async def search_similar(
+        self, emb: str, top_k: int, project_id: uuid.UUID | None = None
+    ) -> list[dict]:
+        """Top-k usable chunks by cosine similarity (the admin search-test).
+
+        Branches in Python on ``project_id`` rather than ``(:pid IS NULL OR ...)`` —
+        asyncpg cannot infer the type of a NULL placeholder used only in an IS-NULL
+        expression. ``emb`` is a pgvector literal.
+        """
+        if project_id is not None:
+            rows = (
+                await self.db.execute(
+                    text(
+                        "SELECT c.content, 1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
+                        "FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id "
+                        "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
+                        "AND c.embedding IS NOT NULL "
+                        "AND d.project_id = CAST(:pid AS uuid) "
+                        "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
+                    ),
+                    {"emb": emb, "k": top_k, "pid": str(project_id)},
+                )
+            ).all()
+        else:
+            rows = (
+                await self.db.execute(
+                    text(
+                        "SELECT c.content, 1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
+                        "FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id "
+                        "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
+                        "AND c.embedding IS NOT NULL "
+                        "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
+                    ),
+                    {"emb": emb, "k": top_k},
+                )
+            ).all()
+        return [{"content": r.content, "similarity": float(r.similarity)} for r in rows]
+
 
 class JobFeatureValueRepo:
     """Read/write the ``job_feature_values`` + ``worker_feature_catalog`` tables."""
