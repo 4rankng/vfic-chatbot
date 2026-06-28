@@ -6,7 +6,7 @@ from app.api.dependencies import get_current_user
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.job import DashboardMetrics
-from app.services.dashboard_service import DashboardService
+from app.services.dashboard import DashboardService
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

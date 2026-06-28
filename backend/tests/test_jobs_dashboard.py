@@ -4,7 +4,7 @@ import uuid
 import pytest
 from sqlalchemy import text
 
-from app.services.dashboard_service import DashboardService
+from app.services.dashboard import DashboardService
 from app.services.job_service import JobService
 from tests.conftest import ADMIN_EMAIL, PASSWORD, RECRUITER_EMAIL
 
