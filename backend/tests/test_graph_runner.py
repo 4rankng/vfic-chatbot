@@ -2,9 +2,12 @@
 suppression, and off-topic refusal via the safety->retry path. (Acceptance #4/#5
 live parity is exercised through graph/factories.py + clients.py with real MiniMax keys.)"""
 
+import asyncio
+
 import pytest
 from sqlalchemy import select, text
 
+import app.graph.runner as runner
 from app.graph.runner import BotRunState, GraphDeps, run_turn
 from app.models.conversation import BotRun, BotRunOutcome, Conversation
 from app.services.zalo_bot_service import SendResult
@@ -34,13 +37,20 @@ class FakeSafety:
 class FakeZalo:
     def __init__(self):
         self.sends = []
+        self.typing_chat_ids = []
 
     async def send(self, chat_id, body):
         self.sends.append(body)
         return SendResult(ok=True, msg_id="z-mock")
 
     async def typing(self, chat_id):
-        pass
+        self.typing_chat_ids.append(chat_id)
+
+
+class SlowAgent(FakeAgent):
+    async def agent(self, user_text, *, system, db, embedder):
+        await asyncio.sleep(0.035)
+        return await super().agent(user_text, system=system, db=db, embedder=embedder)
 
 
 async def _make_conv(db, zalo="bot-1") -> Conversation:
@@ -68,6 +78,28 @@ async def test_runner_sends_clean_reply(db_session):
     assert len(deps.zalo.sends) == 1
     run = (await db_session.scalars(select(BotRun).where(BotRun.conversation_id == conv.id))).first()
     assert run.outcome == BotRunOutcome.SENT
+
+
+async def test_runner_refreshes_zalo_typing_while_processing(db_session, monkeypatch):
+    monkeypatch.setattr(runner, "ZALO_TYPING_HEARTBEAT_SECONDS", 0.01)
+    conv = await _make_conv(db_session, "bot-typing")
+    deps = GraphDeps(
+        db=db_session,
+        agent=SlowAgent(["Bạn đang muốn tìm việc ở khu vực nào?"]),
+        safety=FakeSafety(""),
+        embedder=None,
+        zalo=FakeZalo(),
+    )
+
+    out = await run_turn(
+        BotRunState(conversation_id=str(conv.id), version_at_start=conv.version, user_text="tìm việc"),
+        deps,
+    )
+
+    assert out["outcome"] == "sent"
+    assert deps.zalo.sends == ["Bạn đang muốn tìm việc ở khu vực nào?"]
+    assert len(deps.zalo.typing_chat_ids) >= 2
+    assert set(deps.zalo.typing_chat_ids) == {"bot-typing"}
 
 
 async def test_runner_suppresses_after_takeover(db_session):

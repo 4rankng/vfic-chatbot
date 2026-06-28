@@ -91,13 +91,16 @@ class Settings(BaseSettings):
 
     @property
     def active_llm_provider(self) -> str:
-        if self.minimax_enable and self.openrouter_enable:
-            raise RuntimeError("Enable only one LLM provider: set either MINIMAX_ENABLE or OPENROUTER_ENABLE")
-        if self.openrouter_enable:
+        """Primary LLM provider. MiniMax is always primary when enabled; OpenRouter acts as fallback."""
+        if self.openrouter_enable and not self.minimax_enable:
             return "OpenRouter"
         if self.minimax_enable:
             return "MiniMax"
         raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
+
+    @property
+    def llm_fallback_enabled(self) -> bool:
+        return self.minimax_enable and self.openrouter_enable
 
     @property
     def active_llm_request_timeout(self) -> int:

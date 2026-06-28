@@ -19,8 +19,10 @@ for backward-compatible imports.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
+from contextlib import suppress
 
 from app.graph.prompts import ERROR_REPLY
 from app.graph.safety import (
@@ -30,20 +32,105 @@ from app.graph.safety import (
     retry_exhausted_fallback,
 )
 from app.graph.types import BotRunState, GraphDeps, _now
+from app.models.conversation import DeliveryStatus, Message, MessageSender
 from app.services.conversation import ConversationService
 
 logger = logging.getLogger(__name__)
+ZALO_TYPING_HEARTBEAT_SECONDS = 4.0
+RECENT_HISTORY_LIMIT = 16
 
 
-async def _agent_turn(state: BotRunState, deps: GraphDeps, user_text: str) -> str:
+def _history_speaker(msg: Message) -> str:
+    if msg.sender == MessageSender.WORKER:
+        return "Ứng viên"
+    if msg.sender == MessageSender.BOT:
+        return "Bot"
+    if msg.sender == MessageSender.RECRUITER:
+        return "Nhân viên"
+    return "Hệ thống"
+
+
+def _build_agent_user_text(
+    *,
+    chat_id: str,
+    current_user_text: str,
+    recent_messages: list[Message],
+) -> str:
+    """Give the agent the actual chat state, not just the latest short reply.
+
+    Zalo follow-ups are often terse ("Lê Chân", "ca đêm", "có xe không?").
+    Without the nearby transcript the model treats those as new conversations and
+    falls back to the greeting flow. The webhook already persists inbound before
+    enqueueing the turn, so this wrapper supplies the preceding context while
+    keeping the current user message explicit.
+    """
+    history = [
+        m
+        for m in recent_messages
+        if (m.body or "").strip() and m.delivery_status != DeliveryStatus.SUPPRESSED
+    ]
+    if (
+        history
+        and history[-1].sender == MessageSender.WORKER
+        and history[-1].body.strip() == current_user_text.strip()
+    ):
+        history = history[:-1]
+
+    if history:
+        history_lines = [
+            f"- {_history_speaker(m)}: {m.body.strip()}" for m in history
+        ]
+    else:
+        history_lines = ["- (chưa có tin nhắn trước đó)"]
+
+    return "\n".join(
+        [
+            f"CHAT_ID để tra cứu memory khi cần: {chat_id}",
+            "",
+            "LỊCH SỬ GẦN ĐÂY (cũ -> mới):",
+            *history_lines,
+            "",
+            "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:",
+            current_user_text,
+            "",
+            "Hãy trả lời tin nhắn hiện tại dựa trên lịch sử trên. "
+            "Nếu đây là câu trả lời ngắn cho câu hỏi trước đó, tiếp tục đúng mạch hội thoại; "
+            "không chào lại hoặc hỏi lại thông tin đã có.",
+        ]
+    )
+
+
+async def _agent_turn(
+    state: BotRunState,
+    deps: GraphDeps,
+    user_text: str,
+    *,
+    chat_id: str,
+    recent_messages: list[Message],
+) -> str:
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
     from app.graph.context import build_system_prompt
 
     system = await build_system_prompt(deps.db)
-    return await deps.agent.agent(
-        user_text, system=system, db=deps.db, embedder=deps.embedder
+    contextual_user_text = _build_agent_user_text(
+        chat_id=chat_id,
+        current_user_text=user_text,
+        recent_messages=recent_messages,
     )
+    return await deps.agent.agent(
+        contextual_user_text, system=system, db=deps.db, embedder=deps.embedder
+    )
+
+
+async def _typing_heartbeat(deps: GraphDeps, chat_id: str) -> None:
+    """Keep Zalo's transient typing status visible while a turn is processing."""
+    while True:
+        try:
+            await deps.zalo.typing(chat_id)
+        except Exception:  # noqa: BLE001
+            pass
+        await asyncio.sleep(ZALO_TYPING_HEARTBEAT_SECONDS)
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
@@ -52,75 +139,88 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
     conv = await svc.get(uuid.UUID(state.conversation_id))
     if conv is None:
         return {"outcome": "error", "reason": "conversation_not_found"}
+    recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
 
-    # typing (best-effort; never blocks the run)
-    try:
-        await deps.zalo.typing(conv.zalo_chat_id)
-    except Exception:  # noqa: BLE001
-        pass
-
+    typing_task = asyncio.create_task(_typing_heartbeat(deps, conv.zalo_chat_id))
     started = _now()
 
-    # --- agent ---
     try:
-        raw = await _agent_turn(state, deps, state.user_text)
-    except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
-        logger.warning("agent error: %s", exc)
+        # --- agent ---
+        try:
+            raw = await _agent_turn(
+                state,
+                deps,
+                state.user_text,
+                chat_id=conv.zalo_chat_id,
+                recent_messages=recent_messages,
+            )
+        except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
+            logger.warning("agent error: %s", exc)
+            owned = await svc.recheck_ownership(conv, state.version_at_start)
+            if owned:
+                await deps.zalo.send(conv.zalo_chat_id, ERROR_REPLY)
+            await svc.record_bot_outcome(
+                conv, version_at_start=state.version_at_start, reply=ERROR_REPLY,
+                started_at=started, sent=owned,
+            )
+            return {"outcome": "error", "reply": ERROR_REPLY}
+
+        state.reply = raw
+
+        # --- fast safety filter ---
+        fs = fast_safety_filter(raw)
+        candidate = fs["output"]
+
+        # --- llm safety check (only when fast filter flagged) ---
+        if fs["needs_llm_safety"]:
+            verdict = parse_verdict(await deps.safety.safety(candidate))
+            if verdict["safe_to_send"]:
+                candidate = verdict["final_answer"] or candidate
+            elif state.attempt < 1:
+                state.attempt += 1
+                retry_prompt = build_retry_prompt(state.user_text, candidate, verdict["issue_type"])
+                raw2 = await _agent_turn(
+                    state,
+                    deps,
+                    retry_prompt,
+                    chat_id=conv.zalo_chat_id,
+                    recent_messages=recent_messages,
+                )
+                state.reply = raw2
+                candidate = fast_safety_filter(raw2)["output"]
+            else:
+                candidate = retry_exhausted_fallback(state.user_text)
+
+        # --- pre_send_guard: re-check ownership (catches takeover during generation) ---
+        # svc.get() would return the identity-map instance (expire_on_commit=False) and
+        # hide a concurrent takeover; refresh() forces a fresh SELECT so the version/mode
+        # check below reads committed DB state, not the in-memory snapshot from turn start.
+        await svc.db.refresh(conv)
         owned = await svc.recheck_ownership(conv, state.version_at_start)
         if owned:
-            await deps.zalo.send(conv.zalo_chat_id, ERROR_REPLY)
-        await svc.record_bot_outcome(
-            conv, version_at_start=state.version_at_start, reply=ERROR_REPLY,
-            started_at=started, sent=owned,
-        )
-        return {"outcome": "error", "reply": ERROR_REPLY}
+            await deps.zalo.send(conv.zalo_chat_id, candidate)
+            await svc.record_bot_outcome(
+                conv, version_at_start=state.version_at_start, reply=candidate,
+                started_at=started, sent=True,
+            )
+            # Lead/memory extraction runs only after a real reply was sent (mirrors the
+            # legacy "Should Persist?" gate, which never extracted on greetings/suppressed).
+            if deps.persist is not None:
+                deps.persist(
+                    {
+                        "chat_id": conv.zalo_chat_id,
+                        "user_text": state.user_text,
+                        "bot_output": candidate,
+                    }
+                )
+            return {"outcome": "sent", "reply": candidate}
 
-    state.reply = raw
-
-    # --- fast safety filter ---
-    fs = fast_safety_filter(raw)
-    candidate = fs["output"]
-
-    # --- llm safety check (only when fast filter flagged) ---
-    if fs["needs_llm_safety"]:
-        verdict = parse_verdict(await deps.safety.safety(candidate))
-        if verdict["safe_to_send"]:
-            candidate = verdict["final_answer"] or candidate
-        elif state.attempt < 1:
-            state.attempt += 1
-            retry_prompt = build_retry_prompt(state.user_text, candidate, verdict["issue_type"])
-            raw2 = await _agent_turn(state, deps, retry_prompt)
-            state.reply = raw2
-            candidate = fast_safety_filter(raw2)["output"]
-        else:
-            candidate = retry_exhausted_fallback(state.user_text)
-
-    # --- pre_send_guard: re-check ownership (catches takeover during generation) ---
-    # svc.get() would return the identity-map instance (expire_on_commit=False) and
-    # hide a concurrent takeover; refresh() forces a fresh SELECT so the version/mode
-    # check below reads committed DB state, not the in-memory snapshot from turn start.
-    await svc.db.refresh(conv)
-    owned = await svc.recheck_ownership(conv, state.version_at_start)
-    if owned:
-        await deps.zalo.send(conv.zalo_chat_id, candidate)
         await svc.record_bot_outcome(
             conv, version_at_start=state.version_at_start, reply=candidate,
-            started_at=started, sent=True,
+            started_at=started, sent=False,
         )
-        # Lead/memory extraction runs only after a real reply was sent (mirrors the
-        # legacy "Should Persist?" gate, which never extracted on greetings/suppressed).
-        if deps.persist is not None:
-            deps.persist(
-                {
-                    "chat_id": conv.zalo_chat_id,
-                    "user_text": state.user_text,
-                    "bot_output": candidate,
-                }
-            )
-        return {"outcome": "sent", "reply": candidate}
-
-    await svc.record_bot_outcome(
-        conv, version_at_start=state.version_at_start, reply=candidate,
-        started_at=started, sent=False,
-    )
-    return {"outcome": "suppressed", "reply": candidate}
+        return {"outcome": "suppressed", "reply": candidate}
+    finally:
+        typing_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await typing_task

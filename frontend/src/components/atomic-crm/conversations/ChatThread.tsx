@@ -1,4 +1,12 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+  type HTMLAttributes,
+} from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useDataProvider, useNotify, useTranslate } from "ra-core";
 import type { Conversation, Message } from "../types";
@@ -34,6 +42,19 @@ const formatTime = (iso?: string) => {
     minute: "2-digit",
   }).format(d);
 };
+
+const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+  ({ className, children, ...props }, ref) => (
+    <div
+      {...props}
+      ref={ref}
+      className={["chat-item-list", className].filter(Boolean).join(" ")}
+    >
+      {children}
+    </div>
+  ),
+);
+ChatItemList.displayName = "ChatItemList";
 
 export interface ChatThreadProps {
   conversationId: string;
@@ -240,15 +261,20 @@ export const ChatThread = ({
   // recreate this object every keystroke and force Virtuoso to remount.
   const virtuosoComponents = useMemo(
     () => ({
+      List: ChatItemList,
       Header: () =>
-        isLoadingMore ? (
-          <div
-            className="day-marker"
-            style={{ margin: "8px 0", background: "transparent" }}
-          >
-            <span>Đang tải tin nhắn cũ hơn...</span>
+        (
+          <div className="chat-history-top-spacer">
+            {isLoadingMore ? (
+              <div
+                className="day-marker"
+                style={{ margin: "8px 0", background: "transparent" }}
+              >
+                <span>Đang tải tin nhắn cũ hơn...</span>
+              </div>
+            ) : null}
           </div>
-        ) : null,
+        ),
       EmptyPlaceholder: () =>
         isLoading ? (
           <div className="day-marker" style={{ background: "transparent" }}>

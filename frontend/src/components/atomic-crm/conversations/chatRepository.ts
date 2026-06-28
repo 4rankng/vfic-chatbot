@@ -111,8 +111,8 @@ export const chatRepository = {
    * Paginated message history for a conversation. The backend returns the
    * newest page by default, or the page older than `beforeId` (the integer id of
    * the oldest currently-visible message) for cursor-based load-more. Server
-   * order is newest-first; we reverse to chronological for the virtualised
-   * scroller. A full page (== limit) implies more history may exist.
+   * order is chronological (oldest -> newest) for the virtualised scroller.
+   * A full page (== limit) implies more history may exist.
    */
   async getConversationMessages(
     conversationId: string,
@@ -127,7 +127,6 @@ export const chatRepository = {
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${sp.toString()}`,
     );
     const mapped = (body.data ?? []).map(toMessage);
-    mapped.reverse();
     return { messages: mapped, hasMore: mapped.length >= limit };
   },
 

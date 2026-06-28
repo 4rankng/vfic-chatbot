@@ -71,12 +71,12 @@ def test_minimax_chat_missing_key_names_minimax(monkeypatch):
         _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
 
 
-def test_active_llm_provider_rejects_two_enabled():
+def test_active_llm_provider_returns_minimax_when_both_enabled():
+    """When both providers are enabled, minimax is primary (no XOR error)."""
     class _Both(_Settings):
         openrouter_enable = True
 
-    with pytest.raises(RuntimeError, match="Enable only one LLM provider"):
-        _active_llm_provider(_Both())
+    assert _active_llm_provider(_Both()) == "minimax"
 
 
 def test_openrouter_chat_missing_key_names_openrouter(monkeypatch):

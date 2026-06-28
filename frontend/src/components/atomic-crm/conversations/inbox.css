@@ -582,7 +582,11 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 76px;
+  overflow: hidden;
   border-bottom: 1px solid var(--border);
   background: var(--chat-header-bg);
 }
@@ -598,6 +602,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  overflow: hidden;
 }
 .inbox-bg-container .header-avatar {
   position: relative;
@@ -624,6 +629,7 @@
 }
 
 .inbox-bg-container .person-copy {
+  flex: 1 1 auto;
   min-width: 0;
 }
 .inbox-bg-container .person-name-row {
@@ -683,6 +689,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 1 auto;
   min-width: 0;
 }
 .inbox-bg-container .mode-control {
@@ -693,9 +700,10 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--rad-md);
   background: color-mix(in srgb, var(--surface-solid) 82%, transparent);
+  min-width: 0;
 }
 .inbox-bg-container .mode-segment {
-  min-width: 108px;
+  min-width: clamp(78px, 8vw, 108px);
   min-height: 44px;
   padding: 7px 10px;
   display: inline-flex;
@@ -714,17 +722,39 @@
 }
 .inbox-bg-container .mode-segment.active {
   color: var(--ink);
-  background: var(--surface-solid);
-  box-shadow: 0 1px 2px rgba(11, 20, 26, 0.08);
+  background: color-mix(in srgb, var(--brand) 12%, var(--surface-solid));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--brand) 40%, transparent),
+    0 1px 2px rgba(11, 20, 26, 0.08);
 }
 .inbox-bg-container .mode-segment.active.human {
   color: var(--inbox-accent);
+  background: color-mix(
+    in srgb,
+    var(--inbox-accent) 14%,
+    var(--surface-solid)
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--inbox-accent) 46%, transparent),
+    0 1px 2px rgba(11, 20, 26, 0.08);
 }
 .inbox-bg-container .mode-segment.active.semi_auto {
   color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface-solid));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--brand) 46%, transparent),
+    0 1px 2px rgba(11, 20, 26, 0.08);
 }
 .inbox-bg-container .mode-segment.active.bot {
   color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, var(--surface-solid));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--success) 46%, transparent),
+    0 1px 2px rgba(11, 20, 26, 0.08);
+}
+.inbox-bg-container .mode-segment.active .mode-segment-hint {
+  color: currentColor;
+  opacity: 0.78;
 }
 .inbox-bg-container .mode-segment:disabled {
   cursor: default;
@@ -830,7 +860,7 @@
 
 /* Chat Content */
 :is(.inbox-bg-container, .chat-surface) .chat-scroller {
-  padding: 32px;
+  padding: 0;
   overflow-y: auto;
   overflow-anchor: auto;
   scrollbar-width: none;
@@ -838,6 +868,16 @@
 }
 :is(.inbox-bg-container, .chat-surface) .chat-scroller::-webkit-scrollbar {
   display: none;
+}
+
+:is(.inbox-bg-container, .chat-surface)
+  .chat-scroller
+  .chat-item-list {
+  padding: 32px !important;
+}
+
+:is(.inbox-bg-container, .chat-surface) .chat-history-top-spacer {
+  min-height: 20px;
 }
 
 /* "Load more" affordance for the contacts-only inbox (client-side paging) */
@@ -883,6 +923,7 @@
 
 :is(.inbox-bg-container, .chat-surface) .system-event {
   width: fit-content;
+  max-width: min(100%, 760px);
   margin: 0 auto 24px;
   padding: 8px 16px;
   border-radius: 999px;
@@ -893,7 +934,14 @@
   font-weight: 600;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:is(.inbox-bg-container, .chat-surface) .system-event span {
+  min-width: 0;
 }
 :is(.inbox-bg-container, .chat-surface) .system-event .icon {
   color: var(--brand);
@@ -904,6 +952,8 @@
   align-items: flex-end;
   gap: 12px;
   margin-bottom: 20px;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
@@ -921,6 +971,7 @@
 :is(.inbox-bg-container, .chat-surface) .message-avatar {
   width: 32px;
   height: 32px;
+  flex: 0 0 32px;
   display: grid;
   place-items: center;
   border-radius: var(--rad-sm);
@@ -1463,6 +1514,41 @@
   }
 }
 
+@media (max-width: 900px) and (min-width: 768px) {
+  .inbox-bg-container .app {
+    grid-template-columns: minmax(240px, 38%) minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .chat-header {
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 8px 10px;
+    min-height: 104px;
+    padding: 10px 14px;
+  }
+
+  .inbox-bg-container .header-person {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .inbox-bg-container .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .inbox-bg-container .mode-control {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inbox-bg-container .mode-segment {
+    min-width: 0;
+    width: auto;
+  }
+}
+
 /* ---- Mobile (<= 767px): list-first master/detail ----
    The JS gate (useIsMobile @ 768px) and this block share one boundary, so the
    drawer only fires once MobileAdmin has mounted. The conversation LIST is the
@@ -1520,19 +1606,34 @@
     display: inline-grid;
   }
   .inbox-bg-container .chat-header {
-    padding: 0 16px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 10px;
+    padding: 10px 12px;
+    min-height: 112px;
+  }
+  .inbox-bg-container .header-person {
+    width: 100%;
   }
   .inbox-bg-container .header-actions {
-    gap: 6px;
+    grid-column: 1 / -1;
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
   }
   .inbox-bg-container .mode-control {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 2px;
     padding: 3px;
   }
   .inbox-bg-container .mode-segment {
-    width: 38px;
-    min-width: 38px;
-    min-height: 38px;
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
     padding: 0;
   }
   .inbox-bg-container .mode-segment-copy {
@@ -1564,10 +1665,42 @@
     display: none;
   }
   :is(.inbox-bg-container, .chat-surface) .chat-scroller {
-    padding: 24px 16px;
+    padding: 0;
+  }
+  :is(.inbox-bg-container, .chat-surface)
+    .chat-scroller
+    .chat-item-list {
+    padding: 20px 12px !important;
+  }
+  :is(.inbox-bg-container, .chat-surface) .system-event {
+    max-width: calc(100% - 16px);
+    padding: 7px 10px;
+    border-radius: var(--rad-md);
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-row {
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-avatar {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
   }
   :is(.inbox-bg-container, .chat-surface) .bubble {
-    max-width: 90%;
+    max-width: calc(100% - 40px);
+    font-size: 14px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .composer-wrap {
+    padding: 10px 12px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .composer {
+    gap: 6px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .composer-action {
+    width: 40px;
+    height: 40px;
   }
 }
 
@@ -1577,7 +1710,9 @@
   :is(.inbox-bg-container, .chat-surface) .bubble {
     max-width: min(70%, 640px);
   }
-  :is(.inbox-bg-container, .chat-surface) .chat-scroller,
+  :is(.inbox-bg-container, .chat-surface)
+    .chat-scroller
+    .chat-item-list,
   :is(.inbox-bg-container, .chat-surface) .composer-wrap {
     padding-left: max(32px, calc((100% - 768px) / 2));
     padding-right: max(32px, calc((100% - 768px) / 2));

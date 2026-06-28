@@ -55,7 +55,9 @@ const normalizeFeatureText = (value: string | null | undefined) =>
 
 const shouldShowEvidence = (feature: ProductFeature) => {
   const evidence = normalizeFeatureText(feature.evidence_text);
-  return Boolean(evidence && evidence !== normalizeFeatureText(feature.value_text));
+  return Boolean(
+    evidence && evidence !== normalizeFeatureText(feature.value_text),
+  );
 };
 
 // Binary readiness derivation. A feature is "đủ thông tin" (ready) when the
@@ -309,11 +311,11 @@ const ReadinessHero = ({
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <i className="size-2.5 rounded-[3px] bg-primary" />
+          <i className="size-2.5 rounded-[3px] bg-feature-ready" />
           Đủ thông tin
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <i className="size-2.5 rounded-[3px] border border-destructive border-dashed bg-destructive/10" />
+          <i className="size-2.5 rounded-[3px] border border-feature-gap-border border-dashed bg-feature-gap-soft" />
           Cần bổ sung
         </span>
       </div>
@@ -338,9 +340,9 @@ const FeatureGroup = ({
       <div className="flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           {ready ? (
-            <CheckCircle2 className="size-4 text-primary" />
+            <CheckCircle2 className="size-4 text-feature-ready" />
           ) : (
-            <AlertCircle className="size-4 text-destructive" />
+            <AlertCircle className="size-4 text-feature-gap" />
           )}
           {ready ? "Đủ thông tin" : "Cần bổ sung"}
         </h3>
@@ -357,21 +359,21 @@ const FeatureGroup = ({
                 className={cn(
                   "flex items-center gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs",
                   ready
-                    ? "border-primary/30 bg-primary/5"
-                    : "border-destructive/30 border-dashed bg-destructive/5",
+                    ? "border-feature-ready/30 bg-feature-ready-soft"
+                    : "border-feature-gap-border border-dashed bg-feature-gap-soft",
                 )}
               >
                 <span
                   className={cn(
                     "h-[18px] w-1 shrink-0 rounded-full",
-                    ready ? "bg-primary" : "bg-destructive",
+                    ready ? "bg-feature-ready" : "bg-feature-gap",
                   )}
                 />
                 <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-foreground">
                   <span className="truncate">{name}</span>
                   {highlighted && (
                     <Star
-                      className="size-3.5 shrink-0 text-primary"
+                      className="size-3.5 shrink-0 text-feature-ready"
                       aria-label="Nổi bật"
                     />
                   )}
@@ -436,9 +438,9 @@ const FeatureCard = ({
     <div
       className={cn(
         "min-w-0 rounded-md border p-3",
-        feature.is_highlight && "border-emerald-200 bg-emerald-50",
+        feature.is_highlight && "border-feature-ready/30 bg-feature-ready-soft",
         (feature.is_missing || feature.needs_clarification) &&
-          "border-destructive/30 bg-destructive/5",
+          "border-feature-gap-border bg-feature-gap-soft",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -448,10 +450,15 @@ const FeatureCard = ({
               {feature.name_vi}
             </span>
             {feature.is_highlight && (
-              <Badge className="bg-emerald-500 text-[10px]">Nổi bật</Badge>
+              <Badge className="bg-feature-ready text-[10px] text-primary-foreground">
+                Nổi bật
+              </Badge>
             )}
             {(feature.is_missing || feature.needs_clarification) && (
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge
+                variant="secondary"
+                className="border border-feature-gap-border bg-feature-gap-soft text-[10px] text-feature-gap"
+              >
                 Chưa rõ
               </Badge>
             )}

@@ -43,6 +43,11 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-feature-ready: var(--feature-ready);
+  --color-feature-ready-soft: var(--feature-ready-soft);
+  --color-feature-gap: var(--feature-gap);
+  --color-feature-gap-soft: var(--feature-gap-soft);
+  --color-feature-gap-border: var(--feature-gap-border);
 
   /* VFIC custom colors — converted to OKLCH (exact sRGB equivalents; original
      hex preserved in trailing comments). See adr/ADR-oklch-token-convention.md
@@ -90,6 +95,23 @@
   --border: oklch(0.9069 0.0141 124.6); /* #dee2d8 */
   --input: oklch(0.9069 0.0141 124.6); /* #dee2d8 */
   --ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --feature-ready: var(--primary);
+  --feature-ready-soft: color-mix(
+    in oklab,
+    var(--primary) 8%,
+    var(--background)
+  );
+  --feature-gap: var(--muted-foreground);
+  --feature-gap-soft: color-mix(
+    in oklab,
+    var(--muted-foreground) 8%,
+    var(--background)
+  );
+  --feature-gap-border: color-mix(
+    in oklab,
+    var(--muted-foreground) 26%,
+    var(--background)
+  );
   --grid-color: oklch(0.2372 0.0257 244.3 / 0.018); /* rgba(20,32,42,0.018) */
   --shimmer-highlight: oklch(
     0.2372 0.0257 244.3 / 0.06
@@ -130,6 +152,23 @@
   --border: oklch(0.33 0.02 263); /* dark hairline */
   --input: oklch(0.33 0.02 263); /* dark hairline */
   --ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
+  --feature-ready: var(--primary);
+  --feature-ready-soft: color-mix(
+    in oklab,
+    var(--primary) 14%,
+    var(--background)
+  );
+  --feature-gap: var(--muted-foreground);
+  --feature-gap-soft: color-mix(
+    in oklab,
+    var(--muted-foreground) 12%,
+    var(--background)
+  );
+  --feature-gap-border: color-mix(
+    in oklab,
+    var(--muted-foreground) 30%,
+    var(--background)
+  );
   --grid-color: oklch(1 0 0 / 0.015); /* rgba(255,255,255,0.015) */
   --shimmer-highlight: oklch(1 0 0 / 0.06); /* rgba(255,255,255,0.06) */
 

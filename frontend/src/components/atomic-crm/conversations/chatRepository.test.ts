@@ -21,7 +21,7 @@ import { chatRepository } from "./chatRepository";
 
 /**
  * chatRepository (message history + inbox snippets + realtime subscribe) had
- * zero tests. Covers: newest-first->chronological reversal + sender->type
+ * zero tests. Covers: chronological message history + sender->type
  * mapping + hasMore, the batched last-messages re-keying, and the Socket.IO
  * room join/leave lifecycle (incl. the no-token no-op short-circuit).
  */
@@ -51,13 +51,14 @@ describe("chatRepository.getConversationMessages", () => {
     vi.restoreAllMocks();
   });
 
-  it("maps sender->type, reverses to chronological, and flags hasMore on a full page", async () => {
+  it("keeps API chronological order, maps sender->type, and flags hasMore on a full page", async () => {
     const { fetch } = stubJson(async () => ({
-      // Backend order is newest-first.
+      // Backend order is chronological, matching WhatsApp-style rendering:
+      // older messages higher up, newest messages at the bottom.
       data: [
-        { id: 3, body: "c", sender: "WORKER", created_at: "t3" },
-        { id: 2, body: "b", sender: "BOT", created_at: "t2" },
         { id: 1, body: "a", sender: "SYSTEM", created_at: "t1" },
+        { id: 2, body: "b", sender: "BOT", created_at: "t2" },
+        { id: 3, body: "c", sender: "WORKER", created_at: "t3" },
       ],
       total: 3,
     }));
@@ -68,9 +69,8 @@ describe("chatRepository.getConversationMessages", () => {
         limit: 3,
       },
     );
-    expect(messages.map((m) => m.id)).toEqual(["1", "2", "3"]); // reversed to chronological
-    // Server order is newest-first [id3,id2,id1]; after reverse the oldest (id1)
-    // is first. Mapping: SYSTEM->system, BOT->outbound, WORKER->inbound.
+    expect(messages.map((m) => m.id)).toEqual(["1", "2", "3"]);
+    // Mapping: SYSTEM->system, BOT->outbound, WORKER->inbound.
     expect(messages[0].type).toBe("system"); // id1 SYSTEM (oldest)
     expect(messages[1].type).toBe("outbound"); // id2 BOT
     expect(messages[2].type).toBe("inbound"); // id3 WORKER (newest)
