@@ -318,14 +318,4 @@ body {
     background-repeat: no-repeat;
     animation: vfic-shimmer 1.4s ease-in-out infinite;
   }
-
-  /* Faint grid-paper canvas. Reuses the theme-aware --grid-color token
-     (defined per-theme on :root/.dark), so it stays subtle in both themes.
-     Applied opt-in on individual page wrappers, never globally. */
-  .bg-grid-paper {
-    background-image:
-      linear-gradient(var(--grid-color) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
-    background-size: 28px 28px;
-  }
 }
