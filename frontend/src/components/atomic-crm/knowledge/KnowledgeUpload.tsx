@@ -30,19 +30,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { uploadKnowledgeFile } from "@/lib/vfic/knowledgeService";
 import type { Project } from "../types";
 import { cn } from "@/lib/utils";
-
-const ACCEPTED_KNOWLEDGE_TYPES: Record<string, string[]> = {
-  "application/pdf": [".pdf"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-    ".docx",
-  ],
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-    ".xlsx",
-  ],
-  "text/csv": [".csv"],
-  "text/markdown": [".md"],
-  "text/plain": [".txt", ".md"],
-};
+import {
+  ACCEPTED_KNOWLEDGE_TYPES,
+  formatFileSize,
+} from "./knowledgeUploadConfig";
 
 interface KnowledgeUploadProps {
   open: boolean;
@@ -53,9 +44,9 @@ interface KnowledgeUploadProps {
   lockProject?: boolean;
 }
 
-// KB upload for a project (product). Two modes: pick an Office/text file, or paste raw
-// text. Paste is built into a .txt File so it reuses upload-file (which enqueues the
-// training pipeline) — the JSON /documents/upload route does NOT enqueue training.
+// KB upload for a project (product). Two modes: pick a text file (.txt/.md/.csv), or
+// paste raw text. Paste is built into a .txt File so it reuses upload-file (which
+// enqueues the training pipeline) — the JSON /documents/upload route does NOT enqueue.
 export const KnowledgeUpload = ({
   open,
   onOpenChange,
@@ -87,7 +78,7 @@ export const KnowledgeUpload = ({
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
-    notify("Tệp không hợp lệ. Hỗ trợ PDF, DOCX, XLSX, CSV, TXT và MD.", {
+    notify("Tệp không hợp lệ. Chỉ hỗ trợ tệp văn bản: TXT, MD và CSV.", {
       type: "warning",
     });
   };
@@ -350,10 +341,3 @@ const UploadStep = ({
     <span className="truncate font-medium">{label}</span>
   </div>
 );
-
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-};

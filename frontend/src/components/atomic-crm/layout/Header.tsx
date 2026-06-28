@@ -1,14 +1,12 @@
-import { FileText, Upload, User, Users } from "lucide-react";
-import { usePermissions, useTranslate, useUserMenu } from "ra-core";
+import { FileText, User, Users } from "lucide-react";
+import { useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
 import { UserMenu } from "@/components/admin/user-menu";
-import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
-import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { ChangelogPage } from "../misc/ChangelogPage";
 import { NavPill } from "./topbar/NavPills";
 import { NotificationsBell } from "./topbar/NotificationsBell";
@@ -17,9 +15,6 @@ const Header = () => {
   const { title } = useConfigurationContext();
   const location = useLocation();
   const translate = useTranslate();
-  const { permissions } = usePermissions();
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const isAdmin = permissions === "admin";
 
   const currentPath = useMemo<string | false>(() => {
     if (matchPath("/", location.pathname)) return "/";
@@ -89,27 +84,12 @@ const Header = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-1 md:gap-2">
-            {isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden lg:inline-flex"
-                onClick={() => setUploadOpen(true)}
-                title="Tải tài liệu hoặc dán tin tuyển dụng để huấn luyện agent"
-              >
-                <Upload className="size-4" />
-                Tải kiến thức
-              </Button>
-            )}
             <NotificationsBell />
             <ThemeModeToggle />
             <UserMenu />
           </div>
         </header>
       </div>
-      {isAdmin && (
-        <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
-      )}
     </div>
   );
 };

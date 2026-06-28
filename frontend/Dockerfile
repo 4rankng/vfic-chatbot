@@ -4,7 +4,6 @@
 # the bundle needs no deploy-time env injection.
 FROM node:22-alpine AS build
 WORKDIR /app
-# CI=1 keeps the bundle visualizer from trying to open a browser in the image.
 ENV CI=1
 COPY package.json package-lock.json ./
 RUN npm ci

@@ -4,7 +4,7 @@ Two ingest paths:
   * ``process(embedder, doc, llm_json=None)`` — mechanical 1-chunk fallback (legacy,
     tests). When ``llm_json`` is supplied it runs the full LLM
     ``KnowledgePipeline`` (digest -> embed -> index).
-  * ``upload_bytes(...)`` — multipart upload: extract text from Office/PDF/text,
+  * ``upload_bytes(...)`` — multipart upload: decode the file as raw text,
     persist the original to a volume, create the doc (stage=UPLOADED); the caller
     then enqueues the async ingest job for the real LLM pipeline.
 
@@ -25,7 +25,7 @@ from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
-from app.services.knowledge import LLMJson, extract_text
+from app.services.knowledge import LLMJson
 from app.services.knowledge.repository import KnowledgeChunkRepo, rebuild_bus_timetable
 from app.services.storage import persist_original_upload
 
@@ -60,8 +60,8 @@ class KnowledgeService:
     async def upload_bytes(
         self, file_name: str, content_type: str, data: bytes, *, project_id: uuid.UUID | None = None
     ) -> KnowledgeDocument:
-        """Multipart upload: parse the file to text, persist the original, create doc."""
-        raw_text = extract_text(file_name, content_type, data)
+        """Multipart upload: decode the file as raw text, persist the original, create doc."""
+        raw_text = data.decode("utf-8", errors="replace")
         storage_path = persist_original_upload(file_name, data)
         doc = KnowledgeDocument(
             file_name=file_name,

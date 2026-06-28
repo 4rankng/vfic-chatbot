@@ -14,15 +14,17 @@ import { VitePWA } from "vite-plugin-pwa";
 // client-side, so it does not need the VITE_ prefix.
 const backendPort = process.env.BACKEND_PORT ?? "8000";
 const backendUrl = `http://localhost:${backendPort}`;
+const analyzeBundle = process.env.ANALYZE === "true";
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    visualizer({
-      open: process.env.NODE_ENV !== "CI",
-      filename: "./dist/stats.html",
-    }),
+    analyzeBundle &&
+      visualizer({
+        open: true,
+        filename: "./dist/stats.html",
+      }),
     createHtmlPlugin({
       minify: true,
       inject: {

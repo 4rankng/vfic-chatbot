@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ListBase,
+  useDataProvider,
   useGetList,
   useListContext,
   useNotify,
@@ -14,17 +15,23 @@ import {
   Archive,
   BookOpen,
   CheckCircle2,
+  Check,
+  ChevronsUpDown,
   CircleDashed,
   FileText,
   HelpCircle,
   MoreHorizontal,
   Pencil,
+  Plus,
   Quote,
   RefreshCw,
   Search,
   Tags,
   Upload,
+  UploadCloud,
+  X,
 } from "lucide-react";
+import { useDropzone, type FileRejection } from "react-dropzone";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +43,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -49,13 +69,19 @@ import {
   archiveKnowledge,
   getKnowledgeUnits,
   reindexKnowledge,
+  uploadKnowledgeFile,
   type KnowledgeUnit,
 } from "@/lib/vfic/knowledgeService";
 import { cn } from "@/lib/utils";
 import { getRelativeTimeString } from "../leads/leadUtils";
 import type { KnowledgeSource, Project } from "../types";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { stageLabel } from "./stageTone";
 import { KnowledgeUpload } from "./KnowledgeUpload";
+import {
+  ACCEPTED_KNOWLEDGE_TYPES,
+  formatFileSize,
+} from "./knowledgeUploadConfig";
 
 const ALL_PROJECTS = "__all__";
 const ALL_STAGES = "__all__";
@@ -316,25 +342,6 @@ const KnowledgeSourceListContent = () => {
               </p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refresh()}
-              className="h-10 rounded-[9px]"
-            >
-              <RefreshCw className="size-4" />
-              Làm mới
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => setUploadOpen(true)}
-              className="h-10 rounded-[9px]"
-            >
-              <Upload className="size-4" />
-              Tải lên
-            </Button>
-          </div>
         </header>
 
         <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
@@ -410,18 +417,7 @@ const KnowledgeSourceListContent = () => {
               {isPending ? (
                 <SourceSkeleton />
               ) : sources.length === 0 ? (
-                <EmptyState
-                  icon={<BookOpen className="size-6" />}
-                  title="Chưa có cơ sở kiến thức"
-                  description="Tải lên PDF, DOCX, XLSX, CSV, TXT hoặc dán tin tuyển dụng để huấn luyện agent."
-                  actions={
-                    <Button size="sm" onClick={() => setUploadOpen(true)}>
-                      <Upload className="size-4" />
-                      Tải lên
-                    </Button>
-                  }
-                  className="m-4 bg-card"
-                />
+                <InlineKnowledgeUploader projects={projects ?? []} />
               ) : filteredSources.length === 0 ? (
                 <EmptyState
                   icon={<FileText className="size-6" />}
@@ -489,6 +485,336 @@ const SourceSkeleton = () => (
     ))}
   </div>
 );
+
+const InlineKnowledgeUploader = ({ projects }: { projects: Project[] }) => {
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const [projectChoice, setProjectChoice] = useState(UNASSIGNED_PROJECT);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleRejectedFiles = (rejections: FileRejection[]) => {
+    if (rejections.length === 0) return;
+    notify("Tệp không hợp lệ. Hỗ trợ PDF, DOCX, XLSX, CSV, TXT và MD.", {
+      type: "warning",
+    });
+  };
+
+  const { getRootProps, getInputProps, isDragActive, isDragReject } =
+    useDropzone({
+      accept: ACCEPTED_KNOWLEDGE_TYPES,
+      disabled: busy,
+      maxFiles: 1,
+      multiple: false,
+      onDrop: (acceptedFiles, rejectedFiles) => {
+        handleRejectedFiles(rejectedFiles);
+        if (acceptedFiles[0]) setFile(acceptedFiles[0]);
+      },
+    });
+
+  const submit = async () => {
+    if (!file) {
+      notify("Vui lòng chọn tệp trước khi tải lên.", { type: "warning" });
+      return;
+    }
+    setBusy(true);
+    try {
+      await uploadKnowledgeFile(
+        file,
+        projectChoice === UNASSIGNED_PROJECT ? null : projectChoice,
+      );
+      notify("Đã tải lên. Pipeline đang xử lý ở nền.", { type: "success" });
+      setFile(null);
+      refresh();
+    } catch (err) {
+      notify(`Tải lên thất bại: ${(err as Error).message}`, { type: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="m-4 flex min-h-[420px] flex-col justify-center rounded-[14px] border border-dashed border-border bg-card p-5">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+        <div className="text-center">
+          <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <BookOpen className="size-7" />
+          </span>
+          <h4 className="kb-display mt-4 text-xl text-foreground">
+            Chưa có cơ sở kiến thức
+          </h4>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Chọn dự án, kéo thả tài liệu vào đây, rồi tải lên để huấn luyện
+            agent.
+          </p>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[120px_1fr] sm:items-center">
+          <label className="kb-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            Dự án
+          </label>
+          <ProjectPicker
+            value={projectChoice}
+            projects={projects}
+            onChange={setProjectChoice}
+          />
+        </div>
+
+        <div
+          {...getRootProps({
+            className: cn(
+              "group flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-[12px] border border-dashed bg-background px-5 py-6 text-center transition-colors outline-none",
+              "hover:border-primary/50 hover:bg-primary/5 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+              isDragActive && "border-primary bg-primary/10",
+              isDragReject && "border-destructive bg-destructive/10",
+              busy && "pointer-events-none opacity-70",
+            ),
+          })}
+        >
+          <input {...getInputProps()} />
+          <UploadCloud className="size-8 text-primary transition-transform group-hover:scale-105" />
+          <p className="mt-3 text-sm font-semibold text-foreground">
+            {isDragActive ? "Thả tệp vào đây" : "Kéo thả hoặc bấm để chọn tệp"}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            PDF, DOCX, XLSX, CSV, TXT, MD. Một tệp mỗi lần tải.
+          </p>
+        </div>
+
+        {file && (
+          <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border bg-background p-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-muted text-muted-foreground">
+                <FileText className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {file.name}
+                </p>
+                <p className="kb-mono mt-0.5 text-[11px] text-muted-foreground">
+                  {formatFileSize(file.size)}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 rounded-[9px]"
+              onClick={() => setFile(null)}
+              disabled={busy}
+              aria-label="Xóa tệp đã chọn"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        )}
+
+        <Button
+          type="button"
+          onClick={submit}
+          disabled={!file || busy}
+          className="h-10 self-center rounded-[9px] px-5"
+        >
+          {busy ? (
+            <RefreshCw className="size-4 animate-spin" />
+          ) : (
+            <Upload className="size-4" />
+          )}
+          {busy ? "Đang tải lên..." : "Tải lên"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const ProjectPicker = ({
+  value,
+  projects,
+  onChange,
+}: {
+  value: string;
+  projects: Project[];
+  onChange: (value: string) => void;
+}) => {
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [localProjects, setLocalProjects] = useState<Project[]>([]);
+
+  const availableProjects = useMemo(() => {
+    const map = new Map<string, Project>();
+    for (const project of projects) map.set(String(project.id), project);
+    for (const project of localProjects) map.set(String(project.id), project);
+    return Array.from(map.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "vi"),
+    );
+  }, [localProjects, projects]);
+
+  const selectedProject = availableProjects.find(
+    (project) => String(project.id) === value,
+  );
+  const trimmedSearch = search.trim();
+  const normalizedSearch = normalizeSearch(trimmedSearch);
+  const filteredProjects = normalizedSearch
+    ? availableProjects.filter((project) =>
+        normalizeSearch(`${project.name} ${project.slug}`).includes(
+          normalizedSearch,
+        ),
+      )
+    : availableProjects;
+  const exactMatch = availableProjects.some(
+    (project) => normalizeSearch(project.name) === normalizedSearch,
+  );
+  const canCreate = trimmedSearch.length > 0 && !exactMatch;
+
+  const selectProject = (projectId: string) => {
+    onChange(projectId);
+    setOpen(false);
+    setSearch("");
+  };
+
+  const createProject = async () => {
+    if (!canCreate || creating) return;
+    setCreating(true);
+    try {
+      const response = await dataProvider.create("projects", {
+        data: {
+          name: trimmedSearch,
+          slug: slugifyProject(trimmedSearch),
+          is_active: true,
+        },
+      });
+      const project = response.data as Project;
+      setLocalProjects((current) => [...current, project]);
+      onChange(String(project.id));
+      notify("Đã tạo dự án.", { type: "success" });
+      setOpen(false);
+      setSearch("");
+      refresh();
+    } catch (err) {
+      notify(`Tạo dự án thất bại: ${(err as Error).message}`, {
+        type: "error",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-10 w-full justify-between rounded-[9px] border-border bg-background px-3 text-sm font-normal"
+        >
+          <span className="truncate">
+            {selectedProject?.name ?? "Nguồn chung"}
+          </span>
+          <ChevronsUpDown className="size-4 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[min(420px,calc(100vw-3rem))] p-0"
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm hoặc tạo dự án..."
+          />
+          <CommandList>
+            <CommandGroup heading="Lựa chọn">
+              <CommandItem
+                value={UNASSIGNED_PROJECT}
+                onSelect={() => selectProject(UNASSIGNED_PROJECT)}
+              >
+                <Check
+                  className={cn(
+                    "size-4",
+                    value !== UNASSIGNED_PROJECT && "opacity-0",
+                  )}
+                />
+                Nguồn chung
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="Dự án">
+              {filteredProjects.length > 0 ? (
+                filteredProjects.map((project) => (
+                  <CommandItem
+                    key={project.id}
+                    value={`${project.name} ${project.slug}`}
+                    onSelect={() => selectProject(String(project.id))}
+                  >
+                    <Check
+                      className={cn(
+                        "size-4",
+                        value !== String(project.id) && "opacity-0",
+                      )}
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {project.name}
+                    </span>
+                    <span className="kb-mono shrink-0 text-[11px] text-muted-foreground">
+                      {project.slug}
+                    </span>
+                  </CommandItem>
+                ))
+              ) : (
+                <div className="px-2 py-3 text-sm text-muted-foreground">
+                  Không tìm thấy dự án.
+                </div>
+              )}
+            </CommandGroup>
+            {canCreate && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem
+                    value={`create-${trimmedSearch}`}
+                    onSelect={createProject}
+                    disabled={creating}
+                  >
+                    {creating ? (
+                      <RefreshCw className="size-4 animate-spin" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    <span className="truncate">
+                      Tạo dự án "{trimmedSearch}"
+                    </span>
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const normalizeSearch = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+const slugifyProject = (value: string) => {
+  const slug = normalizeSearch(value)
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || `du-an-${Date.now()}`;
+};
 
 const KnowledgeSourceRow = ({
   source,
@@ -631,9 +957,7 @@ const PipelineMiniProgress = ({ source }: { source: KnowledgeSource }) => {
         <div
           className={cn(
             "h-full rounded-full transition-all",
-            isFailed(source)
-              ? "bg-[var(--kb-rust)]"
-              : "bg-[var(--kb-teal)]",
+            isFailed(source) ? "bg-[var(--kb-rust)]" : "bg-[var(--kb-teal)]",
           )}
           style={{ width: `${percent}%` }}
         />
@@ -914,7 +1238,9 @@ const StoredKnowledgePanel = ({ source }: { source: KnowledgeSource }) => {
     <section className="rounded-[12px] border border-border bg-background p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="kb-display text-sm text-foreground">Kiến thức đã lưu</h4>
+          <h4 className="kb-display text-sm text-foreground">
+            Kiến thức đã lưu
+          </h4>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Đơn vị agent thực sự truy xuất — đây là phần con người có thể kiểm
             tra.
@@ -928,7 +1254,8 @@ const StoredKnowledgePanel = ({ source }: { source: KnowledgeSource }) => {
       {!isPublished(source) && !needsReview(source) ? (
         <div className="mt-3 flex items-center gap-2 rounded-[10px] bg-[var(--kb-teal-soft)] p-3 text-sm text-[var(--kb-teal)]">
           <RefreshCw className="size-4 animate-spin" />
-          Kiến thức sẽ hiện ở đây sau khi pipeline xuất bản các đơn vị truy xuất.
+          Kiến thức sẽ hiện ở đây sau khi pipeline xuất bản các đơn vị truy
+          xuất.
         </div>
       ) : isPending ? (
         <div className="mt-4 grid gap-3">

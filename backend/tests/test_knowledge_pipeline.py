@@ -1,11 +1,10 @@
 """LLM training-pipeline tests (US: per-project KB upload + digestion + personas).
 
-Exercises KnowledgePipeline with INJECTED fakes (no MiniMax/Gemini keys): extract by
-file type, digest schema validation + retry-on-malformed, the full run() (digest ->
+Exercises KnowledgePipeline with INJECTED fakes (no MiniMax/Gemini keys): raw-text
+upload decode, digest schema validation + retry-on-malformed, the full run() (digest ->
 embed -> index) writing rich chunks, project index-card build, scoped search, and the
 multipart upload-file endpoint (with enqueue stubbed).
 """
-import io
 import json
 import uuid
 
@@ -17,7 +16,6 @@ from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.services.knowledge import (
     DigestError,
     KnowledgePipeline,
-    extract_text,
     split_for_digest,
     validate_digest,
 )
@@ -59,38 +57,6 @@ def _units_payload(*contents):
             for c in contents
         ],
     }
-
-
-# --------------------------------------------------------------------------- extract
-def test_extract_text_csv_txt_md():
-    assert extract_text("a.csv", "text/csv", b"x,y\n1,2\n").strip() == "x,y\n1,2"
-    assert extract_text("a.txt", "text/plain", "nội dung".encode("utf-8")) == "nội dung"
-    assert extract_text("a.md", "text/markdown", b"# title") == "# title"
-
-
-def test_extract_text_docx():
-    import docx
-
-    d = docx.Document()
-    d.add_paragraph("Dòng một LG Display")
-    d.add_paragraph("Dòng hai lương 10 triệu")
-    buf = io.BytesIO()
-    d.save(buf)
-    txt = extract_text("a.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buf.getvalue())
-    assert "LG Display" in txt and "10 triệu" in txt
-
-
-def test_extract_text_xlsx():
-    from openpyxl import Workbook
-
-    wb = Workbook()
-    ws = wb.active
-    ws.append(["vị trí", "lương"])
-    ws.append(["operator", "9000000"])
-    buf = io.BytesIO()
-    wb.save(buf)
-    txt = extract_text("a.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.getvalue())
-    assert "operator" in txt and "9000000" in txt
 
 
 def test_split_for_digest_respects_size():
@@ -320,7 +286,7 @@ async def test_search_test_scoped_to_project(db_session, clean_kb):
 
 
 # --------------------------------------------------------------------------- multipart API
-async def test_upload_file_endpoint_extracts_and_enqueues(client, db_session, clean_kb, monkeypatch):
+async def test_upload_file_endpoint_decodes_text_and_enqueues(client, db_session, clean_kb, monkeypatch):
     # Stub enqueue so the test doesn't drop a real job onto the RQ queue.
     enqueued: list[str] = []
     monkeypatch.setattr(
@@ -331,23 +297,18 @@ async def test_upload_file_endpoint_extracts_and_enqueues(client, db_session, cl
     ).json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
 
-    import docx
-    import io as _io
-
-    d = docx.Document()
-    d.add_paragraph("Nội dung DOCX LG Display")
-    buf = _io.BytesIO()
-    d.save(buf)
+    # Uploads are raw text now (no Office parsing): send Vietnamese UTF-8 bytes as a .txt.
+    payload = "Nội dung text LG Display — lương 10 triệu".encode("utf-8")
 
     r = await client.post(
         "/api/v1/knowledge/documents/upload-file",
-        files={"file": ("lg.docx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={"file": ("lg.txt", payload, "text/plain")},
         headers=h,
     )
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["stage"] in {"EXTRACTED", "UPLOADED"}
     assert len(enqueued) == 1 and enqueued[0] == body["id"]
-    # raw_text was extracted + persisted on the doc
+    # raw_text is decoded verbatim from the uploaded bytes and persisted on the doc
     doc = await db_session.get(KnowledgeDocument, uuid.UUID(body["id"]))
     assert doc is not None and "LG Display" in (doc.raw_text or "")
