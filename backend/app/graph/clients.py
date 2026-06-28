@@ -7,11 +7,13 @@ import time. Tool schemas + dispatch live in ``schemas.py``.
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from app.core.config import get_settings
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 
 logger = logging.getLogger(__name__)
+ModelRole = Literal["agent", "safety", "digest"]
 
 
 class GeminiEmbedder:
@@ -108,3 +110,65 @@ def _minimax_chat(model: str, *, temperature: float):
         timeout=s.minimax_request_timeout,
         temperature=temperature,
     )
+
+
+def _openrouter_chat(model: str, *, temperature: float, timeout: int | None = None, json_mode: bool = False):
+    """OpenAI-compatible OpenRouter client from settings."""
+    from langchain_openai import ChatOpenAI
+
+    s = get_settings()
+    if not s.openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter chat")
+    kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+    return ChatOpenAI(
+        model=model,
+        api_key=s.openrouter_api_key,
+        base_url=s.openrouter_base_url,
+        timeout=timeout or s.openrouter_request_timeout,
+        temperature=temperature,
+        **kwargs,
+    )
+
+
+def _active_llm_provider(settings=None) -> Literal["minimax", "openrouter"]:
+    s = settings or get_settings()
+    minimax_enabled = getattr(s, "minimax_enable", True)
+    openrouter_enabled = getattr(s, "openrouter_enable", False)
+    if minimax_enabled and openrouter_enabled:
+        raise RuntimeError("Enable only one LLM provider: set either MINIMAX_ENABLE or OPENROUTER_ENABLE")
+    if openrouter_enabled:
+        return "openrouter"
+    if minimax_enabled:
+        return "minimax"
+    raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
+
+
+def _chat_for_role(role: ModelRole, *, temperature: float, json_mode: bool = False):
+    """Build the selected OpenAI-compatible chat client for an agent/safety/digest role."""
+    from langchain_openai import ChatOpenAI
+
+    s = get_settings()
+    provider = _active_llm_provider(s)
+    if provider == "openrouter":
+        model = {
+            "agent": s.openrouter_agent_model,
+            "safety": s.openrouter_safety_model,
+            "digest": s.openrouter_digest_model or s.openrouter_agent_model,
+        }[role]
+        timeout = s.openrouter_digest_timeout if role == "digest" else s.openrouter_request_timeout
+        return _openrouter_chat(model, temperature=temperature, timeout=timeout, json_mode=json_mode)
+
+    if role == "digest":
+        if not s.minimax_api_key:
+            raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
+        kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+        return ChatOpenAI(
+            model=s.minimax_digest_model or s.minimax_agent_model,
+            api_key=s.minimax_api_key,
+            base_url=s.minimax_base_url,
+            timeout=s.minimax_digest_timeout,
+            temperature=temperature,
+            **kwargs,
+        )
+    model = s.minimax_agent_model if role == "agent" else s.minimax_safety_model
+    return _minimax_chat(model, temperature=temperature)

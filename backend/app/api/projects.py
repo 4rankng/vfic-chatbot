@@ -15,6 +15,7 @@ from app.api.dependencies import require_admin, require_recruiter
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.projects import (
+    BusTimetableResponse,
     FeatureListResponse,
     FeatureOut,
     FeatureUpdate,
@@ -86,6 +87,14 @@ async def list_project_features(
 ) -> FeatureListResponse:
     """List the project's 11 extracted worker product features (catalog order)."""
     return await ProjectService(db).list_features(project_id)
+
+
+@router.get("/{project_id}/bus-timetable", response_model=BusTimetableResponse)
+async def list_project_bus_timetable(
+    project_id: uuid.UUID, _user: User = Depends(require_recruiter), db: AsyncSession = Depends(get_db)
+) -> BusTimetableResponse:
+    """List the project's structured bus routes with ordered pickup stops."""
+    return await ProjectService(db).list_bus_timetable(project_id)
 
 
 @router.patch("/{project_id}/features/{feature_id}", response_model=FeatureOut)

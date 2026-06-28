@@ -17,19 +17,15 @@ logger = logging.getLogger(__name__)
 
 def enqueue_ingest(doc_id) -> None:
     """Enqueue a training-pipeline job for one document (best-effort, non-fatal)."""
-    try:
-        from rq import Queue
+    from app.core.config import get_settings
+    from app.workers.utils import enqueue_job
 
-        from app.core.config import get_settings
-        from app.core.redis import get_redis_sync
-
-        Queue("ingest", connection=get_redis_sync()).enqueue(
-            run_ingest_job,
-            str(doc_id),
-            job_timeout=get_settings().ingest_job_timeout_seconds,
-        )
-    except Exception as exc:  # noqa: BLE001 — enqueue failure must not break the upload response
-        logger.error("failed to enqueue ingest job: %s", exc)
+    enqueue_job(
+        "ingest",
+        run_ingest_job,
+        str(doc_id),
+        job_timeout=get_settings().ingest_job_timeout_seconds,
+    )
 
 
 def run_ingest_job(doc_id: str) -> None:
@@ -83,25 +79,18 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
 
 
 def _mark_doc_failed_sync(doc_id: str, exc: Exception) -> None:
-    """Persist FAILED for crashes raised outside the async job coroutine."""
+    """Persist FAILED for crashes raised outside the async job coroutine.
+
+    Delegates to the repository layer so the SQL lives in one place.
+    """
     try:
-        from sqlalchemy import create_engine, text
-
         from app.core.config import get_settings
+        from app.services.knowledge.repository import mark_document_failed_sync
 
-        engine = create_engine(get_settings().database_url_sync, future=True)
-        try:
-            with engine.begin() as conn:
-                conn.execute(
-                    text(
-                        "UPDATE knowledge_documents "
-                        "SET status = 'FAILED', stage = 'FAILED', "
-                        "error = :error, updated_at = now() "
-                        "WHERE id = CAST(:id AS uuid)"
-                    ),
-                    {"id": doc_id, "error": f"{type(exc).__name__}: {exc}"[:1000]},
-                )
-        finally:
-            engine.dispose()
+        mark_document_failed_sync(
+            get_settings().database_url_sync,
+            doc_id,
+            f"{type(exc).__name__}: {exc}",
+        )
     except Exception:  # noqa: BLE001 — do not mask the original RQ failure
         logger.exception("failed to mark ingest document %s as FAILED", doc_id)

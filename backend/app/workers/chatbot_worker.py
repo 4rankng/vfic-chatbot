@@ -9,14 +9,9 @@ logger = logging.getLogger(__name__)
 
 def enqueue_chat_run(job: dict) -> None:
     """Enqueue a bot turn onto the webhook_high RQ queue (best-effort, non-fatal)."""
-    try:
-        from rq import Queue
+    from app.workers.utils import enqueue_job
 
-        from app.core.redis import get_redis_sync
-
-        Queue("webhook_high", connection=get_redis_sync()).enqueue(run_chat_turn_job, job)
-    except Exception as exc:  # noqa: BLE001 — enqueue failure must not break the webhook ack
-        logger.error("failed to enqueue chat run: %s", exc)
+    enqueue_job("webhook_high", run_chat_turn_job, job)
 
 
 def run_chat_turn_job(job: dict) -> None:

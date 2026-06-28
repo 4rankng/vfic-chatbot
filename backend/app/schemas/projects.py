@@ -92,3 +92,32 @@ class FeatureUpdate(BaseModel):
     is_missing: bool | None = None
     needs_clarification: bool | None = None
     evidence_text: str | None = None
+
+
+# --- Bus timetable (structured project route data) ---
+
+
+class BusStopOut(BaseModel):
+    id: uuid.UUID
+    stop_order: int
+    stop_name: str
+    scheduled_time: str | None = None
+
+
+class BusRouteOut(BaseModel):
+    id: uuid.UUID
+    route_name: str
+    route_no: str | None = None
+    route_variant: str = ""
+    shift: str
+    direction: str
+    area: str | None = None
+    mode: str | None = None
+    source_page: str = ""
+    notes: str | None = None
+    stops: list[BusStopOut] = Field(default_factory=list)
+
+
+class BusTimetableResponse(BaseModel):
+    data: list[BusRouteOut]
+    total: int

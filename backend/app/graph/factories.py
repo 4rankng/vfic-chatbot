@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 
 from app.core.config import get_settings
-from app.graph.clients import GeminiEmbedder, MiniMaxAgent, MiniMaxSafety, _minimax_chat
+from app.graph.clients import GeminiEmbedder, MiniMaxAgent, MiniMaxSafety, _chat_for_role
 from app.graph.types import GraphDeps
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ def build_minimax_extractor():
     """
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    llm = _minimax_chat(get_settings().minimax_safety_model, temperature=0.0)
+    llm = _chat_for_role("safety", temperature=0.0)
 
     async def extractor(system: str, user: str) -> str:
         return (await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])).content
@@ -50,7 +50,7 @@ def build_persona_expander():
 
     from app.graph.prompts import RULE_EXPANDER_PROMPT
 
-    llm = _minimax_chat(get_settings().minimax_agent_model, temperature=0.4)
+    llm = _chat_for_role("agent", temperature=0.4)
 
     async def expand(user: str) -> str:
         return (await llm.ainvoke([SystemMessage(content=RULE_EXPANDER_PROMPT), HumanMessage(content=user)])).content
@@ -66,19 +66,7 @@ def make_minimax_llm_json():
     only, so the app/tests never need langchain-openai at import time.
     """
     from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_openai import ChatOpenAI
-
-    s = get_settings()
-    if not s.minimax_api_key:
-        raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
-    llm = ChatOpenAI(
-        model=s.minimax_digest_model or s.minimax_agent_model,
-        api_key=s.minimax_api_key,
-        base_url=s.minimax_base_url,
-        timeout=s.minimax_digest_timeout,
-        temperature=0.1,
-        model_kwargs={"response_format": {"type": "json_object"}},
-    )
+    llm = _chat_for_role("digest", temperature=0.1, json_mode=True)
 
     async def _call(system: str, user: str) -> str:
         return (await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])).content
@@ -91,8 +79,8 @@ async def build_deps(db):
     from app.services.zalo_bot_service import ZaloBotSender
 
     s = get_settings()
-    agent_llm = _minimax_chat(s.minimax_agent_model, temperature=0.3)
-    safety_llm = _minimax_chat(s.minimax_safety_model, temperature=0.0)
+    agent_llm = _chat_for_role("agent", temperature=0.3)
+    safety_llm = _chat_for_role("safety", temperature=0.0)
     embedder = GeminiEmbedder(s)
     return GraphDeps(
         db=db,

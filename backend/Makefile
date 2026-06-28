@@ -41,15 +41,22 @@ define kill-port
 	@bash -c 'lsof -ti :$(1) 2>/dev/null | while read pid; do kill -9 "$$pid" 2>/dev/null || true; done; exit 0'
 endef
 
+define kill-ingest-workers
+	@echo "==> Stopping stale ingest workers for this checkout (if any)..."
+	@bash -c 'root="$$(pwd)"; pgrep -f "rq worker ingest" 2>/dev/null | while read pid; do cwd="$$(lsof -a -d cwd -p "$$pid" -Fn 2>/dev/null | sed -n "s/^n//p")"; [ "$$cwd" = "$$root" ] && kill "$$pid" 2>/dev/null || true; done; exit 0'
+endef
+
 # ---- Local dev: DB + backend (uvicorn) + ingest worker + frontend (vite) in ONE terminal. ----
 # Each server has its own port (BACKEND_PORT / FRONTEND_PORT); `kill-port` (above)
-# frees both before binding so a stale process can never block startup. BACKEND_PORT
-# is exported into the vite subprocess so its dev-server proxy target tracks it (see
+# frees both before binding, and `kill-ingest-workers` removes orphaned workers from
+# previous runs so stale .env/code cannot process new jobs. BACKEND_PORT is exported
+# into the vite subprocess so its dev-server proxy target tracks it (see
 # frontend/vite.config.ts) — override both together, e.g. `make dev BACKEND_PORT=8001`.
-# Ctrl+C stops both app servers (the DB containers stay running).
+# Ctrl+C stops the app servers + worker from this run (the DB containers stay running).
 dev: db
 	$(call kill-port,$(BACKEND_PORT))
 	$(call kill-port,$(FRONTEND_PORT))
+	$(call kill-ingest-workers)
 	@echo ""
 	@echo "==> Starting backend (:$(BACKEND_PORT)) + ingest worker + frontend (:$(FRONTEND_PORT)) — Ctrl+C stops all."
 	@echo "    App : http://localhost:$(FRONTEND_PORT)   Login: admin@vfic.dev / admin123"

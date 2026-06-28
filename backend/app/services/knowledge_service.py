@@ -14,7 +14,7 @@ sources by archiving/replacing them rather than approving a review queue.
 from __future__ import annotations
 
 import uuid
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from sqlalchemy import desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,49 +74,12 @@ class KnowledgeService:
     ) -> KnowledgeDocument:
         """Multipart upload: decode the file as raw text, persist the original, create doc."""
         original_text = data.decode("utf-8", errors="replace")
-        raw_text = original_text
-        repair = None
-        if require_canonical:
-            repair = repair_canonical_markdown(original_text)
-            raw_text = repair.text
+        raw_text, repair = self._repair_if_canonical(original_text, require_canonical)
         canonical = parse_canonical_markdown(raw_text) if require_canonical else None
+        if canonical is not None and project_id is None:
+            project_id = await self._resolve_project_from_canonical(canonical)
+        metadata, version = self._build_canonical_metadata(canonical, raw_text, original_text, repair)
         storage_path = persist_original_upload(file_name, data)
-        metadata = {}
-        version = None
-        if canonical is not None:
-            if project_id is None:
-                project_slug = str(canonical.metadata.get("project_slug") or "").strip()
-                if project_slug:
-                    project = (
-                        await self.db.scalars(
-                            select(Project)
-                            .where(func.lower(Project.slug) == project_slug.lower())
-                            .limit(1)
-                        )
-                    ).first()
-                    if project is not None:
-                        project_id = project.id
-            version = str(canonical.metadata.get("doc_version") or "")
-            canonical_meta = {
-                "document": canonical.metadata,
-                "validation": {
-                    "chunk_count": len(canonical.chunks),
-                    "bus_route_count": len(canonical.bus_timetable.routes),
-                    "bus_stop_count": sum(len(route.stops) for route in canonical.bus_timetable.routes),
-                },
-            }
-            if repair is not None and repair.changed:
-                canonical_meta["repair"] = {
-                    "applied": True,
-                    "count": len(repair.repairs),
-                    "fixes": repair.repairs,
-                    "original_checksum": checksum_text(original_text),
-                }
-            metadata = {
-                "schema_version": SCHEMA_VERSION,
-                "checksum": checksum_text(raw_text),
-                "canonical": canonical_meta,
-            }
         doc = KnowledgeDocument(
             file_name=file_name,
             source="upload",
@@ -133,6 +96,54 @@ class KnowledgeService:
         await self.db.commit()
         await self.db.refresh(doc)
         return doc
+
+    @staticmethod
+    def _repair_if_canonical(text: str, require_canonical: bool) -> tuple[str, Any]:
+        """Apply canonical markdown repair if requested. Returns (repaired_text, repair_result)."""
+        if not require_canonical:
+            return text, None
+        repair = repair_canonical_markdown(text)
+        return repair.text, repair
+
+    async def _resolve_project_from_canonical(self, canonical: Any) -> uuid.UUID | None:
+        """Look up a project by slug from the canonical document metadata."""
+        slug = str(canonical.metadata.get("project_slug") or "").strip()
+        if not slug:
+            return None
+        project = (
+            await self.db.scalars(
+                select(Project).where(func.lower(Project.slug) == slug.lower()).limit(1)
+            )
+        ).first()
+        return project.id if project else None
+
+    @staticmethod
+    def _build_canonical_metadata(canonical: Any, raw_text: str, original_text: str, repair: Any) -> tuple[dict, str | None]:
+        """Assemble the metadata dict and version for a canonical document."""
+        if canonical is None:
+            return {}, None
+        version = str(canonical.metadata.get("doc_version") or "")
+        canonical_meta: dict = {
+            "document": canonical.metadata,
+            "validation": {
+                "chunk_count": len(canonical.chunks),
+                "bus_route_count": len(canonical.bus_timetable.routes),
+                "bus_stop_count": sum(len(route.stops) for route in canonical.bus_timetable.routes),
+            },
+        }
+        if repair is not None and repair.changed:
+            canonical_meta["repair"] = {
+                "applied": True,
+                "count": len(repair.repairs),
+                "fixes": repair.repairs,
+                "original_checksum": checksum_text(original_text),
+            }
+        metadata = {
+            "schema_version": SCHEMA_VERSION,
+            "checksum": checksum_text(raw_text),
+            "canonical": canonical_meta,
+        }
+        return metadata, version
 
     async def process(self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None) -> KnowledgeDocument:
         """Run the ingest pipeline.

@@ -6,9 +6,65 @@ import {
   getKnowledgeUnits,
   type KnowledgeUnit,
 } from "@/lib/vfic/knowledgeService";
+import { Markdown } from "../misc/Markdown";
 import type { KnowledgeSource } from "../types";
 import { isPublished, needsReview } from "./knowledgePipelineUtils";
 import { Chip } from "./KnowledgeSourceRow";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  benefits: "Phúc lợi",
+  contact: "Liên hệ",
+  faq: "Hỏi đáp",
+  feature: "Đặc điểm",
+  job: "Tuyển dụng",
+  other: "Khác",
+  policy: "Quy định",
+  salary: "Lương",
+  schedule: "Lịch trình",
+};
+
+const CONTENT_TYPE_LABELS: Record<string, string> = {
+  bus_schedule: "Lịch xe",
+  company_knowledge: "Kiến thức công ty",
+  job_posting: "Tin tuyển dụng",
+  policy: "Quy định",
+};
+
+const CONFIDENCE_LABELS: Record<string, string> = {
+  high: "Cao",
+  low: "Thấp",
+  medium: "Trung bình",
+};
+
+const ENTITY_LABELS: Record<string, string> = {
+  company: "Công ty",
+  location: "Địa điểm",
+  project: "Dự án",
+  route: "Tuyến",
+  salary: "Lương",
+  shift: "Ca làm",
+  stop: "Điểm đón",
+};
+
+const CANONICAL_TEXT_LABELS: Record<string, string> = {
+  "Company Overview": "Tổng quan công ty",
+  "LG Display Worker Guide": "Hướng dẫn công nhân LG Display",
+};
+
+const labelFromMap = (value: string | null | undefined, labels: Record<string, string>) => {
+  const key = (value ?? "").trim();
+  return key ? labels[key] ?? key : "";
+};
+
+export const localizeKnowledgeText = (value: string) =>
+  Object.entries(CANONICAL_TEXT_LABELS).reduce(
+    (text, [source, label]) => text.replaceAll(source, label),
+    value,
+  );
+
+const COMPACT_MARKDOWN_CLASS =
+  "[&_h1]:text-base [&_h2]:text-base [&_h3]:text-sm [&_h4]:text-sm [&_h5]:text-sm [&_h6]:text-sm [&_pre]:p-3 [&_table]:text-xs";
+
 export const StoredKnowledgePanel = ({
   source,
 }: {
@@ -82,7 +138,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
   return (
     <article className="rounded-[10px] border border-border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Chip>{unit.category || "other"}</Chip>
+        <Chip>{labelFromMap(unit.category || "other", CATEGORY_LABELS)}</Chip>
         <Chip
           tone={
             unit.confidence === "low"
@@ -92,30 +148,42 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
                 : "neutral"
           }
         >
-          Tin cậy {unit.confidence || "medium"}
+          Tin cậy {labelFromMap(unit.confidence || "medium", CONFIDENCE_LABELS)}
         </Chip>
         {unit.is_inference && <Chip tone="warning">Suy luận</Chip>}
-        {unit.content_type && <Chip>{unit.content_type}</Chip>}
+        {unit.content_type && (
+          <Chip>{labelFromMap(unit.content_type, CONTENT_TYPE_LABELS)}</Chip>
+        )}
         {unit.route_id && <Chip>{unit.route_id}</Chip>}
         <span className="kb-mono ml-auto text-[11px] text-muted-foreground">
           #{unit.chunk_index + 1}
         </span>
       </div>
 
-      <p className="mt-3 break-words text-sm leading-6 text-foreground">
-        {unit.content}
-      </p>
+      <Markdown
+        className={`mt-3 break-words text-sm text-foreground ${COMPACT_MARKDOWN_CLASS}`}
+      >
+        {localizeKnowledgeText(unit.content)}
+      </Markdown>
 
       {unit.summary && (
         <div className="mt-3 rounded-lg bg-secondary p-3 text-xs leading-5 text-muted-foreground">
-          {unit.summary}
+          <Markdown
+            className={`text-xs [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
+          >
+            {localizeKnowledgeText(unit.summary)}
+          </Markdown>
         </div>
       )}
 
       {unit.source_quote && (
         <div className="mt-3 flex gap-2 rounded-lg border border-border bg-secondary p-3 text-xs leading-5 text-muted-foreground">
           <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-ink-300)]" />
-          <span className="break-words">{unit.source_quote}</span>
+          <Markdown
+            className={`min-w-0 flex-1 break-words text-xs [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
+          >
+            {localizeKnowledgeText(unit.source_quote)}
+          </Markdown>
         </div>
       )}
 
@@ -124,12 +192,14 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
           {unit.citation_label && (
             <div className="flex gap-2">
               <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
-              <span className="break-words">Nguồn: {unit.citation_label}</span>
+              <span className="break-words">
+                Nguồn: {localizeKnowledgeText(unit.citation_label)}
+              </span>
             </div>
           )}
           {unit.source_anchor && (
             <div className="kb-mono break-words text-[11px]">
-              Anchor: {unit.source_anchor}
+              Mốc nguồn: {localizeKnowledgeText(unit.source_anchor)}
             </div>
           )}
           {unit.effective_from && (
@@ -156,7 +226,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
                 key={question}
                 className="break-words rounded-lg bg-secondary px-3 py-2 text-xs leading-5 text-[var(--kb-ink-700)]"
               >
-                {question}
+                {localizeKnowledgeText(question)}
               </li>
             ))}
           </ul>
@@ -175,7 +245,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
                 key={key}
                 className="kb-mono rounded-full bg-secondary px-2 py-1 text-[11px] text-[var(--kb-ink-700)]"
               >
-                {key}: {String(value)}
+                {labelFromMap(key, ENTITY_LABELS)}: {String(value)}
               </span>
             ))}
           </div>

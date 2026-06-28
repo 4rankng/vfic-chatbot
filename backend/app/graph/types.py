@@ -14,6 +14,14 @@ from datetime import datetime, timezone
 from app.graph.llm import AgentModel, Embedder, SafetyModel
 from app.services.zalo_bot_service import ZaloBotSender
 
+# TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
+# annotation is stringified by ``from __future__ import annotations`` anyway,
+# but the explicit guard keeps linters/mypy happy without the import cost.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 
 @dataclass
 class BotRunState:
@@ -27,7 +35,7 @@ class BotRunState:
 
 @dataclass
 class GraphDeps:
-    db: object  # AsyncSession
+    db: AsyncSession  # injected at runtime; AsyncSession only for type-checking
     agent: AgentModel
     safety: SafetyModel
     embedder: Embedder

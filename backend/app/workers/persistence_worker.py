@@ -9,25 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 def enqueue_persist_lead(job: dict) -> None:
-    try:
-        from rq import Queue
+    from app.workers.utils import enqueue_job
 
-        from app.core.redis import get_redis_sync
-
-        Queue("persistence_low", connection=get_redis_sync()).enqueue(run_persist_lead_job, job)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("failed to enqueue lead persist: %s", exc)
+    enqueue_job("persistence_low", run_persist_lead_job, job)
 
 
 def enqueue_persist_memory(job: dict) -> None:
-    try:
-        from rq import Queue
+    from app.workers.utils import enqueue_job
 
-        from app.core.redis import get_redis_sync
-
-        Queue("persistence_low", connection=get_redis_sync()).enqueue(run_persist_memory_job, job)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("failed to enqueue memory persist: %s", exc)
+    enqueue_job("persistence_low", run_persist_memory_job, job)
 
 
 def run_persist_lead_job(job: dict) -> None:

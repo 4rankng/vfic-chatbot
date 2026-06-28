@@ -11,6 +11,7 @@ via ``GET /documents/{id}`` (``stage`` / ``digest_meta`` / ``error``).
 from __future__ import annotations
 
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
@@ -69,6 +70,34 @@ async def get_document(
     doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> KnowledgeDocumentOut:
     return KnowledgeDocumentOut.model_validate(await _load(doc_id, db))
+
+
+@router.get("/documents/{doc_id}/raw", response_class=PlainTextResponse)
+async def download_raw_document(
+    doc_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PlainTextResponse:
+    doc = await _load(doc_id, db)
+    filename = (
+        (doc.file_name or "knowledge-source.md")
+        .replace('"', "")
+        .replace("/", "-")
+        .replace("\\", "-")
+    )
+    if "." not in filename:
+        filename = f"{filename}.md"
+    fallback_filename = filename.encode("ascii", "ignore").decode() or "knowledge-source.md"
+    return PlainTextResponse(
+        doc.raw_text or "",
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{fallback_filename}"; '
+                f"filename*=UTF-8''{quote(filename)}"
+            )
+        },
+    )
 
 
 @router.get("/documents/{doc_id}/chunks", response_model=KnowledgeChunkListResponse)

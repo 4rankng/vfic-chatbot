@@ -53,12 +53,22 @@ VFIC_BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASS
 ZALO_BOT_TOKEN=
 ZALO_BOT_WEBHOOK_SECRET=
 
-# ---- LLM: MiniMax (OpenAI-compatible). Agent + safety. ----
+# ---- LLM providers (OpenAI-compatible). Enable exactly one. ----
+MINIMAX_ENABLE=true
 MINIMAX_API_KEY=
 MINIMAX_BASE_URL=https://api.minimax.io/v1
 MINIMAX_AGENT_MODEL=MiniMax-M2.7-highspeed
 MINIMAX_SAFETY_MODEL=MiniMax-M2.5-highspeed
 MINIMAX_REQUEST_TIMEOUT=60
+
+OPENROUTER_ENABLE=false
+OPENROUTER_API_KEY=
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_AGENT_MODEL=deepseek/deepseek-v3.2
+OPENROUTER_SAFETY_MODEL=deepseek/deepseek-v3.2
+OPENROUTER_DIGEST_MODEL=deepseek/deepseek-v3.2
+OPENROUTER_REQUEST_TIMEOUT=60
+OPENROUTER_DIGEST_TIMEOUT=180
 
 # ---- Embeddings: Google Gemini (3072-dim). ----
 GEMINI_API_KEY=

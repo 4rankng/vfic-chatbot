@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ListBase,
-  useGetList,
   useListContext,
   useNotify,
   usePermissions,
@@ -11,21 +10,19 @@ import {
 import {
   Activity,
   Boxes,
-  ChevronDown,
+  BusFront,
   FileText,
-  MapPin,
   MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
-  Search,
   Star,
   Upload,
 } from "lucide-react";
 import { DeleteButton } from "@/components/admin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,24 +31,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
-import type { KnowledgeSource, Project } from "../types";
-import { reindexKnowledge, reindexProject } from "@/lib/vfic/knowledgeService";
+import type { BusRoute, Project } from "../types";
+import {
+  getProjectBusTimetable,
+  reindexProject,
+} from "@/lib/vfic/knowledgeService";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
-import { stageLabel, stageTone } from "../knowledge/stageTone";
 import { ProjectFeatures } from "./ProjectFeatures";
-
-const getProjectLocation = (project: Project) =>
-  project.index_card?.location?.trim() || "Chưa có địa điểm";
-
-const getProjectHighlights = (project: Project) =>
-  project.index_card?.highlights?.filter(Boolean) ?? [];
-
-const isFailedSource = (source: KnowledgeSource) =>
-  String(source.status ?? source.stage ?? "").toUpperCase() === "FAILED";
 
 const ProjectListContent = () => {
   const { data, isPending } = useListContext<Project>();
@@ -59,64 +55,23 @@ const ProjectListContent = () => {
   const isAdmin = permissions === "admin";
   const refresh = useRefresh();
   const redirect = useRedirect();
-  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  const { data: knowledgeSources } = useGetList<KnowledgeSource>(
-    "knowledge_sources",
-    {
-      pagination: { page: 1, perPage: 250 },
-      sort: { field: "updated_at", order: "DESC" },
-    },
-  );
-
   const projects = useMemo(() => data ?? [], [data]);
-  const projectDocs = useMemo(() => {
-    const counts = new Map<string, KnowledgeSource[]>();
-    for (const source of knowledgeSources ?? []) {
-      if (!source.project_id) continue;
-      const projectId = String(source.project_id);
-      counts.set(projectId, [...(counts.get(projectId) ?? []), source]);
-    }
-    return counts;
-  }, [knowledgeSources]);
-
-  const filteredProjects = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return projects.filter((project) => {
-      if (!needle) return true;
-      const haystack = [
-        project.name,
-        project.slug,
-        project.summary,
-        project.index_card?.location,
-        ...(project.index_card?.key_roles ?? []),
-        ...getProjectHighlights(project),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(needle);
-    });
-  }, [projects, query]);
 
   useEffect(() => {
-    if (filteredProjects.length === 0) {
+    if (projects.length === 0) {
       setSelectedId(null);
       return;
     }
-    if (
-      !selectedId ||
-      !filteredProjects.some((project) => project.id === selectedId)
-    ) {
-      setSelectedId(String(filteredProjects[0].id));
+    if (!selectedId || !projects.some((project) => project.id === selectedId)) {
+      setSelectedId(String(projects[0].id));
     }
-  }, [filteredProjects, selectedId]);
+  }, [projects, selectedId]);
 
   const selectedProject =
-    filteredProjects.find((project) => project.id === selectedId) ??
-    filteredProjects[0] ??
+    projects.find((project) => project.id === selectedId) ?? projects[0] ??
     null;
   const activeCount = projects.filter((project) => project.is_active).length;
   const totalDocs = projects.reduce(
@@ -135,7 +90,7 @@ const ProjectListContent = () => {
             Quản lý dự án
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Theo dõi product card, nguồn kiến thức và 11 đặc điểm sản phẩm mà
+            Theo dõi thẻ sản phẩm, nguồn kiến thức và 11 đặc điểm sản phẩm mà
             agent dùng khi tư vấn ứng viên.
           </p>
         </div>
@@ -191,67 +146,32 @@ const ProjectListContent = () => {
           },
           {
             icon: <Star className="size-4" />,
-            label: "Product cards",
+            label: "Thẻ sản phẩm",
             value: String(projects.filter((project) => project.summary).length),
             detail: "Có tóm tắt / thẻ danh mục",
           },
         ]}
       />
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.4fr)]">
-        <Card className="overflow-hidden">
-          <CardHeader className="gap-3 border-b">
-            <CardTitle className="text-base">Danh mục dự án</CardTitle>
-            <div className="flex flex-col gap-2">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Tìm theo tên, slug, vị trí..."
-                  className="pl-9"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isPending ? (
-              <ProjectSkeleton />
-            ) : filteredProjects.length === 0 ? (
-              <EmptyState
-                icon={<Boxes className="size-6" />}
-                title="Không tìm thấy dự án"
-                description="Thử đổi bộ lọc hoặc tạo dự án mới để agent có product context."
-                className="m-4"
-              />
-            ) : (
-              <div className="max-h-[calc(100vh-300px)] min-h-[420px] overflow-y-auto">
-                {filteredProjects.map((project) => (
-                  <ProjectManagementRow
-                    key={project.id}
-                    project={project}
-                    selected={selectedProject?.id === project.id}
-                    onSelect={() => setSelectedId(String(project.id))}
-                    isAdmin={isAdmin}
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
+      <div className="mt-4 space-y-4">
+        <ProjectSwitcher
+          projects={projects}
+          selectedProject={selectedProject}
+          selectedId={selectedId}
+          isPending={isPending}
+          isAdmin={isAdmin}
+          onSelect={setSelectedId}
+        />
         {selectedProject ? (
           <ProjectDetailPanel
             project={selectedProject}
-            docs={projectDocs.get(String(selectedProject.id)) ?? []}
             isAdmin={isAdmin}
-            onUpload={() => setUploadOpen(true)}
           />
         ) : (
           <EmptyState
             icon={<Boxes className="size-6" />}
-            title="Chọn một dự án"
-            description="Thông tin product card, nguồn kiến thức và đặc điểm sản phẩm sẽ hiện ở đây."
+            title="Chưa có dự án"
+            description="Tạo dự án mới hoặc tải kiến thức để agent có ngữ cảnh tư vấn."
             className="min-h-[420px]"
           />
         )}
@@ -394,21 +314,6 @@ const StatsRibbon = ({
   </div>
 );
 
-const ProjectSkeleton = () => (
-  <div className="flex flex-col">
-    {Array.from({ length: 5 }).map((_, index) => (
-      <div key={index} className="flex items-start gap-3 border-b p-4">
-        <Skeleton className="size-9 rounded-md" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-3 w-3/4" />
-          <Skeleton className="h-7 w-52" />
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
 const ProjectStatusBadge = ({
   active,
   short = false,
@@ -427,23 +332,28 @@ const ProjectStatusBadge = ({
   </Badge>
 );
 
-const ProjectManagementRow = ({
-  project,
-  selected,
-  onSelect,
+const ProjectSwitcher = ({
+  projects,
+  selectedProject,
+  selectedId,
+  isPending,
   isAdmin,
+  onSelect,
 }: {
-  project: Project;
-  selected: boolean;
-  onSelect: () => void;
+  projects: Project[];
+  selectedProject: Project | null;
+  selectedId: string | null;
+  isPending: boolean;
   isAdmin: boolean;
+  onSelect: (id: string) => void;
 }) => {
   const notify = useNotify();
   const refresh = useRefresh();
 
   const onReindex = async () => {
+    if (!selectedProject) return;
     try {
-      await reindexProject(String(project.id));
+      await reindexProject(String(selectedProject.id));
       notify("Đã làm mới thẻ danh mục dự án.", { type: "success" });
       refresh();
     } catch (err) {
@@ -452,69 +362,67 @@ const ProjectManagementRow = ({
   };
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onSelect();
-      }}
-      className={cn(
-        "group border-b px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted focus-visible:outline-none",
-        selected && "bg-muted/70",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <Boxes className="size-4" />
-        </div>
+    <Card>
+      <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">
-                {project.name}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="font-mono">{project.slug}</span>
-                <span>•</span>
-                <MapPin className="size-3" />
-                <span className="truncate">{getProjectLocation(project)}</span>
-              </div>
-            </div>
-            <div
-              className="flex shrink-0 items-center gap-1"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <ProjectStatusBadge active={project.is_active} short />
-              {isAdmin && (
-                <ProjectActionsMenu
-                  project={project}
-                  onReindex={onReindex}
-                  onDeleted={() => refresh()}
-                />
+          <div className="mb-2 text-sm font-semibold">Dự án đang xem</div>
+          {isPending ? (
+            <Skeleton className="h-10 w-full max-w-md" />
+          ) : projects.length > 0 ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Select
+                value={selectedId ?? undefined}
+                onValueChange={(value) => onSelect(value)}
+              >
+                <SelectTrigger className="h-10 w-full sm:max-w-md">
+                  <SelectValue placeholder="Chọn dự án" />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={String(project.id)}>
+                      <span className="block truncate">
+                        {project.name} · {project.slug}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedProject && (
+                <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                  <ProjectStatusBadge active={selectedProject.is_active} short />
+                  <ReadinessRing
+                    ready={selectedProject.feature_readiness?.ready}
+                    total={selectedProject.feature_readiness?.total ?? 16}
+                    size="size-7"
+                  />
+                  <span className="truncate tabular-nums">
+                    {typeof selectedProject.feature_readiness?.ready ===
+                    "number"
+                      ? `${selectedProject.feature_readiness.ready}/${selectedProject.feature_readiness?.total ?? 16} có thể tư vấn`
+                      : "Chưa có dữ liệu tư vấn"}
+                  </span>
+                </div>
               )}
             </div>
-          </div>
-          {project.summary && (
-            <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-              {project.summary}
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Chưa có dự án nào để chọn.
             </p>
           )}
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <ReadinessRing
-              ready={project.feature_readiness?.ready}
-              total={project.feature_readiness?.total ?? 16}
-              size="size-7"
-            />
-            <span className="truncate tabular-nums">
-              {typeof project.feature_readiness?.ready === "number"
-                ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16} có thể tư vấn`
-                : "—"}
-            </span>
-          </div>
         </div>
-      </div>
-    </div>
+        {selectedProject && (
+          <div className="flex shrink-0 items-center gap-2">
+            {isAdmin && (
+              <ProjectActionsMenu
+                project={selectedProject}
+                onReindex={onReindex}
+                onDeleted={() => refresh()}
+              />
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 
@@ -535,7 +443,7 @@ const ProjectActionsMenu = ({
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 opacity-70 transition-opacity group-hover:opacity-100"
+          className="size-8 opacity-80 transition-opacity hover:opacity-100"
           aria-label={`Mở thao tác cho ${project.name}`}
         >
           <MoreHorizontal className="size-4" />
@@ -571,34 +479,27 @@ const ProjectActionsMenu = ({
 
 const ProjectDetailPanel = ({
   project,
-  docs,
   isAdmin,
-  onUpload,
 }: {
   project: Project;
-  docs: KnowledgeSource[];
   isAdmin: boolean;
-  onUpload: () => void;
 }) => {
-  const redirect = useRedirect();
-  const notify = useNotify();
-  const refresh = useRefresh();
-  const highlights = getProjectHighlights(project);
-  const card = project.index_card ?? {};
-  const linkedDocCount = Math.max(
-    docs.length,
-    project.knowledge_document_count ?? 0,
-  );
+  const [busRoutes, setBusRoutes] = useState<BusRoute[] | null>(null);
 
-  const retrySource = async (source: KnowledgeSource) => {
-    try {
-      await reindexKnowledge(String(source.id));
-      notify("Đã đưa tài liệu vào hàng xử lý lại.", { type: "success" });
-      refresh();
-    } catch (err) {
-      notify(`Thử lại thất bại: ${(err as Error).message}`, { type: "error" });
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    setBusRoutes(null);
+    getProjectBusTimetable(String(project.id))
+      .then((res) => {
+        if (!cancelled) setBusRoutes(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setBusRoutes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
 
   return (
     <div className="space-y-4">
@@ -610,158 +511,127 @@ const ProjectDetailPanel = ({
         projectId={String(project.id)}
         editable={isAdmin}
       />
-
-      <details className="group rounded-lg border bg-card text-card-foreground shadow-sm">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 border-b px-4 py-3 text-sm font-semibold transition-colors group-open:[&>svg]:rotate-180 hover:bg-muted/50">
-          <span>Thông tin thêm</span>
-          <ChevronDown className="size-4 text-muted-foreground transition-transform" />
-        </summary>
-        <div className="space-y-4 px-4 py-4">
-          <Card className="border-0 shadow-none">
-            <CardHeader className="gap-3 border-b px-0">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <CardTitle className="truncate text-lg">
-                    {project.name}
-                  </CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {project.slug} • {getProjectLocation(project)}
-                  </p>
-                </div>
-                <ProjectStatusBadge active={project.is_active} />
-              </div>
-              {isAdmin && (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => redirect("edit", "projects", project.id)}
-                  >
-                    <Pencil className="size-4" />
-                    Cập nhật
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={onUpload}>
-                    <Upload className="size-4" />
-                    Thêm kiến thức
-                  </Button>
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4 px-0 pt-4">
-              <section>
-                <h3 className="text-sm font-semibold">Product card</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {project.summary ??
-                    "Chưa có tóm tắt. Tải tin tuyển dụng rồi làm mới thẻ danh mục."}
-                </p>
-              </section>
-              <div className="grid gap-3 md:grid-cols-2">
-                <InfoBlock
-                  label="Vị trí tuyển"
-                  value={(card.key_roles ?? []).join(", ") || "Chưa có"}
-                />
-                <InfoBlock
-                  label="Nguồn kiến thức"
-                  value={`${linkedDocCount} tài liệu`}
-                />
-              </div>
-              <section>
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">Điểm nổi bật</h3>
-                  <span className="text-xs text-muted-foreground">
-                    {highlights.length} mục
-                  </span>
-                </div>
-                {highlights.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {highlights.map((highlight) => (
-                      <Badge key={highlight} variant="secondary">
-                        {highlight}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Chưa có điểm nổi bật để agent ưu tiên khi tư vấn.
-                  </p>
-                )}
-              </section>
-              <section>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">Tài liệu liên kết</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => redirect("/knowledge_sources")}
-                  >
-                    Xem kho kiến thức
-                  </Button>
-                </div>
-                {docs.length > 0 ? (
-                  <div className="space-y-2">
-                    {docs.slice(0, 4).map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            redirect("show", "knowledge_sources", doc.id)
-                          }
-                          className="min-w-0 flex-1 truncate text-left"
-                        >
-                          {doc.file_name}
-                        </button>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                            stageTone(doc.stage, doc.status),
-                          )}
-                        >
-                          {stageLabel(doc.stage ?? doc.status)}
-                        </span>
-                        {isFailedSource(doc) && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => retrySource(doc)}
-                            title="Thử xử lý lại tài liệu"
-                          >
-                            <RefreshCw className="size-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : linkedDocCount > 0 ? (
-                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                    Có {linkedDocCount} tài liệu đã gắn với dự án. Bấm làm mới
-                    nếu danh sách chưa hiện.
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                    Chưa có tài liệu nào gắn với dự án này.
-                  </div>
-                )}
-              </section>
-            </CardContent>
-          </Card>
-        </div>
-      </details>
+      <BusTimetableSection routes={busRoutes} />
     </div>
   );
 };
 
-const InfoBlock = ({ label, value }: { label: string; value: string }) => (
-  <div className="rounded-md bg-muted/40 p-3">
-    <div className="text-xs uppercase tracking-wide text-muted-foreground">
-      {label}
+const shiftLabel = (shift: string) =>
+  (
+    {
+      admin: "Hành chính",
+      day: "Ca ngày",
+      night: "Ca đêm",
+    } as Record<string, string>
+  )[shift] ?? shift;
+
+const directionLabel = (direction: string) =>
+  (
+    {
+      outbound: "Lượt đi",
+      return: "Lượt về",
+    } as Record<string, string>
+  )[direction] ?? direction;
+
+const BusTimetableSection = ({ routes }: { routes: BusRoute[] | null }) => {
+  const [showAll, setShowAll] = useState(false);
+  const visibleRoutes = routes ? (showAll ? routes : routes.slice(0, 6)) : [];
+  const hiddenCount = routes ? routes.length - visibleRoutes.length : 0;
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="inline-flex items-center gap-2 text-base font-semibold">
+            <BusFront className="size-4 text-muted-foreground" />
+            Lịch xe đưa đón
+          </h3>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {routes === null ? "Đang tải..." : `${routes.length} tuyến`}
+            </span>
+            {routes && routes.length > 6 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAll((value) => !value)}
+              >
+                {showAll ? "Thu gọn" : "Xem tất cả"}
+              </Button>
+            )}
+          </div>
+        </div>
+        {routes === null ? (
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+        ) : routes.length > 0 ? (
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            {visibleRoutes.map((route) => (
+              <BusRouteCard key={route.id} route={route} />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+            Chưa có lịch xe đưa đón được trích xuất cho dự án này.
+          </p>
+        )}
+        {hiddenCount > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Đang ẩn {hiddenCount} tuyến. Bấm "Xem tất cả" để hiển thị đầy đủ.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const BusRouteCard = ({ route }: { route: BusRoute }) => (
+  <div className="rounded-md border bg-muted/15 p-3">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-sm font-semibold leading-5">{route.route_name}</h4>
+          {route.route_no && (
+            <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+              Tuyến {route.route_no}
+            </Badge>
+          )}
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">
+          {shiftLabel(route.shift)} • {directionLabel(route.direction)}
+        </div>
+      </div>
+      <Badge variant="secondary" className="shrink-0 text-[10px]">
+        {route.stops.length} điểm
+      </Badge>
     </div>
-    <div className="mt-1 text-sm font-medium">{value}</div>
+
+    {route.stops.length > 0 ? (
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {route.stops.map((stop) => (
+          <span
+            key={stop.id}
+            className="inline-flex max-w-full items-center gap-1 rounded-md border bg-card px-2 py-1 text-xs"
+          >
+            <span className="max-w-[180px] truncate font-medium">
+              {stop.stop_name}
+            </span>
+            {stop.scheduled_time && (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {stop.scheduled_time}
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
+    ) : (
+      <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+        Chưa có điểm đón cho tuyến này.
+      </p>
+    )}
   </div>
 );
 

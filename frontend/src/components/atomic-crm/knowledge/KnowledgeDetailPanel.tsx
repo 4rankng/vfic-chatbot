@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { useNotify, useRedirect, useRefresh } from "ra-core";
-import { Archive, MoreHorizontal, Pencil, RefreshCw } from "lucide-react";
+import {
+  Archive,
+  Download,
+  MoreHorizontal,
+  Pencil,
+  RefreshCw,
+} from "lucide-react";
 import { DeleteButton } from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   archiveKnowledge,
+  downloadKnowledgeRawFile,
   reindexKnowledge,
 } from "@/lib/vfic/knowledgeService";
 import { getRelativeTimeString } from "../leads/leadUtils";
@@ -29,7 +36,10 @@ import {
   sourceStage,
 } from "./knowledgePipelineUtils";
 import { PipelineMiniProgress, SourceStamp } from "./KnowledgeSourceRow";
-import { StoredKnowledgePanel } from "./StoredKnowledgePanel";
+import {
+  localizeKnowledgeText,
+  StoredKnowledgePanel,
+} from "./StoredKnowledgePanel";
 import { PipelineTimeline } from "./PipelineTimeline";
 export const KnowledgeDetailPanel = ({
   source,
@@ -38,7 +48,7 @@ export const KnowledgeDetailPanel = ({
 }: {
   source: KnowledgeSource;
   project?: Project;
-  onBack: () => void;
+  onBack?: () => void;
 }) => {
   const redirect = useRedirect();
   const notify = useNotify();
@@ -56,16 +66,29 @@ export const KnowledgeDetailPanel = ({
       notify(`Thất bại: ${(err as Error).message}`, { type: "error" });
     }
   };
+  const downloadRawFile = async () => {
+    try {
+      await downloadKnowledgeRawFile(
+        String(source.id),
+        source.file_name || "knowledge-source.md",
+      );
+      notify("Đã tải tệp gốc.", { type: "success" });
+    } catch (err) {
+      notify(`Thất bại: ${(err as Error).message}`, { type: "error" });
+    }
+  };
 
   return (
     <section className="flex min-h-[620px] flex-col gap-4 rounded-[14px] border border-border bg-card p-5 text-foreground lg:p-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="kb-mono self-start rounded-[9px] px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
-      >
-        ← Quay lại danh sách
-      </button>
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="kb-mono self-start rounded-[9px] px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
+        >
+          ← Quay lại danh sách
+        </button>
+      )}
 
       {/* Compact identity — one block, no duplicated stats */}
       <div className="flex items-start justify-between gap-3">
@@ -107,6 +130,15 @@ export const KnowledgeDetailPanel = ({
         >
           <RefreshCw className="size-4" />
           Huấn luyện lại
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={downloadRawFile}
+          className="rounded-[9px]"
+        >
+          <Download className="size-4" />
+          Tải tệp gốc
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -179,7 +211,7 @@ export const KnowledgeDetailPanel = ({
               className="text-[13.5px] italic text-[var(--kb-ink-700)]"
               style={{ fontFamily: "var(--kb-font-display)" }}
             >
-              {source.digest_summary}
+              {localizeKnowledgeText(source.digest_summary)}
             </p>
           </div>
         ) : (

@@ -75,8 +75,8 @@ class KnowledgePipeline:
         self.db = db
         self.embedder = embedder
         self.llm_json = llm_json
-        # Per-instance LLM ceiling. None (background ingest) -> minimax_digest_timeout;
-        # web-process callers pass minimax_request_timeout so they don't hold a web worker
+        # Per-instance LLM ceiling. None (background ingest) -> provider digest timeout;
+        # web-process callers pass provider request timeout so they don't hold a web worker
         # for the full digest ceiling.
         self._call_timeout = call_timeout
         self.chunks = KnowledgeChunkRepo(db)
@@ -335,12 +335,12 @@ class KnowledgePipeline:
         timeout = (
             self._call_timeout
             if self._call_timeout is not None
-            else get_settings().minimax_digest_timeout
+            else get_settings().active_llm_digest_timeout
         )
         try:
             return await asyncio.wait_for(self.llm_json(system, user), timeout=timeout)
         except TimeoutError as exc:
-            raise TimeoutError(f"MiniMax {purpose} timed out after {timeout}s") from exc
+            raise TimeoutError(f"{get_settings().active_llm_provider} {purpose} timed out after {timeout}s") from exc
 
     async def _set_stage(self, doc, stage: str, *, status: str | None = None, error: str | None = None) -> None:
         doc.stage = stage

@@ -178,6 +178,29 @@ export type ProductFeature = {
 
 export type ProductFeatureList = { data: ProductFeature[]; total: number };
 
+export type BusStop = {
+  id: string;
+  stop_order: number;
+  stop_name: string;
+  scheduled_time?: string | null;
+};
+
+export type BusRoute = {
+  id: string;
+  route_name: string;
+  route_no?: string | null;
+  route_variant: string;
+  shift: "day" | "night" | "admin" | string;
+  direction: "outbound" | "return" | string;
+  area?: string | null;
+  mode?: string | null;
+  source_page?: string | null;
+  notes?: string | null;
+  stops: BusStop[];
+};
+
+export type BusTimetableList = { data: BusRoute[]; total: number };
+
 // An agent persona (free-form markdown). Several stored; one global persona active.
 export type Persona = {
   id: string;

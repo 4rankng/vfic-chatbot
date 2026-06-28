@@ -28,6 +28,36 @@ import { cn } from "@/lib/utils";
 // The gauge is positional across these slots.
 const FEATURE_SLOTS = 11;
 
+const FEATURE_CATEGORY_LABELS: Record<string, string> = {
+  application: "Hồ sơ ứng tuyển",
+  bonus: "Thưởng và hỗ trợ",
+  cashflow: "Kỳ lương",
+  commute: "Đi lại",
+  daily_cost: "Phúc lợi giảm chi phí",
+  housing: "Chỗ ở",
+  income: "Thu nhập",
+  job_difficulty: "Công việc",
+  schedule: "Lịch làm việc",
+};
+
+const getFeatureCategoryLabel = (category: string | null | undefined) => {
+  const key = category?.trim().toLowerCase();
+  if (!key) return "Khác";
+  return FEATURE_CATEGORY_LABELS[key] ?? category;
+};
+
+const normalizeFeatureText = (value: string | null | undefined) =>
+  (value ?? "")
+    .trim()
+    .replace(/^["“”]+|["“”]+$/g, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+const shouldShowEvidence = (feature: ProductFeature) => {
+  const evidence = normalizeFeatureText(feature.evidence_text);
+  return Boolean(evidence && evidence !== normalizeFeatureText(feature.value_text));
+};
+
 // Binary readiness derivation. A feature is "đủ thông tin" (ready) when the
 // agent has a non-empty value_text and the row is not flagged missing/unclear.
 // Empty slots are NOT ready.
@@ -116,7 +146,7 @@ export const ProjectFeatures = ({
   const groupedFeatures = (features ?? []).reduce<
     Record<string, ProductFeature[]>
   >((acc, feature) => {
-    const key = feature.category || "Khác";
+    const key = getFeatureCategoryLabel(feature.category);
     acc[key] = acc[key] ?? [];
     acc[key].push(feature);
     return acc;
@@ -193,7 +223,7 @@ export const ProjectFeatures = ({
                               {items.length} mục
                             </span>
                           </div>
-                          <div className="grid gap-2 xl:grid-cols-2">
+                          <div className="grid gap-3 lg:grid-cols-2">
                             {items.map((f) => (
                               <FeatureCard
                                 key={f.id}
@@ -317,7 +347,7 @@ const FeatureGroup = ({
         <span className="text-xs text-muted-foreground">{count} mục</span>
       </div>
       {count > 0 ? (
-        <div className="grid gap-2 xl:grid-cols-2">
+        <div className="grid gap-2 md:grid-cols-2">
           {slots.map((f, i) => {
             const name = f?.name_vi ?? "Chưa trích xuất";
             const highlighted = ready && !!f?.is_highlight;
@@ -377,6 +407,7 @@ const FeatureCard = ({
   const [draft, setDraft] = useState(feature.value_text);
   const [highlight, setHighlight] = useState(feature.is_highlight);
   const [saving, setSaving] = useState(false);
+  const showEvidence = shouldShowEvidence(feature);
 
   const save = async () => {
     setSaving(true);
@@ -404,7 +435,7 @@ const FeatureCard = ({
   return (
     <div
       className={cn(
-        "rounded-md border p-3",
+        "min-w-0 rounded-md border p-3",
         feature.is_highlight && "border-emerald-200 bg-emerald-50",
         (feature.is_missing || feature.needs_clarification) &&
           "border-destructive/30 bg-destructive/5",
@@ -413,7 +444,9 @@ const FeatureCard = ({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-semibold">{feature.name_vi}</span>
+            <span className="min-w-0 text-sm font-semibold">
+              {feature.name_vi}
+            </span>
             {feature.is_highlight && (
               <Badge className="bg-emerald-500 text-[10px]">Nổi bật</Badge>
             )}
@@ -443,7 +476,7 @@ const FeatureCard = ({
           ) : (
             <>
               <p className="mt-1 text-sm leading-5">{feature.value_text}</p>
-              {feature.evidence_text && (
+              {showEvidence && (
                 <p className="mt-1 text-xs italic text-muted-foreground">
                   "{feature.evidence_text}"
                 </p>

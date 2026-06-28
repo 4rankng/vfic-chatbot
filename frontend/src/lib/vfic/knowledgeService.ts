@@ -8,7 +8,11 @@ import {
   apiJson,
   apiRequest,
 } from "@/components/atomic-crm/providers/rest/api";
-import type { ProductFeature, ProductFeatureList } from "@/components/atomic-crm/types";
+import type {
+  BusTimetableList,
+  ProductFeature,
+  ProductFeatureList,
+} from "@/components/atomic-crm/types";
 
 const BASE = "/api/v1";
 
@@ -103,6 +107,25 @@ export const saveKnowledgeTemplate = async (): Promise<void> => {
   URL.revokeObjectURL(url);
 };
 
+export const downloadKnowledgeRawFile = async (
+  id: string,
+  fileName = "knowledge-source.md",
+): Promise<void> => {
+  const response = await apiRequest(`${doc(id)}/raw`);
+  if (!response.ok) {
+    throw new ApiError(response.status, "Không tải được tệp gốc.");
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName || "knowledge-source.md";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
 export const processKnowledge = (id: string) =>
   apiJson<ApiRecord>(`${doc(id)}/process`, { method: "POST" });
 
@@ -139,6 +162,9 @@ export const reindexProject = (id: string) =>
 
 export const getProjectFeatures = (id: string) =>
   apiJson<ProductFeatureList>(`${proj(id)}/features`);
+
+export const getProjectBusTimetable = (id: string) =>
+  apiJson<BusTimetableList>(`${proj(id)}/bus-timetable`);
 
 /** Synchronously re-extract active features from the project's latest posting (~5-10s). */
 export const extractProjectFeatures = (id: string) =>

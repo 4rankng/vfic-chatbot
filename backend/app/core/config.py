@@ -40,12 +40,23 @@ class Settings(BaseSettings):
     # The webhook URL currently registered with Zalo (used for self-tests / status).
     zalo_bot_webhook_url: str = ""
 
-    # LLM: MiniMax (OpenAI-compatible). Agent + safety. KEPT from n8n, prompts ported verbatim.
+    # LLM providers. MiniMax remains the default for backwards compatibility;
+    # OpenRouter is also OpenAI-compatible and can be selected via *_ENABLE.
+    minimax_enable: bool = True
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.io/v1"
     minimax_agent_model: str = "MiniMax-M2.7-highspeed"
     minimax_safety_model: str = "MiniMax-M2.5-highspeed"
     minimax_request_timeout: int = 60
+
+    openrouter_enable: bool = False
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_agent_model: str = "deepseek/deepseek-v3.2"
+    openrouter_safety_model: str = "deepseek/deepseek-v3.2"
+    openrouter_digest_model: str = "deepseek/deepseek-v3.2"
+    openrouter_request_timeout: int = 60
+    openrouter_digest_timeout: int = 180
 
     # Embeddings: Google Gemini (3072-dim). KEPT from n8n.
     gemini_api_key: str = ""
@@ -77,6 +88,24 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def active_llm_provider(self) -> str:
+        if self.minimax_enable and self.openrouter_enable:
+            raise RuntimeError("Enable only one LLM provider: set either MINIMAX_ENABLE or OPENROUTER_ENABLE")
+        if self.openrouter_enable:
+            return "OpenRouter"
+        if self.minimax_enable:
+            return "MiniMax"
+        raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
+
+    @property
+    def active_llm_request_timeout(self) -> int:
+        return self.openrouter_request_timeout if self.active_llm_provider == "OpenRouter" else self.minimax_request_timeout
+
+    @property
+    def active_llm_digest_timeout(self) -> int:
+        return self.openrouter_digest_timeout if self.active_llm_provider == "OpenRouter" else self.minimax_digest_timeout
 
     def model_post_init(self, __context) -> None:
         """Fail fast if the deployed environment keeps the dev JWT secret.

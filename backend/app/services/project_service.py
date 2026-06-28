@@ -18,13 +18,16 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import User
 from app.schemas.projects import (
+    BusRouteOut,
+    BusStopOut,
+    BusTimetableResponse,
     FeatureListResponse,
     FeatureOut,
     FeatureReadiness,
@@ -195,7 +198,7 @@ class ProjectService:
                 self.db,
                 GeminiEmbedder(),
                 make_minimax_llm_json(),
-                call_timeout=get_settings().minimax_request_timeout,
+                call_timeout=get_settings().active_llm_request_timeout,
             ).build_project_index(proj.id)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"index rebuild failed: {exc}") from exc
@@ -207,6 +210,67 @@ class ProjectService:
         await self._require_project(project_id)
         rows = await JobFeatureValueRepo(self.db).list_for_project(project_id)
         return FeatureListResponse(data=[_feature_from_row(r) for r in rows], total=len(rows))
+
+    async def list_bus_timetable(self, project_id: uuid.UUID) -> BusTimetableResponse:
+        """List structured bus routes for the project, grouped with ordered stops."""
+        await self._require_project(project_id)
+        route_rows = (
+            await self.db.execute(
+                text(
+                    "SELECT id, route_name, route_no, route_variant, shift, direction, "
+                    "       area, mode, source_page, notes "
+                    "FROM bus_routes "
+                    "WHERE project_id = :pid "
+                    "ORDER BY route_name ASC, shift ASC, direction ASC, route_variant ASC"
+                ),
+                {"pid": str(project_id)},
+            )
+        ).mappings().all()
+        if not route_rows:
+            return BusTimetableResponse(data=[], total=0)
+
+        route_ids = [str(row["id"]) for row in route_rows]
+        stop_rows = (
+            await self.db.execute(
+                text(
+                    "SELECT id, route_id, stop_order, stop_name, "
+                    "       to_char(scheduled_time, 'HH24:MI') AS scheduled_time "
+                    "FROM bus_stops "
+                    "WHERE route_id = ANY(CAST(:route_ids AS uuid[])) "
+                    "ORDER BY route_id, stop_order"
+                ),
+                {"route_ids": route_ids},
+            )
+        ).mappings().all()
+        stops_by_route: dict[uuid.UUID, list[BusStopOut]] = {}
+        for row in stop_rows:
+            route_id = row["route_id"]
+            stops_by_route.setdefault(route_id, []).append(
+                BusStopOut(
+                    id=row["id"],
+                    stop_order=row["stop_order"],
+                    stop_name=row["stop_name"],
+                    scheduled_time=row["scheduled_time"],
+                )
+            )
+
+        data = [
+            BusRouteOut(
+                id=row["id"],
+                route_name=row["route_name"],
+                route_no=row["route_no"],
+                route_variant=row["route_variant"] or "",
+                shift=row["shift"],
+                direction=row["direction"],
+                area=row["area"],
+                mode=row["mode"],
+                source_page=row["source_page"] or "",
+                notes=row["notes"],
+                stops=stops_by_route.get(row["id"], []),
+            )
+            for row in route_rows
+        ]
+        return BusTimetableResponse(data=data, total=len(data))
 
     async def update_feature(
         self, project_id: uuid.UUID, feature_id: uuid.UUID, body: FeatureUpdate, admin: User
@@ -288,7 +352,7 @@ class ProjectService:
                 self.db,
                 GeminiEmbedder(),
                 make_minimax_llm_json(),
-                call_timeout=get_settings().minimax_request_timeout,
+                call_timeout=get_settings().active_llm_request_timeout,
             ).extract_product_features(doc, [])
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"feature extraction failed: {exc}") from exc

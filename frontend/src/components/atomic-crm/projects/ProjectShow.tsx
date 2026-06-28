@@ -43,7 +43,7 @@ const ProjectShowContent = () => {
         <CardContent className="flex flex-col gap-3 text-sm">
           <div>
             <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Slug
+              Mã dự án
             </div>
             <div className="font-mono">{project.slug}</div>
           </div>
