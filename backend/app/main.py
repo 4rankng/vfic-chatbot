@@ -31,6 +31,31 @@ async def lifespan(app: FastAPI):
             await ensure_defaults(db)
     except Exception:  # noqa: BLE001
         logger.exception("startup seeder failed (non-fatal)")
+
+    # Register proactive follow-up tick in rq-scheduler (idempotent — re-registering
+    # on every boot is safe and ensures the schedule survives scheduler restarts).
+    try:
+        from datetime import datetime, timezone
+
+        from rq_scheduler import Scheduler
+
+        from app.core.redis import get_redis_sync
+        from app.workers.followup_worker import run_proactive_followup_tick
+
+        conn = get_redis_sync()
+        sched = Scheduler(connection=conn, queue_name="followup")
+        # cancel_any is False by default in schedule(); the repeatable job id is
+        # derived from func.__name__ so re-registration is idempotent.
+        sched.schedule(
+            scheduled_time=datetime.now(timezone.utc),
+            func=run_proactive_followup_tick,
+            interval=settings.proactive_tick_interval_seconds,
+            repeat=None,  # repeat indefinitely
+        )
+        logger.info("proactive follow-up tick registered: interval=%ds", settings.proactive_tick_interval_seconds)
+    except Exception:  # noqa: BLE001
+        logger.exception("proactive scheduler registration failed (non-fatal)")
+
     yield
     await engine.dispose()
     logger.info("vfic backend stopped")
@@ -78,7 +103,7 @@ async def metrics() -> dict:
 
         conn = get_redis_sync()
         queues = {}
-        for name in ("webhook_high", "persistence_low", "ingest"):
+        for name in ("webhook_high", "persistence_low", "ingest", "followup"):
             queues[name] = Queue(name, connection=conn).count  # O(1) Redis LLEN
         queues["workers"] = Worker.count(connection=conn)  # O(1) Redis SCARD
         return queues

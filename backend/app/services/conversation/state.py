@@ -9,6 +9,7 @@ Reads live in ``repository.py``; realtime publishing in ``events.py``.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -31,6 +32,8 @@ from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
 _SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationConflict(Exception):

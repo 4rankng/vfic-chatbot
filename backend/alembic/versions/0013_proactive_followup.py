@@ -14,14 +14,14 @@ Proactive BOT messages are identified by sender='BOT' AND bot_run_id IS NULL
 (proactive turns deliberately log no BotRun).
 
 Revision ID: 0013_proactive_followup
-Revises: 0012_add_contact_info_feature
+Revises: 0013_password_reset_otps
 Create Date: 2026-06-29
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0013_proactive_followup"
-down_revision = "0012_add_contact_info_feature"
+down_revision = "0013_password_reset_otps"
 branch_labels = None
 depends_on = None
 

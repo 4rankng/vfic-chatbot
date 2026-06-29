@@ -116,8 +116,8 @@ def _build_proactive_user_text(
         "- Giọng điệu thân thiện, ngắn gọn (~300 char), không phô trương.\n\n"
         "Bạn PHẢI trả về kết quả dạng JSON:\n"
         '{"send": true hoặc false, "message": "nội dung tin nhắn", "reason": "lý do"}\n'
-        "- send=false: bot sẽ KHÔNG GỬI (không cần soạn message).\n'
-        "- send=true: message là tin nhắn sẽ gửi trực tiếp.\n'
+        "- send=false: bot sẽ KHÔNG GỬI (không cần soạn message).\n"
+        "- send=true: message là tin nhắn sẽ gửi trực tiếp.\n"
         "- reason: giải thích ngắn gọn quyết định.\n"
     )
 

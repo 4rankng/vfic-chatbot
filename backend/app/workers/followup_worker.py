@@ -73,10 +73,13 @@ async def _run_followup_async(job: dict) -> None:
 
 
 def run_proactive_followup_tick() -> None:
-    """Scheduler tick: scan eligible conversations and enqueue per-lead jobs."""
+    """Scheduler tick (sync entrypoint). Scans eligible conversations and enqueues per-lead jobs."""
+    asyncio.run(_run_tick_async())
+
+
+async def _run_tick_async() -> None:
     from app.workers._db import worker_session
     from app.services.proactive.repository import find_eligible_conversations
-    from app.workers.utils import enqueue_job
 
     logger.debug("proactive follow-up tick starting")
 

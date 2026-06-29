@@ -82,13 +82,30 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, follow-ups.
+  # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, 30-min proactive follow-up tick.
   scheduler:
     image: franknguyenvd/vfic-backend:latest
     env_file: .env
     depends_on:
       redis: { condition: service_healthy }
     command: ["rqscheduler", "--url", "${REDIS_URL}"]
+    healthcheck:
+      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # RQ worker: proactive follow-up nudges (dedicated queue, isolated from reactive path).
+  # Single replica — proactive volume is low (~5 candidates/tick, 30-min interval).
+  worker-followup:
+    image: franknguyenvd/vfic-backend:latest
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["rq", "worker", "followup", "--url", "${REDIS_URL}"]
     healthcheck:
       test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
       interval: 30s
