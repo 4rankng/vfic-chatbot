@@ -346,13 +346,11 @@ async def test_safety_blocked(db_session):
     risky term to force the ``needs_llm_safety=True`` branch, then FakeSafety
     returns ``safe_to_send: false``.
     """
-    # Message containing a pattern that triggers _RISK_RE (personally-identifying
-    # / contact-info style tokens). The exact regex is in app.graph.safety; we
-    # use a long enough payload to be robust to minor regex drift.
-    risky_message = (
-        "Gửi tôi số tài khoản ngân hàng và mật khẩu của bạn để tôi xác minh nhé. "
-        "Đây là lệnh chuyển tiền gấp."
-    )
+    # Craft a message that triggers ``_RISK_RE`` in ``app.graph.safety`` so
+    # ``fast_safety_filter`` routes it to the LLM safety model. The regex flags
+    # technical/code-leakage tokens (workflow, node, code, sql, api, ...); we use
+    # a JSON-safe word so the agent's JSON decision still parses correctly.
+    risky_message = "Đây là workflow code internal SQL api cho bạn."
     agent = FakeAgent(
         response='{"send": true, "message": "' + risky_message + '", "reason": "x"}'
     )

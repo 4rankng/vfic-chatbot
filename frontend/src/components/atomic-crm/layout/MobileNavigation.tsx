@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BookOpen, Home, ListTodo, Users } from "lucide-react";
-import { useTranslate } from "ra-core";
+import { BookOpen, Home, ListTodo, UserCog, Users } from "lucide-react";
+import { usePermissions, useTranslate } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
 
@@ -16,6 +16,8 @@ const IS_WEB_IOS =
 export const MobileNavigation = () => {
   const location = useLocation();
   const translate = useTranslate();
+  const { permissions } = usePermissions();
+  const isAdmin = permissions === "admin";
 
   const currentPath = useMemo<string | boolean>(() => {
     if (matchPath("/", location.pathname)) return "/";
@@ -24,6 +26,7 @@ export const MobileNavigation = () => {
       return "/conversations";
     if (matchPath("/knowledge_sources/*", location.pathname))
       return "/knowledge_sources";
+    if (matchPath("/users/*", location.pathname)) return "/users";
     return false;
   }, [location.pathname]);
 
@@ -35,7 +38,12 @@ export const MobileNavigation = () => {
         paddingBottom: IS_PWA && IS_WEB_IOS ? 15 : undefined,
       }}
     >
-      <div className="mx-auto grid h-full w-full max-w-md grid-cols-4 items-stretch">
+      <div
+        className={cn(
+          "mx-auto grid h-full w-full max-w-md items-stretch",
+          isAdmin ? "grid-cols-5" : "grid-cols-4",
+        )}
+      >
         <NavigationButton
           href="/"
           Icon={Home}
@@ -60,6 +68,14 @@ export const MobileNavigation = () => {
           label="Kiến thức"
           isActive={currentPath === "/knowledge_sources"}
         />
+        {isAdmin && (
+          <NavigationButton
+            href="/users"
+            Icon={UserCog}
+            label="Tài khoản"
+            isActive={currentPath === "/users"}
+          />
+        )}
       </div>
     </nav>
   );

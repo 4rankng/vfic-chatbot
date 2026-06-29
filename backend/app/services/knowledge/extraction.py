@@ -7,7 +7,7 @@ paragraph-aware splitter that bounds each digest LLM call to a sane input size
 """
 from __future__ import annotations
 
-from app.core.config import get_settings
+from app.core.config import DIGEST_MAX_SECTIONS, DIGEST_SECTION_CHARS
 
 
 def split_for_digest(text: str, max_chars: int | None = None) -> list[str]:
@@ -16,7 +16,7 @@ def split_for_digest(text: str, max_chars: int | None = None) -> list[str]:
     The LLM does the real semantic splitting per section; this just keeps each call
     within a sane input size. Paragraph boundaries are respected where possible.
     """
-    max_chars = max_chars or get_settings().digest_section_chars
+    max_chars = max_chars or DIGEST_SECTION_CHARS
     text = (text or "").strip()
     if len(text) <= max_chars:
         return [text] if text else []
@@ -28,6 +28,6 @@ def split_for_digest(text: str, max_chars: int | None = None) -> list[str]:
             sections.append(chunk)
         if start + max_chars >= len(text):
             break
-        if len(sections) >= get_settings().digest_max_sections:
+        if len(sections) >= DIGEST_MAX_SECTIONS:
             break
     return sections

@@ -1,5 +1,5 @@
 import { FileText, User, Users } from "lucide-react";
-import { useTranslate, useUserMenu } from "ra-core";
+import { usePermissions, useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
@@ -15,6 +15,8 @@ const Header = () => {
   const { title } = useConfigurationContext();
   const location = useLocation();
   const translate = useTranslate();
+  const { permissions } = usePermissions();
+  const isAdmin = permissions === "admin";
 
   const currentPath = useMemo<string | false>(() => {
     if (matchPath("/", location.pathname)) return "/";
@@ -24,6 +26,7 @@ const Header = () => {
     if (matchPath("/projects/*", location.pathname)) return "/projects";
     if (matchPath("/knowledge_sources/*", location.pathname))
       return "/knowledge_sources";
+    if (matchPath("/users/*", location.pathname)) return "/users";
     // Unmatched secondary routes (e.g. /settings, /profile, /users) leave no
     // pill highlighted, matching the prior behavior.
     return false;
@@ -80,6 +83,13 @@ const Header = () => {
               to="/knowledge_sources"
               isActive={currentPath === "/knowledge_sources"}
             />
+            {isAdmin && (
+              <NavPill
+                label="Tài khoản"
+                to="/users"
+                isActive={currentPath === "/users"}
+              />
+            )}
           </nav>
 
           {/* Actions */}

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, update
 
-from app.core.config import get_settings
+from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
 from app.models.conversation import (
     BotRun,
     BotRunOutcome,
@@ -105,7 +105,7 @@ class ConversationState:
         # Proactive opt-out: cheap substring scan on the hot path. Accepted
         # tradeoff (A7) — atomicity with the inbound txn outweighs purity.
         _lower = body.strip().lower()
-        if _lower and any(p in _lower for p in _settings.proactive_optout_phrases_list):
+        if _lower and any(p in _lower for p in PROACTIVE_OPTOUT_PHRASES):
             conv.followup_opted_out = True
             logger.info(
                 "proactive opt-out: conversation=%s phrase detected",

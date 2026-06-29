@@ -39,7 +39,7 @@ export const UserList = () => {
           </h2>
           <CreateButton />
         </TopToolbar>
-        <Card className="mt-4">
+        <div className="mt-4">
           <DataTable bulkActionButtons={false}>
             <DataTable.Col source="full_name" label="Họ tên">
               <TextField source="full_name" className="font-semibold" />
@@ -58,7 +58,7 @@ export const UserList = () => {
               <UserActions />
             </DataTable.Col>
           </DataTable>
-        </Card>
+        </div>
       </ListBase>
     </CanAccess>
   );

@@ -498,6 +498,34 @@ async def test_role_or_disabled_change_revokes_existing_tokens(client):
     assert stale_after_disable.status_code == 401
 
 
+async def test_admin_can_hard_delete_non_self_user(client, db_session):
+    tok = await _admin_token(client)
+    h = _bearer(tok)
+    email = unique_email()
+    created = await client.post(
+        "/api/v1/users",
+        json={"email": email, "password": "Abcd1234!", "role": "recruiter"},
+        headers=h,
+    )
+    assert created.status_code == 201, created.text
+    uid = created.json()["id"]
+
+    deleted = await client.delete(f"/api/v1/users/{uid}", headers=h)
+    assert deleted.status_code == 204, deleted.text
+    assert (await client.get(f"/api/v1/users/{uid}", headers=h)).status_code == 404
+
+    row = (await db_session.scalars(select(User).where(User.email == email))).first()
+    assert row is None
+
+
+async def test_admin_cannot_hard_delete_self(client):
+    tok = await _admin_token(client)
+    h = _bearer(tok)
+    me = (await client.get("/api/v1/auth/me", headers=h)).json()
+    r = await client.delete(f"/api/v1/users/{me['id']}", headers=h)
+    assert r.status_code == 400
+
+
 async def test_admin_cannot_disable_self(client):
     tok = await _admin_token(client)
     h = _bearer(tok)
@@ -542,6 +570,35 @@ async def test_cannot_remove_last_enabled_admin_via_service(db_session, seed):
                 UserUpdate(role=Role.recruiter),
                 actor_id=recruiter.id,
             )
+    finally:
+        for row in admins:
+            row.disabled = previous_disabled[row.id]
+        await db_session.commit()
+
+
+async def test_cannot_hard_delete_last_enabled_admin_via_service(db_session, seed):
+    from app.models.user import Role
+    from app.services.user_service import UserProvisioningService
+
+    admin = (
+        await db_session.scalars(select(User).where(User.email == ADMIN_EMAIL))
+    ).first()
+    recruiter = (
+        await db_session.scalars(select(User).where(User.email == RECRUITER_EMAIL))
+    ).first()
+    assert admin is not None
+    assert recruiter is not None
+    svc = UserProvisioningService(db_session)
+    admins = (await db_session.scalars(select(User).where(User.role == Role.admin))).all()
+    previous_disabled = {row.id: row.disabled for row in admins}
+
+    try:
+        for row in admins:
+            row.disabled = row.id != admin.id
+        await db_session.commit()
+
+        with pytest.raises(ValueError):
+            await svc.delete(admin.id, actor_id=recruiter.id)
     finally:
         for row in admins:
             row.disabled = previous_disabled[row.id]

@@ -30,9 +30,7 @@ def run_followup_job(job: dict) -> None:
 
 
 async def _run_followup_async(job: dict) -> None:
-    from app.core.config import get_settings
-
-    settings = get_settings()
+    from app.core.config import PROACTIVE_JOB_MAX_AGE_SECONDS
 
     # Job-age guard: drop stale jobs (e.g. worker was down, now backlogged).
     enqueued_at = job.get("enqueued_at")
@@ -42,9 +40,9 @@ async def _run_followup_async(job: dict) -> None:
         except (ValueError, TypeError):
             enqueued_dt = datetime.now(timezone.utc)
         age = (datetime.now(timezone.utc) - enqueued_dt).total_seconds()
-        if age > settings.proactive_job_max_age_seconds:
+        if age > PROACTIVE_JOB_MAX_AGE_SECONDS:
             logger.info("proactive followup job stale: age=%ds, max=%ds, dropped",
-                        age, settings.proactive_job_max_age_seconds)
+                        age, PROACTIVE_JOB_MAX_AGE_SECONDS)
             return
 
     from app.workers._db import worker_session

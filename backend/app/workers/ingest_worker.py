@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 def enqueue_ingest(doc_id) -> None:
     """Enqueue a training-pipeline job for one document (best-effort, non-fatal)."""
-    from app.core.config import get_settings
+    from app.core.config import INGEST_JOB_TIMEOUT_SECONDS
     from app.workers.utils import enqueue_job
 
     enqueue_job(
         "ingest",
         run_ingest_job,
         str(doc_id),
-        job_timeout=get_settings().ingest_job_timeout_seconds,
+        job_timeout=INGEST_JOB_TIMEOUT_SECONDS,
     )
 
 

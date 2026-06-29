@@ -1,6 +1,6 @@
 """User CRUD + provisioning (replaces the Supabase vfic_create_user edge function).
 
-Passwords are hashed with argon2; every create/disable/enable is audited.
+Passwords are hashed with argon2; every create/disable/enable/delete is audited.
 """
 import uuid
 
@@ -15,7 +15,7 @@ from app.services.audit_service import record_audit
 
 
 class UserProvisioningService:
-    """Admin-facing user lifecycle: create / read / update / disable / enable."""
+    """Admin-facing user lifecycle: create / read / update / disable / enable / delete."""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -183,3 +183,24 @@ class UserProvisioningService:
         await self.db.commit()
         await self.db.refresh(user)
         return user
+
+    async def delete(self, user_id: uuid.UUID, *, actor_id: uuid.UUID) -> None:
+        user = await self.db.get(User, user_id)
+        if user is None:
+            raise LookupError("user not found")
+        if user.id == actor_id:
+            raise ValueError("Bạn không thể xóa chính mình")
+
+        await self._guard_admin_change(
+            user, actor_id=actor_id, next_role=user.role, next_disabled=True
+        )
+        await record_audit(
+            self.db,
+            action="delete_user",
+            actor_id=actor_id,
+            target_type="user",
+            target_id=str(user.id),
+            payload={"email": user.email, "role": user.role.value},
+        )
+        await self.db.delete(user)
+        await self.db.commit()

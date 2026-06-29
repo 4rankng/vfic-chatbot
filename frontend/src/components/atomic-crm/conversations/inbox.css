@@ -741,11 +741,7 @@
 }
 .inbox-bg-container .mode-segment.active.human {
   color: var(--inbox-accent);
-  background: color-mix(
-    in srgb,
-    var(--inbox-accent) 14%,
-    var(--surface-solid)
-  );
+  background: color-mix(in srgb, var(--inbox-accent) 14%, var(--surface-solid));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--inbox-accent) 46%, transparent),
     0 1px 2px rgba(11, 20, 26, 0.08);
@@ -920,7 +916,9 @@
 :is(.inbox-bg-container, .chat-surface) .chat-scroller {
   padding: 0;
   overflow-y: auto;
-  overflow-anchor: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  touch-action: pan-y;
   scrollbar-width: none;
   background: var(--chat-bg);
 }
@@ -928,10 +926,9 @@
   display: none;
 }
 
-:is(.inbox-bg-container, .chat-surface)
-  .chat-scroller
-  .chat-item-list {
+:is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
   padding: 32px !important;
+  overflow-anchor: none;
 }
 
 :is(.inbox-bg-container, .chat-surface) .chat-history-top-spacer {
@@ -1781,9 +1778,7 @@
   :is(.inbox-bg-container, .chat-surface) .chat-scroller {
     padding: 0;
   }
-  :is(.inbox-bg-container, .chat-surface)
-    .chat-scroller
-    .chat-item-list {
+  :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
     padding: 20px 12px !important;
   }
   :is(.inbox-bg-container, .chat-surface) .system-event {
@@ -1824,9 +1819,7 @@
   :is(.inbox-bg-container, .chat-surface) .bubble {
     max-width: min(70%, 640px);
   }
-  :is(.inbox-bg-container, .chat-surface)
-    .chat-scroller
-    .chat-item-list,
+  :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list,
   :is(.inbox-bg-container, .chat-surface) .composer-wrap {
     padding-left: max(32px, calc((100% - 768px) / 2));
     padding-right: max(32px, calc((100% - 768px) / 2));

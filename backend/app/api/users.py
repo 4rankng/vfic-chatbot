@@ -88,6 +88,21 @@ async def enable_user(
     return await _set_disabled(user_id=user_id, disabled=False, actor=admin, db=db)
 
 
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    svc = UserProvisioningService(db)
+    try:
+        await svc.delete(user_id, actor_id=admin.id)
+    except LookupError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
 async def _set_disabled(
     *, user_id: uuid.UUID, disabled: bool, actor: User, db: AsyncSession
 ) -> UserOut:

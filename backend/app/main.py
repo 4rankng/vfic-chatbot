@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import auth, bot_runs, conversations, dashboard, jobs, knowledge, leads, personas, projects, realtime, users, webhooks
-from app.core.config import get_settings
+from app.core.config import PROACTIVE_TICK_INTERVAL_SECONDS, get_settings
 from app.core.db import engine
 from app.core.logging import request_id_ctx, setup_logging
 
@@ -49,10 +49,10 @@ async def lifespan(app: FastAPI):
         sched.schedule(
             scheduled_time=datetime.now(timezone.utc),
             func=run_proactive_followup_tick,
-            interval=settings.proactive_tick_interval_seconds,
+            interval=PROACTIVE_TICK_INTERVAL_SECONDS,
             repeat=None,  # repeat indefinitely
         )
-        logger.info("proactive follow-up tick registered: interval=%ds", settings.proactive_tick_interval_seconds)
+        logger.info("proactive follow-up tick registered: interval=%ds", PROACTIVE_TICK_INTERVAL_SECONDS)
     except Exception:  # noqa: BLE001
         logger.exception("proactive scheduler registration failed (non-fatal)")
 

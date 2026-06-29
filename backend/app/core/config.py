@@ -7,6 +7,35 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# ---------------------------------------------------------------------------
+# Proactive follow-up constants (not configurable via env — policy is in code)
+# ---------------------------------------------------------------------------
+PROACTIVE_FOLLOWUP_GAPS_HOURS: list[int] = [6, 24, 46]
+PROACTIVE_FOLLOWUP_CAP: int = 3
+PROACTIVE_SILENCE_LIMIT: int = 2
+PROACTIVE_TICK_INTERVAL_SECONDS: int = 1800  # 30 min
+PROACTIVE_PER_TICK_CAP: int = 5
+# 48h Zalo rule minus 1h safety margin for in-flight latency (MiniMax + safety).
+PROACTIVE_48H_WINDOW_SECONDS: int = 169200  # 47h
+PROACTIVE_RETRY_COOLDOWN_SECONDS: int = 21600  # 6h
+PROACTIVE_JOB_MAX_AGE_SECONDS: int = 3300  # 55 min
+# Vietnamese + English opt-out phrases (substring match on inbound).
+PROACTIVE_OPTOUT_PHRASES: list[str] = [
+    p.strip().lower()
+    for p in (
+        "dừng,đừng nhắn,ko quan tâm,không quan tâm,stop,unsubscribe,để yên,bận rồi,"
+        "đừng làm phiền,không cần nữa,tôi không thích,không thích"
+    ).split(",")
+    if p.strip()
+]
+
+# ---------------------------------------------------------------------------
+# Knowledge pipeline constants (not configurable via env)
+# ---------------------------------------------------------------------------
+DIGEST_SECTION_CHARS: int = 6000
+DIGEST_MAX_SECTIONS: int = 20
+INGEST_JOB_TIMEOUT_SECONDS: int = 3600
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -75,9 +104,6 @@ class Settings(BaseSettings):
     # to source-grounded units instead of failing the document (see KnowledgePipeline).
     minimax_digest_timeout: int = 180
     kb_storage_path: str = "/data/kb_uploads"
-    digest_section_chars: int = 6000
-    digest_max_sections: int = 20
-    ingest_job_timeout_seconds: int = 3600
 
     web_concurrency: int = 2
 
@@ -91,29 +117,6 @@ class Settings(BaseSettings):
     # stuck turn before its per-conversation lock auto-expires (avoids stale-run
     # window where a new inbound re-acquires the lock while the old turn is dying).
     chat_turn_job_timeout: int = 150
-
-    # Proactive follow-up cadence (hours from last_inbound_at per slot).
-    proactive_followup_gaps_hours: str = "6,24,46"
-    proactive_followup_cap: int = 3
-    proactive_silence_limit: int = 2
-    proactive_tick_interval_seconds: int = 1800  # 30 min
-    proactive_per_tick_cap: int = 5
-    proactive_48h_margin_seconds: int = 3600  # 1h; authoritative guard uses 47h
-    proactive_retry_cooldown_seconds: int = 21600  # 6h
-    proactive_job_max_age_seconds: int = 3300  # 55 min
-    # Vietnamese + English opt-out phrases (comma-separated, substring match).
-    proactive_optout_phrases: str = (
-        "dừng,đừng nhắn,ko quan tâm,không quan tâm,stop,unsubscribe,để yên,bận rồi,"
-        "đừng làm phiền,không cần nữa,tôi không thích,không thích"
-    )
-
-    @property
-    def proactive_followup_gaps_hours_list(self) -> list[int]:
-        return [int(x.strip()) for x in self.proactive_followup_gaps_hours.split(",") if x.strip()]
-
-    @property
-    def proactive_optout_phrases_list(self) -> list[str]:
-        return [p.strip().lower() for p in self.proactive_optout_phrases.split(",") if p.strip()]
 
     @property
     def cors_origins_list(self) -> list[str]:

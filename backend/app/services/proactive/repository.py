@@ -13,11 +13,16 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
 
-from app.core.config import get_settings
+from app.core.config import (
+    PROACTIVE_48H_WINDOW_SECONDS,
+    PROACTIVE_FOLLOWUP_CAP,
+    PROACTIVE_FOLLOWUP_GAPS_HOURS,
+    PROACTIVE_PER_TICK_CAP,
+    PROACTIVE_RETRY_COOLDOWN_SECONDS,
+)
 from app.models.conversation import Conversation
 
 logger = logging.getLogger(__name__)
-_settings = get_settings()
 
 
 async def find_eligible_conversations(db) -> list[Conversation]:
@@ -37,10 +42,10 @@ async def find_eligible_conversations(db) -> list[Conversation]:
     Post-filter (Python-side):
     - ``now >= last_inbound_at + GAPS[followup_count]``  (slot is due)
     """
-    margin = timedelta(seconds=_settings.proactive_48h_margin_seconds)
-    cap = _settings.proactive_followup_cap
-    cooldown = timedelta(seconds=_settings.proactive_retry_cooldown_seconds)
-    per_tick = _settings.proactive_per_tick_cap
+    margin = timedelta(seconds=PROACTIVE_48H_WINDOW_SECONDS)
+    cap = PROACTIVE_FOLLOWUP_CAP
+    cooldown = timedelta(seconds=PROACTIVE_RETRY_COOLDOWN_SECONDS)
+    per_tick = PROACTIVE_PER_TICK_CAP
     now = datetime.now(timezone.utc)
     now_minus_margin = now - margin
     now_minus_cooldown = now - cooldown
@@ -83,7 +88,7 @@ async def find_eligible_conversations(db) -> list[Conversation]:
     candidates = list(result.scalars().all())
 
     # --- Python-side gap filter: only return candidates whose slot is due ---
-    gaps = _settings.proactive_followup_gaps_hours_list
+    gaps = PROACTIVE_FOLLOWUP_GAPS_HOURS
     eligible: list[Conversation] = []
     for conv in candidates:
         idx = min(conv.followup_count, len(gaps) - 1)

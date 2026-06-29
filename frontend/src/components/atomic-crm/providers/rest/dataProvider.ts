@@ -181,9 +181,6 @@ const restProvider: DataProvider = {
 
   async delete(resource: string, params: DeleteParams) {
     await apiJson<void>(onePath(resource, params.id), { method: "DELETE" });
-    // Backend user-deletion is intentionally not supported (accounts are
-    // disabled, not removed); when the route 405s the previous record is
-    // returned so the optimistic UI still settles.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return { data: (params.previousData ?? { id: params.id }) as any };
   },

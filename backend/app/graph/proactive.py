@@ -166,17 +166,20 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
      10. Send (``deps.zalo.send``).
      11. Persist (``record_proactive_outcome`` clears lock on any path).
     """
-    from app.core.config import get_settings
+    from app.core.config import (
+        PROACTIVE_48H_WINDOW_SECONDS,
+        PROACTIVE_FOLLOWUP_CAP,
+        PROACTIVE_SILENCE_LIMIT,
+    )
     from app.graph.context import build_system_prompt
     from app.services.lead_repository import LeadRepository
     from app.services.lead_service import lead_profile_text
 
-    settings = get_settings()
     svc = ConversationService(deps.db)
     now = _now()
-    margin = timedelta(seconds=settings.proactive_48h_margin_seconds)
-    cap = settings.proactive_followup_cap
-    silence_limit = settings.proactive_silence_limit
+    margin = timedelta(seconds=PROACTIVE_48H_WINDOW_SECONDS)
+    cap = PROACTIVE_FOLLOWUP_CAP
+    silence_limit = PROACTIVE_SILENCE_LIMIT
 
     # 1. Re-check guards
     await deps.db.refresh(conv)

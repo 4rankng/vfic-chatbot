@@ -14,6 +14,7 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
+import { shouldTrapEdgeWheel } from "./chatEdgeScroll";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
 // the realtime subscription, the virtualised scroller (with all the snap /
@@ -115,6 +116,7 @@ export const ChatThread = ({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const initialJumpDoneRef = useRef(false);
   const lastScrollTopRef = useRef(0);
+  const lastLoadMoreAtRef = useRef(0);
   // Load older messages only on a genuine upward scroll — not merely because
   // the top happens to be visible (which is the case the moment a thread opens,
   // when the initial page fits the viewport, and would otherwise auto-fetch the
@@ -145,8 +147,8 @@ export const ChatThread = ({
   }, [conversationId, conversation, dataProvider]);
 
   // Snap to the newest message instantly when a conversation opens, then let
-  // Virtuoso's followOutput handle subsequent appends (smooth only when the
-  // user is already at the bottom — reading history is never yanked away).
+  // Virtuoso's followOutput handle subsequent appends only when the user is
+  // already at the bottom — reading history is never yanked away.
   useEffect(() => {
     if (messages.length > 0 && !initialJumpDoneRef.current) {
       initialJumpDoneRef.current = true;
@@ -163,6 +165,7 @@ export const ChatThread = ({
     initialJumpDoneRef.current = false;
     readyForMoreRef.current = false;
     lastScrollTopRef.current = 0;
+    lastLoadMoreAtRef.current = 0;
     setEmojiOpen(false);
   }, [conversationId]);
 
@@ -197,8 +200,17 @@ export const ChatThread = ({
       }
       if (currentTop < previousTop) readyForMoreRef.current = true;
     };
+    const onWheel = (event: WheelEvent) => {
+      if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
     scrollerEl.addEventListener("scroll", onScroll, { passive: true });
-    return () => scrollerEl.removeEventListener("scroll", onScroll);
+    scrollerEl.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      scrollerEl.removeEventListener("scroll", onScroll);
+      scrollerEl.removeEventListener("wheel", onWheel);
+    };
   }, [scrollerEl]);
 
   const handleStartReached = useCallback(() => {
@@ -206,12 +218,16 @@ export const ChatThread = ({
     // result of a real upward scroll.
     if (!initialJumpDoneRef.current) return;
     if (!readyForMoreRef.current) return;
+    if (isLoadingMore) return;
     if (hasMore && messages.length > 0) {
+      const now = performance.now();
+      if (now - lastLoadMoreAtRef.current < 350) return;
+      lastLoadMoreAtRef.current = now;
       // Disarm until the next upward scroll — one page per scroll-up.
       readyForMoreRef.current = false;
       void loadMore(messages[0].id);
     }
-  }, [hasMore, messages, loadMore]);
+  }, [hasMore, isLoadingMore, messages, loadMore]);
 
   const followOutput = useCallback(
     (isAtBottom: boolean) => (isAtBottom ? ("auto" as const) : false),
