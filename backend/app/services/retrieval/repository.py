@@ -11,6 +11,8 @@ Row lists/scalars exactly as the inline ``db.execute(...).all()`` calls did.
 """
 from __future__ import annotations
 
+import json
+import unicodedata
 import uuid
 
 from sqlalchemy import text
@@ -52,7 +54,7 @@ class RetrievalRepository:
         return (
             await self.db.execute(
                 text(
-                    "SELECT c.id, c.content, c.metadata, "
+                    "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
                     "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
                     "FROM knowledge_chunks c "
                     "JOIN knowledge_documents d ON d.id = c.document_id "
@@ -74,6 +76,31 @@ class RetrievalRepository:
                 params,
             )
         ).all()
+
+    @staticmethod
+    def _normalize_text(value: str) -> str:
+        no_marks = "".join(
+            ch
+            for ch in unicodedata.normalize("NFD", value.casefold())
+            if unicodedata.category(ch) != "Mn"
+        )
+        no_marks = no_marks.replace("đ", "d")
+        return " ".join(no_marks.split())
+
+    @classmethod
+    def _requested_bus_shifts(cls, question: str) -> list[str | None]:
+        q = cls._normalize_text(question)
+        wants_day = "ca ngay" in q
+        wants_night = "ca dem" in q
+        wants_admin = "hanh chinh" in q
+        shifts: list[str | None] = []
+        if wants_day:
+            shifts.append("day")
+        if wants_night:
+            shifts.append("night")
+        if wants_admin:
+            shifts.append("admin")
+        return shifts or [None]
 
     async def project_id_by_slug(self, slug: str, *, active_only: bool = False) -> uuid.UUID | None:
         """Resolve a project id from its (unique) slug; optionally require ``is_active``."""
@@ -109,7 +136,7 @@ class RetrievalRepository:
         ).scalar_one_or_none()
 
     async def search_bus_timetable(self, company: str, question: str, limit: int) -> list:
-        """Rows from the ``search_bus_timetable`` SQL fn (one row per stop).
+        """Complete route rows matching a bus timetable question.
 
         ``p_project_slug`` is passed as NULL so the search spans all projects --
         the deployment is single-tenant and the ``company`` filter already scopes
@@ -117,13 +144,125 @@ class RetrievalRepository:
         here would re-introduce the unreachable-canonical-timetable bug, since
         canonical Markdown is persisted under the frontmatter ``project_slug``
         (e.g. 'lg-display'), not 'vfic'.
+
+        The SQL function ranks one row per stop. For a stop-level query such as
+        "Cty TNHH Hào Quang", the initial result can contain only the matching
+        stop. The agent needs the complete route, so this method uses the SQL
+        function only to identify candidate route groups, then fetches all stops
+        for those routes in stop_order. It also calls the function once per
+        requested shift so "ca ngày và ca đêm" cannot collapse to one shift.
         """
+        candidate_rows: list = []
+        candidate_limit = max(limit * 25, 500)
+        for shift in self._requested_bus_shifts(question):
+            rows = (
+                await self.db.execute(
+                    text(
+                        "SELECT * FROM search_bus_timetable(NULL, :company, :question, :shift, NULL, :limit)"
+                    ),
+                    {
+                        "company": company,
+                        "question": question,
+                        "shift": shift,
+                        "limit": candidate_limit,
+                    },
+                )
+            ).all()
+            candidate_rows.extend(rows)
+
+        route_keys: list[dict[str, object]] = []
+        seen: set[tuple] = set()
+        fallback_rows: list = []
+        for row in candidate_rows:
+            m = dict(row._mapping)
+            if not m.get("stop_name"):
+                fallback_rows.append(row)
+                continue
+            key = (
+                m.get("company_name"),
+                m.get("route_name"),
+                m.get("route_variant") or "",
+                m.get("shift"),
+                m.get("direction"),
+                m.get("source_page") or "",
+                m.get("mode") or "",
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            route_keys.append(
+                {
+                    "company_name": key[0],
+                    "route_name": key[1],
+                    "route_variant": key[2],
+                    "shift": key[3],
+                    "direction": key[4],
+                    "source_page": key[5],
+                    "mode": key[6],
+                }
+            )
+            if len(route_keys) >= limit:
+                break
+
+        if not route_keys:
+            return fallback_rows
+
         return (
             await self.db.execute(
                 text(
-                    "SELECT * FROM search_bus_timetable(NULL, :company, :question, NULL, NULL, :limit)"
+                    """
+                    WITH candidate_routes AS (
+                      SELECT *
+                      FROM jsonb_to_recordset(CAST(:keys AS jsonb)) AS k(
+                        company_name text,
+                        route_name text,
+                        route_variant text,
+                        shift text,
+                        direction text,
+                        source_page text,
+                        mode text
+                      )
+                    )
+                    SELECT
+                      c.name AS company_name,
+                      br.route_name,
+                      br.route_variant,
+                      br.shift,
+                      br.direction,
+                      bs.stop_order,
+                      bs.stop_name,
+                      to_char(bs.scheduled_time, 'HH24:MI') AS scheduled_time,
+                      br.area,
+                      br.mode,
+                      ks.source_name,
+                      br.source_page,
+                      'complete matched route' AS match_reason,
+                      NULL::text AS requested_day_group,
+                      NULL::text AS requested_day_label,
+                      NULL::text AS availability_code
+                    FROM candidate_routes cr
+                    JOIN companies c ON c.name = cr.company_name
+                    JOIN bus_routes br
+                      ON br.company_id = c.id
+                     AND br.route_name = cr.route_name
+                     AND br.route_variant = cr.route_variant
+                     AND br.shift = cr.shift
+                     AND br.direction = cr.direction
+                     AND br.source_page = cr.source_page
+                     AND COALESCE(br.mode, '') = cr.mode
+                    JOIN bus_stops bs ON bs.route_id = br.id
+                    LEFT JOIN knowledge_sources ks ON ks.id = br.knowledge_source_id
+                    ORDER BY
+                      array_position(CAST(:route_names AS text[]), br.route_name),
+                      CASE br.shift WHEN 'day' THEN 1 WHEN 'admin' THEN 2 WHEN 'night' THEN 3 ELSE 4 END,
+                      br.direction,
+                      bs.stop_order
+                    """
                 ),
-                {"company": company, "question": question, "limit": limit},
+                {
+                    "keys": json.dumps(route_keys, ensure_ascii=False),
+                    "route_names": [str(k["route_name"]) for k in route_keys],
+                },
             )
         ).all()
 

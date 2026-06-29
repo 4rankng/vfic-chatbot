@@ -73,7 +73,7 @@ async def search_knowledge(
             suffix += f"; hiệu lực: {effective}"
         if route:
             suffix += f"; route_id: {route}"
-        lines.append(f"- {str(r.content)[:300]}\n  {suffix}")
+        lines.append(f"- {str(r.content)}\n  {suffix}")
     return "\n".join(lines)
 
 
@@ -95,17 +95,18 @@ async def list_active_projects(db: AsyncSession) -> str:
 
 
 async def search_bus_timetable(
-    db: AsyncSession, company: str, question: str, limit: int = 20
+    db: AsyncSession, company: str, question: str, limit: int = 50
 ) -> str:
-    rows = await RetrievalRepository(db).search_bus_timetable(company, question, limit)
+    repo = RetrievalRepository(db)
+    rows = await repo.search_bus_timetable(company, question, limit)
+    if not rows and company.strip():
+        rows = await repo.search_bus_timetable("", question, limit)
     if not rows:
         return "Không tìm thấy lịch xe phù hợp."
-    # The SQL fn returns one row per stop; group into one line per route and surface
-    # scheduled_time (the actual answer to "mấy giờ"). The old formatter read a
-    # non-existent `stops` column, dropped the time entirely, and fragmented a route
-    # into N per-stop bullets.
+    # Repository retrieval completes each matched route before formatting. Keep
+    # every returned stop/time visible so the LLM can answer at Agent X detail.
     groups: OrderedDict[tuple, list[tuple[str, str]]] = OrderedDict()
-    for r in rows[:limit]:
+    for r in rows:
         m: dict[str, Any] = dict(r._mapping)
         key = (
             m.get("company_name") or "?",
@@ -118,9 +119,10 @@ async def search_bus_timetable(
         groups.setdefault(key, []).append((stop, when))
     lines: list[str] = []
     for (company_name, route, shift, direction), stops in groups.items():
-        parts = [f"{s} {t}" if t else s for s, t in stops if s]
+        parts = [f"{s}: {t}" if t else f"{s}: chưa có giờ trong nguồn" for s, t in stops if s]
         lines.append(
-            f"- {company_name} • {route} ({shift}/{direction}) các điểm đón: {', '.join(parts)}"
+            f"- {company_name} • Tuyến {route} ({shift}/{direction}) đầy đủ điểm dừng: "
+            + "; ".join(parts)
         )
     return "\n".join(lines)
 

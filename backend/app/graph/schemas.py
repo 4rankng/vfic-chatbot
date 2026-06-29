@@ -41,7 +41,11 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "search_knowledge",
-            "description": "Tìm thông tin kiến thức/tuyển dụng trong cơ sở dữ liệu. Truyền project_slug để giới hạn theo một dự án.",
+            "description": (
+                "Tìm thông tin kiến thức/tuyển dụng trong cơ sở dữ liệu. Truyền project_slug để giới hạn "
+                "theo một dự án. Không dùng cho câu hỏi lịch xe có tuyến/điểm đón/giờ đón; các câu đó "
+                "phải dùng search_bus_timetable trước."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -56,7 +60,11 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "search_bus_timetable",
-            "description": "Tra cứu lịch xe đưa đón công nhân theo công ty.",
+            "description": (
+                "Tra cứu lịch xe đưa đón công nhân theo công ty. Dùng trước tiên cho mọi câu hỏi về tuyến xe, "
+                "điểm đón, giờ đón, ca ngày/ca đêm, hoặc địa điểm như Hào Quang/Kiến An/An Lão. Tool trả "
+                "về tuyến đầy đủ kèm giờ từng điểm dừng."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"company": {"type": "string"}, "question": {"type": "string"}},
@@ -71,7 +79,8 @@ TOOL_SCHEMAS = [
             "description": (
                 "Lấy các đặc điểm sản phẩm (lương, ca làm, tăng ca, KTX, xe đưa đón, thưởng...) "
                 "của một dự án/sản phẩm để tư vấn chính xác. Dùng khi ứng viên hỏi về thu nhập, "
-                "lịch ca, phụ cấp, nhà ở, hồ sơ... của một dự án cụ thể."
+                "lịch ca, phụ cấp, nhà ở, hồ sơ... của một dự án cụ thể. Không dùng để tra tuyến/điểm/giờ "
+                "xe; khi hỏi lịch xe chi tiết phải dùng search_bus_timetable."
             ),
             "parameters": {
                 "type": "object",
