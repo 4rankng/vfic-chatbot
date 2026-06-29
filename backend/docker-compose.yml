@@ -46,6 +46,8 @@ services:
     restart: unless-stopped
 
   # RQ worker: chatbot runs (user-facing latency) + lead/memory persistence.
+  # Replicas: 6 gives 6 parallel turns (~36 turns/min at 10s/turn), enough for 100
+  # concurrent bursty conversations. Scale to 8-10 if webhook_high depth stays > 0.
   worker-chatbot:
     image: franknguyenvd/vfic-backend:latest
     env_file: .env
@@ -53,6 +55,8 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: ["rq", "worker", "webhook_high", "persistence_low", "--url", "${REDIS_URL}"]
+    deploy:
+      replicas: 6
     healthcheck:
       test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
       interval: 30s

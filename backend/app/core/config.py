@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 14
+    resend_api_key: str = ""
+    password_reset_otp_ttl_minutes: int = 10
+    password_reset_otp_attempt_limit: int = 5
 
     # Zalo Bot Platform (bot-api.zaloplatforms.com/bot{TOKEN}/...) — the single
     # Zalo integration for inbound + outbound. `zalo_bot_token` rides in the URL
@@ -84,6 +87,33 @@ class Settings(BaseSettings):
     # the `version` optimistic token in recheck_ownership is the real guard
     # against a stale run sending after a takeover.
     bot_lock_ttl_seconds: int = 180
+    # RQ job timeout for chat turns. Must be < bot_lock_ttl_seconds so RQ kills a
+    # stuck turn before its per-conversation lock auto-expires (avoids stale-run
+    # window where a new inbound re-acquires the lock while the old turn is dying).
+    chat_turn_job_timeout: int = 150
+
+    # Proactive follow-up cadence (hours from last_inbound_at per slot).
+    proactive_followup_gaps_hours: str = "6,24,46"
+    proactive_followup_cap: int = 3
+    proactive_silence_limit: int = 2
+    proactive_tick_interval_seconds: int = 1800  # 30 min
+    proactive_per_tick_cap: int = 5
+    proactive_48h_margin_seconds: int = 3600  # 1h; authoritative guard uses 47h
+    proactive_retry_cooldown_seconds: int = 21600  # 6h
+    proactive_job_max_age_seconds: int = 3300  # 55 min
+    # Vietnamese + English opt-out phrases (comma-separated, substring match).
+    proactive_optout_phrases: str = (
+        "dừng,đừng nhắn,ko quan tâm,không quan tâm,stop,unsubscribe,để yên,bận rồi,"
+        "đừng làm phiền,không cần nữa,tôi không thích,không thích"
+    )
+
+    @property
+    def proactive_followup_gaps_hours_list(self) -> list[int]:
+        return [int(x.strip()) for x in self.proactive_followup_gaps_hours.split(",") if x.strip()]
+
+    @property
+    def proactive_optout_phrases_list(self) -> list[str]:
+        return [p.strip().lower() for p in self.proactive_optout_phrases.split(",") if p.strip()]
 
     @property
     def cors_origins_list(self) -> list[str]:

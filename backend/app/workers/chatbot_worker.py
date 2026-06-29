@@ -9,9 +9,15 @@ logger = logging.getLogger(__name__)
 
 def enqueue_chat_run(job: dict) -> None:
     """Enqueue a bot turn onto the webhook_high RQ queue (best-effort, non-fatal)."""
+    from app.core.config import get_settings
     from app.workers.utils import enqueue_job
 
-    enqueue_job("webhook_high", run_chat_turn_job, job)
+    enqueue_job(
+        "webhook_high",
+        run_chat_turn_job,
+        job,
+        job_timeout=get_settings().chat_turn_job_timeout,
+    )
 
 
 def run_chat_turn_job(job: dict) -> None:

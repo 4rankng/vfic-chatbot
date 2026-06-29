@@ -1,4 +1,5 @@
 """VFIC API entrypoint."""
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -63,6 +64,26 @@ app.include_router(webhooks.router)
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/metrics")
+async def metrics() -> dict:
+    """RQ queue depths + worker count — the signal for scaling worker-chatbot replicas.
+
+    Unauthenticated (internal ops endpoint, same trust level as /health).
+    """
+    def _collect() -> dict:
+        from rq import Queue, Worker
+        from app.core.redis import get_redis_sync
+
+        conn = get_redis_sync()
+        queues = {}
+        for name in ("webhook_high", "persistence_low", "ingest"):
+            queues[name] = Queue(name, connection=conn).count  # O(1) Redis LLEN
+        queues["workers"] = Worker.count(connection=conn)  # O(1) Redis SCARD
+        return queues
+
+    return await asyncio.to_thread(_collect)
 
 
 @app.middleware("http")
