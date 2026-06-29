@@ -377,6 +377,7 @@ export const ChatThread = ({
           ) : null}
         </div>
       ),
+      Footer: () => <div className="chat-history-bottom-spacer" />,
       EmptyPlaceholder: () =>
         isLoading ? (
           <div className="day-marker" style={{ background: "transparent" }}>

@@ -937,6 +937,11 @@
   min-height: 20px;
 }
 
+:is(.inbox-bg-container, .chat-surface) .chat-history-bottom-spacer {
+  height: 32px;
+  flex: 0 0 auto;
+}
+
 /* "Load more" affordance for the contacts-only inbox (client-side paging) */
 .inbox-bg-container .load-more-btn {
   display: block;
@@ -1784,6 +1789,9 @@
   }
   :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
     padding: 20px 12px !important;
+  }
+  :is(.inbox-bg-container, .chat-surface) .chat-history-bottom-spacer {
+    height: 20px;
   }
   :is(.inbox-bg-container, .chat-surface) .system-event {
     max-width: calc(100% - 16px);
