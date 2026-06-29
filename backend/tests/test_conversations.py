@@ -61,6 +61,34 @@ async def _make_conv(db_session, zalo="c-1") -> Conversation:
     return conv
 
 
+async def test_messages_endpoint_accepts_cursor_limit_aliases(client, db_session):
+    tok = await _admin_token(client)
+    h = {"Authorization": f"Bearer {tok}"}
+    conv = await _make_conv(db_session, "cursor-aliases-1")
+    db_session.add_all(
+        [
+            Message(conversation_id=conv.id, sender=MessageSender.WORKER, body="one"),
+            Message(conversation_id=conv.id, sender=MessageSender.BOT, body="two"),
+            Message(conversation_id=conv.id, sender=MessageSender.WORKER, body="three"),
+        ]
+    )
+    await db_session.commit()
+
+    newest_page = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages?limit=2", headers=h
+    )
+    assert newest_page.status_code == 200, newest_page.text
+    newest_ids = [row["id"] for row in newest_page.json()["data"]]
+    assert len(newest_ids) == 2
+
+    older_page = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages?before={newest_ids[0]}&limit=2",
+        headers=h,
+    )
+    assert older_page.status_code == 200, older_page.text
+    assert [row["body"] for row in older_page.json()["data"]] == ["one"]
+
+
 # --- acceptance #1: takeover race ------------------------------------------------
 
 

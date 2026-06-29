@@ -126,14 +126,15 @@ describe("chatRepository.getConversationMessages", () => {
     expect(hasMore).toBe(false);
   });
 
-  it("sends before_id cursor when loading older history", async () => {
+  it("sends before cursor when loading older history", async () => {
     const { fetch, lastUrl } = stubJson(async () => ({ data: [], total: 0 }));
     globalThis.fetch = fetch;
     await chatRepository.getConversationMessages("c1", {
       limit: 10,
       beforeId: "42",
     });
-    expect(lastUrl()).toContain("before_id=42");
+    expect(lastUrl()).toContain("limit=10");
+    expect(lastUrl()).toContain("before=42");
   });
 });
 

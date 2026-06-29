@@ -6,6 +6,8 @@ import {
   firstItemIndexAfterPrepend,
 } from "./chatScrollIndex";
 
+export const CHAT_MESSAGES_PAGE_SIZE = 10;
+
 // Owns the realtime subscription + paginated message state for a conversation.
 // Extracted from ChatThread so the message-loading logic is reusable across any
 // shell and unit-testable in isolation (independent of the Virtuoso/composer UI).
@@ -88,7 +90,7 @@ export const useConversationRealtime = (conversationId?: string) => {
     try {
       const { messages: mapped, hasMore: apiHasMore } =
         await chatRepository.getConversationMessages(conversationId, {
-          limit: 10,
+          limit: CHAT_MESSAGES_PAGE_SIZE,
         });
       // Merge, don't replace: a realtime INSERT between subscribe() and this
       // resolve is already in state, and a blind setMessages(mapped) would
@@ -142,7 +144,7 @@ export const useConversationRealtime = (conversationId?: string) => {
       try {
         const { messages: older, hasMore: apiHasMore } =
           await chatRepository.getConversationMessages(conversationId, {
-            limit: 10,
+            limit: CHAT_MESSAGES_PAGE_SIZE,
             beforeId: earliestId,
           });
         setHasMore(apiHasMore);

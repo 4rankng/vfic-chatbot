@@ -5,12 +5,18 @@ import type {
   LayoutComponent,
 } from "ra-core";
 import { CustomRoutes, localStorageStore, Resource } from "ra-core";
-import { Component, lazy, Suspense, useEffect, useMemo } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { ComponentType, ReactNode } from "react";
 import { Navigate, Route } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { Admin } from "@/components/admin/admin";
 
 import leads from "../leads";
@@ -49,6 +55,7 @@ import {
 import { i18nProvider as defaulti18nProvider } from "../providers/commons/i18nProvider";
 import { StartPage } from "../login/StartPage.tsx";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { getAccessToken } from "../providers/rest/api";
 
 const defaultStore = localStorageStore(undefined, "CRM");
 const defaultDataProvider = defaultDataProviderBuilder();
@@ -69,10 +76,6 @@ const queryClient = new QueryClient({
       networkMode: "offlineFirst",
     },
   },
-});
-
-const asyncStoragePersister = createAsyncStoragePersister({
-  storage: localStorage,
 });
 
 // --- Route-level code splitting (P1 #5) ------------------------------------
@@ -98,6 +101,7 @@ const ForgotPasswordPage = lazy(async () => {
 const PROFILE_PATH = "/profile";
 const FORGOT_PASSWORD_PATH = "/forgot-password";
 const CHANGELOG_PATH = "/changelog";
+const PUBLIC_HASH_PATHS = new Set(["/login", FORGOT_PASSWORD_PATH]);
 
 const RouteFallback = () => null;
 
@@ -231,6 +235,18 @@ export const CRM = ({
   dashboard,
   ...rest
 }: CRMProps) => {
+  const [authGateReady, setAuthGateReady] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const hashPath = window.location.hash.replace(/^#/, "").split("?")[0];
+    return Boolean(getAccessToken()) || PUBLIC_HASH_PATHS.has(hashPath);
+  });
+
+  useLayoutEffect(() => {
+    if (authGateReady) return;
+    window.location.hash = "/login";
+    setAuthGateReady(true);
+  }, [authGateReady]);
+
   // Seed the store with CRM prop values if not already stored
   // (backwards compatibility for prop-based config)
   useEffect(() => {
@@ -305,68 +321,65 @@ export const CRM = ({
   // crossing the 768px breakpoint no longer swaps the component type and
   // unmounts the entire app. The layout + dashboard are chosen by isMobile,
   // and the CustomRoutes union is gated per breakpoint. The hoisted
-  // QueryClient + persister wrap the admin so both layouts share the same
-  // cache (and persistence applies on desktop too — acceptable per the audit).
+  // QueryClient is passed into react-admin's CoreAdminContext, which owns the
+  // single QueryClientProvider for the app.
   const resolvedLayout = layout ?? (isMobile ? MobileLayout : Layout);
   const resolvedDashboard =
     dashboard ?? (isMobile ? MobileDashboard : Dashboard);
 
+  if (!authGateReady) return null;
+
   return (
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={{ persister: asyncStoragePersister }}
+    <Admin
+      dataProvider={dataProvider}
+      authProvider={wrappedAuthProvider}
+      i18nProvider={i18nProvider}
+      store={store}
+      queryClient={queryClient}
+      loginPage={StartPage}
+      layout={resolvedLayout}
+      dashboard={resolvedDashboard}
+      requireAuth
+      disableTelemetry
+      {...rest}
     >
-      <Admin
-        dataProvider={dataProvider}
-        authProvider={wrappedAuthProvider}
-        i18nProvider={i18nProvider}
-        store={store}
-        queryClient={queryClient}
-        loginPage={StartPage}
-        layout={resolvedLayout}
-        dashboard={resolvedDashboard}
-        requireAuth
-        disableTelemetry
-        {...rest}
-      >
-        <CustomRoutes>
-          <Route
-            path={PROFILE_PATH}
-            element={
-              <RouteBoundary>
-                <ProfilePage />
-              </RouteBoundary>
-            }
-          />
-          <Route
-            path="/settings/profile"
-            element={<Navigate to={PROFILE_PATH} replace />}
-          />
-          <Route path={CHANGELOG_PATH} element={<ChangelogPage />} />
-        </CustomRoutes>
-        <CustomRoutes noLayout>
-          <Route
-            path={FORGOT_PASSWORD_PATH}
-            element={
-              <RouteBoundary>
-                <ForgotPasswordPage />
-              </RouteBoundary>
-            }
-          />
-        </CustomRoutes>
-        <Resource name="leads" {...leads} />
-        <Resource name="conversations" {...conversations} />
-        <Resource name="bot_runs" {...automation} />
-        <Resource name="knowledge_sources" {...knowledge} />
-        <Resource name="projects" {...projects} />
-        <Resource name="personas" {...personas} />
-        {/* Users admin: always registered so /users resolves.
+      <CustomRoutes>
+        <Route
+          path={PROFILE_PATH}
+          element={
+            <RouteBoundary>
+              <ProfilePage />
+            </RouteBoundary>
+          }
+        />
+        <Route
+          path="/settings/profile"
+          element={<Navigate to={PROFILE_PATH} replace />}
+        />
+        <Route path={CHANGELOG_PATH} element={<ChangelogPage />} />
+      </CustomRoutes>
+      <CustomRoutes noLayout>
+        <Route
+          path={FORGOT_PASSWORD_PATH}
+          element={
+            <RouteBoundary>
+              <ForgotPasswordPage />
+            </RouteBoundary>
+          }
+        />
+      </CustomRoutes>
+      <Resource name="leads" {...leads} />
+      <Resource name="conversations" {...conversations} />
+      <Resource name="bot_runs" {...automation} />
+      <Resource name="knowledge_sources" {...knowledge} />
+      <Resource name="projects" {...projects} />
+      <Resource name="personas" {...personas} />
+      {/* Users admin: always registered so /users resolves.
             Access is gated inside UserList (CanAccess) and via Header
             menu visibility — ra-core's static-children walker does not
             descend into <CanAccess>, so wrapping here would silently
             disable the route. RLS is the security boundary. */}
-        <Resource name="users" {...users} />
-      </Admin>
-    </PersistQueryClientProvider>
+      <Resource name="users" {...users} />
+    </Admin>
   );
 };

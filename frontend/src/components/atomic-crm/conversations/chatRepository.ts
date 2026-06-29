@@ -115,7 +115,7 @@ export const chatRepository = {
   /**
    * Paginated message history for a conversation. The backend returns the
    * newest page by default, or the page older than `beforeId` (the integer id of
-   * the oldest currently-visible message) for cursor-based load-more. Server
+   * the oldest currently-loaded message) for cursor-based load-more. Server
    * order is chronological (oldest -> newest) for the virtualised scroller.
    * A full page (== limit) implies more history may exist.
    */
@@ -124,9 +124,9 @@ export const chatRepository = {
     options?: { limit?: number; beforeId?: string },
   ): Promise<{ messages: Message[]; hasMore: boolean }> {
     const limit = options?.limit ?? 10;
-    const sp = new URLSearchParams({ per_page: String(limit) });
+    const sp = new URLSearchParams({ limit: String(limit) });
     if (options?.beforeId) {
-      sp.set("before_id", String(options.beforeId));
+      sp.set("before", String(options.beforeId));
     }
     const body = await apiJson<ListEnvelope>(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${sp.toString()}`,

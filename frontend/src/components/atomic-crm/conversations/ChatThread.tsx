@@ -67,6 +67,13 @@ const QUICK_EMOJIS = [
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
+const DEFAULT_CHAT_ITEM_HEIGHT_PX = 96;
+const ANCHOR_RESTORE_FRAMES = 6;
+
+type ScrollAnchor = {
+  id: string;
+  offsetTop: number;
+};
 
 const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
@@ -120,6 +127,8 @@ export const ChatThread = ({
   const composerRef = useRef<HTMLFormElement>(null);
   const composerWrapRef = useRef<HTMLElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const scrollerElRef = useRef<HTMLElement | null>(null);
+  const detachScrollerListenersRef = useRef<(() => void) | null>(null);
   const initialJumpDoneRef = useRef(false);
   const initialBottomSettleUntilRef = useRef(0);
   const initialBottomSettleRafRef = useRef<number | null>(null);
@@ -133,7 +142,6 @@ export const ChatThread = ({
   // when the initial page fits the viewport, and would otherwise auto-fetch the
   // whole history). Armed by the scroll listener below, disarmed after each
   // page so one scroll-up = one page and the list can never run away.
-  const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null);
   const readyForMoreRef = useRef(false);
 
   const {
@@ -210,6 +218,65 @@ export const ChatThread = ({
     scheduleScrollToNewest();
   }, [scheduleScrollToNewest]);
 
+  const findMessageElement = useCallback(
+    (scrollerEl: HTMLElement, messageId: string) =>
+      Array.from(
+        scrollerEl.querySelectorAll<HTMLElement>("[data-message-id]"),
+      ).find((el) => el.dataset.messageId === messageId) ?? null,
+    [],
+  );
+
+  const captureScrollAnchor = useCallback((): ScrollAnchor | null => {
+    const scrollerEl = scrollerElRef.current;
+    if (!scrollerEl) return null;
+
+    const scrollerTop = scrollerEl.getBoundingClientRect().top;
+    const anchorEl =
+      Array.from(
+        scrollerEl.querySelectorAll<HTMLElement>("[data-message-id]"),
+      ).find((el) => el.getBoundingClientRect().bottom > scrollerTop + 1) ??
+      null;
+    const id = anchorEl?.dataset.messageId;
+    if (!anchorEl || !id) return null;
+
+    return {
+      id,
+      offsetTop: anchorEl.getBoundingClientRect().top - scrollerTop,
+    };
+  }, []);
+
+  const restoreScrollAnchor = useCallback(
+    (anchor: ScrollAnchor | null) => {
+      if (!anchor) return;
+
+      let frame = 0;
+      const tick = () => {
+        const scrollerEl = scrollerElRef.current;
+        if (!scrollerEl) return;
+
+        const anchorEl = findMessageElement(scrollerEl, anchor.id);
+        if (anchorEl) {
+          const currentOffset =
+            anchorEl.getBoundingClientRect().top -
+            scrollerEl.getBoundingClientRect().top;
+          const delta = currentOffset - anchor.offsetTop;
+          if (Math.abs(delta) > 0.5) {
+            scrollerEl.scrollTop += delta;
+            lastScrollTopRef.current = scrollerEl.scrollTop;
+          }
+        }
+
+        frame += 1;
+        if (frame < ANCHOR_RESTORE_FRAMES) {
+          requestAnimationFrame(tick);
+        }
+      };
+
+      requestAnimationFrame(tick);
+    },
+    [findMessageElement],
+  );
+
   useEffect(
     () => () => {
       if (initialBottomSettleRafRef.current !== null) {
@@ -280,8 +347,14 @@ export const ChatThread = ({
   // Arm "load more" only after the user scrolls away from the bottom (i.e.
   // scrolls up to read history). A freshly opened thread parks at the newest
   // message, so the top being visible there must NOT trigger a fetch.
-  useEffect(() => {
+  const setScrollerRef = useCallback((el: HTMLElement | Window | null) => {
+    detachScrollerListenersRef.current?.();
+    detachScrollerListenersRef.current = null;
+
+    const scrollerEl = el instanceof HTMLElement ? el : null;
+    scrollerElRef.current = scrollerEl;
     if (!scrollerEl) return;
+
     lastScrollTopRef.current = scrollerEl.scrollTop;
     const onScroll = () => {
       const previousTop = lastScrollTopRef.current;
@@ -302,11 +375,20 @@ export const ChatThread = ({
     };
     scrollerEl.addEventListener("scroll", onScroll, { passive: true });
     scrollerEl.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
+    detachScrollerListenersRef.current = () => {
       scrollerEl.removeEventListener("scroll", onScroll);
       scrollerEl.removeEventListener("wheel", onWheel);
     };
-  }, [scrollerEl]);
+  }, []);
+
+  useEffect(
+    () => () => {
+      detachScrollerListenersRef.current?.();
+      detachScrollerListenersRef.current = null;
+      scrollerElRef.current = null;
+    },
+    [],
+  );
 
   const handleStartReached = useCallback(() => {
     // Ignore the initial mount/snap top-touch and any fire that is not the
@@ -315,14 +397,24 @@ export const ChatThread = ({
     if (!readyForMoreRef.current) return;
     if (isLoadingMore) return;
     if (hasMore && messages.length > 0) {
+      const anchor = captureScrollAnchor();
       const now = performance.now();
       if (now - lastLoadMoreAtRef.current < 350) return;
       lastLoadMoreAtRef.current = now;
       // Disarm until the next upward scroll — one page per scroll-up.
       readyForMoreRef.current = false;
-      void loadMore(messages[0].id);
+      void loadMore(messages[0].id).then((added) => {
+        if (added > 0) restoreScrollAnchor(anchor);
+      });
     }
-  }, [hasMore, isLoadingMore, messages, loadMore]);
+  }, [
+    hasMore,
+    isLoadingMore,
+    messages,
+    loadMore,
+    captureScrollAnchor,
+    restoreScrollAnchor,
+  ]);
 
   const followOutput = useCallback(
     (isAtBottom: boolean) => (isAtBottom ? ("auto" as const) : false),
@@ -340,7 +432,10 @@ export const ChatThread = ({
       const kind = classify(m);
       if (kind === "system" || kind === "event") {
         return (
-          <div className={kind === "system" ? "day-marker" : "system-event"}>
+          <div
+            className={kind === "system" ? "day-marker" : "system-event"}
+            data-message-id={m.id}
+          >
             {kind === "event" && (
               <svg className="icon">
                 <use href="#i-sparkles" />
@@ -358,7 +453,10 @@ export const ChatThread = ({
       const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
 
       return (
-        <div className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}>
+        <div
+          className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}
+          data-message-id={m.id}
+        >
           {kind === "user" && !isGrouped ? (
             <span className="message-avatar">
               <svg className="icon">
@@ -464,7 +562,7 @@ export const ChatThread = ({
     <>
       <Virtuoso
         ref={virtuosoRef}
-        scrollerRef={(el) => setScrollerEl(el as HTMLElement | null)}
+        scrollerRef={setScrollerRef}
         className="chat-scroller"
         style={
           {
@@ -478,6 +576,7 @@ export const ChatThread = ({
         startReached={handleStartReached}
         followOutput={followOutput}
         totalListHeightChanged={handleTotalListHeightChanged}
+        defaultItemHeight={DEFAULT_CHAT_ITEM_HEIGHT_PX}
         components={virtuosoComponents}
         itemContent={renderMessage}
       />

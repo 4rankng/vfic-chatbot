@@ -128,15 +128,23 @@ async def last_messages(
 async def list_messages(
     conv_id: uuid.UUID,
     per_page: int = Query(50, ge=1, le=200),
+    limit: int | None = Query(
+        None, ge=1, le=200, description="Cursor page size alias for per_page"
+    ),
     before_id: int | None = Query(
         None, description="Cursor: return messages older than this message id (load-more)"
+    ),
+    before: int | None = Query(
+        None, description="Cursor alias: return messages older than this message id"
     ),
     _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageListResponse:
     conv = await _load(conv_id, db)
     svc = ConversationService(db)
-    msgs = await svc.messages_page(conv, limit=per_page, before_id=before_id)
+    page_size = limit if limit is not None else per_page
+    cursor = before if before is not None else before_id
+    msgs = await svc.messages_page(conv, limit=page_size, before_id=cursor)
     return MessageListResponse(data=[MessageOut.model_validate(m) for m in msgs], total=len(msgs))
 
 
