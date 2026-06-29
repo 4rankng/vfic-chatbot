@@ -90,8 +90,25 @@ export const getAuthProvider = (): AuthProvider => {
     },
 
     checkAuth: async () => {
-      if (!getAccessToken()) {
+      const token = getAccessToken();
+      if (!token) {
         throw new Error("Not authenticated");
+      }
+      // Reject locally-expired tokens without a server round-trip. This prevents
+      // <CoreAdminRoutes> from rendering with a stale JWT and triggering the
+      // <LogoutOnMount> → navigate → re-render infinite loop (ra-core + RR v7).
+      try {
+        const payload = JSON.parse(
+          atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
+        );
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          clearTokens();
+          clearIdentity();
+          throw new Error("Token expired");
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message === "Token expired") throw e;
+        // If we can't decode (malformed), let the server decide.
       }
     },
 
