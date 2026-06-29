@@ -22,12 +22,11 @@ import { stageLabel } from "../knowledge/stageTone";
 export const MobileDashboard = () => {
   const navigate = useNavigate();
   const { permissions } = usePermissions();
+  const { knowledgeIngest, isPending } = useDashboardStats();
 
   if (permissions === "recruiter") {
     return <Navigate to="/leads" replace />;
   }
-
-  const { knowledgeIngest, isPending } = useDashboardStats();
 
   return (
     <main className="mx-auto flex w-full max-w-screen-xl flex-col gap-5 px-4 py-5">
@@ -104,7 +103,7 @@ export const MobileDashboard = () => {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                <span>Pipeline stages</span>
+                <span>Các bước xử lý</span>
                 <span>{knowledgeIngest.stage_breakdown.length} trạng thái</span>
               </div>
               {knowledgeIngest.stage_breakdown.length === 0 ? (
@@ -138,7 +137,7 @@ export const MobileDashboard = () => {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                <span>Recent issues</span>
+                <span>Vấn đề gần đây</span>
                 <button
                   type="button"
                   className="text-primary hover:text-primary/80"

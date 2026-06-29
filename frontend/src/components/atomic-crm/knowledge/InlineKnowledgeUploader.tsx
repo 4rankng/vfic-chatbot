@@ -84,9 +84,9 @@ export const InlineKnowledgeUploader = ({
     }
   };
 
-  const downloadTemplate = async () => {
+  const downloadTemplate = async (kind: "knowledge" | "faq" = "knowledge") => {
     try {
-      await saveKnowledgeTemplate();
+      await saveKnowledgeTemplate(kind);
     } catch (err) {
       notify(`Không tải được mẫu: ${(err as Error).message}`, { type: "error" });
     }
@@ -104,8 +104,8 @@ export const InlineKnowledgeUploader = ({
               Bắt đầu bằng một nguồn kiến thức
             </h4>
             <p className="mt-1 max-w-[34rem] text-sm leading-6 text-muted-foreground">
-              Gắn tệp Markdown/TXT theo mẫu hoặc Word DOCX vào dự án để agent
-              truy xuất sau khi pipeline xử lý xong.
+              Gắn tệp Markdown/TXT theo mẫu, FAQ hoặc Word DOCX vào dự án để
+              agent truy xuất sau khi pipeline xử lý xong.
             </p>
           </div>
         </div>
@@ -213,11 +213,20 @@ export const InlineKnowledgeUploader = ({
           <Button
             type="button"
             variant="outline"
-            onClick={downloadTemplate}
+            onClick={() => downloadTemplate("knowledge")}
             className="h-10 w-full rounded-[9px] px-4 sm:w-auto"
           >
             <Download className="size-4" />
-            Tải mẫu
+            Tải mẫu KB
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => downloadTemplate("faq")}
+            className="h-10 w-full rounded-[9px] px-4 sm:w-auto"
+          >
+            <Download className="size-4" />
+            Tải mẫu FAQ
           </Button>
           <Button
             type="button"

@@ -22,15 +22,11 @@ import {
 import type { ProductFeature } from "../types";
 import { cn } from "@/lib/utils";
 
-// Active worker product-feature catalogue size. Migration 0009 disabled 5 white-collar /
-// meta criteria for manual-labour scope, leaving 11 active rows in worker_feature_catalog.
-// The gauge is positional across these slots.
-const FEATURE_SLOTS = 11;
-
 const FEATURE_CATEGORY_LABELS: Record<string, string> = {
   application: "Hồ sơ ứng tuyển",
   bonus: "Thưởng và hỗ trợ",
   cashflow: "Kỳ lương",
+  contact: "Thông tin liên lạc",
   commute: "Đi lại",
   daily_cost: "Phúc lợi giảm chi phí",
   housing: "Chỗ ở",
@@ -51,6 +47,7 @@ const FEATURE_FILL_HINTS: Record<string, string> = {
   salary_transparency: "Nhập lương cơ bản, từng khoản phụ cấp, thưởng, khấu trừ và điều kiện nhận.",
   shift_schedule: "Nhập ca làm, giờ làm, ngày nghỉ, xoay ca hay cố định.",
   take_home_income: "Nhập tổng thu nhập thực nhận dự kiến theo tháng sau phụ cấp, tăng ca và khấu trừ.",
+  contact_info: "Nhập người liên hệ, số điện thoại/Zalo hỗ trợ và trường hợp nào cần chuyển cho nhân viên VFIC.",
 };
 
 const getFeatureCategoryLabel = (category: string | null | undefined) => {
@@ -70,23 +67,22 @@ const getFillHint = (feature: ProductFeature) =>
 const isReady = (f: ProductFeature | null | undefined): boolean =>
   !!f && !!f.value_text?.trim() && !f.is_missing && !f.needs_clarification;
 
-// Canonical 1..16 positional view: sort by the catalog display_priority and
-// pad to FEATURE_SLOTS so the gauge is always positional regardless of how many
-// rows the API returned.
+// Canonical positional view: sort by the catalog display_priority and pad to
+// the active catalog total returned by the API.
 const orderedSlots = (
   features: ProductFeature[] | null,
+  totalSlots: number,
 ): (ProductFeature | null)[] => {
   const sorted = [...(features ?? [])].sort(
     (a, b) => a.display_priority - b.display_priority,
   );
   const slots: (ProductFeature | null)[] = [];
-  for (let i = 0; i < FEATURE_SLOTS; i++) slots.push(sorted[i] ?? null);
+  for (let i = 0; i < totalSlots; i++) slots.push(sorted[i] ?? null);
   return slots;
 };
 
-// "Đặc điểm sản phẩm" panel: the 11 active worker product features extracted from the
-// project's posting. Reframed as a per-project readiness view: across the active catalog
-// features, whether the agent has enough info to advise on each criterion, or needs more.
+// "Đặc điểm sản phẩm" panel: active worker product features extracted from the
+// project's posting, including missing rows that need an admin-provided value.
 export const ProjectFeatures = ({
   projectId,
   editable = false,
@@ -96,6 +92,7 @@ export const ProjectFeatures = ({
 }) => {
   const notify = useNotify();
   const [features, setFeatures] = useState<ProductFeature[] | null>(null);
+  const [featureTotal, setFeatureTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [extracting, setExtracting] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
@@ -105,6 +102,7 @@ export const ProjectFeatures = ({
     try {
       const res = await getProjectFeatures(projectId);
       setFeatures(res.data);
+      setFeatureTotal(res.total);
     } catch (err) {
       notify(`Không tải được đặc điểm: ${(err as Error).message}`, {
         type: "error",
@@ -124,7 +122,8 @@ export const ProjectFeatures = ({
     try {
       const res = await extractProjectFeatures(projectId);
       setFeatures(res.data);
-      notify("Đã trích xuất 11 đặc điểm sản phẩm.", { type: "success" });
+      setFeatureTotal(res.total);
+      notify(`Đã trích xuất ${res.total} đặc điểm sản phẩm.`, { type: "success" });
     } catch (err) {
       notify(`Trích xuất thất bại: ${(err as Error).message}`, {
         type: "error",
@@ -140,11 +139,12 @@ export const ProjectFeatures = ({
     );
   };
 
-  const slots = orderedSlots(features);
+  const totalSlots = Math.max(featureTotal, features?.length ?? 0);
+  const slots = orderedSlots(features, totalSlots);
   const readySlots = slots.filter(isReady);
   const gapSlots = slots.filter((s) => !isReady(s));
   const readyCount = readySlots.length;
-  const gapCount = FEATURE_SLOTS - readyCount;
+  const gapCount = Math.max(0, totalSlots - readyCount);
   const hasFeatures = (features?.length ?? 0) > 0;
 
   // Detailed editable cards stay category-grouped inside the disclosure (cleaner
@@ -169,7 +169,7 @@ export const ProjectFeatures = ({
               size="sm"
               onClick={onExtract}
               disabled={extracting}
-              title="Trích xuất lại 11 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
+              title="Trích xuất lại các đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
             >
               <Sparkles className="size-4" />
               {extracting ? "Đang trích xuất..." : "Trích xuất lại"}
@@ -186,7 +186,11 @@ export const ProjectFeatures = ({
           </div>
         ) : (
           <>
-            <ReadinessHero readyCount={readyCount} extracting={extracting} />
+            <ReadinessHero
+              readyCount={readyCount}
+              totalSlots={totalSlots}
+              extracting={extracting}
+            />
 
             {hasFeatures ? (
               <div className="space-y-3">
@@ -252,7 +256,7 @@ export const ProjectFeatures = ({
                 <p className="text-sm font-medium">Chưa có đặc điểm sản phẩm</p>
                 <p className="text-xs">
                   {editable
-                    ? 'Tải tin tuyển dụng lên rồi bấm "Trích xuất lại" để LLM trích 11 đặc điểm.'
+                    ? 'Tải tin tuyển dụng lên rồi bấm "Trích xuất lại" để LLM trích các đặc điểm.'
                     : "Dự án này chưa có đặc điểm sản phẩm để hiển thị."}
                 </p>
                 {editable && (
@@ -261,7 +265,7 @@ export const ProjectFeatures = ({
                     size="sm"
                     onClick={onExtract}
                     disabled={extracting}
-                    title="Trích xuất lại 11 đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
+                    title="Trích xuất lại các đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
                   >
                     <Sparkles className="size-4" />
                     {extracting ? "Đang trích xuất..." : "Trích xuất lại"}
@@ -276,17 +280,18 @@ export const ProjectFeatures = ({
   );
 };
 
-// Readiness hero: "{n}/11 CÓ THỂ TƯ VẤN" + an indeterminate-pulsing bar while
-// the LLM extract is in flight. We do NOT fake sequential ticks over the real
-// ~5-10s call.
+// Readiness hero: "{n}/{total} CÓ THỂ TƯ VẤN" + an indeterminate-pulsing bar
+// while the LLM extract is in flight.
 const ReadinessHero = ({
   readyCount,
+  totalSlots,
   extracting,
 }: {
   readyCount: number;
+  totalSlots: number;
   extracting: boolean;
 }) => {
-  const pct = Math.round((readyCount / FEATURE_SLOTS) * 100);
+  const pct = totalSlots > 0 ? Math.round((readyCount / totalSlots) * 100) : 0;
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -294,10 +299,10 @@ const ReadinessHero = ({
           Sẵn sàng tư vấn
         </span>
         <span className="text-sm font-semibold tabular-nums">
-          {readyCount}/{FEATURE_SLOTS} có thể tư vấn
+          {readyCount}/{totalSlots} có thể tư vấn
         </span>
       </div>
-      {/* Decorative bar — the visible "{n}/11 có thể tư vấn" text above is the
+      {/* Decorative bar — the visible "{n}/{total} có thể tư vấn" text above is the
           canonical label; the gap count is announced by the group headings below. */}
       <div
         aria-hidden="true"

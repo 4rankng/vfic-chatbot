@@ -156,9 +156,9 @@ export const KnowledgeUpload = ({
     }
   };
 
-  const downloadTemplate = async () => {
+  const downloadTemplate = async (kind: "knowledge" | "faq" = "knowledge") => {
     try {
-      await saveKnowledgeTemplate();
+      await saveKnowledgeTemplate(kind);
     } catch (err) {
       notify(`Không tải được mẫu: ${(err as Error).message}`, { type: "error" });
     }
@@ -170,20 +170,36 @@ export const KnowledgeUpload = ({
         <DialogHeader className="border-b px-6 py-5 pr-12">
           <DialogTitle>Tải kiến thức</DialogTitle>
           <DialogDescription>
-            Tải nguồn Markdown/TXT theo mẫu VFIC hoặc Word DOCX để agent truy
-            xuất trong hội thoại.
+            Tải nguồn Markdown/TXT theo mẫu VFIC, mẫu FAQ hoặc Word DOCX để
+            agent truy xuất trong hội thoại.
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
             <p className="text-sm text-muted-foreground">
-              Markdown/TXT theo mẫu sẽ được kiểm tra cấu trúc. DOCX sẽ được
-              trích văn bản rồi đưa vào pipeline digest.
+              FAQ dùng cùng luồng tải lên này: tải mẫu FAQ, điền câu hỏi/trả
+              lời, chọn dự án rồi tải tệp Markdown lên.
             </p>
-            <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
-              <Download className="size-4" />
-              Tải mẫu
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadTemplate("knowledge")}
+              >
+                <Download className="size-4" />
+                Tải mẫu KB
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadTemplate("faq")}
+              >
+                <Download className="size-4" />
+                Tải mẫu FAQ
+              </Button>
+            </div>
           </div>
 
           {!lockProject && (

@@ -80,7 +80,7 @@ class ProjectService:
         """List projects with per-project feature readiness attached.
 
         One batched ``readiness_by_project`` query — no N+1. The catalog total is the
-        active-feature count (11 for manual-labour scope; migration 0009).
+        active-feature count.
         """
         rows = await self.list(is_active)
         repo = JobFeatureValueRepo(self.db)
@@ -206,7 +206,7 @@ class ProjectService:
         return proj
 
     async def list_features(self, project_id: uuid.UUID) -> FeatureListResponse:
-        """List the project's 11 extracted worker product features (catalog order)."""
+        """List the project's active extracted worker product features (catalog order)."""
         await self._require_project(project_id)
         rows = await JobFeatureValueRepo(self.db).list_for_project(project_id)
         return FeatureListResponse(data=[_feature_from_row(r) for r in rows], total=len(rows))
@@ -319,7 +319,7 @@ class ProjectService:
         return _feature_from_row(row)
 
     async def extract_features(self, project_id: uuid.UUID, admin: User) -> FeatureListResponse:
-        """Synchronously re-extract the 11 product features from the project's latest posting.
+        """Synchronously re-extract active product features from the project's latest posting.
 
         Persona-pattern: one blocking MiniMax call in the web process (~5-10s). Merges
         the latest document's concrete values into the project's feature profile without

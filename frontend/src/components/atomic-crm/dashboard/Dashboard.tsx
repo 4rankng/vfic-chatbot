@@ -14,8 +14,7 @@ import {
   Database,
   Server,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { Navigate } from "react-router";
+import { useNavigate, Navigate } from "react-router";
 import { usePermissions } from "ra-core";
 import { useDashboardStats } from "./useDashboardStats";
 import { stageLabel } from "../knowledge/stageTone";
@@ -23,12 +22,11 @@ import { stageLabel } from "../knowledge/stageTone";
 export const Dashboard = () => {
   const navigate = useNavigate();
   const { permissions } = usePermissions();
+  const { knowledgeIngest, isPending } = useDashboardStats();
 
   if (permissions === "recruiter") {
     return <Navigate to="/leads" replace />;
   }
-
-  const { knowledgeIngest, isPending } = useDashboardStats();
 
   return (
     <div className="flex flex-col gap-6 mx-auto w-full pb-8">
@@ -106,7 +104,7 @@ export const Dashboard = () => {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  <span>Pipeline stages</span>
+                  <span>Các bước xử lý</span>
                   <span>
                     {knowledgeIngest.stage_breakdown.length} trạng thái
                   </span>
@@ -131,7 +129,7 @@ export const Dashboard = () => {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                <span>Recent issues</span>
+                <span>Vấn đề gần đây</span>
                 <button
                   type="button"
                   className="text-primary hover:text-primary/80"

@@ -102,12 +102,13 @@ async def find_eligible_conversations(db) -> list[Conversation]:
 
     # Cap *after* the gap filter so that actually-due candidates are never
     # starved by not-yet-due rows that happen to be newer.
+    pre_cap = len(eligible)
     eligible = eligible[:per_tick]
 
     logger.info(
         "proactive eligibility: %d candidates (SQL) → %d after gap filter → %d capped",
         len(candidates),
-        len(eligible) if len(eligible) <= per_tick else len(eligible),
-        min(len(eligible), per_tick),
+        pre_cap,
+        len(eligible),
     )
     return eligible

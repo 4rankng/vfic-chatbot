@@ -185,7 +185,7 @@ class JobFeatureValueRepo:
         self.db = db
 
     async def fetch_catalog(self) -> list:
-        """Return the active catalog (11 manual-labour features) ordered by importance then key.
+        """Return the active catalog ordered by importance then key.
 
         Drives both the extraction prompt and the one-row-per-feature write, so inactive
         criteria (migration 0009) drop out of extraction entirely.
@@ -201,7 +201,7 @@ class JobFeatureValueRepo:
         ).all()
 
     async def active_catalog_size(self) -> int:
-        """Count of active catalog features — the readiness denominator (11 for manual-labour scope).
+        """Count of active catalog features — the readiness denominator.
 
         Derived rather than hardcoded so reactivating a criterion stays consistent with the
         extraction prompt and list query without a code edit.
@@ -214,6 +214,42 @@ class JobFeatureValueRepo:
             ).scalar()
             or 0
         )
+
+    async def ensure_active_rows_for_project(self, project_id: uuid.UUID) -> None:
+        """Backfill missing active feature rows for projects extracted before catalog changes."""
+        await self.db.execute(
+            text(
+                """
+                INSERT INTO job_feature_values
+                  (project_id, feature_id, value_text, value_json, strength_score, display_priority,
+                   is_highlight, is_missing, needs_clarification, evidence_text)
+                SELECT
+                  CAST(:pid AS uuid),
+                  wfc.id,
+                  '',
+                  '{}'::jsonb,
+                  wfc.default_importance_score,
+                  row_number() OVER (
+                    ORDER BY wfc.default_importance_score DESC, wfc.feature_key
+                  ) - 1,
+                  false,
+                  true,
+                  false,
+                  'Chưa có thông tin trong nguồn đã tải lên.'
+                FROM worker_feature_catalog wfc
+                WHERE wfc.is_active = true
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM job_feature_values jfv
+                    WHERE jfv.project_id = CAST(:pid AS uuid)
+                      AND jfv.feature_id = wfc.id
+                  )
+                ON CONFLICT (project_id, feature_id) DO NOTHING
+                """
+            ),
+            {"pid": str(project_id)},
+        )
+        await self.db.commit()
 
     async def replace_for_project(
         self,
@@ -308,11 +344,13 @@ class JobFeatureValueRepo:
 
     async def list_for_project(self, project_id: uuid.UUID) -> list:
         """A project's feature values joined to the catalog (catalog display order)."""
+        await self.ensure_active_rows_for_project(project_id)
         return (
             await self.db.execute(
                 text(
                     f"SELECT {_FEATURE_COLUMNS} FROM {_FEATURE_FROM} "  # noqa: S608 — static f-string
                     "WHERE jfv.project_id = :pid "
+                    "  AND wfc.is_active = true "
                     "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
                 ),
                 {"pid": str(project_id)},

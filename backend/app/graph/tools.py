@@ -135,6 +135,7 @@ async def search_knowledge(
     # FAQ-first pre-pass: prepend canonical FAQ answers when a strong match exists.
     faq_rows = await repo.match_faq(emb, top_k=3, project_ids=project_ids)
     faq_lines = [_format_knowledge_row(r) for r in faq_rows]
+    faq_ids: set[str] = {str(getattr(r, "id", "")) for r in faq_rows}
 
     rows = await repo.match_documents(
         emb, top_k, "{}", project_ids=project_ids, query_text=query
@@ -152,6 +153,9 @@ async def search_knowledge(
         lines.append("CÂU HỎI THƯỜNG GẶP (câu trả lời chuẩn):")
         lines.extend(faq_lines)
     for r in rows:
+        # Skip FAQ chunks already prepended above to avoid double-counting.
+        if faq_ids and str(getattr(r, "id", "")) in faq_ids:
+            continue
         lines.append(_format_knowledge_row(r))
     result = "\n".join(lines)
     if s.rag_cache_enabled:

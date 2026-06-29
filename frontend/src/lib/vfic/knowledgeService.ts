@@ -85,22 +85,27 @@ export const uploadKnowledgeFile = async (
   return (await response.json()) as ApiRecord;
 };
 
-export const downloadKnowledgeTemplate = async (): Promise<string> => {
-  const response = await apiRequest(`${BASE}/knowledge/format/template`);
+export const downloadKnowledgeTemplate = async (
+  kind: "knowledge" | "faq" = "knowledge",
+): Promise<string> => {
+  const response = await apiRequest(`${BASE}/knowledge/format/template?kind=${kind}`);
   if (!response.ok) {
     throw new ApiError(response.status, "Không tải được mẫu định dạng.");
   }
   return response.text();
 };
 
-export const saveKnowledgeTemplate = async (): Promise<void> => {
-  const template = await downloadKnowledgeTemplate();
+export const saveKnowledgeTemplate = async (
+  kind: "knowledge" | "faq" = "knowledge",
+): Promise<void> => {
+  const template = await downloadKnowledgeTemplate(kind);
   const url = URL.createObjectURL(
     new Blob([template], { type: "text/markdown;charset=utf-8" }),
   );
   const link = document.createElement("a");
   link.href = url;
-  link.download = "vfic-knowledge-v1-template.md";
+  link.download =
+    kind === "faq" ? "vfic-faq-v1-template.md" : "vfic-knowledge-v1-template.md";
   document.body.appendChild(link);
   link.click();
   link.remove();

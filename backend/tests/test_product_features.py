@@ -1,7 +1,7 @@
-"""Worker product-feature tests: the 11-feature extraction step + agent tool.
+"""Worker product-feature tests: the active-feature extraction step + agent tool.
 
 Exercises KnowledgePipeline.extract_product_features with an injected fake LLM (no
-MiniMax key): exactly-11-rows-per-project (active catalog only; migration 0009),
+MiniMax key): one row per active catalog feature,
 highlight/missing/value_json coercion, idempotent re-run, best-effort (never blocks
 ingest), and the get_product_features agent tool (structured, non-RAG — precedent:
 search_bus_timetable).
@@ -339,3 +339,67 @@ async def test_recruiter_can_read_project_features_api(client, db_session, clean
         headers=headers,
     )
     assert edit.status_code == 403
+
+
+async def test_project_features_api_backfills_new_active_catalog_rows(
+    client, db_session, clean_kb, clean_features
+):
+    proj = await _seed_project(db_session)
+    doc = await _make_doc(db_session, "LG Display.", project_id=proj.id)
+
+    active_count = (
+        await db_session.execute(
+            text("SELECT count(*) FROM worker_feature_catalog WHERE is_active = true")
+        )
+    ).scalar()
+    contact_id = (
+        await db_session.execute(
+            text("SELECT id FROM worker_feature_catalog WHERE feature_key = 'contact_info'")
+        )
+    ).scalar()
+    legacy_rows = (
+        await db_session.execute(
+            text(
+                "SELECT id, feature_key, default_importance_score "
+                "FROM worker_feature_catalog "
+                "WHERE is_active = true AND feature_key <> 'contact_info' "
+                "ORDER BY default_importance_score DESC, feature_key"
+            )
+        )
+    ).all()
+    for priority, row in enumerate(legacy_rows):
+        await db_session.execute(
+            text(
+                "INSERT INTO job_feature_values "
+                "(project_id, feature_id, value_text, value_json, strength_score, display_priority, "
+                " is_highlight, is_missing, needs_clarification, source_document_id) "
+                "VALUES (CAST(:pid AS uuid), CAST(:fid AS uuid), :value_text, '{}'::jsonb, "
+                ":strength, :priority, false, false, false, CAST(:doc_id AS uuid))"
+            ),
+            {
+                "pid": str(proj.id),
+                "fid": str(row.id),
+                "value_text": f"Legacy value for {row.feature_key}",
+                "strength": row.default_importance_score,
+                "priority": priority,
+                "doc_id": str(doc.id),
+            },
+        )
+    await db_session.commit()
+
+    token = (
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": RECRUITER_EMAIL, "password": PASSWORD},
+        )
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    features = await client.get(f"/api/v1/knowledge/projects/{proj.id}/features", headers=headers)
+    assert features.status_code == 200
+    body = features.json()
+    assert body["total"] == active_count
+    contact = next(item for item in body["data"] if item["feature_key"] == "contact_info")
+    assert contact["feature_id"] == str(contact_id)
+    assert contact["is_missing"] is True
+    assert contact["value_text"] == ""
