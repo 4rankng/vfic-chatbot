@@ -5,7 +5,6 @@ import type { Conversation, Lead } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "./InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
-import MobileHeader from "../layout/MobileHeader";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import "./inbox.css";
@@ -392,8 +391,11 @@ const ConversationListContent = () => {
   };
 
   return (
-    <div className="inbox-bg-container">
-      {isMobile && <MobileHeader />}
+    <div
+      className={`inbox-bg-container ${
+        isMobile && detailOpen ? "conversation-open" : ""
+      }`}
+    >
       <InboxIcons />
       <main className={`app ${detailOpen ? "detail-open" : ""}`} id="app">
         <ConversationListPanel

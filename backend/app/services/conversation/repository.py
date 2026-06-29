@@ -97,6 +97,7 @@ class ConversationRepository:
         mode: ConversationMode | None = None,
         status: ConversationStatus | None = None,
         zalo_chat_id: str | None = None,
+        needs_attention: bool = False,
         q: str | None = None,
         sort_by: str | None = None,
         order: str | None = "desc",
@@ -116,6 +117,14 @@ class ConversationRepository:
             base = base.where(Conversation.status == status)
         if zalo_chat_id:
             base = base.where(Conversation.zalo_chat_id == zalo_chat_id)
+        if needs_attention:
+            base = base.where(
+                or_(
+                    Conversation.unread_count > 0,
+                    Conversation.mode == ConversationMode.HUMAN,
+                    Conversation.mode == ConversationMode.SEMI_AUTO,
+                )
+            )
         if q:
             base = base.where(Conversation.zalo_chat_id.ilike(f"%{q}%"))
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))

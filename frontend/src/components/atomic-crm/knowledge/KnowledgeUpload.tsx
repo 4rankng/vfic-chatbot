@@ -48,8 +48,8 @@ interface KnowledgeUploadProps {
   lockProject?: boolean;
 }
 
-// KB upload for a project (product). Two modes: pick a text file (.txt/.md/.csv), or
-// paste raw text. Paste is built into a .txt File so it reuses upload-file (which
+// KB upload for a project (product). Two modes: pick a source file (.md/.txt/.docx),
+// or paste raw text. Paste is built into a .txt File so it reuses upload-file (which
 // enqueues the training pipeline) — the JSON /documents/upload route does NOT enqueue.
 export const KnowledgeUpload = ({
   open,
@@ -81,6 +81,11 @@ export const KnowledgeUpload = ({
     setProjectId(projects[0].id);
   }, [lockProject, open, projectId, projects]);
 
+  useEffect(() => {
+    if (!open || !initialProjectId) return;
+    setProjectId(initialProjectId);
+  }, [initialProjectId, open]);
+
   const reset = () => {
     setFile(null);
     setPasteText("");
@@ -91,7 +96,7 @@ export const KnowledgeUpload = ({
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
-    notify("Tệp không hợp lệ. Chỉ hỗ trợ VFIC Knowledge Markdown v1 (.md/.txt).", {
+    notify("Tệp không hợp lệ. Chỉ hỗ trợ .md, .txt hoặc .docx.", {
       type: "warning",
     });
   };
@@ -165,15 +170,15 @@ export const KnowledgeUpload = ({
         <DialogHeader className="border-b px-6 py-5 pr-12">
           <DialogTitle>Tải kiến thức</DialogTitle>
           <DialogDescription>
-            Tải tệp theo VFIC Knowledge Markdown v1 để agent truy xuất đúng
-            nguồn, hiệu lực và lịch xe trong hội thoại.
+            Tải nguồn Markdown/TXT theo mẫu VFIC hoặc Word DOCX để agent truy
+            xuất trong hội thoại.
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
             <p className="text-sm text-muted-foreground">
-              Dùng đúng mẫu trước khi tải lên để pipeline có thể kiểm tra và
-              trích xuất có trích dẫn.
+              Markdown/TXT theo mẫu sẽ được kiểm tra cấu trúc. DOCX sẽ được
+              trích văn bản rồi đưa vào pipeline digest.
             </p>
             <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="size-4" />
@@ -239,7 +244,7 @@ export const KnowledgeUpload = ({
                   {isDragActive ? "Thả tệp vào đây" : "Kéo thả tệp vào đây"}
                 </p>
                 <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                  hoặc bấm để chọn tệp Markdown/TXT theo VFIC Knowledge Markdown v1.
+                  hoặc bấm để chọn tệp Markdown, TXT hoặc Word DOCX.
                 </p>
                 <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Một tệp mỗi lần tải

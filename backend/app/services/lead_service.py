@@ -111,6 +111,35 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
     }
 
 
+# Priority fields shown to the agent so it can subtly ask for the most
+# important missing ones. Order matters: top = highest collection priority.
+_PROFILE_FIELDS: list[tuple[str, str]] = [
+    ("name", "Tên"),
+    ("phone", "Số điện thoại"),
+    ("desired_job", "Vị trí mong muốn"),
+    ("region", "Khu vực muốn làm"),
+    ("living_area", "Khu vực sinh sống"),
+    ("years_experience", "Kinh nghiệm"),
+]
+
+
+def lead_profile_text(lead: dict | None) -> str:
+    """Format a lead dict into a compact text block for injection into the agent context.
+
+    Returns a 'THÔNG TIN ỨNG VIÊN' section showing known values and 'chưa có'
+    for missing priority fields. Returns empty string when lead is None (new user).
+    """
+    if not lead:
+        lines = [f"- {label}: chưa có" for _, label in _PROFILE_FIELDS]
+        return "THÔNG TIN ỨNG VIÊN (mới, chưa có dữ liệu):\n" + "\n".join(lines)
+
+    lines: list[str] = []
+    for key, label in _PROFILE_FIELDS:
+        val = _pick(lead.get(key))
+        lines.append(f"- {label}: {val or 'chưa có'}")
+    return "THÔNG TIN ỨNG VIÊN:\n" + "\n".join(lines)
+
+
 # Whitelist of sortable lead columns. Unknown / absent sort keys fall back to
 # updated_at (the default inbox ordering). Keys are lower-cased to match the
 # dataProvider which upper-cases the order dir but leaves the field as-is.

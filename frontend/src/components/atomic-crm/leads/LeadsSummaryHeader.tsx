@@ -32,15 +32,20 @@ export const LeadsSummaryHeader = () => {
       <SummaryChip active={!activeStage} onClick={() => setStage(undefined)}>
         Tổng <Count>{total ?? 0}</Count>
       </SummaryChip>
-      {LEAD_STAGES.map((s) => (
-        <SummaryChip
-          key={s.value}
-          active={activeStage === s.value}
-          onClick={() => setStage(s.value)}
-        >
-          {s.label} <Count>{byStage[s.value]?.length ?? 0}</Count>
-        </SummaryChip>
-      ))}
+      {LEAD_STAGES.map((s) => {
+        const count = byStage[s.value]?.length ?? 0;
+        const active = activeStage === s.value;
+        return (
+          <SummaryChip
+            key={s.value}
+            active={active}
+            onClick={() => setStage(s.value)}
+            className={!active && count === 0 ? "max-sm:hidden" : undefined}
+          >
+            {s.label} <Count>{count}</Count>
+          </SummaryChip>
+        );
+      })}
     </div>
   );
 };
@@ -48,10 +53,12 @@ export const LeadsSummaryHeader = () => {
 const SummaryChip = ({
   active,
   onClick,
+  className,
   children,
 }: {
   active: boolean;
   onClick: () => void;
+  className?: string;
   children: ReactNode;
 }) => (
   <button
@@ -62,6 +69,7 @@ const SummaryChip = ({
       active
         ? "border border-primary/40 bg-primary/10 text-primary"
         : "border border-transparent bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+      className,
     )}
   >
     {children}

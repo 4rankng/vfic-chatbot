@@ -6,6 +6,7 @@ from app.models.conversation import Conversation
 from app.models.lead import Lead
 from app.services.lead_service import (
     LeadExtractionService,
+    lead_profile_text,
     normalize_integer,
     normalize_lead,
     normalize_lead_score,
@@ -67,3 +68,48 @@ async def test_upsert_coalesce_keeps_existing(db_session):
     assert row.name == "Dũng"          # COALESCE kept the existing value
     assert row.region == "Hải Phòng"   # new non-empty value applied
     assert row.lead_score == "hot"     # preserved
+
+
+# --- lead_profile_text tests ---
+
+
+def test_lead_profile_text_none_returns_new_user():
+    out = lead_profile_text(None)
+    assert "mới, chưa có dữ liệu" in out
+    assert "chưa có" in out
+    # name should appear first (highest priority)
+    lines = [line for line in out.split("\n") if line.startswith("-")]
+    assert lines[0].startswith("- Tên:")
+    assert lines[1].startswith("- Số điện thoại:")
+
+
+def test_lead_profile_text_empty_dict_returns_new_user():
+    out = lead_profile_text({})
+    assert "mới, chưa có dữ liệu" in out
+
+
+def test_lead_profile_text_partial_lead():
+    lead = {"name": "Dũng", "phone": "0912345678", "desired_job": None, "region": "Hải Phòng", "living_area": None, "years_experience": "2 năm"}
+    out = lead_profile_text(lead)
+    assert "Dũng" in out
+    assert "0912345678" in out
+    assert "Hải Phòng" in out
+    assert "chưa có" in out  # desired_job is None
+
+
+def test_lead_profile_text_full_lead():
+    lead = {"name": "Lê Chân", "phone": "0357210887", "desired_job": "Công nhân", "region": "Hải Phòng", "living_area": "Quận 7", "years_experience": "3"}
+    out = lead_profile_text(lead)
+    assert "chưa có" not in out
+    assert "Lê Chân" in out
+    assert "0357210887" in out
+    assert "Công nhân" in out
+
+
+def test_lead_profile_text_no_double_suffix():
+    """LLM stores years_experience as free-form text like '2 năm' — no double suffix."""
+    lead = {"name": "An", "years_experience": "2 năm làm kho", "phone": "0912345678",
+            "desired_job": None, "region": None, "living_area": None}
+    out = lead_profile_text(lead)
+    assert "năm năm" not in out
+    assert "2 năm làm kho" in out

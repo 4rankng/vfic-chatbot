@@ -168,14 +168,14 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="max-sm:rounded-none max-sm:border-x-0 max-sm:bg-transparent max-sm:shadow-none">
+        <CardHeader className="pb-3 max-sm:px-0">
           <CardTitle className="flex items-center gap-2 text-base">
             <User className="size-4 text-muted-foreground" />
             Thông tin khách hàng
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col">
+        <CardContent className="flex flex-col max-sm:px-0">
           <InfoRow
             icon={<User className="size-4" />}
             label="Họ tên"
@@ -199,14 +199,14 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="max-sm:rounded-none max-sm:border-x-0 max-sm:bg-transparent max-sm:shadow-none">
+        <CardHeader className="pb-3 max-sm:px-0">
           <CardTitle className="flex items-center gap-2 text-base">
             <Briefcase className="size-4 text-muted-foreground" />
             Công việc &amp; mức lương
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col">
+        <CardContent className="flex flex-col max-sm:px-0">
           <InfoRow
             icon={<Briefcase className="size-4" />}
             label="Công việc mong muốn"
@@ -221,14 +221,14 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="max-sm:rounded-none max-sm:border-x-0 max-sm:bg-transparent max-sm:shadow-none">
+        <CardHeader className="pb-3 max-sm:px-0">
           <CardTitle className="flex items-center gap-2 text-base">
             <Hash className="size-4 text-muted-foreground" />
             Đánh giá
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-4 max-sm:px-0">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
               <Hash className="size-4" />
@@ -253,14 +253,14 @@ export const LeadInfoPanel = ({ className }: { className?: string }) => {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="max-sm:rounded-none max-sm:border-x-0 max-sm:bg-transparent max-sm:shadow-none">
+        <CardHeader className="pb-3 max-sm:px-0">
           <CardTitle className="flex items-center gap-2 text-base">
             <Calendar className="size-4 text-muted-foreground" />
             Dòng thời gian
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col">
+        <CardContent className="flex flex-col max-sm:px-0">
           <InfoRow
             icon={<Calendar className="size-4" />}
             label="Ngày tạo"

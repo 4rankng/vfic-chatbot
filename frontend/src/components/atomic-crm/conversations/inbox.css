@@ -800,6 +800,52 @@
   width: 15px;
   height: 15px;
 }
+.inbox-bg-container .mode-menu-trigger {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--rad-sm);
+  background: var(--surface-solid);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.inbox-bg-container .mode-menu-trigger:hover:not(:disabled) {
+  border-color: currentColor;
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+.inbox-bg-container .mode-menu-trigger.human {
+  color: var(--inbox-accent);
+}
+.inbox-bg-container .mode-menu-trigger.semi_auto {
+  color: var(--brand);
+}
+.inbox-bg-container .mode-menu-trigger.bot {
+  color: var(--success);
+}
+.inbox-bg-container .mode-menu-trigger.closed {
+  color: var(--ink-muted);
+}
+.inbox-bg-container .mode-menu-trigger:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.inbox-bg-container .mode-menu-trigger .icon {
+  width: 15px;
+  height: 15px;
+}
+.inbox-bg-container .mode-menu-chevron {
+  width: 12px;
+  height: 12px;
+  transform: rotate(90deg);
+  opacity: 0.72;
+}
 .inbox-bg-container .icon-btn {
   width: 40px;
   height: 40px;
@@ -1556,11 +1602,15 @@
    slides in from the right; the browser back button / in-app back clears it. */
 @media (max-width: 767px) {
   .inbox-bg-container {
-    /* clear the way for the fixed 64px mobile header + the 56px bottom nav */
-    margin-top: 64px;
+    /* MobileLayout owns the fixed topbar and bottom nav offsets. */
     padding: 0;
     height: calc(100vh - 120px);
     height: calc(100dvh - 120px);
+  }
+  .inbox-bg-container.conversation-open {
+    margin-top: 0;
+    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
   }
   .inbox-bg-container .app {
     grid-template-columns: 1fr;
@@ -1607,21 +1657,20 @@
   }
   .inbox-bg-container .chat-header {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px 10px;
-    padding: 10px 12px;
-    min-height: 112px;
+    gap: 8px;
+    padding: 8px 10px;
+    min-height: 60px;
   }
   .inbox-bg-container .header-person {
     width: 100%;
   }
   .inbox-bg-container .header-actions {
-    grid-column: 1 / -1;
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
+    width: auto;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
   }
   .inbox-bg-container .mode-control {
     width: 100%;
@@ -1640,6 +1689,24 @@
     display: none;
   }
   .inbox-bg-container .header-avatar {
+    display: none;
+  }
+  .inbox-bg-container .person-name {
+    font-size: 15px;
+  }
+  .inbox-bg-container .person-meta {
+    margin-top: 2px;
+    font-size: 11px;
+  }
+  .inbox-bg-container .mode-menu-trigger {
+    width: 38px;
+    height: 38px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 999px;
+  }
+  .inbox-bg-container .mode-menu-trigger span,
+  .inbox-bg-container .mode-menu-chevron {
     display: none;
   }
   .inbox-bg-container .chat-mode-chip {

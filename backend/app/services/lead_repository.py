@@ -22,6 +22,22 @@ class LeadRepository:
         await self.db.commit()
         return row.scalar()
 
+    async def by_zalo_id(self, zalo_id: str) -> dict | None:
+        """Fetch an existing lead by ``zalo_id``; return all columns as a dict, or None."""
+        row = await self.db.execute(_FETCH_SQL, {"zalo_id": zalo_id})
+        result = row.mappings().first()
+        return dict(result) if result else None
+
+
+_FETCH_SQL = text(
+    """
+    SELECT id, zalo_id, name, phone, birth_year, age, living_area, address, gender,
+           region, desired_job, years_experience, latest_company, expected_salary,
+           lead_score, lead_stage
+    FROM leads WHERE zalo_id = :zalo_id
+    """
+)
+
 
 _UPSQL = text(
     """

@@ -24,6 +24,21 @@ const scoreToTag = (score: Lead["lead_score"]): TagStackTag | null => {
   return { label: found.label, tone };
 };
 
+const compactIdentifier = (lead: Lead) => {
+  const identifier = lead.phone || lead.zalo_id || "";
+  if (!identifier) return "";
+  return identifier.length > 4 ? identifier.slice(-4) : identifier;
+};
+
+const displayName = (lead: Lead) => {
+  const name = lead.name?.trim();
+  if (name) return name;
+  const suffix = compactIdentifier(lead);
+  return suffix ? `Ứng viên Zalo ${suffix}` : "Ứng viên chưa định danh";
+};
+
+const clean = (value?: string | null) => value?.trim() || "";
+
 interface LeadCardProps {
   lead: Lead;
   showStageBadge?: boolean;
@@ -58,73 +73,102 @@ const LeadCardContentBase = ({
     LEAD_STAGES.find((s) => s.value === lead.lead_stage)?.label ||
     lead.lead_stage;
 
-  const identifier = lead.phone || lead.zalo_id || "";
-  const maskedId =
-    identifier.length > 4 ? `•••• ${identifier.slice(-4)}` : identifier;
+  const identifierSuffix = compactIdentifier(lead);
+  const phone = clean(lead.phone);
+  const jobLabel = clean(lead.desired_job) || "Cần bổ sung vị trí";
+  const salaryLabel = clean(lead.expected_salary) || "Chưa rõ lương";
+  const areaLabel = clean(lead.region) || clean(lead.living_area);
+  const notes = clean(lead.notes);
+  const contactLabel = phone
+    ? phone
+    : identifierSuffix
+      ? `Zalo ${identifierSuffix}`
+      : "Chưa có liên hệ";
+  const activityLabel = updatedAt ? `Cập nhật ${updatedAt}` : "Chưa có hoạt động";
 
   // Derived tag stack from existing lead signals (no tags backend needed).
-  // Score + region/living_area — these aren't surfaced elsewhere in the row, so
-  // the pills add info without duplicating the job/stage columns.
-  const areaTag = lead.region?.trim() || lead.living_area?.trim() || null;
   const tags: TagStackTag[] = [
     scoreToTag(lead.lead_score),
-    areaTag ? { label: areaTag, tone: "default" } : null,
+    showStageBadge && stageLabel ? { label: stageLabel, tone: "default" } : null,
+    areaLabel ? { label: areaLabel, tone: "default" } : null,
   ].filter((t): t is TagStackTag => t !== null);
 
   return (
-    <div
-      className="cursor-pointer select-none bg-card hover:bg-accent/50 transition-colors"
+    <article
+      className="group cursor-pointer select-none rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:bg-accent/25"
       onClick={handleClick}
     >
       <RecordContextProvider value={lead}>
-        <div className="flex items-center gap-4 px-4 py-3 min-h-[64px]">
-          <LeadAvatar record={lead} size="sm" className="size-10 shrink-0" />
+        <div className="flex items-start gap-3">
+          <LeadAvatar record={lead} size="sm" className="size-11 shrink-0" />
 
-          <div className="min-w-0 flex-[2]">
-            <div className="truncate text-[15px] font-semibold text-foreground">
-              {lead.name || "Chưa rõ tên"}
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
-              {!lead.name && (
-                <>
-                  <span className="shrink-0">SĐT {maskedId}</span>
-                  <span className="shrink-0 text-muted-foreground/50">·</span>
-                </>
-              )}
-              <span className="truncate">Nguồn Zalo</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="truncate text-[15px] font-semibold leading-5 text-foreground">
+                  {displayName(lead)}
+                </h3>
+                <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+                  Nguồn Zalo {identifierSuffix ? `· ${identifierSuffix}` : ""}
+                </p>
+              </div>
             </div>
             {tags.length > 0 && (
-              <div className="mt-1.5">
-                <TagStack tags={tags} max={2} />
+              <div className="mt-2">
+                <TagStack tags={tags} max={3} />
               </div>
             )}
           </div>
 
-          <div className="min-w-0 flex-[2] hidden md:block">
-            <div className="truncate text-[14px] text-foreground font-medium">
-              {lead.desired_job || "Chưa rõ công việc"}
-            </div>
-            {showStageBadge && (
-              <div className="mt-0.5 text-[13px] text-muted-foreground">
-                Giai đoạn: {stageLabel}
-              </div>
-            )}
-          </div>
-
-          <div className="min-w-0 flex-[2] hidden lg:block text-[13px]">
-            <div className="text-muted-foreground">
-              Liên hệ cuối: {updatedAt || "Chưa rõ"}
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="-mr-1 -mt-1 flex shrink-0 items-start">
             <LeadStageMenu />
           </div>
         </div>
+
+        <div className="mt-4 divide-y divide-border/70 border-y border-border/70 sm:grid sm:grid-cols-2 sm:gap-2 sm:divide-y-0 sm:border-y-0">
+          <Fact label="Vị trí" value={jobLabel} strong />
+          <Fact label="Lương" value={salaryLabel} />
+          <Fact label="Khu vực" value={areaLabel || "Chưa rõ khu vực"} />
+          <Fact label="Liên hệ" value={contactLabel} />
+        </div>
+
+        {notes && (
+          <p className="mt-3 line-clamp-2 border-l-2 border-border pl-3 text-xs leading-5 text-muted-foreground">
+            {notes}
+          </p>
+        )}
+
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/70 pt-3 text-xs text-muted-foreground">
+          <span>{activityLabel}</span>
+          {showStageBadge && <span className="font-medium">{stageLabel}</span>}
+        </div>
       </RecordContextProvider>
-    </div>
+    </article>
   );
 };
+
+const Fact = ({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) => (
+  <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-3 py-2 sm:block sm:rounded-lg sm:bg-muted/55 sm:px-3 sm:py-2">
+    <div className="text-[11px] font-medium text-muted-foreground">
+      {label}
+    </div>
+    <div
+      className={`min-w-0 text-right text-[13px] sm:mt-0.5 sm:truncate sm:text-left ${
+        strong ? "font-semibold text-foreground" : "font-medium text-foreground/85"
+      }`}
+    >
+      {value}
+    </div>
+  </div>
+);
 
 export const LeadCardContent = memo(LeadCardContentBase);
 

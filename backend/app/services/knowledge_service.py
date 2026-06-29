@@ -4,7 +4,7 @@ Two ingest paths:
   * ``process(embedder, doc, llm_json=None)`` — mechanical 1-chunk fallback (legacy,
     tests). When ``llm_json`` is supplied it runs the full LLM
     ``KnowledgePipeline`` (digest -> embed -> index).
-  * ``upload_bytes(...)`` — multipart upload: decode the file as raw text,
+  * ``upload_bytes(...)`` — multipart upload: extract text from the source file,
     persist the original to a volume, create the doc (stage=UPLOADED); the caller
     then enqueues the async ingest job for the real LLM pipeline.
 
@@ -13,8 +13,12 @@ sources by archiving/replacing them rather than approving a review queue.
 """
 from __future__ import annotations
 
+from io import BytesIO
+from pathlib import Path
 import uuid
 from typing import Any, Awaitable, Callable
+from zipfile import BadZipFile, ZipFile
+from xml.etree import ElementTree as ET
 
 from sqlalchemy import desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +40,55 @@ from app.services.knowledge.repository import KnowledgeChunkRepo, rebuild_bus_ti
 from app.services.storage import persist_original_upload
 
 Embedder = Callable[[str], Awaitable[list[float]]]
+
+DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+WORD_XML_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+class KnowledgeFileExtractionError(ValueError):
+    """Raised when an uploaded source file cannot be converted to ingestable text."""
+
+
+def _detect_upload_format(file_name: str, content_type: str) -> str:
+    suffix = Path(file_name or "").suffix.lower()
+    normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if suffix == ".docx" or normalized_type == DOCX_MIME_TYPE:
+        return "docx"
+    if suffix == ".md" or normalized_type in {"text/markdown", "text/x-markdown"}:
+        return "markdown"
+    if suffix == ".txt" or normalized_type.startswith("text/"):
+        return "text"
+    return suffix.removeprefix(".") or normalized_type or "binary"
+
+
+def _extract_docx_text(data: bytes) -> str:
+    """Extract paragraph text from a Word DOCX without adding runtime dependencies."""
+    try:
+        with ZipFile(BytesIO(data)) as archive:
+            document_xml = archive.read("word/document.xml")
+    except (BadZipFile, KeyError) as exc:
+        raise KnowledgeFileExtractionError("DOCX không hợp lệ hoặc thiếu nội dung Word.") from exc
+
+    try:
+        root = ET.fromstring(document_xml)
+    except ET.ParseError as exc:
+        raise KnowledgeFileExtractionError("Không đọc được nội dung XML trong DOCX.") from exc
+
+    paragraphs: list[str] = []
+    for paragraph in root.iter(f"{WORD_XML_NS}p"):
+        parts: list[str] = []
+        for node in paragraph.iter():
+            if node.tag == f"{WORD_XML_NS}t" and node.text:
+                parts.append(node.text)
+            elif node.tag == f"{WORD_XML_NS}tab":
+                parts.append("\t")
+            elif node.tag in {f"{WORD_XML_NS}br", f"{WORD_XML_NS}cr"}:
+                parts.append("\n")
+        text = "".join(parts).strip()
+        if text:
+            paragraphs.append(text)
+
+    return "\n\n".join(paragraphs)
 
 
 class KnowledgeService:
@@ -72,13 +125,15 @@ class KnowledgeService:
         project_id: uuid.UUID | None = None,
         require_canonical: bool = False,
     ) -> KnowledgeDocument:
-        """Multipart upload: decode the file as raw text, persist the original, create doc."""
-        original_text = data.decode("utf-8", errors="replace")
-        raw_text, repair = self._repair_if_canonical(original_text, require_canonical)
-        canonical = parse_canonical_markdown(raw_text) if require_canonical else None
+        """Multipart upload: extract text, persist the original, create doc."""
+        extracted_text, source_metadata = self._extract_upload_text(file_name, content_type, data)
+        enforce_canonical = require_canonical and source_metadata["format"] != "docx"
+        raw_text, repair = self._repair_if_canonical(extracted_text, enforce_canonical)
+        canonical = parse_canonical_markdown(raw_text) if enforce_canonical else None
         if canonical is not None and project_id is None:
             project_id = await self._resolve_project_from_canonical(canonical)
-        metadata, version = self._build_canonical_metadata(canonical, raw_text, original_text, repair)
+        metadata, version = self._build_canonical_metadata(canonical, raw_text, extracted_text, repair)
+        metadata["source_file"] = source_metadata
         storage_path = persist_original_upload(file_name, data)
         doc = KnowledgeDocument(
             file_name=file_name,
@@ -96,6 +151,28 @@ class KnowledgeService:
         await self.db.commit()
         await self.db.refresh(doc)
         return doc
+
+    @staticmethod
+    def _extract_upload_text(file_name: str, content_type: str, data: bytes) -> tuple[str, dict]:
+        """Return ingestable text plus source-file metadata for an upload."""
+        file_format = _detect_upload_format(file_name, content_type)
+        if file_format == "docx":
+            text = _extract_docx_text(data)
+            if not text.strip():
+                raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
+            return text, {
+                "format": "docx",
+                "mime_type": content_type or DOCX_MIME_TYPE,
+                "extraction": "word_ooxml",
+                "text_checksum": checksum_text(text),
+            }
+        text_value = data.decode("utf-8", errors="replace")
+        return text_value, {
+            "format": file_format,
+            "mime_type": content_type or None,
+            "extraction": "utf8_decode",
+            "text_checksum": checksum_text(text_value),
+        }
 
     @staticmethod
     def _repair_if_canonical(text: str, require_canonical: bool) -> tuple[str, Any]:

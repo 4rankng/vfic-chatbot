@@ -70,7 +70,7 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
 
   if (isLoading) {
     return (
-      <Card className="flex h-[calc(100vh-220px)] flex-col">
+      <Card className="flex h-[min(620px,calc(100dvh-160px))] flex-col lg:h-[calc(100vh-220px)]">
         <CardHeader className="border-b">
           <Skeleton className="h-5 w-48" />
         </CardHeader>
@@ -98,7 +98,7 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
 
   if (error) {
     return (
-      <Card className="flex h-[calc(100vh-220px)] flex-col items-center justify-center p-6">
+      <Card className="flex h-[min(620px,calc(100dvh-160px))] flex-col items-center justify-center p-6 lg:h-[calc(100vh-220px)]">
         <div className="text-center text-sm text-muted-foreground">
           <p className="font-medium text-destructive">
             Không thể tải cuộc trò chuyện
@@ -111,7 +111,7 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
 
   if (!conversation) {
     return (
-      <Card className="flex h-[calc(100vh-220px)] flex-col items-center justify-center p-6">
+      <Card className="flex h-[min(620px,calc(100dvh-160px))] flex-col items-center justify-center p-6 lg:h-[calc(100vh-220px)]">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="rounded-full bg-muted p-4">
             <Bot className="size-8 text-muted-foreground" />
@@ -135,7 +135,7 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
     // embed, which was an inbox-shell pane that only rendered inside
     // /conversations. Same <ChatThread> the inbox uses, so behaviour is
     // identical (realtime, reply, takeover, markAsRead).
-    <div className="chat-surface grid h-[calc(100vh-220px)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden rounded-xl border border-border bg-card">
+    <div className="chat-surface grid h-[min(620px,calc(100dvh-160px))] grid-rows-[minmax(0,1fr)_auto] overflow-hidden rounded-xl border border-border bg-card lg:h-[calc(100vh-220px)]">
       <ChatThread
         conversationId={conversation?.id ?? ""}
         conversation={conversation}
@@ -192,7 +192,7 @@ export const LeadShowContent = () => {
             <Skeleton className="h-64 w-full rounded-xl" />
             <Skeleton className="h-32 w-full rounded-xl" />
           </div>
-          <Skeleton className="h-[calc(100vh-220px)] w-full rounded-xl" />
+          <Skeleton className="h-[min(620px,calc(100dvh-160px))] w-full rounded-xl lg:h-[calc(100vh-220px)]" />
         </div>
       </div>
     );
@@ -229,30 +229,28 @@ export const LeadShowContentMobile = () => {
 
   return (
     <div className="flex flex-col gap-3">
-      <Card>
-        <CardContent className="flex flex-col gap-3 p-4">
-          <div className="flex items-center gap-3">
-            <LeadAvatar size="lg" />
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-lg font-semibold">
-                {record.name || "Chưa rõ tên ứng viên"}
-              </h1>
-              <div className="text-xs text-muted-foreground">
-                {record.phone || "Chưa có số điện thoại"}
-              </div>
+      <section className="border-b border-border pb-3">
+        <div className="flex items-center gap-3">
+          <LeadAvatar size="lg" />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-semibold">
+              {record.name || "Chưa rõ tên ứng viên"}
+            </h1>
+            <div className="text-xs text-muted-foreground">
+              {record.phone || "Chưa có số điện thoại"}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <LeadStageBadge stage={record.lead_stage} />
-            <LeadScoreBar score={record.lead_score} className="flex-1" />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <LeadStageBadge stage={record.lead_stage} />
+          <LeadScoreBar score={record.lead_score} className="min-w-32 flex-1" />
+        </div>
+        {record.desired_job && (
+          <div className="mt-2 text-sm text-muted-foreground">
+            {record.desired_job}
           </div>
-          {record.desired_job && (
-            <div className="text-sm text-muted-foreground">
-              {record.desired_job}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        )}
+      </section>
       <LeadInfoPanel />
       <LeadChat zaloId={record.zalo_id} />
     </div>

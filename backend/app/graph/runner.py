@@ -55,6 +55,7 @@ def _build_agent_user_text(
     chat_id: str,
     current_user_text: str,
     recent_messages: list[Message],
+    lead_profile: str = "",
 ) -> str:
     """Give the agent the actual chat state, not just the latest short reply.
 
@@ -83,21 +84,24 @@ def _build_agent_user_text(
     else:
         history_lines = ["- (chưa có tin nhắn trước đó)"]
 
-    return "\n".join(
-        [
-            f"CHAT_ID để tra cứu memory khi cần: {chat_id}",
-            "",
-            "LỊCH SỬ GẦN ĐÂY (cũ -> mới):",
-            *history_lines,
-            "",
-            "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:",
-            current_user_text,
-            "",
-            "Hãy trả lời tin nhắn hiện tại dựa trên lịch sử trên. "
-            "Nếu đây là câu trả lời ngắn cho câu hỏi trước đó, tiếp tục đúng mạch hội thoại; "
-            "không chào lại hoặc hỏi lại thông tin đã có.",
-        ]
-    )
+    parts: list[str] = [
+        f"CHAT_ID để tra cứu memory khi cần: {chat_id}",
+    ]
+    if lead_profile:
+        parts += ["", lead_profile]
+    parts += [
+        "",
+        "LỊCH SỬ GẦN ĐÂY (cũ -> mới):",
+        *history_lines,
+        "",
+        "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:",
+        current_user_text,
+        "",
+        "Hãy trả lời tin nhắn hiện tại dựa trên lịch sử trên. "
+        "Nếu đây là câu trả lời ngắn cho câu hỏi trước đó, tiếp tục đúng mạch hội thoại; "
+        "không chào lại hoặc hỏi lại thông tin đã có.",
+    ]
+    return "\n".join(parts)
 
 
 async def _agent_turn(
@@ -111,12 +115,26 @@ async def _agent_turn(
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
     from app.graph.context import build_system_prompt
+    from app.services.lead_repository import LeadRepository
+    from app.services.lead_service import lead_profile_text
 
     system = await build_system_prompt(deps.db)
+
+    # Fetch existing lead profile so the agent can see what info is already known
+    # and subtly ask for the most important missing fields. Best-effort: DB error
+    # simply skips injection (a turn never breaks because of this).
+    lead_profile = ""
+    try:
+        lead = await LeadRepository(deps.db).by_zalo_id(chat_id)
+        lead_profile = lead_profile_text(lead)
+    except Exception:  # noqa: BLE001
+        logger.warning("lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True)
+
     contextual_user_text = _build_agent_user_text(
         chat_id=chat_id,
         current_user_text=user_text,
         recent_messages=recent_messages,
+        lead_profile=lead_profile,
     )
     return await deps.agent.agent(
         contextual_user_text, system=system, db=deps.db, embedder=deps.embedder

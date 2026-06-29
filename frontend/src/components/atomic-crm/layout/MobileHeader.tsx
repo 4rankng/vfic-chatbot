@@ -18,19 +18,19 @@ const MobileHeader = ({ children }: MobileHeaderProps) => {
   const { title } = useConfigurationContext();
 
   return (
-    <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/70 bg-background/80 px-3 backdrop-blur-xl dark:bg-card/60">
+    <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/70 bg-background/80 px-6 backdrop-blur-xl dark:bg-card/60">
       <div className="flex min-w-0 items-center gap-2">
         {children ?? (
           <Link to="/" className="flex h-full items-center" aria-label={title}>
             <img
               src="/light-logo.png"
               alt={title}
-              className="h-7 w-auto py-1 dark:hidden"
+              className="h-12 w-auto dark:hidden"
             />
             <img
               src="/dark-logo.png"
               alt={title}
-              className="hidden h-7 w-auto py-1 dark:block"
+              className="hidden h-12 w-auto dark:block"
             />
           </Link>
         )}

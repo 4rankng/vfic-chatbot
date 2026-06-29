@@ -79,7 +79,7 @@ export const KnowledgeDetailPanel = ({
   };
 
   return (
-    <section className="flex min-h-[620px] flex-col gap-4 rounded-[14px] border border-border bg-card p-5 text-foreground lg:p-6">
+    <section className="flex min-h-[620px] flex-col gap-4 bg-transparent text-foreground sm:rounded-[14px] sm:border sm:border-border sm:bg-card sm:p-5 lg:p-6">
       {onBack && (
         <button
           type="button"
@@ -91,9 +91,9 @@ export const KnowledgeDetailPanel = ({
       )}
 
       {/* Compact identity — one block, no duplicated stats */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 px-1 sm:px-0">
         <div className="min-w-0">
-          <h3 className="kb-display break-words text-xl text-foreground">
+          <h3 className="kb-display break-words text-lg text-foreground sm:text-xl">
             {source.file_name}
           </h3>
           <p className="kb-mono mt-1 break-words text-[12.5px] text-muted-foreground">
@@ -108,7 +108,7 @@ export const KnowledgeDetailPanel = ({
       </div>
 
       {/* Single, context-dependent action row */}
-      <div className="flex flex-wrap gap-2 border-b border-border pb-4">
+      <div className="flex flex-wrap gap-2 border-b border-border px-1 pb-4 sm:px-0">
         <Button
           size="sm"
           onClick={() => redirect("edit", "knowledge_sources", source.id)}
@@ -188,7 +188,7 @@ export const KnowledgeDetailPanel = ({
       )}
 
       {/* Compact stat trio (units / flagged / updated) — hairline grid */}
-      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-[10px] bg-border">
+      <div className="grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border sm:rounded-[10px] sm:border-y-0">
         <InfoBlock
           label="Đơn vị"
           value={String(source.digest_meta?.unit_count ?? 0)}
@@ -201,14 +201,14 @@ export const KnowledgeDetailPanel = ({
       </div>
 
       {/* Digest ticket */}
-      <div>
+      <div className="px-1 sm:px-0">
         <h4 className="kb-display text-sm text-foreground">
           {isCanonicalSource(source) ? "Tóm tắt nguồn" : "Tóm tắt digest"}
         </h4>
         {source.digest_summary ? (
-          <div className="mt-2 rounded-[10px] border border-dashed border-[var(--kb-line-strong)] bg-background p-4">
+          <div className="mt-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3">
             <p
-              className="text-[13.5px] italic text-[var(--kb-ink-700)]"
+              className="text-sm italic leading-6 text-[var(--kb-ink-700)]"
               style={{ fontFamily: "var(--kb-font-display)" }}
             >
               {localizeKnowledgeText(source.digest_summary)}
@@ -223,11 +223,11 @@ export const KnowledgeDetailPanel = ({
       <StoredKnowledgePanel source={source} />
 
       {/* Pipeline detail — collapsed, demoted */}
-      <div>
+      <div className="px-1 sm:px-0">
         <button
           type="button"
           onClick={() => setShowPipeline((value) => !value)}
-          className="flex w-full items-center justify-between gap-2 rounded-[10px] border border-border bg-background px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+          className="flex w-full items-center justify-between gap-2 border-y border-border py-3 text-left text-sm font-semibold text-foreground transition-colors hover:text-[var(--kb-teal)] sm:rounded-[10px] sm:border sm:bg-background sm:px-4 sm:hover:bg-secondary"
         >
           <span>Chi tiết pipeline (6 bước)</span>
           <span className="kb-mono text-xs text-muted-foreground">
@@ -242,7 +242,7 @@ export const KnowledgeDetailPanel = ({
           </span>
         </button>
         {showPipeline && (
-          <div className="mt-2 rounded-[10px] border border-border bg-background p-4">
+          <div className="mt-2 border-b border-border pb-4 sm:rounded-[10px] sm:border sm:bg-background sm:p-4">
             <p className="mb-3 text-xs leading-5 text-muted-foreground">
               {pipelineStateCopy(source)}
             </p>
@@ -255,7 +255,7 @@ export const KnowledgeDetailPanel = ({
 };
 
 const InfoBlock = ({ label, value }: { label: string; value: string }) => (
-  <div className="min-w-0 bg-card px-4 py-3">
+  <div className="min-w-0 bg-background px-3 py-3 sm:bg-card sm:px-4">
     <div className="kb-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
       {label}
     </div>
@@ -287,9 +287,9 @@ const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
   }
 
   return (
-    <div className="mt-2 rounded-[10px] border border-dashed border-[var(--kb-line-strong)] bg-background p-4">
+    <div className="mt-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3">
       <p
-        className="text-[13.5px] italic text-[var(--kb-ink-300)]"
+        className="text-sm italic leading-6 text-[var(--kb-ink-300)]"
         style={{ fontFamily: "var(--kb-font-display)" }}
       >
         Pipeline chưa trả về tóm tắt cho nguồn này. Tóm tắt sẽ hiện ra ở đây sau

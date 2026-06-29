@@ -64,7 +64,7 @@ export const LeadListContent = () => {
 
   if (isPending) {
     return (
-      <div className="flex flex-col gap-px rounded-xl border overflow-hidden bg-border/50">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <LeadCardSkeleton key={i} />
         ))}
@@ -98,7 +98,7 @@ export const LeadListContent = () => {
 
   return (
     <>
-      <div className="flex flex-col gap-px rounded-xl border border-border/50 bg-border/50 overflow-hidden shadow-sm">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {sortedLeads.map((lead) => (
           <LeadCard
             key={lead.id}
@@ -134,11 +134,19 @@ export const LeadListContent = () => {
 };
 
 const LeadCardSkeleton = () => (
-  <div className="flex items-center gap-3 bg-card px-4 py-4">
-    <Skeleton shimmer className="size-9 shrink-0 rounded-full" />
-    <div className="flex-1 space-y-2">
-      <Skeleton shimmer className="h-4 w-1/3 rounded" />
-      <Skeleton shimmer className="h-3 w-1/2 rounded" />
+  <div className="rounded-xl border bg-card p-4">
+    <div className="flex items-center gap-3">
+      <Skeleton shimmer className="size-9 shrink-0 rounded-full" />
+      <div className="flex-1 space-y-2">
+        <Skeleton shimmer className="h-4 w-1/3 rounded" />
+        <Skeleton shimmer className="h-3 w-1/2 rounded" />
+      </div>
+    </div>
+    <div className="mt-4 space-y-2 border-y border-border/70 py-2 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0 sm:border-y-0 sm:py-0">
+      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
+      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
+      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
+      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
     </div>
   </div>
 );

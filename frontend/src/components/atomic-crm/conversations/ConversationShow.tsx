@@ -8,6 +8,14 @@ import {
   type ConversationMode,
   useConversationActions,
 } from "./useConversationActions";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -42,10 +50,10 @@ const MODE_OPTIONS: Array<{
 ];
 
 const MODE_STATUS: Record<ConversationMode, string> = {
-  human: "Manual mode: only recruiter replies are enabled",
-  semi_auto: "Semi auto: bot answers after 5 minutes of recruiter inactivity",
-  bot: "Auto mode: chatbot is handling replies",
-  closed: "Conversation closed",
+  human: "Manual · recruiter replies",
+  semi_auto: "Semi auto · bot fallback",
+  bot: "Auto · bot replies",
+  closed: "Closed",
 };
 
 /**
@@ -85,6 +93,9 @@ export const ConversationShowContent = ({
     handleTakeover,
   } = useConversationActions(record);
   const activeMode = effectiveMode ?? record?.mode ?? "bot";
+  const activeModeOption = MODE_OPTIONS.find(
+    (option) => option.mode === activeMode,
+  );
 
   return (
     <section className="panel center-panel" aria-label="Nội dung trò chuyện">
@@ -125,37 +136,50 @@ export const ConversationShowContent = ({
           </div>
         </div>
         <div className="header-actions">
-          <div
-            className="mode-control"
-            role="radiogroup"
-            aria-label="Chế độ trả lời hội thoại"
-          >
-            {MODE_OPTIONS.map((option) => {
-              const isActive = activeMode === option.mode;
-              return (
-                <button
-                  key={option.mode}
-                  type="button"
-                  className={`mode-segment ${option.mode} ${
-                    isActive ? "active" : ""
-                  }`}
-                  role="radio"
-                  aria-checked={isActive}
-                  title={option.title}
-                  disabled={activeMode === "closed" || isActive}
-                  onClick={() => setConversationMode(option.mode)}
-                >
-                  <svg className="icon">
-                    <use href={`#${option.icon}`} />
-                  </svg>
-                  <span className="mode-segment-copy">
-                    <span className="mode-segment-label">{option.label}</span>
-                    <span className="mode-segment-hint">{option.hint}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={`mode-menu-trigger ${activeMode}`}
+                aria-label="Chọn chế độ trả lời"
+                title="Chọn chế độ trả lời"
+                disabled={activeMode === "closed"}
+              >
+                <svg className="icon">
+                  <use href={`#${activeModeOption?.icon ?? "i-bot"}`} />
+                </svg>
+                <span>{activeModeOption?.label ?? "Closed"}</span>
+                <svg className="icon mode-menu-chevron">
+                  <use href="#i-chevron" />
+                </svg>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Chế độ trả lời</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {MODE_OPTIONS.map((option) => {
+                const isActive = activeMode === option.mode;
+                return (
+                  <DropdownMenuItem
+                    key={option.mode}
+                    disabled={isActive}
+                    onSelect={() => setConversationMode(option.mode)}
+                    className="items-start gap-3"
+                  >
+                    <svg className="mt-0.5 size-4 shrink-0">
+                      <use href={`#${option.icon}`} />
+                    </svg>
+                    <span className="grid gap-0.5">
+                      <span className="font-medium">{option.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {option.hint}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {activeMode === "closed" && (
             <span className="chat-mode-chip" title="Hội thoại đã đóng">
               <svg className="icon">

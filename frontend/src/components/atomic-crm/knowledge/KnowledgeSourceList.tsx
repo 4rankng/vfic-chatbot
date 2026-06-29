@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { ListBase, useRefresh } from "ra-core";
-import { FileText, RefreshCw, Search } from "lucide-react";
+import { FileText, RefreshCw, Search, Upload } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -71,6 +72,8 @@ const KnowledgeSourceListContent = () => {
     filteredSources.find((source) => String(source.id) === selectedId) ??
     filteredSources[0] ??
     null;
+  const uploadProjectId =
+    projectFilter !== ALL_PROJECTS ? projectFilter : selectedSource?.project_id;
 
   // Auto-refresh only while something is actively moving through the pipeline;
   // stop when everything has settled (less visual jitter at rest).
@@ -83,8 +86,8 @@ const KnowledgeSourceListContent = () => {
   const hasActive = sources.some(isPipelineActive);
 
   return (
-    <div className="kb-scope min-h-[calc(100vh-4rem)] px-4 py-6 text-foreground md:px-6 lg:py-8">
-      <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
+    <div className="kb-scope min-h-[calc(100vh-4rem)] px-3 py-5 text-foreground sm:px-4 md:px-6 lg:py-8">
+      <div className="mx-auto flex max-w-[1180px] flex-col gap-4 sm:gap-5">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 max-w-2xl">
             <p className="kb-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--kb-teal)]">
@@ -104,9 +107,21 @@ const KnowledgeSourceListContent = () => {
               </p>
             )}
           </div>
+          <Button
+            type="button"
+            onClick={() => setUploadOpen(true)}
+            className="h-10 w-full rounded-[9px] sm:w-fit"
+          >
+            <Upload className="size-4" />
+            Thêm tệp
+          </Button>
         </header>
 
-        <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
+        <KnowledgeUpload
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          initialProjectId={uploadProjectId ? String(uploadProjectId) : undefined}
+        />
 
         <div className="grid gap-2 min-[520px]:grid-cols-[minmax(0,1fr)_180px]">
           <div className="relative">
@@ -142,6 +157,17 @@ const KnowledgeSourceListContent = () => {
             icon={<FileText className="size-6" />}
             title="Không tìm thấy tài liệu"
             description="Thử đổi bộ lọc hoặc tải thêm tài liệu cho dự án."
+            actions={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setUploadOpen(true)}
+              >
+                <Upload className="size-4" />
+                Thêm tệp cho dự án
+              </Button>
+            }
             className="rounded-[14px] bg-card"
           />
         ) : (
@@ -192,7 +218,7 @@ const SourceSelector = ({
     : undefined;
 
   return (
-    <section className="rounded-[14px] border border-border bg-card p-3">
+    <section className="border-y border-border py-3 sm:rounded-[14px] sm:border sm:bg-card sm:p-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <h3 className="kb-display text-base text-foreground">

@@ -79,8 +79,8 @@ export const StoredKnowledgePanel = ({
   const units = data?.data ?? [];
 
   return (
-    <section className="rounded-[12px] border border-border bg-background p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="border-y border-border py-4 sm:rounded-[12px] sm:border sm:bg-background sm:p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-1 sm:px-0">
         <div className="min-w-0">
           <h4 className="kb-display text-sm text-foreground">
             Kiến thức đã lưu
@@ -90,13 +90,13 @@ export const StoredKnowledgePanel = ({
             tra.
           </p>
         </div>
-        <Badge className="kb-mono rounded-full bg-secondary text-[11px] text-[var(--kb-ink-700)] hover:bg-secondary">
+        <Badge className="kb-mono rounded-full bg-[var(--kb-teal-soft)] text-[11px] text-[var(--kb-teal)] hover:bg-[var(--kb-teal-soft)]">
           {source.digest_meta?.unit_count ?? units.length} đơn vị
         </Badge>
       </div>
 
       {!isPublished(source) && !needsReview(source) ? (
-        <div className="mt-3 flex items-center gap-2 rounded-[10px] bg-[var(--kb-teal-soft)] p-3 text-sm text-[var(--kb-teal)]">
+        <div className="mt-3 flex items-center gap-2 border-l-2 border-[var(--kb-teal)] py-2 pl-3 text-sm text-[var(--kb-teal)]">
           <RefreshCw className="size-4 animate-spin" />
           Kiến thức sẽ hiện ở đây sau khi pipeline xuất bản các đơn vị truy
           xuất.
@@ -108,17 +108,17 @@ export const StoredKnowledgePanel = ({
           ))}
         </div>
       ) : isError ? (
-        <div className="mt-3 rounded-[10px] bg-[var(--kb-rust-soft)] p-3 text-sm text-[var(--kb-rust)]">
+        <div className="mt-3 border-l-2 border-[var(--kb-rust)] py-2 pl-3 text-sm text-[var(--kb-rust)]">
           Chưa tải được danh sách kiến thức đã lưu. Hãy làm mới trang hoặc thử
           lại sau.
         </div>
       ) : units.length === 0 ? (
-        <div className="mt-3 rounded-[10px] bg-secondary p-3 text-sm text-muted-foreground">
+        <div className="mt-3 border-l-2 border-border py-2 pl-3 text-sm text-muted-foreground">
           Chưa có đơn vị kiến thức nào được lưu. Nếu tài liệu đã xử lý xong, hãy
           kiểm tra nội dung nguồn hoặc chạy lại pipeline.
         </div>
       ) : (
-        <div className="mt-4 grid max-h-[460px] gap-3 overflow-y-auto pr-1">
+        <div className="mt-4 max-h-[520px] divide-y divide-border overflow-y-auto">
           {units.map((unit) => (
             <KnowledgeUnitCard key={unit.id} unit={unit} />
           ))}
@@ -136,7 +136,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
   );
 
   return (
-    <article className="rounded-[10px] border border-border bg-card p-3">
+    <article className="py-4 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2">
         <Chip>{labelFromMap(unit.category || "other", CATEGORY_LABELS)}</Chip>
         <Chip
@@ -155,19 +155,19 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
           <Chip>{labelFromMap(unit.content_type, CONTENT_TYPE_LABELS)}</Chip>
         )}
         {unit.route_id && <Chip>{unit.route_id}</Chip>}
-        <span className="kb-mono ml-auto text-[11px] text-muted-foreground">
+        <span className="kb-mono text-[11px] text-muted-foreground sm:ml-auto">
           #{unit.chunk_index + 1}
         </span>
       </div>
 
       <Markdown
-        className={`mt-3 break-words text-sm text-foreground ${COMPACT_MARKDOWN_CLASS}`}
+        className={`mt-3 break-words text-sm leading-6 text-foreground ${COMPACT_MARKDOWN_CLASS}`}
       >
         {localizeKnowledgeText(unit.content)}
       </Markdown>
 
       {unit.summary && (
-        <div className="mt-3 rounded-lg bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-3 border-l-2 border-border py-1 pl-3 text-xs leading-5 text-muted-foreground">
           <Markdown
             className={`text-xs [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
           >
@@ -177,7 +177,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
       )}
 
       {unit.source_quote && (
-        <div className="mt-3 flex gap-2 rounded-lg border border-border bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-3 flex gap-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3 text-xs leading-5 text-muted-foreground">
           <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-ink-300)]" />
           <Markdown
             className={`min-w-0 flex-1 break-words text-xs [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
@@ -188,7 +188,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
       )}
 
       {(unit.citation_label || unit.source_anchor || unit.effective_from) && (
-        <div className="mt-3 grid gap-2 rounded-lg border border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-3 grid gap-2 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
           {unit.citation_label && (
             <div className="flex gap-2">
               <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
@@ -224,7 +224,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
             {unit.questions.slice(0, 3).map((question) => (
               <li
                 key={question}
-                className="break-words rounded-lg bg-secondary px-3 py-2 text-xs leading-5 text-[var(--kb-ink-700)]"
+                className="break-words border-l-2 border-border py-1 pl-3 text-xs leading-5 text-[var(--kb-ink-700)]"
               >
                 {localizeKnowledgeText(question)}
               </li>

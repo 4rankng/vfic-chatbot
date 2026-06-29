@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select, text
 
 import app.graph.runner as runner
-from app.graph.runner import BotRunState, GraphDeps, run_turn
+from app.graph.runner import BotRunState, GraphDeps, _build_agent_user_text, run_turn
 from app.models.conversation import BotRun, BotRunOutcome, Conversation
 from app.services.zalo_bot_service import SendResult
 
@@ -153,3 +153,41 @@ async def test_runner_off_topic_refusal_via_retry(db_session):
     assert len(deps.zalo.sends) == 1
     # safety WAS consulted (the off-topic candidate was caught)
     assert deps.agent.calls == 2  # initial + retry
+
+
+# --- _build_agent_user_text with lead_profile ---
+
+
+def test_build_agent_user_text_no_profile_no_section():
+    out = _build_agent_user_text(
+        chat_id="z-1",
+        current_user_text="tìm việc",
+        recent_messages=[],
+    )
+    assert "THÔNG TIN ỨNG VIÊN" not in out
+    assert "LỊCH SỬ GẦN ĐÂY" in out
+
+
+def test_build_agent_user_text_with_profile_shows_section():
+    profile = "THÔNG TIN ỨNG VIÊN:\n- Tên: chưa có\n- Số điện thoại: chưa có"
+    out = _build_agent_user_text(
+        chat_id="z-1",
+        current_user_text="tìm việc",
+        recent_messages=[],
+        lead_profile=profile,
+    )
+    assert "THÔNG TIN ỨNG VIÊN" in out
+    # Profile appears before history
+    profile_pos = out.index("THÔNG TIN ỨNG VIÊN")
+    history_pos = out.index("LỊCH SỬ GẦN ĐÂY")
+    assert profile_pos < history_pos
+
+
+def test_build_agent_user_text_empty_profile_omits_section():
+    out = _build_agent_user_text(
+        chat_id="z-1",
+        current_user_text="tìm việc",
+        recent_messages=[],
+        lead_profile="",
+    )
+    assert "THÔNG TIN ỨNG VIÊN" not in out

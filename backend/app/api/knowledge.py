@@ -2,7 +2,7 @@
 
 Two upload routes:
   * ``POST /documents/upload``       — JSON text upload (programmatic / legacy). No training.
-  * ``POST /documents/upload-file``  — multipart file upload (Office/PDF/text). Extracts text,
+  * ``POST /documents/upload-file``  — multipart file upload (DOCX/Markdown/text). Extracts text,
                                        persists the original, then enqueues the async LLM
                                        training pipeline on the ``ingest`` queue.
 ``process`` / ``reindex`` enqueue the same async pipeline. Pipeline progress is read back
@@ -31,7 +31,7 @@ from app.schemas.knowledge import (
     SearchTestResult,
     UploadRequest,
 )
-from app.services.knowledge_service import KnowledgeService
+from app.services.knowledge_service import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import CanonicalValidationError, load_template
 from app.workers.ingest_worker import enqueue_ingest
 
@@ -160,6 +160,8 @@ async def upload_file(
         )
     except CanonicalValidationError as exc:
         raise HTTPException(422, {"errors": exc.errors}) from exc
+    except KnowledgeFileExtractionError as exc:
+        raise HTTPException(422, {"errors": [str(exc)]}) from exc
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
     enqueue_ingest(doc.id)  # async LLM digest -> embed -> index
     return KnowledgeDocumentOut.model_validate(doc)

@@ -30,42 +30,36 @@ export const MobileNavigation = () => {
   return (
     <nav
       aria-label={translate("crm.navigation.label")}
-      className="fixed bottom-0 left-0 right-0 z-50 bg-secondary h-14 border-t"
+      className="fixed bottom-0 left-0 right-0 z-50 h-14 border-t bg-secondary"
       style={{
         paddingBottom: IS_PWA && IS_WEB_IOS ? 15 : undefined,
       }}
     >
-      <div className="flex justify-around w-full max-w-md mx-auto h-full items-center">
-        <>
-          <NavigationButton
-            href="/"
-            Icon={Home}
-            label={translate("ra.page.dashboard")}
-            isActive={currentPath === "/"}
-          />
-          <NavigationButton
-            href="/leads"
-            Icon={Users}
-            label={translate("resources.leads.name", {
-              smart_count: 2,
-            })}
-            isActive={currentPath === "/leads"}
-          />
-          <NavigationButton
-            href="/conversations"
-            Icon={ListTodo}
-            label={translate("resources.conversations.name", {
-              smart_count: 2,
-            })}
-            isActive={currentPath === "/conversations"}
-          />
-          <NavigationButton
-            href="/knowledge_sources"
-            Icon={BookOpen}
-            label="Kiến thức"
-            isActive={currentPath === "/knowledge_sources"}
-          />
-        </>
+      <div className="mx-auto grid h-full w-full max-w-md grid-cols-4 items-stretch">
+        <NavigationButton
+          href="/"
+          Icon={Home}
+          label="Tổng quan"
+          isActive={currentPath === "/"}
+        />
+        <NavigationButton
+          href="/leads"
+          Icon={Users}
+          label="Ứng viên"
+          isActive={currentPath === "/leads"}
+        />
+        <NavigationButton
+          href="/conversations"
+          Icon={ListTodo}
+          label="Tin nhắn"
+          isActive={currentPath === "/conversations"}
+        />
+        <NavigationButton
+          href="/knowledge_sources"
+          Icon={BookOpen}
+          label="Kiến thức"
+          isActive={currentPath === "/knowledge_sources"}
+        />
       </div>
     </nav>
   );
@@ -86,13 +80,13 @@ const NavigationButton = ({
     asChild
     variant="ghost"
     className={cn(
-      "flex-col gap-1 h-auto py-2 px-1 rounded-md w-16",
+      "h-full w-full min-w-0 flex-col gap-1 rounded-md px-0.5 py-1.5",
       isActive ? null : "text-muted-foreground",
     )}
   >
     <Link to={href}>
-      <Icon className="size-6" />
-      <span className="min-w-0 w-full truncate text-center text-[0.625rem] font-medium">
+      <Icon className="size-6 shrink-0" />
+      <span className="max-w-full text-center text-[0.6875rem] font-medium leading-tight">
         {label}
       </span>
     </Link>

@@ -74,6 +74,7 @@ const toRec = (resource: string, record: ApiRecord): any =>
 
 const buildListQuery = (
   params: GetListParams | GetManyReferenceParams,
+  resource?: string,
 ): string => {
   const sp = new URLSearchParams();
   const pagination = params.pagination ?? { page: 1, perPage: 25 };
@@ -90,9 +91,15 @@ const buildListQuery = (
   for (const [key, value] of Object.entries(filter)) {
     if (value === undefined || value === null || value === "") continue;
     // ra filter keys pass straight through as query params; the backend honours
-    // the ones it knows (mode/status/zalo_chat_id on conversations;
-    // stage/zalo_id/zalo_ids on leads) and ignores the rest.
-    sp.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    // the ones it knows (mode/status/zalo_chat_id/needs_attention on
+    // conversations; stage/zalo_id/zalo_ids on leads) and ignores the rest.
+    const wireValue =
+      resource === "conversations" && (key === "mode" || key === "status")
+        ? String(value).toUpperCase()
+        : Array.isArray(value)
+          ? value.join(",")
+          : String(value);
+    sp.set(key, wireValue);
   }
   return sp.toString();
 };
@@ -100,7 +107,7 @@ const buildListQuery = (
 const restProvider: DataProvider = {
   async getList(resource: string, params: GetListParams) {
     const body = await apiJson<ListEnvelope>(
-      `${pathFor(resource)}?${buildListQuery(params)}`,
+      `${pathFor(resource)}?${buildListQuery(params, resource)}`,
     );
     return {
       data: body.data.map((r) => toRec(resource, r)),
@@ -134,7 +141,7 @@ const restProvider: DataProvider = {
       filter: { ...params.filter, [params.target]: params.id },
     };
     const body = await apiJson<ListEnvelope>(
-      `${pathFor(resource)}?${buildListQuery(merged)}`,
+      `${pathFor(resource)}?${buildListQuery(merged, resource)}`,
     );
     return {
       data: body.data.map((r) => toRec(resource, r)),

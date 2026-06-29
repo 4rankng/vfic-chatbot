@@ -1,6 +1,9 @@
 export const ACCEPTED_KNOWLEDGE_TYPES: Record<string, string[]> = {
   "text/markdown": [".md"],
   "text/plain": [".txt", ".md"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+    ".docx",
+  ],
 };
 
 export const formatFileSize = (bytes: number) => {

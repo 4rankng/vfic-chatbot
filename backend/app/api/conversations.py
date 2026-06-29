@@ -41,6 +41,7 @@ async def list_conversations(
     mode: ConversationMode | None = None,
     status_: ConversationStatus | None = Query(None, alias="status"),
     zalo_chat_id: str | None = None,
+    needs_attention: bool = False,
     q: str | None = Query(None, description="Case-insensitive search over zalo_chat_id"),
     sort: str | None = Query(
         None, description="Sort field (updated_at, created_at, last_inbound_at)"
@@ -57,6 +58,7 @@ async def list_conversations(
         mode=mode,
         status=status_,
         zalo_chat_id=zalo_chat_id,
+        needs_attention=needs_attention,
         q=q,
         sort_by=sort,
         order=order,

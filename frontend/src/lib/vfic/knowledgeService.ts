@@ -74,7 +74,7 @@ export const uploadKnowledgeFile = async (
         : [];
     const message =
       errors.length > 0
-        ? `Tệp chưa đúng VFIC Knowledge Markdown v1:\n${errors.join("\n")}`
+        ? `Tệp chưa ingest được:\n${errors.join("\n")}`
         : "Tải lên thất bại.";
     const error = new ApiError(response.status, message) as ApiError & {
       validationErrors?: string[];

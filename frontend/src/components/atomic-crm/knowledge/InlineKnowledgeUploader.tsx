@@ -42,7 +42,7 @@ export const InlineKnowledgeUploader = ({
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
-    notify("Tệp không hợp lệ. Chỉ hỗ trợ VFIC Knowledge Markdown v1 (.md/.txt).", {
+    notify("Tệp không hợp lệ. Chỉ hỗ trợ .md, .txt hoặc .docx.", {
       type: "warning",
     });
   };
@@ -104,8 +104,8 @@ export const InlineKnowledgeUploader = ({
               Bắt đầu bằng một nguồn kiến thức
             </h4>
             <p className="mt-1 max-w-[34rem] text-sm leading-6 text-muted-foreground">
-              Gắn tệp VFIC Knowledge Markdown v1 vào dự án để agent có thể truy
-              xuất nội dung có trích dẫn sau khi pipeline xử lý xong.
+              Gắn tệp Markdown/TXT theo mẫu hoặc Word DOCX vào dự án để agent
+              truy xuất sau khi pipeline xử lý xong.
             </p>
           </div>
         </div>
@@ -135,7 +135,7 @@ export const InlineKnowledgeUploader = ({
               2. Tệp nguồn
             </label>
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              VFIC Knowledge Markdown v1
+              Markdown, TXT hoặc DOCX
             </span>
           </div>
           <div
@@ -161,7 +161,7 @@ export const InlineKnowledgeUploader = ({
                   : "Kéo thả hoặc bấm để chọn tệp"}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground sm:hidden">
-                Tệp Markdown/TXT theo mẫu VFIC Knowledge Markdown v1.
+                Tệp Markdown, TXT hoặc Word DOCX.
               </p>
             </div>
           </div>
@@ -206,7 +206,7 @@ export const InlineKnowledgeUploader = ({
             </div>
           ) : (
             <p className="text-xs leading-5 text-muted-foreground">
-              Chọn dự án và một tệp đúng mẫu để bật nút tải lên.
+              Chọn dự án và một tệp nguồn để bật nút tải lên.
             </p>
           )}
 

@@ -71,14 +71,14 @@ const PersonaListContent = () => {
   const { data, isPending } = useListContext<Persona>();
 
   return (
-    <>
+    <div className="px-4 py-5 md:px-0 md:py-0">
       <TopToolbar>
-        <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground mr-auto">
+        <h2 className="mr-auto font-display text-2xl font-extrabold uppercase tracking-wide text-foreground sm:text-4xl">
           Persona
         </h2>
       </TopToolbar>
       <Card className="mt-4 overflow-hidden p-0 py-0">
-        <div className="flex h-[calc(100vh-220px)] min-h-[400px] flex-col rounded-[inherit] overflow-hidden">
+        <div className="flex h-[min(620px,calc(100dvh-160px))] min-h-[400px] flex-col overflow-hidden rounded-[inherit] lg:h-[calc(100vh-220px)]">
           {isPending ? (
             <div className="flex flex-col">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -105,7 +105,7 @@ const PersonaListContent = () => {
           )}
         </div>
       </Card>
-    </>
+    </div>
   );
 };
 

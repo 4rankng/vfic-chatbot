@@ -83,7 +83,7 @@ const ProjectListContent = () => {
   ).length;
 
   return (
-    <div className="min-h-[calc(100vh-7rem)] pb-24 md:pb-0">
+    <div className="min-h-[calc(100vh-7rem)] px-4 py-5 pb-24 md:px-0 md:py-0 md:pb-0">
       <TopToolbar className="flex-wrap items-start gap-3">
         <div className="mr-auto min-w-0">
           <h2 className="text-2xl font-bold tracking-tight md:text-3xl">

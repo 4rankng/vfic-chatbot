@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ShowBase,
   usePermissions,
@@ -7,16 +8,18 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pencil } from "lucide-react";
+import { Pencil, Upload } from "lucide-react";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { Project } from "../types";
 import { ProjectFeatures } from "./ProjectFeatures";
 import { DeleteButton } from "@/components/admin";
+import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 
 const ProjectShowContent = () => {
   const project = useRecordContext<Project>();
   const redirect = useRedirect();
   const { permissions } = usePermissions();
+  const [uploadOpen, setUploadOpen] = useState(false);
   if (!project) return null;
 
   const card = project.index_card ?? {};
@@ -71,6 +74,15 @@ const ProjectShowContent = () => {
                 variant="outline"
                 size="sm"
                 className="w-fit"
+                onClick={() => setUploadOpen(true)}
+              >
+                <Upload className="size-4" />
+                Thêm tệp
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
                 onClick={() => redirect("edit", "projects", project.id)}
               >
                 <Pencil className="size-4" />
@@ -88,6 +100,12 @@ const ProjectShowContent = () => {
       </Card>
 
       <ProjectFeatures projectId={project.id} />
+      <KnowledgeUpload
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        initialProjectId={project.id}
+        lockProject
+      />
     </div>
   );
 };
