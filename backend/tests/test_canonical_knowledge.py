@@ -111,11 +111,11 @@ def test_canonical_parser_rejects_list_item_under_scalar_key():
     assert any("list item cannot be added to scalar key" in err for err in exc.value.errors)
 
 
-def test_canonical_parser_rejects_invalid_bus_time():
+def test_canonical_parser_skips_invalid_bus_route_without_rejecting_document():
     bad = load_template().replace("| 1 | TD Plaza | TD Plaza | 06:15 |", "| 1 | TD Plaza | TD Plaza | 6:15 |")
-    with pytest.raises(CanonicalValidationError) as exc:
-        parse_canonical_markdown(bad)
-    assert any("scheduled_time must use HH:MM" in err for err in exc.value.errors)
+    parsed = parse_canonical_markdown(bad)
+    assert parsed.bus_timetable.routes == []
+    assert any(chunk.section_title == "Bus Routes" for chunk in parsed.chunks)
 
 
 def test_canonical_parser_rejects_unknown_feature_key():
@@ -129,11 +129,11 @@ def test_canonical_parser_rejects_unknown_feature_key():
     assert any("unknown or inactive feature key 'career_growth'" in err for err in exc.value.errors)
 
 
-def test_canonical_parser_rejects_missing_active_feature_key():
+def test_canonical_parser_accepts_missing_active_feature_key_for_supplemental_upload():
     bad = load_template().replace("### Feature: daily_cost_benefits", "### Removed: daily_cost_benefits", 1)
-    with pytest.raises(CanonicalValidationError) as exc:
-        parse_canonical_markdown(bad)
-    assert any("missing active feature keys daily_cost_benefits" in err for err in exc.value.errors)
+    parsed = parse_canonical_markdown(bad)
+    feature_titles = {chunk.section_title for chunk in parsed.chunks if chunk.category == "feature"}
+    assert "Feature: daily_cost_benefits" not in feature_titles
 
 
 def test_canonical_repair_fixes_known_bus_route_formatting_artifacts():
@@ -162,10 +162,11 @@ service_days:
 |---|---|---|---|---|
 | 1 | Bãi đỗ xe LGDVH | LGD | 18:30 mon_thu; 17:30 fri | Departure point |
 """
-    with pytest.raises(CanonicalValidationError) as exc:
-        parse_canonical_markdown(bad)
-    assert any("malformed service flag" in err for err in exc.value.errors)
-    assert any("scheduled_time must use HH:MM" in err for err in exc.value.errors)
+    parsed_before_repair = parse_canonical_markdown(bad)
+    assert not any(
+        route.route_name == "Lượt về hành chính ngày thường"
+        for route in parsed_before_repair.bus_timetable.routes
+    )
 
     repaired = repair_canonical_markdown(bad)
     assert repaired.changed

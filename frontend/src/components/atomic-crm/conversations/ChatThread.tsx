@@ -43,6 +43,25 @@ const formatTime = (iso?: string) => {
   }).format(d);
 };
 
+const QUICK_EMOJIS = [
+  "😊",
+  "👍",
+  "🙏",
+  "❤️",
+  "🎉",
+  "✅",
+  "💼",
+  "📍",
+  "📞",
+  "🚌",
+  "🏠",
+  "💰",
+  "⏰",
+  "📄",
+  "✨",
+  "🙌",
+];
+
 const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
     <div
@@ -83,7 +102,11 @@ export const ChatThread = ({
   const translate = useTranslate();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<HTMLFormElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [firstItemIndex, setFirstItemIndex] = useState(0);
   const initialJumpDoneRef = useRef(false);
   // Load older messages only on a genuine upward scroll — not merely because
@@ -134,7 +157,21 @@ export const ChatThread = ({
     initialJumpDoneRef.current = false;
     readyForMoreRef.current = false;
     setFirstItemIndex(0);
+    setEmojiOpen(false);
   }, [conversationId]);
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (composerRef.current?.contains(target)) return;
+      if (emojiPickerRef.current?.contains(target)) return;
+      setEmojiOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [emojiOpen]);
 
   // Arm "load more" only after the user scrolls away from the bottom (i.e.
   // scrolls up to read history). A freshly opened thread parks at the newest
@@ -256,6 +293,19 @@ export const ChatThread = ({
     }
   };
 
+  const insertEmoji = (emoji: string) => {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? reply.length;
+    const end = textarea?.selectionEnd ?? reply.length;
+    const next = `${reply.slice(0, start)}${emoji}${reply.slice(end)}`;
+    setReply(next);
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      const cursor = start + emoji.length;
+      textarea?.setSelectionRange(cursor, cursor);
+    });
+  };
+
   // Keep the Virtuoso component slots referentially stable except when the
   // loading flags actually change — otherwise typing in the composer would
   // recreate this object every keystroke and force Virtuoso to remount.
@@ -321,9 +371,30 @@ export const ChatThread = ({
           </div>
         )}
         <form
+          ref={composerRef}
           className={`composer ${!canHumanReply ? "disabled" : ""}`}
           onSubmit={handleSend}
         >
+          {emojiOpen && (
+            <div
+              ref={emojiPickerRef}
+              className="emoji-picker"
+              role="menu"
+              aria-label="Chọn biểu tượng cảm xúc"
+            >
+              {QUICK_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="emoji-option"
+                  onClick={() => insertEmoji(emoji)}
+                  aria-label={`Chèn ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             className="composer-action"
@@ -335,6 +406,7 @@ export const ChatThread = ({
             </svg>
           </button>
           <textarea
+            ref={textareaRef}
             rows={1}
             placeholder={
               canHumanReply
@@ -358,6 +430,8 @@ export const ChatThread = ({
             className="composer-action"
             aria-label="Biểu tượng cảm xúc"
             disabled={!canHumanReply}
+            aria-expanded={emojiOpen}
+            onClick={() => setEmojiOpen((open) => !open)}
           >
             <svg className="icon">
               <use href="#i-smile" />

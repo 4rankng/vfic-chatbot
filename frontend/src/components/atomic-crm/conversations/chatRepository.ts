@@ -165,7 +165,7 @@ export const chatRepository = {
    */
   subscribeToMessages(
     conversationId: string,
-    onNewMessage: (msg: Message) => void,
+    onNewMessages: (messages: Message[]) => void,
   ): () => void {
     if (!conversationId || !getAccessToken()) {
       return () => {
@@ -183,7 +183,7 @@ export const chatRepository = {
       chatRepository
         .getConversationMessages(conversationId, { limit: 25 })
         .then(({ messages }) => {
-          for (const m of messages) onNewMessage(m);
+          onNewMessages(messages);
         })
         .catch(() => {
           /* best-effort */

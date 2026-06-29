@@ -20,11 +20,37 @@ const compareMessages = (a: Message, b: Message) => {
   return String(a.id).localeCompare(String(b.id));
 };
 
+const sameMessage = (a: Message, b: Message) =>
+  a.id === b.id &&
+  a.content === b.content &&
+  a.type === b.type &&
+  a.created_at === b.created_at &&
+  a.data?.recruiter_id === b.data?.recruiter_id;
+
 const mergeChronological = (current: Message[], incoming: Message[]) => {
   const byId = new Map<string, Message>();
   for (const msg of current) byId.set(msg.id, msg);
-  for (const msg of incoming) byId.set(msg.id, msg);
-  return Array.from(byId.values()).sort(compareMessages);
+  for (const msg of incoming) {
+    const existing = byId.get(msg.id);
+    byId.set(msg.id, existing && sameMessage(existing, msg) ? existing : msg);
+  }
+  const merged = Array.from(byId.values()).sort(compareMessages);
+  if (
+    merged.length === current.length &&
+    merged.every((msg, index) => msg === current[index])
+  ) {
+    return current;
+  }
+  return merged;
+};
+
+const mergeRealtimePage = (current: Message[], latestPage: Message[]) => {
+  if (current.length === 0) return latestPage;
+  const earliestLoaded = current[0];
+  const inLoadedWindow = latestPage.filter(
+    (msg) => compareMessages(msg, earliestLoaded) >= 0,
+  );
+  return mergeChronological(current, inLoadedWindow);
 };
 
 export const useConversationRealtime = (conversationId?: string) => {
@@ -79,8 +105,8 @@ export const useConversationRealtime = (conversationId?: string) => {
 
     let cleanup: (() => void) | undefined;
     try {
-      cleanup = chatRepository.subscribeToMessages(conversationId, (newMsg) => {
-        setMessages((prev) => mergeChronological(prev, [newMsg]));
+      cleanup = chatRepository.subscribeToMessages(conversationId, (latest) => {
+        setMessages((prev) => mergeRealtimePage(prev, latest));
       });
     } catch {
       // Realtime is best-effort; the initial REST fetch still renders history.

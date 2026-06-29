@@ -562,7 +562,6 @@ def _feature_chunks(
     for title, content in blocks:
         match = re.match(r"^Feature:\s*([a-z0-9_]+)\s*$", title, flags=re.IGNORECASE)
         if match is None:
-            errors.append(f"Worker Features: subsection must be '### Feature: <feature_key>', got {title!r}")
             continue
         feature_key = match.group(1)
         if feature_key not in ACTIVE_FEATURE_KEYS:
@@ -583,9 +582,6 @@ def _feature_chunks(
                 or [f"{feature_key} của {metadata.get('company_name')} là gì?"],
             )
         )
-    missing = [key for key in ACTIVE_FEATURE_KEYS if key not in seen]
-    if missing:
-        errors.append("Worker Features: missing active feature keys " + ", ".join(missing))
     return chunks
 
 
@@ -622,7 +618,8 @@ def _parse_bus_routes(
     for title, block in blocks:
         if not title.lower().startswith("bus route:"):
             continue
-        fields, table_rows = _route_fields_and_rows(block, errors, title)
+        route_errors: list[str] = []
+        fields, table_rows = _route_fields_and_rows(block, route_errors, title)
         mode = str(fields.get("mode") or "")
         status_only = mode == "status_only"
         required = ("route_id", "route_group", "route_name")
@@ -630,21 +627,27 @@ def _parse_bus_routes(
             required = (*required, "shift", "direction")
         for key in required:
             if _is_empty(fields.get(key)):
-                errors.append(f"{title}: {key} is required")
+                route_errors.append(f"{title}: {key} is required")
         shift = str(fields.get("shift") or "")
         direction = str(fields.get("direction") or "")
         if shift and not status_only and shift not in {"day", "night", "admin"}:
-            errors.append(f"{title}: shift must be day, night, or admin")
+            route_errors.append(f"{title}: shift must be day, night, or admin")
         if direction and not status_only and direction not in {"outbound", "return"}:
-            errors.append(f"{title}: direction must be outbound or return")
+            route_errors.append(f"{title}: direction must be outbound or return")
         route_name = str(fields.get("route_name") or fields.get("route_group") or "")
         route_group = str(fields.get("route_group") or route_name)
-        service_days.extend(_parse_service_days(fields, route_group, errors, title))
+        parsed_service_days = _parse_service_days(fields, route_group, route_errors, title)
         if status_only:
+            if route_errors:
+                continue
+            service_days.extend(parsed_service_days)
             continue
         if not table_rows:
-            errors.append(f"{title}: stops table is required")
-        stops = [_parse_stop(row, errors, title) for row in table_rows]
+            route_errors.append(f"{title}: stops table is required")
+        stops = [_parse_stop(row, route_errors, title) for row in table_rows]
+        if route_errors:
+            continue
+        service_days.extend(parsed_service_days)
         route_id = str(fields.get("route_id") or normalize_bus_route_key(route_name))
         routes.append(
             BusRoute(
