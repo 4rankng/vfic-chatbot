@@ -44,18 +44,27 @@ export const MobileNavigation = () => {
     if (matchPath("/knowledge_sources/*", location.pathname))
       return "/knowledge_sources";
     if (matchPath("/users/*", location.pathname)) return "/users";
+    if (matchPath("/profile", location.pathname)) return "/profile";
     return false;
   }, [location.pathname]);
+
+  type NavigationItem = {
+    href: string;
+    Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+    label: string;
+    isActive: boolean;
+    badge?: number;
+  };
 
   const overflowItems = useMemo(
     () =>
       [
         isAdmin
           ? {
-              href: "/",
-              Icon: Home,
-              label: translate("ra.page.dashboard"),
-              isActive: currentPath === "/",
+              href: "/projects",
+              Icon: Briefcase,
+              label: "Dự án",
+              isActive: currentPath === "/projects",
             }
           : null,
         isAdmin
@@ -74,48 +83,89 @@ export const MobileNavigation = () => {
               isActive: currentPath === "/users",
             }
           : null,
-      ].filter(Boolean) as Array<{
-        href: string;
-        Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-        label: string;
-        isActive: boolean;
-      }>,
-    [currentPath, isAdmin, translate],
+      ].filter(Boolean) as NavigationItem[],
+    [currentPath, isAdmin],
   );
 
   const overflowActive = overflowItems.some((item) => item.isActive);
+  const visibleItems: NavigationItem[] = isAdmin
+    ? [
+        {
+          href: "/",
+          Icon: Home,
+          label: "Dashboard",
+          isActive: currentPath === "/",
+        },
+        {
+          href: "/leads",
+          Icon: Users,
+          label: "Ứng viên",
+          isActive: currentPath === "/leads",
+        },
+        {
+          href: "/conversations",
+          Icon: MessageCircle,
+          label: "Chat",
+          isActive: currentPath === "/conversations",
+          badge: needsAttentionCount,
+        },
+      ]
+    : [
+        {
+          href: "/leads",
+          Icon: Users,
+          label: "Ứng viên",
+          isActive: currentPath === "/leads",
+        },
+        {
+          href: "/conversations",
+          Icon: MessageCircle,
+          label: "Chat",
+          isActive: currentPath === "/conversations",
+          badge: needsAttentionCount,
+        },
+        {
+          href: "/projects",
+          Icon: Briefcase,
+          label: "Dự án",
+          isActive: currentPath === "/projects",
+        },
+        {
+          href: "/profile",
+          Icon: UserCog,
+          label: "Tài khoản",
+          isActive: currentPath === "/profile",
+        },
+      ];
 
   return (
     <nav
       aria-label={translate("crm.navigation.label")}
-      className="fixed bottom-0 left-0 right-0 z-50 h-24 border-t border-border/70 bg-background/95 px-4 pb-2 pt-3 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:bg-card/95"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/70 bg-background/94 px-3 pb-1 pt-1 shadow-[0_-8px_24px_rgba(26,34,40,0.08)] backdrop-blur-xl dark:bg-card/92"
       style={{
         paddingBottom: IS_PWA && IS_WEB_IOS ? 15 : undefined,
       }}
     >
-      <div className="relative mx-auto grid h-full w-full max-w-md grid-cols-[1fr_1fr_5rem_1fr] items-end gap-1.5">
-        <NavigationButton
-          href="/leads"
-          Icon={Users}
-          label="Ứng viên"
-          isActive={currentPath === "/leads"}
-        />
-        <NavigationButton
-          href="/projects"
-          Icon={Briefcase}
-          label="Dự án"
-          isActive={currentPath === "/projects"}
-        />
-        <NavigationButton
-          href="/conversations"
-          Icon={MessageCircle}
-          label="Chat"
-          isActive={currentPath === "/conversations"}
-          cta
-          badge={needsAttentionCount}
-        />
+      <div
+        className={cn(
+          "mx-auto grid min-h-10 w-full max-w-md items-center gap-1 rounded-xl border border-border/70 bg-card/90 p-0.5 shadow-[0_8px_22px_rgba(26,34,40,0.06)]",
+          visibleItems.length + (overflowItems.length > 0 ? 1 : 0) === 4
+            ? "grid-cols-4"
+            : "grid-cols-3",
+        )}
+      >
+        {visibleItems.map(({ href, Icon, label, isActive, badge }) => (
+          <NavigationButton
+            key={href}
+            href={href}
+            Icon={Icon}
+            label={label}
+            isActive={isActive}
+            badge={badge}
+          />
+        ))}
         {overflowItems.length > 0 ? (
-          <div className="col-start-4">
+          <div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -123,14 +173,14 @@ export const MobileNavigation = () => {
                   variant="ghost"
                   aria-label="Mở thêm chức năng"
                   className={cn(
-                    "relative h-14 w-full min-w-0 flex-col gap-1 rounded-xl px-2 py-1.5",
+                    "relative h-10 w-full min-w-0 flex-col gap-0.5 rounded-lg px-1 py-0.5 transition-all",
                     overflowActive
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground",
+                      ? "bg-primary/10 text-primary ring-1 ring-primary/15 hover:bg-primary/12"
+                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                   )}
                 >
-                  <MoreHorizontal className="size-5 shrink-0" />
-                  <span className="max-w-full text-center text-[0.6875rem] font-medium leading-tight">
+                  <MoreHorizontal className="size-4 shrink-0" />
+                  <span className="max-w-full truncate text-center text-[0.625rem] font-semibold leading-tight">
                     Thêm
                   </span>
                 </Button>
@@ -170,39 +220,36 @@ const NavigationButton = ({
   Icon,
   label,
   isActive,
-  cta = false,
   badge = 0,
 }: {
   href: string;
   Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   label: string;
   isActive: boolean;
-  cta?: boolean;
   badge?: number;
 }) => (
   <Button
     asChild
     variant="ghost"
     className={cn(
-      "relative h-14 w-full min-w-0 flex-col gap-1 rounded-xl px-2 py-1.5",
-      cta &&
-        "absolute bottom-2 left-1/2 h-20 w-20 -translate-x-1/2 rounded-3xl bg-primary text-primary-foreground shadow-xl shadow-primary/30 hover:bg-primary/90 hover:text-primary-foreground",
-      !cta && (isActive ? "bg-muted text-foreground" : "text-muted-foreground"),
+      "relative h-10 w-full min-w-0 flex-col gap-0.5 rounded-lg px-1 py-0.5 transition-all",
+      isActive
+        ? "bg-primary/10 text-primary ring-1 ring-primary/15 hover:bg-primary/12 hover:text-primary"
+        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
     )}
   >
     <Link to={href}>
       <span className="relative">
-        <Icon className={cn("shrink-0", cta ? "size-8" : "size-5")} />
-        {cta && badge > 0 ? (
-          <span className="absolute -right-3 -top-2 min-w-5 rounded-full border border-primary-foreground/70 bg-destructive px-1.5 py-0.5 text-[0.625rem] font-bold leading-none text-white shadow-sm">
+        <Icon className="size-4 shrink-0" />
+        {badge > 0 ? (
+          <span className="absolute -right-3 -top-2 min-w-4 rounded-full border border-background bg-destructive px-1 py-0.5 text-[0.5625rem] font-bold leading-none text-white shadow-sm">
             {badge > 99 ? "99+" : badge}
           </span>
         ) : null}
       </span>
       <span
         className={cn(
-          "max-w-full text-center font-medium leading-tight",
-          cta ? "text-xs font-semibold" : "text-[0.6875rem]",
+          "max-w-full truncate text-center text-[0.625rem] font-semibold leading-tight",
         )}
       >
         {label}
