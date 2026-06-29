@@ -2,9 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message } from "../types";
 import { chatRepository } from "./chatRepository";
 import {
+  mergeChronological,
+  mergeRealtimePage,
+  sortMessagesChronologically,
+} from "./messageOrdering";
+import {
   INITIAL_CHAT_FIRST_ITEM_INDEX,
   firstItemIndexAfterPrepend,
 } from "./chatScrollIndex";
+
+export {
+  compareMessages,
+  mergeChronological,
+  mergeRealtimePage,
+} from "./messageOrdering";
 
 export const CHAT_MESSAGES_PAGE_SIZE = 10;
 
@@ -12,56 +23,6 @@ export const CHAT_MESSAGES_PAGE_SIZE = 10;
 // Extracted from ChatThread so the message-loading logic is reusable across any
 // shell and unit-testable in isolation (independent of the Virtuoso/composer UI).
 //
-// Merge semantics matter: a realtime INSERT that lands between subscribe() and
-// the initial fetch resolve is already in state, so the fetch result is merged
-// (union by id, fetched-first) rather than blindly replacing state.
-export const compareMessages = (a: Message, b: Message) => {
-  const at = Date.parse(a.created_at);
-  const bt = Date.parse(b.created_at);
-  if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt;
-  const aid = Number(a.id);
-  const bid = Number(b.id);
-  if (Number.isFinite(aid) && Number.isFinite(bid) && aid !== bid)
-    return aid - bid;
-  return String(a.id).localeCompare(String(b.id));
-};
-
-export const sameMessage = (a: Message, b: Message) =>
-  a.id === b.id &&
-  a.content === b.content &&
-  a.type === b.type &&
-  a.created_at === b.created_at &&
-  a.data?.recruiter_id === b.data?.recruiter_id;
-
-export const mergeChronological = (current: Message[], incoming: Message[]) => {
-  const byId = new Map<string, Message>();
-  for (const msg of current) byId.set(msg.id, msg);
-  for (const msg of incoming) {
-    const existing = byId.get(msg.id);
-    byId.set(msg.id, existing && sameMessage(existing, msg) ? existing : msg);
-  }
-  const merged = Array.from(byId.values()).sort(compareMessages);
-  if (
-    merged.length === current.length &&
-    merged.every((msg, index) => msg === current[index])
-  ) {
-    return current;
-  }
-  return merged;
-};
-
-export const mergeRealtimePage = (
-  current: Message[],
-  latestPage: Message[],
-) => {
-  if (current.length === 0) return latestPage;
-  const earliestLoaded = current[0];
-  const inLoadedWindow = latestPage.filter(
-    (msg) => compareMessages(msg, earliestLoaded) >= 0,
-  );
-  return mergeChronological(current, inLoadedWindow);
-};
-
 export const useConversationRealtime = (conversationId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,12 +53,13 @@ export const useConversationRealtime = (conversationId?: string) => {
         await chatRepository.getConversationMessages(conversationId, {
           limit: CHAT_MESSAGES_PAGE_SIZE,
         });
+      const chronological = sortMessagesChronologically(mapped);
       // Merge, don't replace: a realtime INSERT between subscribe() and this
       // resolve is already in state, and a blind setMessages(mapped) would
       // drop it (the fetch predates the insert). Union by id, fetched-first.
       setMessages((prev) => {
-        if (prev.length === 0) return mapped;
-        return mergeChronological(prev, mapped);
+        if (prev.length === 0) return chronological;
+        return mergeChronological(prev, chronological);
       });
       setHasMore(apiHasMore);
     } catch {

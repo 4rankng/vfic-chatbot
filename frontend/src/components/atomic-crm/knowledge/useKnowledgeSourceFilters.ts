@@ -7,6 +7,7 @@ import {
   sourceSearchText,
   sourceStage,
 } from "./knowledgePipelineUtils";
+import { normalizeVietnameseSearchText } from "@/lib/vietnameseSearch";
 
 // Sentinel option values for the "all" project / stage filter selects.
 export const ALL_PROJECTS = "__all__";
@@ -44,7 +45,7 @@ export const useKnowledgeSourceFilters = () => {
   );
 
   const filteredSources = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = normalizeVietnameseSearchText(query);
     return sources.filter((source) => {
       if (
         projectFilter !== ALL_PROJECTS &&

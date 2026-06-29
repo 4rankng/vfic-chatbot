@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  HelpCircle,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -45,7 +46,9 @@ import { cn } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { BusRoute, BusTimetableList, Project } from "../types";
 import {
+  getProjectFaq,
   getProjectBusTimetable,
+  type ProjectFaqList,
   reindexProject,
 } from "@/lib/vfic/knowledgeService";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
@@ -502,7 +505,12 @@ const ProjectDetailPanel = ({
       projectId={String(project.id)}
       editable={canEdit}
       canExtract={isAdmin}
-      extraContent={<BusTimetableSection projectId={String(project.id)} />}
+      extraContent={
+        <div className="space-y-5">
+          <ProjectFaqSection projectId={String(project.id)} />
+          <BusTimetableSection projectId={String(project.id)} />
+        </div>
+      }
     />
   );
 };
@@ -525,6 +533,70 @@ const directionLabel = (direction: string) =>
   )[direction] ?? direction;
 
 const BUS_ROUTE_PAGE_SIZE = 6;
+
+const ProjectFaqSection = ({ projectId }: { projectId: string }) => {
+  const [faq, setFaq] = useState<ProjectFaqList | null>(null);
+  const [loading, setLoading] = useState(true);
+  const items = faq?.data ?? [];
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getProjectFaq(projectId)
+      .then((res) => {
+        if (!cancelled) setFaq(res);
+      })
+      .catch(() => {
+        if (!cancelled) setFaq({ data: [], total: 0 });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  return (
+    <section>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="inline-flex items-center gap-2 text-base font-semibold">
+          <HelpCircle className="size-4 text-muted-foreground" />
+          FAQ
+        </h3>
+        <span className="text-sm text-muted-foreground">
+          {loading && !faq ? "Đang tải..." : `${faq?.total ?? 0} câu`}
+        </span>
+      </div>
+      {loading && !faq ? (
+        <div className="mt-3 grid gap-2">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
+      ) : items.length > 0 ? (
+        <div className="mt-3 grid gap-3">
+          {items.map((item) => (
+            <article key={item.id} className="rounded-md border bg-muted/15 p-3">
+              <h4 className="text-sm font-semibold leading-5">{item.question}</h4>
+              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
+                {item.answer}
+              </p>
+              {(item.source_name || item.source_anchor) && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Nguồn: {item.source_name || item.source_anchor}
+                </p>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+          Chưa có FAQ được trích xuất cho dự án này.
+        </p>
+      )}
+    </section>
+  );
+};
 
 const BusTimetableSection = ({ projectId }: { projectId: string }) => {
   const [page, setPage] = useState(1);

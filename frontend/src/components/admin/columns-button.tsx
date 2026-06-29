@@ -6,9 +6,6 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import * as diacritic from "diacritic";
 import {
   useDataTableStoreContext,
   useStore,
@@ -38,6 +35,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 
 /**
  * Renders a button that lets users show / hide columns in a DataTable
@@ -337,9 +335,4 @@ const padRanks = (ranks: number[], length: number) =>
   );
 
 const fieldLabelMatchesFilter = (fieldLabel: string, columnFilter?: string) =>
-  columnFilter
-    ? diacritic
-        .clean(fieldLabel)
-        .toLowerCase()
-        .includes(diacritic.clean(columnFilter).toLowerCase())
-    : true;
+  vietnameseSearchIncludes(fieldLabel, columnFilter);

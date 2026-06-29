@@ -6,6 +6,7 @@ import {
   useRef,
   useCallback,
   useMemo,
+  memo,
   type CSSProperties,
   type HTMLAttributes,
 } from "react";
@@ -16,14 +17,17 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
-import { shouldTrapEdgeWheel } from "./chatEdgeScroll";
+import {
+  shouldPrefetchOlderMessages,
+  shouldTrapEdgeWheel,
+} from "./chatEdgeScroll";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
 // the realtime subscription, the virtualised scroller (with all the snap /
 // load-more arming logic), the reply composer and the bot→human takeover
-// affordance. It renders a FRAGMENT (<Virtuoso/> + <footer/>) so the host shell
-// lays out the scroller (1fr) and composer (auto) — the inbox center-panel grid
-// and the lead-page .chat-surface grid both do this. Styling comes from the
+// affordance. It renders a FRAGMENT (scroll shell + <footer/>) so the host
+// shell lays out the scroller (1fr) and composer (auto) — the inbox center-panel
+// grid and the lead-page .chat-surface grid both do this. Styling comes from the
 // .chat-surface scope in inbox.css (which also matches the inbox's own
 // .inbox-bg-container), so the thread looks identical in either shell.
 
@@ -68,11 +72,24 @@ const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
 const DEFAULT_CHAT_ITEM_HEIGHT_PX = 96;
-const ANCHOR_RESTORE_FRAMES = 6;
+const ANCHOR_RESTORE_FRAMES = 8;
+const HISTORY_PREFETCH_DISTANCE_PX = 560;
+const VIRTUOSO_INCREASE_VIEWPORT_BY = { top: 960, bottom: 420 };
+const AVATAR_PLACEHOLDER_STYLE: CSSProperties = { width: 32 };
 
 type ScrollAnchor = {
   id: string;
   offsetTop: number;
+  scrollTop: number;
+  scrollHeight: number;
+};
+
+type MessageKind = ReturnType<typeof classify>;
+
+type ChatMessageRowProps = {
+  message: Message;
+  kind: MessageKind;
+  isGrouped: boolean;
 };
 
 const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
@@ -87,6 +104,69 @@ const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ),
 );
 ChatItemList.displayName = "ChatItemList";
+
+const ChatMessageRow = memo(
+  ({ message: m, kind, isGrouped }: ChatMessageRowProps) => {
+    if (kind === "system" || kind === "event") {
+      return (
+        <div
+          className={kind === "system" ? "day-marker" : "system-event"}
+          data-message-id={m.id}
+        >
+          {kind === "event" ? (
+            <svg className="icon">
+              <use href="#i-sparkles" />
+            </svg>
+          ) : null}
+          <span>{m.content}</span>
+        </div>
+      );
+    }
+
+    const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
+
+    return (
+      <div
+        className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}
+        data-message-id={m.id}
+      >
+        {kind === "user" && !isGrouped ? (
+          <span className="message-avatar">
+            <svg className="icon">
+              <use href={`#${avatarIcon}`} />
+            </svg>
+          </span>
+        ) : kind === "user" && isGrouped ? (
+          <span
+            className="message-avatar-placeholder"
+            style={AVATAR_PLACEHOLDER_STYLE}
+          />
+        ) : null}
+        <div className="bubble">
+          <div className="bubble-content">
+            <p>{m.content}</p>
+            <span className="bubble-time-inline">
+              {formatTime(m.created_at)}
+            </span>
+          </div>
+        </div>
+        {kind !== "user" && !isGrouped ? (
+          <span className="message-avatar">
+            <svg className="icon">
+              <use href={`#${avatarIcon}`} />
+            </svg>
+          </span>
+        ) : kind !== "user" && isGrouped ? (
+          <span
+            className="message-avatar-placeholder"
+            style={AVATAR_PLACEHOLDER_STYLE}
+          />
+        ) : null}
+      </div>
+    );
+  },
+);
+ChatMessageRow.displayName = "ChatMessageRow";
 
 export interface ChatThreadProps {
   conversationId: string;
@@ -134,9 +214,13 @@ export const ChatThread = ({
   const initialBottomSettleRafRef = useRef<number | null>(null);
   const lastScrollTopRef = useRef(0);
   const lastLoadMoreAtRef = useRef(0);
+  const isAtBottomRef = useRef(true);
+  const isPrependingHistoryRef = useRef(false);
+  const newestMessageIdRef = useRef<string | null>(null);
   const [composerReserve, setComposerReserve] = useState(
     DEFAULT_COMPOSER_RESERVE_PX,
   );
+  const [hasNewerMessages, setHasNewerMessages] = useState(false);
   // Load older messages only on a genuine upward scroll — not merely because
   // the top happens to be visible (which is the case the moment a thread opens,
   // when the initial page fits the viewport, and would otherwise auto-fetch the
@@ -156,11 +240,11 @@ export const ChatThread = ({
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
 
-  const scrollToNewest = useCallback(() => {
+  const scrollToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
     virtuosoRef.current?.scrollToIndex({
       index: "LAST",
       align: "end",
-      behavior: "auto",
+      behavior,
     });
   }, []);
 
@@ -196,8 +280,12 @@ export const ChatThread = ({
       initialBottomSettleRafRef.current = null;
     }
     readyForMoreRef.current = false;
+    isAtBottomRef.current = true;
+    isPrependingHistoryRef.current = false;
+    newestMessageIdRef.current = null;
     lastScrollTopRef.current = 0;
     lastLoadMoreAtRef.current = 0;
+    setHasNewerMessages(false);
     setEmojiOpen(false);
   }, [conversationId]);
 
@@ -216,10 +304,45 @@ export const ChatThread = ({
 
   const handleTotalListHeightChanged = useCallback(() => {
     if (!initialJumpDoneRef.current) return;
+    if (isPrependingHistoryRef.current) return;
     if (performance.now() > initialBottomSettleUntilRef.current) return;
     if (readyForMoreRef.current) return;
     scheduleScrollToNewest();
   }, [scheduleScrollToNewest]);
+
+  const newestMessageId = messages[messages.length - 1]?.id ?? null;
+  useEffect(() => {
+    if (!newestMessageId) {
+      newestMessageIdRef.current = null;
+      return;
+    }
+
+    const previousNewestMessageId = newestMessageIdRef.current;
+    newestMessageIdRef.current = newestMessageId;
+    if (
+      previousNewestMessageId === null ||
+      previousNewestMessageId === newestMessageId ||
+      !initialJumpDoneRef.current
+    ) {
+      return;
+    }
+
+    if (isAtBottomRef.current) {
+      setHasNewerMessages(false);
+      scheduleScrollToNewest();
+      return;
+    }
+
+    if (!isPrependingHistoryRef.current) {
+      setHasNewerMessages(true);
+    }
+  }, [newestMessageId, scheduleScrollToNewest]);
+
+  const handleJumpToNewest = useCallback(() => {
+    setHasNewerMessages(false);
+    isAtBottomRef.current = true;
+    scrollToNewest("smooth");
+  }, [scrollToNewest]);
 
   const findMessageElement = useCallback(
     (scrollerEl: HTMLElement, messageId: string) =>
@@ -245,6 +368,8 @@ export const ChatThread = ({
     return {
       id,
       offsetTop: anchorEl.getBoundingClientRect().top - scrollerTop,
+      scrollTop: scrollerEl.scrollTop,
+      scrollHeight: scrollerEl.scrollHeight,
     };
   }, []);
 
@@ -253,6 +378,7 @@ export const ChatThread = ({
       if (!anchor) return;
 
       let frame = 0;
+      let fallbackApplied = false;
       const tick = () => {
         const scrollerEl = scrollerElRef.current;
         if (!scrollerEl) return;
@@ -265,6 +391,13 @@ export const ChatThread = ({
           const delta = currentOffset - anchor.offsetTop;
           if (Math.abs(delta) > 0.5) {
             scrollerEl.scrollTop += delta;
+            lastScrollTopRef.current = scrollerEl.scrollTop;
+          }
+        } else if (!fallbackApplied) {
+          fallbackApplied = true;
+          const heightDelta = scrollerEl.scrollHeight - anchor.scrollHeight;
+          if (Math.abs(heightDelta) > 0.5) {
+            scrollerEl.scrollTop = anchor.scrollTop + heightDelta;
             lastScrollTopRef.current = scrollerEl.scrollTop;
           }
         }
@@ -297,17 +430,22 @@ export const ChatThread = ({
     const anchorVirtuosoIndex =
       anchorDataIndex >= 0 ? firstItemIndex + anchorDataIndex : null;
     readyForMoreRef.current = false;
-    void loadMore(messages[0].id).then((added) => {
-      if (added <= 0) return;
-      if (anchorVirtuosoIndex !== null) {
-        virtuosoRef.current?.scrollToIndex({
-          index: anchorVirtuosoIndex,
-          align: "start",
-          behavior: "auto",
-        });
-      }
-      restoreScrollAnchor(anchor);
-    });
+    isPrependingHistoryRef.current = true;
+    void loadMore(messages[0].id)
+      .then((added) => {
+        if (added <= 0) return;
+        if (anchorVirtuosoIndex !== null) {
+          virtuosoRef.current?.scrollToIndex({
+            index: anchorVirtuosoIndex,
+            align: "start",
+            behavior: "auto",
+          });
+        }
+        restoreScrollAnchor(anchor);
+      })
+      .finally(() => {
+        isPrependingHistoryRef.current = false;
+      });
   }, [
     hasMore,
     isLoadingMore,
@@ -401,22 +539,47 @@ export const ChatThread = ({
     if (!scrollerEl) return;
 
     lastScrollTopRef.current = scrollerEl.scrollTop;
+    isAtBottomRef.current =
+      scrollerEl.scrollTop + scrollerEl.clientHeight >=
+      scrollerEl.scrollHeight - 1;
     const onScroll = () => {
       const previousTop = lastScrollTopRef.current;
       const currentTop = scrollerEl.scrollTop;
       lastScrollTopRef.current = currentTop;
+      const metrics = {
+        scrollTop: currentTop,
+        scrollHeight: scrollerEl.scrollHeight,
+        clientHeight: scrollerEl.clientHeight,
+      };
       const atBottom =
         currentTop + scrollerEl.clientHeight >= scrollerEl.scrollHeight - 1;
+      isAtBottomRef.current = atBottom;
       if (atBottom) {
         readyForMoreRef.current = false;
+        setHasNewerMessages(false);
         return;
       }
       if (currentTop < previousTop) {
         readyForMoreRef.current = true;
-        if (currentTop <= 1) loadOlderFromTopRef.current();
+        if (
+          shouldPrefetchOlderMessages(
+            metrics,
+            previousTop,
+            HISTORY_PREFETCH_DISTANCE_PX,
+          )
+        ) {
+          loadOlderFromTopRef.current();
+        }
       }
     };
     const onWheel = (event: WheelEvent) => {
+      if (
+        event.deltaY < 0 &&
+        scrollerEl.scrollTop <= HISTORY_PREFETCH_DISTANCE_PX
+      ) {
+        readyForMoreRef.current = true;
+        loadOlderFromTopRef.current();
+      }
       if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
       if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
         readyForMoreRef.current = true;
@@ -462,66 +625,13 @@ export const ChatThread = ({
   const renderMessage = useCallback(
     (virtuosoIndex: number, m: Message) => {
       const kind = classify(m);
-      if (kind === "system" || kind === "event") {
-        return (
-          <div
-            className={kind === "system" ? "day-marker" : "system-event"}
-            data-message-id={m.id}
-          >
-            {kind === "event" && (
-              <svg className="icon">
-                <use href="#i-sparkles" />
-              </svg>
-            )}
-            <span>{m.content}</span>
-          </div>
-        );
-      }
-
       const pos = virtuosoIndex - firstItemIndex;
       const prevMsg = pos > 0 ? messages[pos - 1] : null;
       const prevKind = prevMsg ? classify(prevMsg) : null;
       const isGrouped = prevKind === kind;
-      const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
 
       return (
-        <div
-          className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}
-          data-message-id={m.id}
-        >
-          {kind === "user" && !isGrouped ? (
-            <span className="message-avatar">
-              <svg className="icon">
-                <use href={`#${avatarIcon}`} />
-              </svg>
-            </span>
-          ) : kind === "user" && isGrouped ? (
-            <span
-              className="message-avatar-placeholder"
-              style={{ width: 32 }}
-            />
-          ) : null}
-          <div className="bubble">
-            <div className="bubble-content">
-              <p>{m.content}</p>
-              <span className="bubble-time-inline">
-                {formatTime(m.created_at)}
-              </span>
-            </div>
-          </div>
-          {kind !== "user" && !isGrouped ? (
-            <span className="message-avatar">
-              <svg className="icon">
-                <use href={`#${avatarIcon}`} />
-              </svg>
-            </span>
-          ) : kind !== "user" && isGrouped ? (
-            <span
-              className="message-avatar-placeholder"
-              style={{ width: 32 }}
-            />
-          ) : null}
-        </div>
+        <ChatMessageRow message={m} kind={kind} isGrouped={isGrouped} />
       );
     },
     [messages, firstItemIndex],
@@ -589,29 +699,46 @@ export const ChatThread = ({
     [isLoading, isLoadingMore],
   );
 
-  // Fragment — the host shell lays out the scroller (1fr) and composer (auto).
+  // Fragment — the host shell lays out the scroll surface (1fr) and composer
+  // (auto); the scroll shell only gives us a stable overlay layer.
   return (
     <>
-      <Virtuoso
-        ref={virtuosoRef}
-        scrollerRef={setScrollerRef}
-        className="chat-scroller"
-        style={
-          {
-            height: "100%",
-            "--chat-composer-reserve": `${composerReserve}px`,
-          } as CSSProperties
-        }
-        data={messages}
-        computeItemKey={(_, m) => m.id}
-        firstItemIndex={firstItemIndex}
-        startReached={handleStartReached}
-        followOutput={followOutput}
-        totalListHeightChanged={handleTotalListHeightChanged}
-        defaultItemHeight={DEFAULT_CHAT_ITEM_HEIGHT_PX}
-        components={virtuosoComponents}
-        itemContent={renderMessage}
-      />
+      <div className="chat-scroll-shell">
+        <Virtuoso
+          ref={virtuosoRef}
+          scrollerRef={setScrollerRef}
+          className="chat-scroller"
+          style={
+            {
+              height: "100%",
+              "--chat-composer-reserve": `${composerReserve}px`,
+            } as CSSProperties
+          }
+          data={messages}
+          computeItemKey={(_, m) => m.id}
+          firstItemIndex={firstItemIndex}
+          startReached={handleStartReached}
+          followOutput={followOutput}
+          totalListHeightChanged={handleTotalListHeightChanged}
+          defaultItemHeight={DEFAULT_CHAT_ITEM_HEIGHT_PX}
+          increaseViewportBy={VIRTUOSO_INCREASE_VIEWPORT_BY}
+          components={virtuosoComponents}
+          itemContent={renderMessage}
+        />
+        {hasNewerMessages ? (
+          <button
+            type="button"
+            className="new-message-jump"
+            aria-label="Cuộn đến tin nhắn mới nhất"
+            onClick={handleJumpToNewest}
+          >
+            <span>Tin nhắn mới</span>
+            <svg className="icon new-message-jump-icon">
+              <use href="#i-chevron" />
+            </svg>
+          </button>
+        ) : null}
+      </div>
 
       <footer ref={composerWrapRef} className="composer-wrap">
         {showComposerTakeoverNotice && isBotMode && (

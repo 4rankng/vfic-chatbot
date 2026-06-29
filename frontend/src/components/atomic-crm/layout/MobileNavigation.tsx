@@ -148,7 +148,7 @@ export const MobileNavigation = () => {
     >
       <div
         className={cn(
-          "mx-auto grid min-h-10 w-full max-w-md items-center gap-1 rounded-xl border border-border/70 bg-card/90 p-0.5 shadow-[0_8px_22px_rgba(26,34,40,0.06)]",
+          "mx-auto grid min-h-11 w-full max-w-md items-center gap-1",
           visibleItems.length + (overflowItems.length > 0 ? 1 : 0) === 4
             ? "grid-cols-4"
             : "grid-cols-3",
@@ -173,10 +173,10 @@ export const MobileNavigation = () => {
                   variant="ghost"
                   aria-label="Mở thêm chức năng"
                   className={cn(
-                    "relative h-10 w-full min-w-0 flex-col gap-0.5 rounded-lg px-1 py-0.5 transition-all",
+                    "relative h-11 w-full min-w-0 flex-col gap-0.5 rounded-none border-t-2 border-transparent bg-transparent px-1 py-0.5 transition-colors",
                     overflowActive
-                      ? "bg-primary/10 text-primary ring-1 ring-primary/15 hover:bg-primary/12"
-                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                      ? "border-primary text-primary hover:bg-transparent hover:text-primary"
+                      : "text-muted-foreground hover:bg-transparent hover:text-foreground",
                   )}
                 >
                   <MoreHorizontal className="size-4 shrink-0" />
@@ -232,10 +232,10 @@ const NavigationButton = ({
     asChild
     variant="ghost"
     className={cn(
-      "relative h-10 w-full min-w-0 flex-col gap-0.5 rounded-lg px-1 py-0.5 transition-all",
+      "relative h-11 w-full min-w-0 flex-col gap-0.5 rounded-none border-t-2 border-transparent bg-transparent px-1 py-0.5 transition-colors",
       isActive
-        ? "bg-primary/10 text-primary ring-1 ring-primary/15 hover:bg-primary/12 hover:text-primary"
-        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+        ? "border-primary text-primary hover:bg-transparent hover:text-primary"
+        : "text-muted-foreground hover:bg-transparent hover:text-foreground",
     )}
   >
     <Link to={href}>

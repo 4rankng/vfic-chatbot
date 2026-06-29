@@ -59,14 +59,29 @@ describe("chatRepository.getConversationMessages", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps API chronological order, maps sender->type, and flags hasMore on a full page", async () => {
+  it("sorts API messages chronologically, maps sender->type, and flags hasMore on a full page", async () => {
     const { fetch } = stubJson(async () => ({
-      // Backend order is chronological, matching WhatsApp-style rendering:
-      // older messages higher up, newest messages at the bottom.
+      // Guard against a scrambled page: visible time must move forward
+      // top-to-bottom even when id order would put 02:15 before 01:22.
       data: [
-        { id: 1, body: "a", sender: "SYSTEM", created_at: "t1" },
-        { id: 2, body: "b", sender: "BOT", created_at: "t2" },
-        { id: 3, body: "c", sender: "WORKER", created_at: "t3" },
+        {
+          id: 1,
+          body: "b",
+          sender: "BOT",
+          created_at: "2026-06-29T02:15:00.000Z",
+        },
+        {
+          id: 2,
+          body: "a",
+          sender: "SYSTEM",
+          created_at: "2026-06-29T01:22:00.000Z",
+        },
+        {
+          id: 3,
+          body: "c",
+          sender: "WORKER",
+          created_at: "2026-06-29T13:41:00.000Z",
+        },
       ],
       total: 3,
     }));
@@ -77,10 +92,10 @@ describe("chatRepository.getConversationMessages", () => {
         limit: 3,
       },
     );
-    expect(messages.map((m) => m.id)).toEqual(["1", "2", "3"]);
+    expect(messages.map((m) => m.id)).toEqual(["2", "1", "3"]);
     // Mapping: SYSTEM->system, BOT->outbound, WORKER->inbound.
-    expect(messages[0].type).toBe("system"); // id1 SYSTEM (oldest)
-    expect(messages[1].type).toBe("outbound"); // id2 BOT
+    expect(messages[0].type).toBe("system"); // id2 SYSTEM (oldest)
+    expect(messages[1].type).toBe("outbound"); // id1 BOT
     expect(messages[2].type).toBe("inbound"); // id3 WORKER (newest)
     expect(hasMore).toBe(true); // full page (3 >= 3)
   });

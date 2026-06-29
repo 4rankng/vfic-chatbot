@@ -31,6 +31,8 @@ from app.schemas.projects import (
     FeatureListResponse,
     FeatureOut,
     FeatureReadiness,
+    ProjectFaqOut,
+    ProjectFaqResponse,
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,
@@ -62,6 +64,14 @@ def _feature_from_row(r: Any) -> FeatureOut:
         source_document_id=r.source_document_id,
         updated_at=r.updated_at,
     )
+
+
+def _faq_answer_from_content(content: str | None, question: str) -> str:
+    text_value = (content or "").strip()
+    prefix = f"FAQ: {question}".strip()
+    if prefix and text_value.startswith(prefix):
+        text_value = text_value[len(prefix):].strip()
+    return text_value or (content or "")
 
 
 class ProjectService:
@@ -288,6 +298,39 @@ class ProjectService:
             for row in route_rows
         ]
         return BusTimetableResponse(data=data, total=total, page=page, per_page=per_page)
+
+    async def list_faq(self, project_id: uuid.UUID, *, limit: int = 12) -> ProjectFaqResponse:
+        """List published FAQ chunks for a project."""
+        await self._require_project(project_id)
+        limit = min(50, max(1, limit))
+        rows = (
+            await self.db.execute(
+                text(
+                    "SELECT kc.id, kc.content, kc.questions, kc.source_anchor, kd.file_name "
+                    "FROM knowledge_chunks kc "
+                    "JOIN knowledge_documents kd ON kd.id = kc.document_id "
+                    "WHERE kd.project_id = :pid "
+                    "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
+                    "  AND kc.category = 'faq' "
+                    "ORDER BY kc.created_at DESC, kc.chunk_index ASC "
+                    "LIMIT :limit"
+                ),
+                {"pid": str(project_id), "limit": limit},
+            )
+        ).mappings().all()
+        data = [
+            ProjectFaqOut(
+                id=row["id"],
+                question=(row["questions"] or ["FAQ"])[0],
+                answer=_faq_answer_from_content(
+                    row["content"], (row["questions"] or ["FAQ"])[0]
+                ),
+                source_name=row["file_name"],
+                source_anchor=row["source_anchor"],
+            )
+            for row in rows
+        ]
+        return ProjectFaqResponse(data=data, total=len(data))
 
     async def update_feature(
         self, project_id: uuid.UUID, feature_id: uuid.UUID, body: FeatureUpdate, actor: User

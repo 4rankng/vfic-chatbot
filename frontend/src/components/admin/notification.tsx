@@ -87,6 +87,7 @@ export const Notification = (props: ToasterProps) => {
 
         toast[type](finalMessage, {
           duration,
+          position: type === "error" ? "top-center" : undefined,
           action: undoable
             ? {
                 label: translate("ra.action.undo"),

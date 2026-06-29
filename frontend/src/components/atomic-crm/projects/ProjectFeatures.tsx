@@ -225,34 +225,39 @@ export const ProjectFeatures = ({
                       : "Xem chi tiết"}
                 </Button>
                 {showDetail && (
-                  <div className="columns-1 gap-4 xl:columns-2">
-                    {Object.entries(groupedFeatures).map(
-                      ([category, items]) => (
-                        <section
-                          key={category}
-                          className="mb-4 break-inside-avoid space-y-2"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="text-sm font-semibold">
-                              {category}
-                            </h3>
-                            <span className="text-xs text-muted-foreground">
-                              {items.length} mục
-                            </span>
-                          </div>
-                          <div className="grid gap-3">
-                            {items.map((f) => (
-                              <FeatureCard
-                                key={f.id}
-                                projectId={projectId}
-                                feature={f}
-                                editable={editable}
-                                onUpdate={onUpdate}
-                              />
-                            ))}
-                          </div>
-                        </section>
-                      ),
+                  <div className="space-y-4">
+                    <div className="columns-1 gap-4 xl:columns-2">
+                      {Object.entries(groupedFeatures).map(
+                        ([category, items]) => (
+                          <section
+                            key={category}
+                            className="mb-4 break-inside-avoid space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <h3 className="text-sm font-semibold">
+                                {category}
+                              </h3>
+                              <span className="text-xs text-muted-foreground">
+                                {items.length} mục
+                              </span>
+                            </div>
+                            <div className="grid gap-3">
+                              {items.map((f) => (
+                                <FeatureCard
+                                  key={f.id}
+                                  projectId={projectId}
+                                  feature={f}
+                                  editable={editable}
+                                  onUpdate={onUpdate}
+                                />
+                              ))}
+                            </div>
+                          </section>
+                        ),
+                      )}
+                    </div>
+                    {extraContent && (
+                      <div className="border-t pt-4">{extraContent}</div>
                     )}
                   </div>
                 )}
@@ -282,7 +287,6 @@ export const ProjectFeatures = ({
             )}
           </>
         )}
-        {extraContent && <div className="border-t pt-4">{extraContent}</div>}
       </CardContent>
     </Card>
   );

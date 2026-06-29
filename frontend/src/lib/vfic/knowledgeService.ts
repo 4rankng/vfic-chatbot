@@ -45,6 +45,19 @@ export type KnowledgeUnitList = {
   total: number;
 };
 
+export type ProjectFaq = {
+  id: string;
+  question: string;
+  answer: string;
+  source_name?: string | null;
+  source_anchor?: string | null;
+};
+
+export type ProjectFaqList = {
+  data: ProjectFaq[];
+  total: number;
+};
+
 export const uploadKnowledgeFile = async (
   file: File,
   projectId?: string | null,
@@ -175,6 +188,9 @@ export const getProjectBusTimetable = (
   apiJson<BusTimetableList>(
     `${proj(id)}/bus-timetable?page=${page}&per_page=${perPage}`,
   );
+
+export const getProjectFaq = (id: string, limit = 12) =>
+  apiJson<ProjectFaqList>(`${proj(id)}/faq?limit=${limit}`);
 
 /** Synchronously re-extract active features from the project's latest posting (~5-10s). */
 export const extractProjectFeatures = (id: string) =>

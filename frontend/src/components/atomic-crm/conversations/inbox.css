@@ -948,6 +948,15 @@
 }
 
 /* Chat Content */
+:is(.inbox-bg-container, .chat-surface) .chat-scroll-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--chat-bg);
+}
+
 :is(.inbox-bg-container, .chat-surface) .chat-scroller {
   min-height: 0;
   padding: 0;
@@ -978,6 +987,35 @@
 :is(.inbox-bg-container, .chat-surface) .chat-history-bottom-spacer {
   height: var(--chat-composer-reserve, 104px);
   flex: 0 0 auto;
+}
+
+:is(.inbox-bg-container, .chat-surface) .new-message-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  max-width: calc(100% - 32px);
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-solid);
+  color: var(--ink);
+  box-shadow: var(--shadow-md);
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+:is(.inbox-bg-container, .chat-surface) .new-message-jump-icon {
+  width: 16px;
+  height: 16px;
+  transform: rotate(90deg);
+  color: var(--brand);
 }
 
 .inbox-bg-container .inbox-pagination {
@@ -1057,18 +1095,19 @@
 :is(.inbox-bg-container, .chat-surface) .message-row {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 8px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow-anchor: none;
+  contain: layout paint;
   filter: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
-  margin-top: -16px;
+  margin-top: 0;
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-row.user {
@@ -1102,10 +1141,10 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble {
-  max-width: min(70%, 760px);
+  max-width: min(72%, 760px);
   min-width: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 7px 10px 6px;
+  border-radius: 7.5px;
   font-size: 14.2px;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -1125,10 +1164,10 @@
   background: var(--chat-bubble-in);
   color: var(--ink);
   border: none;
-  border-top-left-radius: 0;
+  border-top-left-radius: 2px;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.user.grouped .bubble {
-  border-top-left-radius: 8px;
+  border-top-left-radius: 7.5px;
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-row.bot .bubble,
@@ -1136,18 +1175,18 @@
   background: var(--chat-bubble-out);
   color: var(--ink);
   border: none;
-  border-top-right-radius: 0;
+  border-top-right-radius: 2px;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.bot.grouped .bubble,
 :is(.inbox-bg-container, .chat-surface) .message-row.agent.grouped .bubble {
-  border-top-right-radius: 8px;
+  border-top-right-radius: 7.5px;
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble-content {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 :is(.inbox-bg-container, .chat-surface) .bubble-time-inline {
@@ -1836,6 +1875,12 @@
   :is(.inbox-bg-container, .chat-surface) .chat-scroller {
     padding: 0;
   }
+  :is(.inbox-bg-container, .chat-surface) .new-message-jump {
+    bottom: 10px;
+    min-height: 34px;
+    max-width: calc(100% - 24px);
+    padding: 0 10px 0 12px;
+  }
   :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
     padding: 20px 12px !important;
   }
@@ -1850,17 +1895,25 @@
     line-height: 1.35;
   }
   :is(.inbox-bg-container, .chat-surface) .message-row {
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
+    margin-top: 0;
   }
   :is(.inbox-bg-container, .chat-surface) .message-avatar {
-    width: 28px;
-    height: 28px;
-    flex-basis: 28px;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-avatar-placeholder {
+    flex: 0 0 26px;
+    width: 26px !important;
   }
   :is(.inbox-bg-container, .chat-surface) .bubble {
-    max-width: calc(100% - 40px);
+    max-width: calc(100% - 38px);
     font-size: 14px;
+    line-height: 1.38;
   }
   :is(.inbox-bg-container, .chat-surface) .composer-wrap {
     padding: 10px 12px;

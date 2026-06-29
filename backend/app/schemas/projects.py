@@ -123,3 +123,19 @@ class BusTimetableResponse(BaseModel):
     total: int
     page: int = 1
     per_page: int = 25
+
+
+# --- Project FAQ (published canonical FAQ chunks) ---
+
+
+class ProjectFaqOut(BaseModel):
+    id: uuid.UUID
+    question: str
+    answer: str
+    source_name: str | None = None
+    source_anchor: str | None = None
+
+
+class ProjectFaqResponse(BaseModel):
+    data: list[ProjectFaqOut]
+    total: int

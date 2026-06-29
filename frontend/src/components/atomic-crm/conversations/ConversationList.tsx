@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin";
+import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadStatusColor } from "./conversationDisplay";
 import "./inbox.css";
 
@@ -274,12 +275,10 @@ const ConversationListPanel = ({
       }))
       .filter((c) => {
         if (query) {
-          const q = query.toLowerCase();
           const haystack = [c.zalo_chat_id, c._lead?.name, c._lead?.phone]
             .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          if (!haystack.includes(q)) return false;
+            .join(" ");
+          if (!vietnameseSearchIncludes(haystack, query)) return false;
         }
         return true;
       })

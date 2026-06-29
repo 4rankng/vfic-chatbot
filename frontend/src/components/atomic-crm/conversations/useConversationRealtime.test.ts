@@ -23,9 +23,39 @@ describe("mergeChronological", () => {
 
     expect(result).toBe(existing);
   });
+
+  it("sorts merged messages by timestamp even when ids point the other way", () => {
+    const older = {
+      ...msg(2),
+      created_at: "2026-06-29T01:22:00.000Z",
+    };
+    const newer = {
+      ...msg(1),
+      created_at: "2026-06-29T02:15:00.000Z",
+    };
+
+    const result = mergeChronological([], [newer, older]);
+
+    expect(result.map((m) => m.id)).toEqual(["2", "1"]);
+  });
 });
 
 describe("mergeRealtimePage", () => {
+  it("normalizes an initial realtime page before any history is loaded", () => {
+    const older = {
+      ...msg(2),
+      created_at: "2026-06-29T01:22:00.000Z",
+    };
+    const newer = {
+      ...msg(1),
+      created_at: "2026-06-29T02:15:00.000Z",
+    };
+
+    const result = mergeRealtimePage([], [newer, older]);
+
+    expect(result.map((m) => m.id)).toEqual(["2", "1"]);
+  });
+
   it("does not backfill older fetched rows into the current visible window", () => {
     const firstLoaded = msg(10);
     const current = [firstLoaded, msg(11), msg(12)];

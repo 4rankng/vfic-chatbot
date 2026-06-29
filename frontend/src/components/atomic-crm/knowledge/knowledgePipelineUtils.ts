@@ -6,6 +6,7 @@
 // processing / stuck?" decision lives in one place.
 
 import type { KnowledgeSource } from "../types";
+import { vietnameseSearchKey } from "@/lib/vietnameseSearch";
 
 export const PIPELINE_STEPS = [
   {
@@ -82,17 +83,14 @@ export const sourceSearchText = (
   source: KnowledgeSource,
   projectName?: string,
 ) =>
-  [
+  vietnameseSearchKey(
     source.file_name,
     source.source,
     source.mime_type,
     source.digest_summary,
     sourceStage(source),
     projectName,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  );
 
 export const pipelineStepIndex = (source: KnowledgeSource) => {
   const stage = sourceStage(source).toUpperCase();

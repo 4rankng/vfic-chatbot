@@ -1,13 +1,11 @@
-export const normalizeSearch = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+import {
+  normalizeVietnameseSearchText,
+  slugifyVietnamese,
+} from "@/lib/vietnameseSearch";
+
+export const normalizeSearch = normalizeVietnameseSearchText;
 
 export const slugifyProject = (value: string) => {
-  const slug = normalizeSearch(value)
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  const slug = slugifyVietnamese(value);
   return slug || `du-an-${Date.now()}`;
 };

@@ -19,3 +19,19 @@ export const shouldTrapEdgeWheel = (
   if (deltaY < 0) return scroller.scrollTop <= EDGE_EPSILON_PX;
   return scroller.scrollTop >= maxScrollTop - EDGE_EPSILON_PX;
 };
+
+export const shouldPrefetchOlderMessages = (
+  scroller: ScrollMetrics,
+  previousScrollTop: number,
+  prefetchDistancePx: number,
+) => {
+  const maxScrollTop = Math.max(
+    0,
+    scroller.scrollHeight - scroller.clientHeight,
+  );
+  if (maxScrollTop <= EDGE_EPSILON_PX) return false;
+  return (
+    scroller.scrollTop < previousScrollTop &&
+    scroller.scrollTop <= prefetchDistancePx
+  );
+};

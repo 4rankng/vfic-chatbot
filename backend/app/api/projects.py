@@ -19,6 +19,7 @@ from app.schemas.projects import (
     FeatureListResponse,
     FeatureOut,
     FeatureUpdate,
+    ProjectFaqResponse,
     ProjectCreate,
     ProjectListResponse,
     ProjectOut,
@@ -99,6 +100,17 @@ async def list_project_bus_timetable(
 ) -> BusTimetableResponse:
     """List the project's structured bus routes with ordered pickup stops."""
     return await ProjectService(db).list_bus_timetable(project_id, page=page, per_page=per_page)
+
+
+@router.get("/{project_id}/faq", response_model=ProjectFaqResponse)
+async def list_project_faq(
+    project_id: uuid.UUID,
+    limit: int = Query(12, ge=1, le=50),
+    _user: User = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_db),
+) -> ProjectFaqResponse:
+    """List the project's published FAQ answers."""
+    return await ProjectService(db).list_faq(project_id, limit=limit)
 
 
 @router.patch("/{project_id}/features/{feature_id}", response_model=FeatureOut)

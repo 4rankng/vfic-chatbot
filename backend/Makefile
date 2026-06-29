@@ -2,6 +2,7 @@
 
 BACKEND_PORT  ?= 8000
 FRONTEND_PORT ?= 5173
+ZALO_MOCK_PORT ?= 8788
 PROD_SERVER   := bot.tingting.vip
 PROD_DIR      := /opt/vfic
 IMAGE_NAME    := franknguyenvd/vfic-backend
@@ -46,21 +47,40 @@ define kill-ingest-workers
 	@bash -c 'root="$$(pwd)"; pgrep -f "rq worker ingest" 2>/dev/null | while read pid; do cwd="$$(lsof -a -d cwd -p "$$pid" -Fn 2>/dev/null | sed -n "s/^n//p")"; [ "$$cwd" = "$$root" ] && kill "$$pid" 2>/dev/null || true; done; exit 0'
 endef
 
-# ---- Local dev: DB + backend (uvicorn) + ingest worker + frontend (vite) in ONE terminal. ----
-# Each server has its own port (BACKEND_PORT / FRONTEND_PORT); `kill-port` (above)
-# frees both before binding, and `kill-ingest-workers` removes orphaned workers from
-# previous runs so stale .env/code cannot process new jobs. BACKEND_PORT is exported
-# into the vite subprocess so its dev-server proxy target tracks it (see
-# frontend/vite.config.ts) — override both together, e.g. `make dev BACKEND_PORT=8001`.
-# Ctrl+C stops the app servers + worker from this run (the DB containers stay running).
+define kill-chatbot-workers
+	@echo "==> Stopping stale chatbot workers for this checkout (if any)..."
+	@bash -c 'root="$$(pwd)"; pgrep -f "rq worker webhook_high" 2>/dev/null | while read pid; do cwd="$$(lsof -a -d cwd -p "$$pid" -Fn 2>/dev/null | sed -n "s/^n//p")"; [ "$$cwd" = "$$root" ] && kill "$$pid" 2>/dev/null || true; done; exit 0'
+endef
+
+# ---- Local dev: DB + backend (uvicorn) + workers + frontend + zalo mock in ONE terminal. ----
+# Each server has its own port (BACKEND_PORT / FRONTEND_PORT / ZALO_MOCK_PORT);
+# `kill-port` frees them before binding, and the kill-workers macros remove
+# orphaned RQ workers from previous runs. BACKEND_PORT is exported into the
+# vite subprocess so its dev-server proxy target tracks it (see
+# frontend/vite.config.ts) — override all together, e.g. `make dev BACKEND_PORT=8001`.
+# ZALO_BOT_API_BASE + ZALO_BOT_TOKEN are exported so the backend routes all
+# outbound Zalo calls to the local mock (no real Zalo traffic).
+# Ctrl+C stops the app servers + workers + mock from this run (the DB containers stay running).
 dev: db
 	$(call kill-port,$(BACKEND_PORT))
 	$(call kill-port,$(FRONTEND_PORT))
+	$(call kill-port,$(ZALO_MOCK_PORT))
 	$(call kill-ingest-workers)
+	$(call kill-chatbot-workers)
 	@echo ""
-	@echo "==> Starting backend (:$(BACKEND_PORT)) + ingest worker + frontend (:$(FRONTEND_PORT)) — Ctrl+C stops all."
+	@echo "==> Starting backend (:$(BACKEND_PORT)) + workers + frontend (:$(FRONTEND_PORT)) + zalo mock (:$(ZALO_MOCK_PORT)) — Ctrl+C stops all."
 	@echo "    App : http://localhost:$(FRONTEND_PORT)   Login: admin@vfic.dev / admin123"
-	@bash -c 'trap "kill 0" INT TERM EXIT; export BACKEND_PORT="$(BACKEND_PORT)"; REDIS_URL="$$(grep "^REDIS_URL=" .env | cut -d= -f2-)"; (. .venv/bin/activate && exec uvicorn app.main:app --reload --port $(BACKEND_PORT)) & (. .venv/bin/activate && exec rq worker ingest --worker-class rq.SimpleWorker --url "$$REDIS_URL") & (cd ../frontend && exec npm run dev -- --port $(FRONTEND_PORT) --strictPort) & wait'
+	@echo "    Mock: http://localhost:$(ZALO_MOCK_PORT)   (Zalo traffic → localhost, not real Zalo)"
+	@bash -c 'trap "kill 0" INT TERM EXIT; \
+		export BACKEND_PORT="$(BACKEND_PORT)"; \
+		export ZALO_BOT_API_BASE="http://localhost:$(ZALO_MOCK_PORT)"; \
+		export ZALO_BOT_TOKEN="dev-mock-token"; \
+		REDIS_URL="$$(grep "^REDIS_URL=" .env | cut -d= -f2-)"; \
+		(. .venv/bin/activate && exec uvicorn app.main:app --reload --port $(BACKEND_PORT)) & \
+		(. .venv/bin/activate && exec rq worker ingest --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
+		(. .venv/bin/activate && exec rq worker webhook_high persistence_low --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
+		(. .venv/bin/activate && exec python -m mock_servers.zalo_mock --port $(ZALO_MOCK_PORT)) & \
+		(cd ../frontend && exec npm run dev -- --port $(FRONTEND_PORT) --strictPort) & wait'
 
 # ---- Build & push the AMD64 backend image to DockerHub. ----
 push:

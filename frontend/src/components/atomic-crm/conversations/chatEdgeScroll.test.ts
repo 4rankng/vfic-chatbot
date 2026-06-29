@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldTrapEdgeWheel } from "./chatEdgeScroll";
+import {
+  shouldPrefetchOlderMessages,
+  shouldTrapEdgeWheel,
+} from "./chatEdgeScroll";
 
 describe("shouldTrapEdgeWheel", () => {
   const scroller = {
@@ -32,5 +35,42 @@ describe("shouldTrapEdgeWheel", () => {
         12,
       ),
     ).toBe(true);
+  });
+});
+
+describe("shouldPrefetchOlderMessages", () => {
+  const scroller = {
+    clientHeight: 100,
+    scrollHeight: 500,
+  };
+
+  it("prefetches while scrolling upward near the top", () => {
+    expect(
+      shouldPrefetchOlderMessages(
+        { ...scroller, scrollTop: 80 },
+        140,
+        100,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not prefetch away from the top threshold", () => {
+    expect(
+      shouldPrefetchOlderMessages(
+        { ...scroller, scrollTop: 220 },
+        260,
+        100,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not prefetch while scrolling downward", () => {
+    expect(
+      shouldPrefetchOlderMessages(
+        { ...scroller, scrollTop: 80 },
+        40,
+        100,
+      ),
+    ).toBe(false);
   });
 });
