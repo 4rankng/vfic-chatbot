@@ -59,10 +59,10 @@ async def create_project(
 async def update_project(
     project_id: uuid.UUID,
     body: ProjectUpdate,
-    admin: User = Depends(require_admin),
+    actor: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectOut:
-    return ProjectOut.model_validate(await ProjectService(db).update(project_id, body, admin))
+    return ProjectOut.model_validate(await ProjectService(db).update(project_id, body, actor))
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -91,10 +91,14 @@ async def list_project_features(
 
 @router.get("/{project_id}/bus-timetable", response_model=BusTimetableResponse)
 async def list_project_bus_timetable(
-    project_id: uuid.UUID, _user: User = Depends(require_recruiter), db: AsyncSession = Depends(get_db)
+    project_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(6, ge=1, le=25),
+    _user: User = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_db),
 ) -> BusTimetableResponse:
     """List the project's structured bus routes with ordered pickup stops."""
-    return await ProjectService(db).list_bus_timetable(project_id)
+    return await ProjectService(db).list_bus_timetable(project_id, page=page, per_page=per_page)
 
 
 @router.patch("/{project_id}/features/{feature_id}", response_model=FeatureOut)
@@ -102,11 +106,11 @@ async def update_project_feature(
     project_id: uuid.UUID,
     feature_id: uuid.UUID,
     body: FeatureUpdate,
-    admin: User = Depends(require_admin),
+    actor: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> FeatureOut:
-    """Admin review/edit of one extracted feature value; re-syncs product highlights."""
-    return await ProjectService(db).update_feature(project_id, feature_id, body, admin)
+    """Recruiter/admin review-edit of one feature value; re-syncs product highlights."""
+    return await ProjectService(db).update_feature(project_id, feature_id, body, actor)
 
 
 @router.post("/{project_id}/features/extract", response_model=FeatureListResponse)

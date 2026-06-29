@@ -202,7 +202,12 @@ export type BusRoute = {
   stops: BusStop[];
 };
 
-export type BusTimetableList = { data: BusRoute[]; total: number };
+export type BusTimetableList = {
+  data: BusRoute[];
+  total: number;
+  page: number;
+  per_page: number;
+};
 
 // An agent persona (free-form markdown). Several stored; one global persona active.
 export type Persona = {

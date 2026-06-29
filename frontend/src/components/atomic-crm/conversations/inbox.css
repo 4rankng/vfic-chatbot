@@ -942,26 +942,15 @@
   flex: 0 0 auto;
 }
 
-/* "Load more" affordance for the contacts-only inbox (client-side paging) */
-.inbox-bg-container .load-more-btn {
-  display: block;
-  width: 100%;
-  margin: 8px 0 16px;
+.inbox-bg-container .inbox-pagination {
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   padding: 10px 12px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  border-radius: 12px;
-  background: var(--surface-solid);
-  color: var(--ink-muted);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
 }
-.inbox-bg-container .load-more-btn:hover {
-  background: var(--brand-light);
-  color: var(--brand);
+
+.inbox-bg-container .inbox-pagination > div {
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 :is(.inbox-bg-container, .chat-surface) .day-marker {

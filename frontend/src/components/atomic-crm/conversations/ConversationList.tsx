@@ -7,24 +7,13 @@ import { InboxIcons } from "./InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListPagination } from "@/components/admin";
+import { getLeadStatusColor } from "./conversationDisplay";
 import "./inbox.css";
-
-// How many contact rows to render at a time. The list still loads (and client
-// search still covers) every conversation; we only gate the rendered subset so
-// the first paint stays instant even with hundreds of contacts.
-const VISIBLE_PAGE_SIZE = 50;
 
 type ConversationRow = Conversation & {
   _lead?: Lead | null;
   _snippet?: string;
-};
-
-export const getLeadStatusColor = (lead?: Lead | null) => {
-  if (!lead || (!lead.name && !lead.phone))
-    return { bg: "var(--surface-solid)", ink: "var(--ink-faint)" };
-  if (!lead.phone || !lead.desired_job)
-    return { bg: "var(--brand-light)", ink: "var(--brand)" };
-  return { bg: "var(--success-light)", ink: "var(--success)" };
 };
 
 const getRelativeTimeString = (dateStr?: string) => {
@@ -198,7 +187,6 @@ const ConversationListPanel = ({
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(VISIBLE_PAGE_SIZE);
 
   // Resolve contact details AND the latest message per conversation in one
   // batched pass each (getLeadsByZaloIds + getLastMessages), replacing the old
@@ -284,7 +272,7 @@ const ConversationListPanel = ({
           <div className="empty-state">Không tìm thấy hội thoại phù hợp.</div>
         ) : (
           <>
-            {rows.slice(0, visibleCount).map((c) => (
+            {rows.map((c) => (
               <ConversationListItem
                 key={c.id}
                 conversation={c}
@@ -293,17 +281,12 @@ const ConversationListPanel = ({
                 readIds={readIds}
               />
             ))}
-            {rows.length > visibleCount && (
-              <button
-                type="button"
-                className="load-more-btn"
-                onClick={() => setVisibleCount((c) => c + VISIBLE_PAGE_SIZE)}
-              >
-                Tải thêm ({rows.length - visibleCount} còn lại)
-              </button>
-            )}
           </>
         )}
+      </div>
+
+      <div className="inbox-pagination">
+        <ListPagination rowsPerPageOptions={[25, 50, 100, 200]} />
       </div>
     </aside>
   );
@@ -334,11 +317,14 @@ const ConversationListContent = () => {
   // stays list-first until the user taps a row.
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
+    const hasUrlConversation = !!urlId && conversations.some((c) => c.id === urlId);
+    const hasSelectedConversation =
+      !!selectedId && conversations.some((c) => c.id === selectedId);
 
     // A stale deep link (?id= for a deleted/invalid conversation) would leave
     // detailOpen true with no selectable conversation, stranding the user on
     // an empty detail pane. Clear it so the list shows instead.
-    if (isMobile && urlId && !conversations.some((c) => c.id === urlId)) {
+    if (isMobile && urlId && !hasUrlConversation) {
       setSearchParams(
         (prev) => {
           prev.delete("id");
@@ -349,11 +335,27 @@ const ConversationListContent = () => {
       return;
     }
 
-    if (selectedId) return;
-    if (urlId && conversations.some((c) => c.id === urlId)) {
+    if (hasUrlConversation) {
       setSelectedId(urlId);
-    } else if (!isMobile) {
-      setSelectedId((conversations[0] as Conversation).id);
+      return;
+    }
+
+    if (hasSelectedConversation) return;
+
+    if (!isMobile) {
+      const firstId = (conversations[0] as Conversation).id;
+      setSelectedId(firstId);
+      if (urlId) {
+        setSearchParams(
+          (prev) => {
+            prev.set("id", firstId);
+            return prev;
+          },
+          { replace: true },
+        );
+      }
+    } else if (selectedId) {
+      setSelectedId(null);
     }
   }, [conversations, urlId, selectedId, isMobile, setSearchParams]);
 
@@ -362,23 +364,26 @@ const ConversationListContent = () => {
   // Stable identity so memoized ConversationListItem children don't re-render
   // on every list state change (the parent re-renders on search/selection, but
   // `onSelect` itself never needs to change — it only calls stable setters).
-  const openConversation = useCallback((c: Conversation) => {
-    setSelectedId(c.id);
-    // Optimistically clear the unread badge for this row; ConversationShow
-    // confirms server-side via markAsRead on open.
-    setPendingReadIds((prev) => {
-      if (prev.has(c.id)) return prev;
-      const next = new Set(prev);
-      next.add(c.id);
-      return next;
-    });
-    // Push (not replace) so each opened conversation is a history entry and the
-    // browser back button returns to the list.
-    setSearchParams((prev) => {
-      prev.set("id", c.id);
-      return prev;
-    });
-  }, []);
+  const openConversation = useCallback(
+    (c: Conversation) => {
+      setSelectedId(c.id);
+      // Optimistically clear the unread badge for this row; ConversationShow
+      // confirms server-side via markAsRead on open.
+      setPendingReadIds((prev) => {
+        if (prev.has(c.id)) return prev;
+        const next = new Set(prev);
+        next.add(c.id);
+        return next;
+      });
+      // Push (not replace) so each opened conversation is a history entry and the
+      // browser back button returns to the list.
+      setSearchParams((prev) => {
+        prev.set("id", c.id);
+        return prev;
+      });
+    },
+    [setSearchParams],
+  );
 
   const backToList = () => {
     setSearchParams(

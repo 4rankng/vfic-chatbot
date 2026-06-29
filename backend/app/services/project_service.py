@@ -158,7 +158,7 @@ class ProjectService:
         await self.db.refresh(proj)
         return proj
 
-    async def update(self, project_id: uuid.UUID, body: ProjectUpdate, admin: User) -> Project:
+    async def update(self, project_id: uuid.UUID, body: ProjectUpdate, actor: User) -> Project:
         proj = await self._require_project(project_id)
         if body.name is not None:
             proj.name = body.name.strip()
@@ -167,7 +167,7 @@ class ProjectService:
         if body.default_persona_id is not None:
             proj.default_persona_id = body.default_persona_id
         await record_audit(
-            self.db, action="update_project", actor_id=admin.id, target_type="project", target_id=str(proj.id)
+            self.db, action="update_project", actor_id=actor.id, target_type="project", target_id=str(proj.id)
         )
         await self.db.commit()
         await self.db.refresh(proj)
@@ -211,9 +211,25 @@ class ProjectService:
         rows = await JobFeatureValueRepo(self.db).list_for_project(project_id)
         return FeatureListResponse(data=[_feature_from_row(r) for r in rows], total=len(rows))
 
-    async def list_bus_timetable(self, project_id: uuid.UUID) -> BusTimetableResponse:
-        """List structured bus routes for the project, grouped with ordered stops."""
+    async def list_bus_timetable(
+        self, project_id: uuid.UUID, *, page: int = 1, per_page: int = 6
+    ) -> BusTimetableResponse:
+        """List one page of structured bus routes with ordered stops."""
         await self._require_project(project_id)
+        page = max(1, page)
+        per_page = min(25, max(1, per_page))
+        total = int(
+            (
+                await self.db.execute(
+                    text("SELECT count(*) FROM bus_routes WHERE project_id = :pid"),
+                    {"pid": str(project_id)},
+                )
+            ).scalar()
+            or 0
+        )
+        if total == 0:
+            return BusTimetableResponse(data=[], total=0, page=page, per_page=per_page)
+
         route_rows = (
             await self.db.execute(
                 text(
@@ -221,13 +237,14 @@ class ProjectService:
                     "       area, mode, source_page, notes "
                     "FROM bus_routes "
                     "WHERE project_id = :pid "
-                    "ORDER BY route_name ASC, shift ASC, direction ASC, route_variant ASC"
+                    "ORDER BY route_name ASC, shift ASC, direction ASC, route_variant ASC "
+                    "LIMIT :limit OFFSET :offset"
                 ),
-                {"pid": str(project_id)},
+                {"pid": str(project_id), "limit": per_page, "offset": (page - 1) * per_page},
             )
         ).mappings().all()
         if not route_rows:
-            return BusTimetableResponse(data=[], total=0)
+            return BusTimetableResponse(data=[], total=total, page=page, per_page=per_page)
 
         route_ids = [str(row["id"]) for row in route_rows]
         stop_rows = (
@@ -270,12 +287,12 @@ class ProjectService:
             )
             for row in route_rows
         ]
-        return BusTimetableResponse(data=data, total=len(data))
+        return BusTimetableResponse(data=data, total=total, page=page, per_page=per_page)
 
     async def update_feature(
-        self, project_id: uuid.UUID, feature_id: uuid.UUID, body: FeatureUpdate, admin: User
+        self, project_id: uuid.UUID, feature_id: uuid.UUID, body: FeatureUpdate, actor: User
     ) -> FeatureOut:
-        """Admin edit of one extracted feature value; re-syncs product highlights."""
+        """Recruiter/admin edit of one extracted feature value; re-syncs product highlights."""
         repo = JobFeatureValueRepo(self.db)
         if not await repo.exists_for_project(feature_id, project_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "feature value not found")
@@ -307,7 +324,7 @@ class ProjectService:
             await record_audit(
                 self.db,
                 action="update_project_feature",
-                actor_id=admin.id,
+                actor_id=actor.id,
                 target_type="job_feature_value",
                 target_id=str(feature_id),
             )

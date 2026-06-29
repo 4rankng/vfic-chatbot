@@ -117,6 +117,8 @@ export const ChatThread = ({
   const composerRef = useRef<HTMLFormElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const initialJumpDoneRef = useRef(false);
+  const initialBottomSettleUntilRef = useRef(0);
+  const initialBottomSettleRafRef = useRef<number | null>(null);
   const lastScrollTopRef = useRef(0);
   const lastLoadMoreAtRef = useRef(0);
   // Load older messages only on a genuine upward scroll — not merely because
@@ -136,6 +138,25 @@ export const ChatThread = ({
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
 
+  const scrollToNewest = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({
+      index: "LAST",
+      align: "end",
+      behavior: "auto",
+    });
+  }, []);
+
+  const scheduleScrollToNewest = useCallback(() => {
+    if (initialBottomSettleRafRef.current !== null) {
+      cancelAnimationFrame(initialBottomSettleRafRef.current);
+    }
+
+    initialBottomSettleRafRef.current = requestAnimationFrame(() => {
+      initialBottomSettleRafRef.current = null;
+      scrollToNewest();
+    });
+  }, [scrollToNewest]);
+
   // Server-confirm the optimistic unread clear from the inbox list. Skips the
   // round-trip when nothing is unread, and re-fires if a realtime inbound bumps
   // the counter while the recruiter is viewing the thread. vfic_mark_read resets
@@ -148,28 +169,48 @@ export const ChatThread = ({
     });
   }, [conversationId, conversation, dataProvider]);
 
-  // Snap to the newest message instantly when a conversation opens, then let
-  // Virtuoso's followOutput handle subsequent appends only when the user is
-  // already at the bottom — reading history is never yanked away.
-  useEffect(() => {
-    if (messages.length > 0 && !initialJumpDoneRef.current) {
-      initialJumpDoneRef.current = true;
-      virtuosoRef.current?.scrollToIndex({
-        index: "LAST",
-        align: "end",
-        behavior: "auto",
-      });
-    }
-  }, [messages]);
-
   // Reset per-conversation state so each thread opens at its newest message.
   useEffect(() => {
     initialJumpDoneRef.current = false;
+    initialBottomSettleUntilRef.current = 0;
+    if (initialBottomSettleRafRef.current !== null) {
+      cancelAnimationFrame(initialBottomSettleRafRef.current);
+      initialBottomSettleRafRef.current = null;
+    }
     readyForMoreRef.current = false;
     lastScrollTopRef.current = 0;
     lastLoadMoreAtRef.current = 0;
     setEmojiOpen(false);
   }, [conversationId]);
+
+  // Snap to the newest message instantly when a conversation opens, then let
+  // Virtuoso's followOutput handle subsequent appends only when the user is
+  // already at the bottom. Very tall bubbles can be measured after the first
+  // snap, so totalListHeightChanged keeps the initial open pinned briefly.
+  useEffect(() => {
+    if (messages.length > 0 && !initialJumpDoneRef.current) {
+      initialJumpDoneRef.current = true;
+      initialBottomSettleUntilRef.current = performance.now() + 800;
+      scrollToNewest();
+      scheduleScrollToNewest();
+    }
+  }, [messages, scheduleScrollToNewest, scrollToNewest]);
+
+  const handleTotalListHeightChanged = useCallback(() => {
+    if (!initialJumpDoneRef.current) return;
+    if (performance.now() > initialBottomSettleUntilRef.current) return;
+    if (readyForMoreRef.current) return;
+    scheduleScrollToNewest();
+  }, [scheduleScrollToNewest]);
+
+  useEffect(
+    () => () => {
+      if (initialBottomSettleRafRef.current !== null) {
+        cancelAnimationFrame(initialBottomSettleRafRef.current);
+      }
+    },
+    [],
+  );
 
   const syncComposerTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -403,6 +444,7 @@ export const ChatThread = ({
         firstItemIndex={firstItemIndex}
         startReached={handleStartReached}
         followOutput={followOutput}
+        totalListHeightChanged={handleTotalListHeightChanged}
         components={virtuosoComponents}
         itemContent={renderMessage}
       />

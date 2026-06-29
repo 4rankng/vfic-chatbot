@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.models.user import User
 from app.schemas.projects import ProjectCreate, ProjectUpdate
@@ -75,3 +75,58 @@ async def test_update_unknown_project_returns_404(db_session, seed):
     with pytest.raises(HTTPException) as exc:
         await ProjectService(db).update(uuid.uuid4(), ProjectUpdate(name="x"), admin)
     assert exc.value.status_code == 404
+
+
+async def test_list_bus_timetable_is_paginated(db_session, seed):
+    db = db_session
+    admin = await _admin(db)
+    project = await ProjectService(db).create(
+        ProjectCreate(slug=f"p-{uuid.uuid4().hex[:4]}", name="Bus Paging", is_active=True),
+        admin,
+    )
+    company_id = (
+        await db.execute(
+            text(
+                "INSERT INTO companies(project_id, name) "
+                "VALUES (:pid, 'Bus Paging Co') RETURNING id"
+            ),
+            {"pid": str(project.id)},
+        )
+    ).scalar()
+    for i, route_name in enumerate(["A Route", "B Route", "C Route"], start=1):
+        route_id = (
+            await db.execute(
+                text(
+                    "INSERT INTO bus_routes("
+                    "project_id, company_id, route_name, route_no, shift, direction, route_group_key"
+                    ") VALUES (:pid, :cid, :name, :no, 'day', 'outbound', :key) RETURNING id"
+                ),
+                {
+                    "pid": str(project.id),
+                    "cid": str(company_id),
+                    "name": route_name,
+                    "no": f"0{i}",
+                    "key": f"route-{i}",
+                },
+            )
+        ).scalar()
+        await db.execute(
+            text(
+                "INSERT INTO bus_stops(route_id, stop_order, stop_name, scheduled_time) "
+                "VALUES (:rid, 1, :stop, '07:00')"
+            ),
+            {"rid": str(route_id), "stop": f"Stop {i}"},
+        )
+    await db.commit()
+
+    page_1 = await ProjectService(db).list_bus_timetable(project.id, page=1, per_page=2)
+    page_2 = await ProjectService(db).list_bus_timetable(project.id, page=2, per_page=2)
+
+    assert page_1.total == 3
+    assert page_1.page == 1
+    assert page_1.per_page == 2
+    assert [route.route_name for route in page_1.data] == ["A Route", "B Route"]
+    assert [route.stops[0].stop_name for route in page_1.data] == ["Stop 1", "Stop 2"]
+    assert page_2.total == 3
+    assert page_2.page == 2
+    assert [route.route_name for route in page_2.data] == ["C Route"]

@@ -24,6 +24,7 @@ const ProjectShowContent = () => {
 
   const card = project.index_card ?? {};
   const isAdmin = permissions === "admin";
+  const canEdit = permissions === "admin" || permissions === "recruiter";
 
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
@@ -68,8 +69,8 @@ const ProjectShowContent = () => {
             </div>
             <p>{(card.key_roles ?? []).join(", ") || "—"}</p>
           </div>
-          {isAdmin && (
-            <div className="mt-1 flex flex-wrap gap-2">
+          <div className="mt-1 flex flex-wrap gap-2">
+            {isAdmin && (
               <Button
                 variant="outline"
                 size="sm"
@@ -79,6 +80,8 @@ const ProjectShowContent = () => {
                 <Upload className="size-4" />
                 Thêm tệp
               </Button>
+            )}
+            {canEdit && (
               <Button
                 variant="outline"
                 size="sm"
@@ -88,18 +91,24 @@ const ProjectShowContent = () => {
                 <Pencil className="size-4" />
                 Quản lý dự án
               </Button>
+            )}
+            {isAdmin && (
               <DeleteButton
                 label="Xóa"
                 size="sm"
                 successMessage="Đã xóa dự án."
                 redirect="list"
               />
-            </div>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      <ProjectFeatures projectId={project.id} />
+      <ProjectFeatures
+        projectId={project.id}
+        editable={canEdit}
+        canExtract={isAdmin}
+      />
       <KnowledgeUpload
         open={uploadOpen}
         onOpenChange={setUploadOpen}

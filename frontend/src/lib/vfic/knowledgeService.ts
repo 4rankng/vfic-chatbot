@@ -168,8 +168,13 @@ export const reindexProject = (id: string) =>
 export const getProjectFeatures = (id: string) =>
   apiJson<ProductFeatureList>(`${proj(id)}/features`);
 
-export const getProjectBusTimetable = (id: string) =>
-  apiJson<BusTimetableList>(`${proj(id)}/bus-timetable`);
+export const getProjectBusTimetable = (
+  id: string,
+  { page = 1, perPage = 6 }: { page?: number; perPage?: number } = {},
+) =>
+  apiJson<BusTimetableList>(
+    `${proj(id)}/bus-timetable?page=${page}&per_page=${perPage}`,
+  );
 
 /** Synchronously re-extract active features from the project's latest posting (~5-10s). */
 export const extractProjectFeatures = (id: string) =>

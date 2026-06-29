@@ -84,7 +84,7 @@ class FeatureListResponse(BaseModel):
 
 
 class FeatureUpdate(BaseModel):
-    """Admin edit of a single extracted feature value."""
+    """Recruiter/admin edit of a single extracted feature value."""
 
     value_text: str | None = None
     value_json: dict[str, Any] | None = None
@@ -121,3 +121,5 @@ class BusRouteOut(BaseModel):
 class BusTimetableResponse(BaseModel):
     data: list[BusRouteOut]
     total: int
+    page: int = 1
+    per_page: int = 25

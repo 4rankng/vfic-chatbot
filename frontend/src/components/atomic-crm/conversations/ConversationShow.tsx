@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRecordContext, useGetList, ShowBase } from "ra-core";
 import type { Conversation, Lead } from "../types";
-import { getLeadStatusColor } from "./ConversationList";
+import { getLeadStatusColor } from "./conversationDisplay";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 import { ChatThread } from "./ChatThread";
 import {

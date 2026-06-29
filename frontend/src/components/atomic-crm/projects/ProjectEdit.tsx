@@ -4,6 +4,7 @@ import {
   Form,
   useDataProvider,
   useNotify,
+  usePermissions,
   useRecordContext,
   useRedirect,
 } from "ra-core";
@@ -24,10 +25,13 @@ const ProjectEditContent = () => {
   const project = useRecordContext<Project>();
   const notify = useNotify();
   const redirect = useRedirect();
+  const { permissions } = usePermissions();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   if (!project) return null;
+
+  const isAdmin = permissions === "admin";
 
   const onSubmit = async (data: Record<string, unknown>) => {
     setSubmitting(true);
@@ -82,15 +86,17 @@ const ProjectEditContent = () => {
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
             <span>Thẻ danh mục (master index)</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setUploadOpen(true)}
-              title="Tải tin tuyển dụng lên cho dự án này"
-            >
-              <Upload className="size-4" />
-              Tải tin lên
-            </Button>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setUploadOpen(true)}
+                title="Tải tin tuyển dụng lên cho dự án này"
+              >
+                <Upload className="size-4" />
+                Tải tin lên
+              </Button>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 pt-2 text-sm">
@@ -113,28 +119,45 @@ const ProjectEditContent = () => {
         </CardContent>
       </Card>
 
-      <ProjectFeatures projectId={project.id} editable />
-
-      <KnowledgeUpload
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        initialProjectId={project.id}
-        lockProject
+      <ProjectFeatures
+        projectId={project.id}
+        editable
+        canExtract={isAdmin}
       />
+
+      {isAdmin && (
+        <KnowledgeUpload
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          initialProjectId={project.id}
+          lockProject
+        />
+      )}
     </>
   );
 };
 
 export const ProjectEdit = () => (
   <EditBase>
-    <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa dự án</h2>
-      <DeleteButton
-        label="Xóa dự án"
-        successMessage="Đã xóa dự án."
-        redirect="list"
-      />
-    </TopToolbar>
+    <ProjectEditToolbar />
     <ProjectEditContent />
   </EditBase>
 );
+
+const ProjectEditToolbar = () => {
+  const { permissions } = usePermissions();
+  const isAdmin = permissions === "admin";
+
+  return (
+    <TopToolbar>
+      <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa dự án</h2>
+      {isAdmin && (
+        <DeleteButton
+          label="Xóa dự án"
+          successMessage="Đã xóa dự án."
+          redirect="list"
+        />
+      )}
+    </TopToolbar>
+  );
+};

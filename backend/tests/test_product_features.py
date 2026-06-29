@@ -327,6 +327,14 @@ async def test_recruiter_can_read_project_features_api(client, db_session, clean
     assert one.status_code == 200
     assert one.json()["id"] == str(proj.id)
 
+    project_edit = await client.patch(
+        f"/api/v1/knowledge/projects/{proj.id}",
+        json={"name": "LG Display Recruiter Updated"},
+        headers=headers,
+    )
+    assert project_edit.status_code == 200
+    assert project_edit.json()["name"] == "LG Display Recruiter Updated"
+
     features = await client.get(f"/api/v1/knowledge/projects/{proj.id}/features", headers=headers)
     assert features.status_code == 200
     body = features.json()
@@ -335,10 +343,11 @@ async def test_recruiter_can_read_project_features_api(client, db_session, clean
 
     edit = await client.patch(
         f"/api/v1/knowledge/projects/{proj.id}/features/{feature_id}",
-        json={"value_text": "recruiter edit should fail"},
+        json={"value_text": "Nhân viên tuyển dụng đã cập nhật nội dung tư vấn."},
         headers=headers,
     )
-    assert edit.status_code == 403
+    assert edit.status_code == 200
+    assert edit.json()["value_text"] == "Nhân viên tuyển dụng đã cập nhật nội dung tư vấn."
 
 
 async def test_project_features_api_backfills_new_active_catalog_rows(

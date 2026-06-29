@@ -86,9 +86,13 @@ const orderedSlots = (
 export const ProjectFeatures = ({
   projectId,
   editable = false,
+  canExtract = editable,
+  extraContent,
 }: {
   projectId: string;
   editable?: boolean;
+  canExtract?: boolean;
+  extraContent?: React.ReactNode;
 }) => {
   const notify = useNotify();
   const [features, setFeatures] = useState<ProductFeature[] | null>(null);
@@ -163,7 +167,7 @@ export const ProjectFeatures = ({
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
           <span>Đặc điểm sản phẩm</span>
-          {editable && hasFeatures && (
+          {canExtract && hasFeatures && (
             <Button
               variant="outline"
               size="sm"
@@ -221,10 +225,13 @@ export const ProjectFeatures = ({
                       : "Xem chi tiết"}
                 </Button>
                 {showDetail && (
-                  <div className="space-y-4">
+                  <div className="columns-1 gap-4 xl:columns-2">
                     {Object.entries(groupedFeatures).map(
                       ([category, items]) => (
-                        <section key={category} className="space-y-2">
+                        <section
+                          key={category}
+                          className="mb-4 break-inside-avoid space-y-2"
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <h3 className="text-sm font-semibold">
                               {category}
@@ -233,7 +240,7 @@ export const ProjectFeatures = ({
                               {items.length} mục
                             </span>
                           </div>
-                          <div className="grid gap-3 lg:grid-cols-2">
+                          <div className="grid gap-3">
                             {items.map((f) => (
                               <FeatureCard
                                 key={f.id}
@@ -256,10 +263,10 @@ export const ProjectFeatures = ({
                 <p className="text-sm font-medium">Chưa có đặc điểm sản phẩm</p>
                 <p className="text-xs">
                   {editable
-                    ? 'Tải tin tuyển dụng lên rồi bấm "Trích xuất lại" để LLM trích các đặc điểm.'
+                    ? "Chưa có đặc điểm sản phẩm để chỉnh sửa."
                     : "Dự án này chưa có đặc điểm sản phẩm để hiển thị."}
                 </p>
-                {editable && (
+                {canExtract && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -275,6 +282,7 @@ export const ProjectFeatures = ({
             )}
           </>
         )}
+        {extraContent && <div className="border-t pt-4">{extraContent}</div>}
       </CardContent>
     </Card>
   );
@@ -376,7 +384,7 @@ const FeatureGroup = ({
                     ready ? "bg-feature-ready" : "bg-feature-gap",
                   )}
                 />
-                  <span className="flex min-w-0 flex-1 flex-col gap-1 text-foreground">
+                <span className="flex min-w-0 flex-1 flex-col gap-1 text-foreground">
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="truncate">{name}</span>
                   </span>

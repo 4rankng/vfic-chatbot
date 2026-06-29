@@ -11,6 +11,8 @@ import {
   Activity,
   Boxes,
   BusFront,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   MoreHorizontal,
   Pencil,
@@ -41,7 +43,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
-import type { BusRoute, Project } from "../types";
+import type { BusRoute, BusTimetableList, Project } from "../types";
 import {
   getProjectBusTimetable,
   reindexProject,
@@ -53,6 +55,7 @@ const ProjectListContent = () => {
   const { data, isPending } = useListContext<Project>();
   const { permissions } = usePermissions();
   const isAdmin = permissions === "admin";
+  const canEdit = permissions === "admin" || permissions === "recruiter";
   const refresh = useRefresh();
   const redirect = useRedirect();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -160,12 +163,14 @@ const ProjectListContent = () => {
           selectedId={selectedId}
           isPending={isPending}
           isAdmin={isAdmin}
+          canEdit={canEdit}
           onSelect={setSelectedId}
         />
         {selectedProject ? (
           <ProjectDetailPanel
             project={selectedProject}
             isAdmin={isAdmin}
+            canEdit={canEdit}
           />
         ) : (
           <EmptyState
@@ -338,6 +343,7 @@ const ProjectSwitcher = ({
   selectedId,
   isPending,
   isAdmin,
+  canEdit,
   onSelect,
 }: {
   projects: Project[];
@@ -345,10 +351,12 @@ const ProjectSwitcher = ({
   selectedId: string | null;
   isPending: boolean;
   isAdmin: boolean;
+  canEdit: boolean;
   onSelect: (id: string) => void;
 }) => {
   const notify = useNotify();
   const refresh = useRefresh();
+  const redirect = useRedirect();
 
   const onReindex = async () => {
     if (!selectedProject) return;
@@ -412,6 +420,16 @@ const ProjectSwitcher = ({
         </div>
         {selectedProject && (
           <div className="flex shrink-0 items-center gap-2">
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => redirect("edit", "projects", selectedProject.id)}
+              >
+                <Pencil className="size-4" />
+                Sửa thông tin
+              </Button>
+            )}
             {isAdmin && (
               <ProjectActionsMenu
                 project={selectedProject}
@@ -435,8 +453,6 @@ const ProjectActionsMenu = ({
   onReindex: () => void;
   onDeleted: () => void;
 }) => {
-  const redirect = useRedirect();
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -450,12 +466,6 @@ const ProjectActionsMenu = ({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem
-          onSelect={() => redirect("edit", "projects", project.id)}
-        >
-          <Pencil className="size-4" />
-          Sửa
-        </DropdownMenuItem>
         <DropdownMenuItem onSelect={onReindex}>
           <RefreshCw className="size-4" />
           Làm mới thẻ
@@ -480,39 +490,20 @@ const ProjectActionsMenu = ({
 const ProjectDetailPanel = ({
   project,
   isAdmin,
+  canEdit,
 }: {
   project: Project;
   isAdmin: boolean;
+  canEdit: boolean;
 }) => {
-  const [busRoutes, setBusRoutes] = useState<BusRoute[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setBusRoutes(null);
-    getProjectBusTimetable(String(project.id))
-      .then((res) => {
-        if (!cancelled) setBusRoutes(res.data);
-      })
-      .catch(() => {
-        if (!cancelled) setBusRoutes([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id]);
-
   return (
-    <div className="space-y-4">
-      {/* key on project.id so the whole panel (incl. disclosure + FeatureCard
-          local draft state) resets when the recruiter selects another project.
-          Rendered FIRST so readiness is the unmistakable hero of the detail. */}
-      <ProjectFeatures
-        key={String(project.id)}
-        projectId={String(project.id)}
-        editable={isAdmin}
-      />
-      <BusTimetableSection routes={busRoutes} />
-    </div>
+    <ProjectFeatures
+      key={String(project.id)}
+      projectId={String(project.id)}
+      editable={canEdit}
+      canExtract={isAdmin}
+      extraContent={<BusTimetableSection projectId={String(project.id)} />}
+    />
   );
 };
 
@@ -533,58 +524,105 @@ const directionLabel = (direction: string) =>
     } as Record<string, string>
   )[direction] ?? direction;
 
-const BusTimetableSection = ({ routes }: { routes: BusRoute[] | null }) => {
-  const [showAll, setShowAll] = useState(false);
-  const visibleRoutes = routes ? (showAll ? routes : routes.slice(0, 6)) : [];
-  const hiddenCount = routes ? routes.length - visibleRoutes.length : 0;
+const BUS_ROUTE_PAGE_SIZE = 6;
+
+const BusTimetableSection = ({ projectId }: { projectId: string }) => {
+  const [page, setPage] = useState(1);
+  const [timetable, setTimetable] = useState<BusTimetableList | null>(null);
+  const [loading, setLoading] = useState(true);
+  const routes = timetable?.data ?? [];
+  const total = timetable?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / BUS_ROUTE_PAGE_SIZE));
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getProjectBusTimetable(projectId, {
+      page,
+      perPage: BUS_ROUTE_PAGE_SIZE,
+    })
+      .then((res) => {
+        if (!cancelled) setTimetable(res);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTimetable({
+            data: [],
+            total: 0,
+            page,
+            per_page: BUS_ROUTE_PAGE_SIZE,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, page]);
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="inline-flex items-center gap-2 text-base font-semibold">
-            <BusFront className="size-4 text-muted-foreground" />
-            Lịch xe đưa đón
-          </h3>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {routes === null ? "Đang tải..." : `${routes.length} tuyến`}
+    <section>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="inline-flex items-center gap-2 text-base font-semibold">
+          <BusFront className="size-4 text-muted-foreground" />
+          Lịch xe đưa đón
+        </h3>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {loading && !timetable ? "Đang tải..." : `${total} tuyến`}
+          </span>
+          {total > BUS_ROUTE_PAGE_SIZE && (
+            <span className="text-xs text-muted-foreground">
+              Trang {page}/{pageCount}
             </span>
-            {routes && routes.length > 6 && (
+          )}
+          {total > BUS_ROUTE_PAGE_SIZE && (
+            <div className="flex items-center gap-1">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                onClick={() => setShowAll((value) => !value)}
+                size="icon"
+                className="size-8"
+                disabled={loading || page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                aria-label="Trang trước"
               >
-                {showAll ? "Thu gọn" : "Xem tất cả"}
+                <ChevronLeft className="size-4" />
               </Button>
-            )}
-          </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-8"
+                disabled={loading || page >= pageCount}
+                onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+                aria-label="Trang sau"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
-        {routes === null ? (
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-          </div>
-        ) : routes.length > 0 ? (
-          <div className="mt-3 grid gap-3 xl:grid-cols-2">
-            {visibleRoutes.map((route) => (
-              <BusRouteCard key={route.id} route={route} />
-            ))}
-          </div>
-        ) : (
-          <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-            Chưa có lịch xe đưa đón được trích xuất cho dự án này.
-          </p>
-        )}
-        {hiddenCount > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Đang ẩn {hiddenCount} tuyến. Bấm "Xem tất cả" để hiển thị đầy đủ.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      {loading && !timetable ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
+      ) : routes.length > 0 ? (
+        <div className="mt-3 grid gap-3 xl:grid-cols-2">
+          {routes.map((route) => (
+            <BusRouteCard key={route.id} route={route} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+          Chưa có lịch xe đưa đón được trích xuất cho dự án này.
+        </p>
+      )}
+    </section>
   );
 };
 
