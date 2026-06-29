@@ -84,11 +84,12 @@ Question: Chưa có kinh nghiệm có làm được không?
 
 Answer: Có. Ứng viên chưa có kinh nghiệm vẫn có thể làm vì công ty sẽ hỗ trợ đào tạo trước khi vào làm việc.
 
-### FAQ: Công ty nhận người có hình xăm không?
 
-Question: Công ty nhận người có hình xăm không?
+### FAQ: Xăm kín người 100% thì có đi làm được không?
 
-Answer: Có. Nguồn tuyển dụng hiện tại ghi nhận LG Display có nhận người có hình xăm nên anh/chị có thể đăng ký. Nếu hình xăm ở vị trí đặc biệt hoặc anh/chị lo ngại khi kiểm tra đầu vào, nên để nhân viên tuyển dụng xác nhận thêm.
+Question: Xăm kín người 100% thì có đi làm được không?
+
+Answer: Công ty LG Display cho phép nhận người có hình xăm làm việc, không hạn chế vị trí xăm trên cơ thể. Anh/chị có thể yên tâm đăng ký đi làm. Tuy nhiên, về hình xăm ở mặt hoặc mũi, nguồn thông tin hiện tại không có quy định cụ thể nào. Anh/chị nên để lại thông tin liên hệ để nhân viên tuyển dụng VFIC hỗ trợ xác nhận và hướng dẫn cụ thể hơn.
 
 ### FAQ: Sức khỏe như thế nào thì có thể ứng tuyển?
 
