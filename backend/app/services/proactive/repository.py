@@ -1,0 +1,99 @@
+"""Eligibility scan for proactive follow-up nudges.
+
+Queries ``conversations`` JOIN ``leads`` for BOT-mode, OPEN, not-opted-out,
+interested-but-silent leads within the Zalo 48-hour window. The gap/slot-due
+filter runs in Python (the ``next_due_at`` depends on ``followup_count`` which is
+per-row, so a simple SQL ``now() >= last_inbound_at + GAPS[count]`` cannot be
+expressed without a lateral join).
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select, text
+
+from app.core.config import get_settings
+from app.models.conversation import Conversation
+
+logger = logging.getLogger(__name__)
+_settings = get_settings()
+
+
+async def find_eligible_conversations(db) -> list[Conversation]:
+    """Return conversation objects eligible for a proactive follow-up nudge.
+
+    Preconditions (checked in SQL where possible):
+    - ``conversation.mode == 'BOT'`` and ``status == 'OPEN'``
+    - ``followup_opted_out == FALSE``
+    - ``last_inbound_at`` exists and is within ``48h - margin`` (raw DB pre-filter)
+    - ``followup_count < cap``
+    - ``last_followup_attempt_at`` is old enough (failed-send cooldown)
+    - ``bot_locked_until`` is clear
+    - lead stage is ``NEW / ENGAGED / QUALIFIED``
+    - lead score is not ``not_interested``
+    - lead showed interest (``desired_job`` non-empty OR ``lead_score`` in ``hot/warm``)
+
+    Post-filter (Python-side):
+    - ``now >= last_inbound_at + GAPS[followup_count]``  (slot is due)
+    """
+    margin = timedelta(seconds=_settings.proactive_48h_margin_seconds)
+    cap = _settings.proactive_followup_cap
+    cooldown = timedelta(seconds=_settings.proactive_retry_cooldown_seconds)
+    per_tick = _settings.proactive_per_tick_cap
+    now = datetime.now(timezone.utc)
+    now_minus_margin = now - margin
+    now_minus_cooldown = now - cooldown
+
+    sql = text(
+        """
+        SELECT c.id
+        FROM conversations c
+        JOIN leads l ON l.zalo_id = c.zalo_chat_id
+        WHERE c.mode = 'BOT'
+          AND c.status = 'OPEN'
+          AND c.followup_opted_out = FALSE
+          AND c.last_inbound_at IS NOT NULL
+          AND c.last_inbound_at >= :now_minus_margin
+          AND c.followup_count < :cap
+          AND (c.last_followup_attempt_at IS NULL
+               OR c.last_followup_attempt_at < :now_minus_cooldown)
+          AND (c.bot_locked_until IS NULL OR c.bot_locked_until < now())
+          AND l.lead_stage IN ('NEW', 'ENGAGED', 'QUALIFIED')
+          AND (l.lead_score IS NULL OR l.lead_score <> 'not_interested')
+          AND (l.lead_score IN ('hot', 'warm')
+               OR (l.desired_job IS NOT NULL AND l.desired_job <> ''))
+        ORDER BY c.last_inbound_at DESC
+        LIMIT :per_tick
+        """
+    )
+
+    result = await db.execute(sql, {
+        "now_minus_margin": now_minus_margin,
+        "now_minus_cooldown": now_minus_cooldown,
+        "cap": cap,
+        "per_tick": per_tick,
+    })
+    conv_ids = [row[0] for row in result.fetchall()]
+    if not conv_ids:
+        return []
+
+    stmt = select(Conversation).where(Conversation.id.in_(conv_ids))
+    result = await db.execute(stmt)
+    candidates = list(result.scalars().all())
+
+    # --- Python-side gap filter: only return candidates whose slot is due ---
+    gaps = _settings.proactive_followup_gaps_hours_list
+    eligible: list[Conversation] = []
+    for conv in candidates:
+        idx = min(conv.followup_count, len(gaps) - 1)
+        due_at = conv.last_inbound_at + timedelta(hours=gaps[idx])
+        if now >= due_at:
+            eligible.append(conv)
+
+    logger.info(
+        "proactive eligibility: %d candidates (SQL) → %d after gap filter",
+        len(candidates),
+        len(eligible),
+    )
+    return eligible

@@ -51,3 +51,28 @@ async def enforce_rate_limit(
         raise
     except Exception:  # noqa: BLE001 — redis unavailable -> fail open
         logger.warning("rate-limit check skipped for %s (redis unavailable)", prefix)
+
+
+async def enforce_rate_limit_key(prefix: str, key_part: str, limit: int, window: int) -> None:
+    """Reject with 429 for a caller-supplied bucket, e.g. normalized email.
+
+    Like the IP limiter, this is production-only and fail-open on Redis errors.
+    """
+    if get_settings().app_env == "development":
+        return
+    safe_key = key_part.strip().lower().replace(" ", "")
+    key = f"rl:{prefix}:{safe_key}"
+    try:
+        redis = get_redis()
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, window)
+        if count > limit:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau vài phút.",
+            )
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.warning("rate-limit check skipped for %s (redis unavailable)", prefix)

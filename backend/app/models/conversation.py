@@ -89,6 +89,17 @@ class Conversation(Base):
     bot_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_outbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # --- proactive follow-up state ---
+    followup_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    last_followup_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_followup_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    followup_opted_out: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

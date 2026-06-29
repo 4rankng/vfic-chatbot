@@ -74,6 +74,43 @@ class UserProvisioningService:
         await self.db.refresh(user)
         return user
 
+    async def _other_enabled_admin_count(self, user_id: uuid.UUID) -> int:
+        total = await self.db.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(User.role == Role.admin, User.disabled.is_(False), User.id != user_id)
+        )
+        return int(total or 0)
+
+    async def _lock_admin_lifecycle(self) -> None:
+        # Serializes role/disabled changes that can remove enabled admins. Without
+        # this, two admins can concurrently demote/disable each other after both
+        # observe another enabled admin.
+        await self.db.execute(select(func.pg_advisory_xact_lock(913_202_406)))
+
+    async def _guard_admin_change(
+        self,
+        user: User,
+        *,
+        actor_id: uuid.UUID,
+        next_role: Role,
+        next_disabled: bool,
+    ) -> None:
+        await self._lock_admin_lifecycle()
+        if user.id == actor_id and user.role == Role.admin:
+            if next_disabled:
+                raise ValueError("Bạn không thể vô hiệu hóa chính mình")
+            if next_role != Role.admin:
+                raise ValueError("Bạn không thể tự hạ quyền quản trị của chính mình")
+
+        removes_enabled_admin = (
+            user.role == Role.admin
+            and not user.disabled
+            and (next_role != Role.admin or next_disabled)
+        )
+        if removes_enabled_admin and await self._other_enabled_admin_count(user.id) == 0:
+            raise ValueError("Không thể xóa quản trị viên cuối cùng đang hoạt động")
+
     async def update(
         self, user_id: uuid.UUID, data: UserUpdate, *, actor_id: uuid.UUID
     ) -> User:
@@ -82,14 +119,24 @@ class UserProvisioningService:
             raise LookupError("user not found")
 
         changes = data.model_dump(exclude_unset=True)
+        next_role = changes.get("role", user.role)
+        next_disabled = changes.get("disabled", user.disabled)
+        await self._guard_admin_change(
+            user, actor_id=actor_id, next_role=next_role, next_disabled=next_disabled
+        )
+        security_state_changed = False
         if changes.get("email") is not None:
             user.email = changes["email"].strip().lower()
         if "full_name" in changes:
             user.full_name = changes["full_name"]
         if changes.get("role") is not None:
+            security_state_changed = user.role != changes["role"]
             user.role = changes["role"]
         if "disabled" in changes:
+            security_state_changed = security_state_changed or user.disabled != changes["disabled"]
             user.disabled = changes["disabled"]
+        if security_state_changed:
+            user.token_version += 1
 
         try:
             await self.db.flush()
@@ -119,7 +166,12 @@ class UserProvisioningService:
         if user.disabled == disabled:
             return user
 
+        await self._guard_admin_change(
+            user, actor_id=actor_id, next_role=user.role, next_disabled=disabled
+        )
+
         user.disabled = disabled
+        user.token_version += 1
         await record_audit(
             self.db,
             action="disable_user" if disabled else "enable_user",

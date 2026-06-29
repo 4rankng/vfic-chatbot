@@ -14,7 +14,7 @@ import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persi
 import { Admin } from "@/components/admin/admin";
 
 import leads from "../leads";
-import profiles from "../profiles";
+import users from "../users";
 import conversations from "../conversations";
 import automation from "../automation";
 import knowledge from "../knowledge";
@@ -342,11 +342,11 @@ export const CRM = ({
         <Resource name="projects" {...projects} />
         <Resource name="personas" {...personas} />
         {/* Users admin: always registered so /users resolves.
-            Access is gated inside ProfileList (CanAccess) and via Header
+            Access is gated inside UserList (CanAccess) and via Header
             menu visibility — ra-core's static-children walker does not
             descend into <CanAccess>, so wrapping here would silently
             disable the route. RLS is the security boundary. */}
-        <Resource name="users" {...profiles} />
+        <Resource name="users" {...users} />
       </Admin>
     </PersistQueryClientProvider>
   );

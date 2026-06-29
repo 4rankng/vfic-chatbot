@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_user
 from app.core.config import get_settings
 from app.core.db import get_db
-from app.core.ratelimit import enforce_rate_limit
+from app.core.ratelimit import enforce_rate_limit, enforce_rate_limit_key
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -22,13 +22,16 @@ from app.core.security import (
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     RefreshRequest,
+    ResetPasswordWithOtpRequest,
     TokenResponse,
 )
 from app.schemas.user import UserOut
 from app.services.audit_service import record_audit
 from app.services.auth_service import authenticate
+from app.services.password_reset_service import PasswordResetError, PasswordResetService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _settings = get_settings()
@@ -61,6 +64,35 @@ async def login(
             detail="Email hoặc mật khẩu không đúng",
         )
     return await _tokens_for(user)
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+async def forgot_password(
+    body: ForgotPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> None:
+    normalized = body.email.strip().lower()
+    await enforce_rate_limit(request, "auth-forgot-password", limit=5, window=300)
+    await enforce_rate_limit_key(
+        "auth-forgot-password-email", normalized, limit=3, window=900
+    )
+    await PasswordResetService(db).request_reset(normalized)
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(
+    body: ResetPasswordWithOtpRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    normalized = body.email.strip().lower()
+    await enforce_rate_limit(request, "auth-reset-password", limit=10, window=300)
+    await enforce_rate_limit_key("auth-reset-password-email", normalized, limit=10, window=900)
+    try:
+        await PasswordResetService(db).reset_password(
+            email=normalized, otp=body.otp, new_password=body.new_password
+        )
+    except PasswordResetError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post("/refresh", response_model=TokenResponse)

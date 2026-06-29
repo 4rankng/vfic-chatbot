@@ -76,11 +76,6 @@ async def disable_user(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-    if user_id == admin.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Bạn không thể vô hiệu hóa chính mình",
-        )
     return await _set_disabled(user_id=user_id, disabled=True, actor=admin, db=db)
 
 
@@ -101,4 +96,6 @@ async def _set_disabled(
         user = await svc.set_disabled(user_id, disabled, actor_id=actor.id)
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return UserOut.model_validate(user)

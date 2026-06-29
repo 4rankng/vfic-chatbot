@@ -106,6 +106,7 @@ async def clean_kb(db_session):
 # inside a single atomic TRUNCATE; splitting it into per-table statements fails.
 _TRANSIENT_TABLES = (
     "audit_events",
+    "password_reset_otps",
     "message_dedup",
     "messages",
     "bot_runs",

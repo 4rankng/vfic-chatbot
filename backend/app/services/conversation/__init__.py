@@ -103,6 +103,9 @@ class ConversationService:
     async def record_recruiter_message(self, *args, **kwargs):
         return await self.state.record_recruiter_message(*args, **kwargs)
 
+    async def record_proactive_outcome(self, *args, **kwargs):
+        return await self.state.record_proactive_outcome(*args, **kwargs)
+
     async def deliver_recruiter_message(self, conv, recruiter, body):
         """Send a recruiter reply via Zalo + record it. Returns ``(message, delivered_ok)``.
 

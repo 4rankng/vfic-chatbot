@@ -273,6 +273,18 @@ const getDataProviderWithCustomMethods = () => ({
     return apiJson<ApiRecord>(`${BASE}/users`, { method: "POST", body });
   },
 
+  async disableUser(userId: string) {
+    return apiJson<ApiRecord>(`${BASE}/users/${encodeURIComponent(userId)}/disable`, {
+      method: "POST",
+    });
+  },
+
+  async enableUser(userId: string) {
+    return apiJson<ApiRecord>(`${BASE}/users/${encodeURIComponent(userId)}/enable`, {
+      method: "POST",
+    });
+  },
+
   // Sign-up is disabled. VFIC accounts are provisioned out-of-band by an admin.
   async signUp(_body: {
     email: string;

@@ -99,6 +99,15 @@ class ConversationState:
         )
         self.db.add(msg)
         conv.last_inbound_at = utcnow()
+        # Proactive opt-out: cheap substring scan on the hot path. Accepted
+        # tradeoff (A7) — atomicity with the inbound txn outweighs purity.
+        _lower = body.strip().lower()
+        if _lower and any(p in _lower for p in _settings.proactive_optout_phrases_list):
+            conv.followup_opted_out = True
+            logger.info(
+                "proactive opt-out: conversation=%s phrase detected",
+                conv.zalo_chat_id,
+            )
         if conv.mode != ConversationMode.BOT:
             conv.unread_count = (conv.unread_count or 0) + 1
         await self.db.flush()
@@ -173,6 +182,45 @@ class ConversationState:
         conv.bot_locked_until = None
         if sent:
             conv.last_outbound_at = utcnow()
+        await self.db.commit()
+        await self.db.refresh(msg)
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
+        return msg
+
+    # --- proactive follow-up ---
+
+    async def record_proactive_outcome(
+        self,
+        conv: Conversation,
+        *,
+        message: str,
+        result: SendResult,
+    ) -> Message:
+        """Persist a proactive BOT message (no BotRun). Handles success/failure + cadence.
+
+        On success: increments ``followup_count``, sets ``last_followup_at`` and
+        ``last_outbound_at``, bumps version.  On failure: sets
+        ``last_followup_attempt_at`` only (cadence budget is NOT consumed).
+        Always clears the lock and fires realtime events.
+        """
+        msg = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.BOT,
+            body=message,
+            delivery_status=DeliveryStatus.SENT if result.ok else DeliveryStatus.FAILED,
+            zalo_message_id=result.msg_id,
+            external_error=None if result.ok else result.error,
+        )
+        self.db.add(msg)
+        conv.bot_locked_until = None
+        if result.ok:
+            conv.last_outbound_at = utcnow()
+            conv.last_followup_at = utcnow()
+            conv.followup_count = (conv.followup_count or 0) + 1
+            conv.version += 1
+        else:
+            conv.last_followup_attempt_at = utcnow()
         await self.db.commit()
         await self.db.refresh(msg)
         await self.events.message_created(msg, conv)

@@ -1,13 +1,16 @@
 import type { Identifier, RaRecord } from "ra-core";
 
-export type Profile = {
+export type UserAccount = {
   id: string;
   full_name: string;
   email: string;
   role: "admin" | "recruiter";
+  disabled: boolean;
   created_at: string;
   updated_at: string;
 };
+
+export type Profile = UserAccount;
 
 // Legacy Contact model — still referenced by partially-migrated components in
 // conversations/ and notes/. Kept as an alias of the Lead shape so existing code
