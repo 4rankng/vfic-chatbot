@@ -262,6 +262,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
             )
         except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
             logger.warning("agent error: %s", exc)
+            # refresh to read committed version/mode — see recheck_ownership docstring
+            await svc.db.refresh(conv)
             owned = await svc.recheck_ownership(conv, state.version_at_start)
             if owned:
                 await deps.zalo.send(conv.zalo_chat_id, ERROR_REPLY)
