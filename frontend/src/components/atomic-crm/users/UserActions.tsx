@@ -1,4 +1,10 @@
-import { useCreatePath, useDataProvider, useNotify, useRecordContext, useRefresh } from "ra-core";
+import {
+  useCreatePath,
+  useDataProvider,
+  useNotify,
+  useRecordContext,
+  useRefresh,
+} from "ra-core";
 import { Button } from "@/components/ui/button";
 import { Confirm } from "@/components/admin/confirm";
 import {
@@ -56,47 +62,67 @@ export const UserActions = () => {
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            title="Thao tác"
+      <div
+        className="inline-flex"
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="Thao tác"
+            >
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-44"
             onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
           >
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem asChild>
-            <Link to={editPath} className="flex items-center gap-2">
-              <Pencil className="size-4" />
-              Sửa
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={toggleDisabled}>
-            {record.disabled ? (
-              <Power className="size-4" />
-            ) : (
-              <PowerOff className="size-4" />
-            )}
-            {record.disabled ? "Kích hoạt" : "Vô hiệu hóa"}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={(event) => {
-              event.preventDefault();
-              setDeleteOpen(true);
-            }}
-          >
-            <Trash2 className="size-4" />
-            Xóa vĩnh viễn
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem asChild>
+              <Link
+                to={editPath}
+                className="flex items-center gap-2"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Pencil className="size-4" />
+                Sửa
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.stopPropagation();
+                void toggleDisabled();
+              }}
+            >
+              {record.disabled ? (
+                <Power className="size-4" />
+              ) : (
+                <PowerOff className="size-4" />
+              )}
+              {record.disabled ? "Kích hoạt" : "Vô hiệu hóa"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setDeleteOpen(true);
+              }}
+            >
+              <Trash2 className="size-4" />
+              Xóa vĩnh viễn
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       <Confirm
         isOpen={deleteOpen}
         title="Xóa vĩnh viễn tài khoản?"

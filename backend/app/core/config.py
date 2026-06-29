@@ -95,6 +95,16 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "gemini-embedding-2"
     embedding_dim: int = 3072
 
+    # Retrieval scaling. ``rag_ann_enabled`` uses pgvector halfvec HNSW for
+    # candidate generation, then exact vector re-ranking preserves result quality.
+    rag_ann_enabled: bool = True
+    rag_ann_candidates: int = 200
+    rag_cache_enabled: bool = True
+    rag_result_cache_ttl_seconds: int = 300
+    embedding_cache_ttl_seconds: int = 86400
+    dashboard_cache_enabled: bool = False
+    dashboard_cache_ttl_seconds: int = 10
+
     # LLM "training pipeline" — MiniMax digests raw KB files into RAG units + builds
     # the per-project catalog card. Falls back to the agent model when unset.
     minimax_digest_model: str = ""

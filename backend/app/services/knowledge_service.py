@@ -244,6 +244,9 @@ class KnowledgeService:
         doc.status = KnowledgeStatus.PUBLISHED
         doc.stage = "PUBLISHED"
         await self.db.commit()
+        from app.core.cache import bump_cache_version
+
+        await bump_cache_version("knowledge")
         # rebuild the structured bus graph from the `documents` VIEW (best-effort;
         # never block ingest). The repo helper owns the SQL + commit.
         try:
@@ -257,6 +260,9 @@ class KnowledgeService:
         doc.status = KnowledgeStatus.ARCHIVED
         await record_audit(self.db, action="archive_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=str(doc.id))
         await self.db.commit()
+        from app.core.cache import bump_cache_version
+
+        await bump_cache_version("knowledge")
         await self.db.refresh(doc)
         return doc
 

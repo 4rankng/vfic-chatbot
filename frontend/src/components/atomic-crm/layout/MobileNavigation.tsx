@@ -1,6 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BookOpen, Home, ListTodo, UserCog, Users } from "lucide-react";
+import {
+  BookOpen,
+  Briefcase,
+  Home,
+  ListTodo,
+  UserCog,
+  Users,
+} from "lucide-react";
 import { usePermissions, useTranslate } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
@@ -26,6 +33,7 @@ export const MobileNavigation = () => {
       return "/conversations";
     if (matchPath("/knowledge_sources/*", location.pathname))
       return "/knowledge_sources";
+    if (matchPath("/projects/*", location.pathname)) return "/projects";
     if (matchPath("/users/*", location.pathname)) return "/users";
     return false;
   }, [location.pathname]);
@@ -41,15 +49,17 @@ export const MobileNavigation = () => {
       <div
         className={cn(
           "mx-auto grid h-full w-full max-w-md items-stretch",
-          isAdmin ? "grid-cols-5" : "grid-cols-4",
+          isAdmin ? "grid-cols-5" : "grid-cols-3",
         )}
       >
-        <NavigationButton
-          href="/"
-          Icon={Home}
-          label="Tổng quan"
-          isActive={currentPath === "/"}
-        />
+        {isAdmin && (
+          <NavigationButton
+            href="/"
+            Icon={Home}
+            label="Tổng quan"
+            isActive={currentPath === "/"}
+          />
+        )}
         <NavigationButton
           href="/leads"
           Icon={Users}
@@ -62,12 +72,22 @@ export const MobileNavigation = () => {
           label="Tin nhắn"
           isActive={currentPath === "/conversations"}
         />
-        <NavigationButton
-          href="/knowledge_sources"
-          Icon={BookOpen}
-          label="Kiến thức"
-          isActive={currentPath === "/knowledge_sources"}
-        />
+        {!isAdmin && (
+          <NavigationButton
+            href="/projects"
+            Icon={Briefcase}
+            label="Dự án"
+            isActive={currentPath === "/projects"}
+          />
+        )}
+        {isAdmin && (
+          <NavigationButton
+            href="/knowledge_sources"
+            Icon={BookOpen}
+            label="Kiến thức"
+            isActive={currentPath === "/knowledge_sources"}
+          />
+        )}
         {isAdmin && (
           <NavigationButton
             href="/users"

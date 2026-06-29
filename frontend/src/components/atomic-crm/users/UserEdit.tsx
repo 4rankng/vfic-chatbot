@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
+import { ArrowLeft } from "lucide-react";
+import { Link } from "react-router";
 
 const ROLE_CHOICES = [
   { id: "admin", name: "Quản trị" },
@@ -88,6 +90,12 @@ export const UserEdit = () => (
   <EditBase>
     <TopToolbar>
       <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa tài khoản</h2>
+      <Button asChild variant="outline" size="sm">
+        <Link to="/users">
+          <ArrowLeft className="size-4" />
+          Quay lại
+        </Link>
+      </Button>
     </TopToolbar>
     <UserEditContent />
   </EditBase>

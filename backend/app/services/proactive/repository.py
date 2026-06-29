@@ -41,6 +41,12 @@ async def find_eligible_conversations(db) -> list[Conversation]:
 
     Post-filter (Python-side):
     - ``now >= last_inbound_at + GAPS[followup_count]``  (slot is due)
+
+    The SQL pre-filter intentionally omits LIMIT because the gap filter is
+    per-row (depends on ``followup_count``) and ordering by newest-inbound
+    first would starve actually-due older candidates.  The candidate set
+    is already bounded by the 48h window + ``followup_count < cap``, so
+    filtering the full set is safe.  We cap only *after* the gap filter.
     """
     margin = timedelta(seconds=PROACTIVE_48H_WINDOW_SECONDS)
     cap = PROACTIVE_FOLLOWUP_CAP
@@ -69,7 +75,6 @@ async def find_eligible_conversations(db) -> list[Conversation]:
           AND (l.lead_score IN ('hot', 'warm')
                OR (l.desired_job IS NOT NULL AND l.desired_job <> ''))
         ORDER BY c.last_inbound_at DESC
-        LIMIT :per_tick
         """
     )
 
@@ -77,7 +82,6 @@ async def find_eligible_conversations(db) -> list[Conversation]:
         "now_minus_margin": now_minus_margin,
         "now_minus_cooldown": now_minus_cooldown,
         "cap": cap,
-        "per_tick": per_tick,
     })
     conv_ids = [row[0] for row in result.fetchall()]
     if not conv_ids:
@@ -96,9 +100,14 @@ async def find_eligible_conversations(db) -> list[Conversation]:
         if now >= due_at:
             eligible.append(conv)
 
+    # Cap *after* the gap filter so that actually-due candidates are never
+    # starved by not-yet-due rows that happen to be newer.
+    eligible = eligible[:per_tick]
+
     logger.info(
-        "proactive eligibility: %d candidates (SQL) → %d after gap filter",
+        "proactive eligibility: %d candidates (SQL) → %d after gap filter → %d capped",
         len(candidates),
-        len(eligible),
+        len(eligible) if len(eligible) <= per_tick else len(eligible),
+        min(len(eligible), per_tick),
     )
     return eligible

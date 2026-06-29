@@ -84,6 +84,7 @@ const KnowledgeSourceListContent = () => {
   }, [refresh, sources]);
 
   const hasActive = sources.some(isPipelineActive);
+  const hasSources = sources.length > 0;
 
   return (
     <div className="kb-scope min-h-[calc(100vh-4rem)] px-3 py-5 text-foreground sm:px-4 md:px-6 lg:py-8">
@@ -107,14 +108,16 @@ const KnowledgeSourceListContent = () => {
               </p>
             )}
           </div>
-          <Button
-            type="button"
-            onClick={() => setUploadOpen(true)}
-            className="h-10 w-full rounded-[9px] sm:w-fit"
-          >
-            <Upload className="size-4" />
-            Thêm tệp
-          </Button>
+          {hasSources && (
+            <Button
+              type="button"
+              onClick={() => setUploadOpen(true)}
+              className="h-10 w-full rounded-[9px] sm:w-fit"
+            >
+              <Upload className="size-4" />
+              Thêm tệp
+            </Button>
+          )}
         </header>
 
         <KnowledgeUpload

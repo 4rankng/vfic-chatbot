@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useEffect,
+  useLayoutEffect,
   useState,
   useRef,
   useCallback,
@@ -62,6 +63,7 @@ const QUICK_EMOJIS = [
   "✨",
   "🙌",
 ];
+const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 
 const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
@@ -168,6 +170,30 @@ export const ChatThread = ({
     lastLoadMoreAtRef.current = 0;
     setEmojiOpen(false);
   }, [conversationId]);
+
+  const syncComposerTextarea = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(
+      textarea.scrollHeight,
+      COMPOSER_TEXTAREA_MAX_HEIGHT,
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
+  }, []);
+
+  useLayoutEffect(() => {
+    syncComposerTextarea();
+  }, [reply, canHumanReply, isBotMode, syncComposerTextarea]);
+
+  useEffect(() => {
+    const onResize = () => syncComposerTextarea();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [syncComposerTextarea]);
 
   useEffect(() => {
     if (!emojiOpen) return;

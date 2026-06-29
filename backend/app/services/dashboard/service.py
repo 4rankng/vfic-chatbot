@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache_get_json, cache_set_json
+from app.core.config import get_settings
 from app.models.user import Role, User
 from app.schemas.job import DashboardMetrics, KnowledgeIngestHealth
 from app.services.dashboard.repository import DashboardRepository
@@ -28,6 +30,15 @@ class DashboardService:
         self.db = db
 
     async def metrics(self, viewer: User) -> DashboardMetrics:
+        settings = get_settings()
+        cache_enabled = settings.dashboard_cache_enabled and settings.app_env == "production"
+        cache_scope = "admin" if viewer.role == Role.admin else f"recruiter:{viewer.id}"
+        cache_key = f"dashboard:metrics:{cache_scope}"
+        if cache_enabled:
+            cached = await cache_get_json(cache_key)
+            if isinstance(cached, dict):
+                return DashboardMetrics.model_validate(cached)
+
         # Every count is scoped to the viewer: admin = global, recruiter = assigned
         # to them or unassigned. The repo takes ``recruiter_id=None`` for global.
         recruiter_id = None if viewer.role == Role.admin else str(viewer.id)
@@ -55,7 +66,7 @@ class DashboardService:
             for stage in _LEAD_STAGE_ORDER
         ]
 
-        return DashboardMetrics(
+        metrics = DashboardMetrics(
             open_conversations=int(open_convs or 0),
             hot_leads=int(hot_leads or 0),
             pending_followups=int(pending_fu or 0),
@@ -70,6 +81,11 @@ class DashboardService:
             stage_breakdown=stage_breakdown,
             knowledge_ingest=await self._knowledge_ingest_health() if viewer.role == Role.admin else None,
         )
+        if cache_enabled:
+            await cache_set_json(
+                cache_key, metrics.model_dump(mode="json"), settings.dashboard_cache_ttl_seconds
+            )
+        return metrics
 
     async def _knowledge_ingest_health(self) -> KnowledgeIngestHealth:
         """Admin-only health snapshot for the async knowledge ingest pipeline."""

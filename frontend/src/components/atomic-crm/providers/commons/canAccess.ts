@@ -7,12 +7,15 @@ type CanAccessParams<
   record?: RecordType;
 };
 
+// Resources visible to recruiters. Admin sees everything.
+const RECRUITER_RESOURCES = new Set(["leads", "conversations", "projects"]);
+
 /**
  * VFIC access control.
  *
- * admin and recruiter have identical data access EXCEPT for user management
- * (the `users` resource): only admin can manage users. Everything else is
- * available to both roles. Real enforcement is the FastAPI backend
+ * Recruiters can only access leads, conversations, and projects. All other
+ * resources (users, bot_runs, knowledge_sources, personas, etc.) are
+ * admin-only. Real enforcement is the FastAPI backend
  * (app/api/dependencies.py); this is the UX layer.
  */
 export const canAccess = <
@@ -25,12 +28,5 @@ export const canAccess = <
     return true;
   }
 
-  // User management and the legacy configuration screen are admin-only.
-  // (configuration has no backing table in VFIC — its update is a no-op —
-  // so exposing it to recruiters would only surface a false success toast.)
-  if (params.resource === "users" || params.resource === "configuration") {
-    return false;
-  }
-
-  return true;
+  return RECRUITER_RESOURCES.has(params.resource);
 };

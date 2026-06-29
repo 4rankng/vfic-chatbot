@@ -1,6 +1,7 @@
 import type { AuthProvider, UserIdentity } from "ra-core";
 
 import { canAccess as canAccessFn } from "../commons/canAccess";
+import { closeRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import {
   ApiError,
   apiJson,
@@ -85,6 +86,7 @@ export const getAuthProvider = (): AuthProvider => {
     logout: async () => {
       clearTokens();
       clearIdentity();
+      closeRealtimeSocket();
     },
 
     checkAuth: async () => {

@@ -19,7 +19,7 @@ from app.graph.safety import (
     fast_safety_filter,
     retry_exhausted_fallback,
 )
-from app.graph.types import GraphDeps
+from app.graph.types import GraphDeps, _now, _speaker
 from app.models.conversation import DeliveryStatus, Message, MessageSender
 from app.services.conversation import ConversationService
 from app.services.zalo_bot_service import SendResult
@@ -36,10 +36,6 @@ _OUTCOME = "proactive"
 
 def _outcome(kind: str, *, reason: str, reply: str = "") -> dict:
     return {"outcome": f"{_OUTCOME}:{kind}", "reason": reason, "reply": reply}
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def parse_proactive_decision(raw: str | dict) -> dict:
@@ -132,17 +128,6 @@ def _build_proactive_user_text(
         instruction,
     ]
     return "\n".join(parts)
-
-
-def _speaker(m: Message) -> str:
-    """Map ``Message.sender`` to a Vietnamese label."""
-    if m.sender == MessageSender.WORKER:
-        return "Ứng viên"
-    if m.sender == MessageSender.BOT:
-        return "Bot"
-    if m.sender == MessageSender.RECRUITER:
-        return "Nhân viên"
-    return "Hệ thống"
 
 
 # ---------------------------------------------------------------------------

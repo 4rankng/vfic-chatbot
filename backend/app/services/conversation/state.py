@@ -113,6 +113,7 @@ class ConversationState:
             )
         if conv.mode != ConversationMode.BOT:
             conv.unread_count = (conv.unread_count or 0) + 1
+        conv.version += 1
         await self.db.flush()
         await self.db.commit()
         await self.db.refresh(msg)
@@ -150,7 +151,13 @@ class ConversationState:
         await self.db.commit()
 
     async def recheck_ownership(self, conv: Conversation, version_at_start: int) -> bool:
-        """Pre-send guard: bot may send only if eligible and version unchanged."""
+        """Pre-send guard: bot may send only if eligible and version unchanged.
+
+        IMPORTANT: the caller **must** run ``db.refresh(conv)`` immediately
+        before calling this method (``expire_on_commit=False`` means the
+        identity map hides concurrent takeovers).  Failing to refresh reads a
+        stale in-memory ``version`` and may approve a send after a takeover.
+        """
         return self.run_start_guard(conv) and conv.version == version_at_start
 
     async def record_bot_outcome(

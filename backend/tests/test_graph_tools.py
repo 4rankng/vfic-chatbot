@@ -160,6 +160,50 @@ async def test_search_knowledge_excludes_low_similarity_chunk(db_session):
 
 
 # ---------------------------------------------------------------------------
+# FAQ-first pre-pass: FAQ chunks above floor are prepended
+async def test_search_knowledge_faq_prepass(db_session):
+    """FAQ chunks (category='faq') above the FAQ floor are prepended as a canonical block."""
+    good_vec = "[" + ",".join(["0.01000000"] * 3072) + "]"
+    faq_doc_id = "44444444-4444-4444-4444-000000000001"
+
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_documents(id, drive_file_id, file_name, source, status, raw_text, metadata) "
+            "VALUES (CAST(:id AS uuid), :df, :fn, :src, :status, :raw, CAST('{}' AS jsonb)) "
+            "ON CONFLICT (id) DO NOTHING"
+        ),
+        {"id": faq_doc_id, "df": "f_faq", "fn": "faq_test.md",
+         "src": "upload", "status": "PUBLISHED", "raw": "faq"},
+    )
+    # FAQ chunk with high-similarity embedding
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata, category) "
+            "VALUES (CAST(:did AS uuid), 0, :content, CAST(:e AS vector), CAST('{}' AS jsonb), 'faq') "
+            "ON CONFLICT (document_id, chunk_index) DO UPDATE SET embedding = EXCLUDED.embedding, content = EXCLUDED.content"
+        ),
+        {"did": faq_doc_id, "content": "CANONICAL_FAQ_ANSWER: Lương từ 7-9 triệu", "e": good_vec},
+    )
+    # Regular (non-FAQ) chunk with same embedding
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata, category) "
+            "VALUES (CAST(:did AS uuid), 1, :content, CAST(:e AS vector), CAST('{}' AS jsonb), 'job') "
+            "ON CONFLICT (document_id, chunk_index) DO UPDATE SET embedding = EXCLUDED.embedding, content = EXCLUDED.content"
+        ),
+        {"did": faq_doc_id, "content": "REGULAR_CHUNK_DATA", "e": good_vec},
+    )
+    await db_session.commit()
+
+    out = await search_knowledge(db_session, emb, "Lương bao nhiêu")
+    assert "CÂU HỎI THƯỜNG GẶP" in out
+    assert "CANONICAL_FAQ_ANSWER" in out
+    assert "REGULAR_CHUNK_DATA" in out
+    # FAQ content appears before the regular chunk in the output
+    assert out.index("CANONICAL_FAQ_ANSWER") < out.index("REGULAR_CHUNK_DATA")
+
+
+# ---------------------------------------------------------------------------
 # F4: greeting_gate allows numeric answers like "5" (age)
 def test_greeting_gate_allows_numeric_answers():
     assert greeting_gate("5") is True

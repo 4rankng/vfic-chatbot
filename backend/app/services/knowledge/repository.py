@@ -19,6 +19,7 @@ from typing import Any, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import bump_cache_version
 from app.core.vector import vec_literal
 
 
@@ -65,6 +66,7 @@ class KnowledgeChunkRepo:
                 },
             )
         await self.db.commit()
+        await bump_cache_version("knowledge")
 
     async def list_for_doc(self, doc_id: uuid.UUID, *, limit: int = 50) -> list[dict]:
         """A document's chunks (catalog order) as ready-to-serialize dicts.

@@ -56,11 +56,13 @@ const Header = () => {
 
           {/* Pill nav */}
           <nav className="hidden flex-1 items-center justify-center gap-1 md:flex lg:gap-2">
-            <NavPill
-              label={translate("ra.page.dashboard")}
-              to="/"
-              isActive={currentPath === "/"}
-            />
+            {isAdmin && (
+              <NavPill
+                label={translate("ra.page.dashboard")}
+                to="/"
+                isActive={currentPath === "/"}
+              />
+            )}
             <NavPill
               label={translate("resources.leads.name", { smart_count: 2 })}
               to="/leads"
@@ -78,11 +80,13 @@ const Header = () => {
               to="/projects"
               isActive={currentPath === "/projects"}
             />
-            <NavPill
-              label="Kiến thức"
-              to="/knowledge_sources"
-              isActive={currentPath === "/knowledge_sources"}
-            />
+            {isAdmin && (
+              <NavPill
+                label="Kiến thức"
+                to="/knowledge_sources"
+                isActive={currentPath === "/knowledge_sources"}
+              />
+            )}
             {isAdmin && (
               <NavPill
                 label="Tài khoản"

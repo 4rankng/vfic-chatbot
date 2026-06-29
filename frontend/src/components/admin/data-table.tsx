@@ -241,26 +241,40 @@ const DataTableRow = ({
     [handleToggleItem, record.id],
   );
 
-  const handleClick = useCallback(async () => {
-    const temporaryLink =
-      typeof rowClick === "function"
-        ? rowClick(record.id, resource, record)
-        : rowClick;
+  const handleClick = useCallback(
+    async (event: React.MouseEvent<HTMLTableRowElement>) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          'a, button, input, select, textarea, [role="button"], [role="menuitem"]',
+        )
+      ) {
+        return;
+      }
 
-    const link = isPromise(temporaryLink) ? await temporaryLink : temporaryLink;
+      const temporaryLink =
+        typeof rowClick === "function"
+          ? rowClick(record.id, resource, record)
+          : rowClick;
 
-    const path = await getPathForRecord({
-      record,
-      resource,
-      link,
-    });
-    if (path === false || path == null) {
-      return;
-    }
-    navigate(path, {
-      state: { _scrollToTop: true },
-    });
-  }, [record, resource, rowClick, navigate, getPathForRecord]);
+      const link = isPromise(temporaryLink)
+        ? await temporaryLink
+        : temporaryLink;
+
+      const path = await getPathForRecord({
+        record,
+        resource,
+        link,
+      });
+      if (path === false || path == null) {
+        return;
+      }
+      navigate(path, {
+        state: { _scrollToTop: true },
+      });
+    },
+    [record, resource, rowClick, navigate, getPathForRecord],
+  );
 
   return (
     <TableRow

@@ -32,7 +32,7 @@ from app.graph.safety import (
     parse_verdict,
     retry_exhausted_fallback,
 )
-from app.graph.types import BotRunState, GraphDeps, _now
+from app.graph.types import BotRunState, GraphDeps, _now, _speaker
 from app.models.conversation import DeliveryStatus, Message, MessageSender
 from app.services.conversation import ConversationService
 
@@ -40,16 +40,6 @@ logger = logging.getLogger(__name__)
 ZALO_TYPING_HEARTBEAT_SECONDS = 4.0
 RECENT_HISTORY_LIMIT = 16
 _PHONE_RE = re.compile(r"(?:\+?84|0)(?:\D*\d){8,10}\b")
-
-
-def _history_speaker(msg: Message) -> str:
-    if msg.sender == MessageSender.WORKER:
-        return "Ứng viên"
-    if msg.sender == MessageSender.BOT:
-        return "Bot"
-    if msg.sender == MessageSender.RECRUITER:
-        return "Nhân viên"
-    return "Hệ thống"
 
 
 def _last_bot_message(recent_messages: list[Message]) -> str:
@@ -162,7 +152,7 @@ def _build_agent_user_text(
 
     if history:
         history_lines = [
-            f"- {_history_speaker(m)}: {m.body.strip()}" for m in history
+            f"- {_speaker(m)}: {m.body.strip()}" for m in history
         ]
     else:
         history_lines = ["- (chưa có tin nhắn trước đó)"]

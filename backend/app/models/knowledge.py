@@ -55,7 +55,7 @@ class KnowledgeDocument(Base):
 
     @property
     def is_canonical(self) -> bool:
-        return (self.metadata_ or {}).get("schema_version") == "vfic-knowledge-v1"
+        return (self.metadata_ or {}).get("schema_version") in {"vfic-knowledge-v1", "vfic-faq-v1"}
 
 
 class KnowledgeChunk(Base):
@@ -76,3 +76,4 @@ class KnowledgeChunk(Base):
     category: Mapped[str | None] = mapped_column(String)
     entities: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
     confidence: Mapped[str | None] = mapped_column(String)
+    search_text: Mapped[str | None] = mapped_column(Text)

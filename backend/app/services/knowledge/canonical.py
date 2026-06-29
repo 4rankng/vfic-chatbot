@@ -37,6 +37,21 @@ REQUIRED_FRONTMATTER = (
     "source_owner",
 )
 REQUIRED_SECTIONS = ("Company Overview", "Worker Features", "Rules/Policies", "FAQ", "Contacts")
+FAQ_SCHEMA_VERSION = "vfic-faq-v1"
+FAQ_TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "vfic_faq_v1.md"
+FAQ_REQUIRED_FRONTMATTER = (
+    "schema_version",
+    "doc_id",
+    "doc_version",
+    "title",
+    "project_slug",
+    "locale",
+    "audience",
+    "content_type",
+    "effective_from",
+    "source_owner",
+)
+FAQ_REQUIRED_SECTIONS = ("FAQ",)
 ACTIVE_FEATURE_KEYS = (
     "take_home_income",
     "pay_frequency",
@@ -164,6 +179,10 @@ def load_template() -> str:
     return TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
+def load_faq_template() -> str:
+    return FAQ_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+
 def checksum_text(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -210,9 +229,12 @@ def parse_canonical_markdown(text: str) -> ParsedKnowledgeDocument:
     text = _normalize_markdown_text(text)
     errors: list[str] = []
     metadata, body = _split_frontmatter(text, errors)
-    if metadata.get("schema_version") != SCHEMA_VERSION:
-        errors.append(f"schema_version must be {SCHEMA_VERSION!r}")
-    for key in REQUIRED_FRONTMATTER:
+    is_faq = metadata.get("schema_version") == FAQ_SCHEMA_VERSION
+    if metadata.get("schema_version") not in {SCHEMA_VERSION, FAQ_SCHEMA_VERSION}:
+        errors.append(f"schema_version must be {SCHEMA_VERSION!r} or {FAQ_SCHEMA_VERSION!r}")
+    req_frontmatter = FAQ_REQUIRED_FRONTMATTER if is_faq else REQUIRED_FRONTMATTER
+    req_sections = FAQ_REQUIRED_SECTIONS if is_faq else REQUIRED_SECTIONS
+    for key in req_frontmatter:
         if _is_empty(metadata.get(key)):
             errors.append(f"frontmatter.{key} is required")
     _validate_date_field(metadata, "effective_from", errors, required=True)
@@ -223,12 +245,16 @@ def parse_canonical_markdown(text: str) -> ParsedKnowledgeDocument:
         metadata["tags"] = []
 
     sections = _sections(body)
-    for section in REQUIRED_SECTIONS:
+    for section in req_sections:
         if section not in sections or not sections[section].strip():
             errors.append(f"section {section!r} is required and cannot be empty")
 
-    chunks = _build_chunks(metadata, sections, errors)
-    timetable = _parse_bus_routes(metadata, sections.get("Bus Routes", ""), errors)
+    if is_faq:
+        chunks = _faq_chunks(metadata, sections.get("FAQ", ""))
+        timetable = ParsedBusTimetable()
+    else:
+        chunks = _build_chunks(metadata, sections, errors)
+        timetable = _parse_bus_routes(metadata, sections.get("Bus Routes", ""), errors)
     if errors:
         raise CanonicalValidationError(errors)
     return ParsedKnowledgeDocument(

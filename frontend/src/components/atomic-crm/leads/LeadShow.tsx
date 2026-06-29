@@ -52,15 +52,7 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
         if (cancelled) return;
         const msg =
           e instanceof Error ? e.message : "Không thể tải cuộc trò chuyện";
-        // Only the genuine "relation does not exist" (schema/table missing, e.g.
-        // a fresh or demo setup) should render as "no conversation yet". Any other
-        // failure (RLS denial, network, 5xx) is surfaced instead of swallowed.
-        if (/relation.*does not exist/i.test(msg)) {
-          setConversation(null);
-          setError(null);
-        } else {
-          setError(msg);
-        }
+        setError(msg);
         setIsLoading(false);
       });
     return () => {
@@ -431,16 +423,9 @@ export const LeadShowContentSheet = () => {
         setMessages(msgs);
         setStatus(msgs.length > 0 ? "ready" : "empty");
       })
-      .catch((e: unknown) => {
+      .catch(() => {
         if (cancelled) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        // A missing table (fresh/demo setup) reads as "no conversation yet",
-        // not a hard error — mirrors LeadChat's guard.
-        if (/relation.*does not exist/i.test(msg)) {
-          setStatus("empty");
-        } else {
-          setStatus("error");
-        }
+        setStatus("error");
       });
 
     return () => {

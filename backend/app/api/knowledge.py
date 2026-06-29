@@ -32,14 +32,23 @@ from app.schemas.knowledge import (
     UploadRequest,
 )
 from app.services.knowledge_service import KnowledgeFileExtractionError, KnowledgeService
-from app.services.knowledge.canonical import CanonicalValidationError, load_template
+from app.services.knowledge.canonical import CanonicalValidationError, load_faq_template, load_template
 from app.workers.ingest_worker import enqueue_ingest
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 
 @router.get("/format/template", response_class=PlainTextResponse)
-async def get_knowledge_format_template(_admin: User = Depends(require_admin)) -> PlainTextResponse:
+async def get_knowledge_format_template(
+    kind: str = Query("knowledge", pattern="^(knowledge|faq)$"),
+    _admin: User = Depends(require_admin),
+) -> PlainTextResponse:
+    if kind == "faq":
+        return PlainTextResponse(
+            load_faq_template(),
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="vfic-faq-v1-template.md"'},
+        )
     return PlainTextResponse(
         load_template(),
         media_type="text/markdown; charset=utf-8",

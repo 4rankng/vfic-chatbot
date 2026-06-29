@@ -47,3 +47,20 @@ class GraphDeps:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _speaker(msg) -> str:
+    """Map ``Message.sender`` to a Vietnamese label.
+
+    Shared by both ``runner.py`` (reactive turns) and ``proactive.py``
+    (proactive nudges) to avoid drift between identical label maps.
+    """
+    from app.models.conversation import MessageSender
+
+    if msg.sender == MessageSender.WORKER:
+        return "Ứng viên"
+    if msg.sender == MessageSender.BOT:
+        return "Bot"
+    if msg.sender == MessageSender.RECRUITER:
+        return "Nhân viên"
+    return "Hệ thống"

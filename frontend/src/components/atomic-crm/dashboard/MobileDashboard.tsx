@@ -6,197 +6,223 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
-  Users,
-  UserCheck,
-  TrendingUp,
-  AlertCircle,
   Activity,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Server,
 } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate, Navigate } from "react-router";
+import { usePermissions } from "ra-core";
 import { useDashboardStats } from "./useDashboardStats";
+import { stageLabel } from "../knowledge/stageTone";
 
 export const MobileDashboard = () => {
   const navigate = useNavigate();
+  const { permissions } = usePermissions();
 
-  const {
-    totalLeads: totalLeadsCount,
-    qualifiedCount: qualifiedLeads,
-    unreadConversationCount: unreadConvs,
-    hiredRate,
-    stageBreakdown,
-    isPending: isLoading,
-  } = useDashboardStats();
+  if (permissions === "recruiter") {
+    return <Navigate to="/leads" replace />;
+  }
+
+  const { knowledgeIngest, isPending } = useDashboardStats();
 
   return (
     <main className="mx-auto flex w-full max-w-screen-xl flex-col gap-5 px-4 py-5">
-      {/* Analytics Title for Mobile */}
-      <div>
-        <h2 className="font-display text-2xl font-extrabold tracking-wide uppercase text-foreground">
-          Tổng quan phân tích
-        </h2>
-        <p className="text-muted-foreground text-xs font-medium mt-0.5">
-          Hiệu suất tuyển dụng
-        </p>
-      </div>
+      {isPending ? (
+        <div className="w-full h-[200px] flex items-center justify-center text-muted-foreground">
+          <Activity className="size-6 animate-spin" />
+        </div>
+      ) : knowledgeIngest ? (
+        <Card className="border border-border bg-card shadow-xs">
+          <CardHeader className="pb-3 pt-4 px-4">
+            <CardTitle className="flex items-center gap-2">
+              <span className="w-1.5 h-4.5 bg-primary rounded-full" />
+              <span className="font-display text-base font-bold tracking-wider uppercase text-foreground">
+                Knowledge ingest
+              </span>
+            </CardTitle>
+            <CardDescription className="text-[11px] text-muted-foreground">
+              Tín hiệu vận hành để quyết định retry, restart worker hoặc kiểm tra
+              LLM
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <MobileIngestMetric
+                label="Đang xử lý"
+                value={knowledgeIngest.processing_count}
+                icon={<Activity className="size-3.5" />}
+                tone={knowledgeIngest.processing_count > 0 ? "busy" : "ok"}
+              />
+              <MobileIngestMetric
+                label="Có thể kẹt"
+                value={knowledgeIngest.stuck_count}
+                icon={<Clock3 className="size-3.5" />}
+                tone={knowledgeIngest.stuck_count > 0 ? "warn" : "ok"}
+              />
+              <MobileIngestMetric
+                label="Nguồn lỗi"
+                value={knowledgeIngest.failed_document_count}
+                icon={<AlertTriangle className="size-3.5" />}
+                tone={
+                  knowledgeIngest.failed_document_count > 0 ? "bad" : "ok"
+                }
+              />
+              <MobileIngestMetric
+                label="Đã xuất bản"
+                value={knowledgeIngest.published_document_count}
+                icon={<CheckCircle2 className="size-3.5" />}
+                tone="ok"
+              />
+            </div>
 
-      {/* KPI Cards (2 columns layout) */}
-      <div className="grid grid-cols-2 gap-3.5">
-        <MobileKpiCard
-          title="Tổng khách hàng"
-          value={
-            isLoading ? "..." : totalLeadsCount.toString().padStart(2, "0")
-          }
-          icon={<Users className="size-4" />}
-          description="Tất cả quy trình"
-        />
-        <MobileKpiCard
-          title="Cần phản hồi"
-          value={isLoading ? "..." : unreadConvs.toString().padStart(2, "0")}
-          icon={<AlertCircle className="size-4" />}
-          description="Đợi phản hồi"
-        />
-        <MobileKpiCard
-          title="Đạt chuẩn"
-          value={
-            isLoading ? "..." : qualifiedLeads.toString().padStart(2, "0")
-          }
-          icon={<UserCheck className="size-4" />}
-          description="Sẵn sàng tuyển dụng"
-        />
-        <MobileKpiCard
-          title="Tỷ lệ tuyển"
-          value={isLoading ? "..." : `${hiredRate}%`}
-          icon={<TrendingUp className="size-4" />}
-          description="Tỷ lệ chuyển đổi"
-        />
-      </div>
+            <div className="grid grid-cols-3 gap-2">
+              <MobileIngestMetric
+                label="Queue"
+                value={knowledgeIngest.queue_depth}
+                icon={<Database className="size-3" />}
+                tone={knowledgeIngest.queue_depth > 0 ? "busy" : "neutral"}
+              />
+              <MobileIngestMetric
+                label="RQ failed"
+                value={knowledgeIngest.failed_job_count}
+                icon={<AlertCircle className="size-3" />}
+                tone={
+                  knowledgeIngest.failed_job_count > 0 ? "warn" : "neutral"
+                }
+              />
+              <MobileIngestMetric
+                label="Worker"
+                value={knowledgeIngest.worker_count}
+                icon={<Server className="size-3" />}
+                tone={knowledgeIngest.worker_count === 0 ? "bad" : "neutral"}
+              />
+            </div>
 
-      {/* Pipeline Distribution snapshot */}
-      <Card className="border border-border bg-card shadow-xs">
-        <CardHeader className="pb-3 pt-4 px-4">
-          <CardTitle className="flex items-center gap-2">
-            <span className="w-1.5 h-4.5 bg-primary rounded-full" />
-            <span className="font-display text-base font-bold tracking-wider uppercase text-foreground">
-              Phân bổ quy trình
-            </span>
-          </CardTitle>
-          <CardDescription className="text-[11px] text-muted-foreground">
-            Tổng quan khách hàng theo giai đoạn
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="flex flex-col gap-2.5">
-            {isLoading ? (
-              <div className="w-full h-[120px] flex items-center justify-center text-muted-foreground">
-                <Activity className="size-6 animate-spin" />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <span>Pipeline stages</span>
+                <span>{knowledgeIngest.stage_breakdown.length} trạng thái</span>
               </div>
-            ) : (
-              stageBreakdown.map((stage) => {
-                const count = stage.count;
-                const percentage = stage.percentage;
-                const bgClass = stage.color;
-                return (
+              {knowledgeIngest.stage_breakdown.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Chưa có nguồn kiến thức.
+                </p>
+              ) : (
+                knowledgeIngest.stage_breakdown.map((row) => (
                   <div
-                    key={stage.value}
-                    className="flex items-center gap-3 cursor-pointer hover:bg-muted/40 p-1.5 rounded-lg transition-all"
-                    onClick={() =>
-                      navigate(
-                        `/leads?filter=%7B"lead_stage"%3A"${stage.value}"%7D`,
-                      )
-                    }
+                    key={row.stage}
+                    className="flex items-center gap-2 rounded-lg bg-muted/20 px-2.5 py-1.5"
                   >
-                    <div className="w-20 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
-                      {stage.label}
+                    <div className="w-28 text-[10px] font-semibold text-muted-foreground truncate">
+                      {stageLabel(row.stage)}
                     </div>
-                    <div className="w-6 text-xs font-semibold font-mono text-right">
-                      {count}
-                    </div>
-                    <div className="flex-1 h-1.5 bg-muted/60 rounded-full overflow-hidden flex">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/60">
                       <div
-                        className={`h-full ${bgClass} rounded-full`}
-                        style={{ width: `${percentage}%` }}
+                        className="h-full rounded-full bg-primary"
+                        style={{
+                          width: `${Math.min(100, Math.max(8, row.count * 12))}%`,
+                        }}
                       />
                     </div>
-                    <div className="w-8 text-[10px] font-semibold font-mono text-muted-foreground text-right">
-                      {percentage}%
+                    <div className="w-8 text-right text-xs font-semibold font-mono">
+                      {row.count}
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                ))
+              )}
+            </div>
 
-      {/* System Activity */}
-      <Card className="border border-border bg-card shadow-xs">
-        <CardHeader className="pb-3 pt-4 px-4">
-          <CardTitle className="flex items-center gap-2">
-            <span className="w-1.5 h-4.5 bg-primary rounded-full" />
-            <span className="font-display text-base font-bold tracking-wider uppercase text-foreground">
-              Hoạt động hệ thống
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 flex flex-col gap-4">
-          <div
-            className="space-y-1 cursor-pointer hover:bg-muted/50 p-1.5 rounded-md transition-colors"
-            onClick={() => navigate("/conversations")}
-          >
-            <h4 className="text-xs font-semibold flex items-center gap-2">
-              <AlertCircle className="size-3.5 text-amber-500" />
-              Cần chú ý
-            </h4>
-            <p className="text-[10px] text-muted-foreground ml-5.5">
-              {unreadConvs} cuộc trò chuyện cần phản hồi
-            </p>
-          </div>
-
-          <div
-            className="space-y-1 cursor-pointer hover:bg-muted/50 p-1.5 rounded-md transition-colors"
-            onClick={() =>
-              navigate(`/leads?filter=%7B"lead_stage"%3A"QUALIFIED"%7D`)
-            }
-          >
-            <h4 className="text-xs font-semibold flex items-center gap-2">
-              <UserCheck className="size-3.5 text-cyan-500" />
-              Ứng viên đạt chuẩn
-            </h4>
-            <p className="text-[10px] text-muted-foreground ml-5.5">
-              {qualifiedLeads} ứng viên cần xem xét
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <span>Recent issues</span>
+                <button
+                  type="button"
+                  className="text-primary hover:text-primary/80"
+                  onClick={() => navigate("/knowledge_sources")}
+                >
+                  Mở kiến thức
+                </button>
+              </div>
+              {knowledgeIngest.recent_issues.length === 0 ? (
+                <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-4 text-xs text-muted-foreground">
+                  Không có nguồn lỗi hoặc đứng quá 10 phút.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {knowledgeIngest.recent_issues.map((issue) => (
+                    <button
+                      key={issue.id}
+                      type="button"
+                      className="w-full rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-left transition-colors hover:bg-muted/45"
+                      onClick={() =>
+                        navigate(`/knowledge_sources/${issue.id}/show`)
+                      }
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-foreground">
+                            {issue.file_name}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            {stageLabel(issue.stage)} ·{" "}
+                            {issue.minutes_since_update} phút
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-md border border-border/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {issue.status}
+                        </span>
+                      </div>
+                      {issue.error && (
+                        <p className="mt-1 line-clamp-2 text-[10px] text-destructive">
+                          {issue.error}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </main>
   );
 };
 
-const MobileKpiCard = ({
-  title,
+const MobileIngestMetric = ({
+  label,
   value,
   icon,
-  description,
+  tone,
 }: {
-  title: string;
-  value: string;
+  label: string;
+  value: number;
   icon: React.ReactNode;
-  description: string;
-}) => (
-  <Card className="border border-border bg-card shadow-xs p-3">
-    <div className="flex items-center justify-between">
-      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground truncate mr-1">
-        {title}
-      </span>
-      <div className="p-1 bg-muted/40 text-muted-foreground border border-border/50 rounded-md shrink-0">
-        {icon}
+  tone: "ok" | "busy" | "warn" | "bad" | "neutral";
+}) => {
+  const toneClass = {
+    ok: "text-emerald-600 bg-emerald-500/10 border-emerald-500/20",
+    busy: "text-sky-600 bg-sky-500/10 border-sky-500/20",
+    warn: "text-amber-600 bg-amber-500/10 border-amber-500/20",
+    bad: "text-destructive bg-destructive/10 border-destructive/20",
+    neutral: "text-muted-foreground bg-muted/30 border-border/70",
+  }[tone];
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+          {label}
+        </span>
+        <span className={`rounded-md border p-1 ${toneClass}`}>{icon}</span>
+      </div>
+      <div className="mt-2 text-lg font-semibold font-mono tracking-tight text-foreground">
+        {value}
       </div>
     </div>
-    <div className="text-xl font-semibold font-mono tracking-tight text-foreground mt-1.5">
-      {value}
-    </div>
-    <p className="text-[9px] font-medium text-muted-foreground/80 mt-1 truncate">
-      {description}
-    </p>
-  </Card>
-);
+  );
+};

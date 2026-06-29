@@ -18,6 +18,7 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.text import normalize_vietnamese_text
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class RetrievalRepository:
     # Chosen so that even moderately relevant chunks (>= 0.30) pass while
     # near-orthogonal embeddings (random topic drift) are excluded.
     SIMILARITY_FLOOR = 0.30
+    FAQ_SIMILARITY_FLOOR = 0.70
 
     _LEXICAL_STOPWORDS = {
         "anh",
@@ -66,6 +68,11 @@ class RetrievalRepository:
         self.db = db
 
     @staticmethod
+    def _ann_enabled() -> bool:
+        s = get_settings()
+        return bool(s.rag_ann_enabled and s.embedding_dim == 3072)
+
+    @staticmethod
     def _chunk_visibility(project_clause: str) -> str:
         """Shared WHERE predicate for chunk-scoping (vector + lexical paths).
 
@@ -88,6 +95,25 @@ class RetrievalRepository:
 
     async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list:
         """Top-k memory rows for a chat (``match_memories`` SQL function)."""
+        try:
+            filter_obj = json.loads(filter_json or "{}")
+        except json.JSONDecodeError:
+            filter_obj = {}
+        chat_id = filter_obj.get("chat_id")
+        if isinstance(chat_id, str) and set(filter_obj) <= {"chat_id"}:
+            return (
+                await self.db.execute(
+                    text(
+                        "SELECT id, content, metadata, "
+                        "       1 - (embedding <=> CAST(:emb AS vector)) AS similarity "
+                        "FROM memories "
+                        "WHERE chat_id = :chat_id AND embedding IS NOT NULL "
+                        "ORDER BY embedding <=> CAST(:emb AS vector) "
+                        "LIMIT :k"
+                    ),
+                    {"emb": emb, "k": top_k, "chat_id": chat_id},
+                )
+            ).all()
         return (
             await self.db.execute(
                 text(
@@ -129,21 +155,43 @@ class RetrievalRepository:
         if project_ids:
             project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
             params["pids"] = project_ids
-        vector_rows = (
-            await self.db.execute(
-                text(
-                    "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
-                    "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
-                    "FROM knowledge_chunks c "
-                    "JOIN knowledge_documents d ON d.id = c.document_id "
-                    "WHERE " + self._chunk_visibility(project_clause) + " "
-                    "  AND 1 - (c.embedding <=> CAST(:emb AS vector)) >= :floor "
-                    "ORDER BY c.embedding <=> CAST(:emb AS vector) "
-                    "LIMIT :k"
-                ),
-                {**params, "floor": self.SIMILARITY_FLOOR},
+        s = get_settings()
+        if self._ann_enabled():
+            vector_sql = (
+                "WITH ann_candidates AS ("
+                "  SELECT c.id "
+                "  FROM knowledge_chunks c "
+                "  JOIN knowledge_documents d ON d.id = c.document_id "
+                "  WHERE " + self._chunk_visibility(project_clause) + " "
+                "  ORDER BY c.embedding::halfvec(3072) <=> CAST(:emb AS halfvec(3072)) "
+                "  LIMIT :candidate_k"
+                ") "
+                "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
+                "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
+                "FROM ann_candidates ac "
+                "JOIN knowledge_chunks c ON c.id = ac.id "
+                "WHERE 1 - (c.embedding <=> CAST(:emb AS vector)) >= :floor "
+                "ORDER BY c.embedding <=> CAST(:emb AS vector) "
+                "LIMIT :k"
             )
-        ).all()
+            vector_params = {
+                **params,
+                "floor": self.SIMILARITY_FLOOR,
+                "candidate_k": max(int(s.rag_ann_candidates), top_k),
+            }
+        else:
+            vector_sql = (
+                "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
+                "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
+                "FROM knowledge_chunks c "
+                "JOIN knowledge_documents d ON d.id = c.document_id "
+                "WHERE " + self._chunk_visibility(project_clause) + " "
+                "  AND 1 - (c.embedding <=> CAST(:emb AS vector)) >= :floor "
+                "ORDER BY c.embedding <=> CAST(:emb AS vector) "
+                "LIMIT :k"
+            )
+            vector_params = {**params, "floor": self.SIMILARITY_FLOOR}
+        vector_rows = (await self.db.execute(text(vector_sql), vector_params)).all()
         logger.debug(
             "match_documents vector branch: %d rows (floor=%.2f)",
             len(vector_rows), self.SIMILARITY_FLOOR,
@@ -152,17 +200,28 @@ class RetrievalRepository:
         if not terms:
             return vector_rows
 
+        lexical_terms = terms[:8]
+        term_predicates = [
+            f"c.search_text ILIKE :term_like_{i}" for i, _term in enumerate(lexical_terms)
+        ]
+        lexical_prefilter = " OR ".join(term_predicates) or "false"
+        lexical_params = {
+            **params,
+            "terms": lexical_terms,
+            **{f"term_like_{i}": f"%{term}%" for i, term in enumerate(lexical_terms)},
+        }
         lexical_rows = (
             await self.db.execute(
                 text(
                     "WITH haystack AS ("
                     "  SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
-                    "         public.normalize_search_text("
+                    "         COALESCE(c.search_text, public.normalize_search_text("
                     "           COALESCE(c.content, '') || ' ' || COALESCE(c.source_quote, '') || ' ' || COALESCE(c.summary, '')"
-                    "         ) AS searchable "
+                    "         )) AS searchable "
                     "  FROM knowledge_chunks c "
                     "  JOIN knowledge_documents d ON d.id = c.document_id "
                     "  WHERE " + self._chunk_visibility(project_clause) + " "
+                    "    AND (c.search_text IS NULL OR " + lexical_prefilter + ") "
                     "), scored AS ("
                     "  SELECT id, content, source_quote, summary, metadata, "
                     "         (SELECT count(*) FROM unnest(CAST(:terms AS text[])) AS term(value) "
@@ -177,7 +236,7 @@ class RetrievalRepository:
                     "ORDER BY lexical_hits DESC "
                     "LIMIT :k"
                 ),
-                {**params, "terms": terms},
+                lexical_params,
             )
         ).all()
 
@@ -206,6 +265,49 @@ class RetrievalRepository:
             len(merged), lexical_count, len(merged) - lexical_count, top_k,
         )
         return merged[:top_k]
+
+    async def match_faq(
+        self,
+        emb: str,
+        top_k: int = 3,
+        *,
+        project_ids: list[str] | None = None,
+        floor: float | None = None,
+    ) -> list:
+        """FAQ-first retrieval: scoped to ``category='faq'`` chunks with a higher floor.
+
+        Used by ``search_knowledge`` to prepend canonical FAQ answers before the
+        general retrieval pass.  Reuses ``_chunk_visibility`` for status / effective-date /
+        project scoping so archived or out-of-date FAQ chunks are excluded automatically.
+        """
+        if floor is None:
+            floor = self.FAQ_SIMILARITY_FLOOR
+        project_clause = ""
+        params: dict[str, object] = {"emb": emb, "k": top_k, "filter": "{}"}
+        if project_ids:
+            project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
+            params["pids"] = project_ids
+        rows = (
+            await self.db.execute(
+                text(
+                    "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
+                    "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
+                    "FROM knowledge_chunks c "
+                    "JOIN knowledge_documents d ON d.id = c.document_id "
+                    "WHERE " + self._chunk_visibility(project_clause) + " "
+                    "  AND c.category = 'faq' "
+                    "  AND 1 - (c.embedding <=> CAST(:emb AS vector)) >= :faq_floor "
+                    "ORDER BY c.embedding <=> CAST(:emb AS vector) "
+                    "LIMIT :k"
+                ),
+                {**params, "faq_floor": floor},
+            )
+        ).all()
+        logger.debug(
+            "match_faq: %d rows (floor=%.2f, category=faq)",
+            len(rows), floor,
+        )
+        return list(rows)
 
     @staticmethod
     def _normalize_text(value: str) -> str:

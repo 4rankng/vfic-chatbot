@@ -1,7 +1,6 @@
 import { ListBase, useListContext } from "ra-core";
 
 import { LeadListContent } from "./LeadListContent";
-import { LeadsSummaryHeader } from "./LeadsSummaryHeader";
 import { LeadsToolbar } from "./LeadsToolbar";
 
 const LeadPageHeader = () => {
@@ -25,7 +24,6 @@ export const LeadList = () => {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
           <LeadPageHeader />
           <LeadsToolbar />
-          <LeadsSummaryHeader />
           <LeadListContent />
         </div>
       </div>

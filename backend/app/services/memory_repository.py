@@ -7,8 +7,12 @@ the owning service controls the transaction boundary.
 """
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.cache import bump_cache_version
 
 
 class MemoryRepository:
@@ -46,6 +50,13 @@ class MemoryRepository:
             ),
             [{"c": c, "m": m, "e": e} for c, m, e in rows],
         )
+        for _content, metadata_json, _embedding in rows:
+            try:
+                chat_id = json.loads(metadata_json).get("chat_id")
+            except Exception:  # noqa: BLE001
+                chat_id = None
+            if chat_id:
+                await bump_cache_version(f"memory:{chat_id}")
         return len(rows)
 
 

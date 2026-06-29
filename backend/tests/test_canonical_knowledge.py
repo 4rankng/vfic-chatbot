@@ -11,7 +11,9 @@ from sqlalchemy import text
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
+    FAQ_SCHEMA_VERSION,
     checksum_text,
+    load_faq_template,
     load_template,
     parse_canonical_markdown,
     repair_canonical_markdown,
@@ -566,3 +568,153 @@ async def test_search_knowledge_filters_canonical_effective_dates_and_keeps_lega
     assert "LEGACY null-date" in output
     assert "EXPIRED canonical" not in output
     assert "Nguồn: Current, Policy" in output
+
+
+# ---------------------------------------------------------------------------
+# FAQ-only canonical schema (vfic-faq-v1) tests
+# ---------------------------------------------------------------------------
+
+FAQ_DOC = """\
+---
+schema_version: vfic-faq-v1
+doc_id: faq-001
+doc_version: "1.0"
+title: Câu hỏi thường gặp
+project_slug: lg-display
+locale: vi
+audience:
+  - worker
+content_type: faq
+effective_from: "2026-06-29"
+source_owner: admin
+tags:
+  - faq
+---
+
+## FAQ
+
+### FAQ: Lương bao nhiêu?
+
+Question: Lương bao nhiêu?
+
+Answer: Mức lương cơ bản từ 7–9 triệu VNĐ/tháng.
+
+### FAQ: Có tuyển nam hay nữ?
+
+Question: Có tuyển nam hay nữ?
+
+Answer: Tuyển cả nam và nữ cho các vị trí công nhân sản xuất.
+"""
+
+
+def test_parse_faq_only_document():
+    """FAQ-only canonical doc parses with category='faq' chunks and questions populated."""
+    parsed = parse_canonical_markdown(FAQ_DOC)
+    assert parsed.metadata["schema_version"] == FAQ_SCHEMA_VERSION
+    assert len(parsed.chunks) == 2
+    for chunk in parsed.chunks:
+        assert chunk.category == "faq"
+        assert chunk.questions is not None and len(chunk.questions) >= 1
+    assert parsed.chunks[0].questions[0] == "Lương bao nhiêu?"
+    assert "7–9 triệu" in parsed.chunks[0].content
+    assert parsed.chunks[1].questions[0] == "Có tuyển nam hay nữ?"
+    assert len(parsed.bus_timetable.routes) == 0
+
+
+def test_parse_faq_only_rejects_missing_faq_section():
+    """FAQ-only doc without the required ## FAQ section is rejected."""
+    doc = """\
+---
+schema_version: vfic-faq-v1
+doc_id: faq-002
+doc_version: "1.0"
+title: No FAQ here
+project_slug: lg-display
+locale: vi
+audience:
+  - worker
+content_type: faq
+effective_from: "2026-06-29"
+source_owner: admin
+tags: []
+---
+
+## Company Overview
+Some text.
+"""
+    with pytest.raises(CanonicalValidationError) as exc:
+        parse_canonical_markdown(doc)
+    assert "FAQ" in str(exc.value)
+
+
+def test_parse_faq_only_rejects_missing_project_slug():
+    """FAQ-only doc missing a required frontmatter field is rejected."""
+    doc = """\
+---
+schema_version: vfic-faq-v1
+doc_id: faq-003
+doc_version: "1.0"
+title: Missing fields
+locale: vi
+audience:
+  - worker
+content_type: faq
+effective_from: "2026-06-29"
+source_owner: admin
+tags: []
+---
+
+## FAQ
+### FAQ: Test?
+Question: Test?
+Answer: Test answer.
+"""
+    with pytest.raises(CanonicalValidationError) as exc:
+        parse_canonical_markdown(doc)
+    assert "project_slug" in str(exc.value)
+
+
+def test_parse_unknown_schema_rejected():
+    """Unknown schema_version is rejected."""
+    doc = """\
+---
+schema_version: vfic-unknown-v1
+doc_id: faq-004
+doc_version: "1.0"
+title: Unknown
+project_slug: lg-display
+locale: vi
+audience:
+  - worker
+content_type: faq
+effective_from: "2026-06-29"
+source_owner: admin
+tags: []
+---
+
+## FAQ
+### FAQ: Test?
+Question: Test?
+Answer: Test answer.
+"""
+    with pytest.raises(CanonicalValidationError) as exc:
+        parse_canonical_markdown(doc)
+    assert "schema_version" in str(exc.value)
+
+
+def test_is_canonical_recognizes_faq():
+    """KnowledgeDocument.is_canonical returns True for vfic-faq-v1 docs."""
+    doc = KnowledgeDocument()
+    doc.metadata_ = {"schema_version": FAQ_SCHEMA_VERSION}
+    assert doc.is_canonical
+    doc.metadata_ = {"schema_version": "vfic-knowledge-v1"}
+    assert doc.is_canonical
+    doc.metadata_ = {"schema_version": "other"}
+    assert not doc.is_canonical
+
+
+def test_load_faq_template_returns_markdown():
+    """FAQ template loads without error and contains the schema version."""
+    tpl = load_faq_template()
+    assert FAQ_SCHEMA_VERSION in tpl
+    assert "## FAQ" in tpl
