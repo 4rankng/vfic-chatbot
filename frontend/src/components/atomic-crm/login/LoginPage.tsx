@@ -8,7 +8,6 @@ import {
   useTranslate,
 } from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
-import { Link } from "react-router";
 import {
   ArrowRight,
   Eye,
@@ -81,17 +80,17 @@ export const LoginPage = (props: { redirectTo?: string }) => {
 
   return (
     <div className="kb-scope login-paper min-h-svh overflow-hidden text-foreground">
-      <main className="mx-auto grid min-h-svh w-full max-w-[1480px] items-center gap-8 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(360px,520px)_minmax(0,1fr)] lg:gap-12 lg:px-12 xl:gap-20 xl:px-16">
+      <main className="mx-auto flex min-h-svh w-full max-w-[620px] items-center justify-center px-5 py-8 sm:px-8">
         <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
           <div className="mb-6 space-y-3 sm:mb-8">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center gap-4">
               <img
                 src="/ttsoft-logo.png"
                 alt=""
                 aria-hidden="true"
-                className="size-9 shrink-0 rounded-md object-contain"
+                className="size-12 shrink-0 rounded-md object-contain"
               />
-              <p className="kb-mono text-xs font-semibold uppercase tracking-[0.22em] text-[var(--kb-teal)]">
+              <p className="text-xl font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
                 Ting Ting Soft
               </p>
             </div>
@@ -155,14 +154,14 @@ export const LoginPage = (props: { redirectTo?: string }) => {
                 {translate("ra-auth.auth.forgot_password", {
                   _: "Quên mật khẩu?",
                 })}{" "}
-                <Link
-                  to="/forgot-password"
+                <a
+                  href="/forgot-password"
                   className="font-semibold text-foreground underline-offset-4 hover:underline"
                 >
                   {translate("crm.auth.recover_now", {
                     _: "Khôi phục ngay",
                   })}
-                </Link>
+                </a>
               </p>
             ) : null}
           </div>
@@ -175,19 +174,6 @@ export const LoginPage = (props: { redirectTo?: string }) => {
           </p>
         </section>
 
-        <aside
-          aria-label="Minh họa hệ thống Ting Ting Soft"
-          className="relative hidden min-h-[640px] items-center justify-center lg:flex"
-        >
-          <div className="absolute inset-x-8 bottom-20 top-24 rounded-md border border-border bg-card/40 shadow-xs" />
-          <img
-            src="/login-illustration.png"
-            alt=""
-            aria-hidden="true"
-            className="relative z-10 w-full max-w-[820px] select-none object-contain"
-            draggable={false}
-          />
-        </aside>
       </main>
       <Notification />
     </div>
