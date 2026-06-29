@@ -118,6 +118,11 @@ class DashboardMetrics(BaseModel):
     bot_suppressed_count: int = 0
     bot_success_rate: float = 0.0
     avg_bot_response_seconds: float = 0.0
+    # Concurrent-load monitoring (chatbot readiness)
+    webhook_queue_depth: int = 0
+    active_turns: int = 0
+    p95_bot_response_seconds: float = 0.0
+    turns_last_5min: int = 0
     # Funnel aggregates (server-side COUNT/GROUP BY, scoped like the tiles
     # above). Replaces the previous client-side useGetList(perPage=1000)
     # aggregation in useDashboardStats, which exceeded the per_page<=200 list

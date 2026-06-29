@@ -43,5 +43,5 @@ def enqueue_job(
         q.enqueue(fn, *args, job_timeout=job_timeout, **kwargs)
         return True
     except Exception as exc:  # noqa: BLE001 — enqueue failure must not break the caller
-        logger.error("failed to enqueue %s on queue %s: %s", fn.__name__, queue_name, exc)
+        logger.error("failed to enqueue %s on queue %s: %s", fn.__name__, queue_name, exc, exc_info=True)
         return False

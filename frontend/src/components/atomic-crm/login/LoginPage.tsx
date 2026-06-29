@@ -8,6 +8,7 @@ import {
   useTranslate,
 } from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
+import { Link } from "react-router";
 import {
   ArrowRight,
   Eye,
@@ -154,14 +155,14 @@ export const LoginPage = (props: { redirectTo?: string }) => {
                 {translate("ra-auth.auth.forgot_password", {
                   _: "Quên mật khẩu?",
                 })}{" "}
-                <a
-                  href="/#/forgot-password"
+                <Link
+                  to="/forgot-password"
                   className="font-semibold text-foreground underline-offset-4 hover:underline"
                 >
                   {translate("crm.auth.recover_now", {
                     _: "Khôi phục ngay",
                   })}
-                </a>
+                </Link>
               </p>
             ) : null}
           </div>

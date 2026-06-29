@@ -70,9 +70,14 @@ class ZaloWebhookService:
         db: AsyncSession,
         payload: dict,
         *,
-        enqueue: Callable[[dict], Awaitable[None] | None],
+        enqueue: Callable[[dict], bool | Awaitable[bool]],
     ) -> dict:
-        """Run the synchronous guard chain and (if allowed) enqueue the bot turn."""
+        """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
+
+        The *enqueue* callback returns ``False`` when the job cannot be
+        enqueued (Redis down / queue depth exceeded).  The caller translates
+        this to HTTP 503 so the upstream (Zalo) retries.
+        """
         norm = ZaloWebhookService.normalize(payload)
         if norm is None:
             return {"status": "ignored"}
@@ -113,8 +118,9 @@ class ZaloWebhookService:
         }
         result = enqueue(job)
         if asyncio.iscoroutine(result):
-            await result
+            result = await result
         if result is False:
+            await svc.release_lock(conv.id)  # no worker will clear it
             return {"status": "enqueue_failed", "conversation_id": str(conv.id)}
         return {"status": "queued", "conversation_id": str(conv.id)}
 

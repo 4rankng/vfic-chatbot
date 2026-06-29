@@ -127,6 +127,11 @@ class Settings(BaseSettings):
     # stuck turn before its per-conversation lock auto-expires (avoids stale-run
     # window where a new inbound re-acquires the lock while the old turn is dying).
     chat_turn_job_timeout: int = 150
+
+    # Phase 2 scaling knobs (env-tunable). 0 = disabled (no-op default).
+    llm_concurrency_limit: int = 0  # Redis-backed cross-process semaphore token count (0=disabled)
+    max_llm_calls_per_turn: int = 6  # agent tool-loop ceiling (replaces hardcoded DEFAULT_MAX_ITERS)
+    embed_concurrency_limit: int = 0  # separate Gemini embed semaphore (0=disabled)
     # Backpressure: reject enqueue when webhook_high depth reaches this.
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
     chat_queue_max_depth: int = 40

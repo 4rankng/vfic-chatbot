@@ -16,6 +16,10 @@ from typing import Any
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
 
+# Standard LogRecord attributes — anything else came from extra={}.
+_STD_LOG_ATTRS = frozenset(logging.LogRecord("", "", "", "", 0, "", "", "").__dict__)
+
+
 class _JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
@@ -27,6 +31,10 @@ class _JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
+        # Forward extra={} fields (e.g. llm_latency_ms, queue_depth).
+        for key, value in record.__dict__.items():
+            if key not in _STD_LOG_ATTRS and key not in payload:
+                payload[key] = value
         return json.dumps(payload, ensure_ascii=False)
 
 

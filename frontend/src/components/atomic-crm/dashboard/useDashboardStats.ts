@@ -29,6 +29,11 @@ interface DashboardMetrics {
   bot_suppressed_count?: number | null;
   bot_success_rate?: number | null;
   avg_bot_response_seconds?: number | null;
+  // Concurrent-load monitoring (chatbot readiness)
+  webhook_queue_depth?: number | null;
+  active_turns?: number | null;
+  p95_bot_response_seconds?: number | null;
+  turns_last_5min?: number | null;
   total_leads?: number | null;
   qualified_count?: number | null;
   hired_count?: number | null;
@@ -85,6 +90,10 @@ export interface DashboardStats {
   botSuppressedCount: number;
   botSuccessRate: number;
   avgBotResponseSeconds: number;
+  webhookQueueDepth: number;
+  activeTurns: number;
+  p95BotResponseSeconds: number;
+  turnsLast5min: number;
   totalLeads: number;
   qualifiedCount: number;
   unreadConversationCount: number;
@@ -143,6 +152,10 @@ export const useDashboardStats = (): DashboardStats => {
         botSuppressedCount: 0,
         botSuccessRate: 0,
         avgBotResponseSeconds: 0,
+        webhookQueueDepth: 0,
+        activeTurns: 0,
+        p95BotResponseSeconds: 0,
+        turnsLast5min: 0,
         totalLeads: 0,
         qualifiedCount: 0,
         unreadConversationCount: 0,
@@ -187,6 +200,10 @@ export const useDashboardStats = (): DashboardStats => {
       botSuppressedCount,
       botSuccessRate,
       avgBotResponseSeconds: numberOrZero(data.avg_bot_response_seconds),
+      webhookQueueDepth: numberOrZero(data.webhook_queue_depth),
+      activeTurns: numberOrZero(data.active_turns),
+      p95BotResponseSeconds: numberOrZero(data.p95_bot_response_seconds),
+      turnsLast5min: numberOrZero(data.turns_last_5min),
       totalLeads,
       qualifiedCount: numberOrZero(data.qualified_count),
       unreadConversationCount: numberOrZero(data.unread_conversation_count),

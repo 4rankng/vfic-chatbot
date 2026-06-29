@@ -25,6 +25,7 @@ import re
 import uuid
 from contextlib import suppress
 
+from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompts import ERROR_REPLY
 from app.graph.safety import (
     build_retry_prompt,
@@ -260,6 +261,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
                 chat_id=conv.zalo_chat_id,
                 recent_messages=recent_messages,
             )
+        except LLMThrottled:
+            raise  # let worker handle degradation msg (no LLM call)
         except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
             logger.warning("agent error: %s", exc)
             # refresh to read committed version/mode — see recheck_ownership docstring

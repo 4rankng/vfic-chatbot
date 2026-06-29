@@ -162,7 +162,7 @@ async def release(
     conv = await svc.release(await _load(conv_id, db), user)
     pending = await svc.latest_unanswered_worker_message(conv)
     if pending is not None and await svc.acquire_lock(conv.id):
-        enqueue_chat_run(
+        enqueued = enqueue_chat_run(
             {
                 "conversation_id": str(conv.id),
                 "version_at_start": conv.version,
@@ -171,6 +171,13 @@ async def release(
                 "received_at": pending.created_at.isoformat(),
             }
         )
+        if not enqueued:
+            await svc.release_lock(conv.id)
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "release enqueue failed for conversation %s; lock released", conv.id
+            )
     return ConversationOut.model_validate(conv)
 
 

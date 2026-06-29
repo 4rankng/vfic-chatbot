@@ -3,8 +3,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
+
+from app.graph.llm_semaphore import LLMThrottled
 
 logger = logging.getLogger(__name__)
+
+# Static Vietnamese degradation message — sent when LLM is throttled (no LLM call).
+DEGRADATION_REPLY = (
+    "Xin lỗi bạn, hiện tại hệ thống đang gặp nhiều truy cập đồng thời. "
+    "Vui lòng gửi lại tin nhắn sau ít phút nhé. Cảm ơn bạn!"
+)
 
 
 def enqueue_chat_run(job: dict) -> bool:
@@ -47,6 +56,29 @@ async def _run_job_async(job: dict) -> None:
     from app.graph.factories import build_deps
     from app.graph.runner import BotRunState, run_turn
 
+    # ── Phase 0 observability: log queue depth + worker ratio at job start ──
+    try:
+        from rq import Queue, Worker
+
+        from app.core.redis import get_redis_sync
+
+        conn = get_redis_sync()
+        qd = Queue("webhook_high", connection=conn).count
+        total_w = Worker.count(connection=conn)
+        # busy = workers where current_job is not None
+        busy_w = sum(1 for w in (Worker.all(connection=conn) or []) if w.get_current_job() is not None)
+        logger.info(
+            "chat_turn_start",
+            extra={
+                "conversation_id": job.get("conversation_id", "?"),
+                "queue_depth": qd,
+                "busy_workers": busy_w,
+                "total_workers": total_w,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass  # non-fatal — don't break the turn for observability
+
     state = BotRunState(
         conversation_id=job["conversation_id"],
         version_at_start=int(job["version_at_start"]),
@@ -56,4 +88,17 @@ async def _run_job_async(job: dict) -> None:
     async with worker_session() as db:
         deps = await build_deps(db)
         deps.persist = _enqueue_persist  # wire lead/memory extraction on SENT
-        await run_turn(state, deps)
+        try:
+            await run_turn(state, deps)
+        except LLMThrottled:
+            # LLM is throttled — send static degradation msg (no LLM call).
+            logger.warning("llm_throttled: sending degradation reply for %s", job.get("conversation_id", "?"))
+            try:
+                from app.services.conversation import ConversationService
+
+                svc = ConversationService(db)
+                conv = await svc.get(uuid.UUID(state.conversation_id))
+                if conv is not None:
+                    await deps.zalo.send(conv.zalo_chat_id, DEGRADATION_REPLY)
+            except Exception:  # noqa: BLE001
+                logger.error("failed to send degradation reply", exc_info=True)

@@ -1,11 +1,20 @@
-import { useState } from "react";
-import { Form, useNotify } from "ra-core";
+import { useState, type ComponentProps, type ComponentType } from "react";
+import { Form, required, useInput, useNotify } from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
+import {
+  ArrowLeft,
+  ArrowRight,
+  KeyRound,
+  Loader2,
+  Lock,
+  Mail,
+  RotateCcw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TextInput } from "@/components/admin/text-input";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Notification } from "@/components/admin/notification";
-import { useConfigurationContext } from "@/components/atomic-crm/root/ConfigurationContext";
 import {
   requestPasswordResetOtp,
   resetPasswordWithOtp,
@@ -14,7 +23,6 @@ import {
 type Step = "email" | "otp";
 
 export const ForgotPasswordPage = () => {
-  const { darkModeLogo, title } = useConfigurationContext();
   const notify = useNotify();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("email");
@@ -52,7 +60,7 @@ export const ForgotPasswordPage = () => {
     try {
       await resetPasswordWithOtp({ email, otp, newPassword });
       notify("Đã đổi mật khẩu. Vui lòng đăng nhập lại.", { type: "success" });
-      navigate("/");
+      navigate("/login");
     } catch (e) {
       notify((e as Error).message, { type: "error" });
     } finally {
@@ -61,79 +69,167 @@ export const ForgotPasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex">
-      <div className="relative grid w-full lg:grid-cols-2">
-        <div className="relative hidden h-full flex-col bg-muted p-10 text-white dark:border-r lg:flex">
-          <div className="absolute inset-0 bg-zinc-900" />
-          <div className="relative z-20 flex items-center text-lg font-medium">
-            <img className="h-6 mr-2" src={darkModeLogo} alt={title} />
-            {title}
-          </div>
-        </div>
-        <div className="flex w-full flex-col justify-center p-4 lg:p-8">
-          <div className="w-full space-y-6 lg:mx-auto lg:w-[380px]">
-            <div className="text-center">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Khôi phục mật khẩu
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {step === "email"
-                  ? "Nhập email tài khoản để nhận mã OTP."
-                  : "Nhập mã OTP và mật khẩu mới."}
+    <div className="kb-scope login-paper min-h-svh overflow-hidden text-foreground">
+      <main className="mx-auto flex min-h-svh w-full max-w-[620px] items-center justify-center px-5 py-8 sm:px-8">
+        <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
+          <div className="mb-6 space-y-3 text-center sm:mb-8">
+            <div className="flex items-center justify-center gap-4">
+              <img
+                src="/ttsoft-logo.png"
+                alt=""
+                aria-hidden="true"
+                className="size-12 shrink-0 rounded-md object-contain"
+              />
+              <p className="text-xl font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
+                Ting Ting Soft
               </p>
             </div>
+            <div className="space-y-3">
+              <h1 className="kb-display text-balance text-[clamp(1.65rem,3.05vw,2.65rem)] leading-none text-foreground">
+                Khôi phục mật khẩu
+              </h1>
+              <p className="mx-auto max-w-[360px] text-sm leading-6 text-muted-foreground">
+                {step === "email"
+                  ? "Nhập email tài khoản để nhận mã OTP."
+                  : "Nhập mã OTP và mật khẩu mới cho tài khoản của bạn."}
+              </p>
+            </div>
+          </div>
 
+          <div className="rounded-md border border-border bg-card/92 p-4 shadow-xs backdrop-blur sm:p-6">
             {step === "email" ? (
-              <Form className="space-y-8" onSubmit={submitEmail}>
-                <TextInput label="Email" source="email" type="email" isRequired />
-                <Button type="submit" className="w-full" disabled={loading}>
+              <Form className="space-y-4" onSubmit={submitEmail}>
+                <RecoveryField
+                  label="Email"
+                  source="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  icon={Mail}
+                />
+                <Button
+                  type="submit"
+                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-sm font-semibold"
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : null}
                   Gửi mã OTP
+                  {!loading ? <ArrowRight className="size-4" /> : null}
                 </Button>
               </Form>
             ) : (
-              <Form className="space-y-8" onSubmit={submitOtp}>
-                <TextInput
+              <Form className="space-y-4" onSubmit={submitOtp}>
+                <RecoveryField
                   label="Email"
                   source="email"
                   type="email"
                   defaultValue={email}
                   disabled
+                  icon={Mail}
                 />
-                <TextInput label="Mã OTP" source="otp" isRequired />
-                <TextInput
+                <RecoveryField
+                  label="Mã OTP"
+                  source="otp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  icon={KeyRound}
+                />
+                <RecoveryField
                   label="Mật khẩu mới"
                   source="new_password"
                   type="password"
-                  isRequired
+                  autoComplete="new-password"
+                  icon={Lock}
                 />
-                <TextInput
+                <RecoveryField
                   label="Xác nhận mật khẩu"
                   source="confirm_password"
                   type="password"
-                  isRequired
+                  autoComplete="new-password"
+                  icon={Lock}
                 />
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button
+                  type="submit"
+                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-sm font-semibold"
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : null}
                   Đổi mật khẩu
+                  {!loading ? <ArrowRight className="size-4" /> : null}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full"
+                  className="h-12 w-full rounded-md text-sm font-semibold"
                   disabled={loading}
                   onClick={() => setStep("email")}
                 >
+                  <RotateCcw className="size-4" />
                   Gửi lại mã
                 </Button>
               </Form>
             )}
 
-            <a href="/#/login" className="block text-center text-sm hover:underline">
+            <Link
+              to="/login"
+              className="mt-5 flex items-center justify-center gap-2 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+            >
+              <ArrowLeft className="size-4" />
               Quay lại đăng nhập
-            </a>
+            </Link>
           </div>
-        </div>
-      </div>
+
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            &copy; {new Date().getFullYear()} Giải pháp phần mềm Ting Ting
+          </p>
+        </section>
+      </main>
       <Notification />
+    </div>
+  );
+};
+
+type RecoveryFieldProps = ComponentProps<"input"> & {
+  label: string;
+  source: string;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+};
+
+const RecoveryField = ({
+  label,
+  source,
+  icon: Icon,
+  type = "text",
+  defaultValue,
+  ...inputProps
+}: RecoveryFieldProps) => {
+  const { id, field, isRequired } = useInput({
+    source,
+    type,
+    validate: inputProps.disabled ? undefined : required(),
+    defaultValue,
+  });
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="font-semibold text-muted-foreground">
+        {label}
+      </Label>
+      <div className="relative">
+        <Icon
+          aria-hidden
+          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          id={id}
+          type={type}
+          required={isRequired}
+          className="h-12 rounded-md bg-background/70 pl-11 text-base shadow-none placeholder:text-muted-foreground/70 disabled:opacity-100"
+          {...inputProps}
+          {...field}
+        />
+      </div>
     </div>
   );
 };

@@ -53,6 +53,12 @@ class DashboardService:
         counts_by_stage = await repo.leads_by_stage(recruiter_id)
         human_convs = await repo.count_human_conversations(recruiter_id)
 
+        # Concurrent-load monitoring (chatbot readiness)
+        queue_depth = self._webhook_queue_depth()
+        active_turns_count = await repo.active_turns()
+        p95_latency = await repo.bot_run_p95_latency()
+        recent_turns = await repo.recent_turns_count(5)
+
         total_leads = sum(counts_by_stage.values())
         qualified_count = counts_by_stage.get("QUALIFIED", 0)
         hired_count = counts_by_stage.get("HIRED", 0)
@@ -88,6 +94,10 @@ class DashboardService:
             unread_conversation_count=int(human_convs or 0),
             stage_breakdown=stage_breakdown,
             knowledge_ingest=await self._knowledge_ingest_health() if viewer.role == Role.admin else None,
+            webhook_queue_depth=queue_depth,
+            active_turns=active_turns_count,
+            p95_bot_response_seconds=round(float(p95_latency), 1),
+            turns_last_5min=recent_turns,
         )
         if cache_enabled:
             await cache_set_json(
@@ -126,6 +136,18 @@ class DashboardService:
                 for row in issue_rows
             ],
         )
+
+    def _webhook_queue_depth(self) -> int:
+        """Current depth of the webhook_high RQ queue (messages waiting for a worker slot)."""
+        try:
+            from rq import Queue
+
+            from app.core.redis import get_redis_sync
+
+            return Queue("webhook_high", connection=get_redis_sync()).count
+        except Exception:  # noqa: BLE001 — Redis telemetry must not break dashboard
+            logger.warning("failed to read webhook_high queue depth", exc_info=True)
+            return 0
 
     def _rq_ingest_counts(self) -> tuple[int, int, int]:
         try:

@@ -196,5 +196,40 @@ class DashboardRepository:
             )
         ).mappings()
 
+    # --- Concurrent-load monitoring (300-concurrency readiness) ---
+
+    async def active_turns(self) -> int:
+        """Conversations currently processing a bot turn (lock held)."""
+        return await self.db.scalar(
+            text("SELECT count(*) FROM conversations WHERE bot_locked_until > now()")
+        ) or 0
+
+    async def bot_run_p95_latency(self, days: int = 7) -> float:
+        """95th percentile turn duration (seconds) from completed bot_runs in the last *days* days."""
+        return float(
+            await self.db.scalar(
+                text(
+                    "SELECT coalesce(percentile_cont(0.95) "
+                    "WITHIN GROUP (ORDER BY extract(epoch FROM (ended_at - started_at))), 0) "
+                    "FROM bot_runs "
+                    "WHERE outcome IN ('SENT','SUPPRESSED') "
+                    "AND started_at > now() - make_interval(days => :days) "
+                    "AND ended_at IS NOT NULL"
+                ),
+                {"days": days},
+            )
+            or 0.0
+        )
+
+    async def recent_turns_count(self, minutes: int = 5) -> int:
+        """Bot turns started in the last N minutes (near-real-time throughput)."""
+        return await self.db.scalar(
+            text(
+                "SELECT count(*) FROM bot_runs "
+                "WHERE started_at > now() - make_interval(mins => :minutes)"
+            ),
+            {"minutes": minutes},
+        ) or 0
+
 
 __all__ = ["DashboardRepository"]

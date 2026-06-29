@@ -82,6 +82,10 @@ const ProfilePage = lazy(async () => {
   const mod = await import("../settings/ProfilePage");
   return { default: mod.ProfilePage as ComponentType };
 });
+const ForgotPasswordPage = lazy(async () => {
+  const mod = await import("../login/ForgotPasswordPage");
+  return { default: mod.ForgotPasswordPage as ComponentType };
+});
 // NOTE: ChangelogPage is imported statically (top of file) rather than lazy
 // here — Header.tsx already imports it eagerly, so a lazy() wrapper would be
 // a no-op (Vite keeps it in the main chunk and warns). Keeping it static is
@@ -92,6 +96,7 @@ const ProfilePage = lazy(async () => {
 // Source of truth remains the static assignment in each page module; if a
 // path changes there, update this constant too.
 const PROFILE_PATH = "/profile";
+const FORGOT_PASSWORD_PATH = "/forgot-password";
 const CHANGELOG_PATH = "/changelog";
 
 const RouteFallback = () => null;
@@ -338,6 +343,16 @@ export const CRM = ({
             element={<Navigate to={PROFILE_PATH} replace />}
           />
           <Route path={CHANGELOG_PATH} element={<ChangelogPage />} />
+        </CustomRoutes>
+        <CustomRoutes noLayout>
+          <Route
+            path={FORGOT_PASSWORD_PATH}
+            element={
+              <RouteBoundary>
+                <ForgotPasswordPage />
+              </RouteBoundary>
+            }
+          />
         </CustomRoutes>
         <Resource name="leads" {...leads} />
         <Resource name="conversations" {...conversations} />

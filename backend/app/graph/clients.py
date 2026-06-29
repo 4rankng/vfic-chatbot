@@ -6,7 +6,10 @@ import time. Tool schemas + dispatch live in ``schemas.py``.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
+import time
 import unicodedata
 from typing import Literal
 
@@ -14,6 +17,39 @@ from app.core.config import get_settings
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 
 logger = logging.getLogger(__name__)
+
+# ── LLM observability helpers (Redis-backed, process-agnostic) ──────────────
+_RKEY_429 = "llm:minimax_429s"      # INCR on 429, EXPIRE 60 (rolling minute)
+_RKEY_INVOKE_COUNT = "llm:invoke_count"
+_RKEY_INVOKE_MS = "llm:invoke_total_ms"
+
+
+def _record_llm_latency(ms: int) -> None:
+    """Persist LLM call latency + count to Redis (best-effort, non-fatal)."""
+    try:
+        from app.core.redis import get_redis_sync
+
+        r = get_redis_sync()
+        pipe = r.pipeline()
+        pipe.incr(_RKEY_INVOKE_COUNT)
+        pipe.incrby(_RKEY_INVOKE_MS, ms)
+        pipe.expire(_RKEY_INVOKE_COUNT, 120)
+        pipe.expire(_RKEY_INVOKE_MS, 120)
+        pipe.execute()
+    except Exception:  # noqa: BLE001
+        logger.warning("failed to record llm latency to redis", exc_info=True)
+
+
+def _record_llm_429() -> None:
+    """Increment MiniMax 429 counter in Redis (best-effort, non-fatal)."""
+    try:
+        from app.core.redis import get_redis_sync
+
+        r = get_redis_sync()
+        r.incr(_RKEY_429)
+        r.expire(_RKEY_429, 60)  # rolling 1-minute window
+    except Exception:  # noqa: BLE001
+        logger.warning("failed to record llm 429 to redis", exc_info=True)
 ModelRole = Literal["agent", "safety", "digest"]
 
 
@@ -42,6 +78,31 @@ def _should_prefetch_knowledge(user_text: str) -> bool:
     return any(term in text for term in contact_terms)
 
 
+async def _llm_call_with_retry(bound, messages):
+    """Call bound.ainvoke with 1 retry on 429 (2s ± 0.5s jitter).
+
+    On second 429, raises LLMThrottled so the worker can send a static
+    degradation message without making another LLM call.
+    """
+    from app.graph.llm_semaphore import LLMThrottled
+
+    try:
+        return await bound.ainvoke(messages)
+    except Exception as exc:
+        if "429" in str(exc) or "rate" in str(exc).lower():
+            _record_llm_429()
+            logger.warning("llm_429_retry", exc_info=True)
+            await asyncio.sleep(2.0 + random.uniform(-0.5, 0.5))
+            try:
+                return await bound.ainvoke(messages)
+            except Exception as exc2:
+                if "429" in str(exc2) or "rate" in str(exc2).lower():
+                    _record_llm_429()
+                    raise LLMThrottled("LLM rate limit exhausted after retry")
+                raise
+        raise
+
+
 class GeminiEmbedder:
     def __init__(self, settings=None) -> None:
         self.s = settings or get_settings()
@@ -53,6 +114,9 @@ class GeminiEmbedder:
     # exactly one vector per input.
     _EMBED_BATCH_SIZE = 100
 
+    async def embed(self, text: str) -> list[float]:
+        return (await self.batch([text]))[0]
+
     async def batch(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts in chunked SDK calls.
 
@@ -61,8 +125,10 @@ class GeminiEmbedder:
         texts.  This method chunks into sub-batches to stay within limits
         and guarantee one vector per input.
         """
+        from app.graph.llm_semaphore import get_embed_semaphore
         from google import genai
 
+        embed_sem = get_embed_semaphore()
         if not texts:
             return []
         if not self.s.gemini_api_key:
@@ -72,9 +138,10 @@ class GeminiEmbedder:
         all_vectors: list[list[float]] = []
         for i in range(0, len(texts), self._EMBED_BATCH_SIZE):
             chunk = texts[i : i + self._EMBED_BATCH_SIZE]
-            resp = await self._client.aio.models.embed_content(
-                model=self.s.gemini_embedding_model, contents=chunk,
-            )
+            async with embed_sem:
+                resp = await self._client.aio.models.embed_content(
+                    model=self.s.gemini_embedding_model, contents=chunk,
+                )
             if resp.embeddings:
                 all_vectors.extend(list(e.values) for e in resp.embeddings)
             else:
@@ -83,31 +150,27 @@ class GeminiEmbedder:
                 all_vectors.extend([0.0] * (self.s.embedding_dim or 768) for _ in chunk)
         return all_vectors
 
-    async def embed(self, text: str) -> list[float]:
-        return (await self.batch([text]))[0]
-
-    # The graph wires this object where the Embedder Callable[[str], ...] contract is
-    # expected (tools.py does `await embedder(query)`), so the instance must be callable.
-    __call__ = embed
-
 
 class MiniMaxAgent:
     """Tool-calling agent: loops on MiniMax tool_calls until a final text reply."""
 
-    # Floor allows the agent to call up to 6 tools per turn (e.g. memory +
-    # knowledge + bus + features + follow-up search + clarification).  The old
-    # limit of 4 truncated complex multi-tool conversations.
-    DEFAULT_MAX_ITERS = 6
-
-    def __init__(self, llm, embedder, max_iters: int = DEFAULT_MAX_ITERS) -> None:
+    def __init__(self, llm, embedder, max_iters: int | None = None) -> None:
         self.llm = llm
         self.embedder = embedder
-        self.max_iters = max_iters
+        # max_iters reads from settings unless explicitly overridden (tests, etc.).
+        if max_iters is not None:
+            self.max_iters = max_iters
+        else:
+            s = get_settings()
+            self.max_iters = s.max_llm_calls_per_turn
 
     async def agent(self, user_text, *, system, db, embedder) -> str:
+        from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
+
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
         bound = self.llm.bind_tools(TOOL_SCHEMAS) if hasattr(self.llm, "bind_tools") else self.llm
+        sem = get_llm_semaphore()
         messages = [SystemMessage(content=system)]
         if _should_prefetch_knowledge(user_text):
             try:
@@ -127,7 +190,21 @@ class MiniMaxAgent:
                 )
         messages.append(HumanMessage(content=user_text))
         for _ in range(self.max_iters):
-            ai = await bound.ainvoke(messages)
+            t0 = time.monotonic()
+            try:
+                async with sem:
+                    ai = await _llm_call_with_retry(bound, messages)
+            except LLMThrottled:
+                raise
+            except Exception as exc:
+                # Track non-retry-path 429s for observability (Phase 0 metric).
+                if "429" in str(exc) or "rate" in str(exc).lower():
+                    _record_llm_429()
+                    logger.error("llm_429", exc_info=True)
+                raise
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            _record_llm_latency(elapsed_ms)
+            logger.info("llm_invoke", extra={"llm_latency_ms": elapsed_ms})
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
             if not calls:

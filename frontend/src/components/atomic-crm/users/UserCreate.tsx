@@ -38,41 +38,43 @@ export const UserCreate = () => {
 
   return (
     <CreateBase resource="users">
-      <TopToolbar>
-        <h2 className="mr-auto text-xl font-semibold">Tạo tài khoản</h2>
-      </TopToolbar>
-      <Card className="mt-4 max-w-2xl">
-        <CardContent className="pt-6">
-          <Form onSubmit={onSubmit}>
-            <div className="flex flex-col gap-4">
-              <TextInput source="email" label="Email" type="email" isRequired />
-              <TextInput source="full_name" label="Họ tên" isRequired />
-              <SelectInput
-                source="role"
-                label="Vai trò"
-                choices={ROLE_CHOICES}
-                defaultValue="recruiter"
-                isRequired
-              />
-              <TextInput
-                source="password"
-                label="Mật khẩu"
-                type="password"
-                isRequired
-              />
-              <TextInput
-                source="confirm_password"
-                label="Xác nhận mật khẩu"
-                type="password"
-                isRequired
-              />
-              <Button type="submit" disabled={isSubmitting}>
-                Tạo tài khoản
-              </Button>
-            </div>
-          </Form>
-        </CardContent>
-      </Card>
+      <div className="mx-auto w-full max-w-2xl">
+        <TopToolbar className="items-center">
+          <h2 className="mr-auto text-xl font-semibold">Tạo tài khoản</h2>
+        </TopToolbar>
+        <Card className="mt-4 w-full">
+          <CardContent className="pt-6">
+            <Form onSubmit={onSubmit}>
+              <div className="flex flex-col gap-4">
+                <TextInput source="email" label="Email" type="email" isRequired />
+                <TextInput source="full_name" label="Họ tên" isRequired />
+                <SelectInput
+                  source="role"
+                  label="Vai trò"
+                  choices={ROLE_CHOICES}
+                  defaultValue="recruiter"
+                  isRequired
+                />
+                <TextInput
+                  source="password"
+                  label="Mật khẩu"
+                  type="password"
+                  isRequired
+                />
+                <TextInput
+                  source="confirm_password"
+                  label="Xác nhận mật khẩu"
+                  type="password"
+                  isRequired
+                />
+                <Button type="submit" disabled={isSubmitting}>
+                  Tạo tài khoản
+                </Button>
+              </div>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
     </CreateBase>
   );
 };

@@ -39,6 +39,7 @@ const UserEditContent = () => {
         id: user.id,
         previousData: user,
         data: {
+          email: data.email,
           full_name: data.full_name,
           role: data.role,
           disabled: data.disabled,
@@ -54,7 +55,7 @@ const UserEditContent = () => {
   };
 
   return (
-    <Card className="mt-4 max-w-2xl">
+    <Card className="mt-4 w-full">
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-3 text-base">
           <span>{user.email}</span>
@@ -67,7 +68,7 @@ const UserEditContent = () => {
       <CardContent className="pt-2">
         <Form record={user} onSubmit={onSubmit}>
           <div className="flex flex-col gap-4">
-            <TextInput source="email" label="Email" disabled />
+            <TextInput source="email" label="Email" type="email" isRequired />
             <TextInput source="full_name" label="Họ tên" isRequired />
             <SelectInput
               source="role"
@@ -88,15 +89,17 @@ const UserEditContent = () => {
 
 export const UserEdit = () => (
   <EditBase>
-    <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa tài khoản</h2>
-      <Button asChild variant="outline" size="sm">
-        <Link to="/users">
-          <ArrowLeft className="size-4" />
-          Quay lại
-        </Link>
-      </Button>
-    </TopToolbar>
-    <UserEditContent />
+    <div className="mx-auto w-full max-w-2xl">
+      <TopToolbar className="items-center">
+        <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa tài khoản</h2>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/users">
+            <ArrowLeft className="size-4" />
+            Quay lại
+          </Link>
+        </Button>
+      </TopToolbar>
+      <UserEditContent />
+    </div>
   </EditBase>
 );

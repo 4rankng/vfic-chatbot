@@ -83,6 +83,7 @@ export const SelectInput = (props: SelectInputProps) => {
     onChange,
     parse,
     validate,
+    isRequired: _isRequiredProp,
     readOnly,
     disabled,
 

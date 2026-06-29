@@ -46,6 +46,7 @@ export const TextInput = (props: TextInputProps) => {
     className,
     inputClassName,
     helperText,
+    isRequired: _isRequiredProp,
     validate: _validateProp,
     format: _formatProp,
     ...rest
