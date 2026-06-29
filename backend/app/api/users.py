@@ -1,16 +1,51 @@
-"""User admin routes — every endpoint is require_admin-gated (spec §17)."""
+"""User routes — self-service /me + admin CRUD (require_admin-gated)."""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import require_admin
+from app.api.dependencies import get_current_user, require_admin
 from app.core.db import get_db
 from app.models.user import Role, User
-from app.schemas.user import UserCreate, UserListResponse, UserOut, UserUpdate
+from app.schemas.user import (
+    SelfProfileUpdate,
+    UserCreate,
+    UserListResponse,
+    UserOut,
+    UserUpdate,
+)
 from app.services.user_service import UserProvisioningService
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+# ── Self-service (any authenticated user) ─────────────────────────────────
+
+
+@router.get("/me", response_model=UserOut)
+async def get_me(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserOut:
+    await db.refresh(user)
+    return UserOut.model_validate(user)
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_me(
+    body: SelfProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserOut:
+    svc = UserProvisioningService(db)
+    try:
+        updated = await svc.update(user.id, body, actor_id=user.id)
+    except ValueError as exc:  # email already exists
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return UserOut.model_validate(updated)
+
+
+# ── Admin CRUD ─────────────────────────────────────────────────────────────
 
 
 @router.get("", response_model=UserListResponse)

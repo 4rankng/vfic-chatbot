@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import desc, func, or_, select, text
+from sqlalchemy import case, desc, func, or_, select, text
 
 from app.models.conversation import (
     Conversation,
@@ -132,9 +132,22 @@ class ConversationRepository:
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
         sort_col = _CONVERSATION_SORT.get((sort_by or "").lower()) or Conversation.updated_at
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
+        attention_expr = case(
+            (
+                or_(
+                    Conversation.unread_count > 0,
+                    Conversation.mode == ConversationMode.HUMAN,
+                    Conversation.mode == ConversationMode.SEMI_AUTO,
+                ),
+                1,
+            ),
+            else_=0,
+        )
         rows = (
             await self.db.scalars(
-                base.order_by(order_expr).offset((page - 1) * per_page).limit(per_page)
+                base.order_by(attention_expr.desc(), order_expr)
+                .offset((page - 1) * per_page)
+                .limit(per_page)
             )
         ).all()
         return list(rows), int(total or 0)

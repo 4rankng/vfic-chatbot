@@ -118,7 +118,6 @@ export const ConversationShowContent = ({
             style={{
               background: colors.bg,
               color: colors.ink,
-              backgroundImage: "none",
             }}
           >
             <svg className="icon" style={{ width: "18px", height: "18px" }}>

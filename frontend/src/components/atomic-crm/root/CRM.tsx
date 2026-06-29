@@ -7,7 +7,7 @@ import type {
 import { CustomRoutes, localStorageStore, Resource } from "ra-core";
 import { Component, lazy, Suspense, useEffect, useMemo } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { Route } from "react-router";
+import { Navigate, Route } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
@@ -51,6 +51,8 @@ import { StartPage } from "../login/StartPage.tsx";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
 
 const defaultStore = localStorageStore(undefined, "CRM");
+const defaultDataProvider = defaultDataProviderBuilder();
+const defaultAuthProvider = defaultAuthProviderBuilder();
 
 // --- Module-level singletons (P0 #2) ---------------------------------------
 // Hoisting the QueryClient + persister out of the component body prevents
@@ -212,8 +214,8 @@ export const CRM = ({
   noteStatuses = defaultNoteStatuses,
   taskTypes = defaultTaskTypes,
   title = defaultTitle,
-  dataProvider = defaultDataProviderBuilder(),
-  authProvider = defaultAuthProviderBuilder(),
+  dataProvider = defaultDataProvider,
+  authProvider = defaultAuthProvider,
   i18nProvider = defaulti18nProvider,
   store = defaultStore,
   googleWorkplaceDomain = import.meta.env.VITE_GOOGLE_WORKPLACE_DOMAIN,
@@ -323,16 +325,18 @@ export const CRM = ({
         {...rest}
       >
         <CustomRoutes>
-          {!isMobile && (
-            <Route
-              path={PROFILE_PATH}
-              element={
-                <RouteBoundary>
-                  <ProfilePage />
-                </RouteBoundary>
-              }
-            />
-          )}
+          <Route
+            path={PROFILE_PATH}
+            element={
+              <RouteBoundary>
+                <ProfilePage />
+              </RouteBoundary>
+            }
+          />
+          <Route
+            path="/settings/profile"
+            element={<Navigate to={PROFILE_PATH} replace />}
+          />
           <Route path={CHANGELOG_PATH} element={<ChangelogPage />} />
         </CustomRoutes>
         <Resource name="leads" {...leads} />

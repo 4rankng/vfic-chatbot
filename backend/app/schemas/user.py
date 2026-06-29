@@ -25,6 +25,13 @@ class UserUpdate(BaseModel):
     disabled: bool | None = None
 
 
+class SelfProfileUpdate(BaseModel):
+    """Restricted update schema for own-profile edits (no role/disabled)."""
+
+    email: EmailStr | None = None
+    full_name: str | None = None
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

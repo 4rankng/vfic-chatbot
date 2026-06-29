@@ -73,6 +73,7 @@ export type Conversation = {
   // Backend ConversationMode is BOT/HUMAN/SEMI_AUTO/CLOSED; the REST dataProvider
   // lower-cases it so render checks keep working.
   mode: "bot" | "human" | "semi_auto" | "closed";
+  needs_human?: boolean;
   last_inbound_at: string;
   assigned_recruiter_id: string | null;
   created_at: string;

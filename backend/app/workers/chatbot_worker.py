@@ -7,16 +7,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def enqueue_chat_run(job: dict) -> None:
-    """Enqueue a bot turn onto the webhook_high RQ queue (best-effort, non-fatal)."""
+def enqueue_chat_run(job: dict) -> bool:
+    """Enqueue a bot turn onto the webhook_high RQ queue.
+
+    Returns False when the enqueue fails (e.g. Redis down) or the queue depth
+    exceeds ``chat_queue_max_depth`` (backpressure).  The caller should propagate
+    this as a 503 so Zalo retries.
+    """
     from app.core.config import get_settings
     from app.workers.utils import enqueue_job
 
-    enqueue_job(
+    s = get_settings()
+    return enqueue_job(
         "webhook_high",
         run_chat_turn_job,
         job,
-        job_timeout=get_settings().chat_turn_job_timeout,
+        job_timeout=s.chat_turn_job_timeout,
+        max_depth=s.chat_queue_max_depth or None,
     )
 
 

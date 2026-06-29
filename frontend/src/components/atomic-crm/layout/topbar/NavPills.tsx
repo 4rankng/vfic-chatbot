@@ -16,7 +16,7 @@ interface NavPillProps {
 export const NavPill = memo(({ label, to, isActive }: NavPillProps) => (
   <Link
     to={to}
-    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors ${
+    className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[0.68rem] font-semibold uppercase tracking-normal transition-colors lg:gap-2 lg:px-3 lg:text-xs lg:tracking-wide ${
       isActive
         ? "bg-muted/70 text-foreground shadow-sm dark:bg-muted/40"
         : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"

@@ -273,6 +273,24 @@ input[type="time"] {
   color: var(--foreground);
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
 }
+.login-paper {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(rgba(21, 32, 28, 0.052) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 32, 28, 0.052) 1px, transparent 1px),
+    linear-gradient(rgba(31, 111, 84, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 111, 84, 0.025) 1px, transparent 1px);
+  background-position:
+    0 0,
+    0 0,
+    14px 14px,
+    14px 14px;
+  background-size:
+    28px 28px,
+    28px 28px,
+    112px 112px,
+    112px 112px;
+}
 .kb-display {
   font-family: var(--kb-font-display);
   font-weight: 600;

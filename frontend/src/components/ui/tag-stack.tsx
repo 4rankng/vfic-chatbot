@@ -40,13 +40,18 @@ function TagStack({
   const overflow = tags.slice(max)
 
   return (
-    <div className={cn("flex max-w-full items-center gap-1.5", className)}>
+    <div
+      className={cn(
+        "flex min-w-0 max-w-full flex-wrap items-center gap-1.5",
+        className
+      )}
+    >
       {visible.map((tag, i) => (
         <Badge
           key={`${tag.label}-${i}`}
           variant="secondary"
           className={cn(
-            "max-w-[160px] truncate",
+            "min-w-0 max-w-[160px] truncate",
             toneClass[tag.tone ?? "default"]
           )}
         >

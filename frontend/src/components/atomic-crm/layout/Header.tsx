@@ -33,9 +33,9 @@ const Header = () => {
   }, [location.pathname]);
 
   return (
-    <div className="sticky top-0 z-40 px-4 pt-3 md:px-6 md:pt-4">
+    <div className="sticky top-0 z-40 px-4 pt-3 md:pt-4 lg:px-6">
       <div className="mx-auto max-w-[1440px]">
-        <header className="flex h-14 items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:bg-card/60 md:px-4">
+        <header className="flex h-14 items-center justify-between gap-2 rounded-2xl border border-border/70 bg-background/80 px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:bg-card/60 md:px-3 lg:gap-3 lg:px-4">
           {/* Brand */}
           <Link
             to="/"
@@ -55,7 +55,7 @@ const Header = () => {
           </Link>
 
           {/* Pill nav */}
-          <nav className="hidden flex-1 items-center justify-center gap-1 md:flex lg:gap-2">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 md:flex lg:gap-2">
             {isAdmin && (
               <NavPill
                 label={translate("ra.page.dashboard")}
@@ -97,7 +97,7 @@ const Header = () => {
           </nav>
 
           {/* Actions */}
-          <div className="flex items-center gap-1 md:gap-2">
+          <div className="flex shrink-0 items-center gap-1 lg:gap-2">
             <NotificationsBell />
             <ThemeModeToggle />
             <UserMenu />

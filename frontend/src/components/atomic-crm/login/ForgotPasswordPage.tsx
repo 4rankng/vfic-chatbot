@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Form, useNotify } from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
 import { Notification } from "@/components/admin/notification";
@@ -127,9 +127,9 @@ export const ForgotPasswordPage = () => {
               </Form>
             )}
 
-            <Link to="/" className="block text-center text-sm hover:underline">
+            <a href="/#/login" className="block text-center text-sm hover:underline">
               Quay lại đăng nhập
-            </Link>
+            </a>
           </div>
         </div>
       </div>

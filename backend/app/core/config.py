@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # stuck turn before its per-conversation lock auto-expires (avoids stale-run
     # window where a new inbound re-acquires the lock while the old turn is dying).
     chat_turn_job_timeout: int = 150
+    # Backpressure: reject enqueue when webhook_high depth reaches this.
+    # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
+    chat_queue_max_depth: int = 40
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -2,7 +2,6 @@ import { useMutation } from "@tanstack/react-query";
 import { CircleX, Pencil, Save } from "lucide-react";
 import {
   Form,
-  useDataProvider,
   useGetIdentity,
   useGetOne,
   useLocaleState,
@@ -23,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CrmDataProvider } from "../providers/types";
+import { apiJson, ApiError } from "../providers/rest/api";
 import type { Profile } from "../types";
 
 // Self-profile edit. The signed-in user edits their own row in `profiles`
@@ -39,22 +38,13 @@ export const ProfilePage = () => {
   });
   const translate = useTranslate();
   const notify = useNotify();
-  const dataProvider = useDataProvider<CrmDataProvider>();
 
   const { mutate } = useMutation({
     mutationKey: ["profile-update"],
     mutationFn: async (values: { full_name?: string; email?: string }) => {
-      if (!identity || !data) {
-        throw new Error(
-          translate("crm.profile.record_not_found", {
-            _: "Record not found",
-          }),
-        );
-      }
-      return dataProvider.update("users", {
-        id: identity.id,
-        data: { full_name: values.full_name, email: values.email },
-        previousData: data,
+      return apiJson<Record<string, unknown>>("/api/v1/users/me", {
+        method: "PATCH",
+        body: { full_name: values.full_name, email: values.email },
       });
     },
     onSuccess: () => {
@@ -63,17 +53,21 @@ export const ProfilePage = () => {
       setEditMode(false);
       notify("crm.profile.updated", {
         messageArgs: {
-          _: "Your profile has been updated",
+          _: "Thông tin đã được cập nhật",
         },
       });
     },
-    onError: () => {
-      notify("crm.profile.update_error", {
-        type: "error",
-        messageArgs: {
-          _: "An error occurred. Please try again",
-        },
-      });
+    onError: (error: Error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        notify("Email đã được sử dụng bởi tài khoản khác", { type: "error" });
+      } else {
+        notify("crm.profile.update_error", {
+          type: "error",
+          messageArgs: {
+            _: "Đã xảy ra lỗi. Vui lòng thử lại",
+          },
+        });
+      }
     },
   });
 

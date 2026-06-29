@@ -25,7 +25,7 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
           <div
             className={cn(
               "min-h-dvh",
-              hideTopbar ? "pb-14" : "pt-16 pb-14",
+              hideTopbar ? "pb-20" : "pt-16 pb-20",
             )}
           >
             {children}

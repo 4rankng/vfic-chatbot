@@ -82,7 +82,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
     <div className="kb-scope login-paper min-h-svh overflow-hidden text-foreground">
       <main className="mx-auto flex min-h-svh w-full max-w-[620px] items-center justify-center px-5 py-8 sm:px-8">
         <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
-          <div className="mb-6 space-y-3 sm:mb-8">
+          <div className="mb-6 space-y-3 text-center sm:mb-8">
             <div className="flex items-center justify-center gap-4">
               <img
                 src="/ttsoft-logo.png"
@@ -95,7 +95,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
               </p>
             </div>
             <div className="space-y-3">
-              <h1 className="kb-display whitespace-nowrap text-[clamp(1.65rem,3.05vw,2.65rem)] leading-none text-foreground">
+              <h1 className="kb-display text-balance text-[clamp(1.65rem,3.05vw,2.65rem)] leading-none text-foreground">
                 {translate("crm.auth.welcome_back", {
                   _: "Chào mừng bạn trở lại!",
                 })}
@@ -155,7 +155,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
                   _: "Quên mật khẩu?",
                 })}{" "}
                 <a
-                  href="/forgot-password"
+                  href="/#/forgot-password"
                   className="font-semibold text-foreground underline-offset-4 hover:underline"
                 >
                   {translate("crm.auth.recover_now", {

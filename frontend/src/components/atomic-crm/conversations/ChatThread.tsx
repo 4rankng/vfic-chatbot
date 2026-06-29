@@ -6,6 +6,7 @@ import {
   useRef,
   useCallback,
   useMemo,
+  type CSSProperties,
   type HTMLAttributes,
 } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
@@ -64,6 +65,8 @@ const QUICK_EMOJIS = [
   "🙌",
 ];
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
+const DEFAULT_COMPOSER_RESERVE_PX = 104;
+const COMPOSER_RESERVE_GAP_PX = 16;
 
 const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
@@ -115,12 +118,16 @@ export const ChatThread = ({
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
+  const composerWrapRef = useRef<HTMLElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const initialJumpDoneRef = useRef(false);
   const initialBottomSettleUntilRef = useRef(0);
   const initialBottomSettleRafRef = useRef<number | null>(null);
   const lastScrollTopRef = useRef(0);
   const lastLoadMoreAtRef = useRef(0);
+  const [composerReserve, setComposerReserve] = useState(
+    DEFAULT_COMPOSER_RESERVE_PX,
+  );
   // Load older messages only on a genuine upward scroll — not merely because
   // the top happens to be visible (which is the case the moment a thread opens,
   // when the initial page fits the viewport, and would otherwise auto-fetch the
@@ -211,6 +218,27 @@ export const ChatThread = ({
     },
     [],
   );
+
+  useLayoutEffect(() => {
+    const footer = composerWrapRef.current;
+    if (!footer) return;
+
+    const updateComposerReserve = () => {
+      const nextReserve = Math.ceil(
+        footer.getBoundingClientRect().height + COMPOSER_RESERVE_GAP_PX,
+      );
+      setComposerReserve((currentReserve) =>
+        currentReserve === nextReserve ? currentReserve : nextReserve,
+      );
+    };
+
+    updateComposerReserve();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(updateComposerReserve);
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, [showComposerTakeoverNotice, isBotMode]);
 
   const syncComposerTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -438,7 +466,12 @@ export const ChatThread = ({
         ref={virtuosoRef}
         scrollerRef={(el) => setScrollerEl(el as HTMLElement | null)}
         className="chat-scroller"
-        style={{ height: "100%" }}
+        style={
+          {
+            height: "100%",
+            "--chat-composer-reserve": `${composerReserve}px`,
+          } as CSSProperties
+        }
         data={messages}
         computeItemKey={(_, m) => m.id}
         firstItemIndex={firstItemIndex}
@@ -449,7 +482,7 @@ export const ChatThread = ({
         itemContent={renderMessage}
       />
 
-      <footer className="composer-wrap">
+      <footer ref={composerWrapRef} className="composer-wrap">
         {showComposerTakeoverNotice && isBotMode && (
           <div className="handoff-note">
             <svg className="icon">

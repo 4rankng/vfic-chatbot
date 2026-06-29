@@ -95,11 +95,11 @@ const LeadCardContentBase = ({
 
   return (
     <article
-      className="group cursor-pointer select-none rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:bg-accent/25"
+      className="group w-full max-w-full cursor-pointer select-none overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:bg-accent/25"
       onClick={handleClick}
     >
       <RecordContextProvider value={lead}>
-        <div className="flex items-start gap-3">
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3">
           <LeadAvatar record={lead} size="sm" className="size-11 shrink-0" />
 
           <div className="min-w-0 flex-1">

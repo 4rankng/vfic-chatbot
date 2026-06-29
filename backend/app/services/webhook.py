@@ -112,8 +112,10 @@ class ZaloWebhookService:
             "received_at": datetime.now(timezone.utc).isoformat(),
         }
         result = enqueue(job)
-        if result is not None:
+        if asyncio.iscoroutine(result):
             await result
+        if result is False:
+            return {"status": "enqueue_failed", "conversation_id": str(conv.id)}
         return {"status": "queued", "conversation_id": str(conv.id)}
 
 

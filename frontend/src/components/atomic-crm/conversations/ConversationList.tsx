@@ -16,6 +16,15 @@ type ConversationRow = Conversation & {
   _snippet?: string;
 };
 
+const needsVisibleAttention = (
+  conversation: Conversation,
+  readIds: Set<string>,
+) =>
+  Boolean(conversation.needs_human) ||
+  (!readIds.has(conversation.id) && (conversation.unread_count ?? 0) > 0) ||
+  conversation.mode === "human" ||
+  conversation.mode === "semi_auto";
+
 const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -103,10 +112,13 @@ const ConversationListItem = memo(
     const unread = readIds.has(conversation.id)
       ? 0
       : (conversation.unread_count ?? 0);
+    const needsAttention = needsVisibleAttention(conversation, readIds);
 
     return (
       <button
-        className={`conversation ${isActive ? "active" : ""}`}
+        className={`conversation ${isActive ? "active" : ""} ${
+          needsAttention ? "needs-attention" : ""
+        }`}
         onClick={() => onSelect(conversation)}
         aria-label={`Mở hội thoại với ${name}`}
       >
@@ -141,11 +153,16 @@ const ConversationListItem = memo(
           </span>
           <span className="conv-bottom">
             {subtitle && <span className="conv-preview">{subtitle}</span>}
-            <span className={`mini-chip ${modeMeta.tone}`}>
-              <svg className="icon">
-                <use href={`#${modeMeta.icon}`} />
-              </svg>
-              {modeMeta.label}
+            <span className="conv-badges">
+              {needsAttention && (
+                <span className="mini-chip attention">Cần xử lý</span>
+              )}
+              <span className={`mini-chip ${modeMeta.tone}`}>
+                <svg className="icon">
+                  <use href={`#${modeMeta.icon}`} />
+                </svg>
+                {modeMeta.label}
+              </span>
             </span>
           </span>
         </span>
@@ -238,8 +255,21 @@ const ConversationListPanel = ({
           if (!haystack.includes(q)) return false;
         }
         return true;
+      })
+      .sort((a, b) => {
+        const aAttention = needsVisibleAttention(a, readIds) ? 1 : 0;
+        const bAttention = needsVisibleAttention(b, readIds) ? 1 : 0;
+        if (aAttention !== bAttention) return bAttention - aAttention;
+
+        const aUnread = readIds.has(a.id) ? 0 : (a.unread_count ?? 0);
+        const bUnread = readIds.has(b.id) ? 0 : (b.unread_count ?? 0);
+        if (aUnread !== bUnread) return bUnread - aUnread;
+
+        return (
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        );
       });
-  }, [conversations, leads, snippets, query]);
+  }, [conversations, leads, snippets, query, readIds]);
 
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
@@ -259,8 +289,11 @@ const ConversationListPanel = ({
       </div>
 
       <div className="section-label">
-        <span>Hộp thư đến</span>
-        <span>{rows.length} cuộc trò chuyện</span>
+        <span>Zalo cần chăm sóc</span>
+        <span>
+          {rows.filter((row) => needsVisibleAttention(row, readIds)).length} cần
+          xử lý · {rows.length} chat
+        </span>
       </div>
 
       <div className="conversations animate-in fade-in-0 duration-300">

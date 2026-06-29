@@ -1,4 +1,4 @@
-import { CanAccess, ListBase, useTranslate } from "ra-core";
+import { ListBase, usePermissions, useTranslate } from "ra-core";
 import { CreateButton } from "@/components/admin/create-button";
 import { DataTable } from "@/components/admin/data-table";
 import { TextField } from "@/components/admin/text-field";
@@ -30,36 +30,39 @@ const AccessDenied = () => {
 
 export const UserList = () => {
   const translate = useTranslate();
+  const { permissions, isPending } = usePermissions();
+
+  if (isPending) return null;
+  if (permissions !== "admin") return <AccessDenied />;
+
   return (
-    <CanAccess resource="users" action="list" accessDenied={<AccessDenied />}>
-      <ListBase perPage={25} sort={{ field: "created_at", order: "DESC" }}>
-        <TopToolbar>
-          <h2 className="mr-auto text-xl font-semibold">
-            {translate("resources.users.name", { smart_count: 2 })}
-          </h2>
-          <CreateButton />
-        </TopToolbar>
-        <div className="mt-4">
-          <DataTable bulkActionButtons={false}>
-            <DataTable.Col source="full_name" label="Họ tên">
-              <TextField source="full_name" className="font-semibold" />
-            </DataTable.Col>
-            <DataTable.Col source="email" label="Email" />
-            <DataTable.Col source="role" label="Vai trò">
-              <UserRoleBadge />
-            </DataTable.Col>
-            <DataTable.Col source="disabled" label="Trạng thái">
-              <UserStatusBadge />
-            </DataTable.Col>
-            <DataTable.Col source="created_at" label="Ngày tạo">
-              <DateField source="created_at" showTime />
-            </DataTable.Col>
-            <DataTable.Col label="Thao tác">
-              <UserActions />
-            </DataTable.Col>
-          </DataTable>
-        </div>
-      </ListBase>
-    </CanAccess>
+    <ListBase perPage={25} sort={{ field: "created_at", order: "DESC" }}>
+      <TopToolbar>
+        <h2 className="mr-auto text-xl font-semibold">
+          {translate("resources.users.name", { smart_count: 2 })}
+        </h2>
+        <CreateButton />
+      </TopToolbar>
+      <div className="mt-4">
+        <DataTable bulkActionButtons={false}>
+          <DataTable.Col source="full_name" label="Họ tên">
+            <TextField source="full_name" className="font-semibold" />
+          </DataTable.Col>
+          <DataTable.Col source="email" label="Email" />
+          <DataTable.Col source="role" label="Vai trò">
+            <UserRoleBadge />
+          </DataTable.Col>
+          <DataTable.Col source="disabled" label="Trạng thái">
+            <UserStatusBadge />
+          </DataTable.Col>
+          <DataTable.Col source="created_at" label="Ngày tạo">
+            <DateField source="created_at" showTime />
+          </DataTable.Col>
+          <DataTable.Col label="Thao tác">
+            <UserActions />
+          </DataTable.Col>
+        </DataTable>
+      </div>
+    </ListBase>
   );
 };
