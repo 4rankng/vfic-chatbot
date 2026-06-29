@@ -159,6 +159,77 @@ async def test_extract_is_idempotent_on_rerun(db_session, clean_kb, clean_featur
     assert n == 11  # no duplicates
 
 
+async def test_new_upload_merges_features_without_erasing_existing_values(
+    db_session, clean_kb, clean_features
+):
+    proj = await _seed_project(db_session)
+    first_doc = await _make_doc(
+        db_session,
+        "LG Display tuyển operator lương 10-13 triệu, có xe đưa đón Thái Bình.",
+        project_id=proj.id,
+    )
+    second_doc = await _make_doc(
+        db_session,
+        "LG Display cập nhật thu nhập 12-15 triệu/tháng.",
+        project_id=proj.id,
+    )
+
+    async def first_llm_json(system, user):
+        return json.dumps(_features_payload())
+
+    async def second_llm_json(system, user):
+        return json.dumps(
+            {
+                "features": [
+                    {
+                        "feature_key": "take_home_income",
+                        "value_text": "12–15 triệu/tháng",
+                        "value_json": {
+                            "min": 12000000,
+                            "max": 15000000,
+                            "currency": "VND",
+                            "period": "month",
+                        },
+                        "is_highlight": True,
+                        "strength_score": 0.92,
+                        "evidence_text": "thu nhập 12-15 triệu",
+                    }
+                ]
+            }
+        )
+
+    await KnowledgePipeline(db_session, _FakeEmbedder(), first_llm_json).extract_product_features(
+        first_doc, []
+    )
+    await KnowledgePipeline(db_session, _FakeEmbedder(), second_llm_json).extract_product_features(
+        second_doc, []
+    )
+
+    rows = (
+        await db_session.execute(
+            text(
+                "SELECT wfc.feature_key, jfv.value_text, jfv.value_json, "
+                "jfv.is_missing, jfv.source_document_id "
+                "FROM job_feature_values jfv "
+                "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
+                "WHERE jfv.project_id = :p "
+                "AND wfc.feature_key IN ('take_home_income', 'commute_support')"
+            ),
+            {"p": str(proj.id)},
+        )
+    ).mappings()
+    by_key = {row["feature_key"]: row for row in rows}
+
+    assert by_key["take_home_income"]["value_text"] == "12–15 triệu/tháng"
+    assert by_key["take_home_income"]["value_json"]["max"] == 15000000
+    assert by_key["take_home_income"]["source_document_id"] == second_doc.id
+
+    assert by_key["commute_support"]["value_text"] == "Có xe đưa đón Thái Bình"
+    assert by_key["commute_support"]["is_missing"] is False
+    assert by_key["commute_support"]["source_document_id"] == first_doc.id
+    assert (await _count_features(db_session, proj.id)).scalar() == 11
+
+
 async def test_extract_syncs_project_highlights(db_session, clean_kb, clean_features):
     proj = await _seed_project(db_session)
     doc = await _make_doc(db_session, "LG Display.", project_id=proj.id)

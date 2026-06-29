@@ -248,9 +248,9 @@ class KnowledgePipeline:
     async def extract_product_features(self, doc, units: list[dict]) -> None:
         """LLM-extract the 11 worker product features for ``doc.project_id`` (best-effort).
 
-        Always writes exactly one job_feature_values row per active catalog feature — features the
-        posting omits get ``is_missing=true`` — so the project has a stable 11-row set.
-        Idempotent: deletes the project's existing rows before inserting.
+        Keeps one job_feature_values row per active catalog feature. New concrete values
+        update the project profile, but missing values from a newer upload do not erase
+        older useful answers.
         """
         if doc.project_id is None:
             return
@@ -275,7 +275,7 @@ class KnowledgePipeline:
                 if key:
                     by_key[key] = f
         rows = [(c, _coerce_feature(by_key.get(c.feature_key), c)) for c in catalog]
-        await self.features.replace_for_project(doc.project_id, doc.id, rows)
+        await self.features.merge_for_project(doc.project_id, doc.id, rows)
         await self.index.sync_highlights(doc.project_id)
 
     async def sync_canonical_product_features(
@@ -308,7 +308,7 @@ class KnowledgePipeline:
                     "evidence_text": answer[:1000],
                 }
             rows.append((c, _coerce_feature(raw, c)))
-        await self.features.replace_for_project(doc.project_id, doc.id, rows)
+        await self.features.merge_for_project(doc.project_id, doc.id, rows)
         await self.index.sync_highlights(doc.project_id)
 
     async def _update_canonical_project_card(

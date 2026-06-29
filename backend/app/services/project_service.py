@@ -321,8 +321,9 @@ class ProjectService:
     async def extract_features(self, project_id: uuid.UUID, admin: User) -> FeatureListResponse:
         """Synchronously re-extract the 11 product features from the project's latest posting.
 
-        Persona-pattern: one blocking MiniMax call in the web process (~5-10s). Overwrites the
-        project's 11 feature values. Requires a source document with extracted text.
+        Persona-pattern: one blocking MiniMax call in the web process (~5-10s). Merges
+        the latest document's concrete values into the project's feature profile without
+        erasing older useful answers for features the latest document omits.
         """
         await self._require_project(project_id)
         doc = (

@@ -40,25 +40,30 @@ const FEATURE_CATEGORY_LABELS: Record<string, string> = {
   schedule: "Lịch làm việc",
 };
 
+const FEATURE_FILL_HINTS: Record<string, string> = {
+  application_simplicity: "Nhập danh sách giấy tờ cần chuẩn bị và ai hỗ trợ làm hồ sơ.",
+  commute_support: "Nhập tuyến/khu vực có xe đưa đón, mức hỗ trợ vé xe, hoặc điều kiện khoảng cách.",
+  daily_cost_benefits: "Nhập các khoản hỗ trợ ăn ở, đi lại, ký túc xá hoặc chi phí sinh hoạt.",
+  housing: "Nhập có/không có ký túc xá, điều kiện phòng ở, chi phí và đối tượng được ở.",
+  job_difficulty: "Nhập công việc hằng ngày, yêu cầu kinh nghiệm, đào tạo và mức độ vất vả.",
+  joining_bonus: "Nhập mức thưởng, thời điểm nhận và điều kiện để được thưởng.",
+  overtime_rate: "Nhập cách tính tiền tăng ca theo ngày thường, ngày nghỉ và ngày lễ.",
+  pay_frequency: "Nhập lịch trả lương, có lương tuần/ứng lương hay không, và ngày nhận tiền.",
+  salary_transparency: "Nhập lương cơ bản, từng khoản phụ cấp, thưởng, khấu trừ và điều kiện nhận.",
+  shift_schedule: "Nhập ca làm, giờ làm, ngày nghỉ, xoay ca hay cố định.",
+  take_home_income: "Nhập tổng thu nhập thực nhận dự kiến theo tháng sau phụ cấp, tăng ca và khấu trừ.",
+};
+
 const getFeatureCategoryLabel = (category: string | null | undefined) => {
   const key = category?.trim().toLowerCase();
   if (!key) return "Khác";
   return FEATURE_CATEGORY_LABELS[key] ?? category;
 };
 
-const normalizeFeatureText = (value: string | null | undefined) =>
-  (value ?? "")
-    .trim()
-    .replace(/^["“”]+|["“”]+$/g, "")
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-
-const shouldShowEvidence = (feature: ProductFeature) => {
-  const evidence = normalizeFeatureText(feature.evidence_text);
-  return Boolean(
-    evidence && evidence !== normalizeFeatureText(feature.value_text),
-  );
-};
+const getFillHint = (feature: ProductFeature) =>
+  FEATURE_FILL_HINTS[feature.feature_key] ??
+  feature.worker_question_vi ??
+  `Nhập thông tin cụ thể cho ${feature.name_vi}.`;
 
 // Binary readiness derivation. A feature is "đủ thông tin" (ready) when the
 // agent has a non-empty value_text and the row is not flagged missing/unclear.
@@ -324,7 +329,7 @@ const ReadinessHero = ({
 };
 
 // One of the two readiness groups. Highlights are NOT a separate group — a
-// ready + is_highlight slot shows a small ⭐ accent next to its name.
+// ready + is_highlight slot shows a small star accent next to its name.
 const FeatureGroup = ({
   tone,
   count,
@@ -357,7 +362,7 @@ const FeatureGroup = ({
               <div
                 key={f?.id ?? `slot-${i}`}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs",
+                  "flex items-start gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs",
                   ready
                     ? "border-feature-ready/30 bg-feature-ready-soft"
                     : "border-feature-gap-border border-dashed bg-feature-gap-soft",
@@ -369,13 +374,20 @@ const FeatureGroup = ({
                     ready ? "bg-feature-ready" : "bg-feature-gap",
                   )}
                 />
-                <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-foreground">
-                  <span className="truncate">{name}</span>
-                  {highlighted && (
-                    <Star
-                      className="size-3.5 shrink-0 text-feature-ready"
-                      aria-label="Nổi bật"
-                    />
+                <span className="flex min-w-0 flex-1 flex-col gap-1 text-foreground">
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="truncate">{name}</span>
+                    {highlighted && (
+                      <Star
+                        className="size-3.5 shrink-0 text-feature-ready"
+                        aria-label="Nổi bật"
+                      />
+                    )}
+                  </span>
+                  {!ready && f && (
+                    <span className="line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                      {getFillHint(f)}
+                    </span>
                   )}
                 </span>
               </div>
@@ -409,7 +421,7 @@ const FeatureCard = ({
   const [draft, setDraft] = useState(feature.value_text);
   const [highlight, setHighlight] = useState(feature.is_highlight);
   const [saving, setSaving] = useState(false);
-  const showEvidence = shouldShowEvidence(feature);
+  const showFillHint = feature.is_missing || feature.needs_clarification;
 
   const save = async () => {
     setSaving(true);
@@ -483,9 +495,12 @@ const FeatureCard = ({
           ) : (
             <>
               <p className="mt-1 text-sm leading-5">{feature.value_text}</p>
-              {showEvidence && (
-                <p className="mt-1 text-xs italic text-muted-foreground">
-                  "{feature.evidence_text}"
+              {showFillHint && (
+                <p className="mt-2 rounded-md border border-dashed bg-muted/25 px-2.5 py-2 text-xs leading-5 text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    Cần bổ sung:
+                  </span>{" "}
+                  {getFillHint(feature)}
                 </p>
               )}
             </>

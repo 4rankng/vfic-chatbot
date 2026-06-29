@@ -253,6 +253,57 @@ class JobFeatureValueRepo:
             )
         await self.db.commit()
 
+    async def merge_for_project(
+        self,
+        project_id: uuid.UUID,
+        doc_id: uuid.UUID,
+        rows: list[tuple[Any, dict]],
+    ) -> None:
+        """Merge extracted feature values into a project's read model.
+
+        New uploads supplement the existing project profile. A concrete value from the
+        new document updates the row (newer posting wins for obsolete details), while a
+        missing/unclear extraction only inserts a gap row when the project has no value
+        yet; it never erases an older useful answer.
+        """
+        for priority, (c, coerced) in enumerate(rows):
+            await self.db.execute(
+                text(
+                    "INSERT INTO job_feature_values "
+                    "(project_id, feature_id, value_text, value_json, strength_score, display_priority, "
+                    " is_highlight, is_missing, needs_clarification, evidence_text, source_document_id) "
+                    "VALUES (CAST(:pid AS uuid), CAST(:fid AS uuid), :vtext, CAST(:vjson AS jsonb), "
+                    "        :strength, :prio, :hl, :missing, :clarify, :evidence, CAST(:did AS uuid)) "
+                    "ON CONFLICT (project_id, feature_id) DO UPDATE SET "
+                    "  value_text = EXCLUDED.value_text, "
+                    "  value_json = EXCLUDED.value_json, "
+                    "  strength_score = EXCLUDED.strength_score, "
+                    "  display_priority = EXCLUDED.display_priority, "
+                    "  is_highlight = EXCLUDED.is_highlight, "
+                    "  is_missing = EXCLUDED.is_missing, "
+                    "  needs_clarification = EXCLUDED.needs_clarification, "
+                    "  evidence_text = EXCLUDED.evidence_text, "
+                    "  source_document_id = EXCLUDED.source_document_id "
+                    "WHERE COALESCE(EXCLUDED.is_missing, false) = false "
+                    "  AND COALESCE(EXCLUDED.needs_clarification, false) = false "
+                    "  AND btrim(EXCLUDED.value_text) <> ''"
+                ),
+                {
+                    "pid": str(project_id),
+                    "fid": str(c.id),
+                    "vtext": coerced["value_text"],
+                    "vjson": json.dumps(coerced["value_json"], ensure_ascii=False),
+                    "strength": coerced["strength_score"],
+                    "prio": priority,
+                    "hl": coerced["is_highlight"],
+                    "missing": coerced["is_missing"],
+                    "clarify": coerced["needs_clarification"],
+                    "evidence": coerced["evidence_text"],
+                    "did": str(doc_id),
+                },
+            )
+        await self.db.commit()
+
     async def list_for_project(self, project_id: uuid.UUID) -> list:
         """A project's feature values joined to the catalog (catalog display order)."""
         return (
