@@ -1,0 +1,34 @@
+"""Shared embedding helpers for batch-then-fallback patterns."""
+from __future__ import annotations
+
+import logging
+from typing import Awaitable, Callable
+
+logger = logging.getLogger(__name__)
+
+# Type alias for a batch embedder callable.
+BatchEmbedder = Callable[[list[str]], Awaitable[list[list[float]]]]
+
+
+async def embed_with_fallback(
+    embed_batch: BatchEmbedder,
+    texts: list[str],
+    *,
+    label: str = "embedder",
+) -> list[list[float]]:
+    """Embed many texts; fall back to one-by-one on batch mismatch.
+
+    Tries the batch callable first.  If the returned vector count doesn't
+    match the input count, logs a warning and retries each text individually
+    using the same callable (wrapping each as a single-item list).
+    """
+    vectors = await embed_batch(texts)
+    if len(vectors) == len(texts):
+        return vectors
+    logger.warning(
+        "%s batch returned %d vectors for %d texts; retrying one-by-one",
+        label,
+        len(vectors),
+        len(texts),
+    )
+    return [await embed_batch([t])[0] for t in texts]

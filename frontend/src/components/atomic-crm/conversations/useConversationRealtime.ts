@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message } from "../types";
 import { chatRepository } from "./chatRepository";
+import {
+  INITIAL_CHAT_FIRST_ITEM_INDEX,
+  firstItemIndexAfterPrepend,
+} from "./chatScrollIndex";
 
 // Owns the realtime subscription + paginated message state for a conversation.
 // Extracted from ChatThread so the message-loading logic is reusable across any
@@ -61,6 +65,9 @@ export const useConversationRealtime = (conversationId?: string) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [firstItemIndex, setFirstItemIndex] = useState(
+    INITIAL_CHAT_FIRST_ITEM_INDEX,
+  );
   const isFetchingRef = useRef(false);
   // Mirror `messages` into a ref so loadMore can read the latest set
   // synchronously. A setMessages functional updater runs later (during render),
@@ -102,6 +109,7 @@ export const useConversationRealtime = (conversationId?: string) => {
   useEffect(() => {
     setMessages([]);
     setHasMore(false);
+    setFirstItemIndex(INITIAL_CHAT_FIRST_ITEM_INDEX);
     fetchInitial();
 
     if (!conversationId) return;
@@ -149,6 +157,9 @@ export const useConversationRealtime = (conversationId?: string) => {
           (n, m) => n + (existingIds.has(m.id) ? 0 : 1),
           0,
         );
+        if (added > 0) {
+          setFirstItemIndex((i) => firstItemIndexAfterPrepend(i, added));
+        }
         setMessages((prev) => mergeChronological(prev, older));
         return added;
       } catch {
@@ -165,5 +176,12 @@ export const useConversationRealtime = (conversationId?: string) => {
     [hasMore, conversationId],
   );
 
-  return { messages, isLoading, isLoadingMore, hasMore, loadMore };
+  return {
+    messages,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    firstItemIndex,
+    loadMore,
+  };
 };

@@ -29,6 +29,7 @@ from typing import Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.embedding import embed_with_fallback
 from app.services.knowledge.coercion import (
     DigestError,
     _coerce_feature,
@@ -218,16 +219,9 @@ class KnowledgePipeline:
     async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts; prefer a batch call when the embedder supports it."""
         batch = getattr(self.embedder, "batch", None)
-        if callable(batch):
-            vectors = await batch(texts)  # type: ignore[misc]
-            if len(vectors) == len(texts):
-                return vectors
-            logger.warning(
-                "embedder batch returned %d vectors for %d texts; retrying one-by-one",
-                len(vectors),
-                len(texts),
-            )
-        return [await self.embedder(t) for t in texts]
+        if not callable(batch):
+            return [await self.embedder(t) for t in texts]
+        return await embed_with_fallback(batch, texts, label="embedder batch")
 
     async def build_project_index(self, project_id: uuid.UUID) -> None:
         """Regenerate the project's catalog card from usable units (master index)."""

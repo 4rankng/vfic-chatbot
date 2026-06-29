@@ -1,19 +1,21 @@
 """Memory persistence (port of VFIC Persist Memories).
 
 greeting_gate is a VERBATIM port of the 'Should Persist?' code node (high-precision
-skip of pure greetings/affirmations). canonical_key dedup uses NFD normalisation
-(the live 'Dedup Facts' behavior): a fact already stored under the same canonical
-key for this chat is not re-saved. Embeddings via Gemini (injected for tests).
+skip of pure greetings/affirmations). canonical_key dedup is accent-insensitive:
+a fact already stored under the same canonical key for this chat is not re-saved.
+Embeddings via Gemini are injected for tests.
 """
 from __future__ import annotations
 
 import json
+import logging
 import re
-import unicodedata
 from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.embedding import embed_with_fallback
+from app.core.text import normalize_vietnamese_text
 from app.core.vector import vec_literal
 from app.prompts.lead_memory import MEMORY_EXTRACT_PROMPT
 from app.services.memory_repository import MemoryRepository
@@ -21,6 +23,7 @@ from app.services.memory_repository import MemoryRepository
 Extractor = Callable[[str, str], Awaitable[str]]
 # Batch embedder: many texts -> many vectors in one call (avoids the per-fact N+1).
 BatchEmbedder = Callable[[list[str]], Awaitable[list[list[float]]]]
+logger = logging.getLogger(__name__)
 
 # Verbatim skip list from the 'Should Persist?' node.
 _SKIP = {
@@ -32,14 +35,23 @@ _SKIP = {
 
 
 def greeting_gate(user_text: str) -> bool:
-    """Return True if the message is substantive enough to run the memory extractor."""
+    """Return True if the message is substantive enough to run the memory extractor.
+
+    Allows single meaningful answers like '5' (age), '25', '30' through — these
+    are numeric responses that carry information even though they're short.
+    """
     u = (user_text or "").strip().lower()
-    return not (len(u) < 3 or u in _SKIP)
+    if not u:
+        return False
+    if len(u) < 3:
+        # Allow single/double-digit numeric answers (e.g. "5" = age).
+        return u.isdigit()
+    return u not in _SKIP
 
 
 def canonical_key(text: str) -> str:
-    """NFD-normalised, lowercased, whitespace-collapsed key for dedup."""
-    return " ".join(unicodedata.normalize("NFD", (text or "").lower()).split())
+    """Accent-insensitive, lowercased, whitespace-collapsed key for dedup."""
+    return normalize_vietnamese_text(text or "")
 
 
 def _flatten_facts(raw) -> list[str]:
@@ -89,7 +101,13 @@ class MemoryService:
     @staticmethod
     async def extract(extractor: Extractor, user_text: str, bot_output: str) -> list[str]:
         raw = await extractor(MEMORY_EXTRACT_PROMPT, f"Tin nhắn người dùng: {user_text or ''}\n\nPhản hồi của bot: {bot_output or ''}")
-        return _parse_facts(raw)
+        facts = _parse_facts(raw)
+        logger.debug("memory extract: %d facts from user text (%d chars)", len(facts), len(user_text or ""))
+        return facts
+
+    @staticmethod
+    async def _embed_facts(embed_batch: BatchEmbedder, facts: list[str]) -> list[list[float]]:
+        return await embed_with_fallback(embed_batch, facts, label="memory embedder")
 
     @staticmethod
     async def save(db: AsyncSession, embed_batch: BatchEmbedder, chat_id: str, facts: list[str]) -> int:
@@ -108,7 +126,7 @@ class MemoryService:
             await db.commit()
             return 0
 
-        embeddings = await embed_batch(new_facts)
+        embeddings = await MemoryService._embed_facts(embed_batch, new_facts)
         rows = [
             (
                 fact,
@@ -117,9 +135,10 @@ class MemoryService:
             )
             for fact, emb in zip(new_facts, embeddings)
         ]
-        await repo.insert_memories(rows)
+        inserted = await repo.insert_memories(rows)
         await db.commit()
-        return len(rows)
+        logger.debug("memory save: %d new facts persisted for chat %s", inserted, chat_id)
+        return inserted
 
     @staticmethod
     async def persist(
@@ -131,8 +150,16 @@ class MemoryService:
         bot_output: str,
     ) -> int:
         if not greeting_gate(user_text):
+            logger.debug("memory persist skipped by greeting_gate: '%s'", user_text[:80])
             return 0
         facts = await MemoryService.extract(extractor, user_text, bot_output)
         if not facts:
             return 0
-        return await MemoryService.save(db, embed_batch, chat_id, facts)
+        try:
+            return await MemoryService.save(db, embed_batch, chat_id, facts)
+        except Exception:
+            logger.warning(
+                "memory persist failed for chat %s (%d facts extracted); chat turn continues",
+                chat_id, len(facts), exc_info=True,
+            )
+            return 0

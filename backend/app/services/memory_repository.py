@@ -30,15 +30,23 @@ class MemoryRepository:
         ).all()
         return {r.ck for r in rows if r.ck}
 
-    async def insert_memories(self, rows: list[tuple[str, str, str]]) -> None:
-        """Batched insert of ``(content, metadata_json, embedding_literal)`` rows."""
+    async def insert_memories(self, rows: list[tuple[str, str, str]]) -> int:
+        """Batched insert of ``(content, metadata_json, embedding_literal)`` rows.
+
+        Returns ``len(rows)`` (the caller pre-deduplicates, so input count equals
+        expected inserts).  ``ON CONFLICT DO NOTHING`` guards against race-condition
+        duplicate-key errors; asyncpg ``executemany`` rowcount is unreliable, so
+        we use the input count rather than ``result.rowcount``.
+        """
         await self.db.execute(
             text(
                 "INSERT INTO memories(content, metadata, embedding) "
-                "VALUES (:c, CAST(:m AS jsonb), CAST(:e AS vector))"
+                "VALUES (:c, CAST(:m AS jsonb), CAST(:e AS vector)) "
+                "ON CONFLICT DO NOTHING"
             ),
             [{"c": c, "m": m, "e": e} for c, m, e in rows],
         )
+        return len(rows)
 
 
 __all__ = ["MemoryRepository"]

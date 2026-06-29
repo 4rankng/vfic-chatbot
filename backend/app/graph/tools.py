@@ -1,8 +1,8 @@
 """The 3 retrieval tools the agent may call (port of the n8n vector/postgres tools):
 
   * search_user_memory  -> match_memories top-5 filtered by chat_id
-  * search_jobs         -> match_documents top-25 (over the `documents` VIEW)
-  * search_bus_timetable-> SELECT * FROM search_bus_timetable('vfic', ...)
+  * search_jobs         -> search_knowledge top-25
+  * search_bus_timetable-> complete structured bus route groups + stop times
 
 Each takes an injected embedder (Gemini) + async db session, so they are testable
 without an LLM. STRICT rule (from the agent prompt): advise only from returned data.
@@ -13,6 +13,7 @@ the embedding (a graph-layer concern) + the Vietnamese formatting only.
 from __future__ import annotations
 
 import json
+import logging
 from collections import OrderedDict
 from typing import Any
 
@@ -21,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.vector import vec_literal
 from app.graph.llm import Embedder
 from app.services.retrieval import RetrievalRepository
+
+logger = logging.getLogger(__name__)
 
 
 async def search_user_memory(
@@ -32,6 +35,7 @@ async def search_user_memory(
     )
     if not rows:
         return "Không có thông tin ghi nhớ về người dùng này."
+    logger.debug("search_user_memory: %d rows for chat %s", len(rows), chat_id)
     return "\n".join(f"- {r.content} (sim={r.similarity:.2f})" for r in rows)
 
 
@@ -51,9 +55,12 @@ async def search_knowledge(
             return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
         project_ids = [str(pid)]
     emb = vec_literal(await embedder(query))
-    rows = await repo.match_documents(emb, top_k, "{}", project_ids=project_ids)
+    rows = await repo.match_documents(
+        emb, top_k, "{}", project_ids=project_ids, query_text=query
+    )
     if not rows:
         return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
+    logger.debug("search_knowledge: %d rows (project=%s)", len(rows), project_slug)
     lines: list[str] = []
     for r in rows:
         metadata = getattr(r, "metadata", None) or {}
@@ -73,7 +80,17 @@ async def search_knowledge(
             suffix += f"; hiệu lực: {effective}"
         if route:
             suffix += f"; route_id: {route}"
-        lines.append(f"- {str(r.content)}\n  {suffix}")
+        # Prefer source_quote (precise evidence) over raw content;
+        # append summary as supplementary context when available.
+        quote = getattr(r, "source_quote", None)
+        summary = getattr(r, "summary", None)
+        parts: list[str] = []
+        if quote:
+            parts.append(str(quote))
+        if summary:
+            parts.append(f"Tóm tắt: {summary}")
+        content = "\n".join(parts) if parts else str(r.content)
+        lines.append(f"- {content}\n  {suffix}")
     return "\n".join(lines)
 
 
@@ -102,7 +119,9 @@ async def search_bus_timetable(
     if not rows and company.strip():
         rows = await repo.search_bus_timetable("", question, limit)
     if not rows:
+        logger.debug("search_bus_timetable: no rows for company=%s", company)
         return "Không tìm thấy lịch xe phù hợp."
+    logger.debug("search_bus_timetable: %d rows for company=%s", len(rows), company)
     # Repository retrieval completes each matched route before formatting. Keep
     # every returned stop/time visible so the LLM can answer at Agent X detail.
     groups: OrderedDict[tuple, list[tuple[str, str]]] = OrderedDict()

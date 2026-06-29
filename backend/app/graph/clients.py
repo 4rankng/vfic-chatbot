@@ -7,6 +7,7 @@ import time. Tool schemas + dispatch live in ``schemas.py``.
 from __future__ import annotations
 
 import logging
+import unicodedata
 from typing import Literal
 
 from app.core.config import get_settings
@@ -14,6 +15,31 @@ from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 
 logger = logging.getLogger(__name__)
 ModelRole = Literal["agent", "safety", "digest"]
+
+
+def _normalize_query_hint(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text or "")
+    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return ascii_text.replace("đ", "d").replace("Đ", "D").lower()
+
+
+def _should_prefetch_knowledge(user_text: str) -> bool:
+    """Detect queries where skipping KB retrieval causes false "I don't know" replies.
+
+    Contact/admin/phone questions should see KB facts before the model answers.
+    """
+    text = _normalize_query_hint(user_text)
+    contact_terms = (
+        "lien he",
+        "admin",
+        "so dien thoai",
+        "sdt",
+        "phone",
+        "hotline",
+        "zalo",
+        "den cong ty",
+    )
+    return any(term in text for term in contact_terms)
 
 
 class GeminiEmbedder:
@@ -50,7 +76,12 @@ class GeminiEmbedder:
 class MiniMaxAgent:
     """Tool-calling agent: loops on MiniMax tool_calls until a final text reply."""
 
-    def __init__(self, llm, embedder, max_iters: int = 4) -> None:
+    # Floor allows the agent to call up to 6 tools per turn (e.g. memory +
+    # knowledge + bus + features + follow-up search + clarification).  The old
+    # limit of 4 truncated complex multi-tool conversations.
+    DEFAULT_MAX_ITERS = 6
+
+    def __init__(self, llm, embedder, max_iters: int = DEFAULT_MAX_ITERS) -> None:
         self.llm = llm
         self.embedder = embedder
         self.max_iters = max_iters
@@ -59,7 +90,24 @@ class MiniMaxAgent:
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
         bound = self.llm.bind_tools(TOOL_SCHEMAS) if hasattr(self.llm, "bind_tools") else self.llm
-        messages = [SystemMessage(content=system), HumanMessage(content=user_text)]
+        messages = [SystemMessage(content=system)]
+        if _should_prefetch_knowledge(user_text):
+            try:
+                prefetched = await _dispatch_tool(db, embedder, "search_knowledge", {"query": user_text})
+            except Exception:  # noqa: BLE001
+                logger.warning("Contact knowledge prefetch failed", exc_info=True)
+            else:
+                messages.append(
+                    SystemMessage(
+                        content=(
+                            "KẾT QUẢ TRA CỨU KB CHỦ ĐỘNG CHO CÂU HỎI LIÊN HỆ/ADMIN/SỐ ĐIỆN THOẠI:\n"
+                            f"{prefetched}\n\n"
+                            "Nếu kết quả có liên hệ hoặc số điện thoại từ KB, hãy trả lời trực tiếp theo dữ liệu đó. "
+                            "Nếu không có, mới nói chưa có thông tin trong dữ liệu."
+                        )
+                    )
+                )
+        messages.append(HumanMessage(content=user_text))
         for _ in range(self.max_iters):
             ai = await bound.ainvoke(messages)
             messages.append(ai)

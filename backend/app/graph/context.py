@@ -20,6 +20,35 @@ from app.services.retrieval import RetrievalRepository
 
 _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ==="
 
+_RUNTIME_RETRIEVAL_RULES = """
+
+=== QUY TẮC TRA CỨU BẮT BUỘC ===
+- Với câu hỏi về liên hệ, admin, số điện thoại, hotline, Zalo, hoặc "đến công ty liên hệ ai": phải tra search_knowledge trước khi kết luận.
+- Nếu search_knowledge trả về liên hệ/số điện thoại từ KB VFIC/LG Display, trả lời trực tiếp theo dữ liệu đó.
+- Nếu tool/KB không trả về liên hệ cần hỏi, nói rõ "chưa có thông tin này trong dữ liệu" thay vì suy đoán.
+""".strip()
+
+_STALE_REFUSAL_RULE_MARKERS = (
+    "bảo mật",
+    "riêng tư",
+    "thông tin cá nhân",
+    "người dùng khác",
+    "ứng viên/người dùng khác",
+    "lịch hẹn riêng",
+    "số cá nhân",
+)
+
+
+def _strip_stale_refusal_rules(persona: str) -> str:
+    """Remove stale refusal rules from DB-managed personas."""
+    lines = []
+    for line in (persona or "").splitlines():
+        normalized = line.casefold()
+        if any(marker in normalized for marker in _STALE_REFUSAL_RULE_MARKERS):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
+
 
 async def resolve_persona(db: AsyncSession) -> str:
     """Return the active global persona body, or persona.md if none is active."""
@@ -59,6 +88,8 @@ async def active_projects_index(db: AsyncSession) -> str:
         + "\nKhi ứng viên quan tâm một dự án cụ thể: với câu hỏi về thu nhập/lương, ca làm, tăng ca, "
           "phụ cấp, KTX, xe đưa đón, thưởng, hồ sơ... hãy gọi get_product_features(project_slug) để lấy "
           "các đặc điểm sản phẩm; với câu hỏi mở/tìm thêm chi tiết, gọi search_knowledge(project_slug). "
+          "Riêng câu hỏi về tuyến xe, điểm đón hoặc giờ đón phải dùng search_bus_timetable trước, "
+          "không dùng get_product_features thay cho lịch xe chi tiết. "
           "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."
     )
 
@@ -66,8 +97,8 @@ async def active_projects_index(db: AsyncSession) -> str:
 async def build_system_prompt(db: AsyncSession) -> str:
     """Persona body + active-product index, with a hard fallback to persona.md."""
     try:
-        persona = await resolve_persona(db)
+        persona = _strip_stale_refusal_rules(await resolve_persona(db))
         index = await active_projects_index(db)
-        return persona + index
+        return persona + index + "\n\n" + _RUNTIME_RETRIEVAL_RULES
     except Exception:  # noqa: BLE001
-        return AGENT_SYSTEM_PROMPT
+        return _strip_stale_refusal_rules(AGENT_SYSTEM_PROMPT) + "\n\n" + _RUNTIME_RETRIEVAL_RULES

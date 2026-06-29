@@ -6,6 +6,8 @@ routes a named tool call to its function; used by ``MiniMaxAgent``'s tool loop i
 """
 from __future__ import annotations
 
+import logging
+
 from app.graph.tools import (
     get_product_features,
     list_active_projects,
@@ -14,6 +16,8 @@ from app.graph.tools import (
     search_knowledge,
     search_user_memory,
 )
+
+logger = logging.getLogger(__name__)
 
 # OpenAI-compatible function schemas handed to MiniMax (descriptions match n8n).
 TOOL_SCHEMAS = [
@@ -43,8 +47,9 @@ TOOL_SCHEMAS = [
             "name": "search_knowledge",
             "description": (
                 "Tìm thông tin kiến thức/tuyển dụng trong cơ sở dữ liệu. Truyền project_slug để giới hạn "
-                "theo một dự án. Không dùng cho câu hỏi lịch xe có tuyến/điểm đón/giờ đón; các câu đó "
-                "phải dùng search_bus_timetable trước."
+                "theo một dự án. Dùng bắt buộc cho câu hỏi về liên hệ chính thức, admin, số điện thoại, "
+                "hotline, Zalo, hoặc 'đến công ty liên hệ ai'. Không dùng cho câu hỏi lịch xe có tuyến/"
+                "điểm đón/giờ đón; các câu đó phải dùng search_bus_timetable trước."
             ),
             "parameters": {
                 "type": "object",
@@ -98,18 +103,36 @@ TOOL_SCHEMAS = [
 
 
 async def _dispatch_tool(db, embedder, name: str, args: dict) -> str:
+    """Route a named tool call to its function.
+
+    Errors are caught and returned as strings so the LLM sees the failure in the
+    ToolMessage and can self-correct (retry, try a different tool, or answer from
+    context) instead of crashing the entire agent loop.
+    """
+    import time
+
     name = (name or "").strip()
     args = args or {}
     if name == "search_user_memory":
-        return await search_user_memory(db, embedder, args.get("chat_id", ""), args.get("query", ""))
-    if name == "search_knowledge":
-        return await search_knowledge(db, embedder, args.get("query", ""), args.get("project_slug"))
-    if name == "search_jobs":  # back-compat: older turns may still call this name
-        return await search_jobs(db, embedder, args.get("query", ""))
-    if name == "list_active_projects":
-        return await list_active_projects(db)
-    if name == "search_bus_timetable":
-        return await search_bus_timetable(db, args.get("company", ""), args.get("question", ""))
-    if name == "get_product_features":
-        return await get_product_features(db, args.get("project_slug", ""))
-    return "unknown tool"
+        fn = lambda: search_user_memory(db, embedder, args.get("chat_id", ""), args.get("query", ""))  # noqa: E731
+    elif name == "search_knowledge":
+        fn = lambda: search_knowledge(db, embedder, args.get("query", ""), args.get("project_slug"))  # noqa: E731
+    elif name == "search_jobs":  # back-compat: older turns may still call this name
+        fn = lambda: search_jobs(db, embedder, args.get("query", ""))  # noqa: E731
+    elif name == "list_active_projects":
+        fn = lambda: list_active_projects(db)  # noqa: E731
+    elif name == "search_bus_timetable":
+        fn = lambda: search_bus_timetable(db, args.get("company", ""), args.get("question", ""))  # noqa: E731
+    elif name == "get_product_features":
+        fn = lambda: get_product_features(db, args.get("project_slug", ""))  # noqa: E731
+    else:
+        logger.warning("unknown tool dispatched: %s (args=%s)", name, args)
+        return "unknown tool"
+    try:
+        t0 = time.monotonic()
+        result = await fn()
+        logger.debug("tool %s completed in %.1fms (%d chars)", name, (time.monotonic() - t0) * 1000, len(result))
+        return result
+    except Exception:
+        logger.warning("tool %s failed (args=%s)", name, args, exc_info=True)
+        return f"Lỗi khi gọi tool '{name}': vui lòng thử lại hoặc dùng cách khác."

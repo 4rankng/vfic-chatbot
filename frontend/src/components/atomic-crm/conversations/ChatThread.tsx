@@ -14,10 +14,6 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
-import {
-  INITIAL_CHAT_FIRST_ITEM_INDEX,
-  firstItemIndexAfterPrepend,
-} from "./chatScrollIndex";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
 // the realtime subscription, the virtualised scroller (with all the snap /
@@ -99,8 +95,14 @@ export const ChatThread = ({
   onTakeoverOverride,
   showComposerTakeoverNotice = true,
 }: ChatThreadProps) => {
-  const { messages, isLoading, isLoadingMore, hasMore, loadMore } =
-    useConversationRealtime(conversationId);
+  const {
+    messages,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    firstItemIndex,
+    loadMore,
+  } = useConversationRealtime(conversationId);
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const translate = useTranslate();
@@ -111,9 +113,6 @@ export const ChatThread = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const [firstItemIndex, setFirstItemIndex] = useState(
-    INITIAL_CHAT_FIRST_ITEM_INDEX,
-  );
   const initialJumpDoneRef = useRef(false);
   const lastScrollTopRef = useRef(0);
   // Load older messages only on a genuine upward scroll — not merely because
@@ -164,7 +163,6 @@ export const ChatThread = ({
     initialJumpDoneRef.current = false;
     readyForMoreRef.current = false;
     lastScrollTopRef.current = 0;
-    setFirstItemIndex(INITIAL_CHAT_FIRST_ITEM_INDEX);
     setEmojiOpen(false);
   }, [conversationId]);
 
@@ -211,11 +209,7 @@ export const ChatThread = ({
     if (hasMore && messages.length > 0) {
       // Disarm until the next upward scroll — one page per scroll-up.
       readyForMoreRef.current = false;
-      loadMore(messages[0].id).then((count: number) => {
-        if (count > 0) {
-          setFirstItemIndex((i) => firstItemIndexAfterPrepend(i, count));
-        }
-      });
+      void loadMore(messages[0].id);
     }
   }, [hasMore, messages, loadMore]);
 

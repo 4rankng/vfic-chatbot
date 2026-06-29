@@ -23,12 +23,14 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
+from app.graph.tools import search_bus_timetable
 from app.services.knowledge.bus_timetable import (
     normalize_bus_route_key,
     normalize_search_text,
     parse_bus_timetable,
 )
 from app.services.knowledge.repository import rebuild_bus_timetable
+from app.services.retrieval import RetrievalRepository
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_PATH = _REPO_ROOT / "kb" / "LGDisplay" / "LGDisplay.txt"
@@ -247,3 +249,97 @@ async def test_t2_rebuild_matches_golden(db_session) -> None:
         assert _multiset(service_days) == _multiset(_load_fixture("golden_bus_route_service_days.json"))
     finally:
         await _cleanup_lgdisplay(db_session)  # teardown: don't pollute the shared test DB
+
+
+@pytest.mark.asyncio
+async def test_bus_search_completes_hao_quang_an_lao_day_and_night_routes(db_session) -> None:
+    """A stop-level match must return complete route groups, not only the matched stop."""
+    content = _SOURCE_PATH.read_text(encoding="utf-8")
+    await _cleanup_lgdisplay(db_session)
+    project_id = (
+        await db_session.execute(
+            text(
+                "INSERT INTO projects(slug, name, is_active) "
+                "VALUES (:slug, 'LG Display Bus Test', true) RETURNING id"
+            ),
+            {"slug": _LEGACY_PROJECT_SLUG},
+        )
+    ).scalar()
+    doc_id = (
+        await db_session.execute(
+            text(
+                "INSERT INTO knowledge_documents(file_name, source, status, raw_text, project_id) "
+                "VALUES ('LGDisplay.txt', 'upload', 'PUBLISHED', :raw, :pid) RETURNING id"
+            ),
+            {"raw": content, "pid": project_id},
+        )
+    ).scalar()
+    await db_session.execute(
+        text("INSERT INTO knowledge_chunks(document_id, chunk_index, content) VALUES (:did, 0, :c)"),
+        {"did": str(doc_id), "c": "LLM digest text without structured bus headings"},
+    )
+    await db_session.commit()
+
+    try:
+        await rebuild_bus_timetable(db_session)
+        rows = await RetrievalRepository(db_session).search_bus_timetable(
+            company="LG Display",
+            question="mấy giờ đón ở Cty TNHH Hào Quang ca ngày, ca đêm, tuyến An Lão",
+            limit=50,
+        )
+        stop_pairs = {
+            (r.route_name, r.shift, r.stop_name, r.scheduled_time)
+            for r in rows
+            if r.route_name == "An Lão"
+        }
+        for expected in {
+            ("An Lão", "day", "Cty TNHH Hào Quang", "06:35"),
+            ("An Lão", "day", "BV An Lão 2", "06:50"),
+            ("An Lão", "day", "Trung tâm giống cây trồng", "06:55"),
+            ("An Lão", "day", "Ngã 5 Kiến An", "07:00"),
+            ("An Lão", "day", "Cống Đôi Kiến An", "07:05"),
+            ("An Lão", "day", "Quân đoàn 679", "07:10"),
+            ("An Lão", "day", "LGD", None),
+            ("An Lão", "night", "Cty TNHH Hào Quang", "18:35"),
+            ("An Lão", "night", "BV An Lão 2", "18:50"),
+            ("An Lão", "night", "Trung tâm giống cây trồng", "18:55"),
+            ("An Lão", "night", "Ngã 5 Kiến An", "19:00"),
+            ("An Lão", "night", "Cống Đôi Kiến An", "19:05"),
+            ("An Lão", "night", "Quân đoàn 679", "19:10"),
+            ("An Lão", "night", "LGD", None),
+        }:
+            assert expected in stop_pairs
+
+        formatted = await search_bus_timetable(
+            db_session,
+            "Cty TNHH Hào Quang",
+            "mấy giờ đón ở Cty TNHH Hào Quang ca ngày, ca đêm, tuyến An Lão",
+        )
+        assert "Cty TNHH Hào Quang: 06:35" in formatted
+        assert "BV An Lão 2: 06:50" in formatted
+        assert "Cống Đôi Kiến An: 19:05" in formatted
+        assert "LGD: chưa có giờ trong nguồn" in formatted
+    finally:
+        await _cleanup_lgdisplay(db_session)
+
+
+# ---------------------------------------------------------------------------
+# F6: Bus shift detection recognises "ca sáng" / "buổi sáng"
+def test_requested_bus_shifts_ca_sang():
+    shifts = RetrievalRepository._requested_bus_shifts("xe ca sáng đi Hào Quang")
+    assert shifts == ["day"]
+
+
+def test_requested_bus_shifts_buoi_sang():
+    shifts = RetrievalRepository._requested_bus_shifts("buổi sáng làm gì")
+    assert shifts == ["day"]
+
+
+def test_requested_bus_shifts_ca_ngay_still_works():
+    shifts = RetrievalRepository._requested_bus_shifts("ca ngày xe nào")
+    assert shifts == ["day"]
+
+
+def test_requested_bus_shifts_ca_dem():
+    shifts = RetrievalRepository._requested_bus_shifts("ca đêm về")
+    assert shifts == ["night"]

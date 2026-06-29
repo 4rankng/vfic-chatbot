@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from contextlib import suppress
 
@@ -38,6 +39,7 @@ from app.services.conversation import ConversationService
 logger = logging.getLogger(__name__)
 ZALO_TYPING_HEARTBEAT_SECONDS = 4.0
 RECENT_HISTORY_LIMIT = 16
+_PHONE_RE = re.compile(r"(?:\+?84|0)(?:\D*\d){8,10}\b")
 
 
 def _history_speaker(msg: Message) -> str:
@@ -50,12 +52,93 @@ def _history_speaker(msg: Message) -> str:
     return "Hệ thống"
 
 
+def _last_bot_message(recent_messages: list[Message]) -> str:
+    for msg in reversed(recent_messages):
+        if msg.sender == MessageSender.BOT and (msg.body or "").strip():
+            return msg.body.strip()
+    return ""
+
+
+def _bot_asked_for_name(text: str) -> bool:
+    lowered = (text or "").casefold()
+    return "tên" in lowered and any(token in lowered for token in ("bạn", "cho tôi", "cho mình", "xin"))
+
+
+def _current_text_answers_name(current_user_text: str, recent_messages: list[Message]) -> bool:
+    text = re.sub(r"\s+", " ", current_user_text or "").strip()
+    if not text or _PHONE_RE.search(text):
+        return False
+    lowered = text.casefold()
+    if any(marker in lowered for marker in ("tôi tên", "mình tên", "em tên", "anh tên", "chị tên", "tên là")):
+        return True
+    if _bot_asked_for_name(_last_bot_message(recent_messages)):
+        return 1 <= len(text.split()) <= 5 and len(text) <= 50
+    return False
+
+
+def _lead_has_value(lead: dict | None, key: str) -> bool:
+    if not lead:
+        return False
+    return bool(str(lead.get(key) or "").strip())
+
+
+def _lead_collection_instruction(
+    *,
+    question: str,
+) -> str:
+    return (
+        "THU THẬP LEAD BẮT BUỘC:\n"
+        "- Sau khi trả lời nội dung chính của ứng viên, phải kết thúc bằng đúng 1 câu hỏi này:\n"
+        f"{question}\n"
+        "- Không thay bằng câu hỏi khác và không hỏi thêm trường khác trong cùng tin nhắn."
+    )
+
+
+def _lead_collection_question(
+    *,
+    lead: dict | None,
+    current_user_text: str,
+    recent_messages: list[Message],
+) -> str:
+    current_has_phone = bool(_PHONE_RE.search(current_user_text or ""))
+    current_has_name = _current_text_answers_name(current_user_text, recent_messages)
+
+    if not _lead_has_value(lead, "name") and not current_has_name:
+        return "Bạn cho tôi xin tên để tiện hỗ trợ nhé?"
+    if not _lead_has_value(lead, "phone") and not current_has_phone:
+        return "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+    return ""
+
+
+def _compact_for_match(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").casefold()).strip()
+
+
+def _ensure_lead_collection_question(reply: str, question: str) -> str:
+    if not question:
+        return reply
+    text = (reply or "").strip()
+    if not text:
+        return question
+    if _compact_for_match(question.rstrip("?")) in _compact_for_match(text):
+        return text
+
+    paragraphs = re.split(r"\n\s*\n", text)
+    last = paragraphs[-1].strip() if paragraphs else ""
+    question_mark_at_end = "?" in last and last.rfind("?") >= max(len(last) - 8, 0)
+    if question_mark_at_end and len(last) <= 220:
+        paragraphs[-1] = question
+        return "\n\n".join(p.strip() for p in paragraphs if p.strip())
+    return f"{text}\n\n{question}"
+
+
 def _build_agent_user_text(
     *,
     chat_id: str,
     current_user_text: str,
     recent_messages: list[Message],
     lead_profile: str = "",
+    lead_collection_instruction: str = "",
 ) -> str:
     """Give the agent the actual chat state, not just the latest short reply.
 
@@ -89,6 +172,8 @@ def _build_agent_user_text(
     ]
     if lead_profile:
         parts += ["", lead_profile]
+    if lead_collection_instruction:
+        parts += ["", lead_collection_instruction]
     parts += [
         "",
         "LỊCH SỬ GẦN ĐÂY (cũ -> mới):",
@@ -124,9 +209,20 @@ async def _agent_turn(
     # and subtly ask for the most important missing fields. Best-effort: DB error
     # simply skips injection (a turn never breaks because of this).
     lead_profile = ""
+    lead_collection_question = ""
+    lead_collection_instruction = ""
     try:
         lead = await LeadRepository(deps.db).by_zalo_id(chat_id)
         lead_profile = lead_profile_text(lead)
+        lead_collection_question = _lead_collection_question(
+            lead=lead,
+            current_user_text=user_text,
+            recent_messages=recent_messages,
+        )
+        if lead_collection_question:
+            lead_collection_instruction = _lead_collection_instruction(
+                question=lead_collection_question
+            )
     except Exception:  # noqa: BLE001
         logger.warning("lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True)
 
@@ -135,10 +231,12 @@ async def _agent_turn(
         current_user_text=user_text,
         recent_messages=recent_messages,
         lead_profile=lead_profile,
+        lead_collection_instruction=lead_collection_instruction,
     )
-    return await deps.agent.agent(
+    reply = await deps.agent.agent(
         contextual_user_text, system=system, db=deps.db, embedder=deps.embedder
     )
+    return _ensure_lead_collection_question(reply, lead_collection_question)
 
 
 async def _typing_heartbeat(deps: GraphDeps, chat_id: str) -> None:

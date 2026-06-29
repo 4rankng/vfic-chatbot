@@ -3,7 +3,9 @@
 import pytest
 from sqlalchemy import text
 
-from app.graph.tools import search_bus_timetable, search_jobs, search_user_memory
+from app.graph.tools import search_bus_timetable, search_jobs, search_knowledge, search_user_memory
+from app.services.memory_service import greeting_gate
+from app.services.retrieval import RetrievalRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -60,7 +62,118 @@ async def test_search_user_memory_empty(db_session):
     assert "Không" in out
 
 
+async def test_search_knowledge_does_not_truncate_answer_bearing_chunk(db_session):
+    long_content = (
+        "Thông tin đầu chunk. "
+        + ("phần đệm " * 45)
+        + "CHI_TIET_SAU_KY_TU_300: Cty TNHH Hào Quang 06:35, BV An Lão 2 06:50."
+    )
+    assert long_content.index("CHI_TIET_SAU_KY_TU_300") > 300
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_documents(id, drive_file_id, file_name, source, status, raw_text, metadata) "
+            "VALUES (CAST(:id AS uuid), :df, :fn, :src, :status, :raw, CAST('{}' AS jsonb)) "
+            "ON CONFLICT (id) DO NOTHING"
+        ),
+        {
+            "id": "22222222-2222-2222-2222-000000000002",
+            "df": "f2",
+            "fn": "long.md",
+            "src": "upload",
+            "status": "PUBLISHED",
+            "raw": long_content,
+        },
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata) "
+            "VALUES (CAST(:did AS uuid), 0, :content, CAST(:e AS vector), CAST(:m AS jsonb)) "
+            "ON CONFLICT (document_id, chunk_index) DO UPDATE SET content = EXCLUDED.content, metadata = EXCLUDED.metadata"
+        ),
+        {
+            "did": "22222222-2222-2222-2222-000000000002",
+            "content": long_content,
+            "e": VEC,
+            "m": '{"citation":{"label":"Long KB","source_anchor":"Full chunk"}}',
+        },
+    )
+    await db_session.commit()
+
+    out = await search_knowledge(db_session, emb, "Hào Quang")
+    assert "CHI_TIET_SAU_KY_TU_300" in out
+    assert "BV An Lão 2 06:50" in out
+    assert "Nguồn: Long KB (Full chunk)" in out
+
+
 async def test_search_bus_timetable_runs(db_session):
     # no bus data seeded -> tool returns the "not found" string without raising
     out = await search_bus_timetable(db_session, "VFIC", "xe Kiến An ca đêm")
     assert isinstance(out, str)
+
+
+# ---------------------------------------------------------------------------
+# F1: Similarity floor — near-zero-similarity chunks must be excluded
+async def test_search_knowledge_excludes_low_similarity_chunk(db_session):
+    """A chunk with anti-parallel embedding (similarity=-1.0) must not appear.
+
+    pgvector treats all-zero vectors as maximally similar, so we use an
+    anti-parallel vector instead (cosine=-1, distance=2, 1-distance=-1).
+    """
+    good_vec = "[" + ",".join(["0.01000000"] * 3072) + "]"
+    # Anti-parallel: cosine similarity = -1.0 → similarity = 1 - (1-(-1)) = -1.0
+    bad_vec = "[" + ",".join(["-0.01000000"] * 3072) + "]"
+
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_documents(id, drive_file_id, file_name, source, status, raw_text, metadata) "
+            "VALUES (CAST(:id AS uuid), :df, :fn, :src, :status, :raw, CAST('{}' AS jsonb)) "
+            "ON CONFLICT (id) DO NOTHING"
+        ),
+        {"id": "33333333-3333-3333-3333-000000000001", "df": "f_sim", "fn": "sim_test.md",
+         "src": "upload", "status": "PUBLISHED", "raw": "x"},
+    )
+    # High-similarity chunk (embedder returns 0.01 vectors, so sim ~1.0)
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata) "
+            "VALUES (CAST(:did AS uuid), 0, :content, CAST(:e AS vector), CAST('{}' AS jsonb)) "
+            "ON CONFLICT (document_id, chunk_index) DO NOTHING"
+        ),
+        {"did": "33333333-3333-3333-3333-000000000001",
+         "content": "RELEVANT_CHUNK_DATA", "e": good_vec},
+    )
+    # Low-similarity chunk (anti-parallel vector → sim = -1.0, below 0.30 floor)
+    await db_session.execute(
+        text(
+            "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata) "
+            "VALUES (CAST(:did AS uuid), 1, :content, CAST(:e AS vector), CAST('{}' AS jsonb)) "
+            "ON CONFLICT (document_id, chunk_index) DO NOTHING"
+        ),
+        {"did": "33333333-3333-3333-3333-000000000001",
+         "content": "NOISE_CHUNK_SHOULD_BE_EXCLUDED", "e": bad_vec},
+    )
+    await db_session.commit()
+
+    out = await search_knowledge(db_session, emb, "RELEVANT_CHUNK_DATA")
+    assert "RELEVANT_CHUNK_DATA" in out
+    assert "NOISE_CHUNK_SHOULD_BE_EXCLUDED" not in out
+
+
+# ---------------------------------------------------------------------------
+# F4: greeting_gate allows numeric answers like "5" (age)
+def test_greeting_gate_allows_numeric_answers():
+    assert greeting_gate("5") is True
+    assert greeting_gate("25") is True
+    assert greeting_gate("30") is True
+
+
+def test_greeting_gate_rejects_skip_list():
+    assert greeting_gate("ok") is False
+    assert greeting_gate("da") is False
+    assert greeting_gate("👍") is False
+
+
+def test_greeting_gate_rejects_empty_and_short_non_numeric():
+    assert greeting_gate("") is False
+    assert greeting_gate("a") is False
+    assert greeting_gate("hi") is False  # len < 3 and not numeric
