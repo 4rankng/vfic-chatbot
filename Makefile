@@ -1,4 +1,4 @@
-.PHONY: dev deploy deploy-backend deploy-frontend adminer
+.PHONY: dev deploy deploy-backend deploy-frontend adminer seed
 
 # Local dev: frontend (vite) + backend (uvicorn --reload) on host, Postgres +
 # Redis + Adminer in docker. Delegates to backend/ (payroll pattern).
@@ -32,3 +32,9 @@ deploy-frontend:
 	@echo "=== Deploying frontend only ==="
 	cd frontend && make push
 	$(MAKE) -C backend deploy-restart-frontend
+
+# Seed local dev database with realistic test data (truncate + re-insert).
+# Requires: make db (Postgres running), alembic upgrade head already applied.
+seed:
+	@echo "=== Seeding local dev database ==="
+	cd backend && .venv/bin/python -m scripts.seed_dev
