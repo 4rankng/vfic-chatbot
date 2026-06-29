@@ -16,7 +16,9 @@ from app.models.conversation import (
     Conversation,
     ConversationMode,
     ConversationStatus,
+    DeliveryStatus,
     Message,
+    MessageSender,
 )
 from app.models.user import Role, User
 
@@ -190,3 +192,33 @@ class ConversationRepository:
             stmt = stmt.where(Message.id < before_id)
         rows = (await self.db.scalars(stmt)).all()
         return list(reversed(rows))
+
+    async def latest_unanswered_worker_message(self, conv: Conversation) -> Message | None:
+        """Return the latest Zalo user message if no successful outbound follows it."""
+        worker_msg = (
+            await self.db.scalars(
+                select(Message)
+                .where(
+                    Message.conversation_id == conv.id,
+                    Message.sender == MessageSender.WORKER,
+                )
+                .order_by(desc(Message.created_at), desc(Message.id))
+                .limit(1)
+            )
+        ).first()
+        if worker_msg is None:
+            return None
+
+        answered = (
+            await self.db.scalars(
+                select(Message.id)
+                .where(
+                    Message.conversation_id == conv.id,
+                    Message.id > worker_msg.id,
+                    Message.sender.in_([MessageSender.BOT, MessageSender.RECRUITER]),
+                    Message.delivery_status == DeliveryStatus.SENT,
+                )
+                .limit(1)
+            )
+        ).first()
+        return None if answered is not None else worker_msg

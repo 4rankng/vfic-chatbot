@@ -245,7 +245,7 @@ export interface LabeledValue {
 export const LEAD_STAGES = [
   { value: "NEW", label: "Mới", color: "bg-slate-500" },
   { value: "ENGAGED", label: "Đang liên hệ", color: "bg-blue-500" },
-  { value: "QUALIFIED", label: "Đủ điều kiện", color: "bg-cyan-500" },
+
   { value: "APPLIED", label: "Đã ứng tuyển", color: "bg-amber-500" },
   { value: "HIRED", label: "Đã tuyển", color: "bg-emerald-500" },
   { value: "LOST", label: "Đã mất", color: "bg-rose-500" },

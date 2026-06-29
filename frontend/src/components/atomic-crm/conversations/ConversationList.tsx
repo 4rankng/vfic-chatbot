@@ -286,7 +286,10 @@ const ConversationListPanel = ({
       </div>
 
       <div className="inbox-pagination">
-        <ListPagination rowsPerPageOptions={[25, 50, 100, 200]} />
+        <ListPagination
+          rowsPerPageOptions={[25, 50, 100, 200]}
+          className="inbox-pagination-controls"
+        />
       </div>
     </aside>
   );

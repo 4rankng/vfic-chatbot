@@ -944,13 +944,31 @@
 
 .inbox-bg-container .inbox-pagination {
   border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
-.inbox-bg-container .inbox-pagination > div {
+.inbox-bg-container .inbox-pagination-controls {
   justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.inbox-bg-container .inbox-pagination-controls > div:first-child {
+  flex: 0 0 auto;
+}
+
+.inbox-bg-container .inbox-pagination-controls > div:first-child p {
+  display: none;
+}
+
+.inbox-bg-container .inbox-pagination-controls [data-slot="pagination"] {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.inbox-bg-container .inbox-pagination-controls [data-slot="pagination-content"] {
+  gap: 0;
 }
 
 :is(.inbox-bg-container, .chat-surface) .day-marker {

@@ -23,6 +23,7 @@ from app.schemas.conversation import (
     SendMessageRequest,
 )
 from app.services.conversation import ConversationConflict, ConversationService
+from app.workers.chatbot_worker import enqueue_chat_run
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -157,9 +158,20 @@ async def take_over(
 async def release(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
-    return ConversationOut.model_validate(
-        await ConversationService(db).release(await _load(conv_id, db), user)
-    )
+    svc = ConversationService(db)
+    conv = await svc.release(await _load(conv_id, db), user)
+    pending = await svc.latest_unanswered_worker_message(conv)
+    if pending is not None and await svc.acquire_lock(conv.id):
+        enqueue_chat_run(
+            {
+                "conversation_id": str(conv.id),
+                "version_at_start": conv.version,
+                "user_text": pending.body,
+                "user_name": "",
+                "received_at": pending.created_at.isoformat(),
+            }
+        )
+    return ConversationOut.model_validate(conv)
 
 
 @router.post("/{conv_id}/semi-auto", response_model=ConversationOut)

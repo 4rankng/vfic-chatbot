@@ -298,6 +298,65 @@ async def test_mark_read_and_release(client, db_session):
     assert released.status_code == 200 and released.json()["mode"] == "BOT"
 
 
+async def test_release_to_bot_enqueues_unanswered_worker_message(client, db_session, monkeypatch):
+    import app.api.conversations as conversations_api
+
+    captured = []
+    monkeypatch.setattr(conversations_api, "enqueue_chat_run", lambda job: captured.append(job))
+
+    rec_tok = await _recruiter_token(client)
+    h = {"Authorization": f"Bearer {rec_tok}"}
+    svc = ConversationService(db_session)
+    conv = await _make_conv(db_session, "release-unanswered-1")
+
+    assert (
+        await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=h)
+    ).status_code == 200
+    await db_session.refresh(conv)
+    await svc.record_inbound(conv, body="Cho em hỏi ca đêm còn tuyển không?", zalo_message_id="zu-1")
+    await db_session.refresh(conv)
+
+    released = await client.post(f"/api/v1/conversations/{conv.id}/release", headers=h)
+    assert released.status_code == 200, released.text
+    assert released.json()["mode"] == "BOT"
+
+    assert len(captured) == 1
+    assert captured[0]["conversation_id"] == str(conv.id)
+    assert captured[0]["user_text"] == "Cho em hỏi ca đêm còn tuyển không?"
+    assert captured[0]["version_at_start"] == released.json()["version"]
+
+
+async def test_release_to_bot_does_not_enqueue_when_recruiter_answered(
+    client, db_session, monkeypatch
+):
+    import app.api.conversations as conversations_api
+
+    captured = []
+    monkeypatch.setattr(conversations_api, "enqueue_chat_run", lambda job: captured.append(job))
+
+    rec_tok = await _recruiter_token(client)
+    h = {"Authorization": f"Bearer {rec_tok}"}
+    svc = ConversationService(db_session)
+    conv = await _make_conv(db_session, "release-answered-1")
+
+    assert (
+        await client.post(f"/api/v1/conversations/{conv.id}/take-over", headers=h)
+    ).status_code == 200
+    await db_session.refresh(conv)
+    await svc.record_inbound(conv, body="Em muốn ứng tuyển", zalo_message_id="za-1")
+
+    reply = await client.post(
+        f"/api/v1/conversations/{conv.id}/messages",
+        json={"body": "VFIC đã nhận thông tin, mình hỗ trợ ngay nhé."},
+        headers=h,
+    )
+    assert reply.status_code == 201, reply.text
+
+    released = await client.post(f"/api/v1/conversations/{conv.id}/release", headers=h)
+    assert released.status_code == 200, released.text
+    assert captured == []
+
+
 async def test_last_messages_batch_returns_latest_per_conversation(client, db_session):
     """GET /conversations/last-messages/batch returns the latest body per
     conversation in ONE request (replaces the client-side N-fanout)."""

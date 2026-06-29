@@ -427,7 +427,7 @@ const FunnelCard = ({
     <CardContent className={`${v.contentClass} space-y-5`}>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-2">
         <CompactMetric
-          label="Cuộc mở"
+          label="Chat"
           value={openConversations}
           icon={<MessageCircle className="size-3.5" />}
         />

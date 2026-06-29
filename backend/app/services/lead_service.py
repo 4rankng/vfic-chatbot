@@ -198,12 +198,13 @@ class LeadService:
             base = base.where(Lead.zalo_id.in_(zalo_ids))
         if q:
             pat = f"%{q}%"
+            ua = func.extensions.unaccent
             base = base.where(
                 or_(
-                    Lead.name.ilike(pat),
-                    Lead.phone.ilike(pat),
-                    Lead.desired_job.ilike(pat),
-                    Lead.zalo_id.ilike(pat),
+                    ua(Lead.name).ilike(ua(pat)),
+                    ua(Lead.phone).ilike(ua(pat)),
+                    ua(Lead.desired_job).ilike(ua(pat)),
+                    ua(Lead.zalo_id).ilike(ua(pat)),
                 )
             )
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))

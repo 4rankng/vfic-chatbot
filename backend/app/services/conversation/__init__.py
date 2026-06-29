@@ -57,6 +57,9 @@ class ConversationService:
     async def messages_page(self, *args, **kwargs):
         return await self.repo.messages_page(*args, **kwargs)
 
+    async def latest_unanswered_worker_message(self, *args, **kwargs):
+        return await self.repo.latest_unanswered_worker_message(*args, **kwargs)
+
     # --- mutations (delegate to state) ---
     async def ensure(self, *args, **kwargs):
         return await self.state.ensure(*args, **kwargs)
