@@ -23,6 +23,7 @@ are POST ``application/json``.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -80,6 +81,8 @@ class WebhookInfo:
 # Chat action enum (documented values; ``upload_photo`` is "coming soon"
 # per the docs and currently no-ops on the Zalo side).
 ChatAction = Literal["typing", "upload_photo"]
+ZALO_MAX_TEXT_CHARS = 2000
+ZALO_VISIBLE_BUBBLE_CHARS = 420
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +155,78 @@ def _send_result(envelope: dict[str, Any]) -> SendResult:
     return SendResult(ok=False, error=str(desc), raw=envelope)
 
 
+def _split_long_plain_text(
+    text: str,
+    max_chars: int = ZALO_VISIBLE_BUBBLE_CHARS,
+) -> list[str]:
+    """Split plain text into short Zalo bubbles without adding semantics."""
+    text = text.strip()
+    if not text:
+        return []
+    if len(text) <= max_chars:
+        return [text]
+
+    parts: list[str] = []
+    chunks: list[str] = []
+    current = ""
+
+    def append_part(part: str) -> None:
+        part = part.strip()
+        if part:
+            parts.append(part)
+
+    def push(part: str) -> None:
+        nonlocal current
+        part = part.strip()
+        if not part:
+            return
+        if not current:
+            current = part
+            return
+        candidate = f"{current}\n\n{part}"
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            chunks.append(current)
+            current = part
+
+    for paragraph in re.split(r"\n\s*\n", text):
+        paragraph = paragraph.strip()
+        if len(paragraph) <= max_chars:
+            append_part(paragraph)
+            continue
+
+        for piece in re.split(r"(?<=[.!?。！？])\s+|\n+", paragraph):
+            piece = piece.strip()
+            if len(piece) <= max_chars:
+                append_part(piece)
+                continue
+
+            words = piece.split()
+            segment = ""
+            for word in words:
+                if len(word) > max_chars:
+                    append_part(segment)
+                    segment = ""
+                    for start in range(0, len(word), max_chars):
+                        append_part(word[start : start + max_chars])
+                    continue
+                candidate = word if not segment else f"{segment} {word}"
+                if len(candidate) <= max_chars:
+                    segment = candidate
+                    continue
+                append_part(segment)
+                segment = word
+            append_part(segment)
+
+    for part in parts:
+        push(part)
+
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 # ---------------------------------------------------------------------------
 # Outbound: sendMessage / sendPhoto / sendSticker / sendVoice / sendChatAction
 # ---------------------------------------------------------------------------
@@ -185,15 +260,46 @@ class ZaloBotSender:
         parse_mode: Literal["markdown", "html"] | None = None,
         text_styles: list[dict[str, Any]] | None = None,
     ) -> SendResult:
-        """Send a 1-2000 char text message. See Zalo docs for ``text_styles`` shape."""
-        if not 1 <= len(text) <= 2000:
+        """Send a text message, chunking long plain text into readable Zalo bubbles."""
+        text = text.strip()
+        if not text:
             return SendResult(ok=False, error="text length must be 1..2000")
-        body: dict[str, Any] = {"chat_id": chat_id, "text": text}
-        if parse_mode is not None:
-            body["parse_mode"] = parse_mode
-        if text_styles is not None:
-            body["text_styles"] = text_styles
-        return _send_result(await _post(self._settings, "sendMessage", body))
+        if (parse_mode is not None or text_styles is not None) and len(text) > ZALO_MAX_TEXT_CHARS:
+            return SendResult(ok=False, error="text length must be 1..2000")
+
+        chunks = (
+            [text]
+            if parse_mode is not None or text_styles is not None
+            else _split_long_plain_text(text)
+        )
+        envelopes: list[dict[str, Any]] = []
+        message_ids: list[str] = []
+        for index, chunk in enumerate(chunks, start=1):
+            if not 1 <= len(chunk) <= ZALO_MAX_TEXT_CHARS:
+                return SendResult(ok=False, error="text length must be 1..2000")
+            body: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
+            # Rich-text offsets apply to the original string, so only attach them
+            # to the single-message path where indices remain valid.
+            if parse_mode is not None:
+                body["parse_mode"] = parse_mode
+            if text_styles is not None:
+                body["text_styles"] = text_styles
+            result = _send_result(await _post(self._settings, "sendMessage", body))
+            envelopes.append(result.raw or {})
+            if result.msg_id:
+                message_ids.append(result.msg_id)
+            if not result.ok:
+                return SendResult(
+                    ok=False,
+                    msg_id=message_ids[0] if message_ids else None,
+                    error=f"chunk {index}/{len(chunks)} failed: {result.error}",
+                    raw={"chunks": envelopes, "message_ids": message_ids},
+                )
+        return SendResult(
+            ok=True,
+            msg_id=message_ids[0] if message_ids else None,
+            raw={"chunks": envelopes, "message_ids": message_ids},
+        )
 
     async def send_photo(self, chat_id: str, photo: str, caption: str | None = None) -> SendResult:
         """Send an image by URL/path. ``caption`` is 1-2000 chars if provided."""

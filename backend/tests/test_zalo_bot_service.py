@@ -169,6 +169,67 @@ async def test_send_message_happy_path(monkeypatch: pytest.MonkeyPatch, settings
     assert cap.calls == [("sendMessage", {"chat_id": "chat-1", "text": "hello"})]
 
 
+async def test_send_message_splits_long_plain_text_into_visible_bubbles(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    cap = _patch_post(
+        monkeypatch,
+        [
+            {"ok": True, "result": {"message_id": "m-1", "date": 1700000000}},
+            {"ok": True, "result": {"message_id": "m-2", "date": 1700000001}},
+            {"ok": True, "result": {"message_id": "m-3", "date": 1700000002}},
+            {"ok": True, "result": {"message_id": "m-4", "date": 1700000003}},
+        ],
+    )
+    sender = svc.ZaloBotSender(settings=settings)
+    long_reply = (
+        "Cảm ơn Dũng đã hỏi nhé! Dựa trên thông tin mình có, mình chia sẻ cụ thể cho bạn:\n\n"
+        "Công việc chính tại LG Display là sản xuất và kiểm tra màn hình các sản phẩm như "
+        "tivi, máy tính, điện thoại.\n\n"
+        "Hàng ngày bạn sẽ làm việc theo ca luân phiên:\n"
+        "- Ca ngày: 08:00 - 20:00\n"
+        "- Ca đêm: 20:00 - 08:00\n\n"
+        "Lịch kíp: 4 ngày ca ngày -> nghỉ 2 ngày -> 4 ngày ca đêm -> nghỉ 2 ngày -> lặp lại.\n\n"
+        "Công việc cụ thể bao gồm các công đoạn trên dây chuyền sản xuất và kiểm tra chất lượng "
+        "sản phẩm màn hình.\n\n"
+        "Về địa chỉ văn phòng VFIC Hải Phòng, mình chưa có thông tin cụ thể trong dữ liệu lúc này. "
+        "Bạn có thể gọi hotline VFIC để được cung cấp địa chỉ chính xác nhé.\n\n"
+        "Bạn còn câu hỏi gì thêm không, hay đã sẵn sàng đến nộp hồ sơ rồi?"
+    )
+
+    result = await sender.send_message("chat-1", long_reply)
+
+    assert result.ok is True
+    assert result.msg_id == "m-1"
+    assert len(cap.calls) >= 2
+    assert [call[0] for call in cap.calls] == ["sendMessage"] * len(cap.calls)
+    sent_texts = [(call[1] or {})["text"] for call in cap.calls]
+    assert all(1 <= len(text) <= svc.ZALO_VISIBLE_BUBBLE_CHARS for text in sent_texts)
+    assert "\n\n".join(sent_texts) == long_reply
+
+
+async def test_send_message_split_failure_reports_partial_delivery(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    cap = _patch_post(
+        monkeypatch,
+        [
+            {"ok": True, "result": {"message_id": "m-1", "date": 1700000000}},
+            {"ok": False, "description": "rate limited"},
+        ],
+    )
+    sender = svc.ZaloBotSender(settings=settings)
+    long_reply = "Đoạn một " + ("rất dài " * 60) + "\n\nĐoạn hai " + ("cũng dài " * 60)
+
+    result = await sender.send_message("chat-1", long_reply)
+
+    assert result.ok is False
+    assert result.msg_id == "m-1"
+    assert "chunk 2/" in (result.error or "")
+    assert "rate limited" in (result.error or "")
+    assert len(cap.calls) == 2
+
+
 async def test_send_message_with_optional_fields(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
     cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "m-43", "date": 1700000001}}])
     sender = svc.ZaloBotSender(settings=settings)

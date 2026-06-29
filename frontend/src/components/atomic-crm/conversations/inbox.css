@@ -41,6 +41,11 @@
   --chat-bg: var(--background);
   --chat-bubble-in: #ffffff;
   --chat-bubble-out: #d9fdd3;
+  --chat-bubble-user: var(--primary);
+  --chat-bubble-user-text: var(--primary-foreground);
+  --chat-bubble-bot: #ffffff;
+  --chat-bubble-agent: var(--inbox-accent-light);
+  --chat-bubble-agent-text: #24384a;
   --chat-header-bg: var(--background);
   --chat-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.08);
 }
@@ -65,6 +70,11 @@
   --chat-bg: #080c14;
   --chat-bubble-in: #161f30;
   --chat-bubble-out: #1b3d2b;
+  --chat-bubble-user: var(--primary);
+  --chat-bubble-user-text: var(--primary-foreground);
+  --chat-bubble-bot: #161f30;
+  --chat-bubble-agent: #193144;
+  --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: #0f1524;
   --chat-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 
@@ -962,10 +972,16 @@
   padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  overflow-anchor: none;
+  overflow-anchor: auto;
+  scroll-behavior: smooth;
   touch-action: pan-y;
   scrollbar-width: none;
   background: var(--chat-bg);
+  will-change: scroll-position;
+}
+:is(.inbox-bg-container, .chat-surface)
+  .chat-scroller[data-anchor-restoring="true"] {
+  scroll-behavior: auto;
 }
 :is(.inbox-bg-container, .chat-surface) .chat-scroller::-webkit-scrollbar {
   display: none;
@@ -973,11 +989,7 @@
 
 :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
   padding: 32px !important;
-  overflow-anchor: none;
-}
-
-:is(.inbox-bg-container, .chat-surface) .chat-scroller * {
-  transition-property: opacity, transform;
+  overflow-anchor: auto;
 }
 
 :is(.inbox-bg-container, .chat-surface) .chat-history-top-spacer {
@@ -1043,7 +1055,9 @@
   flex: 0 0 auto;
 }
 
-.inbox-bg-container .inbox-pagination-controls [data-slot="pagination-content"] {
+.inbox-bg-container
+  .inbox-pagination-controls
+  [data-slot="pagination-content"] {
   gap: 0;
 }
 
@@ -1100,8 +1114,8 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow-anchor: none;
-  contain: layout paint;
+  overflow-anchor: auto;
+  contain: layout style paint;
   filter: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -1111,11 +1125,11 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-row.user {
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.bot,
 :is(.inbox-bg-container, .chat-surface) .message-row.agent {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-avatar {
@@ -1141,62 +1155,77 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble {
-  max-width: min(72%, 760px);
+  max-width: min(62%, 620px);
   min-width: 0;
-  padding: 7px 10px 6px;
-  border-radius: 7.5px;
+  padding: 8px 11px 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   font-size: 14.2px;
   line-height: 1.4;
   overflow-wrap: anywhere;
   word-break: break-word;
   box-shadow: var(--chat-shadow);
+  contain: layout style paint;
 }
-:is(.inbox-bg-container, .chat-surface) .bubble p {
+
+:is(.inbox-bg-container, .chat-surface) .message-text {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+  contain: layout style paint;
+}
+:is(.inbox-bg-container, .chat-surface) .message-text-block {
   margin: 0;
-  display: inline;
+  min-width: 0;
 }
-:is(.inbox-bg-container, .chat-surface) .bubble p + p {
+:is(.inbox-bg-container, .chat-surface) .message-text-break {
   display: block;
-  margin-top: 12px;
+  height: 8px;
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-row.user .bubble {
-  background: var(--chat-bubble-in);
-  color: var(--ink);
-  border: none;
-  border-top-left-radius: 2px;
+  background: var(--chat-bubble-user);
+  color: var(--chat-bubble-user-text);
+  border-color: transparent;
+  border-top-right-radius: 3px;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.user.grouped .bubble {
-  border-top-left-radius: 7.5px;
+  border-top-right-radius: 10px;
 }
 
-:is(.inbox-bg-container, .chat-surface) .message-row.bot .bubble,
-:is(.inbox-bg-container, .chat-surface) .message-row.agent .bubble {
-  background: var(--chat-bubble-out);
+:is(.inbox-bg-container, .chat-surface) .message-row.bot .bubble {
+  background: var(--chat-bubble-bot);
   color: var(--ink);
-  border: none;
-  border-top-right-radius: 2px;
+  border-color: var(--border);
+  border-top-left-radius: 3px;
+}
+:is(.inbox-bg-container, .chat-surface) .message-row.agent .bubble {
+  background: var(--chat-bubble-agent);
+  color: var(--chat-bubble-agent-text);
+  border-color: color-mix(in oklab, var(--inbox-accent) 18%, transparent);
+  border-top-left-radius: 3px;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.bot.grouped .bubble,
 :is(.inbox-bg-container, .chat-surface) .message-row.agent.grouped .bubble {
-  border-top-right-radius: 7.5px;
+  border-top-left-radius: 10px;
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble-content {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  display: grid;
   gap: 6px;
-  justify-content: flex-end;
+  justify-items: stretch;
+  min-width: 0;
 }
 :is(.inbox-bg-container, .chat-surface) .bubble-time-inline {
+  justify-self: end;
   font-size: 11px;
   font-weight: 500;
   color: var(--ink-faint);
-  margin-left: auto;
-  margin-bottom: -2px;
-  float: right;
   line-height: 1;
+}
+:is(.inbox-bg-container, .chat-surface) .message-row.user .bubble-time-inline {
+  color: color-mix(in oklab, var(--chat-bubble-user-text) 72%, transparent);
 }
 
 /* Composer */
@@ -1911,7 +1940,7 @@
     width: 26px !important;
   }
   :is(.inbox-bg-container, .chat-surface) .bubble {
-    max-width: calc(100% - 38px);
+    max-width: min(78%, calc(100% - 38px));
     font-size: 14px;
     line-height: 1.38;
   }
@@ -1931,7 +1960,7 @@
    Gated above the laptop band (1024-1440) so laptop rendering is unchanged. */
 @media (min-width: 1536px) {
   :is(.inbox-bg-container, .chat-surface) .bubble {
-    max-width: min(70%, 640px);
+    max-width: min(58%, 560px);
   }
   :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list,
   :is(.inbox-bg-container, .chat-surface) .composer-wrap {

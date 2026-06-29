@@ -10,7 +10,11 @@ import {
   type CSSProperties,
   type HTMLAttributes,
 } from "react";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
+import {
+  Virtuoso,
+  type SizeFunction,
+  type VirtuosoHandle,
+} from "react-virtuoso";
 import { useDataProvider, useNotify, useTranslate } from "ra-core";
 import type { Conversation, Message } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
@@ -21,6 +25,11 @@ import {
   shouldPrefetchOlderMessages,
   shouldTrapEdgeWheel,
 } from "./chatEdgeScroll";
+import {
+  measuredOrEstimatedMessageRowHeight,
+  scrollTopAfterAnchorOffsetChange,
+  scrollTopAfterPrependHeightChange,
+} from "./chatScrollIndex";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
 // the realtime subscription, the virtualised scroller (with all the snap /
@@ -72,10 +81,12 @@ const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
 const DEFAULT_CHAT_ITEM_HEIGHT_PX = 96;
-const ANCHOR_RESTORE_FRAMES = 8;
+const ANCHOR_RESTORE_FRAMES = 20;
 const HISTORY_PREFETCH_DISTANCE_PX = 560;
-const VIRTUOSO_INCREASE_VIEWPORT_BY = { top: 960, bottom: 420 };
+const VIRTUOSO_INCREASE_VIEWPORT_BY = { top: 2400, bottom: 800 };
+const VIRTUOSO_MIN_OVERSCAN_ITEM_COUNT = { top: 8, bottom: 4 };
 const AVATAR_PLACEHOLDER_STYLE: CSSProperties = { width: 32 };
+const MESSAGE_TEXT_CHUNK_CHARS = 320;
 
 type ScrollAnchor = {
   id: string;
@@ -90,6 +101,43 @@ type ChatMessageRowProps = {
   message: Message;
   kind: MessageKind;
   isGrouped: boolean;
+};
+
+const splitLongTextLine = (line: string) => {
+  if (line.length <= MESSAGE_TEXT_CHUNK_CHARS) return [line];
+
+  const chunks: string[] = [];
+  let remaining = line;
+  while (remaining.length > MESSAGE_TEXT_CHUNK_CHARS) {
+    const windowText = remaining.slice(0, MESSAGE_TEXT_CHUNK_CHARS);
+    const sentenceBreak = Math.max(
+      windowText.lastIndexOf(". "),
+      windowText.lastIndexOf("! "),
+      windowText.lastIndexOf("? "),
+      windowText.lastIndexOf("; "),
+      windowText.lastIndexOf(", "),
+    );
+    const splitAt =
+      sentenceBreak > MESSAGE_TEXT_CHUNK_CHARS * 0.55
+        ? sentenceBreak + 1
+        : MESSAGE_TEXT_CHUNK_CHARS;
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+};
+
+const splitMessageTextBlocks = (content: string) => {
+  const blocks = content
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .flatMap((line) => {
+      const trimmed = line.trim();
+      return trimmed ? splitLongTextLine(trimmed) : [""];
+    });
+
+  return blocks.length > 0 ? blocks : [""];
 };
 
 const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
@@ -107,6 +155,11 @@ ChatItemList.displayName = "ChatItemList";
 
 const ChatMessageRow = memo(
   ({ message: m, kind, isGrouped }: ChatMessageRowProps) => {
+    const textBlocks = useMemo(
+      () => splitMessageTextBlocks(m.content),
+      [m.content],
+    );
+
     if (kind === "system" || kind === "event") {
       return (
         <div
@@ -124,44 +177,57 @@ const ChatMessageRow = memo(
     }
 
     const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
+    const avatar = !isGrouped ? (
+      <span className="message-avatar">
+        <svg className="icon">
+          <use href={`#${avatarIcon}`} />
+        </svg>
+      </span>
+    ) : (
+      <span
+        className="message-avatar-placeholder"
+        style={AVATAR_PLACEHOLDER_STYLE}
+      />
+    );
+    const bubble = (
+      <div className="bubble">
+        <div className="bubble-content">
+          <div className="message-text">
+            {textBlocks.map((block, index) =>
+              block ? (
+                <p className="message-text-block" key={`${index}-${block}`}>
+                  {block}
+                </p>
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="message-text-break"
+                  key={`break-${index}`}
+                />
+              ),
+            )}
+          </div>
+          <span className="bubble-time-inline">{formatTime(m.created_at)}</span>
+        </div>
+      </div>
+    );
 
     return (
       <div
         className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}
         data-message-id={m.id}
       >
-        {kind === "user" && !isGrouped ? (
-          <span className="message-avatar">
-            <svg className="icon">
-              <use href={`#${avatarIcon}`} />
-            </svg>
-          </span>
-        ) : kind === "user" && isGrouped ? (
-          <span
-            className="message-avatar-placeholder"
-            style={AVATAR_PLACEHOLDER_STYLE}
-          />
-        ) : null}
-        <div className="bubble">
-          <div className="bubble-content">
-            <p>{m.content}</p>
-            <span className="bubble-time-inline">
-              {formatTime(m.created_at)}
-            </span>
-          </div>
-        </div>
-        {kind !== "user" && !isGrouped ? (
-          <span className="message-avatar">
-            <svg className="icon">
-              <use href={`#${avatarIcon}`} />
-            </svg>
-          </span>
-        ) : kind !== "user" && isGrouped ? (
-          <span
-            className="message-avatar-placeholder"
-            style={AVATAR_PLACEHOLDER_STYLE}
-          />
-        ) : null}
+        {kind === "user" ? (
+          <>
+            {bubble}
+            {avatar}
+          </>
+        ) : (
+          <>
+            {avatar}
+            {bubble}
+          </>
+        )}
       </div>
     );
   },
@@ -209,6 +275,7 @@ export const ChatThread = ({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const scrollerElRef = useRef<HTMLElement | null>(null);
   const detachScrollerListenersRef = useRef<(() => void) | null>(null);
+  const measuredMessageHeightsRef = useRef(new Map<string, number>());
   const initialJumpDoneRef = useRef(false);
   const initialBottomSettleUntilRef = useRef(0);
   const initialBottomSettleRafRef = useRef<number | null>(null);
@@ -240,7 +307,7 @@ export const ChatThread = ({
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
 
-  const scrollToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
+  const scrollToNewest = useCallback((behavior: "auto" | "smooth" = "auto") => {
     virtuosoRef.current?.scrollToIndex({
       index: "LAST",
       align: "end",
@@ -344,6 +411,32 @@ export const ChatThread = ({
     scrollToNewest("smooth");
   }, [scrollToNewest]);
 
+  const messageHeightEstimates = useMemo(
+    () =>
+      messages.map((message) =>
+        measuredOrEstimatedMessageRowHeight(
+          message,
+          measuredMessageHeightsRef.current,
+        ),
+      ),
+    [messages],
+  );
+
+  const measureMessageItem = useCallback<SizeFunction>((el, field) => {
+    const rect = el.getBoundingClientRect();
+    const measured = Math.ceil(
+      field === "offsetWidth" ? rect.width : rect.height,
+    );
+    if (field === "offsetHeight" && measured > 0) {
+      const messageEl = el.querySelector<HTMLElement>("[data-message-id]");
+      const messageId = messageEl?.dataset.messageId;
+      if (messageId) {
+        measuredMessageHeightsRef.current.set(messageId, measured);
+      }
+    }
+    return measured;
+  }, []);
+
   const findMessageElement = useCallback(
     (scrollerEl: HTMLElement, messageId: string) =>
       Array.from(
@@ -378,26 +471,32 @@ export const ChatThread = ({
       if (!anchor) return;
 
       let frame = 0;
-      let fallbackApplied = false;
+      scrollerElRef.current?.setAttribute("data-anchor-restoring", "true");
       const tick = () => {
         const scrollerEl = scrollerElRef.current;
         if (!scrollerEl) return;
 
         const anchorEl = findMessageElement(scrollerEl, anchor.id);
-        if (anchorEl) {
+        if (!anchorEl) {
+          const nextScrollTop = scrollTopAfterPrependHeightChange(
+            anchor,
+            scrollerEl.scrollHeight,
+          );
+          if (Math.abs(scrollerEl.scrollTop - nextScrollTop) > 0.5) {
+            scrollerEl.scrollTop = nextScrollTop;
+            lastScrollTopRef.current = scrollerEl.scrollTop;
+          }
+        } else {
           const currentOffset =
             anchorEl.getBoundingClientRect().top -
             scrollerEl.getBoundingClientRect().top;
-          const delta = currentOffset - anchor.offsetTop;
-          if (Math.abs(delta) > 0.5) {
-            scrollerEl.scrollTop += delta;
-            lastScrollTopRef.current = scrollerEl.scrollTop;
-          }
-        } else if (!fallbackApplied) {
-          fallbackApplied = true;
-          const heightDelta = scrollerEl.scrollHeight - anchor.scrollHeight;
-          if (Math.abs(heightDelta) > 0.5) {
-            scrollerEl.scrollTop = anchor.scrollTop + heightDelta;
+          const nextScrollTop = scrollTopAfterAnchorOffsetChange(
+            scrollerEl.scrollTop,
+            anchor.offsetTop,
+            currentOffset,
+          );
+          if (Math.abs(scrollerEl.scrollTop - nextScrollTop) > 0.5) {
+            scrollerEl.scrollTop = nextScrollTop;
             lastScrollTopRef.current = scrollerEl.scrollTop;
           }
         }
@@ -405,7 +504,9 @@ export const ChatThread = ({
         frame += 1;
         if (frame < ANCHOR_RESTORE_FRAMES) {
           requestAnimationFrame(tick);
+          return;
         }
+        scrollerEl.removeAttribute("data-anchor-restoring");
       };
 
       requestAnimationFrame(tick);
@@ -424,23 +525,11 @@ export const ChatThread = ({
     lastLoadMoreAtRef.current = now;
 
     const anchor = captureScrollAnchor();
-    const anchorDataIndex = anchor
-      ? messages.findIndex((msg) => msg.id === anchor.id)
-      : -1;
-    const anchorVirtuosoIndex =
-      anchorDataIndex >= 0 ? firstItemIndex + anchorDataIndex : null;
     readyForMoreRef.current = false;
     isPrependingHistoryRef.current = true;
     void loadMore(messages[0].id)
       .then((added) => {
         if (added <= 0) return;
-        if (anchorVirtuosoIndex !== null) {
-          virtuosoRef.current?.scrollToIndex({
-            index: anchorVirtuosoIndex,
-            align: "start",
-            behavior: "auto",
-          });
-        }
         restoreScrollAnchor(anchor);
       })
       .finally(() => {
@@ -450,7 +539,6 @@ export const ChatThread = ({
     hasMore,
     isLoadingMore,
     messages,
-    firstItemIndex,
     loadMore,
     captureScrollAnchor,
     restoreScrollAnchor,
@@ -630,9 +718,7 @@ export const ChatThread = ({
       const prevKind = prevMsg ? classify(prevMsg) : null;
       const isGrouped = prevKind === kind;
 
-      return (
-        <ChatMessageRow message={m} kind={kind} isGrouped={isGrouped} />
-      );
+      return <ChatMessageRow message={m} kind={kind} isGrouped={isGrouped} />;
     },
     [messages, firstItemIndex],
   );
@@ -721,7 +807,10 @@ export const ChatThread = ({
           followOutput={followOutput}
           totalListHeightChanged={handleTotalListHeightChanged}
           defaultItemHeight={DEFAULT_CHAT_ITEM_HEIGHT_PX}
+          heightEstimates={messageHeightEstimates}
+          itemSize={measureMessageItem}
           increaseViewportBy={VIRTUOSO_INCREASE_VIEWPORT_BY}
+          minOverscanItemCount={VIRTUOSO_MIN_OVERSCAN_ITEM_COUNT}
           components={virtuosoComponents}
           itemContent={renderMessage}
         />
