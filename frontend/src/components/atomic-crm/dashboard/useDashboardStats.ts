@@ -24,6 +24,11 @@ interface DashboardMetrics {
   bot_suppression_rate: number;
   failed_zalo_sends: number;
   bot_errors: number;
+  bot_run_count: number;
+  bot_sent_count: number;
+  bot_suppressed_count: number;
+  bot_success_rate: number;
+  avg_bot_response_seconds: number;
   total_leads: number;
   qualified_count: number;
   hired_count: number;
@@ -69,6 +74,17 @@ export interface KnowledgeIngestHealth {
 }
 
 export interface DashboardStats {
+  openConversations: number;
+  hotLeads: number;
+  pendingFollowups: number;
+  botSuppressionRate: number;
+  failedZaloSends: number;
+  botErrors: number;
+  botRunCount: number;
+  botSentCount: number;
+  botSuppressedCount: number;
+  botSuccessRate: number;
+  avgBotResponseSeconds: number;
   totalLeads: number;
   qualifiedCount: number;
   unreadConversationCount: number;
@@ -88,6 +104,17 @@ export const useDashboardStats = (): DashboardStats => {
   return useMemo<DashboardStats>(() => {
     if (!data) {
       return {
+        openConversations: 0,
+        hotLeads: 0,
+        pendingFollowups: 0,
+        botSuppressionRate: 0,
+        failedZaloSends: 0,
+        botErrors: 0,
+        botRunCount: 0,
+        botSentCount: 0,
+        botSuppressedCount: 0,
+        botSuccessRate: 0,
+        avgBotResponseSeconds: 0,
         totalLeads: 0,
         qualifiedCount: 0,
         unreadConversationCount: 0,
@@ -102,6 +129,17 @@ export const useDashboardStats = (): DashboardStats => {
     // stages (which the backend emits too).
     const byValue = new Map(data.stage_breakdown.map((s) => [s.value, s]));
     return {
+      openConversations: data.open_conversations,
+      hotLeads: data.hot_leads,
+      pendingFollowups: data.pending_followups,
+      botSuppressionRate: data.bot_suppression_rate,
+      failedZaloSends: data.failed_zalo_sends,
+      botErrors: data.bot_errors,
+      botRunCount: data.bot_run_count,
+      botSentCount: data.bot_sent_count,
+      botSuppressedCount: data.bot_suppressed_count,
+      botSuccessRate: data.bot_success_rate,
+      avgBotResponseSeconds: data.avg_bot_response_seconds,
       totalLeads: data.total_leads,
       qualifiedCount: data.qualified_count,
       unreadConversationCount: data.unread_conversation_count,

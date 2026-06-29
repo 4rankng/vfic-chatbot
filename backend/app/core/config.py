@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     rag_cache_enabled: bool = True
     rag_result_cache_ttl_seconds: int = 300
     embedding_cache_ttl_seconds: int = 86400
+    dashboard_cache_enabled: bool = True
+    dashboard_cache_ttl_seconds: int = 30
 
     # LLM "training pipeline" — MiniMax digests raw KB files into RAG units + builds
     # the per-project catalog card. Falls back to the agent model when unset.

@@ -47,10 +47,19 @@ class GeminiEmbedder:
         self.s = settings or get_settings()
         self._client = None
 
-    async def batch(self, texts: list[str]) -> list[list[float]]:
-        """Embed many texts in ONE SDK call (Gemini accepts a `contents` list).
+    # Gemini's per-request token budget is shared across all inputs; large
+    # batches silently truncate, returning fewer vectors than texts.  Chunk
+    # into sub-batches so each request stays within limits and returns
+    # exactly one vector per input.
+    _EMBED_BATCH_SIZE = 100
 
-        Replaces the N+1 pattern of calling embed() per fact in MemoryService.save.
+    async def batch(self, texts: list[str]) -> list[list[float]]:
+        """Embed many texts in chunked SDK calls.
+
+        Gemini's per-request token budget is shared across the batch.  Sending
+        all texts at once silently truncates, returning fewer vectors than
+        texts.  This method chunks into sub-batches to stay within limits
+        and guarantee one vector per input.
         """
         from google import genai
 
@@ -60,10 +69,19 @@ class GeminiEmbedder:
             raise RuntimeError("GEMINI_API_KEY is required for Gemini embeddings")
         if self._client is None:
             self._client = genai.Client(api_key=self.s.gemini_api_key)
-        resp = await self._client.aio.models.embed_content(
-            model=self.s.gemini_embedding_model, contents=texts
-        )
-        return [list(e.values) for e in resp.embeddings]
+        all_vectors: list[list[float]] = []
+        for i in range(0, len(texts), self._EMBED_BATCH_SIZE):
+            chunk = texts[i : i + self._EMBED_BATCH_SIZE]
+            resp = await self._client.aio.models.embed_content(
+                model=self.s.gemini_embedding_model, contents=chunk,
+            )
+            if resp.embeddings:
+                all_vectors.extend(list(e.values) for e in resp.embeddings)
+            else:
+                # API returned no embeddings — pad with zero vectors so the
+                # caller (embed_with_fallback) can retry one-by-one.
+                all_vectors.extend([[0.0] * (self.s.embedding_dim or 768)] for _ in chunk])
+        return all_vectors
 
     async def embed(self, text: str) -> list[float]:
         return (await self.batch([text]))[0]

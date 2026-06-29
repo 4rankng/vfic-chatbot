@@ -49,12 +49,15 @@ class DashboardService:
         failed_sends = await repo.count_failed_sends(recruiter_id)
         bot_errors = await repo.count_bot_errors(recruiter_id)
         suppression = await repo.bot_suppression_rate(recruiter_id)
+        bot_summary = await repo.bot_run_summary(recruiter_id)
         counts_by_stage = await repo.leads_by_stage(recruiter_id)
         human_convs = await repo.count_human_conversations(recruiter_id)
 
         total_leads = sum(counts_by_stage.values())
         qualified_count = counts_by_stage.get("QUALIFIED", 0)
         hired_count = counts_by_stage.get("HIRED", 0)
+        bot_run_count = int(bot_summary["total"] or 0)
+        bot_sent_count = int(bot_summary["sent"] or 0)
         stage_breakdown = [
             {
                 "value": stage,
@@ -73,6 +76,11 @@ class DashboardService:
             bot_suppression_rate=float(suppression or 0.0),
             failed_zalo_sends=int(failed_sends or 0),
             bot_errors=int(bot_errors or 0),
+            bot_run_count=bot_run_count,
+            bot_sent_count=bot_sent_count,
+            bot_suppressed_count=int(bot_summary["suppressed"] or 0),
+            bot_success_rate=round(bot_sent_count / bot_run_count * 100) if bot_run_count else 0.0,
+            avg_bot_response_seconds=round(float(bot_summary["avg_seconds"] or 0.0), 1),
             total_leads=total_leads,
             qualified_count=qualified_count,
             hired_count=hired_count,

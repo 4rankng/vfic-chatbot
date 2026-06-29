@@ -86,7 +86,15 @@ async def test_dashboard_metrics(client, db_session):
     await db_session.execute(text("INSERT INTO leads(zalo_id,name,lead_score,lead_stage) VALUES (:z,'X','hot','NEW') ON CONFLICT (zalo_id) DO NOTHING"), {"z": zalo})
     lead_id = (await db_session.execute(text("SELECT id FROM leads WHERE zalo_id=:z"), {"z": zalo})).scalar()
     await db_session.execute(text("INSERT INTO follow_up_tasks(lead_id,due_at,status) VALUES (:l,now()+interval '1 day','PENDING')"), {"l": lead_id})
-    await db_session.execute(text("INSERT INTO bot_runs(conversation_id,version_at_start,outcome) VALUES (:c,1,'SENT'),(:c,1,'SUPPRESSED')"), {"c": conv_id})
+    await db_session.execute(
+        text(
+            "INSERT INTO bot_runs(conversation_id,version_at_start,outcome,started_at,ended_at) "
+            "VALUES "
+            "(:c,1,'SENT',now() - interval '3 seconds',now()),"
+            "(:c,1,'SUPPRESSED',now() - interval '5 seconds',now())"
+        ),
+        {"c": conv_id},
+    )
     await db_session.commit()
 
     m = await DashboardService(db_session).metrics(type("U", (), {"id": uuid.UUID(me["id"]), "role": None})())
@@ -94,6 +102,11 @@ async def test_dashboard_metrics(client, db_session):
     assert m.hot_leads >= before.hot_leads + 1
     assert m.pending_followups >= before.pending_followups + 1
     assert 0.0 <= m.bot_suppression_rate <= 1.0
+    assert m.bot_run_count >= before.bot_run_count + 2
+    assert m.bot_sent_count >= before.bot_sent_count + 1
+    assert m.bot_suppressed_count >= before.bot_suppressed_count + 1
+    assert 0.0 <= m.bot_success_rate <= 100.0
+    assert m.avg_bot_response_seconds >= 0.0
 
 
 async def test_dashboard_metrics_funnel_aggregates(client, db_session):

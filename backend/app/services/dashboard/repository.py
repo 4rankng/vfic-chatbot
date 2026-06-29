@@ -80,6 +80,34 @@ class DashboardRepository:
             {"uid": recruiter_id},
         )
 
+    async def bot_run_summary(self, recruiter_id: str | None = None) -> dict[str, float | int]:
+        """Aggregate bot-turn health without downloading the bot_run audit log."""
+        sql = (
+            "SELECT "
+            "count(*)::int AS total, "
+            "count(*) FILTER (WHERE b.outcome = 'SENT')::int AS sent, "
+            "count(*) FILTER (WHERE b.outcome = 'SUPPRESSED')::int AS suppressed, "
+            "count(*) FILTER (WHERE b.outcome = 'ERROR')::int AS errors, "
+            "coalesce(avg(extract(epoch FROM (b.ended_at - b.started_at))) "
+            "FILTER (WHERE b.ended_at IS NOT NULL), 0)::float AS avg_seconds "
+            "FROM bot_runs b"
+        )
+        params = {}
+        if recruiter_id is not None:
+            sql += (
+                " JOIN conversations c ON c.id = b.conversation_id "
+                "WHERE (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+            )
+            params["uid"] = recruiter_id
+        row = (await self.db.execute(text(sql), params)).mappings().one()
+        return {
+            "total": int(row["total"] or 0),
+            "sent": int(row["sent"] or 0),
+            "suppressed": int(row["suppressed"] or 0),
+            "errors": int(row["errors"] or 0),
+            "avg_seconds": float(row["avg_seconds"] or 0.0),
+        }
+
     async def bot_suppression_rate(self, recruiter_id: str | None = None) -> float | None:
         if recruiter_id is None:
             return (
