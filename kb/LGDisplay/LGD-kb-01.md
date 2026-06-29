@@ -115,6 +115,14 @@ Answer: Ứng viên có thể được hỗ trợ xe đưa đón theo tuyến, k
 
 Source: LGDisplay.txt, mục Phúc lợi của LG Display và Chương trình riêng của VFIC.
 
+### Feature: contact_info
+
+Question: Liên hệ ai khi cần hỗ trợ?
+
+Answer: Khi đến liên hệ Admin Mai, số điện thoại 0868232891.
+
+Source: LGDisplay.txt, mục Thông tin liên lạc.
+
 ## Rules/Policies
 
 ### Rule: Training-day preparation

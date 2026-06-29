@@ -54,7 +54,7 @@ def _units_payload(*contents):
 
 
 def _features_payload():
-    """LLM returns 3 features; the other 8 active catalog features become is_missing=true."""
+    """LLM returns 3 features; the other 9 active catalog features become is_missing=true."""
     return {
         "features": [
             {
@@ -75,7 +75,7 @@ def _features_payload():
 async def clean_features(db_session):
     """job_feature_values are per-project and accumulate across runs; wipe them.
 
-    worker_feature_catalog (the 11-active seed) is deliberately NOT truncated — tests
+    worker_feature_catalog (the 12-active seed) is deliberately NOT truncated — tests
     rely on those rows being present.
     """
     await db_session.execute(text("TRUNCATE job_feature_values"))
@@ -104,7 +104,7 @@ def _count_features(db, project_id) -> ...:
 
 
 # --------------------------------------------------------------------------- extraction
-async def test_extract_writes_exactly_11_rows(db_session, clean_kb, clean_features):
+async def test_extract_writes_exactly_12_rows(db_session, clean_kb, clean_features):
     proj = await _seed_project(db_session)
     doc = await _make_doc(db_session, "LG Display tuyển operator lương 10-13 triệu.", project_id=proj.id)
 
@@ -114,7 +114,7 @@ async def test_extract_writes_exactly_11_rows(db_session, clean_kb, clean_featur
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).extract_product_features(doc, [])
 
     n = (await _count_features(db_session, proj.id)).scalar()
-    assert n == 11  # one row per catalog feature, regardless of how many the LLM returned
+    assert n == 12  # one row per catalog feature, regardless of how many the LLM returned
 
     hi = (
         await db_session.execute(
@@ -156,7 +156,7 @@ async def test_extract_is_idempotent_on_rerun(db_session, clean_kb, clean_featur
     await pipe.extract_product_features(doc, [])  # re-extract: delete-then-insert
 
     n = (await _count_features(db_session, proj.id)).scalar()
-    assert n == 11  # no duplicates
+    assert n == 12  # no duplicates
 
 
 async def test_new_upload_merges_features_without_erasing_existing_values(
@@ -227,7 +227,7 @@ async def test_new_upload_merges_features_without_erasing_existing_values(
     assert by_key["commute_support"]["value_text"] == "Có xe đưa đón Thái Bình"
     assert by_key["commute_support"]["is_missing"] is False
     assert by_key["commute_support"]["source_document_id"] == first_doc.id
-    assert (await _count_features(db_session, proj.id)).scalar() == 11
+    assert (await _count_features(db_session, proj.id)).scalar() == 12
 
 
 async def test_extract_syncs_project_highlights(db_session, clean_kb, clean_features):
@@ -261,7 +261,7 @@ async def test_pipeline_run_extracts_features(db_session, clean_kb, clean_featur
     await db_session.refresh(doc)
 
     assert doc.status == KnowledgeStatus.PUBLISHED
-    assert (await _count_features(db_session, proj.id)).scalar() == 11
+    assert (await _count_features(db_session, proj.id)).scalar() == 12
 
 
 async def test_pipeline_run_survives_bad_extraction(db_session, clean_kb, clean_features):
@@ -330,7 +330,7 @@ async def test_recruiter_can_read_project_features_api(client, db_session, clean
     features = await client.get(f"/api/v1/knowledge/projects/{proj.id}/features", headers=headers)
     assert features.status_code == 200
     body = features.json()
-    assert body["total"] == 11
+    assert body["total"] == 12
     feature_id = body["data"][0]["id"]
 
     edit = await client.patch(

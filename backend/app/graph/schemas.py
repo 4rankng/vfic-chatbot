@@ -113,24 +113,23 @@ async def _dispatch_tool(db, embedder, name: str, args: dict) -> str:
 
     name = (name or "").strip()
     args = args or {}
-    if name == "search_user_memory":
-        fn = lambda: search_user_memory(db, embedder, args.get("chat_id", ""), args.get("query", ""))  # noqa: E731
-    elif name == "search_knowledge":
-        fn = lambda: search_knowledge(db, embedder, args.get("query", ""), args.get("project_slug"))  # noqa: E731
-    elif name == "search_jobs":  # back-compat: older turns may still call this name
-        fn = lambda: search_jobs(db, embedder, args.get("query", ""))  # noqa: E731
-    elif name == "list_active_projects":
-        fn = lambda: list_active_projects(db)  # noqa: E731
-    elif name == "search_bus_timetable":
-        fn = lambda: search_bus_timetable(db, args.get("company", ""), args.get("question", ""))  # noqa: E731
-    elif name == "get_product_features":
-        fn = lambda: get_product_features(db, args.get("project_slug", ""))  # noqa: E731
-    else:
-        logger.warning("unknown tool dispatched: %s (args=%s)", name, args)
-        return "unknown tool"
     try:
         t0 = time.monotonic()
-        result = await fn()
+        if name == "search_user_memory":
+            result = await search_user_memory(db, embedder, args.get("chat_id", ""), args.get("query", ""))
+        elif name == "search_knowledge":
+            result = await search_knowledge(db, embedder, args.get("query", ""), args.get("project_slug"))
+        elif name == "search_jobs":  # back-compat: older turns may still call this name
+            result = await search_jobs(db, embedder, args.get("query", ""))
+        elif name == "list_active_projects":
+            result = await list_active_projects(db)
+        elif name == "search_bus_timetable":
+            result = await search_bus_timetable(db, args.get("company", ""), args.get("question", ""))
+        elif name == "get_product_features":
+            result = await get_product_features(db, args.get("project_slug", ""))
+        else:
+            logger.warning("unknown tool dispatched: %s (args=%s)", name, args)
+            return "unknown tool"
         logger.debug("tool %s completed in %.1fms (%d chars)", name, (time.monotonic() - t0) * 1000, len(result))
         return result
     except Exception:

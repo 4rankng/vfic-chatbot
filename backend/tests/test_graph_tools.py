@@ -5,7 +5,6 @@ from sqlalchemy import text
 
 from app.graph.tools import search_bus_timetable, search_jobs, search_knowledge, search_user_memory
 from app.services.memory_service import greeting_gate
-from app.services.retrieval import RetrievalRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -114,10 +113,10 @@ async def test_search_bus_timetable_runs(db_session):
 # ---------------------------------------------------------------------------
 # F1: Similarity floor — near-zero-similarity chunks must be excluded
 async def test_search_knowledge_excludes_low_similarity_chunk(db_session):
-    """A chunk with anti-parallel embedding (similarity=-1.0) must not appear.
+    """A chunk with anti-parallel embedding must not appear.
 
-    pgvector treats all-zero vectors as maximally similar, so we use an
-    anti-parallel vector instead (cosine=-1, distance=2, 1-distance=-1).
+    pgvector treats all-zero vectors as NaN-similarity, so we use an
+    anti-parallel vector instead (cosine distance=2, similarity=1-2=-1.0).
     """
     good_vec = "[" + ",".join(["0.01000000"] * 3072) + "]"
     # Anti-parallel: cosine similarity = -1.0 → similarity = 1 - (1-(-1)) = -1.0
@@ -143,11 +142,12 @@ async def test_search_knowledge_excludes_low_similarity_chunk(db_session):
          "content": "RELEVANT_CHUNK_DATA", "e": good_vec},
     )
     # Low-similarity chunk (anti-parallel vector → sim = -1.0, below 0.30 floor)
+    # Uses DO UPDATE to replace stale data from prior test runs.
     await db_session.execute(
         text(
             "INSERT INTO knowledge_chunks(document_id, chunk_index, content, embedding, metadata) "
             "VALUES (CAST(:did AS uuid), 1, :content, CAST(:e AS vector), CAST('{}' AS jsonb)) "
-            "ON CONFLICT (document_id, chunk_index) DO NOTHING"
+            "ON CONFLICT (document_id, chunk_index) DO UPDATE SET embedding = EXCLUDED.embedding, content = EXCLUDED.content"
         ),
         {"did": "33333333-3333-3333-3333-000000000001",
          "content": "NOISE_CHUNK_SHOULD_BE_EXCLUDED", "e": bad_vec},

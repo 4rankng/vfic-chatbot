@@ -390,12 +390,15 @@
 .inbox-bg-container .conversation {
   position: relative;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 14px;
-  padding: 14px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  width: 100%;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
   border: 1px solid transparent;
   border-radius: var(--rad-lg);
   background: transparent;
+  text-align: left;
   transition: var(--transition);
 }
 .inbox-bg-container .conversation + .conversation {
@@ -414,8 +417,8 @@
   content: "";
   position: absolute;
   left: 0;
-  top: 14px;
-  bottom: 14px;
+  top: 10px;
+  bottom: 10px;
   width: 3px;
   background: var(--brand);
   border-radius: 3px;
@@ -423,8 +426,8 @@
 
 .inbox-bg-container .avatar {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border-radius: var(--rad-md);
@@ -451,17 +454,23 @@
 
 .inbox-bg-container .conv-body {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  width: 100%;
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: 6px;
+  align-content: center;
+  justify-items: stretch;
 }
 .inbox-bg-container .conv-top {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
+  column-gap: 8px;
   margin-bottom: 4px;
+  min-width: 0;
 }
 .inbox-bg-container .conv-name {
+  min-width: 0;
   color: var(--ink);
   font-size: 14px;
   font-weight: 700;
@@ -476,19 +485,21 @@
   flex: 0 0 auto;
 }
 .inbox-bg-container .conv-preview {
+  width: 100%;
+  min-width: 0;
   color: var(--ink-muted);
   font-size: 13px;
   line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
-  white-space: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .inbox-bg-container .conv-bottom {
-  margin-top: 8px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  column-gap: 8px;
+  min-width: 0;
 }
 
 .inbox-bg-container .mini-chip {
@@ -499,6 +510,7 @@
   border-radius: 6px;
   font-size: 10px;
   font-weight: 700;
+  white-space: nowrap;
 }
 .inbox-bg-container .mini-chip.bot {
   color: var(--brand);

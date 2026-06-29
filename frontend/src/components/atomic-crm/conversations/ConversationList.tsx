@@ -150,8 +150,8 @@ const ConversationListItem = memo(
             <span className="conv-name">{name}</span>
             <span className="conv-time">{time}</span>
           </span>
-          {subtitle && <span className="conv-preview">{subtitle}</span>}
           <span className="conv-bottom">
+            {subtitle && <span className="conv-preview">{subtitle}</span>}
             <span className={`mini-chip ${modeMeta.tone}`}>
               <svg className="icon">
                 <use href={`#${modeMeta.icon}`} />
