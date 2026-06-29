@@ -271,6 +271,7 @@ class RetrievalRepository:
         emb: str,
         top_k: int = 3,
         *,
+        filter_json: str = "{}",
         project_ids: list[str] | None = None,
         floor: float | None = None,
     ) -> list:
@@ -283,7 +284,7 @@ class RetrievalRepository:
         if floor is None:
             floor = self.FAQ_SIMILARITY_FLOOR
         project_clause = ""
-        params: dict[str, object] = {"emb": emb, "k": top_k, "filter": "{}"}
+        params: dict[str, object] = {"emb": emb, "k": top_k, "filter": filter_json}
         if project_ids:
             project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
             params["pids"] = project_ids
