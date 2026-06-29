@@ -74,7 +74,8 @@ export type Conversation = {
   // lower-cases it so render checks keep working.
   mode: "bot" | "human" | "semi_auto" | "closed";
   needs_human?: boolean;
-  last_inbound_at: string;
+  last_inbound_at: string | null;
+  last_outbound_at?: string | null;
   assigned_recruiter_id: string | null;
   created_at: string;
   updated_at: string;

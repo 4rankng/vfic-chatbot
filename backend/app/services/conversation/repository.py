@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import case, desc, func, or_, select, text
+from sqlalchemy import and_, case, desc, func, or_, select, text
 
 from app.models.conversation import (
     Conversation,
@@ -29,6 +29,16 @@ _CONVERSATION_SORT = {
     "created_at": Conversation.created_at,
     "last_inbound_at": Conversation.last_inbound_at,
 }
+
+
+def _unanswered_inbound_condition():
+    return and_(
+        Conversation.last_inbound_at.is_not(None),
+        or_(
+            Conversation.last_outbound_at.is_(None),
+            Conversation.last_inbound_at > Conversation.last_outbound_at,
+        ),
+    )
 
 
 class ConversationRepository:
@@ -120,13 +130,7 @@ class ConversationRepository:
         if zalo_chat_id:
             base = base.where(Conversation.zalo_chat_id == zalo_chat_id)
         if needs_attention:
-            base = base.where(
-                or_(
-                    Conversation.unread_count > 0,
-                    Conversation.mode == ConversationMode.HUMAN,
-                    Conversation.mode == ConversationMode.SEMI_AUTO,
-                )
-            )
+            base = base.where(_unanswered_inbound_condition())
         if q:
             base = base.where(Conversation.zalo_chat_id.ilike(f"%{q}%"))
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
@@ -134,11 +138,7 @@ class ConversationRepository:
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
         attention_expr = case(
             (
-                or_(
-                    Conversation.unread_count > 0,
-                    Conversation.mode == ConversationMode.HUMAN,
-                    Conversation.mode == ConversationMode.SEMI_AUTO,
-                ),
+                _unanswered_inbound_condition(),
                 1,
             ),
             else_=0,
@@ -153,20 +153,14 @@ class ConversationRepository:
         return list(rows), int(total or 0)
 
     async def needs_attention_count(self, *, viewer: User) -> int:
-        """Conversations the topbar bell should ring for: in recruiter takeover
-        (manual/semi-auto) OR with unread inbound (unread_count > 0). Scoped like
+        """Conversations the topbar bell should ring for: a Zalo user has sent
+        a message after the latest successful bot/recruiter reply. Scoped like
         ``list`` (admin = all, recruiter = own + unassigned). Backs the
         notification badge so it never downloads conversation rows."""
         stmt = (
             select(func.count())
             .select_from(Conversation)
-            .where(
-                or_(
-                    Conversation.mode == ConversationMode.HUMAN,
-                    Conversation.mode == ConversationMode.SEMI_AUTO,
-                    Conversation.unread_count > 0,
-                )
-            )
+            .where(_unanswered_inbound_condition())
         )
         if viewer.role != Role.admin:
             stmt = stmt.where(

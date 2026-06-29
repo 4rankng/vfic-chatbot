@@ -382,7 +382,8 @@ class ConversationState:
             external_error=None if result.ok else result.error,
         )
         self.db.add(msg)
-        conv.last_outbound_at = utcnow()
+        if result.ok:
+            conv.last_outbound_at = utcnow()
         conv.taken_over_at = utcnow()
         conv.version += 1
         await record_audit(

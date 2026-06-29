@@ -94,7 +94,7 @@ async def needs_attention(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Count of conversations needing a human (mode=HUMAN or unread_count>0),
+    """Count of conversations where the latest user message is still unanswered,
     scoped to the viewer. Lightweight count for the topbar notification badge —
     replaces the previous useGetList(perPage=500) + client-side filter.
 

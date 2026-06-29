@@ -5,6 +5,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    command: ["postgres", "-c", "max_connections=150"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vfic}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -19,7 +20,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes: [vfic_redisdata:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
@@ -57,6 +58,11 @@ services:
     command: ["rq", "worker", "webhook_high", "persistence_low", "--url", "${REDIS_URL}"]
     deploy:
       replicas: 6
+      resources:
+        limits:
+          # TODO: measure real RSS under load (expect ~100-150M per worker).
+          # 512M is a safe ceiling for 6 workers on a 4GB droplet.
+          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
       interval: 30s

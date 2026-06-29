@@ -6,6 +6,7 @@ import logging
 import uuid
 
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.types import _now
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +89,13 @@ async def _run_job_async(job: dict) -> None:
     async with worker_session() as db:
         deps = await build_deps(db)
         deps.persist = _enqueue_persist  # wire lead/memory extraction on SENT
+        started_at = _now()
         try:
             await run_turn(state, deps)
         except LLMThrottled:
             # LLM is throttled — send static degradation msg (no LLM call).
+            # Must record_bot_outcome to clear the per-chat mutex (bot_locked_until),
+            # otherwise the conversation is stalled until TTL expiry (~3 min).
             logger.warning("llm_throttled: sending degradation reply for %s", job.get("conversation_id", "?"))
             try:
                 from app.services.conversation import ConversationService
@@ -100,5 +104,12 @@ async def _run_job_async(job: dict) -> None:
                 conv = await svc.get(uuid.UUID(state.conversation_id))
                 if conv is not None:
                     await deps.zalo.send(conv.zalo_chat_id, DEGRADATION_REPLY)
+                    await svc.record_bot_outcome(
+                        conv,
+                        version_at_start=state.version_at_start,
+                        reply=DEGRADATION_REPLY,
+                        started_at=started_at,
+                        sent=True,
+                    )
             except Exception:  # noqa: BLE001
                 logger.error("failed to send degradation reply", exc_info=True)

@@ -78,6 +78,11 @@ def _should_prefetch_knowledge(user_text: str) -> bool:
     return any(term in text for term in contact_terms)
 
 
+def _is_429(exc: Exception) -> bool:
+    """Check if an exception represents an HTTP 429 (rate limit)."""
+    return "429" in str(exc) or "rate" in str(exc).lower()
+
+
 async def _llm_call_with_retry(bound, messages):
     """Call bound.ainvoke with 1 retry on 429 (2s ± 0.5s jitter).
 
@@ -89,14 +94,14 @@ async def _llm_call_with_retry(bound, messages):
     try:
         return await bound.ainvoke(messages)
     except Exception as exc:
-        if "429" in str(exc) or "rate" in str(exc).lower():
+        if _is_429(exc):
             _record_llm_429()
             logger.warning("llm_429_retry", exc_info=True)
             await asyncio.sleep(2.0 + random.uniform(-0.5, 0.5))
             try:
                 return await bound.ainvoke(messages)
             except Exception as exc2:
-                if "429" in str(exc2) or "rate" in str(exc2).lower():
+                if _is_429(exc2):
                     _record_llm_429()
                     raise LLMThrottled("LLM rate limit exhausted after retry")
                 raise
@@ -198,7 +203,7 @@ class MiniMaxAgent:
                 raise
             except Exception as exc:
                 # Track non-retry-path 429s for observability (Phase 0 metric).
-                if "429" in str(exc) or "rate" in str(exc).lower():
+                if _is_429(exc):
                     _record_llm_429()
                     logger.error("llm_429", exc_info=True)
                 raise

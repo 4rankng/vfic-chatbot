@@ -7,13 +7,10 @@ interface NeedsAttentionResponse {
 }
 
 /**
- * Counts conversations that need attention: unread inbound messages (real
- * unread_count, kept in sync by the vfic_chat_histories_unread trigger) OR an
- * active recruiter handoff (mode === "human"). Computed server-side via
- * GET /conversations/needs-attention so the bell never loads conversation rows
- * (the previous useGetList(perPage=500) exceeded the per_page<=200 list cap and
- * filtered client-side). Shared by the desktop and mobile topbar bells so both
- * stay in sync.
+ * Counts conversations where the latest user message is still unanswered.
+ * Computed server-side via GET /conversations/needs-attention so the bell never
+ * loads conversation rows. Shared by the desktop and mobile topbar bells so
+ * both stay in sync.
  */
 export const useNotifications = () => {
   const { data } = useQuery<NeedsAttentionResponse>({

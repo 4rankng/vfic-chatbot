@@ -18,12 +18,15 @@ type ConversationRow = Conversation & {
 
 const needsVisibleAttention = (
   conversation: Conversation,
-  readIds: Set<string>,
-) =>
-  Boolean(conversation.needs_human) ||
-  (!readIds.has(conversation.id) && (conversation.unread_count ?? 0) > 0) ||
-  conversation.mode === "human" ||
-  conversation.mode === "semi_auto";
+  _readIds: Set<string>,
+) => {
+  if (!conversation.last_inbound_at) return false;
+  if (!conversation.last_outbound_at) return true;
+  return (
+    new Date(conversation.last_inbound_at).getTime() >
+    new Date(conversation.last_outbound_at).getTime()
+  );
+};
 
 const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";

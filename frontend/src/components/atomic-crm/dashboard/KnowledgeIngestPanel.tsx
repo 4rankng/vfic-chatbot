@@ -13,13 +13,8 @@ import {
   CheckCircle2,
   Clock3,
   Database,
-  Flame,
-  MessageCircle,
   Send,
   Server,
-  TrendingUp,
-  UserCheck,
-  Users,
 } from "lucide-react";
 import { Navigate, useNavigate } from "react-router";
 import { usePermissions } from "ra-core";
@@ -116,20 +111,6 @@ const panelTitle = (
       {subtitle}
     </CardDescription>
   </CardHeader>
-);
-
-const ToneBadge = ({
-  tone,
-  children,
-}: {
-  tone: Tone;
-  children: React.ReactNode;
-}) => (
-  <span
-    className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${TONE_CLASS[tone]}`}
-  >
-    {children}
-  </span>
 );
 
 const CompactMetric = ({
@@ -391,106 +372,6 @@ const DeliveryMixCard = ({
   );
 };
 
-const FunnelCard = ({
-  v,
-  openConversations,
-  unreadConversationCount,
-  hotLeads,
-  pendingFollowups,
-  qualifiedCount,
-  totalLeads,
-  hiredRate,
-  stageBreakdown,
-}: {
-  v: VariantConfig;
-  openConversations: number;
-  unreadConversationCount: number;
-  hotLeads: number;
-  pendingFollowups: number;
-  qualifiedCount: number;
-  totalLeads: number;
-  hiredRate: number;
-  stageBreakdown: Array<{
-    value: string;
-    label: string;
-    count: number;
-    percentage: number;
-  }>;
-}) => (
-  <Card className={`${v.cardClass} lg:col-span-12 xl:col-span-4`}>
-    {panelTitle(
-      "Recruitment funnel",
-      "Tách tín hiệu hội thoại khỏi tiến độ ứng viên để dễ ra quyết định.",
-      <Users className="size-4" />,
-      v,
-    )}
-    <CardContent className={`${v.contentClass} space-y-5`}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-2">
-        <CompactMetric
-          label="Chat"
-          value={openConversations}
-          icon={<MessageCircle className="size-3.5" />}
-        />
-        <CompactMetric
-          label="Cần tiếp quản"
-          value={unreadConversationCount}
-          icon={<UserCheck className="size-3.5" />}
-          tone={unreadConversationCount > 0 ? "busy" : "ok"}
-        />
-        <CompactMetric
-          label="Hot leads"
-          value={hotLeads}
-          icon={<Flame className="size-3.5" />}
-          tone={hotLeads > 0 ? "busy" : "neutral"}
-        />
-        <CompactMetric
-          label="Hired rate"
-          value={formatPercent(hiredRate)}
-          icon={<TrendingUp className="size-3.5" />}
-          tone={hiredRate > 0 ? "ok" : "neutral"}
-        />
-      </div>
-
-      <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Qualified
-            </p>
-            <p className="mt-1 font-mono text-2xl font-semibold">
-              {qualifiedCount}/{totalLeads}
-            </p>
-          </div>
-          <ToneBadge tone={pendingFollowups > 0 ? "warn" : "neutral"}>
-            {pendingFollowups} follow-up
-          </ToneBadge>
-        </div>
-        <div className="space-y-2">
-          {stageBreakdown.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Chưa có lead.</p>
-          ) : (
-            stageBreakdown.map((stage) => (
-              <ProgressRow
-                key={stage.value}
-                label={stage.label}
-                value={stage.count}
-                percent={stage.percentage}
-                tone={
-                  stage.value === "HIRED"
-                    ? "ok"
-                    : stage.value === "LOST" || stage.value === "UNQUALIFIED"
-                      ? "neutral"
-                      : "busy"
-                }
-              />
-            ))
-          )}
-        </div>
-      </div>
-    </CardContent>
-  </Card>
-);
-
 const KnowledgeStagesCard = ({
   v,
   stageBreakdown,
@@ -700,16 +581,8 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
     botSuppressedCount,
     botSuppressionRate,
     failedZaloSends,
-    hiredRate,
-    hotLeads,
     isPending,
     knowledgeIngest,
-    openConversations,
-    pendingFollowups,
-    qualifiedCount,
-    stageBreakdown,
-    totalLeads,
-    unreadConversationCount,
   } = useDashboardStats();
   const v = V[variant];
 
@@ -749,17 +622,6 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
           botSuppressionRate={botSuppressionRate}
           botErrors={botErrors}
           failedZaloSends={failedZaloSends}
-        />
-        <FunnelCard
-          v={v}
-          openConversations={openConversations}
-          unreadConversationCount={unreadConversationCount}
-          hotLeads={hotLeads}
-          pendingFollowups={pendingFollowups}
-          qualifiedCount={qualifiedCount}
-          totalLeads={totalLeads}
-          hiredRate={hiredRate}
-          stageBreakdown={stageBreakdown}
         />
       </div>
 
