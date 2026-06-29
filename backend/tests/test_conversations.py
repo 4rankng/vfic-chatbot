@@ -234,6 +234,8 @@ async def test_recruiter_reply_failed_delivery_returns_502(client, db_session, m
     body = r.json()
     assert body["delivery_status"] == "FAILED"
     assert body["external_error"] == "upstream zalo timeout"
+    await db_session.refresh(conv)
+    assert conv.last_outbound_at is None
 
 
 # --- take-over conflict between recruiters --------------------------------------
@@ -296,6 +298,61 @@ async def test_mark_read_and_release(client, db_session):
 
     released = await client.post(f"/api/v1/conversations/{conv.id}/release", headers=h)
     assert released.status_code == 200 and released.json()["mode"] == "BOT"
+
+
+async def test_needs_attention_only_counts_unanswered_inbound(client, db_session):
+    """Manual/unread chats are not enough for "Cần xử lý"; the latest user
+    message must be newer than the latest successful outbound reply."""
+    base = datetime.now(timezone.utc)
+    db_session.add_all(
+        [
+            Conversation(
+                zalo_chat_id="manual-answered",
+                mode=ConversationMode.HUMAN,
+                unread_count=5,
+                last_inbound_at=base - timedelta(minutes=2),
+                last_outbound_at=base - timedelta(minutes=1),
+            ),
+            Conversation(
+                zalo_chat_id="unanswered-after-reply",
+                mode=ConversationMode.BOT,
+                unread_count=0,
+                last_inbound_at=base,
+                last_outbound_at=base - timedelta(minutes=1),
+            ),
+            Conversation(
+                zalo_chat_id="unanswered-no-reply",
+                mode=ConversationMode.HUMAN,
+                unread_count=0,
+                last_inbound_at=base,
+                last_outbound_at=None,
+            ),
+            Conversation(
+                zalo_chat_id="manual-no-inbound",
+                mode=ConversationMode.HUMAN,
+                unread_count=10,
+                last_inbound_at=None,
+                last_outbound_at=None,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    tok = await _admin_token(client)
+    headers = {"Authorization": f"Bearer {tok}"}
+    count = await client.get("/api/v1/conversations/needs-attention", headers=headers)
+    assert count.status_code == 200, count.text
+    assert count.json()["count"] == 1
+
+    listed = await client.get(
+        "/api/v1/conversations?needs_attention=true&per_page=20",
+        headers=headers,
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["total"] == 1
+    assert {row["zalo_chat_id"] for row in listed.json()["data"]} == {
+        "unanswered-no-reply",
+    }
 
 
 async def test_release_to_bot_enqueues_unanswered_worker_message(client, db_session, monkeypatch):

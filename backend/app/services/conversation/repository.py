@@ -33,6 +33,7 @@ _CONVERSATION_SORT = {
 
 def _unanswered_inbound_condition():
     return and_(
+        Conversation.mode.in_([ConversationMode.HUMAN, ConversationMode.SEMI_AUTO]),
         Conversation.last_inbound_at.is_not(None),
         or_(
             Conversation.last_outbound_at.is_(None),

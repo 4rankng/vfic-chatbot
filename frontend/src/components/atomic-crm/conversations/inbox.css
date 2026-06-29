@@ -420,6 +420,7 @@
   width: 3px;
   border-radius: 3px;
   background: var(--inbox-accent);
+  animation: attention-marker 1.8s var(--ease) infinite;
 }
 .inbox-bg-container .conversation.active {
   background: var(--brand-light);
@@ -560,10 +561,44 @@
   color: var(--primary-foreground);
   background: linear-gradient(135deg, var(--brand), var(--brand-hover));
   box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 20%, transparent);
+  animation: attention-chip 1.8s var(--ease) infinite;
 }
 .inbox-bg-container .mini-chip .icon {
   width: 12px;
   height: 12px;
+}
+
+@keyframes attention-marker {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scaleY(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes attention-chip {
+  0%,
+  100% {
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 20%, transparent);
+    filter: saturate(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent),
+      0 10px 22px color-mix(in srgb, var(--brand) 30%, transparent);
+    filter: saturate(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-bg-container .conversation.needs-attention::after,
+  .inbox-bg-container .mini-chip.attention {
+    animation: none;
+  }
 }
 
 /* Left Footer */

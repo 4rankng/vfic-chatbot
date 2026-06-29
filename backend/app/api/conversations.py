@@ -172,7 +172,7 @@ async def release(
             }
         )
         if not enqueued:
-            await svc.release_lock(conv.id)
+            await svc.release_lock(conv)
             import logging
 
             logging.getLogger(__name__).warning(

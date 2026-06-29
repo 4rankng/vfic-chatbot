@@ -16,10 +16,16 @@ type ConversationRow = Conversation & {
   _snippet?: string;
 };
 
+const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
+const CONVERSATION_ROWS_PER_PAGE_OPTIONS = [25, 50, 100, 200];
+
 const needsVisibleAttention = (
   conversation: Conversation,
   _readIds: Set<string>,
 ) => {
+  if (conversation.mode !== "human" && conversation.mode !== "semi_auto") {
+    return false;
+  }
   if (!conversation.last_inbound_at) return false;
   if (!conversation.last_outbound_at) return true;
   return (
@@ -207,6 +213,10 @@ const ConversationListPanel = ({
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  const conversationIdsKey = useMemo(
+    () => conversations?.map((c) => c.id).join("|") ?? "",
+    [conversations],
+  );
 
   // Resolve contact details AND the latest message per conversation in one
   // batched pass each (getLeadsByZaloIds + getLastMessages), replacing the old
@@ -229,8 +239,22 @@ const ConversationListPanel = ({
           const key = lead.zalo_id;
           if (key && byZalo[key] === undefined) byZalo[key] = lead;
         }
-        setLeads((prev) => ({ ...prev, ...byZalo }));
-        setSnippets((prev) => ({ ...prev, ...snips }));
+        setLeads((prev) => {
+          if (
+            Object.entries(byZalo).every(([key, value]) => prev[key] === value)
+          ) {
+            return prev;
+          }
+          return { ...prev, ...byZalo };
+        });
+        setSnippets((prev) => {
+          if (
+            Object.entries(snips).every(([key, value]) => prev[key] === value)
+          ) {
+            return prev;
+          }
+          return { ...prev, ...snips };
+        });
       } catch {
         // Leave previously loaded leads/snippets intact on error.
       }
@@ -238,7 +262,7 @@ const ConversationListPanel = ({
     return () => {
       cancelled = true;
     };
-  }, [conversations]);
+  }, [conversationIdsKey]);
 
   const rows: ConversationRow[] = useMemo(() => {
     if (!conversations) return [];
@@ -323,7 +347,7 @@ const ConversationListPanel = ({
 
       <div className="inbox-pagination">
         <ListPagination
-          rowsPerPageOptions={[25, 50, 100, 200]}
+          rowsPerPageOptions={CONVERSATION_ROWS_PER_PAGE_OPTIONS}
           className="inbox-pagination-controls"
         />
       </div>
@@ -336,14 +360,20 @@ const ConversationListContent = () => {
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const conversationIdsKey = useMemo(
+    () => conversations?.map((c) => c.id).join("|") ?? "",
+    [conversations],
+  );
   // Optimistic unread-clears. Reset whenever the list refreshes so the server
   // state stays authoritative (markAsRead has reset unread_count) — otherwise a
   // fresh inbound that bumps the count back above 0 would stay hidden for the
   // whole session after a chat is opened once.
   const [pendingReadIds, setPendingReadIds] = useState<Set<string>>(new Set());
   useEffect(() => {
-    setPendingReadIds(new Set());
-  }, [conversations]);
+    setPendingReadIds((current) =>
+      current.size === 0 ? current : new Set(),
+    );
+  }, [conversationIdsKey]);
 
   const urlId = searchParams.get("id");
   // On mobile the detail pane is shown iff a conversation id is in the URL, so
@@ -470,7 +500,7 @@ export const ConversationList = () => (
   // Real pagination (react-admin <Pagination>): the backend caps per_page at
   // 200, and the inbox must page instead of "load everyone". Row previews come
   // from /conversations/last-messages/batch regardless of page size.
-  <ListBase perPage={25} sort={{ field: "updated_at", order: "DESC" }}>
+  <ListBase perPage={25} sort={CONVERSATION_LIST_SORT}>
     <ConversationListContent />
   </ListBase>
 );

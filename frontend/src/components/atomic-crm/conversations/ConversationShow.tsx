@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRecordContext, useGetList, ShowBase } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import { getLeadStatusColor } from "./conversationDisplay";
@@ -71,14 +71,22 @@ export const ConversationShowContent = ({
 }) => {
   const record = useRecordContext<Conversation>();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const leadListParams = useMemo(
+    () => ({
+      filter: { zalo_id: record?.zalo_chat_id },
+      pagination: { page: 1, perPage: 1 },
+    }),
+    [record?.zalo_chat_id],
+  );
+  const leadListOptions = useMemo(
+    () => ({ enabled: !!record?.zalo_chat_id }),
+    [record?.zalo_chat_id],
+  );
 
   const { data: leadData } = useGetList(
     "leads",
-    {
-      filter: { zalo_id: record?.zalo_chat_id },
-      pagination: { page: 1, perPage: 1 },
-    },
-    { enabled: !!record?.zalo_chat_id },
+    leadListParams,
+    leadListOptions,
   );
   const lead = leadData?.[0] as Lead | undefined;
 
