@@ -23,10 +23,7 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
       <ErrorBoundary FallbackComponent={Error}>
         <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
           <div
-            className={cn(
-              "min-h-dvh",
-              hideTopbar ? "pb-20" : "pt-16 pb-20",
-            )}
+            className={cn("min-h-dvh", hideTopbar ? "pb-24" : "pt-16 pb-24")}
           >
             {children}
           </div>

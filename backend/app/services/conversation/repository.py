@@ -187,9 +187,10 @@ class ConversationRepository:
         self, conv: Conversation, limit: int = 50, before_id: int | None = None
     ) -> list[Message]:
         """Newest-first page of a conversation's messages; when `before_id` (the
-        integer message id of the oldest currently-visible message) is set, return
-        the page older than that cursor. Results are reversed to chronological
-        order for the chat scroller. Used for cursor-based load-more."""
+        integer message id of the oldest currently-loaded message) is set,
+        resolve that row and return the page older than its (created_at, id)
+        cursor. Results are reversed to chronological order for the chat
+        scroller. Used for cursor-based load-more."""
         stmt = (
             select(Message)
             .where(Message.conversation_id == conv.id)
@@ -197,7 +198,18 @@ class ConversationRepository:
             .limit(limit)
         )
         if before_id is not None:
-            stmt = stmt.where(Message.id < before_id)
+            cursor = await self.db.get(Message, before_id)
+            if cursor is None or cursor.conversation_id != conv.id:
+                return []
+            stmt = stmt.where(
+                or_(
+                    Message.created_at < cursor.created_at,
+                    and_(
+                        Message.created_at == cursor.created_at,
+                        Message.id < cursor.id,
+                    ),
+                )
+            )
         rows = (await self.db.scalars(stmt)).all()
         return list(reversed(rows))
 

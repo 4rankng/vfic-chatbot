@@ -72,6 +72,7 @@ class Lead(Base):
     qualification_reasons: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
     next_action_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     assigned_recruiter_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

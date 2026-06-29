@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 class ConversationConflict(Exception):
     """Raised when a recruiter tries to take over a conversation owned by another."""
 
+    def __init__(self, message: str = "", owner_name: str | None = None) -> None:
+        super().__init__(message)
+        self.owner_name = owner_name
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -239,19 +243,47 @@ class ConversationState:
 
     # --- recruiter-side state transitions ---
     async def take_over(self, conv: Conversation, recruiter: User) -> Conversation:
-        if conv.assigned_recruiter_id not in (None, recruiter.id):
-            raise ConversationConflict("conversation is owned by another recruiter")
-        conv.mode = ConversationMode.HUMAN
-        conv.status = ConversationStatus.OPEN
-        conv.assigned_recruiter_id = recruiter.id
-        conv.taken_over_at = utcnow()
-        conv.needs_human = False
-        conv.unread_count = 0
-        # A human takeover releases any in-flight bot mutex: mode is now HUMAN so the
-        # bot cannot run anyway, and leaving bot_locked_until set would cause every
-        # subsequent inbound from this candidate to be silently dropped until the TTL.
-        conv.bot_locked_until = None
-        conv.version += 1
+        """Atomically claim a conversation. Uses conditional UPDATE so two recruiters
+        racing on the same unassigned conversation produce exactly one winner and one
+        ConversationConflict (mirrors acquire_lock pattern)."""
+        now = utcnow()
+        res = await self.db.execute(
+            update(Conversation)
+            .where(
+                Conversation.id == conv.id,
+                or_(
+                    Conversation.assigned_recruiter_id.is_(None),
+                    Conversation.assigned_recruiter_id == recruiter.id,
+                ),
+            )
+            .values(
+                mode=ConversationMode.HUMAN,
+                status=ConversationStatus.OPEN,
+                assigned_recruiter_id=recruiter.id,
+                taken_over_at=now,
+                needs_human=False,
+                unread_count=0,
+                bot_locked_until=None,
+                version=Conversation.version + 1,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        if res.rowcount == 0:
+            # Fetch current owner for rich error message
+            await self.db.refresh(conv)
+            from sqlalchemy import select
+
+            from app.models.user import User as UserModel
+
+            owner_row = await self.db.scalar(
+                select(UserModel.full_name).where(UserModel.id == conv.assigned_recruiter_id)
+            )
+            raise ConversationConflict(
+                "conversation is owned by another recruiter",
+                owner_name=owner_row or None,
+            )
+        await self.db.refresh(conv)
         self.db.add(
             Message(
                 conversation_id=conv.id,
@@ -297,16 +329,44 @@ class ConversationState:
         return conv
 
     async def semi_auto(self, conv: Conversation, recruiter: User) -> Conversation:
-        if conv.assigned_recruiter_id not in (None, recruiter.id):
-            raise ConversationConflict("conversation is owned by another recruiter")
-        conv.mode = ConversationMode.SEMI_AUTO
-        conv.status = ConversationStatus.OPEN
-        conv.assigned_recruiter_id = recruiter.id
-        conv.taken_over_at = utcnow()
-        conv.needs_human = False
-        conv.unread_count = 0
-        conv.bot_locked_until = None
-        conv.version += 1
+        """Atomically enable semi-auto mode. Same conditional-UPDATE pattern as take_over."""
+        now = utcnow()
+        res = await self.db.execute(
+            update(Conversation)
+            .where(
+                Conversation.id == conv.id,
+                or_(
+                    Conversation.assigned_recruiter_id.is_(None),
+                    Conversation.assigned_recruiter_id == recruiter.id,
+                ),
+            )
+            .values(
+                mode=ConversationMode.SEMI_AUTO,
+                status=ConversationStatus.OPEN,
+                assigned_recruiter_id=recruiter.id,
+                taken_over_at=now,
+                needs_human=False,
+                unread_count=0,
+                bot_locked_until=None,
+                version=Conversation.version + 1,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        if res.rowcount == 0:
+            await self.db.refresh(conv)
+            from sqlalchemy import select
+
+            from app.models.user import User as UserModel
+
+            owner_row = await self.db.scalar(
+                select(UserModel.full_name).where(UserModel.id == conv.assigned_recruiter_id)
+            )
+            raise ConversationConflict(
+                "conversation is owned by another recruiter",
+                owner_name=owner_row or None,
+            )
+        await self.db.refresh(conv)
         self.db.add(
             Message(
                 conversation_id=conv.id,

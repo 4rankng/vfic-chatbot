@@ -155,9 +155,10 @@ async def take_over(
     conv = await _load(conv_id, db)
     try:
         conv = await ConversationService(db).take_over(conv, user)
-    except ConversationConflict:
+    except ConversationConflict as exc:
+        who = exc.owner_name or "nhân viên khác"
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Hội thoại đã được tiếp nhận bởi nhân viên khác"
+            status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận"
         )
     return ConversationOut.model_validate(conv)
 
@@ -196,9 +197,10 @@ async def semi_auto(
     conv = await _load(conv_id, db)
     try:
         conv = await ConversationService(db).semi_auto(conv, user)
-    except ConversationConflict:
+    except ConversationConflict as exc:
+        who = exc.owner_name or "nhân viên khác"
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Hội thoại đã được tiếp nhận bởi nhân viên khác"
+            status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận"
         )
     return ConversationOut.model_validate(conv)
 

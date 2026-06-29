@@ -28,6 +28,7 @@ class LeadOut(BaseModel):
     lead_score: LeadScore | None = None
     lead_stage: LeadStage
     assigned_recruiter_id: uuid.UUID | None = None
+    version: int = 1
     next_action_at: datetime | None = None
     notes: str | None = None
     created_at: datetime
@@ -40,6 +41,7 @@ class LeadListResponse(BaseModel):
 
 
 class LeadUpdate(BaseModel):
+    version: int | None = None
     name: str | None = None
     phone: str | None = None
     birth_year: int | None = None

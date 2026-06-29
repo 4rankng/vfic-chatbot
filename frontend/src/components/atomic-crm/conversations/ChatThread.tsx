@@ -143,6 +143,9 @@ export const ChatThread = ({
   // whole history). Armed by the scroll listener below, disarmed after each
   // page so one scroll-up = one page and the list can never run away.
   const readyForMoreRef = useRef(false);
+  const loadOlderFromTopRef = useRef<() => void>(() => {
+    /* assigned below after the loader callback is created */
+  });
 
   const {
     isBotMode: internalIsBotMode,
@@ -277,6 +280,48 @@ export const ChatThread = ({
     [findMessageElement],
   );
 
+  const loadOlderFromTop = useCallback(() => {
+    if (!initialJumpDoneRef.current) return;
+    if (!readyForMoreRef.current) return;
+    if (isLoadingMore) return;
+    if (!hasMore || messages.length === 0) return;
+
+    const now = performance.now();
+    if (now - lastLoadMoreAtRef.current < 350) return;
+    lastLoadMoreAtRef.current = now;
+
+    const anchor = captureScrollAnchor();
+    const anchorDataIndex = anchor
+      ? messages.findIndex((msg) => msg.id === anchor.id)
+      : -1;
+    const anchorVirtuosoIndex =
+      anchorDataIndex >= 0 ? firstItemIndex + anchorDataIndex : null;
+    readyForMoreRef.current = false;
+    void loadMore(messages[0].id).then((added) => {
+      if (added <= 0) return;
+      if (anchorVirtuosoIndex !== null) {
+        virtuosoRef.current?.scrollToIndex({
+          index: anchorVirtuosoIndex,
+          align: "start",
+          behavior: "auto",
+        });
+      }
+      restoreScrollAnchor(anchor);
+    });
+  }, [
+    hasMore,
+    isLoadingMore,
+    messages,
+    firstItemIndex,
+    loadMore,
+    captureScrollAnchor,
+    restoreScrollAnchor,
+  ]);
+
+  useEffect(() => {
+    loadOlderFromTopRef.current = loadOlderFromTop;
+  }, [loadOlderFromTop]);
+
   useEffect(
     () => () => {
       if (initialBottomSettleRafRef.current !== null) {
@@ -366,10 +411,17 @@ export const ChatThread = ({
         readyForMoreRef.current = false;
         return;
       }
-      if (currentTop < previousTop) readyForMoreRef.current = true;
+      if (currentTop < previousTop) {
+        readyForMoreRef.current = true;
+        if (currentTop <= 1) loadOlderFromTopRef.current();
+      }
     };
     const onWheel = (event: WheelEvent) => {
       if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
+      if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
+        readyForMoreRef.current = true;
+        loadOlderFromTopRef.current();
+      }
       event.preventDefault();
       event.stopPropagation();
     };
@@ -393,28 +445,8 @@ export const ChatThread = ({
   const handleStartReached = useCallback(() => {
     // Ignore the initial mount/snap top-touch and any fire that is not the
     // result of a real upward scroll.
-    if (!initialJumpDoneRef.current) return;
-    if (!readyForMoreRef.current) return;
-    if (isLoadingMore) return;
-    if (hasMore && messages.length > 0) {
-      const anchor = captureScrollAnchor();
-      const now = performance.now();
-      if (now - lastLoadMoreAtRef.current < 350) return;
-      lastLoadMoreAtRef.current = now;
-      // Disarm until the next upward scroll — one page per scroll-up.
-      readyForMoreRef.current = false;
-      void loadMore(messages[0].id).then((added) => {
-        if (added > 0) restoreScrollAnchor(anchor);
-      });
-    }
-  }, [
-    hasMore,
-    isLoadingMore,
-    messages,
-    loadMore,
-    captureScrollAnchor,
-    restoreScrollAnchor,
-  ]);
+    loadOlderFromTop();
+  }, [loadOlderFromTop]);
 
   const followOutput = useCallback(
     (isAtBottom: boolean) => (isAtBottom ? ("auto" as const) : false),

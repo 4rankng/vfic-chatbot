@@ -29,10 +29,12 @@ settings = get_settings()
 def _room_for_payload(payload: dict) -> str | None:
     """The Socket.IO room a realtime event targets.
 
-    Every VFIC event carries either ``conversation_id`` (``message.created``) or
-    ``id`` (``conversation.updated`` -> ``ConversationOut``). Events with neither
-    are broadcast to all connected clients (room=None).
+    Conversation events carry ``conversation_id`` or ``id`` → ``conv:{id}``.
+    Lead events carry ``lead_id`` → ``lead:{id}``.
+    Events with neither are broadcast to all connected clients (room=None).
     """
+    if payload.get("lead_id") is not None:
+        return f"lead:{payload['lead_id']}"
     cid = payload.get("conversation_id") or payload.get("id")
     if not cid:
         return None
@@ -121,3 +123,92 @@ async def _leave_conversation(sid, data):  # type: ignore[no-untyped-def]
     if not conv_id:
         return
     await sio.leave_room(sid, f"conv:{conv_id}")
+
+
+@sio.on("join lead")
+async def _join_lead(sid, data):  # type: ignore[no-untyped-def]
+    """Client opens a lead detail: join its room so lead.updated events target it."""
+    lead_id = data.get("lead_id") if isinstance(data, dict) else None
+    if not lead_id:
+        return
+    await sio.enter_room(sid, f"lead:{lead_id}")
+
+
+@sio.on("leave lead")
+async def _leave_lead(sid, data):  # type: ignore[no-untyped-def]
+    lead_id = data.get("lead_id") if isinstance(data, dict) else None
+    if not lead_id:
+        return
+    await sio.leave_room(sid, f"lead:{lead_id}")
+
+
+# --- presence events (viewing / typing) ---
+
+@sio.on("presence join")
+async def _presence_join(sid, data):  # type: ignore[no-untyped-def]
+    """Client enters a lead/conversation view: register presence."""
+    from app.services.presence import join_viewing
+
+    session = await sio.get_session(sid)
+    user_id = session.get("user_id", "") if session else ""
+    entity_type = data.get("entity_type", "lead") if isinstance(data, dict) else "lead"
+    entity_id = data.get("entity_id") if isinstance(data, dict) else None
+    if not entity_id:
+        return
+    await join_viewing(entity_type, entity_id, user_id)
+
+
+@sio.on("presence leave")
+async def _presence_leave(sid, data):  # type: ignore[no-untyped-def]
+    """Client leaves a lead/conversation view: clear presence."""
+    from app.services.presence import leave_viewing
+
+    session = await sio.get_session(sid)
+    user_id = session.get("user_id", "") if session else ""
+    entity_type = data.get("entity_type", "lead") if isinstance(data, dict) else "lead"
+    entity_id = data.get("entity_id") if isinstance(data, dict) else None
+    if not entity_id:
+        return
+    await leave_viewing(entity_type, entity_id, user_id)
+
+
+@sio.on("presence heartbeat")
+async def _presence_heartbeat(sid, data):  # type: ignore[no-untyped-def]
+    """Periodic heartbeat to keep presence alive."""
+    from app.services.presence import heartbeat_viewing
+
+    session = await sio.get_session(sid)
+    user_id = session.get("user_id", "") if session else ""
+    entity_type = data.get("entity_type", "lead") if isinstance(data, dict) else "lead"
+    entity_id = data.get("entity_id") if isinstance(data, dict) else None
+    if not entity_id:
+        return
+    await heartbeat_viewing(entity_type, entity_id, user_id)
+
+
+@sio.on("presence typing")
+async def _presence_typing(sid, data):  # type: ignore[no-untyped-def]
+    """Client is typing in a conversation."""
+    from app.services.presence import start_typing
+
+    session = await sio.get_session(sid)
+    user_id = session.get("user_id", "") if session else ""
+    entity_type = data.get("entity_type", "conv") if isinstance(data, dict) else "conv"
+    entity_id = data.get("entity_id") if isinstance(data, dict) else None
+    if not entity_id:
+        return
+    await start_typing(entity_type, str(entity_id), user_id)
+
+
+@sio.on("presence stop typing")
+async def _presence_stop_typing(sid, data):  # type: ignore[no-untyped-def]
+    """Client stopped typing."""
+    from app.services.presence import stop_typing
+
+    session = await sio.get_session(sid)
+    user_id = session.get("user_id", "") if session else ""
+    entity_type = data.get("entity_type", "conv") if isinstance(data, dict) else "conv"
+    entity_id = data.get("entity_id") if isinstance(data, dict) else None
+    if not entity_id:
+        return
+    await stop_typing(entity_type, str(entity_id), user_id)

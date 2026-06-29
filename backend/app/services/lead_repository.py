@@ -33,7 +33,7 @@ _FETCH_SQL = text(
     """
     SELECT id, zalo_id, name, phone, birth_year, age, living_area, address, gender,
            region, desired_job, years_experience, latest_company, expected_salary,
-           lead_score, lead_stage
+           lead_score, lead_stage, version
     FROM leads WHERE zalo_id = :zalo_id
     """
 )
@@ -42,9 +42,9 @@ _FETCH_SQL = text(
 _UPSQL = text(
     """
     INSERT INTO leads (zalo_id, name, phone, birth_year, age, living_area, address, gender,
-        region, desired_job, years_experience, latest_company, expected_salary, lead_score)
+        region, desired_job, years_experience, latest_company, expected_salary, lead_score, version)
     VALUES (:zalo_id, :name, :phone, :birth_year, :age, :living_area, :address, :gender,
-        :region, :desired_job, :years_experience, :latest_company, :expected_salary, :lead_score)
+        :region, :desired_job, :years_experience, :latest_company, :expected_salary, :lead_score, 1)
     ON CONFLICT (zalo_id) DO UPDATE SET
         name = COALESCE(NULLIF(EXCLUDED.name,''), leads.name),
         phone = COALESCE(NULLIF(EXCLUDED.phone,''), leads.phone),
@@ -59,6 +59,7 @@ _UPSQL = text(
         latest_company = COALESCE(NULLIF(EXCLUDED.latest_company,''), leads.latest_company),
         expected_salary = COALESCE(NULLIF(EXCLUDED.expected_salary,''), leads.expected_salary),
         lead_score = COALESCE(EXCLUDED.lead_score, leads.lead_score),
+        version = leads.version + 1,
         updated_at = now()
     RETURNING id
     """

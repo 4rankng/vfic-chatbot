@@ -12,16 +12,25 @@ import uuid
 from datetime import datetime
 from typing import Awaitable, Callable
 
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.prompts.lead_memory import LEAD_EXTRACT_SYSTEM_PROMPT
 from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadStage
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
+from app.services.lead_events import LeadEventBus
 from app.services.lead_repository import LeadRepository
 
 Extractor = Callable[[str, str], Awaitable[str]]
+
+
+class LeadConflict(Exception):
+    """Raised when a lead update conflicts with a concurrent change (stale version)."""
+
+    def __init__(self, message: str = "", owner_name: str | None = None) -> None:
+        super().__init__(message)
+        self.owner_name = owner_name
 
 
 # --- pure normalisation (verbatim port of 'Merge Lead') ----------------------
@@ -170,6 +179,7 @@ class LeadExtractionService:
 class LeadService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        self.events = LeadEventBus()
 
     async def get(self, lead_id: int) -> Lead | None:
         return await self.db.get(Lead, lead_id)
@@ -214,28 +224,88 @@ class LeadService:
         return list(rows), int(total or 0)
 
     async def update(self, lead: Lead, changes: dict) -> Lead:
+        """Optimistic-concurrency update: rejects stale writes with LeadConflict."""
+        incoming_version = changes.pop("version", None)
+        if incoming_version is not None:
+            # Strip metadata fields that are not DB columns
+            changes = {k: v for k, v in changes.items() if hasattr(lead, k) and k not in ("id", "created_at", "updated_at")}
+            changes["version"] = Lead.version + 1
+            res = await self.db.execute(
+                update(Lead)
+                .where(
+                    Lead.id == lead.id,
+                    Lead.version == incoming_version,
+                )
+                .values(**changes, updated_at=func.now())
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.commit()
+            if res.rowcount == 0:
+                await self.db.refresh(lead)
+                raise LeadConflict("lead was modified by another recruiter")
+            await self.db.refresh(lead)
+            await self.events.lead_updated(lead)
+            return lead
+        # No version provided — apply directly (backward compat for internal callers)
         for k, v in changes.items():
-            if hasattr(lead, k):
+            if hasattr(lead, k) and k not in ("id", "created_at", "updated_at"):
                 setattr(lead, k, v)
         await self.db.commit()
         await self.db.refresh(lead)
+        await self.events.lead_updated(lead)
         return lead
 
     async def assign(self, lead: Lead, recruiter_id: uuid.UUID, *, actor: User) -> Lead:
-        lead.assigned_recruiter_id = recruiter_id
+        res = await self.db.execute(
+            update(Lead)
+            .where(
+                Lead.id == lead.id,
+                Lead.version == lead.version,
+            )
+            .values(
+                assigned_recruiter_id=recruiter_id,
+                version=Lead.version + 1,
+                updated_at=func.now(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        if res.rowcount == 0:
+            await self.db.refresh(lead)
+            raise LeadConflict("lead was modified by another recruiter")
+        await self.db.refresh(lead)
         self.db.add(LeadEvent(lead_id=lead.id, event_type="assign", payload={"recruiter_id": str(recruiter_id)}, actor_id=actor.id))
         await record_audit(self.db, action="assign_lead", actor_id=actor.id, target_type="lead", target_id=str(lead.id), payload={"recruiter_id": str(recruiter_id)})
         await self.db.commit()
         await self.db.refresh(lead)
+        await self.events.lead_updated(lead, actor_name=actor.full_name)
         return lead
 
     async def set_stage(self, lead: Lead, stage: LeadStage, *, actor: User) -> Lead:
         prev = lead.lead_stage
-        lead.lead_stage = stage
+        res = await self.db.execute(
+            update(Lead)
+            .where(
+                Lead.id == lead.id,
+                Lead.version == lead.version,
+            )
+            .values(
+                lead_stage=stage,
+                version=Lead.version + 1,
+                updated_at=func.now(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        if res.rowcount == 0:
+            await self.db.refresh(lead)
+            raise LeadConflict("lead was modified by another recruiter")
+        await self.db.refresh(lead)
         self.db.add(LeadEvent(lead_id=lead.id, event_type="stage_change", payload={"from": prev.value if prev else None, "to": stage.value}, actor_id=actor.id))
         await record_audit(self.db, action="change_lead_stage", actor_id=actor.id, target_type="lead", target_id=str(lead.id), payload={"from": prev.value if prev else None, "to": stage.value})
         await self.db.commit()
         await self.db.refresh(lead)
+        await self.events.lead_updated(lead, actor_name=actor.full_name)
         return lead
 
     async def create_followup(self, lead: Lead, due_at: datetime, note: str | None, *, actor: User) -> FollowUpTask:

@@ -19,7 +19,7 @@ from app.schemas.lead import (
     LeadUpdate,
     StageRequest,
 )
-from app.services.lead_service import LeadService
+from app.services.lead_service import LeadConflict, LeadService
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -67,19 +67,28 @@ async def get_lead(lead_id: int, _user: User = Depends(get_current_user), db: As
 @router.patch("/{lead_id}", response_model=LeadOut)
 async def update_lead(lead_id: int, body: LeadUpdate, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
     lead = await _load(lead_id, db)
-    return LeadOut.model_validate(await LeadService(db).update(lead, body.model_dump(exclude_unset=True)))
+    try:
+        return LeadOut.model_validate(await LeadService(db).update(lead, body.model_dump(exclude_unset=True)))
+    except LeadConflict:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 
 @router.post("/{lead_id}/assign", response_model=LeadOut)
 async def assign_lead(lead_id: int, body: AssignRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
     lead = await _load(lead_id, db)
-    return LeadOut.model_validate(await LeadService(db).assign(lead, body.recruiter_id, actor=user))
+    try:
+        return LeadOut.model_validate(await LeadService(db).assign(lead, body.recruiter_id, actor=user))
+    except LeadConflict:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 
 @router.post("/{lead_id}/stage", response_model=LeadOut)
 async def set_stage(lead_id: int, body: StageRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
     lead = await _load(lead_id, db)
-    return LeadOut.model_validate(await LeadService(db).set_stage(lead, body.stage, actor=user))
+    try:
+        return LeadOut.model_validate(await LeadService(db).set_stage(lead, body.stage, actor=user))
+    except LeadConflict:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 
 @router.post("/{lead_id}/follow-ups", response_model=FollowUpOut, status_code=status.HTTP_201_CREATED)
@@ -98,3 +107,14 @@ async def list_followups(lead_id: int, _user: User = Depends(get_current_user), 
 async def list_events(lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[LeadEventOut]:
     await _load(lead_id, db)
     return [LeadEventOut.model_validate(e) for e in await LeadService(db).list_events(lead_id)]
+
+
+@router.get("/{lead_id}/presence")
+async def get_lead_presence(lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    """Return current viewers and typing users for a lead."""
+    from app.services.presence import get_typing_users, get_viewers
+
+    await _load(lead_id, db)
+    viewers = await get_viewers("lead", lead_id)
+    typing = await get_typing_users("lead", str(lead_id))
+    return {"viewers": viewers, "typing": typing}

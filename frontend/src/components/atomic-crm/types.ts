@@ -65,6 +65,7 @@ export type Lead = {
   region?: string | null;
   living_area?: string | null;
   notes?: string | null;
+  version?: number;
 } & Pick<RaRecord, "id">;
 
 export type Conversation = {

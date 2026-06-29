@@ -18,8 +18,26 @@ import { LeadBreadcrumb } from "./LeadBreadcrumb";
 import { LeadInfoPanel } from "./LeadInfoPanel";
 import { LeadScoreBar } from "./LeadScoreBar";
 import { LeadStageBadge } from "./LeadStageBadge";
-import { Bot, MessageSquare } from "lucide-react";
+import { useLeadPresence, type ViewerInfo } from "./useLeadPresence";
+import { Bot, Eye, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const PresenceViewers = ({ viewers, typingUsers }: { viewers: ViewerInfo[]; typingUsers: ViewerInfo[] }) => {
+  if (viewers.length === 0 && typingUsers.length === 0) return null;
+  const names = viewers.map((v) => v.name || "Nhân viên").join(", ");
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Eye className="size-3" />
+      <span>{names} đang xem</span>
+      {typingUsers.length > 0 && (
+        <span className="text-primary">
+          {" · "}
+          {typingUsers.map((u) => u.name || "Nhân viên").join(", ")} đang nhập...
+        </span>
+      )}
+    </div>
+  );
+};
 
 const LeadChat = ({ zaloId }: { zaloId: string }) => {
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -174,7 +192,16 @@ const LeadHero = () => {
 };
 
 export const LeadShowContent = () => {
-  const { record, isPending, isLoading } = useShowContext<Lead>();
+  const { record, isPending, isLoading, refetch } = useShowContext<Lead>();
+  const presence = useLeadPresence(record?.id);
+
+  // Auto-refresh when lead.updated event arrives from another recruiter
+  useEffect(() => {
+    const handler = () => refetch();
+    window.addEventListener("vfic:lead-updated", handler);
+    return () => window.removeEventListener("vfic:lead-updated", handler);
+  }, [refetch]);
+
   if (isPending) {
     return (
       <div className="mt-2 flex flex-col gap-4">
@@ -194,6 +221,7 @@ export const LeadShowContent = () => {
   return (
     <div className="mt-2 flex flex-col gap-4">
       <LeadHero />
+      <PresenceViewers viewers={presence.viewers} typingUsers={presence.typingUsers} />
       <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
         <div className="flex flex-col gap-4">
           <LeadInfoPanel />
@@ -207,7 +235,15 @@ export const LeadShowContent = () => {
 };
 
 export const LeadShowContentMobile = () => {
-  const { record, isPending, isLoading } = useShowContext<Lead>();
+  const { record, isPending, isLoading, refetch } = useShowContext<Lead>();
+  const presence = useLeadPresence(record?.id);
+
+  useEffect(() => {
+    const handler = () => refetch();
+    window.addEventListener("vfic:lead-updated", handler);
+    return () => window.removeEventListener("vfic:lead-updated", handler);
+  }, [refetch]);
+
   if (isPending) {
     return (
       <div className="flex flex-col gap-3 p-2">
@@ -243,6 +279,7 @@ export const LeadShowContentMobile = () => {
           </div>
         )}
       </section>
+      <PresenceViewers viewers={presence.viewers} typingUsers={presence.typingUsers} />
       <LeadInfoPanel />
       <LeadChat zaloId={record.zalo_id} />
     </div>
