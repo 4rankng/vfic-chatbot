@@ -1,8 +1,8 @@
-# AGENTS.md — VFIC miniCRM (Ting Ting) frontend
+# AGENTS.md — VFIC Chatbot (Ting Ting) frontend
 
 ## Project Overview
 
-**VFIC miniCRM** (brand *Ting Ting*) is the recruiter/admin console for the
+**VFIC Chatbot** (brand *Ting Ting*) is the recruiter/admin console for the
 VFIC recruitment platform. It is a React + react-admin single-page app that
 talks to the **VFIC FastAPI backend** (`/api/v1` REST + `/realtime` SSE).
 The UI is **Vietnamese-only**. It is derived from the open-source

@@ -3,7 +3,7 @@
 This repo runs the VFIC recruitment stack: a **FastAPI + LangGraph** chatbot
 backend (`backend/`), a **self-hosted Postgres+pgvector + Redis** data layer,
 and a **React / react-admin** console (`frontend/`, brand *Ting Ting* /
-*VFIC miniCRM*). The whole stack is deployed as Docker images to a single
+*VFIC Chatbot*). The whole stack is deployed as Docker images to a single
 droplet (`bot.tingting.vip`) behind Caddy; **the repo is the source of truth**
 — the live service is rebuilt from it alone.
 
