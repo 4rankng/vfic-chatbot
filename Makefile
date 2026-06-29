@@ -1,4 +1,4 @@
-.PHONY: dev deploy adminer
+.PHONY: dev deploy deploy-backend deploy-frontend adminer
 
 # Local dev: frontend (vite) + backend (uvicorn --reload) on host, Postgres +
 # Redis + Adminer in docker. Delegates to backend/ (payroll pattern).
@@ -19,3 +19,16 @@ deploy:
 # Ctrl-C closes the tunnel.
 adminer:
 	$(MAKE) -C backend adminer
+
+# Fast-track: rebuild + push + rolling restart backend only (web + workers + scheduler).
+# Skips frontend build and full-stack bootstrap (compose sync, migrations, etc.).
+deploy-backend:
+	@echo "=== Deploying backend only ==="
+	cd backend && make push
+	$(MAKE) -C backend deploy-restart
+
+# Fast-track: rebuild + push + rolling restart frontend only.
+deploy-frontend:
+	@echo "=== Deploying frontend only ==="
+	cd frontend && make push
+	$(MAKE) -C backend deploy-restart-frontend

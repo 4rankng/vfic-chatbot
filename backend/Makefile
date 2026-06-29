@@ -1,4 +1,4 @@
-.PHONY: dev db push deploy adminer
+.PHONY: dev db push deploy deploy-restart deploy-restart-frontend adminer
 
 BACKEND_PORT  ?= 8000
 FRONTEND_PORT ?= 5173
@@ -122,3 +122,21 @@ adminer:
 	@ssh root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose start adminer" 2>/dev/null || true
 	@(sleep 1 && (open http://localhost:18081 || xdg-open http://localhost:18081 || true)) &
 	@ssh -N -L 18081:127.0.0.1:8081 root@$(PROD_SERVER)
+
+# ---- Fast-track: pull + rolling restart backend containers only. ----
+# Used by root Makefile's deploy-backend after push. No compose sync,
+# no migrations, no bootstrap — just pull the latest image and recreate.
+deploy-restart:
+	@echo "==> Pulling backend image on $(PROD_SERVER)..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull web"
+	@echo "==> Recreating backend containers..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d --force-recreate web worker-chatbot worker-ingest worker-followup scheduler"
+	@echo "==> Backend deploy done."
+
+# ---- Fast-track: pull + rolling restart frontend container only. ----
+deploy-restart-frontend:
+	@echo "==> Pulling frontend image on $(PROD_SERVER)..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull frontend"
+	@echo "==> Recreating frontend container..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d --force-recreate frontend"
+	@echo "==> Frontend deploy done."
