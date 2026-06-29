@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Form,
   required,
@@ -8,8 +8,15 @@ import {
   useTranslate,
 } from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
-import { Link, useLocation, useNavigate } from "react-router";
-import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import { Link } from "react-router";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  Mail,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,10 +31,8 @@ import { SSOAuthButton } from "./SSOAuthButton";
  * Automatically shown when an unauthenticated user tries to access a protected route.
  * Handles login via authProvider.login() and displays error notifications on failure.
  *
- * Layout: two-column split.
- *   - Left: sign-in form (email/password or Google Workspace SSO).
- *   - Right (desktop only): brand hero illustration (public/bg.avif) depicting a
- *     CRM dashboard + chat widget that mirrors the product itself.
+ * Layout follows the VFIC knowledge-center visual language: paper surface,
+ * dark ink actions, and a transparent product illustration.
  *
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/loginpage LoginPage documentation}
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/security Security documentation}
@@ -37,39 +42,9 @@ export const LoginPage = (props: { redirectTo?: string }) => {
     useConfigurationContext();
   const { redirectTo } = props;
   const [loading, setLoading] = useState(false);
-  const hasDisplayedRecoveryNotification = useRef(false);
-  const location = useLocation();
-  const navigate = useNavigate();
   const login = useLogin();
   const notify = useNotify();
   const translate = useTranslate();
-
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const shouldNotify = searchParams.get("passwordRecoveryEmailSent") === "1";
-
-    if (!shouldNotify || hasDisplayedRecoveryNotification.current) {
-      return;
-    }
-
-    hasDisplayedRecoveryNotification.current = true;
-    notify("crm.auth.recovery_email_sent", {
-      type: "success",
-      messageArgs: {
-        _: "If you're a registered user, you should receive a password recovery email shortly.",
-      },
-    });
-
-    searchParams.delete("passwordRecoveryEmailSent");
-    const nextSearch = searchParams.toString();
-    navigate(
-      {
-        pathname: location.pathname,
-        search: nextSearch ? `?${nextSearch}` : "",
-      },
-      { replace: true },
-    );
-  }, [location.pathname, location.search, navigate, notify]);
 
   const handleSubmit: SubmitHandler<FieldValues> = (values) => {
     setLoading(true);
@@ -105,108 +80,119 @@ export const LoginPage = (props: { redirectTo?: string }) => {
   const showDivider = showEmailPassword && showSso;
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="grid min-h-screen w-full lg:grid-cols-[minmax(0,520px)_1fr]">
-        {/* Left: sign-in form */}
-        <div className="flex flex-col p-6 sm:p-10">
-          <div className="flex flex-1 items-center justify-center py-10">
-            <div className="w-full max-w-sm space-y-7">
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-                {translate("crm.auth.welcome_back", { _: "Welcome back" })}
+    <div className="kb-scope login-paper min-h-svh overflow-hidden text-foreground">
+      <main className="mx-auto grid min-h-svh w-full max-w-[1480px] items-center gap-8 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(360px,520px)_minmax(0,1fr)] lg:gap-12 lg:px-12 xl:gap-20 xl:px-16">
+        <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
+          <div className="mb-6 space-y-3 sm:mb-8">
+            <div className="flex items-center gap-3">
+              <img
+                src="/ttsoft-logo.png"
+                alt=""
+                aria-hidden="true"
+                className="size-9 shrink-0 rounded-md object-contain"
+              />
+              <p className="kb-mono text-xs font-semibold uppercase tracking-[0.22em] text-[var(--kb-teal)]">
+                Ting Ting Soft
+              </p>
+            </div>
+            <div className="space-y-3">
+              <h1 className="kb-display whitespace-nowrap text-[clamp(1.65rem,3.05vw,2.65rem)] leading-none text-foreground">
+                {translate("crm.auth.welcome_back", {
+                  _: "Chào mừng bạn trở lại!",
+                })}
               </h1>
-
-              {showEmailPassword ? (
-                <Form className="space-y-4" onSubmit={handleSubmit}>
-                  <EmailField />
-                  <PasswordField disabled={loading} />
-                  <Button
-                    type="submit"
-                    className="h-11 w-full cursor-pointer text-sm font-medium"
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        {translate("ra.auth.sign_in", { _: "Sign in" })}
-                      </>
-                    ) : (
-                      translate("ra.auth.sign_in", { _: "Sign in" })
-                    )}
-                  </Button>
-                </Form>
-              ) : null}
-
-              {showDivider ? (
-                <div className="relative">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs text-muted-foreground">
-                    {translate("crm.auth.or_divider", { _: "or" })}
-                  </span>
-                </div>
-              ) : null}
-
-              {showSso ? (
-                <SSOAuthButton
-                  className="h-11 w-full"
-                  domain={googleWorkplaceDomain!}
-                >
-                  <GoogleMark />
-                  {translate("crm.auth.sign_in_google", {
-                    _: "Sign in with Google",
-                  })}
-                </SSOAuthButton>
-              ) : null}
-
-              {showEmailPassword ? (
-                <p className="text-center text-sm text-muted-foreground">
-                  {translate("ra-auth.auth.forgot_password", {
-                    _: "Forgot password?",
-                  })}{" "}
-                  <Link
-                    to="/forgot-password"
-                    className="font-medium text-foreground underline-offset-4 hover:underline"
-                  >
-                    {translate("crm.auth.recover_now", {
-                      _: "Recover now",
-                    })}
-                  </Link>
-                </p>
-              ) : null}
             </div>
           </div>
 
-          <p className="text-center text-xs text-muted-foreground lg:text-left">
+          <div className="rounded-md border border-border bg-card/92 p-4 shadow-xs backdrop-blur sm:p-6">
+            {showEmailPassword ? (
+              <Form className="space-y-4" onSubmit={handleSubmit}>
+                <EmailField />
+                <PasswordField disabled={loading} />
+                <Button
+                  type="submit"
+                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-sm font-semibold"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {translate("ra.auth.sign_in", { _: "Đăng nhập" })}
+                    </>
+                  ) : (
+                    <>
+                      {translate("ra.auth.sign_in", { _: "Đăng nhập" })}
+                      <ArrowRight className="size-4" />
+                    </>
+                  )}
+                </Button>
+              </Form>
+            ) : null}
+
+            {showDivider ? (
+              <div className="relative py-5">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                  {translate("crm.auth.or_divider", { _: "hoặc" })}
+                </span>
+              </div>
+            ) : null}
+
+            {showSso ? (
+              <SSOAuthButton
+                className="h-12 w-full rounded-md"
+                domain={googleWorkplaceDomain!}
+              >
+                <GoogleMark />
+                {translate("crm.auth.sign_in_google", {
+                  _: "Đăng nhập với Google",
+                })}
+              </SSOAuthButton>
+            ) : null}
+
+            {showEmailPassword ? (
+              <p className="pt-5 text-center text-sm text-muted-foreground">
+                {translate("ra-auth.auth.forgot_password", {
+                  _: "Quên mật khẩu?",
+                })}{" "}
+                <Link
+                  to="/forgot-password"
+                  className="font-semibold text-foreground underline-offset-4 hover:underline"
+                >
+                  {translate("crm.auth.recover_now", {
+                    _: "Khôi phục ngay",
+                  })}
+                </Link>
+              </p>
+            ) : null}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-muted-foreground">
             &copy; {new Date().getFullYear()}{" "}
             {translate("crm.auth.footer_tagline", {
-              _: "Ting Ting Software Solution",
+              _: "Giải pháp phần mềm Ting Ting",
             })}
           </p>
-        </div>
+        </section>
 
-        {/* Right: brand hero illustration (desktop only) */}
-        <aside className="relative hidden overflow-hidden lg:flex">
-          {/* Hero illustration (public/bg.avif) — a CRM dashboard + chat-widget
-              scene that mirrors the product itself. Calm, light composition so
-              it reads as a hero without competing with the sign-in form. */}
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: "url('/bg.avif')" }}
-          />
-          {/* Left-edge scrim blends the illustration into the form column;
-              stronger in dark mode where the bright image meets a dark surface. */}
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-gradient-to-r from-background/70 via-background/10 to-transparent dark:from-background/95 dark:via-background/40"
+        <aside
+          aria-label="Minh họa hệ thống Ting Ting Soft"
+          className="relative hidden min-h-[640px] items-center justify-center lg:flex"
+        >
+          <div className="absolute inset-x-8 bottom-20 top-24 rounded-md border border-border bg-card/40 shadow-xs" />
+          <img
+            src="/login-illustration.png"
+            alt=""
+            aria-hidden="true"
+            className="relative z-10 w-full max-w-[820px] select-none object-contain"
+            draggable={false}
           />
         </aside>
-      </div>
+      </main>
       <Notification />
     </div>
   );
 };
-
-/* ---------- form field components ---------- */
 
 const EmailField = () => {
   const { id, field, isRequired } = useInput({
@@ -217,11 +203,13 @@ const EmailField = () => {
   const translate = useTranslate();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{translate("ra.auth.email", { _: "Email" })}</Label>
+      <Label htmlFor={id} className="font-semibold text-muted-foreground">
+        {translate("ra.auth.email", { _: "Email" })}
+      </Label>
       <div className="relative">
         <Mail
           aria-hidden
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <Input
           id={id}
@@ -229,7 +217,7 @@ const EmailField = () => {
           autoComplete="email"
           required={isRequired}
           placeholder="you@example.com"
-          className="h-11 pl-10"
+          className="h-12 rounded-md bg-background/70 pl-11 text-base shadow-none placeholder:text-muted-foreground/70"
           {...field}
         />
       </div>
@@ -248,20 +236,20 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
   const Icon = show ? EyeOff : Eye;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>
-        {translate("ra.auth.password", { _: "Password" })}
+      <Label htmlFor={id} className="font-semibold text-muted-foreground">
+        {translate("ra.auth.password", { _: "Mật khẩu" })}
       </Label>
       <div className="relative">
         <Lock
           aria-hidden
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <Input
           id={id}
           type={show ? "text" : "password"}
           autoComplete="current-password"
           required={isRequired}
-          className="h-11 pl-10 pr-10"
+          className="h-12 rounded-md bg-background/70 pl-11 pr-11 text-base shadow-none"
           {...field}
           disabled={disabled}
         />
@@ -269,7 +257,7 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
           type="button"
           onClick={() => setShow((s) => !s)}
           aria-label={show ? "Hide password" : "Show password"}
-          className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="absolute right-2.5 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Icon className="size-4" />
         </button>
@@ -277,8 +265,6 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
     </div>
   );
 };
-
-/* ---------- small helpers ---------- */
 
 const GoogleMark = () => (
   <svg

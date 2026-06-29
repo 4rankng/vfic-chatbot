@@ -193,8 +193,6 @@ export const vietnameseCrmMessages = {
     },
     language: "Ngôn ngữ",
     auth: {
-      recovery_email_sent:
-        "Nếu bạn là người dùng đã đăng ký, bạn sẽ sớm nhận được email khôi phục mật khẩu.",
       sign_in_google_workspace: "Đăng nhập bằng Google Workspace",
       sign_in_google: "Đăng nhập với Google",
       welcome_back: "Chào mừng bạn trở lại!",

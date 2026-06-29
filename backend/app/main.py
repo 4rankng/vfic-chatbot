@@ -21,6 +21,10 @@ logger = logging.getLogger("app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("vfic backend starting env=%s", settings.app_env)
+    if not settings.resend_api_key:
+        logger.warning(
+            "RESEND_API_KEY is unset — password-reset emails will fail silently"
+        )
     # Ensure a default persona exists (idempotent, non-fatal). resolve_persona falls
     # back to persona.md regardless.
     try:

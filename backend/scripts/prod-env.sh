@@ -75,6 +75,10 @@ GEMINI_API_KEY=
 GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 EMBEDDING_DIM=3072
 
+# ---- Email: Resend (password-reset OTPs). Sender: vficbot@1stop.app. ----
+# Verify the 1stop.app sending domain in Resend before using.
+RESEND_API_KEY=
+
 # ---- Runtime ----
 WEB_CONCURRENCY=2
 EOF

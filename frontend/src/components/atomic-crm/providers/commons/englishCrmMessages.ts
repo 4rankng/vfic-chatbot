@@ -398,8 +398,6 @@ export const englishCrmMessages = {
       confirm_password: "Confirm password",
       confirmation_required:
         "Please follow the link we just sent you by email to confirm your account.",
-      recovery_email_sent:
-        "If you're a registered user, you should receive a password recovery email shortly.",
       sign_in_failed: "Failed to log in.",
       sign_in_google: "Sign in with Google",
       sign_in_google_workspace: "Sign in with Google Workplace",

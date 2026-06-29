@@ -28,15 +28,85 @@ async def send_password_reset_otp(*, to_email: str, otp: str) -> str | None:
     payload = {
         "from": PASSWORD_RESET_FROM_EMAIL,
         "to": [to_email],
-        "subject": "VFIC password reset code",
+        "subject": "Ting Ting — Mã khôi phục mật khẩu",
         "text": (
-            f"Your VFIC password reset code is {otp}. "
-            f"It expires in {settings.password_reset_otp_ttl_minutes} minutes."
+            f"Xin chào,\n\n"
+            f"Mã khôi phục mật khẩu của bạn là: {otp}\n\n"
+            f"Mã có hiệu lực trong {settings.password_reset_otp_ttl_minutes} phút. "
+            "Nếu bạn không yêu cầu thao tác này, vui lòng bỏ qua email.\n\n"
+            "Trân trọng,\nGiải pháp phần mềm Ting Ting"
         ),
         "html": (
-            "<p>Your VFIC password reset code is:</p>"
-            f"<p><strong>{otp}</strong></p>"
-            f"<p>This code expires in {settings.password_reset_otp_ttl_minutes} minutes.</p>"
+            "<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>"
+            "<table width='100%' cellpadding='0' cellspacing='0' "
+            "style='background:#f1f5f9;padding:40px 16px;font-family:-apple-system,"
+            "BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;'>"
+            "<tr><td align='center'>"
+
+            # ── Card ──
+            "<table width='100%' cellpadding='0' cellspacing='0' "
+            "style='max-width:460px;background:#ffffff;border-radius:12px;"
+            "overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);'>"
+
+            # ── Brand header bar ──
+            "<tr><td style='background:#0f172a;padding:20px 24px;text-align:center;'>"
+            "<span style='font-size:17px;font-weight:600;color:#ffffff;"
+            "letter-spacing:.3px'>Ting Ting Soft</span>"
+            "<br/>"
+            "<span style='font-size:11px;color:#94a3b8;letter-spacing:.2px'>"
+            "Giải pháp phần mềm Ting Ting</span>"
+            "</td></tr>"
+
+            # ── Body ──
+            "<tr><td style='padding:32px 24px 8px;'>"
+            "<p style='margin:0 0 4px;color:#0f172a;font-size:15px;font-weight:500;'>"
+            "Xin chào,</p>"
+            "<p style='margin:0 0 24px;color:#475569;font-size:14px;line-height:1.6;'>"
+            "Bạn vừa yêu cầu khôi phục mật khẩu cho tài khoản Ting Ting. "
+            "Nhập mã xác nhận bên dưới để tiếp tục:</p>"
+            "</td></tr>"
+
+            # ── OTP code card ──
+            "<tr><td align='center' style='padding:0 24px 24px;'>"
+            "<table width='100%' cellpadding='0' cellspacing='0' "
+            "style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;'>"
+            "<tr><td style='padding:20px 16px;text-align:center;'>"
+            f"<span style='font-size:36px;font-weight:700;color:#0f172a;"
+            f"letter-spacing:8px;font-family:monospace,monospace'>{otp}</span>"
+            "</td></tr></table>"
+            "</td></tr>"
+
+            # ── TTL notice ──
+            "<tr><td align='center' style='padding:0 24px 24px;'>"
+            f"<p style='margin:0;color:#64748b;font-size:13px;'>"
+            f"Mã có hiệu lực trong <strong>{settings.password_reset_otp_ttl_minutes} phút</strong>"
+            "</p>"
+            "</td></tr>"
+
+            # ── Security note ──
+            "<tr><td style='padding:0 24px 24px;'>"
+            "<p style='margin:0;padding:12px 16px;background:#fffbeb;border-radius:6px;"
+            "font-size:12px;color:#92400e;line-height:1.5;'>"
+            "🔒 Nếu bạn không yêu cầu khôi phục mật khẩu, vui lòng bỏ qua "
+            "email này. Tài khoản của bạn vẫn an toàn.</p>"
+            "</td></tr>"
+
+            # ── Divider + Footer ──
+            "<tr><td style='padding:0 24px;'>"
+            "<hr style='border:none;border-top:1px solid #e2e8f0;margin:0;'/>"
+            "</td></tr>"
+            "<tr><td style='padding:16px 24px 24px;text-align:center;'>"
+            "<p style='margin:0;color:#94a3b8;font-size:11px;'>"
+            "© 2025 Ting Ting Soft. Giải pháp phần mềm Ting Ting."
+            "<br/>Tất cả quyền được bảo lưu.</p>"
+            "</td></tr>"
+
+            # ── End card ──
+            "</table>"
+
+            # ── End wrapper ──
+            "</td></tr></table>"
+            "</body></html>"
         ),
     }
     headers = {
