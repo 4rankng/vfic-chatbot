@@ -80,7 +80,7 @@ class GeminiEmbedder:
             else:
                 # API returned no embeddings — pad with zero vectors so the
                 # caller (embed_with_fallback) can retry one-by-one.
-                all_vectors.extend([[0.0] * (self.s.embedding_dim or 768)] for _ in chunk])
+                all_vectors.extend([0.0] * (self.s.embedding_dim or 768) for _ in chunk)
         return all_vectors
 
     async def embed(self, text: str) -> list[float]:
