@@ -22,6 +22,11 @@ def main() -> int:
     parser.add_argument("--password", required=True)
     parser.add_argument("--full-name", default=None)
     parser.add_argument("--role", default="admin", choices=["admin", "recruiter"])
+    parser.add_argument(
+        "--only-if-no-admins",
+        action="store_true",
+        help="Skip if ANY admin user already exists (bootstrap guard for deploy)",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -29,6 +34,19 @@ def main() -> int:
     email = args.email.strip().lower()
 
     with Session(engine) as session:
+        # Bootstrap guard: if any admin exists, don't create another one.
+        # This prevents deploy from recreating a deleted bootstrap admin
+        # when a real admin account is already in use.
+        if args.only_if_no_admins:
+            any_admin = session.scalar(
+                select(User.id)
+                .where(User.role == Role.admin)
+                .limit(1)
+            )
+            if any_admin is not None:
+                print("an admin already exists; skipping bootstrap", file=sys.stderr)
+                return 0
+
         existing = session.scalar(select(User).where(User.email == email))
         if existing is not None:
             print(

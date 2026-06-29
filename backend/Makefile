@@ -102,7 +102,7 @@ deploy:
 		echo "  alembic SSH refused (attempt $$i/5), retrying in 4s..."; sleep 4; \
 	done; [ $$ok -eq 1 ]
 	@echo "==> Creating bootstrap admin (idempotent)..."
-	@$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose run --rm web python -m scripts.create_admin --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin' || true
+	@$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose run --rm web python -m scripts.create_admin --only-if-no-admins --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin' || true
 	@echo "==> Bringing up full stack..."
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d"
 	@echo "==============================================================="

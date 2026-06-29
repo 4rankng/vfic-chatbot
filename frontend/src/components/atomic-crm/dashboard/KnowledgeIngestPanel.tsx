@@ -6,6 +6,11 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Activity,
   AlertCircle,
   AlertTriangle,
@@ -191,35 +196,54 @@ const IngestMetric = ({
   icon,
   tone,
   v,
+  description,
 }: {
   label: string;
   value: React.ReactNode;
   icon: React.ReactNode;
   tone: Tone;
   v: VariantConfig;
-}) => (
-  <div
-    className={`rounded-lg border border-border/60 bg-muted/20 ${v.metricPad}`}
-  >
-    <div className={`flex items-center justify-between ${v.metricHeaderGap}`}>
-      <span
-        className={`font-bold uppercase tracking-wider text-muted-foreground truncate ${v.metricLabelSize}`}
-      >
-        {label}
-      </span>
-      <span
-        className={`rounded-md border ${v.metricIconPad} ${TONE_CLASS[tone]}`}
-      >
-        {icon}
-      </span>
-    </div>
+  description?: string;
+}) => {
+  const card = (
     <div
-      className={`${v.metricValueMargin} font-semibold font-mono tracking-tight text-foreground ${v.metricValueSize}`}
+      className={`rounded-lg border border-border/60 bg-muted/20 ${v.metricPad}`}
+      tabIndex={description ? 0 : undefined}
+      aria-label={description ? `${label}: ${description}` : undefined}
     >
-      {value}
+      <div
+        className={`flex items-center justify-between ${v.metricHeaderGap}`}
+      >
+        <span
+          className={`truncate font-bold uppercase tracking-wider text-muted-foreground ${v.metricLabelSize}`}
+        >
+          {label}
+        </span>
+        <span
+          className={`rounded-md border ${v.metricIconPad} ${TONE_CLASS[tone]}`}
+        >
+          {icon}
+        </span>
+      </div>
+      <div
+        className={`${v.metricValueMargin} font-mono font-semibold tracking-tight text-foreground ${v.metricValueSize}`}
+      >
+        {value}
+      </div>
     </div>
-  </div>
-);
+  );
+
+  if (!description) return card;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{card}</TooltipTrigger>
+      <TooltipContent className="max-w-[260px] leading-snug" sideOffset={8}>
+        {description}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
 
 const formatPercent = (value: number) => `${Math.round(value)}%`;
 
@@ -300,6 +324,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<Bot className={v.metricIconSize} />}
                   tone="neutral"
                   v={v}
+                  description="Tổng số lần chatbot được kích hoạt để xử lý hoặc phản hồi hội thoại trong phạm vi dashboard."
                 />
                 <IngestMetric
                   label="Đã gửi"
@@ -307,6 +332,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<Send className={v.metricIconSize} />}
                   tone={botSentCount > 0 ? "ok" : "neutral"}
                   v={v}
+                  description="Số phản hồi chatbot đã gửi thành công tới ứng viên qua kênh chat."
                 />
                 <IngestMetric
                   label="Tỷ lệ gửi"
@@ -322,6 +348,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                           : "bad"
                   }
                   v={v}
+                  description="Tỷ lệ phản hồi gửi thành công trên tổng số bot runs. Chỉ số thấp thường gợi ý lỗi gửi, bị chặn hoặc bot không tạo được phản hồi."
                 />
                 <IngestMetric
                   label="TB phản hồi"
@@ -337,6 +364,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                           : "bad"
                   }
                   v={v}
+                  description="Thời gian trung bình từ lúc chatbot bắt đầu xử lý đến khi phản hồi được ghi nhận."
                 />
               </div>
 
@@ -347,6 +375,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<Percent className={v.metricIconSize} />}
                   tone={botSuppressedCount > 0 ? "warn" : "ok"}
                   v={v}
+                  description="Số lần bot bị chặn không gửi tin, thường do hội thoại cần người xử lý hoặc điều kiện an toàn không cho phép tự động trả lời."
                 />
                 <IngestMetric
                   label="Tỷ lệ chặn"
@@ -362,6 +391,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                           : "bad"
                   }
                   v={v}
+                  description="Tỷ lệ bot runs bị chặn trên tổng số lần chatbot được kích hoạt."
                 />
                 <IngestMetric
                   label="Bot errors"
@@ -369,6 +399,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<AlertTriangle className={v.metricIconSize} />}
                   tone={botErrors > 0 ? "bad" : "ok"}
                   v={v}
+                  description="Số lỗi nội bộ khi chatbot xử lý hội thoại, như lỗi gọi model, lỗi tool hoặc lỗi runtime."
                 />
                 <IngestMetric
                   label="Lỗi gửi Zalo"
@@ -376,6 +407,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<AlertCircle className={v.metricIconSize} />}
                   tone={failedZaloSends > 0 ? "bad" : "ok"}
                   v={v}
+                  description="Số tin nhắn không gửi được qua Zalo sau khi chatbot đã có nội dung phản hồi."
                 />
               </div>
 
@@ -386,6 +418,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<MessageCircle className={v.metricIconSize} />}
                   tone="neutral"
                   v={v}
+                  description="Số hội thoại đang mở và còn được theo dõi trong dashboard."
                 />
                 <IngestMetric
                   label="Human takeover"
@@ -393,6 +426,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<UserCheck className={v.metricIconSize} />}
                   tone={unreadConversationCount > 0 ? "busy" : "ok"}
                   v={v}
+                  description="Số hội thoại đang ở trạng thái cần người tuyển dụng tiếp quản hoặc có tin chưa đọc từ ứng viên."
                 />
                 <IngestMetric
                   label="Hot leads"
@@ -400,6 +434,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<Flame className={v.metricIconSize} />}
                   tone={hotLeads > 0 ? "busy" : "neutral"}
                   v={v}
+                  description="Số ứng viên có tín hiệu ưu tiên cao, cần được liên hệ hoặc xử lý sớm."
                 />
                 <IngestMetric
                   label="Qualified"
@@ -407,6 +442,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<Users className={v.metricIconSize} />}
                   tone="neutral"
                   v={v}
+                  description="Số ứng viên đang ở giai đoạn Qualified trên tổng số lead trong phạm vi dashboard."
                 />
                 <IngestMetric
                   label="Hired rate"
@@ -414,6 +450,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
                   icon={<TrendingUp className={v.metricIconSize} />}
                   tone={hiredRate > 0 ? "ok" : "neutral"}
                   v={v}
+                  description="Tỷ lệ ứng viên đã tuyển trên tổng số lead trong phạm vi dashboard."
                 />
               </div>
 
