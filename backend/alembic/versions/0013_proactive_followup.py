@@ -17,6 +17,7 @@ Revision ID: 0013_proactive_followup
 Revises: 0012_add_contact_info_feature
 Create Date: 2026-06-29
 """
+import sqlalchemy as sa
 from alembic import op
 
 revision = "0013_proactive_followup"
@@ -26,10 +27,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("conversations", op.column("followup_count", op.INTEGER(), nullable=False, server_default="0"))
-    op.add_column("conversations", op.column("last_followup_at", op.TIMESTAMPTZ(), nullable=True))
-    op.add_column("conversations", op.column("last_followup_attempt_at", op.TIMESTAMPTZ(), nullable=True))
-    op.add_column("conversations", op.column("followup_opted_out", op.BOOLEAN(), nullable=False, server_default="false"))
+    op.add_column("conversations", sa.Column("followup_count", op.INTEGER(), nullable=False, server_default="0"))
+    op.add_column("conversations", sa.Column("last_followup_at", op.TIMESTAMPTZ(), nullable=True))
+    op.add_column("conversations", sa.Column("last_followup_attempt_at", op.TIMESTAMPTZ(), nullable=True))
+    op.add_column("conversations", sa.Column("followup_opted_out", op.BOOLEAN(), nullable=False, server_default="false"))
 
     op.create_index(
         "conversations_followup_candidate_idx",
