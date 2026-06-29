@@ -49,7 +49,7 @@ export const MobileNavigation = () => {
       <div
         className={cn(
           "mx-auto grid h-full w-full max-w-md items-stretch",
-          isAdmin ? "grid-cols-5" : "grid-cols-3",
+          isAdmin ? "grid-cols-6" : "grid-cols-3",
         )}
       >
         {isAdmin && (
@@ -72,14 +72,12 @@ export const MobileNavigation = () => {
           label="Tin nhắn"
           isActive={currentPath === "/conversations"}
         />
-        {!isAdmin && (
-          <NavigationButton
-            href="/projects"
-            Icon={Briefcase}
-            label="Dự án"
-            isActive={currentPath === "/projects"}
-          />
-        )}
+        <NavigationButton
+          href="/projects"
+          Icon={Briefcase}
+          label="Dự án"
+          isActive={currentPath === "/projects"}
+        />
         {isAdmin && (
           <NavigationButton
             href="/knowledge_sources"
