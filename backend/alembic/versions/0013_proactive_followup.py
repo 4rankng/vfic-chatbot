@@ -27,10 +27,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("conversations", sa.Column("followup_count", op.INTEGER(), nullable=False, server_default="0"))
-    op.add_column("conversations", sa.Column("last_followup_at", op.TIMESTAMPTZ(), nullable=True))
-    op.add_column("conversations", sa.Column("last_followup_attempt_at", op.TIMESTAMPTZ(), nullable=True))
-    op.add_column("conversations", sa.Column("followup_opted_out", op.BOOLEAN(), nullable=False, server_default="false"))
+    op.add_column("conversations", sa.Column("followup_count", sa.Integer(), nullable=False, server_default="0"))
+    op.add_column("conversations", sa.Column("last_followup_at", sa.TIMESTAMP(timezone=True), nullable=True))
+    op.add_column("conversations", sa.Column("last_followup_attempt_at", sa.TIMESTAMP(timezone=True), nullable=True))
+    op.add_column("conversations", sa.Column("followup_opted_out", sa.Boolean(), nullable=False, server_default="false"))
 
     op.create_index(
         "conversations_followup_candidate_idx",
