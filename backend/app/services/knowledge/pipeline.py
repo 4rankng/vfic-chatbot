@@ -38,6 +38,7 @@ from app.services.knowledge.coercion import (
     validate_digest,
 )
 from app.services.knowledge.canonical import (
+    CANONICAL_SCHEMA_VERSIONS,
     SCHEMA_VERSION,
     ParsedKnowledgeDocument,
     checksum_text,
@@ -88,7 +89,7 @@ class KnowledgePipeline:
         """Full pipeline for ``doc`` (KnowledgeDocument). Mutates + commits."""
         raw = doc.raw_text or ""
         canonical_doc = None
-        is_canonical = (doc.metadata_ or {}).get("schema_version") == SCHEMA_VERSION
+        is_canonical = (doc.metadata_ or {}).get("schema_version") in CANONICAL_SCHEMA_VERSIONS
         await self._set_stage(doc, "DIGESTING", status="PROCESSING", error=None)
         if is_canonical:
             stored_checksum = (doc.metadata_ or {}).get("checksum")

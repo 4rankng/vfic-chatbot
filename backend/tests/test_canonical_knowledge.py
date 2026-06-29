@@ -621,6 +621,67 @@ def test_parse_faq_only_document():
     assert len(parsed.bus_timetable.routes) == 0
 
 
+@pytest.mark.asyncio
+async def test_faq_upload_auto_links_project_and_preserves_schema(db_session, clean_kb):
+    """FAQ-only canonical upload belongs to the frontmatter project and keeps vfic-faq-v1."""
+    slug = f"faq-lg-display-{uuid.uuid4().hex[:8]}"
+    project_id = (
+        await db_session.execute(
+            text("INSERT INTO projects(slug,name,is_active) VALUES (:slug,'LG Display',true) RETURNING id"),
+            {"slug": slug},
+        )
+    ).scalar_one()
+    await db_session.commit()
+    payload = FAQ_DOC.replace("project_slug: lg-display", f"project_slug: {slug}")
+
+    doc = await KnowledgeService(db_session).upload_bytes(
+        "faq-001-lg-display.md",
+        "text/markdown",
+        payload.encode("utf-8"),
+        require_canonical=True,
+    )
+
+    assert doc.project_id == project_id
+    assert doc.metadata_["schema_version"] == FAQ_SCHEMA_VERSION
+    assert doc.metadata_["canonical"]["validation"]["chunk_count"] == 2
+    assert doc.metadata_["canonical"]["validation"]["bus_route_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_faq_pipeline_publishes_without_llm(db_session, clean_kb):
+    """FAQ-only canonical docs use parse -> embed -> index, not MiniMax digest."""
+    doc = await KnowledgeService(db_session).upload_bytes(
+        "faq-001-lg-display.md",
+        "text/markdown",
+        FAQ_DOC.encode("utf-8"),
+        require_canonical=True,
+    )
+    llm_calls: list[str] = []
+
+    async def exploding_llm(system, user):
+        llm_calls.append(system)
+        raise AssertionError("FAQ canonical ingest should not call LLM")
+
+    await KnowledgePipeline(db_session, _CollapsingBatchEmbedder(), exploding_llm).run(doc)
+    await db_session.refresh(doc)
+
+    chunks = (
+        await db_session.execute(
+            text(
+                "SELECT content, category, questions FROM knowledge_chunks "
+                "WHERE document_id = :did ORDER BY chunk_index"
+            ),
+            {"did": str(doc.id)},
+        )
+    ).all()
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert doc.stage == "PUBLISHED"
+    assert doc.digest_meta["unit_count"] == 2
+    assert llm_calls == []
+    assert [row.category for row in chunks] == ["faq", "faq"]
+    assert chunks[0].questions == ["Lương bao nhiêu?"]
+
+
 def test_parse_faq_only_rejects_missing_faq_section():
     """FAQ-only doc without the required ## FAQ section is rejected."""
     doc = """\

@@ -55,7 +55,9 @@ class KnowledgeDocument(Base):
 
     @property
     def is_canonical(self) -> bool:
-        return (self.metadata_ or {}).get("schema_version") in {"vfic-knowledge-v1", "vfic-faq-v1"}
+        from app.services.knowledge.canonical import CANONICAL_SCHEMA_VERSIONS
+
+        return (self.metadata_ or {}).get("schema_version") in CANONICAL_SCHEMA_VERSIONS
 
 
 class KnowledgeChunk(Base):

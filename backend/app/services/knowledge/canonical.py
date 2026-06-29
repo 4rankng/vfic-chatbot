@@ -22,6 +22,7 @@ from app.services.knowledge.bus_timetable.models import (
 from app.services.knowledge.bus_timetable.normalize import normalize_bus_route_key
 
 SCHEMA_VERSION = "vfic-knowledge-v1"
+CANONICAL_SCHEMA_VERSIONS = {SCHEMA_VERSION, "vfic-faq-v1"}
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "vfic_knowledge_v1.md"
 REQUIRED_FRONTMATTER = (
     "schema_version",
@@ -230,7 +231,7 @@ def parse_canonical_markdown(text: str) -> ParsedKnowledgeDocument:
     errors: list[str] = []
     metadata, body = _split_frontmatter(text, errors)
     is_faq = metadata.get("schema_version") == FAQ_SCHEMA_VERSION
-    if metadata.get("schema_version") not in {SCHEMA_VERSION, FAQ_SCHEMA_VERSION}:
+    if metadata.get("schema_version") not in CANONICAL_SCHEMA_VERSIONS:
         errors.append(f"schema_version must be {SCHEMA_VERSION!r} or {FAQ_SCHEMA_VERSION!r}")
     req_frontmatter = FAQ_REQUIRED_FRONTMATTER if is_faq else REQUIRED_FRONTMATTER
     req_sections = FAQ_REQUIRED_SECTIONS if is_faq else REQUIRED_SECTIONS

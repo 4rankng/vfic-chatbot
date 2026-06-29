@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class FeatureReadiness(BaseModel):
     """Per-project feature readiness: how many of the active catalog features
     have enough info for the agent to advise on (vs. need more info supplied).
-    The total is the active-feature count (11 for manual-labour scope; migration 0009).
+    The total is the active-feature count.
     """
 
     ready: int
@@ -29,7 +29,7 @@ class ProjectOut(BaseModel):
     default_persona_id: uuid.UUID | None = None
     knowledge_document_count: int = 0
     feature_readiness: FeatureReadiness = Field(
-        default_factory=lambda: FeatureReadiness(ready=0, total=11)
+        default_factory=lambda: FeatureReadiness(ready=0, total=0)
     )
     created_at: datetime
     updated_at: datetime

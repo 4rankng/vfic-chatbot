@@ -1,9 +1,9 @@
 """Worker product-feature ORM models (mirror Alembic migration 0004 + 0009).
 
-``WorkerFeatureCatalog`` is the seeded catalog of worker-interest product features; 11 are
-``is_active`` for VFIC's manual-labour scope (migration 0009 disabled the 5 white-collar /
-meta criteria). ``JobFeatureValue`` holds the per-project, LLM-extracted value (text +
-structured JSON) the chatbot grounds answers on via the ``get_product_features`` tool.
+``WorkerFeatureCatalog`` is the seeded catalog of worker-interest product features.
+``is_active`` keeps VFIC's manual-labour scope current as catalog rows change over time.
+``JobFeatureValue`` holds the per-project, LLM-extracted value (text + structured JSON)
+the chatbot grounds answers on via the ``get_product_features`` tool.
 """
 from __future__ import annotations
 

@@ -31,6 +31,7 @@ from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
 from app.services.knowledge import LLMJson
 from app.services.knowledge.canonical import (
+    CANONICAL_SCHEMA_VERSIONS,
     SCHEMA_VERSION,
     checksum_text,
     parse_canonical_markdown,
@@ -200,6 +201,9 @@ class KnowledgeService:
         if canonical is None:
             return {}, None
         version = str(canonical.metadata.get("doc_version") or "")
+        schema_version = str(canonical.metadata.get("schema_version") or SCHEMA_VERSION)
+        if schema_version not in CANONICAL_SCHEMA_VERSIONS:
+            schema_version = SCHEMA_VERSION
         canonical_meta: dict = {
             "document": canonical.metadata,
             "validation": {
@@ -216,7 +220,7 @@ class KnowledgeService:
                 "original_checksum": checksum_text(original_text),
             }
         metadata = {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": schema_version,
             "checksum": checksum_text(raw_text),
             "canonical": canonical_meta,
         }

@@ -170,16 +170,14 @@ export const KnowledgeUpload = ({
         <DialogHeader className="border-b px-6 py-5 pr-12">
           <DialogTitle>Tải kiến thức</DialogTitle>
           <DialogDescription>
-            Tải nguồn Markdown/TXT theo mẫu VFIC, mẫu FAQ hoặc Word DOCX để
-            agent truy xuất trong hội thoại.
+            Tải KB, FAQ hoặc DOCX cho dự án.
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
-            <p className="text-sm text-muted-foreground">
-              FAQ dùng cùng luồng tải lên này: tải mẫu FAQ, điền câu hỏi/trả
-              lời, chọn dự án rồi tải tệp Markdown lên.
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
+            <span className="text-sm font-medium text-muted-foreground">
+              Mẫu
+            </span>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"

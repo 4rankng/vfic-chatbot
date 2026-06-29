@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from app.services.knowledge.coercion import DigestError, validate_digest
 from app.services.knowledge.canonical import (
+    CANONICAL_SCHEMA_VERSIONS,
     CanonicalValidationError,
     SCHEMA_VERSION,
     load_template,
@@ -32,6 +33,7 @@ __all__ = [
     "Embedder",
     "KnowledgePipeline",
     "LLMJson",
+    "CANONICAL_SCHEMA_VERSIONS",
     "CanonicalValidationError",
     "SCHEMA_VERSION",
     "load_template",

@@ -31,4 +31,10 @@ async def embed_with_fallback(
         len(vectors),
         len(texts),
     )
-    return [await embed_batch([t])[0] for t in texts]
+    fallback_vectors: list[list[float]] = []
+    for text in texts:
+        single = await embed_batch([text])
+        if not single:
+            raise RuntimeError(f"{label} returned no vector for single-text fallback")
+        fallback_vectors.append(single[0])
+    return fallback_vectors

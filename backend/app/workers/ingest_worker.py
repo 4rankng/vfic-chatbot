@@ -48,7 +48,7 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
     # are injectable so the cross-loop regression test can run the pipeline with fakes.
     from app.graph.clients import GeminiEmbedder
     from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
-    from app.services.knowledge.canonical import SCHEMA_VERSION
+    from app.services.knowledge.canonical import CANONICAL_SCHEMA_VERSIONS
     from app.services.knowledge import KnowledgePipeline
     from app.workers._db import worker_session
 
@@ -58,7 +58,7 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
         if doc is None:
             logger.warning("ingest job: document %s not found", doc_id)
             return
-        is_canonical = (doc.metadata_ or {}).get("schema_version") == SCHEMA_VERSION
+        is_canonical = (doc.metadata_ or {}).get("schema_version") in CANONICAL_SCHEMA_VERSIONS
         if _llm is not None:
             llm = _llm
         elif is_canonical:
