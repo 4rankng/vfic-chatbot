@@ -12,6 +12,11 @@ interface ListEnvelope {
   data: ApiRecord[];
   total: number;
 }
+interface MessageCreatedPayload {
+  conversation_id?: string;
+  message_id?: string | number;
+  message?: ApiRecord;
+}
 
 const INBOUND_SENDERS = new Set([
   "WORKER",
@@ -157,11 +162,12 @@ export const chatRepository = {
    * Subscribe to new messages for a conversation over the Socket.IO realtime
    * transport (per-conversation rooms replace the SSE firehose). The access
    * JWT rides in the socket `auth` handshake, verified server-side on connect.
-   * Joining the `conv:<id>` room scopes delivery to this conversation; the
-   * `message.created` payload carries only ids, so on a match we refetch the
-   * latest page and merge — the consumer dedups by message id. Returns an
-   * unsubscribe fn (no-op when there is no session token or conversation id)
-   * which leaves the room and detaches the handler.
+   * Joining the `conv:<id>` room scopes delivery to this conversation; modern
+   * `message.created` payloads include the serialized message so the consumer
+   * can append/update without a page refetch. Older id-only payloads still
+   * trigger a debounced latest-page fetch as a compatibility fallback.
+   * Returns an unsubscribe fn (no-op when there is no session token or
+   * conversation id) which leaves the room and detaches the handler.
    */
   subscribeToMessages(
     conversationId: string,
@@ -173,21 +179,56 @@ export const chatRepository = {
       };
     }
     const socket = getRealtimeSocket();
+    let refreshTimer: number | undefined;
+    let refreshInFlight = false;
+    let refreshPending = false;
+    let closed = false;
 
-    const handler = (payload: { conversation_id?: string } | undefined) => {
-      // The server emits to conv:<id>, but the socket may be in several rooms,
-      // so keep a defensive conversation_id check (parity with the SSE path).
-      if (payload?.conversation_id !== conversationId) return;
-      // Refetch + merge (the event carries ids only). Ignore failures — the
-      // next event / list refresh reconciles.
+    const refreshLatest = () => {
+      if (closed) return;
+      if (refreshInFlight) {
+        refreshPending = true;
+        return;
+      }
+      refreshInFlight = true;
       chatRepository
         .getConversationMessages(conversationId, { limit: 25 })
         .then(({ messages }) => {
+          if (closed) return;
           onNewMessages(messages);
         })
         .catch(() => {
           /* best-effort */
+        })
+        .finally(() => {
+          refreshInFlight = false;
+          if (!closed && refreshPending) {
+            refreshPending = false;
+            refreshLatest();
+          }
         });
+    };
+
+    const handler = (payload: MessageCreatedPayload | undefined) => {
+      if (closed) return;
+      // The server emits to conv:<id>, but the socket may be in several rooms,
+      // so keep a defensive conversation_id check (parity with the SSE path).
+      const payloadConversationId =
+        payload?.conversation_id ??
+        (payload?.message
+          ? String(payload.message.conversation_id ?? "")
+          : undefined);
+      if (payloadConversationId !== conversationId) return;
+
+      if (payload?.message) {
+        onNewMessages([toMessage(payload.message)]);
+        return;
+      }
+
+      // Legacy id-only event: refetch + merge. Ignore failures — the next
+      // event / list refresh reconciles.
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(refreshLatest, 80);
     };
 
     socket.on("message.created", handler);
@@ -198,10 +239,10 @@ export const chatRepository = {
     }
     socket.emit("join conversation", { conversation_id: conversationId });
 
-    let closed = false;
     return () => {
       if (closed) return;
       closed = true;
+      window.clearTimeout(refreshTimer);
       socket.off("message.created", handler);
       socket.emit("leave conversation", { conversation_id: conversationId });
     };

@@ -6,7 +6,7 @@ The single place conversation/message realtime events are published. Extracts th
 """
 from __future__ import annotations
 
-from app.schemas.conversation import ConversationOut
+from app.schemas.conversation import ConversationOut, MessageOut
 from app.services.realtime import publish_event
 
 
@@ -16,6 +16,11 @@ def _conv_payload(conv) -> dict:
     Shape is consumed verbatim by the frontend SSE/Socket.IO client — do not change.
     """
     return ConversationOut.model_validate(conv).model_dump(mode="json")
+
+
+def _message_payload(msg) -> dict:
+    """Serialize a message for the realtime `message.created` payload."""
+    return MessageOut.model_validate(msg).model_dump(mode="json")
 
 
 class ConversationEventBus:
@@ -30,5 +35,9 @@ class ConversationEventBus:
     async def message_created(self, msg, conv) -> None:
         await publish_event(
             "message.created",
-            {"message_id": msg.id, "conversation_id": str(conv.id)},
+            {
+                "message_id": msg.id,
+                "conversation_id": str(conv.id),
+                "message": _message_payload(msg),
+            },
         )

@@ -43,6 +43,14 @@ const stubJson = (
   };
 };
 
+const messageCreatedHandler = () => {
+  const call = mockSocket.on.mock.calls.find(
+    ([event]) => event === "message.created",
+  );
+  if (!call) throw new Error("message.created handler was not registered");
+  return call[1] as (payload: unknown) => void;
+};
+
 describe("chatRepository.getConversationMessages", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
@@ -157,7 +165,11 @@ describe("chatRepository.getLastMessages", () => {
 });
 
 describe("chatRepository.subscribeToMessages", () => {
+  const originalFetch = globalThis.fetch;
+
   afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
     vi.clearAllMocks();
     clearTokens();
     mockSocket.connected = false;
@@ -192,5 +204,74 @@ describe("chatRepository.subscribeToMessages", () => {
     expect(mockSocket.emit).toHaveBeenCalledWith("leave conversation", {
       conversation_id: "c1",
     });
+  });
+
+  it("uses a full realtime message payload without refetching latest history", () => {
+    setTokens("access", "refresh");
+    globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+    const onMessages = vi.fn();
+
+    chatRepository.subscribeToMessages("c1", onMessages);
+    messageCreatedHandler()({
+      conversation_id: "c1",
+      message_id: 7,
+      message: {
+        id: 7,
+        conversation_id: "c1",
+        sender: "BOT",
+        body: "Xin chào",
+        created_at: "2026-06-29T01:02:03.000Z",
+      },
+    });
+
+    expect(onMessages).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "7",
+        conversation_id: "c1",
+        type: "outbound",
+        content: "Xin chào",
+        created_at: "2026-06-29T01:02:03.000Z",
+      }),
+    ]);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a debounced latest-page fetch for legacy id-only payloads", async () => {
+    vi.useFakeTimers();
+    setTokens("access", "refresh");
+    const { fetch } = stubJson(async () => ({
+      data: [
+        {
+          id: 8,
+          conversation_id: "c1",
+          sender: "WORKER",
+          body: "Legacy refresh",
+          created_at: "2026-06-29T01:02:04.000Z",
+        },
+      ],
+      total: 1,
+    }));
+    globalThis.fetch = fetch;
+    const onMessages = vi.fn();
+
+    chatRepository.subscribeToMessages("c1", onMessages);
+    const handler = messageCreatedHandler();
+    handler({ conversation_id: "c1", message_id: 8 });
+    handler({ conversation_id: "c1", message_id: 8 });
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(80);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(onMessages).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "8",
+        conversation_id: "c1",
+        type: "inbound",
+        content: "Legacy refresh",
+      }),
+    ]);
   });
 });

@@ -12,9 +12,11 @@ import pytest
 from sqlalchemy import text
 from socketio.exceptions import ConnectionRefusedError
 
+from app.models.conversation import Conversation, Message, MessageSender
 from app.realtime.emitter import emit_event as real_emit_event
 from app.realtime.socketio import _room_for_payload, authenticate_socket_token
 from app.services.conversation import ConversationService
+from app.services.conversation.events import ConversationEventBus
 from tests.conftest import ADMIN_EMAIL, PASSWORD
 
 pytestmark = pytest.mark.asyncio
@@ -35,6 +37,44 @@ async def test_room_for_payload_maps_keys():
     assert _room_for_payload({"conversation_id": "abc", "id": "xyz"}) == "conv:abc"
     assert _room_for_payload({"foo": "bar"}) is None
     assert _room_for_payload({}) is None
+
+
+async def test_message_created_payload_includes_serialized_message(db_session, monkeypatch):
+    captured: list[tuple[str, dict]] = []
+
+    async def _fake_publish(event_type, payload):
+        captured.append((event_type, payload))
+
+    import app.services.conversation.events as events_mod
+
+    monkeypatch.setattr(events_mod, "publish_event", _fake_publish)
+
+    conv = Conversation(zalo_chat_id=f"msg-payload-{uuid.uuid4().hex[:8]}")
+    db_session.add(conv)
+    await db_session.flush()
+    msg = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body="Xin chào",
+    )
+    db_session.add(msg)
+    await db_session.commit()
+    await db_session.refresh(conv)
+    await db_session.refresh(msg)
+
+    await ConversationEventBus(db_session).message_created(msg, conv)
+
+    assert len(captured) == 1
+    event_type, payload = captured[0]
+    assert event_type == "message.created"
+    assert payload["message_id"] == msg.id
+    assert payload["conversation_id"] == str(conv.id)
+    assert payload["message"]["id"] == msg.id
+    assert payload["message"]["conversation_id"] == str(conv.id)
+    assert payload["message"]["sender"] == "BOT"
+    assert payload["message"]["body"] == "Xin chào"
+    assert payload["message"]["delivery_status"] == "SENT"
+    assert payload["message"]["created_at"]
 
 
 async def test_authenticate_socket_token_accepts_valid(client, db_session):

@@ -9,7 +9,7 @@ import { chatRepository } from "./chatRepository";
 // Merge semantics matter: a realtime INSERT that lands between subscribe() and
 // the initial fetch resolve is already in state, so the fetch result is merged
 // (union by id, fetched-first) rather than blindly replacing state.
-const compareMessages = (a: Message, b: Message) => {
+export const compareMessages = (a: Message, b: Message) => {
   const at = Date.parse(a.created_at);
   const bt = Date.parse(b.created_at);
   if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt;
@@ -20,14 +20,14 @@ const compareMessages = (a: Message, b: Message) => {
   return String(a.id).localeCompare(String(b.id));
 };
 
-const sameMessage = (a: Message, b: Message) =>
+export const sameMessage = (a: Message, b: Message) =>
   a.id === b.id &&
   a.content === b.content &&
   a.type === b.type &&
   a.created_at === b.created_at &&
   a.data?.recruiter_id === b.data?.recruiter_id;
 
-const mergeChronological = (current: Message[], incoming: Message[]) => {
+export const mergeChronological = (current: Message[], incoming: Message[]) => {
   const byId = new Map<string, Message>();
   for (const msg of current) byId.set(msg.id, msg);
   for (const msg of incoming) {
@@ -44,7 +44,10 @@ const mergeChronological = (current: Message[], incoming: Message[]) => {
   return merged;
 };
 
-const mergeRealtimePage = (current: Message[], latestPage: Message[]) => {
+export const mergeRealtimePage = (
+  current: Message[],
+  latestPage: Message[],
+) => {
   if (current.length === 0) return latestPage;
   const earliestLoaded = current[0];
   const inLoadedWindow = latestPage.filter(

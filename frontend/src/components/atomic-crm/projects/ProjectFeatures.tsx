@@ -12,7 +12,6 @@ import {
   Pencil,
   RefreshCw,
   Sparkles,
-  Star,
   X,
 } from "lucide-react";
 import {
@@ -317,19 +316,18 @@ const ReadinessHero = ({
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <i className="size-2.5 rounded-[3px] bg-feature-ready" />
-          Đủ thông tin
+          Đầy đủ
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="size-2.5 rounded-[3px] border border-feature-gap-border border-dashed bg-feature-gap-soft" />
-          Cần bổ sung
+          Thiếu thông tin
         </span>
       </div>
     </div>
   );
 };
 
-// One of the two readiness groups. Highlights are NOT a separate group — a
-// ready + is_highlight slot shows a small star accent next to its name.
+// One of the two readiness groups.
 const FeatureGroup = ({
   tone,
   count,
@@ -349,7 +347,7 @@ const FeatureGroup = ({
           ) : (
             <AlertCircle className="size-4 text-feature-gap" />
           )}
-          {ready ? "Đủ thông tin" : "Cần bổ sung"}
+          {ready ? "Đầy đủ" : "Thiếu thông tin"}
         </h3>
         <span className="text-xs text-muted-foreground">{count} mục</span>
       </div>
@@ -357,7 +355,6 @@ const FeatureGroup = ({
         <div className="grid gap-2 md:grid-cols-2">
           {slots.map((f, i) => {
             const name = f?.name_vi ?? "Chưa trích xuất";
-            const highlighted = ready && !!f?.is_highlight;
             return (
               <div
                 key={f?.id ?? `slot-${i}`}
@@ -374,15 +371,9 @@ const FeatureGroup = ({
                     ready ? "bg-feature-ready" : "bg-feature-gap",
                   )}
                 />
-                <span className="flex min-w-0 flex-1 flex-col gap-1 text-foreground">
+                  <span className="flex min-w-0 flex-1 flex-col gap-1 text-foreground">
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="truncate">{name}</span>
-                    {highlighted && (
-                      <Star
-                        className="size-3.5 shrink-0 text-feature-ready"
-                        aria-label="Nổi bật"
-                      />
-                    )}
                   </span>
                   {!ready && f && (
                     <span className="line-clamp-2 text-[11px] leading-4 text-muted-foreground">
@@ -397,8 +388,8 @@ const FeatureGroup = ({
       ) : (
         <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
           {ready
-            ? "Chưa có đặc điểm đủ thông tin."
-            : "Không còn mục cần bổ sung."}
+            ? "Chưa có mục đầy đủ."
+            : "Không còn mục thiếu thông tin."}
         </p>
       )}
     </section>
@@ -419,16 +410,15 @@ const FeatureCard = ({
   const notify = useNotify();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(feature.value_text);
-  const [highlight, setHighlight] = useState(feature.is_highlight);
   const [saving, setSaving] = useState(false);
   const showFillHint = feature.is_missing || feature.needs_clarification;
+  const ready = isReady(feature);
 
   const save = async () => {
     setSaving(true);
     try {
       const updated = await updateProjectFeature(projectId, feature.id, {
         value_text: draft,
-        is_highlight: highlight,
       });
       onUpdate(updated);
       setEditing(false);
@@ -442,7 +432,6 @@ const FeatureCard = ({
 
   const cancel = () => {
     setDraft(feature.value_text);
-    setHighlight(feature.is_highlight);
     setEditing(false);
   };
 
@@ -450,8 +439,8 @@ const FeatureCard = ({
     <div
       className={cn(
         "min-w-0 rounded-md border p-3",
-        feature.is_highlight && "border-feature-ready/30 bg-feature-ready-soft",
-        (feature.is_missing || feature.needs_clarification) &&
+        ready && "border-feature-ready/30 bg-feature-ready-soft",
+        !ready &&
           "border-feature-gap-border bg-feature-gap-soft",
       )}
     >
@@ -461,17 +450,16 @@ const FeatureCard = ({
             <span className="min-w-0 text-sm font-semibold">
               {feature.name_vi}
             </span>
-            {feature.is_highlight && (
+            {ready ? (
               <Badge className="bg-feature-ready text-[10px] text-primary-foreground">
-                Nổi bật
+                Đầy đủ
               </Badge>
-            )}
-            {(feature.is_missing || feature.needs_clarification) && (
+            ) : (
               <Badge
                 variant="secondary"
                 className="border border-feature-gap-border bg-feature-gap-soft text-[10px] text-feature-gap"
               >
-                Chưa rõ
+                Thiếu thông tin
               </Badge>
             )}
           </div>
@@ -483,14 +471,6 @@ const FeatureCard = ({
                 rows={3}
                 className="text-sm"
               />
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={highlight}
-                  onChange={(e) => setHighlight(e.target.checked)}
-                />
-                Điểm nổi bật (hiện trong thẻ danh mục)
-              </label>
             </div>
           ) : (
             <>
@@ -498,7 +478,7 @@ const FeatureCard = ({
               {showFillHint && (
                 <p className="mt-2 rounded-md border border-dashed bg-muted/25 px-2.5 py-2 text-xs leading-5 text-muted-foreground">
                   <span className="font-medium text-foreground">
-                    Cần bổ sung:
+                    Thiếu thông tin:
                   </span>{" "}
                   {getFillHint(feature)}
                 </p>

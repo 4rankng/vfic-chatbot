@@ -14,6 +14,10 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
+import {
+  INITIAL_CHAT_FIRST_ITEM_INDEX,
+  firstItemIndexAfterPrepend,
+} from "./chatScrollIndex";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
 // the realtime subscription, the virtualised scroller (with all the snap /
@@ -107,8 +111,11 @@ export const ChatThread = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const [firstItemIndex, setFirstItemIndex] = useState(0);
+  const [firstItemIndex, setFirstItemIndex] = useState(
+    INITIAL_CHAT_FIRST_ITEM_INDEX,
+  );
   const initialJumpDoneRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
   // Load older messages only on a genuine upward scroll — not merely because
   // the top happens to be visible (which is the case the moment a thread opens,
   // when the initial page fits the viewport, and would otherwise auto-fetch the
@@ -156,7 +163,8 @@ export const ChatThread = ({
   useEffect(() => {
     initialJumpDoneRef.current = false;
     readyForMoreRef.current = false;
-    setFirstItemIndex(0);
+    lastScrollTopRef.current = 0;
+    setFirstItemIndex(INITIAL_CHAT_FIRST_ITEM_INDEX);
     setEmojiOpen(false);
   }, [conversationId]);
 
@@ -178,11 +186,18 @@ export const ChatThread = ({
   // message, so the top being visible there must NOT trigger a fetch.
   useEffect(() => {
     if (!scrollerEl) return;
+    lastScrollTopRef.current = scrollerEl.scrollTop;
     const onScroll = () => {
+      const previousTop = lastScrollTopRef.current;
+      const currentTop = scrollerEl.scrollTop;
+      lastScrollTopRef.current = currentTop;
       const atBottom =
-        scrollerEl.scrollTop + scrollerEl.clientHeight >=
-        scrollerEl.scrollHeight - 1;
-      if (!atBottom) readyForMoreRef.current = true;
+        currentTop + scrollerEl.clientHeight >= scrollerEl.scrollHeight - 1;
+      if (atBottom) {
+        readyForMoreRef.current = false;
+        return;
+      }
+      if (currentTop < previousTop) readyForMoreRef.current = true;
     };
     scrollerEl.addEventListener("scroll", onScroll, { passive: true });
     return () => scrollerEl.removeEventListener("scroll", onScroll);
@@ -197,13 +212,15 @@ export const ChatThread = ({
       // Disarm until the next upward scroll — one page per scroll-up.
       readyForMoreRef.current = false;
       loadMore(messages[0].id).then((count: number) => {
-        if (count > 0) setFirstItemIndex((i) => i + count);
+        if (count > 0) {
+          setFirstItemIndex((i) => firstItemIndexAfterPrepend(i, count));
+        }
       });
     }
   }, [hasMore, messages, loadMore]);
 
   const followOutput = useCallback(
-    (isAtBottom: boolean) => (isAtBottom ? ("smooth" as const) : false),
+    (isAtBottom: boolean) => (isAtBottom ? ("auto" as const) : false),
     [],
   );
 
@@ -312,19 +329,18 @@ export const ChatThread = ({
   const virtuosoComponents = useMemo(
     () => ({
       List: ChatItemList,
-      Header: () =>
-        (
-          <div className="chat-history-top-spacer">
-            {isLoadingMore ? (
-              <div
-                className="day-marker"
-                style={{ margin: "8px 0", background: "transparent" }}
-              >
-                <span>Đang tải tin nhắn cũ hơn...</span>
-              </div>
-            ) : null}
-          </div>
-        ),
+      Header: () => (
+        <div className="chat-history-top-spacer">
+          {isLoadingMore ? (
+            <div
+              className="day-marker"
+              style={{ margin: "8px 0", background: "transparent" }}
+            >
+              <span>Đang tải tin nhắn cũ hơn...</span>
+            </div>
+          ) : null}
+        </div>
+      ),
       EmptyPlaceholder: () =>
         isLoading ? (
           <div className="day-marker" style={{ background: "transparent" }}>
