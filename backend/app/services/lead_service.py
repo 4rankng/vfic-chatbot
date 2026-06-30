@@ -84,11 +84,15 @@ def normalize_integer(value, min_v: int, max_v: int) -> int | None:
     return n
 
 
-def normalize_lead_score(value, phone) -> str | None:
+def normalize_lead_score(value) -> str | None:
+    """Return the LLM verdict verbatim; fall back to None (never guess).
+
+    The old ``return "hot" if phone else None`` override was removed because it
+    stamped every phone-bearing turn ``hot`` regardless of the LLM's warm /
+    not_interested verdict, conflating "contactable" with "high intent".
+    """
     score = (_pick(value) or "").lower()
-    if score in ("hot", "warm", "not_interested"):
-        return score
-    return "hot" if phone else None
+    return score if score in ("hot", "warm", "not_interested") else None
 
 
 def current_year() -> int:
@@ -102,6 +106,15 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
         return None
     ext = parse_lead_json(raw)
     phone = normalize_phone(ext.get("phone"))
+
+    # Route free-text miscellanea (notes + legacy latest_company) into ``notes``.
+    _notes_parts: list[str] = []
+    for key in ("notes", "latest_company"):  # latest_company kept for prompt-transition compat
+        v = _pick(ext.get(key))
+        if v:
+            _notes_parts.append(v)
+    notes = "; ".join(_notes_parts) if _notes_parts else None
+
     return {
         "zalo_id": chat_id,
         "name": _pick(ext.get("name")),
@@ -114,21 +127,24 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
         "region": _pick(ext.get("region")),
         "desired_job": _pick(ext.get("desired_job")),
         "years_experience": _pick(ext.get("years_experience")),
-        "latest_company": _pick(ext.get("latest_company")),
+        "latest_company": None,  # pipeline no longer populates; column kept for backward-compat
         "expected_salary": _pick(ext.get("expected_salary")),
-        "lead_score": normalize_lead_score(ext.get("lead_score"), phone),
+        "lead_score": normalize_lead_score(ext.get("lead_score")),
+        "notes": notes,
     }
 
 
-# Priority fields shown to the agent so it can subtly ask for the most
-# important missing ones. Order matters: top = highest collection priority.
+# Fields shown to the agent so it can see what's known and what's missing.
+# Order matters: top = highest collection priority.  ``notes`` is passive
+# capture (never probed directly — there is no natural "what are your notes?" question).
 _PROFILE_FIELDS: list[tuple[str, str]] = [
-    ("name", "Tên"),
+    ("name", "Họ tên"),
     ("phone", "Số điện thoại"),
-    ("desired_job", "Vị trí mong muốn"),
-    ("region", "Khu vực muốn làm"),
+    ("desired_job", "Công việc mong muốn"),
+    ("expected_salary", "Lương mong muốn"),
+    ("region", "Tỉnh / thành"),
     ("living_area", "Khu vực sinh sống"),
-    ("years_experience", "Kinh nghiệm"),
+    ("notes", "Ghi chú"),
 ]
 
 

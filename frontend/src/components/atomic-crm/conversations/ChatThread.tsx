@@ -86,7 +86,6 @@ type ChatMessageRowProps = {
 };
 
 const deliveryStatusLabel = (status?: Message["delivery_status"]) => {
-  if (status === "pending") return "Đang soạn";
   if (status === "failed") return "Gửi lỗi";
   if (status === "suppressed") return "Đã chặn";
   if (status === "sent") return "Đã gửi";
@@ -166,6 +165,7 @@ const ChatMessageRow = memo(
       );
     }
 
+    const deliveryLabel = deliveryStatusLabel(m.delivery_status);
     const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
     const avatar = !isGrouped ? (
       <span className="message-avatar">
@@ -198,11 +198,11 @@ const ChatMessageRow = memo(
             )}
           </div>
           <span className="bubble-meta-inline">
-            {kind !== "user" ? (
+            {kind !== "user" && deliveryLabel ? (
               <span
                 className={`delivery-status ${m.delivery_status ?? "sent"}`}
               >
-                {deliveryStatusLabel(m.delivery_status)}
+                {deliveryLabel}
               </span>
             ) : null}
             <span className="bubble-time-inline">{formatTime(m.created_at)}</span>

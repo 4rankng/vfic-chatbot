@@ -40,15 +40,29 @@ def _build_extractor():
 
 
 async def _persist_lead_async(job: dict) -> None:
-    from app.workers._db import worker_session
+    from app.services.memory_service import greeting_gate
     from app.services.lead_service import LeadExtractionService
 
-    async with worker_session() as db:
-        lead = await LeadExtractionService.extract(
-            _build_extractor(), job["user_text"], job.get("bot_output", ""), job["chat_id"]
+    user_text = job.get("user_text", "")
+    if not greeting_gate(user_text):
+        logger.debug("lead extraction skipped by greeting_gate: '%s'", user_text[:80])
+        return
+
+    from app.workers._db import worker_session
+
+    try:
+        async with worker_session() as db:
+            lead = await LeadExtractionService.extract(
+                _build_extractor(), user_text, job.get("bot_output", ""), job["chat_id"]
+            )
+            if lead:
+                await LeadExtractionService.upsert(db, lead)
+    except Exception:
+        logger.warning(
+            "lead extraction failed for chat %s; chat turn continues",
+            job.get("chat_id"),
+            exc_info=True,
         )
-        if lead:
-            await LeadExtractionService.upsert(db, lead)
 
 
 async def _persist_memory_async(job: dict) -> None:

@@ -78,11 +78,46 @@ def _lead_collection_instruction(
     question: str,
 ) -> str:
     return (
-        "THU THẬP LEAD BẮT BUỘC:\n"
-        "- Sau khi trả lời nội dung chính của ứng viên, phải kết thúc bằng đúng 1 câu hỏi này:\n"
-        f"{question}\n"
-        "- Không thay bằng câu hỏi khác và không hỏi thêm trường khác trong cùng tin nhắn."
+        "THU THẬP THÔNG TIN ỨNG VIÊN:\n"
+        "- Sau khi trả lời nội dung chính, hãy kết thúc bằng câu hỏi thu thập "
+        "(hoặc lồng ghép tự nhiên vào câu trả lời):\n"
+        f"  → {question}\n"
+        "- Chỉ hỏi 1 trường trong tin nhắn này, ưu tiên giữ mạch hội thoại tự nhiên."
     )
+
+
+# Askable fields: (db_key, question).  Order = probing priority.
+# ``notes`` is passive capture (never probed — no natural "what are your notes?" question).
+_ASKABLE_FIELDS: list[tuple[str, str]] = [
+    ("name", "Bạn cho tôi xin tên để tiện hỗ trợ nhé?"),
+    ("phone", "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"),
+    ("desired_job", "Bạn muốn ứng tuyển vị trí công việc nào?"),
+    ("region", "Bạn muốn làm việc ở tỉnh/thành nào?"),
+    ("living_area", "Bạn đang sinh sống ở khu vực nào?"),
+    ("expected_salary", "Bạn mong muốn mức lương khoảng bao nhiêu?"),
+]
+
+# Cheap keyword checks — if the current turn mentions any of these, assume the
+# user already answered the corresponding field this turn (prevents re-asking
+# before the async extraction worker updates the lead row).
+# Each tuple includes both accented AND unaccented forms so mobile users who
+# type without diacritics (common on Zalo) are still detected.
+_FIELD_DETECT_KW: dict[str, tuple[str, ...]] = {
+    "desired_job": ("làm việc", "công việc", "vị trí", "ứng tuyển", "muốn làm", "tìm việc"),
+    "region": (
+        "tỉnh", "thành phố",
+        "hải phòng", "hai phong",
+        "hà nội", "ha noi",
+        "đà nẵng", "da nang",
+        "hcm", "hồ chí minh", "ho chi minh",
+        "bình dương", "binh duong",
+        "đồng nai", "dong nai",
+        "bắc ninh", "bac ninh",
+        "hưng yên", "hung yen",
+    ),
+    "living_area": ("sống ở", "đang sống", "sinh sống", "quê ở", "địa chỉ"),
+    "expected_salary": ("lương", "triệu"),
+}
 
 
 def _lead_collection_question(
@@ -91,13 +126,21 @@ def _lead_collection_question(
     current_user_text: str,
     recent_messages: list[Message],
 ) -> str:
-    current_has_phone = bool(_PHONE_RE.search(current_user_text or ""))
-    current_has_name = _current_text_answers_name(current_user_text, recent_messages)
-
-    if not _lead_has_value(lead, "name") and not current_has_name:
-        return "Bạn cho tôi xin tên để tiện hỗ trợ nhé?"
-    if not _lead_has_value(lead, "phone") and not current_has_phone:
-        return "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+    text = current_user_text or ""
+    for field, question in _ASKABLE_FIELDS:
+        if _lead_has_value(lead, field):
+            continue
+        # Per-field same-turn "already answered" guards.
+        if field == "name" and _current_text_answers_name(text, recent_messages):
+            continue
+        if field == "phone" and bool(_PHONE_RE.search(text)):
+            continue
+        keywords = _FIELD_DETECT_KW.get(field)
+        if keywords:
+            lowered = text.casefold()
+            if any(kw in lowered for kw in keywords):
+                continue
+        return question
     return ""
 
 
@@ -113,13 +156,7 @@ def _ensure_lead_collection_question(reply: str, question: str) -> str:
         return question
     if _compact_for_match(question.rstrip("?")) in _compact_for_match(text):
         return text
-
-    paragraphs = re.split(r"\n\s*\n", text)
-    last = paragraphs[-1].strip() if paragraphs else ""
-    question_mark_at_end = "?" in last and last.rfind("?") >= max(len(last) - 8, 0)
-    if question_mark_at_end and len(last) <= 220:
-        paragraphs[-1] = question
-        return "\n\n".join(p.strip() for p in paragraphs if p.strip())
+    # Always append — never replace the model's last paragraph.
     return f"{text}\n\n{question}"
 
 

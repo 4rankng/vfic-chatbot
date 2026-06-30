@@ -4,6 +4,7 @@ Secrets (Zalo token, MiniMax/Gemini keys, DB password, JWT secret) live here and
 must NEVER reach the frontend — the CRM holds only the user JWT.
 """
 from functools import lru_cache
+from typing import ClassVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -81,12 +82,14 @@ class Settings(BaseSettings):
     minimax_safety_model: str = "MiniMax-M2.5-highspeed"
     minimax_request_timeout: int = 60
 
+    OPENROUTER_DEFAULT_MODEL: ClassVar[str] = "deepseek/deepseek-v4-flash"
+
     openrouter_enable: bool = False
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_agent_model: str = "deepseek/deepseek-v3.2"
-    openrouter_safety_model: str = "deepseek/deepseek-v3.2"
-    openrouter_digest_model: str = "deepseek/deepseek-v3.2"
+    openrouter_agent_model: str = OPENROUTER_DEFAULT_MODEL
+    openrouter_safety_model: str = OPENROUTER_DEFAULT_MODEL
+    openrouter_digest_model: str = OPENROUTER_DEFAULT_MODEL
     openrouter_request_timeout: int = 60
     openrouter_digest_timeout: int = 180
 
