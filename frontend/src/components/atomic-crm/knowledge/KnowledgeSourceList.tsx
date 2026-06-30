@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ListBase, useRefresh } from "ra-core";
+import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
 import { FileText, RefreshCw, Search, Upload } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -18,13 +19,16 @@ import { KnowledgeUpload } from "./KnowledgeUpload";
 import { isPipelineActive } from "./knowledgePipelineUtils";
 import { InlineKnowledgeUploader } from "./InlineKnowledgeUploader";
 import { KnowledgeDetailPanel } from "./KnowledgeDetailPanel";
-import { ALL_PROJECTS, useKnowledgeSourceFilters } from "./useKnowledgeSourceFilters";
+import {
+  ALL_PROJECTS,
+  useKnowledgeSourceFilters,
+} from "./useKnowledgeSourceFilters";
 import { ProjectPicker } from "./ProjectPicker";
+import type { KnowledgeSource } from "../types";
 
 const KnowledgeSourceListContent = () => {
   const refresh = useRefresh();
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const {
     isPending,
@@ -37,37 +41,11 @@ const KnowledgeSourceListContent = () => {
     selectProject,
   } = useKnowledgeSourceFilters();
 
-  // Keep the selection valid as the backend page changes; default to the top.
-  useEffect(() => {
-    if (pageSources.length === 0) {
-      setSelectedId(null);
-      return;
-    }
-    if (
-      !selectedId ||
-      !pageSources.some((source) => String(source.id) === selectedId)
-    ) {
-      setSelectedId(String(pageSources[0].id));
-    }
-  }, [pageSources, selectedId]);
-
-  // Auto-select a source that newly appears mid-session (e.g., right after an
-  // upload) so the user immediately sees its progress / extraction.
-  const knownIdsRef = useRef<Set<string>>(new Set());
-  const firstLoadRef = useRef(true);
-  useEffect(() => {
-    const ids = new Set(sources.map((source) => String(source.id)));
-    if (firstLoadRef.current) {
-      knownIdsRef.current = ids;
-      firstLoadRef.current = false;
-      return;
-    }
-    const appeared = sources
-      .filter((source) => !knownIdsRef.current.has(String(source.id)))
-      .map((source) => String(source.id));
-    if (appeared.length > 0) setSelectedId(appeared[0]);
-    knownIdsRef.current = ids;
-  }, [sources]);
+  const { selectedId, setSelectedId } =
+    useMasterDetailSelection<KnowledgeSource>({
+      data: pageSources,
+      autoSelectNewlyAppeared: true,
+    });
 
   const selectedSource =
     pageSources.find((source) => String(source.id) === selectedId) ??
@@ -124,7 +102,9 @@ const KnowledgeSourceListContent = () => {
         <KnowledgeUpload
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          initialProjectId={uploadProjectId ? String(uploadProjectId) : undefined}
+          initialProjectId={
+            uploadProjectId ? String(uploadProjectId) : undefined
+          }
         />
 
         <div className="grid gap-2 min-[520px]:grid-cols-[minmax(0,1fr)_180px]">
@@ -190,9 +170,7 @@ const KnowledgeSourceListContent = () => {
               className="justify-center"
             />
             {selectedSource ? (
-              <KnowledgeDetailPanel
-                source={selectedSource}
-              />
+              <KnowledgeDetailPanel source={selectedSource} />
             ) : (
               <EmptyState
                 icon={<FileText className="size-6" />}
@@ -215,7 +193,9 @@ const SourceSelector = ({
   onSelect,
 }: {
   sources: ReturnType<typeof useKnowledgeSourceFilters>["pageSources"];
-  selectedSource: ReturnType<typeof useKnowledgeSourceFilters>["pageSources"][number] | null;
+  selectedSource:
+    | ReturnType<typeof useKnowledgeSourceFilters>["pageSources"][number]
+    | null;
   total: number;
   onSelect: (id: string) => void;
 }) => {
@@ -248,7 +228,8 @@ const SourceSelector = ({
               return (
                 <SelectItem key={source.id} value={String(source.id)}>
                   <span className="block truncate">
-                    {source.file_name} · {source.project_name ?? "Chưa gắn dự án"} ·{" "}
+                    {source.file_name} ·{" "}
+                    {source.project_name ?? "Chưa gắn dự án"} ·{" "}
                     {source.digest_meta?.unit_count ?? 0} đơn vị
                   </span>
                 </SelectItem>

@@ -16,10 +16,11 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
-import { usePermissions, useTranslate } from "ra-core";
+import { useTranslate } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
 import { useNotifications } from "./topbar/useNotifications";
+import { useRoleActions } from "../hooks/useRoleActions";
 
 // Static per-session: display-mode and UA do not change without a reload.
 const IS_PWA =
@@ -32,9 +33,8 @@ const IS_WEB_IOS =
 export const MobileNavigation = () => {
   const location = useLocation();
   const translate = useTranslate();
-  const { permissions } = usePermissions();
+  const { isAdmin } = useRoleActions();
   const { count: needsAttentionCount } = useNotifications();
-  const isAdmin = permissions === "admin";
 
   const currentPath = useMemo<string | boolean>(() => {
     if (matchPath("/", location.pathname)) return "/";

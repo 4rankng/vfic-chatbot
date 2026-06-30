@@ -3,16 +3,15 @@ import {
   ListBase,
   useListContext,
   useNotify,
-  usePermissions,
   useRedirect,
   useRefresh,
 } from "ra-core";
+import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
 import {
   Boxes,
   BusFront,
   ChevronLeft,
   ChevronRight,
-  HelpCircle,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -44,38 +43,30 @@ import { cn } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { BusRoute, BusTimetableList, Project } from "../types";
 import {
-  getProjectFaq,
   getProjectBusTimetable,
-  type ProjectFaqList,
   reindexProject,
 } from "@/lib/vfic/knowledgeService";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
+import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectFeatures } from "./ProjectFeatures";
+import { ProjectFaqEditor } from "./ProjectFaqEditor";
 
 const ProjectListContent = () => {
   const { data, isPending, total } = useListContext<Project>();
-  const { permissions } = usePermissions();
-  const isAdmin = permissions === "admin";
-  const canEdit = permissions === "admin" || permissions === "recruiter";
+  const { isAdmin, canEdit } = useRoleActions();
   const refresh = useRefresh();
   const redirect = useRedirect();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const projects = useMemo(() => data ?? [], [data]);
 
-  useEffect(() => {
-    if (projects.length === 0) {
-      setSelectedId(null);
-      return;
-    }
-    if (!selectedId || !projects.some((project) => project.id === selectedId)) {
-      setSelectedId(String(projects[0].id));
-    }
-  }, [projects, selectedId]);
+  const { selectedId, setSelectedId } = useMasterDetailSelection<Project>({
+    data: projects,
+  });
 
   const selectedProject =
-    projects.find((project) => project.id === selectedId) ?? projects[0] ??
+    projects.find((project) => project.id === selectedId) ??
+    projects[0] ??
     null;
 
   return (
@@ -286,7 +277,10 @@ const ProjectSwitcher = ({
               </Select>
               {selectedProject && (
                 <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-                  <ProjectStatusBadge active={selectedProject.is_active} short />
+                  <ProjectStatusBadge
+                    active={selectedProject.is_active}
+                    short
+                  />
                   <ReadinessRing
                     ready={selectedProject.feature_readiness?.ready}
                     total={selectedProject.feature_readiness?.total ?? 16}
@@ -393,7 +387,11 @@ const ProjectDetailPanel = ({
       canExtract={isAdmin}
       extraContent={
         <div className="space-y-5">
-          <ProjectFaqSection projectId={String(project.id)} />
+          <ProjectFaqEditor
+            projectId={String(project.id)}
+            editable={canEdit}
+            embedded
+          />
           <BusTimetableSection projectId={String(project.id)} />
         </div>
       }
@@ -403,86 +401,22 @@ const ProjectDetailPanel = ({
 
 const shiftLabel = (shift: string) =>
   (
-    {
+    ({
       admin: "Hành chính",
       day: "Ca ngày",
       night: "Ca đêm",
-    } as Record<string, string>
+    }) as Record<string, string>
   )[shift] ?? shift;
 
 const directionLabel = (direction: string) =>
   (
-    {
+    ({
       outbound: "Lượt đi",
       return: "Lượt về",
-    } as Record<string, string>
+    }) as Record<string, string>
   )[direction] ?? direction;
 
 const BUS_ROUTE_PAGE_SIZE = 6;
-
-const ProjectFaqSection = ({ projectId }: { projectId: string }) => {
-  const [faq, setFaq] = useState<ProjectFaqList | null>(null);
-  const [loading, setLoading] = useState(true);
-  const items = faq?.data ?? [];
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    getProjectFaq(projectId)
-      .then((res) => {
-        if (!cancelled) setFaq(res);
-      })
-      .catch(() => {
-        if (!cancelled) setFaq({ data: [], total: 0 });
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
-
-  return (
-    <section>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="inline-flex items-center gap-2 text-base font-semibold">
-          <HelpCircle className="size-4 text-muted-foreground" />
-          FAQ
-        </h3>
-        <span className="text-sm text-muted-foreground">
-          {loading && !faq ? "Đang tải..." : `${faq?.total ?? 0} câu`}
-        </span>
-      </div>
-      {loading && !faq ? (
-        <div className="mt-3 grid gap-2">
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
-        </div>
-      ) : items.length > 0 ? (
-        <div className="mt-3 grid gap-3">
-          {items.map((item) => (
-            <article key={item.id} className="rounded-md border bg-muted/15 p-3">
-              <h4 className="text-sm font-semibold leading-5">{item.question}</h4>
-              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
-                {item.answer}
-              </p>
-              {(item.source_name || item.source_anchor) && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Nguồn: {item.source_name || item.source_anchor}
-                </p>
-              )}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-          Chưa có FAQ được trích xuất cho dự án này.
-        </p>
-      )}
-    </section>
-  );
-};
 
 const BusTimetableSection = ({ projectId }: { projectId: string }) => {
   const [page, setPage] = useState(1);
@@ -555,7 +489,9 @@ const BusTimetableSection = ({ projectId }: { projectId: string }) => {
                 size="icon"
                 className="size-8"
                 disabled={loading || page >= pageCount}
-                onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+                onClick={() =>
+                  setPage((value) => Math.min(pageCount, value + 1))
+                }
                 aria-label="Trang sau"
               >
                 <ChevronRight className="size-4" />
@@ -589,9 +525,14 @@ const BusRouteCard = ({ route }: { route: BusRoute }) => (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h4 className="text-sm font-semibold leading-5">{route.route_name}</h4>
+          <h4 className="text-sm font-semibold leading-5">
+            {route.route_name}
+          </h4>
           {route.route_no && (
-            <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+            <Badge
+              variant="outline"
+              className="h-5 rounded-md px-1.5 text-[10px]"
+            >
               Tuyến {route.route_no}
             </Badge>
           )}

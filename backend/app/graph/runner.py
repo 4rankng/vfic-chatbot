@@ -228,8 +228,8 @@ async def _agent_turn(
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
     from app.graph.context import build_system_prompt
-    from app.services.lead_repository import LeadRepository
-    from app.services.lead_service import lead_profile_text
+    from app.services.lead.repository import LeadRepository
+    from app.services.lead import lead_profile_text
 
     system = await build_system_prompt(deps.db)
 

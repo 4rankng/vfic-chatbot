@@ -68,16 +68,12 @@ export default defineConfig({
             return "react-vendor";
           }
           // react-admin headless framework
-          if (id.includes("/ra-core/") || id.includes("/ra-supabase")) {
+          if (id.includes("/ra-core/")) {
             return "ra-vendor";
           }
           // TanStack Query family
           if (id.includes("/@tanstack/")) {
             return "tanstack-vendor";
-          }
-          // Supabase JS client
-          if (id.includes("/@supabase/")) {
-            return "supabase-vendor";
           }
           // Icon set (large barrel)
           if (id.includes("/lucide-react/")) {

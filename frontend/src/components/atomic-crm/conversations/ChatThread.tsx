@@ -30,6 +30,7 @@ import {
   scrollTopAfterAnchorOffsetChange,
   scrollTopAfterPrependHeightChange,
 } from "./chatScrollIndex";
+import { Bot, Sparkles, UserRound } from "lucide-react";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
 // the realtime subscription, the virtualised scroller (with all the snap /
@@ -155,23 +156,17 @@ const ChatMessageRow = memo(
           className={kind === "system" ? "day-marker" : "system-event"}
           data-message-id={m.id}
         >
-          {kind === "event" ? (
-            <svg className="icon">
-              <use href="#i-sparkles" />
-            </svg>
-          ) : null}
+          {kind === "event" ? <Sparkles className="icon" /> : null}
           <span>{m.content}</span>
         </div>
       );
     }
 
     const deliveryLabel = deliveryStatusLabel(m.delivery_status);
-    const avatarIcon = kind === "bot" ? "i-bot" : "i-user";
+    const AvatarIcon = kind === "bot" ? Bot : UserRound;
     const avatar = !isGrouped ? (
       <span className="message-avatar">
-        <svg className="icon">
-          <use href={`#${avatarIcon}`} />
-        </svg>
+        <AvatarIcon className="icon" />
       </span>
     ) : (
       <span
@@ -205,7 +200,9 @@ const ChatMessageRow = memo(
                 {deliveryLabel}
               </span>
             ) : null}
-            <span className="bubble-time-inline">{formatTime(m.created_at)}</span>
+            <span className="bubble-time-inline">
+              {formatTime(m.created_at)}
+            </span>
           </span>
         </div>
       </div>
@@ -634,74 +631,77 @@ export const ChatThread = ({
   // Arm "load more" only after the user scrolls away from the bottom (i.e.
   // scrolls up to read history). A freshly opened thread parks at the newest
   // message, so the top being visible there must NOT trigger a fetch.
-  const setScrollerRef = useCallback((el: HTMLElement | Window | null) => {
-    detachScrollerListenersRef.current?.();
-    detachScrollerListenersRef.current = null;
+  const setScrollerRef = useCallback(
+    (el: HTMLElement | Window | null) => {
+      detachScrollerListenersRef.current?.();
+      detachScrollerListenersRef.current = null;
 
-    const scrollerEl = el instanceof HTMLElement ? el : null;
-    scrollerElRef.current = scrollerEl;
-    if (!scrollerEl) return;
+      const scrollerEl = el instanceof HTMLElement ? el : null;
+      scrollerElRef.current = scrollerEl;
+      if (!scrollerEl) return;
 
-    lastScrollTopRef.current = scrollerEl.scrollTop;
-    isAtBottomRef.current =
-      scrollerEl.scrollTop + scrollerEl.clientHeight >=
-      scrollerEl.scrollHeight - 1;
-    const onScroll = () => {
-      const previousTop = lastScrollTopRef.current;
-      const currentTop = scrollerEl.scrollTop;
-      lastScrollTopRef.current = currentTop;
-      const metrics = {
-        scrollTop: currentTop,
-        scrollHeight: scrollerEl.scrollHeight,
-        clientHeight: scrollerEl.clientHeight,
+      lastScrollTopRef.current = scrollerEl.scrollTop;
+      isAtBottomRef.current =
+        scrollerEl.scrollTop + scrollerEl.clientHeight >=
+        scrollerEl.scrollHeight - 1;
+      const onScroll = () => {
+        const previousTop = lastScrollTopRef.current;
+        const currentTop = scrollerEl.scrollTop;
+        lastScrollTopRef.current = currentTop;
+        const metrics = {
+          scrollTop: currentTop,
+          scrollHeight: scrollerEl.scrollHeight,
+          clientHeight: scrollerEl.clientHeight,
+        };
+        const atBottom =
+          currentTop + scrollerEl.clientHeight >= scrollerEl.scrollHeight - 1;
+        isAtBottomRef.current = atBottom;
+        if (atBottom) {
+          readyForMoreRef.current = false;
+          setHasNewerMessages(false);
+          return;
+        }
+        if (currentTop < previousTop) {
+          readyForMoreRef.current = true;
+          if (
+            shouldPrefetchOlderMessages(
+              metrics,
+              previousTop,
+              HISTORY_PREFETCH_DISTANCE_PX,
+            )
+          ) {
+            loadOlderFromTopRef.current();
+          }
+        }
       };
-      const atBottom =
-        currentTop + scrollerEl.clientHeight >= scrollerEl.scrollHeight - 1;
-      isAtBottomRef.current = atBottom;
-      if (atBottom) {
-        readyForMoreRef.current = false;
-        setHasNewerMessages(false);
-        return;
-      }
-      if (currentTop < previousTop) {
-        readyForMoreRef.current = true;
-        if (
-          shouldPrefetchOlderMessages(
-            metrics,
-            previousTop,
-            HISTORY_PREFETCH_DISTANCE_PX,
-          )
-        ) {
+      const onWheel = (event: WheelEvent) => {
+        if (scrollerEl.hasAttribute("data-anchor-restoring")) {
+          cancelAnchorRestore();
+        }
+        if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
+        if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
+          readyForMoreRef.current = true;
           loadOlderFromTopRef.current();
         }
-      }
-    };
-    const onWheel = (event: WheelEvent) => {
-      if (scrollerEl.hasAttribute("data-anchor-restoring")) {
-        cancelAnchorRestore();
-      }
-      if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
-      if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
-        readyForMoreRef.current = true;
-        loadOlderFromTopRef.current();
-      }
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    const onTouchMove = () => {
-      if (scrollerEl.hasAttribute("data-anchor-restoring")) {
-        cancelAnchorRestore();
-      }
-    };
-    scrollerEl.addEventListener("scroll", onScroll, { passive: true });
-    scrollerEl.addEventListener("wheel", onWheel, { passive: false });
-    scrollerEl.addEventListener("touchmove", onTouchMove, { passive: true });
-    detachScrollerListenersRef.current = () => {
-      scrollerEl.removeEventListener("scroll", onScroll);
-      scrollerEl.removeEventListener("wheel", onWheel);
-      scrollerEl.removeEventListener("touchmove", onTouchMove);
-    };
-  }, [cancelAnchorRestore]);
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      const onTouchMove = () => {
+        if (scrollerEl.hasAttribute("data-anchor-restoring")) {
+          cancelAnchorRestore();
+        }
+      };
+      scrollerEl.addEventListener("scroll", onScroll, { passive: true });
+      scrollerEl.addEventListener("wheel", onWheel, { passive: false });
+      scrollerEl.addEventListener("touchmove", onTouchMove, { passive: true });
+      detachScrollerListenersRef.current = () => {
+        scrollerEl.removeEventListener("scroll", onScroll);
+        scrollerEl.removeEventListener("wheel", onWheel);
+        scrollerEl.removeEventListener("touchmove", onTouchMove);
+      };
+    },
+    [cancelAnchorRestore],
+  );
 
   useEffect(
     () => () => {
@@ -839,9 +839,7 @@ export const ChatThread = ({
       <footer ref={composerWrapRef} className="composer-wrap">
         {showComposerTakeoverNotice && isBotMode && (
           <div className="handoff-note">
-            <svg className="icon">
-              <use href="#i-bot" />
-            </svg>
+            <Bot className="icon" />
             <span>Đang dùng ChatBot cho cuộc trò chuyện này.</span>
             <button
               type="button"

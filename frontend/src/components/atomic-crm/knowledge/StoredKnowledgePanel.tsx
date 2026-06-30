@@ -51,9 +51,12 @@ const CANONICAL_TEXT_LABELS: Record<string, string> = {
   "LG Display Worker Guide": "Hướng dẫn công nhân LG Display",
 };
 
-const labelFromMap = (value: string | null | undefined, labels: Record<string, string>) => {
+const labelFromMap = (
+  value: string | null | undefined,
+  labels: Record<string, string>,
+) => {
   const key = (value ?? "").trim();
-  return key ? labels[key] ?? key : "";
+  return key ? (labels[key] ?? key) : "";
 };
 
 export const localizeKnowledgeText = (value: string) =>

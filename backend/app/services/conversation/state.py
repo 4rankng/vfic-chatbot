@@ -48,6 +48,22 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+async def _fetch_owner_name(db, conv: Conversation) -> str | None:
+    """Look up the full name of the current owner of *conv*.
+
+    Used by :meth:`take_over` and :meth:`semi_auto` when a conditional
+    UPDATE fails, to produce a rich ``ConversationConflict`` message.
+    """
+    from sqlalchemy import select
+
+    from app.models.user import User as UserModel
+
+    owner_row = await db.scalar(
+        select(UserModel.full_name).where(UserModel.id == conv.assigned_recruiter_id)
+    )
+    return owner_row or None
+
+
 class ConversationState:
     """Mutates conversation/message rows + records audit + publishes realtime events.
 
@@ -328,18 +344,10 @@ class ConversationState:
         )
         await self.db.commit()
         if res.rowcount == 0:
-            # Fetch current owner for rich error message
             await self.db.refresh(conv)
-            from sqlalchemy import select
-
-            from app.models.user import User as UserModel
-
-            owner_row = await self.db.scalar(
-                select(UserModel.full_name).where(UserModel.id == conv.assigned_recruiter_id)
-            )
             raise ConversationConflict(
                 "conversation is owned by another recruiter",
-                owner_name=owner_row or None,
+                owner_name=await _fetch_owner_name(self.db, conv),
             )
         await self.db.refresh(conv)
         self.db.add(
@@ -413,16 +421,9 @@ class ConversationState:
         await self.db.commit()
         if res.rowcount == 0:
             await self.db.refresh(conv)
-            from sqlalchemy import select
-
-            from app.models.user import User as UserModel
-
-            owner_row = await self.db.scalar(
-                select(UserModel.full_name).where(UserModel.id == conv.assigned_recruiter_id)
-            )
             raise ConversationConflict(
                 "conversation is owned by another recruiter",
-                owner_name=owner_row or None,
+                owner_name=await _fetch_owner_name(self.db, conv),
             )
         await self.db.refresh(conv)
         self.db.add(

@@ -1,5 +1,6 @@
-import { ShowBase, useShowContext, useDataProvider } from "ra-core";
+import { ShowBase, useGetList, useShowContext } from "ra-core";
 import type { ShowBaseProps } from "ra-core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -60,45 +61,24 @@ const PresenceViewers = ({
 };
 
 const LeadChat = ({ zaloId }: { zaloId: string }) => {
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const dataProvider = useDataProvider<any>();
+  const { data, isPending, error } = useGetList<Conversation>(
+    "conversations",
+    {
+      filter: { zalo_chat_id: zaloId },
+      pagination: { page: 1, perPage: 1 },
+      sort: { field: "updated_at", order: "DESC" },
+    },
+    { enabled: !!zaloId },
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!zaloId) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
+  const conversation = data?.[0] ?? null;
+  const errorMessage = error
+    ? error instanceof Error
+      ? error.message
+      : "Không thể tải cuộc trò chuyện"
+    : null;
 
-    Promise.resolve(
-      dataProvider.getList("conversations", {
-        filter: { zalo_chat_id: zaloId },
-        pagination: { page: 1, perPage: 1 },
-        sort: { field: "updated_at", order: "DESC" },
-      }),
-    )
-      .then(({ data }: { data: Conversation[] }) => {
-        if (cancelled) return;
-        setConversation(data?.[0] ?? null);
-        setIsLoading(false);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        const msg =
-          e instanceof Error ? e.message : "Không thể tải cuộc trò chuyện";
-        setError(msg);
-        setIsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [zaloId, dataProvider]);
-
-  if (isLoading) {
+  if (isPending) {
     return (
       <Card className="flex h-[min(620px,calc(100dvh-160px))] flex-col lg:h-[calc(100vh-220px)]">
         <CardHeader className="border-b">
@@ -126,14 +106,14 @@ const LeadChat = ({ zaloId }: { zaloId: string }) => {
     );
   }
 
-  if (error) {
+  if (errorMessage) {
     return (
       <Card className="flex h-[min(620px,calc(100dvh-160px))] flex-col items-center justify-center p-6 lg:h-[calc(100vh-220px)]">
         <div className="text-center text-sm text-muted-foreground">
           <p className="font-medium text-destructive">
             Không thể tải cuộc trò chuyện
           </p>
-          <p className="mt-1 text-xs">{error}</p>
+          <p className="mt-1 text-xs">{errorMessage}</p>
         </div>
       </Card>
     );
@@ -633,59 +613,48 @@ const LeadChatPreview = ({
 // height — body scrolls, footer stays pinned.
 export const LeadShowContentSheet = () => {
   const { record, isPending } = useShowContext<Lead>();
-  const dataProvider = useDataProvider<any>();
-
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [status, setStatus] = useState<PreviewStatus>("loading");
-  const [retryNonce, setRetryNonce] = useState(0);
+  const queryClient = useQueryClient();
 
   const zaloId = record?.zalo_id;
 
-  useEffect(() => {
-    if (isPending) return;
-    if (!zaloId) {
-      setConversationId(null);
-      setMessages([]);
-      setStatus("empty");
-      return;
-    }
-    let cancelled = false;
-    setStatus("loading");
-    setConversationId(null);
+  const {
+    data: convData,
+    isPending: isConvPending,
+    error: convError,
+    refetch: refetchConv,
+  } = useGetList<Conversation>(
+    "conversations",
+    {
+      filter: { zalo_chat_id: zaloId },
+      pagination: { page: 1, perPage: 1 },
+      sort: { field: "updated_at", order: "DESC" },
+    },
+    { enabled: !isPending && !!zaloId },
+  );
 
-    Promise.resolve(
-      dataProvider.getList("conversations", {
-        filter: { zalo_chat_id: zaloId },
-        pagination: { page: 1, perPage: 1 },
-        sort: { field: "updated_at", order: "DESC" },
-      }),
-    )
-      .then(({ data }: { data: Conversation[] }) => {
-        if (cancelled) return;
-        const conv = data?.[0] ?? null;
-        if (!conv?.id) {
-          setStatus("empty");
-          return null;
-        }
-        setConversationId(conv.id);
-        return chatRepository.getConversationMessages(conv.id, { limit: 3 });
-      })
-      .then((res) => {
-        if (cancelled || !res) return;
-        const msgs = res.messages ?? [];
-        setMessages(msgs);
-        setStatus(msgs.length > 0 ? "ready" : "empty");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setStatus("error");
-      });
+  const conversationId = convData?.[0]?.id ?? null;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [zaloId, isPending, dataProvider, retryNonce]);
+  const {
+    data: messagesData,
+    isPending: isMessagesPending,
+    error: messagesError,
+  } = useQuery({
+    queryKey: ["lead-preview-messages", conversationId],
+    queryFn: () =>
+      chatRepository.getConversationMessages(conversationId!, { limit: 3 }),
+    enabled: !!conversationId,
+  });
+
+  const messages = messagesData?.messages ?? [];
+  const status: PreviewStatus = !zaloId
+    ? "empty"
+    : isConvPending || isMessagesPending
+      ? "loading"
+      : convError || messagesError
+        ? "error"
+        : messages.length > 0
+          ? "ready"
+          : "empty";
 
   if (isPending) {
     return (
@@ -705,10 +674,15 @@ export const LeadShowContentSheet = () => {
         <LeadChatPreview
           messages={messages}
           status={status}
-          onRetry={() => setRetryNonce((n) => n + 1)}
+          onRetry={() => {
+            refetchConv();
+            queryClient.invalidateQueries({
+              queryKey: ["lead-preview-messages", conversationId],
+            });
+          }}
         />
       </div>
-      {conversationId && (
+      {conversationId !== null && (
         <div className="shrink-0 border-t border-border bg-card/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <Button asChild className="h-10 w-full text-sm font-semibold">
             <Link to={`/conversations?id=${conversationId}`}>

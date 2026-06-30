@@ -148,7 +148,7 @@ export const ProjectPicker = ({
             if (
               event.key === "Enter" &&
               canCreate &&
-      availableProjects.length === 0
+              availableProjects.length === 0
             ) {
               event.preventDefault();
               void createProject();

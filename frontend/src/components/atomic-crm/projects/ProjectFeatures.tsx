@@ -36,18 +36,28 @@ const FEATURE_CATEGORY_LABELS: Record<string, string> = {
 };
 
 const FEATURE_FILL_HINTS: Record<string, string> = {
-  application_simplicity: "Nhập danh sách giấy tờ cần chuẩn bị và ai hỗ trợ làm hồ sơ.",
-  commute_support: "Nhập tuyến/khu vực có xe đưa đón, mức hỗ trợ vé xe, hoặc điều kiện khoảng cách.",
-  daily_cost_benefits: "Nhập các khoản hỗ trợ ăn ở, đi lại, ký túc xá hoặc chi phí sinh hoạt.",
-  housing: "Nhập có/không có ký túc xá, điều kiện phòng ở, chi phí và đối tượng được ở.",
-  job_difficulty: "Nhập công việc hằng ngày, yêu cầu kinh nghiệm, đào tạo và mức độ vất vả.",
+  application_simplicity:
+    "Nhập danh sách giấy tờ cần chuẩn bị và ai hỗ trợ làm hồ sơ.",
+  commute_support:
+    "Nhập tuyến/khu vực có xe đưa đón, mức hỗ trợ vé xe, hoặc điều kiện khoảng cách.",
+  daily_cost_benefits:
+    "Nhập các khoản hỗ trợ ăn ở, đi lại, ký túc xá hoặc chi phí sinh hoạt.",
+  housing:
+    "Nhập có/không có ký túc xá, điều kiện phòng ở, chi phí và đối tượng được ở.",
+  job_difficulty:
+    "Nhập công việc hằng ngày, yêu cầu kinh nghiệm, đào tạo và mức độ vất vả.",
   joining_bonus: "Nhập mức thưởng, thời điểm nhận và điều kiện để được thưởng.",
-  overtime_rate: "Nhập cách tính tiền tăng ca theo ngày thường, ngày nghỉ và ngày lễ.",
-  pay_frequency: "Nhập lịch trả lương, có lương tuần/ứng lương hay không, và ngày nhận tiền.",
-  salary_transparency: "Nhập lương cơ bản, từng khoản phụ cấp, thưởng, khấu trừ và điều kiện nhận.",
+  overtime_rate:
+    "Nhập cách tính tiền tăng ca theo ngày thường, ngày nghỉ và ngày lễ.",
+  pay_frequency:
+    "Nhập lịch trả lương, có lương tuần/ứng lương hay không, và ngày nhận tiền.",
+  salary_transparency:
+    "Nhập lương cơ bản, từng khoản phụ cấp, thưởng, khấu trừ và điều kiện nhận.",
   shift_schedule: "Nhập ca làm, giờ làm, ngày nghỉ, xoay ca hay cố định.",
-  take_home_income: "Nhập tổng thu nhập thực nhận dự kiến theo tháng sau phụ cấp, tăng ca và khấu trừ.",
-  contact_info: "Nhập người liên hệ, số điện thoại/Zalo hỗ trợ và trường hợp nào cần chuyển cho nhân viên VFIC.",
+  take_home_income:
+    "Nhập tổng thu nhập thực nhận dự kiến theo tháng sau phụ cấp, tăng ca và khấu trừ.",
+  contact_info:
+    "Nhập người liên hệ, số điện thoại/Zalo hỗ trợ và trường hợp nào cần chuyển cho nhân viên VFIC.",
 };
 
 const getFeatureCategoryLabel = (category: string | null | undefined) => {
@@ -127,7 +137,9 @@ export const ProjectFeatures = ({
       const res = await extractProjectFeatures(projectId);
       setFeatures(res.data);
       setFeatureTotal(res.total);
-      notify(`Đã trích xuất ${res.total} đặc điểm sản phẩm.`, { type: "success" });
+      notify(`Đã trích xuất ${res.total} đặc điểm sản phẩm.`, {
+        type: "success",
+      });
     } catch (err) {
       notify(`Trích xuất thất bại: ${(err as Error).message}`, {
         type: "error",
@@ -404,9 +416,7 @@ const FeatureGroup = ({
         </div>
       ) : (
         <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-          {ready
-            ? "Chưa có mục đầy đủ."
-            : "Không còn mục thiếu thông tin."}
+          {ready ? "Chưa có mục đầy đủ." : "Không còn mục thiếu thông tin."}
         </p>
       )}
     </section>
@@ -457,8 +467,7 @@ const FeatureCard = ({
       className={cn(
         "min-w-0 rounded-md border p-3",
         ready && "border-feature-ready/30 bg-feature-ready-soft",
-        !ready &&
-          "border-feature-gap-border bg-feature-gap-soft",
+        !ready && "border-feature-gap-border bg-feature-gap-soft",
       )}
     >
       <div className="flex items-start justify-between gap-2">

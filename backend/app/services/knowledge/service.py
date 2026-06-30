@@ -1,4 +1,4 @@
-"""Knowledge ingest + publishing (port of VFIC Knowledge Ingest + LLM training pipeline).
+"""Knowledge ingest + publishing service.
 
 Two ingest paths:
   * ``process(embedder, doc, llm_json=None)`` — mechanical 1-chunk fallback (legacy,
@@ -35,7 +35,7 @@ from app.services.knowledge.canonical import (
     parse_canonical_markdown,
     repair_canonical_markdown,
 )
-from app.services.knowledge.file_extraction import (  # noqa: F401 — backward-compat re-export
+from app.services.knowledge.file_extraction import (
     DOCX_MIME_TYPE,
     KnowledgeFileExtractionError,
     _detect_upload_format,

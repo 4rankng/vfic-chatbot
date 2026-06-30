@@ -13,14 +13,8 @@ export const ALL_STAGES = "__all__";
  * contract; this hook does not filter or count document rows in memory.
  */
 export const useKnowledgeSourceFilters = () => {
-  const {
-    data,
-    isPending,
-    filterValues,
-    setFilters,
-    setPage,
-    total,
-  } = useListContext<KnowledgeSource>();
+  const { data, isPending, filterValues, setFilters, setPage, total } =
+    useListContext<KnowledgeSource>();
   const filters = useMemo(() => filterValues ?? {}, [filterValues]);
   const query = typeof filters.q === "string" ? filters.q : "";
   const projectFilter =

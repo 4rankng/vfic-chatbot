@@ -135,7 +135,10 @@ export const pipelineStateCopy = (source: KnowledgeSource) => {
   if (isWaitingForWorker(source)) {
     return "Nguồn đã trích văn bản và đang chờ worker ingest nhận việc. Nếu đứng ở đây lâu, hãy kiểm tra tiến trình rq worker ingest.";
   }
-  const current = pipelineStepCopy(source, PIPELINE_STEPS[pipelineStepIndex(source)]);
+  const current = pipelineStepCopy(
+    source,
+    PIPELINE_STEPS[pipelineStepIndex(source)],
+  );
   return current?.description ?? "Nguồn đang được xử lý trong pipeline.";
 };
 

@@ -1,8 +1,18 @@
+import { lazy } from "react";
 import type { Lead } from "../types";
-import { LeadList } from "./LeadList";
-import { LeadShow } from "./LeadShow";
-import { ContactCreate } from "./LeadCreate";
-import { ContactEdit } from "./LeadEdit";
+
+const LeadList = lazy(() =>
+  import("./LeadList").then((m) => ({ default: m.LeadList })),
+);
+const LeadShow = lazy(() =>
+  import("./LeadShow").then((m) => ({ default: m.LeadShow })),
+);
+const ContactCreate = lazy(() =>
+  import("./LeadCreate").then((m) => ({ default: m.ContactCreate })),
+);
+const ContactEdit = lazy(() =>
+  import("./LeadEdit").then((m) => ({ default: m.ContactEdit })),
+);
 
 export default {
   list: LeadList,

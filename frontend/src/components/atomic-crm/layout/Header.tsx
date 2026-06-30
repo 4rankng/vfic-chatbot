@@ -9,7 +9,7 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
-import { usePermissions, useTranslate, useUserMenu } from "ra-core";
+import { useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
+import { useRoleActions } from "../hooks/useRoleActions";
 import { NavPill } from "./topbar/NavPills";
 import { NotificationsBell } from "./topbar/NotificationsBell";
 
@@ -31,8 +32,7 @@ const Header = () => {
   const { title } = useConfigurationContext();
   const location = useLocation();
   const translate = useTranslate();
-  const { permissions } = usePermissions();
-  const isAdmin = permissions === "admin";
+  const { isAdmin } = useRoleActions();
 
   const currentPath = useMemo<string | false>(() => {
     if (matchPath("/", location.pathname)) return "/";

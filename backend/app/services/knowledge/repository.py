@@ -300,15 +300,8 @@ class JobFeatureValueRepo:
             text("DELETE FROM job_feature_values WHERE project_id = :pid"),
             {"pid": str(project_id)},
         )
-        for priority, (c, coerced) in enumerate(rows):
-            await self.db.execute(
-                text(
-                    "INSERT INTO job_feature_values "
-                    "(project_id, feature_id, value_text, value_json, strength_score, display_priority, "
-                    " is_highlight, is_missing, needs_clarification, evidence_text, source_document_id) "
-                    "VALUES (CAST(:pid AS uuid), CAST(:fid AS uuid), :vtext, CAST(:vjson AS jsonb), "
-                    "        :strength, :prio, :hl, :missing, :clarify, :evidence, CAST(:did AS uuid))"
-                ),
+        if rows:
+            params_list = [
                 {
                     "pid": str(project_id),
                     "fid": str(c.id),
@@ -321,7 +314,18 @@ class JobFeatureValueRepo:
                     "clarify": coerced["needs_clarification"],
                     "evidence": coerced["evidence_text"],
                     "did": str(doc_id),
-                },
+                }
+                for priority, (c, coerced) in enumerate(rows)
+            ]
+            await self.db.execute(
+                text(
+                    "INSERT INTO job_feature_values "
+                    "(project_id, feature_id, value_text, value_json, strength_score, display_priority, "
+                    " is_highlight, is_missing, needs_clarification, evidence_text, source_document_id) "
+                    "VALUES (CAST(:pid AS uuid), CAST(:fid AS uuid), :vtext, CAST(:vjson AS jsonb), "
+                    "        :strength, :prio, :hl, :missing, :clarify, :evidence, CAST(:did AS uuid))"
+                ),
+                params_list,
             )
         await self.db.commit()
 
@@ -338,7 +342,23 @@ class JobFeatureValueRepo:
         missing/unclear extraction only inserts a gap row when the project has no value
         yet; it never erases an older useful answer.
         """
-        for priority, (c, coerced) in enumerate(rows):
+        if rows:
+            params_list = [
+                {
+                    "pid": str(project_id),
+                    "fid": str(c.id),
+                    "vtext": coerced["value_text"],
+                    "vjson": json.dumps(coerced["value_json"], ensure_ascii=False),
+                    "strength": coerced["strength_score"],
+                    "prio": priority,
+                    "hl": coerced["is_highlight"],
+                    "missing": coerced["is_missing"],
+                    "clarify": coerced["needs_clarification"],
+                    "evidence": coerced["evidence_text"],
+                    "did": str(doc_id),
+                }
+                for priority, (c, coerced) in enumerate(rows)
+            ]
             await self.db.execute(
                 text(
                     "INSERT INTO job_feature_values "
@@ -360,19 +380,7 @@ class JobFeatureValueRepo:
                     "  AND COALESCE(EXCLUDED.needs_clarification, false) = false "
                     "  AND btrim(EXCLUDED.value_text) <> ''"
                 ),
-                {
-                    "pid": str(project_id),
-                    "fid": str(c.id),
-                    "vtext": coerced["value_text"],
-                    "vjson": json.dumps(coerced["value_json"], ensure_ascii=False),
-                    "strength": coerced["strength_score"],
-                    "prio": priority,
-                    "hl": coerced["is_highlight"],
-                    "missing": coerced["is_missing"],
-                    "clarify": coerced["needs_clarification"],
-                    "evidence": coerced["evidence_text"],
-                    "did": str(doc_id),
-                },
+                params_list,
             )
         await self.db.commit()
 

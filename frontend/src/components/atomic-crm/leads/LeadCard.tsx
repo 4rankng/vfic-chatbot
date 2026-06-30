@@ -26,10 +26,7 @@ interface LeadCardProps {
 // Memoize the heavy inner component so it only re-renders when its own props
 // change. The list passes a stable onClick (useCallback in LeadListContent)
 // so the only driver of re-renders is the lead object reference itself.
-const LeadCardContentBase = ({
-  lead,
-  onClick,
-}: LeadCardProps) => {
+const LeadCardContentBase = ({ lead, onClick }: LeadCardProps) => {
   const redirect = useRedirect();
   const handleClick = () => {
     if (onClick) {
@@ -76,9 +73,7 @@ export const LeadCardContent = memo(LeadCardContentBase);
 
 // Thin null-guard wrapper. Also memoized so a stable onClick + unchanged lead
 // reference from the list doesn't needlessly re-render the guard layer either.
-export const LeadCard = memo(
-  ({ lead, onClick }: LeadCardProps) => {
-    if (!lead) return null;
-    return <LeadCardContent lead={lead} onClick={onClick} />;
-  },
-);
+export const LeadCard = memo(({ lead, onClick }: LeadCardProps) => {
+  if (!lead) return null;
+  return <LeadCardContent lead={lead} onClick={onClick} />;
+});

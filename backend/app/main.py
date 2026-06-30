@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from app.api import auth, bot_runs, conversations, dashboard, jobs, knowledge, leads, personas, projects, realtime, users, webhooks
 from app.core.config import PROACTIVE_TICK_INTERVAL_SECONDS, get_settings
 from app.core.db import engine
+from app.core.errors import register_domain_exception_handlers
 from app.core.logging import request_id_ctx, setup_logging
 
 settings = get_settings()
@@ -80,6 +81,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="VFIC API", version="0.1.0", lifespan=lifespan)
+register_domain_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,

@@ -29,7 +29,11 @@ export const UserActions = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   if (!record) return null;
 
-  const editPath = createPath({ resource: "users", type: "edit", id: record.id });
+  const editPath = createPath({
+    resource: "users",
+    type: "edit",
+    id: record.id,
+  });
 
   const toggleDisabled = async () => {
     try {

@@ -1,8 +1,7 @@
 import type { Lead } from "../types";
 
 export const getLeadStatusColor = (lead?: Lead | null) => {
-  if (!lead)
-    return { bg: "var(--surface-solid)", ink: "var(--ink-faint)" };
+  if (!lead) return { bg: "var(--surface-solid)", ink: "var(--ink-faint)" };
   if (lead.lead_score === "hot")
     return { bg: "rgba(244, 63, 94, 0.16)", ink: "#e11d48" };
   if (lead.lead_score === "warm")

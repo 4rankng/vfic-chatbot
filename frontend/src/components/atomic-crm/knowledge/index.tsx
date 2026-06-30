@@ -1,7 +1,21 @@
+import { lazy } from "react";
 import type { KnowledgeSource } from "../types";
-import { KnowledgeSourceEdit } from "./KnowledgeSourceEdit";
-import { KnowledgeSourceList } from "./KnowledgeSourceList";
-import { KnowledgeSourceShow } from "./KnowledgeSourceShow";
+
+const KnowledgeSourceList = lazy(() =>
+  import("./KnowledgeSourceList").then((m) => ({
+    default: m.KnowledgeSourceList,
+  })),
+);
+const KnowledgeSourceShow = lazy(() =>
+  import("./KnowledgeSourceShow").then((m) => ({
+    default: m.KnowledgeSourceShow,
+  })),
+);
+const KnowledgeSourceEdit = lazy(() =>
+  import("./KnowledgeSourceEdit").then((m) => ({
+    default: m.KnowledgeSourceEdit,
+  })),
+);
 
 // Admin view over the `knowledge_sources` table. Admins can upload documents,
 // adjust their project assignment, retrain/archive, or delete bad uploads.

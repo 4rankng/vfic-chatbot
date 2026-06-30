@@ -30,7 +30,9 @@ export const ForgotPasswordPage = () => {
   const [loading, setLoading] = useState(false);
 
   const submitEmail: SubmitHandler<FieldValues> = async (values) => {
-    const nextEmail = String(values.email ?? "").trim().toLowerCase();
+    const nextEmail = String(values.email ?? "")
+      .trim()
+      .toLowerCase();
     if (!nextEmail) {
       notify("Vui lòng nhập email.", { type: "error" });
       return;

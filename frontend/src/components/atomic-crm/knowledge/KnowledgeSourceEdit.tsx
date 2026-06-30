@@ -83,7 +83,9 @@ const KnowledgeSourceEditContent = () => {
 export const KnowledgeSourceEdit = () => (
   <EditBase>
     <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa cơ sở kiến thức</h2>
+      <h2 className="mr-auto text-xl font-semibold">
+        Chỉnh sửa cơ sở kiến thức
+      </h2>
     </TopToolbar>
     <KnowledgeSourceEditContent />
   </EditBase>

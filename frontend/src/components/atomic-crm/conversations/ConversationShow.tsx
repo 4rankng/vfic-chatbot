@@ -3,7 +3,6 @@ import {
   useRecordContext,
   useGetList,
   ShowBase,
-  usePermissions,
   useNotify,
   useRefresh,
   useDataProvider,
@@ -17,6 +16,7 @@ import {
   type ConversationMode,
   useConversationActions,
 } from "./useConversationActions";
+import { useRoleActions } from "../hooks/useRoleActions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +26,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Confirm } from "@/components/admin/confirm";
-import { Trash2 } from "lucide-react";
+import {
+  Bot,
+  Handshake,
+  Trash2,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -35,28 +41,28 @@ const MODE_OPTIONS: Array<{
   label: string;
   hint: string;
   title: string;
-  icon: string;
+  Icon: LucideIcon;
 }> = [
   {
     mode: "human",
     label: "Tư vấn viên",
     hint: "Người phụ trách",
     title: "Tư vấn viên - chỉ nhân sự trả lời ứng viên",
-    icon: "i-user",
+    Icon: UserRound,
   },
   {
     mode: "semi_auto",
     label: "Bán tự động",
     hint: "ChatBot hỗ trợ",
     title: "Bán tự động - ChatBot tiếp quản khi tư vấn viên không phản hồi",
-    icon: "i-sparkles",
+    Icon: Handshake,
   },
   {
     mode: "bot",
     label: "Chatbot",
     hint: "ChatBot trả lời",
     title: "Chatbot - ChatBot xử lý cuộc trò chuyện",
-    icon: "i-bot",
+    Icon: Bot,
   },
 ];
 
@@ -115,9 +121,9 @@ export const ConversationShowContent = ({
   const activeModeOption = MODE_OPTIONS.find(
     (option) => option.mode === activeMode,
   );
+  const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
 
-  const { permissions } = usePermissions();
-  const isAdmin = permissions === "admin";
+  const { isAdmin } = useRoleActions();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
@@ -163,9 +169,10 @@ export const ConversationShowContent = ({
               color: colors.ink,
             }}
           >
-            <svg className="icon" style={{ width: "18px", height: "18px" }}>
-              <use href="#i-user" />
-            </svg>
+            <UserRound
+              className="icon"
+              style={{ width: "18px", height: "18px" }}
+            />
           </div>
           <div className="person-copy">
             <div className="person-name-row">
@@ -187,9 +194,7 @@ export const ConversationShowContent = ({
                 title="Chọn chế độ trả lời"
                 disabled={activeMode === "closed"}
               >
-                <svg className="icon">
-                  <use href={`#${activeModeOption?.icon ?? "i-bot"}`} />
-                </svg>
+                <ActiveModeIcon className="icon" />
                 <span>{activeModeOption?.label ?? "Closed"}</span>
                 <svg className="icon mode-menu-chevron">
                   <use href="#i-chevron" />
@@ -208,9 +213,7 @@ export const ConversationShowContent = ({
                     onSelect={() => setConversationMode(option.mode)}
                     className="items-start gap-3"
                   >
-                    <svg className="mt-0.5 size-4 shrink-0">
-                      <use href={`#${option.icon}`} />
-                    </svg>
+                    <option.Icon className="mt-0.5 size-4 shrink-0" />
                     <span className="grid gap-0.5">
                       <span className="font-medium">{option.label}</span>
                       <span className="text-xs text-muted-foreground">
@@ -248,9 +251,7 @@ export const ConversationShowContent = ({
           )}
           {activeMode === "closed" && (
             <span className="chat-mode-chip" title="Hội thoại đã đóng">
-              <svg className="icon">
-                <use href="#i-bot" />
-              </svg>
+              <Bot className="icon" />
               <span>Đã đóng</span>
             </span>
           )}

@@ -66,9 +66,12 @@ export const InlineKnowledgeUploader = () => {
       setFile(null);
       refresh();
     } catch (err) {
-      const errors = (err as Error & { validationErrors?: string[] }).validationErrors ?? [];
+      const errors =
+        (err as Error & { validationErrors?: string[] }).validationErrors ?? [];
       setValidationErrors(errors);
-      notify(`Tải lên thất bại: ${(err as Error).message.split("\n")[0]}`, { type: "error" });
+      notify(`Tải lên thất bại: ${(err as Error).message.split("\n")[0]}`, {
+        type: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -78,7 +81,9 @@ export const InlineKnowledgeUploader = () => {
     try {
       await saveKnowledgeTemplate(kind);
     } catch (err) {
-      notify(`Không tải được mẫu: ${(err as Error).message}`, { type: "error" });
+      notify(`Không tải được mẫu: ${(err as Error).message}`, {
+        type: "error",
+      });
     }
   };
 
@@ -112,10 +117,7 @@ export const InlineKnowledgeUploader = () => {
           <label className="kb-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             1. Dự án
           </label>
-          <ProjectPicker
-            value={projectChoice}
-            onChange={setProjectChoice}
-          />
+          <ProjectPicker value={projectChoice} onChange={setProjectChoice} />
         </div>
 
         <div className="grid gap-2">

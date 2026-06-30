@@ -1,6 +1,12 @@
-import { ConversationList } from "./ConversationList";
-import { ConversationShow } from "./ConversationShow";
+import { lazy } from "react";
 import type { Conversation } from "../types";
+
+const ConversationList = lazy(() =>
+  import("./ConversationList").then((m) => ({ default: m.ConversationList })),
+);
+const ConversationShow = lazy(() =>
+  import("./ConversationShow").then((m) => ({ default: m.ConversationShow })),
+);
 
 export default {
   list: ConversationList,

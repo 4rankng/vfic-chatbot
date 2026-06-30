@@ -23,6 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { LEAD_STAGES, type Lead } from "../types";
 import { LeadCard } from "./LeadCard";
@@ -119,117 +120,94 @@ export const LeadListContent = ({
     null,
   );
   const [sectionPages, setSectionPages] = useState(createSectionPages);
-  const [sectionResults, setSectionResults] = useState(() =>
-    createSectionResults(true),
-  );
-  const [refreshTick, setRefreshTick] = useState(0);
 
   const normalizedSearchQuery = searchQuery.trim();
   const sortField = sort?.field ?? "updated_at";
   const sortOrder = sort?.order === "ASC" ? "ASC" : "DESC";
+
+  const queryClient = useQueryClient();
+
+  const boardQuery = useQuery({
+    queryKey: [
+      "leads-board",
+      { sectionPages, sortField, sortOrder, q: normalizedSearchQuery },
+    ],
+    queryFn: () =>
+      apiJson<LeadBoardResponse>("/api/v1/leads/board", {
+        method: "POST",
+        body: {
+          q: normalizedSearchQuery || undefined,
+          sort: sortField,
+          order: sortOrder,
+          per_page: SECTION_PER_PAGE,
+          section_pages: sectionPages,
+        },
+      }),
+    staleTime: 15_000,
+  });
+
+  // Derive section results from query state
+  const sectionResults = useMemo<Record<SectionKey, SectionResult>>(() => {
+    if (boardQuery.isPending) {
+      return createSectionResults(true) as Record<SectionKey, SectionResult>;
+    }
+
+    if (boardQuery.error || !boardQuery.data) {
+      const results = createSectionResults(false) as Record<
+        SectionKey,
+        SectionResult
+      >;
+      for (const section of SECTION_CONFIGS) {
+        results[section.key] = {
+          ...results[section.key],
+          error: true,
+          leads: [],
+          total: 0,
+        };
+      }
+      return results;
+    }
+
+    return boardQuery.data.sections.reduce(
+      (acc, section) => ({
+        ...acc,
+        [section.key as SectionKey]: {
+          key: section.key,
+          title: section.title,
+          leads: section.data,
+          total: section.total,
+          page: section.page,
+          perPage: section.per_page,
+          isPriority: section.is_priority,
+          isLoading: false,
+          error: false,
+        },
+      }),
+      createSectionResults(false) as Record<SectionKey, SectionResult>,
+    );
+  }, [boardQuery.data, boardQuery.isPending, boardQuery.error]);
+
+  // Report total count to parent when data arrives
+  useEffect(() => {
+    if (boardQuery.data) {
+      onTotalChange(boardQuery.data.total);
+    }
+  }, [boardQuery.data?.total, onTotalChange]);
 
   useEffect(() => {
     setSectionPages(createSectionPages());
   }, [normalizedSearchQuery, sortField, sortOrder]);
 
   useEffect(() => {
-    const refreshSections = () => setRefreshTick((value) => value + 1);
-
-    window.addEventListener("vfic:lead-list-refresh", refreshSections);
-    window.addEventListener("vfic:lead-updated", refreshSections);
+    const handleRefresh = () =>
+      queryClient.invalidateQueries({ queryKey: ["leads-board"] });
+    window.addEventListener("vfic:lead-list-refresh", handleRefresh);
+    window.addEventListener("vfic:lead-updated", handleRefresh);
     return () => {
-      window.removeEventListener("vfic:lead-list-refresh", refreshSections);
-      window.removeEventListener("vfic:lead-updated", refreshSections);
+      window.removeEventListener("vfic:lead-list-refresh", handleRefresh);
+      window.removeEventListener("vfic:lead-updated", handleRefresh);
     };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setSectionResults((prev) =>
-      SECTION_CONFIGS.reduce(
-        (acc, section) => ({
-          ...acc,
-          [section.key]: {
-            ...prev[section.key],
-            isLoading: true,
-            error: false,
-          },
-        }),
-        {} as Record<SectionKey, SectionResult>,
-      ),
-    );
-
-    const loadSections = async () => {
-      try {
-        const response = await apiJson<LeadBoardResponse>(
-          "/api/v1/leads/board",
-          {
-            method: "POST",
-            body: {
-              q: normalizedSearchQuery || undefined,
-              sort: sortField,
-              order: sortOrder,
-              per_page: SECTION_PER_PAGE,
-              section_pages: sectionPages,
-            },
-          },
-        );
-        if (cancelled) return;
-        setSectionResults(
-          response.sections.reduce(
-            (acc, section) => ({
-              ...acc,
-              [section.key as SectionKey]: {
-                key: section.key,
-                title: section.title,
-                leads: section.data,
-                total: section.total,
-                page: section.page,
-                perPage: section.per_page,
-                isPriority: section.is_priority,
-                isLoading: false,
-                error: false,
-              },
-            }),
-            {} as Record<SectionKey, SectionResult>,
-          ),
-        );
-        onTotalChange(response.total);
-      } catch {
-        if (cancelled) return;
-        setSectionResults((prev) =>
-          SECTION_CONFIGS.reduce(
-            (acc, section) => ({
-              ...acc,
-              [section.key]: {
-                ...prev[section.key],
-                leads: [],
-                total: 0,
-                isLoading: false,
-                error: true,
-              },
-            }),
-            {} as Record<SectionKey, SectionResult>,
-          ),
-        );
-        onTotalChange(0);
-      }
-    };
-
-    void loadSections();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    onTotalChange,
-    refreshTick,
-    normalizedSearchQuery,
-    sectionPages,
-    sortField,
-    sortOrder,
-  ]);
+  }, [queryClient]);
 
   const handleLeadSelect = useCallback((lead: Lead) => {
     setSelectedLeadId(lead.id);
@@ -237,8 +215,8 @@ export const LeadListContent = ({
 
   const handleRefresh = useCallback(() => {
     refresh();
-    setRefreshTick((value) => value + 1);
-  }, [refresh]);
+    queryClient.invalidateQueries({ queryKey: ["leads-board"] });
+  }, [refresh, queryClient]);
 
   const allSections = useMemo(
     () =>
@@ -298,11 +276,7 @@ export const LeadListContent = ({
             }}
           >
             {section.leads.map((lead) => (
-              <LeadCard
-                key={lead.id}
-                lead={lead}
-                onClick={handleLeadSelect}
-              />
+              <LeadCard key={lead.id} lead={lead} onClick={handleLeadSelect} />
             ))}
           </LeadSection>
         ))}
@@ -319,7 +293,7 @@ export const LeadListContent = ({
             <SheetTitle>Chi tiết ứng viên</SheetTitle>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
-            {selectedLeadId && (
+            {selectedLeadId !== null && (
               <ShowBase resource="leads" id={selectedLeadId}>
                 <LeadShowContentSheet />
               </ShowBase>

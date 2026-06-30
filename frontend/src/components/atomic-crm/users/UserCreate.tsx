@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { CreateBase, Form, useDataProvider, useNotify, useRedirect } from "ra-core";
+import {
+  CreateBase,
+  Form,
+  useDataProvider,
+  useNotify,
+  useRedirect,
+} from "ra-core";
 import { Card, CardContent } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
@@ -46,7 +52,12 @@ export const UserCreate = () => {
           <CardContent className="pt-6">
             <Form onSubmit={onSubmit}>
               <div className="flex flex-col gap-4">
-                <TextInput source="email" label="Email" type="email" isRequired />
+                <TextInput
+                  source="email"
+                  label="Email"
+                  type="email"
+                  isRequired
+                />
                 <TextInput source="full_name" label="Họ tên" isRequired />
                 <SelectInput
                   source="role"

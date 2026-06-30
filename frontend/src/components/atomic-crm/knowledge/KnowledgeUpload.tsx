@@ -132,9 +132,12 @@ export const KnowledgeUpload = ({
       onOpenChange(false);
       refresh();
     } catch (err) {
-      const errors = (err as Error & { validationErrors?: string[] }).validationErrors ?? [];
+      const errors =
+        (err as Error & { validationErrors?: string[] }).validationErrors ?? [];
       setValidationErrors(errors);
-      notify(`Tải lên thất bại: ${(err as Error).message.split("\n")[0]}`, { type: "error" });
+      notify(`Tải lên thất bại: ${(err as Error).message.split("\n")[0]}`, {
+        type: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -144,7 +147,9 @@ export const KnowledgeUpload = ({
     try {
       await saveKnowledgeTemplate(kind);
     } catch (err) {
-      notify(`Không tải được mẫu: ${(err as Error).message}`, { type: "error" });
+      notify(`Không tải được mẫu: ${(err as Error).message}`, {
+        type: "error",
+      });
     }
   };
 

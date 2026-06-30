@@ -14,6 +14,7 @@ import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadStatusColor } from "./conversationDisplay";
+import { Bot, Handshake, UserRound, type LucideIcon } from "lucide-react";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
@@ -61,11 +62,15 @@ const getRelativeTimeString = (dateStr?: string) => {
 
 const conversationModeMeta = (mode: Conversation["mode"]) => {
   if (mode === "human")
-    return { label: "Tư vấn viên", icon: "i-user", tone: "manual" };
+    return { label: "Tư vấn viên", Icon: UserRound, tone: "manual" };
   if (mode === "semi_auto")
-    return { label: "Bán tự động", icon: "i-sparkles", tone: "semi" };
-  if (mode === "bot") return { label: "Chatbot", icon: "i-bot", tone: "auto" };
-  return { label: "Closed", icon: "i-bot", tone: "closed" };
+    return { label: "Bán tự động", Icon: Handshake, tone: "semi" };
+  if (mode === "bot") return { label: "Chatbot", Icon: Bot, tone: "auto" };
+  return { label: "Closed", Icon: Bot, tone: "closed" };
+};
+
+type ConversationModeMeta = ReturnType<typeof conversationModeMeta> & {
+  Icon: LucideIcon;
 };
 
 // Hoisted static style objects so list rows don't allocate brand-new objects on
@@ -103,6 +108,33 @@ const AVATAR_ICON_STYLE: React.CSSProperties = {
   height: "22px",
 } as const;
 
+// Hoisted skeleton styles — same rationale as UNREAD_BADGE_*: avoid
+// allocating fresh style objects on every render of the skeleton row.
+const SKELETON_AVATAR_STYLE: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  flexShrink: 0,
+};
+
+const SKELETON_BODY_STYLE: React.CSSProperties = {
+  flex: 1,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const SKELETON_LINE_1_STYLE: React.CSSProperties = {
+  height: 13,
+  width: "55%",
+  borderRadius: 6,
+};
+
+const SKELETON_LINE_2_STYLE: React.CSSProperties = {
+  height: 12,
+  width: "85%",
+  borderRadius: 6,
+};
+
 type ConversationListItemProps = {
   conversation: ConversationRow;
   isActive: boolean;
@@ -134,7 +166,9 @@ const ConversationListItem = memo(
     // back to the contact's phone when no snippet is available yet.
     const subtitle = conversation._snippet || lead?.phone || "";
 
-    const modeMeta = conversationModeMeta(conversation.mode);
+    const modeMeta: ConversationModeMeta = conversationModeMeta(
+      conversation.mode,
+    );
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
     const unread = readIds.has(conversation.id)
@@ -160,9 +194,7 @@ const ConversationListItem = memo(
             } as React.CSSProperties
           }
         >
-          <svg className="icon" style={AVATAR_ICON_STYLE}>
-            <use href="#i-user" />
-          </svg>
+          <UserRound className="icon" style={AVATAR_ICON_STYLE} />
           {unread > 0 && (
             <span
               aria-label={`${unread} tin nhắn chưa đọc`}
@@ -190,9 +222,7 @@ const ConversationListItem = memo(
                 aria-label={modeMeta.label}
                 title={modeMeta.label}
               >
-                <svg className="icon" aria-hidden="true">
-                  <use href={`#${modeMeta.icon}`} />
-                </svg>
+                <modeMeta.Icon className="icon" aria-hidden="true" />
               </span>
             </span>
           </span>
@@ -207,17 +237,10 @@ ConversationListItem.displayName = "ConversationListItem";
 // loads (replaces the previous "flash of empty-state" on slow connections).
 const ConversationListItemSkeleton = () => (
   <div className="conversation" aria-hidden style={{ cursor: "default" }}>
-    <Skeleton
-      shimmer
-      className="!rounded-full"
-      style={{ width: 36, height: 36, flexShrink: 0 }}
-    />
-    <div
-      className="conv-body"
-      style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}
-    >
-      <Skeleton shimmer style={{ height: 13, width: "55%", borderRadius: 6 }} />
-      <Skeleton shimmer style={{ height: 12, width: "85%", borderRadius: 6 }} />
+    <Skeleton shimmer className="!rounded-full" style={SKELETON_AVATAR_STYLE} />
+    <div className="conv-body" style={SKELETON_BODY_STYLE}>
+      <Skeleton shimmer style={SKELETON_LINE_1_STYLE} />
+      <Skeleton shimmer style={SKELETON_LINE_2_STYLE} />
     </div>
   </div>
 );
@@ -332,7 +355,8 @@ const ConversationListPanel = ({
       rows: rows.filter((row) => row.mode === group.mode),
     }));
     const otherRows = rows.filter(
-      (row) => !CONVERSATION_MODE_GROUPS.some((group) => group.mode === row.mode),
+      (row) =>
+        !CONVERSATION_MODE_GROUPS.some((group) => group.mode === row.mode),
     );
     if (otherRows.length > 0) {
       grouped.push({ mode: "other", label: "Khác", rows: otherRows });
@@ -408,11 +432,7 @@ const ConversationListPanel = ({
             ref={loadMoreRef}
             aria-hidden="true"
           >
-            {isFetchingNextPage ? (
-              <ConversationListItemSkeleton />
-            ) : (
-              <span />
-            )}
+            {isFetchingNextPage ? <ConversationListItemSkeleton /> : <span />}
           </div>
         )}
       </div>
@@ -435,9 +455,7 @@ const ConversationListContent = () => {
   // whole session after a chat is opened once.
   const [pendingReadIds, setPendingReadIds] = useState<Set<string>>(new Set());
   useEffect(() => {
-    setPendingReadIds((current) =>
-      current.size === 0 ? current : new Set(),
-    );
+    setPendingReadIds((current) => (current.size === 0 ? current : new Set()));
   }, [conversationIdsKey]);
 
   const urlId = searchParams.get("id");
@@ -451,7 +469,8 @@ const ConversationListContent = () => {
   // stays list-first until the user taps a row.
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
-    const hasUrlConversation = !!urlId && conversations.some((c) => c.id === urlId);
+    const hasUrlConversation =
+      !!urlId && conversations.some((c) => c.id === urlId);
     const hasSelectedConversation =
       !!selectedId && conversations.some((c) => c.id === selectedId);
 

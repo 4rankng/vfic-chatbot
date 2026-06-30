@@ -47,7 +47,10 @@ const PERSONA_SECTIONS = [
   {
     title: "4. Tôi nên tránh điều gì?",
     hint: "Liệt kê các giới hạn: không bịa dữ liệu, không lạc đề, không lộ thông tin, không dùng định dạng cấm.",
-    aliases: ["Tôi nên tránh điều gì?", "4. Tôi nên tránh điều gì? (What should I avoid?)"],
+    aliases: [
+      "Tôi nên tránh điều gì?",
+      "4. Tôi nên tránh điều gì? (What should I avoid?)",
+    ],
   },
   {
     title: "5. Bạn muốn tôi theo dõi kết quả nào?",
@@ -118,7 +121,9 @@ const parsePersonaMarkdown = (markdown: string) => {
     const title = match[1] ?? "";
     const start = (match.index ?? 0) + match[0].length;
     const end =
-      index + 1 < matches.length ? (matches[index + 1].index ?? markdown.length) : markdown.length;
+      index + 1 < matches.length
+        ? (matches[index + 1].index ?? markdown.length)
+        : markdown.length;
     const content = markdown.slice(start, end).trim();
     const normalizedTitle = normalizeSectionTitle(title);
     const sectionIndex = PERSONA_SECTIONS.findIndex((section) =>
@@ -162,9 +167,7 @@ export const getCompletedPersonaSectionCount = (markdown: string) =>
 
 export const getPersonaAuthoredContentLength = (markdown: string) => {
   const parsed = parsePersonaMarkdown(markdown);
-  return [...parsed.sections, parsed.extraMarkdown]
-    .join("\n")
-    .trim().length;
+  return [...parsed.sections, parsed.extraMarkdown].join("\n").trim().length;
 };
 
 export interface PersonaValues {
@@ -273,8 +276,12 @@ const PersonaForm = ({
     }
   };
 
-  const completedSectionCount = sectionValues.filter((section) => section.trim()).length;
-  const contentLength = [...sectionValues, extraMarkdown].join("\n").trim().length;
+  const completedSectionCount = sectionValues.filter((section) =>
+    section.trim(),
+  ).length;
+  const contentLength = [...sectionValues, extraMarkdown]
+    .join("\n")
+    .trim().length;
 
   return (
     <Card className="w-full overflow-hidden rounded-xl py-0 shadow-sm">

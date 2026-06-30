@@ -149,7 +149,8 @@ class BusTimetableRepo:
                     },
                 )
             ).scalar()
-            for stop in route.stops:
+            # Bulk-insert stops for this route (1 round-trip instead of N).
+            if route.stops:
                 await db.execute(
                     text(
                         "INSERT INTO bus_stops "
@@ -159,16 +160,19 @@ class BusTimetableRepo:
                         "SET stop_name = EXCLUDED.stop_name, stop_aliases = EXCLUDED.stop_aliases, "
                         "    scheduled_time = EXCLUDED.scheduled_time, raw_stop_text = EXCLUDED.raw_stop_text"
                     ),
-                    {
-                        "rid": str(route_id), "order": stop.stop_order, "sname": stop.stop_name,
-                        "aliases": list(stop.stop_aliases), "stime": stop.scheduled_time,
-                        "raw": stop.raw_stop_text,
-                    },
+                    [
+                        {
+                            "rid": str(route_id), "order": stop.stop_order, "sname": stop.stop_name,
+                            "aliases": list(stop.stop_aliases), "stime": stop.scheduled_time,
+                            "raw": stop.raw_stop_text,
+                        }
+                        for stop in route.stops
+                    ],
                 )
-                stops_rebuilt += 1
+            stops_rebuilt += len(route.stops)
 
-        # --- weekly service-day matrix ---
-        for day in parsed.service_days:
+        # --- weekly service-day matrix (bulk: 1 round-trip instead of N) ---
+        if parsed.service_days:
             await db.execute(
                 text(
                     "INSERT INTO bus_route_service_days "
@@ -181,12 +185,15 @@ class BusTimetableRepo:
                     "    route_group_name = EXCLUDED.route_group_name, day_label = EXCLUDED.day_label, "
                     "    availability_code = EXCLUDED.availability_code, metadata = EXCLUDED.metadata"
                 ),
-                {
-                    "pid": pid, "cid": cid, "sid": sid, "rgkey": day.route_group_key,
-                    "rgname": day.route_group_name, "dgroup": day.day_group, "dlabel": day.day_label,
-                    "stype": day.service_type, "acode": day.availability_code,
-                    "meta": json.dumps(day.metadata, ensure_ascii=False),
-                },
+                [
+                    {
+                        "pid": pid, "cid": cid, "sid": sid, "rgkey": day.route_group_key,
+                        "rgname": day.route_group_name, "dgroup": day.day_group, "dlabel": day.day_label,
+                        "stype": day.service_type, "acode": day.availability_code,
+                        "meta": json.dumps(day.metadata, ensure_ascii=False),
+                    }
+                    for day in parsed.service_days
+                ],
             )
 
         # route_group_key is already set per-route by the parser (Python

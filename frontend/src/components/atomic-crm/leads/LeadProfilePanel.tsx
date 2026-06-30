@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { useDataProvider, useNotify, useRecordContext } from "ra-core";
 import { apiJson } from "../providers/rest/api";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LEAD_SCORES,
   LEAD_STAGES,
@@ -99,84 +100,48 @@ const LeadProfilePanelImpl = ({
   leadPropRef.current = leadProp;
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
-  const [lead, setLead] = useState<Lead | null>(null);
-  const [memories, setMemories] = useState<LeadMemory[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
-  const [notFound, setNotFound] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Lead>>({});
   const [isSaving, setIsSaving] = useState(false);
+  // Transient override so the panel body reflects the save immediately,
+  // even when the lead was supplied by a parent prop (query disabled).
+  const [editedLead, setEditedLead] = useState<Lead | null>(null);
 
   const zaloChatId = conversation?.zalo_chat_id;
 
-  useEffect(() => {
-    if (!open) {
-      setIsEditing(false);
-      return;
-    }
-    if (!zaloChatId) {
-      setLead(null);
-      setNotFound(true);
-      return;
-    }
-
-    const sharedLead = leadPropRef.current;
-    if (sharedLead) {
-      setLead(sharedLead);
-      setNotFound(false);
-      setIsLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoading(true);
-    setNotFound(false);
-    (async () => {
-      try {
-        const { data } = await dataProvider.getList("leads", {
-          filter: { zalo_id: zaloChatId },
-          pagination: { page: 1, perPage: 1 },
-          sort: { field: "updated_at", order: "DESC" },
-        });
-        if (cancelled) return;
-        setLead((data?.[0] as Lead) ?? null);
-        setNotFound(!data?.[0]);
-      } catch {
-        if (cancelled) return;
-        setLead(null);
-        setNotFound(true);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dataProvider, zaloChatId, open]);
-
-  useEffect(() => {
-    if (!open || !lead?.id) {
-      setMemories([]);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingMemories(true);
-    apiJson<LeadMemory[]>(`/api/v1/leads/${lead.id}/memories`)
-      .then((rows) => {
-        if (!cancelled) setMemories(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setMemories([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingMemories(false);
+  // Lead lookup — skip when parent already provides the lead or panel is closed
+  const { data: fetchedLead, isPending: isLeadPending } = useQuery({
+    queryKey: ["lead-by-zalo", zaloChatId],
+    queryFn: async () => {
+      const result = await dataProvider.getList("leads", {
+        filter: { zalo_id: zaloChatId },
+        pagination: { page: 1, perPage: 1 },
+        sort: { field: "updated_at", order: "DESC" },
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [lead?.id, open]);
+      return (result.data?.[0] as Lead) ?? null;
+    },
+    enabled: open && !!zaloChatId && !leadPropRef.current,
+  });
+
+  const lead = editedLead ?? leadProp ?? fetchedLead ?? null;
+  const notFound =
+    !isLeadPending && !!zaloChatId && !leadPropRef.current && !fetchedLead;
+
+  // Memories lookup
+  const { data: memoriesData, isPending: isMemoriesPending } = useQuery({
+    queryKey: ["lead-memories", lead?.id],
+    queryFn: () => apiJson<LeadMemory[]>(`/api/v1/leads/${lead!.id}/memories`),
+    enabled: open && !!lead?.id,
+  });
+
+  const memories = memoriesData ?? [];
+  const queryClient = useQueryClient();
+
+  // Clear the transient save override when the query refetches (e.g. parent
+  // navigates away and back, causing a new panel open that re-fetches).
+  useEffect(() => {
+    if (fetchedLead) setEditedLead(null);
+  }, [fetchedLead]);
 
   if (!open) return null;
 
@@ -198,7 +163,8 @@ const LeadProfilePanelImpl = ({
         data: editData,
         previousData: lead,
       });
-      setLead(data as Lead);
+      setEditedLead(data as Lead);
+      queryClient.setQueryData(["lead-by-zalo", zaloChatId], data as Lead);
       setIsEditing(false);
       notify("Đã cập nhật hồ sơ", { type: "success" });
     } catch {
@@ -234,7 +200,7 @@ const LeadProfilePanelImpl = ({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {isLoading ? (
+            {isLeadPending ? (
               <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
                 <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">
                   Đang tải hồ sơ...
@@ -408,12 +374,12 @@ const LeadProfilePanelImpl = ({
                       Ghi nhớ từ hội thoại
                     </h3>
                     <span className="shrink-0 rounded-md border border-border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {isLoadingMemories
+                      {isMemoriesPending
                         ? "Đang tải..."
                         : `${memories.length} mục`}
                     </span>
                   </div>
-                  {isLoadingMemories ? (
+                  {isMemoriesPending ? (
                     <div className="mt-4 text-sm text-muted-foreground">
                       Đang tải ghi nhớ...
                     </div>

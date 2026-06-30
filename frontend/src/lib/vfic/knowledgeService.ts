@@ -208,6 +208,33 @@ export const getProjectBusTimetable = (
 export const getProjectFaq = (id: string, limit = 12) =>
   apiJson<ProjectFaqList>(`${proj(id)}/faq?limit=${limit}`);
 
+export type ProjectFaqPayload = Pick<ProjectFaq, "question" | "answer">;
+
+export const createProjectFaq = (projectId: string, payload: ProjectFaqPayload) =>
+  apiJson<ProjectFaq>(`${proj(projectId)}/faq`, {
+    method: "POST",
+    body: payload,
+  });
+
+export const updateProjectFaq = (
+  projectId: string,
+  faqId: string,
+  payload: Partial<ProjectFaqPayload>,
+) =>
+  apiJson<ProjectFaq>(`${proj(projectId)}/faq/${encodeURIComponent(faqId)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+
+export const deleteProjectFaq = (projectId: string, faqId: string) =>
+  apiRequest(`${proj(projectId)}/faq/${encodeURIComponent(faqId)}`, {
+    method: "DELETE",
+  }).then((response) => {
+    if (!response.ok) {
+      throw new ApiError(response.status, "Không xóa được FAQ.");
+    }
+  });
+
 /** Synchronously re-extract active features from the project's latest posting (~5-10s). */
 export const extractProjectFeatures = (id: string) =>
   apiJson<ProductFeatureList>(`${proj(id)}/features/extract`, { method: "POST" });

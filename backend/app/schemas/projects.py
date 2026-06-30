@@ -145,3 +145,13 @@ class ProjectFaqOut(BaseModel):
 class ProjectFaqResponse(BaseModel):
     data: list[ProjectFaqOut]
     total: int
+
+
+class ProjectFaqCreate(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1, max_length=5000)
+
+
+class ProjectFaqUpdate(BaseModel):
+    question: str | None = Field(default=None, min_length=1, max_length=500)
+    answer: str | None = Field(default=None, min_length=1, max_length=5000)

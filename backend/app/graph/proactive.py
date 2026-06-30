@@ -157,8 +157,8 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
         PROACTIVE_SILENCE_LIMIT,
     )
     from app.graph.context import build_system_prompt
-    from app.services.lead_repository import LeadRepository
-    from app.services.lead_service import lead_profile_text
+    from app.services.lead.repository import LeadRepository
+    from app.services.lead import lead_profile_text
 
     svc = ConversationService(deps.db)
     now = _now()

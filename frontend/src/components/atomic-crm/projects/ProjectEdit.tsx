@@ -4,7 +4,6 @@ import {
   Form,
   useDataProvider,
   useNotify,
-  usePermissions,
   useRecordContext,
   useRedirect,
 } from "ra-core";
@@ -16,7 +15,9 @@ import { TopToolbar } from "../layout/TopToolbar";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
+import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectFeatures } from "./ProjectFeatures";
+import { ProjectFaqEditor } from "./ProjectFaqEditor";
 import { ProjectPersonaPanel } from "./ProjectPersonaPanel";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
@@ -26,13 +27,11 @@ const ProjectEditContent = () => {
   const project = useRecordContext<Project>();
   const notify = useNotify();
   const redirect = useRedirect();
-  const { permissions } = usePermissions();
+  const { isAdmin } = useRoleActions();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   if (!project) return null;
-
-  const isAdmin = permissions === "admin";
 
   const onSubmit = async (data: Record<string, unknown>) => {
     setSubmitting(true);
@@ -123,6 +122,7 @@ const ProjectEditContent = () => {
       </Card>
 
       <ProjectFeatures projectId={project.id} editable canExtract={isAdmin} />
+      <ProjectFaqEditor projectId={project.id} editable />
 
       {isAdmin && (
         <KnowledgeUpload
@@ -144,8 +144,7 @@ export const ProjectEdit = () => (
 );
 
 const ProjectEditToolbar = () => {
-  const { permissions } = usePermissions();
-  const isAdmin = permissions === "admin";
+  const { isAdmin } = useRoleActions();
 
   return (
     <TopToolbar>

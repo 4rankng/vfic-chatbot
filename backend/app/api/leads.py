@@ -23,7 +23,8 @@ from app.schemas.lead import (
     LeadUpdate,
     StageRequest,
 )
-from app.services.lead_service import LeadConflict, LeadService
+from app.services.lead import LeadService
+from app.services.lead_service import LeadConflict  # noqa: F401 — backward-compat alias
 from app.services.memory_repository import MemoryRepository
 
 router = APIRouter(prefix="/leads", tags=["leads"])

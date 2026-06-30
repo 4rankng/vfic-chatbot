@@ -17,7 +17,10 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { formatDateTime } from "../automation/botRunMeta";
 import { stageLabel, stageTone } from "./stageTone";
 import { isCanonicalSource } from "./knowledgePipelineUtils";
-import { archiveKnowledge, reindexKnowledge } from "@/lib/vfic/knowledgeService";
+import {
+  archiveKnowledge,
+  reindexKnowledge,
+} from "@/lib/vfic/knowledgeService";
 import { DeleteButton } from "@/components/admin";
 
 const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
@@ -104,7 +107,9 @@ const KnowledgeSourceShowContent = () => {
           />
           {source.digest_summary && (
             <Field
-              label={isCanonicalSource(source) ? "Tóm tắt nguồn" : "Tóm tắt (LLM)"}
+              label={
+                isCanonicalSource(source) ? "Tóm tắt nguồn" : "Tóm tắt (LLM)"
+              }
               value={source.digest_summary}
             />
           )}

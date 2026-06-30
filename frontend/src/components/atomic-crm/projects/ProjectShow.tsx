@@ -1,10 +1,5 @@
 import { useState } from "react";
-import {
-  ShowBase,
-  usePermissions,
-  useRecordContext,
-  useRedirect,
-} from "ra-core";
+import { ShowBase, useRecordContext, useRedirect } from "ra-core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,19 +7,19 @@ import { Pencil, Upload } from "lucide-react";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { Project } from "../types";
 import { ProjectFeatures } from "./ProjectFeatures";
+import { ProjectFaqEditor } from "./ProjectFaqEditor";
 import { DeleteButton } from "@/components/admin";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
+import { useRoleActions } from "../hooks/useRoleActions";
 
 const ProjectShowContent = () => {
   const project = useRecordContext<Project>();
   const redirect = useRedirect();
-  const { permissions } = usePermissions();
   const [uploadOpen, setUploadOpen] = useState(false);
   if (!project) return null;
 
   const card = project.index_card ?? {};
-  const isAdmin = permissions === "admin";
-  const canEdit = permissions === "admin" || permissions === "recruiter";
+  const { isAdmin, canEdit } = useRoleActions();
 
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
@@ -109,6 +104,7 @@ const ProjectShowContent = () => {
         editable={canEdit}
         canExtract={isAdmin}
       />
+      <ProjectFaqEditor projectId={project.id} editable={canEdit} />
       <KnowledgeUpload
         open={uploadOpen}
         onOpenChange={setUploadOpen}

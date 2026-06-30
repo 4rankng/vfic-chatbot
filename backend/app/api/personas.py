@@ -23,7 +23,6 @@ from app.schemas.personas import (
     PersonaOut,
     PersonaUpdate,
 )
-from app.services.errors import ConflictError, NotFoundError
 from app.services.persona_service import PersonaService, load_persona_template
 
 router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
@@ -58,10 +57,7 @@ async def list_personas(
 async def create_persona(
     body: PersonaCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> PersonaOut:
-    try:
         return PersonaOut.model_validate(await PersonaService(db).create(body, admin))
-    except ConflictError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
 
 @router.get("/{persona_id}", response_model=PersonaOut)
@@ -70,10 +66,7 @@ async def get_persona(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> PersonaOut:
-    try:
-        persona = await PersonaService(db).get(persona_id)
-    except NotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    persona = await PersonaService(db).get(persona_id)
     out = PersonaOut.model_validate(persona)
     out.assigned_projects = getattr(persona, "_assigned_projects", [])
     return out
@@ -86,20 +79,14 @@ async def update_persona(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> PersonaOut:
-    try:
         return PersonaOut.model_validate(await PersonaService(db).update(persona_id, body, admin))
-    except NotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
 @router.delete("/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_persona(
     persona_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> None:
-    try:
-        await PersonaService(db).delete(persona_id)
-    except NotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    await PersonaService(db).delete(persona_id)
 
 
 @router.post("/{persona_id}/activate", response_model=PersonaOut)
@@ -108,13 +95,8 @@ async def activate_persona(
 ) -> PersonaOut:
     try:
         return PersonaOut.model_validate(await PersonaService(db).activate(persona_id))
-    except (NotFoundError, ValueError) as exc:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST
-            if isinstance(exc, ValueError)
-            else status.HTTP_404_NOT_FOUND,
-            str(exc),
-        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.post("/{persona_id}/assign-all-projects")

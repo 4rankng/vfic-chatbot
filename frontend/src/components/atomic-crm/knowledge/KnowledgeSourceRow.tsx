@@ -154,7 +154,9 @@ export const SourceStamp = ({ source }: { source: KnowledgeSource }) => {
   if (needsReview(source)) return <Stamp tone="pending">Cần xem lại</Stamp>;
   return (
     <Stamp tone="pending">
-      {stageLabel(sourceStage(source), { isCanonical: isCanonicalSource(source) })}
+      {stageLabel(sourceStage(source), {
+        isCanonical: isCanonicalSource(source),
+      })}
     </Stamp>
   );
 };

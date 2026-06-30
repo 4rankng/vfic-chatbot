@@ -32,8 +32,7 @@ from app.schemas.knowledge import (
     SearchTestResult,
     UploadRequest,
 )
-from app.services.errors import NotFoundError
-from app.services.knowledge_service import KnowledgeFileExtractionError, KnowledgeService
+from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
     load_faq_template,
@@ -160,10 +159,7 @@ async def update_document(
     db: AsyncSession = Depends(get_db),
 ) -> KnowledgeDocumentOut:
     service = KnowledgeService(db)
-    try:
-        result = await service.update(await _load(doc_id, db), body, actor=admin)
-    except NotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    result = await service.update(await _load(doc_id, db), body, actor=admin)
     return KnowledgeDocumentOut.model_validate(result)
 
 

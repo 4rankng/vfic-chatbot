@@ -132,12 +132,15 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
                     <span className="truncate">
                       {selected === GLOBAL_DEFAULT_VALUE
                         ? "Mặc định toàn hệ thống"
-                        : selectedPersona?.name ?? "Chọn Agent"}
+                        : (selectedPersona?.name ?? "Chọn Agent")}
                     </span>
                     <ChevronsUpDown className="size-4 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-[min(420px,calc(100vw-3rem))] p-0">
+                <PopoverContent
+                  align="start"
+                  className="w-[min(420px,calc(100vw-3rem))] p-0"
+                >
                   <Command shouldFilter={false}>
                     <CommandInput
                       value={personaSearch}

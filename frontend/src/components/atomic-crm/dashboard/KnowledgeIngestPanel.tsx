@@ -75,6 +75,14 @@ const BAR_CLASS: Record<Tone, string> = {
   neutral: "bg-muted-foreground",
 };
 
+const DONUT_COLOR: Record<Tone, string> = {
+  ok: "oklch(0.6222 0.1338 155.6)",
+  busy: "oklch(0.72 0.14 74)",
+  warn: "oklch(0.72 0.14 74)",
+  bad: "var(--destructive)",
+  neutral: "var(--primary)",
+};
+
 const clamp = (value: number, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));
 
@@ -185,14 +193,7 @@ const DonutMetric = ({
   tone: Tone;
 }) => {
   const percent = clamp(value);
-  const color =
-    tone === "ok"
-      ? "oklch(0.6222 0.1338 155.6)"
-      : tone === "warn"
-        ? "oklch(0.72 0.14 74)"
-        : tone === "bad"
-          ? "var(--destructive)"
-          : "var(--primary)";
+  const color = DONUT_COLOR[tone];
 
   return (
     <div className="flex items-center gap-4">

@@ -445,6 +445,6 @@ def test_conversation_conflict_owner_name():
 
 
 def test_lead_conflict_owner_name():
-    """LeadConflict stores optional owner_name."""
-    exc = LeadConflict("modified", owner_name="Bob")
-    assert exc.owner_name == "Bob"
+    """LeadConflict is now a ConflictError alias — no owner_name attribute."""
+    exc = LeadConflict("modified")
+    assert str(exc) == "modified"

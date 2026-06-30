@@ -90,9 +90,7 @@ describe("canonical source copy", () => {
 
   it("uses canonical processing copy for the active digest slot", () => {
     expect(
-      pipelineStateCopy(
-        makeSource({ stage: "DIGESTING", is_canonical: true }),
-      ),
+      pipelineStateCopy(makeSource({ stage: "DIGESTING", is_canonical: true })),
     ).toContain("Markdown canonical");
     expect(pipelineStateCopy(makeSource({ stage: "DIGESTING" }))).toContain(
       "LLM",
