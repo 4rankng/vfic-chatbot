@@ -82,7 +82,7 @@ const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
 const DEFAULT_CHAT_ITEM_HEIGHT_PX = 96;
 const ANCHOR_RESTORE_FRAMES = 20;
-const HISTORY_PREFETCH_DISTANCE_PX = 560;
+const HISTORY_PREFETCH_DISTANCE_PX = 1;
 const VIRTUOSO_INCREASE_VIEWPORT_BY = { top: 2400, bottom: 800 };
 const VIRTUOSO_MIN_OVERSCAN_ITEM_COUNT = { top: 8, bottom: 4 };
 const AVATAR_PLACEHOLDER_STYLE: CSSProperties = { width: 32 };
@@ -275,6 +275,7 @@ export const ChatThread = ({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const scrollerElRef = useRef<HTMLElement | null>(null);
   const detachScrollerListenersRef = useRef<(() => void) | null>(null);
+  const anchorRestoreTokenRef = useRef(0);
   const measuredMessageHeightsRef = useRef(new Map<string, number>());
   const initialJumpDoneRef = useRef(false);
   const initialBottomSettleUntilRef = useRef(0);
@@ -445,6 +446,11 @@ export const ChatThread = ({
     [],
   );
 
+  const cancelAnchorRestore = useCallback(() => {
+    anchorRestoreTokenRef.current += 1;
+    scrollerElRef.current?.removeAttribute("data-anchor-restoring");
+  }, []);
+
   const captureScrollAnchor = useCallback((): ScrollAnchor | null => {
     const scrollerEl = scrollerElRef.current;
     if (!scrollerEl) return null;
@@ -467,14 +473,33 @@ export const ChatThread = ({
   }, []);
 
   const restoreScrollAnchor = useCallback(
-    (anchor: ScrollAnchor | null) => {
-      if (!anchor) return;
+    (anchor: ScrollAnchor | null, onComplete?: () => void) => {
+      if (!anchor) {
+        onComplete?.();
+        return;
+      }
 
       let frame = 0;
+      let isComplete = false;
+      const restoreToken = anchorRestoreTokenRef.current + 1;
+      anchorRestoreTokenRef.current = restoreToken;
       scrollerElRef.current?.setAttribute("data-anchor-restoring", "true");
+      const finish = () => {
+        if (isComplete) return;
+        isComplete = true;
+        scrollerElRef.current?.removeAttribute("data-anchor-restoring");
+        onComplete?.();
+      };
       const tick = () => {
         const scrollerEl = scrollerElRef.current;
-        if (!scrollerEl) return;
+        if (!scrollerEl) {
+          finish();
+          return;
+        }
+        if (anchorRestoreTokenRef.current !== restoreToken) {
+          finish();
+          return;
+        }
 
         const anchorEl = findMessageElement(scrollerEl, anchor.id);
         if (!anchorEl) {
@@ -506,7 +531,7 @@ export const ChatThread = ({
           requestAnimationFrame(tick);
           return;
         }
-        scrollerEl.removeAttribute("data-anchor-restoring");
+        finish();
       };
 
       requestAnimationFrame(tick);
@@ -527,14 +552,15 @@ export const ChatThread = ({
     const anchor = captureScrollAnchor();
     readyForMoreRef.current = false;
     isPrependingHistoryRef.current = true;
-    void loadMore(messages[0].id)
-      .then((added) => {
-        if (added <= 0) return;
-        restoreScrollAnchor(anchor);
-      })
-      .finally(() => {
+    void loadMore(messages[0].id).then((added) => {
+      if (added <= 0) {
+        isPrependingHistoryRef.current = false;
+        return;
+      }
+      restoreScrollAnchor(anchor, () => {
         isPrependingHistoryRef.current = false;
       });
+    });
   }, [
     hasMore,
     isLoadingMore,
@@ -661,12 +687,8 @@ export const ChatThread = ({
       }
     };
     const onWheel = (event: WheelEvent) => {
-      if (
-        event.deltaY < 0 &&
-        scrollerEl.scrollTop <= HISTORY_PREFETCH_DISTANCE_PX
-      ) {
-        readyForMoreRef.current = true;
-        loadOlderFromTopRef.current();
+      if (scrollerEl.hasAttribute("data-anchor-restoring")) {
+        cancelAnchorRestore();
       }
       if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
       if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
@@ -676,13 +698,20 @@ export const ChatThread = ({
       event.preventDefault();
       event.stopPropagation();
     };
+    const onTouchMove = () => {
+      if (scrollerEl.hasAttribute("data-anchor-restoring")) {
+        cancelAnchorRestore();
+      }
+    };
     scrollerEl.addEventListener("scroll", onScroll, { passive: true });
     scrollerEl.addEventListener("wheel", onWheel, { passive: false });
+    scrollerEl.addEventListener("touchmove", onTouchMove, { passive: true });
     detachScrollerListenersRef.current = () => {
       scrollerEl.removeEventListener("scroll", onScroll);
       scrollerEl.removeEventListener("wheel", onWheel);
+      scrollerEl.removeEventListener("touchmove", onTouchMove);
     };
-  }, []);
+  }, [cancelAnchorRestore]);
 
   useEffect(
     () => () => {
@@ -700,7 +729,8 @@ export const ChatThread = ({
   }, [loadOlderFromTop]);
 
   const followOutput = useCallback(
-    (isAtBottom: boolean) => (isAtBottom ? ("auto" as const) : false),
+    (isAtBottom: boolean) =>
+      !isPrependingHistoryRef.current && isAtBottom ? ("auto" as const) : false,
     [],
   );
 

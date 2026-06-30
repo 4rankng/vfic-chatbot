@@ -306,7 +306,8 @@ class ProjectService:
         rows = (
             await self.db.execute(
                 text(
-                    "SELECT kc.id, kc.content, kc.questions, kc.source_anchor, kd.file_name "
+                    "SELECT kc.id, kc.content, kc.questions, "
+                    "       kc.metadata ->> 'source_anchor' AS source_anchor, kd.file_name "
                     "FROM knowledge_chunks kc "
                     "JOIN knowledge_documents kd ON kd.id = kc.document_id "
                     "WHERE kd.project_id = :pid "
