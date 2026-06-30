@@ -11,6 +11,8 @@ from app.models.user import Role
 
 
 class UserCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: str | None = None
@@ -19,6 +21,8 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr | None = None
     full_name: str | None = None
     role: Role | None = None
@@ -27,6 +31,8 @@ class UserUpdate(BaseModel):
 
 class SelfProfileUpdate(BaseModel):
     """Restricted update schema for own-profile edits (no role/disabled)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     email: EmailStr | None = None
     full_name: str | None = None

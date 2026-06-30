@@ -1,5 +1,12 @@
-import { useCallback, useMemo, useState } from "react";
-import { useListContext, useRefresh, ShowBase } from "ra-core";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { ShowBase, useDataProvider, useListContext, useRefresh } from "ra-core";
 import {
   Sheet,
   SheetContent,
@@ -9,8 +16,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ListPagination } from "@/components/admin";
-import { RefreshCw, Users } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  UserRound,
+  Users,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import { LEAD_STAGES, type Lead } from "../types";
 import { LeadCard } from "./LeadCard";
@@ -18,86 +31,257 @@ import { LeadShowContentSheet } from "./LeadShow";
 
 export { LEAD_STAGES };
 
-const compareLeads =
-  (field: string, order: "ASC" | "DESC") => (a: Lead, b: Lead) => {
-    const av = String((a as Record<string, unknown>)[field] ?? "");
-    const bv = String((b as Record<string, unknown>)[field] ?? "");
-    const cmp =
-      field === "name"
-        ? av.localeCompare(bv, "vi")
-        : av < bv
-          ? -1
-          : av > bv
-            ? 1
-            : 0;
-    return order === "DESC" ? -cmp : cmp;
-  };
+const CARD_GRID_CLASS =
+  "grid justify-start gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),240px))]";
+const SECTION_PER_PAGE = 60;
 
-const getLeadPriorityRank = (lead: Lead) => {
-  if (lead.lead_score === "hot") return 0;
-  if (lead.lead_score === "warm") return 1;
-  return 2;
+type StageSectionKey = (typeof LEAD_STAGES)[number]["value"];
+type SectionKey = "needs_reply" | StageSectionKey;
+
+type SectionConfig = {
+  key: SectionKey;
+  title: string;
+  filter: Record<string, string | boolean>;
+  isPriority?: boolean;
 };
 
+type SectionResult = {
+  leads: Lead[];
+  total: number;
+  isLoading: boolean;
+  error: boolean;
+};
+
+const SECTION_CONFIGS: SectionConfig[] = [
+  {
+    key: "needs_reply",
+    title: "Cần trả lời",
+    filter: { needs_reply: true },
+    isPriority: true,
+  },
+  ...LEAD_STAGES.map((stage) => ({
+    key: stage.value,
+    title: stage.label,
+    filter: { stage: stage.value },
+  })),
+];
+
+const createSectionPages = () =>
+  SECTION_CONFIGS.reduce(
+    (acc, section) => ({ ...acc, [section.key]: 1 }),
+    {} as Record<SectionKey, number>,
+  );
+
+const createSectionResults = (isLoading: boolean) =>
+  SECTION_CONFIGS.reduce(
+    (acc, section) => ({
+      ...acc,
+      [section.key]: {
+        leads: [],
+        total: 0,
+        isLoading,
+        error: false,
+      },
+    }),
+    {} as Record<SectionKey, SectionResult>,
+  );
+
 export const LeadListContent = () => {
-  const {
-    data: leads,
-    isPending,
-    error,
-    sort,
-    filterValues,
-  } = useListContext<Lead>();
+  const { sort, filterValues } = useListContext<Lead>();
+  const dataProvider = useDataProvider();
+  const refresh = useRefresh();
   const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(
     null,
   );
-  const refresh = useRefresh();
+  const [sectionPages, setSectionPages] = useState(createSectionPages);
+  const [sectionResults, setSectionResults] = useState(() =>
+    createSectionResults(true),
+  );
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const filters = filterValues ?? {};
-  const hasActiveStage = Boolean(filters.lead_stage);
+  const searchQuery = typeof filters.q === "string" ? filters.q.trim() : "";
+  const sortField = sort?.field ?? "updated_at";
+  const sortOrder = sort?.order === "ASC" ? "ASC" : "DESC";
 
-  // Stable handler so LeadCard's memo holds across list re-renders. The inline
-  // arrow previously created a new function per render and defeated memoization.
+  useEffect(() => {
+    setSectionPages(createSectionPages());
+  }, [searchQuery, sortField, sortOrder]);
+
+  useEffect(() => {
+    const refreshSections = () => setRefreshTick((value) => value + 1);
+
+    window.addEventListener("vfic:lead-list-refresh", refreshSections);
+    window.addEventListener("vfic:lead-updated", refreshSections);
+    return () => {
+      window.removeEventListener("vfic:lead-list-refresh", refreshSections);
+      window.removeEventListener("vfic:lead-updated", refreshSections);
+    };
+  }, []);
+
+  // Ref so the load effect always reads the latest page numbers without
+  // re-triggering when a single section paginates.
+  const sectionPagesRef = useRef(sectionPages);
+  sectionPagesRef.current = sectionPages;
+
+  // Fetch a single section (used for pagination — no full reload).
+  const fetchSection = useCallback(
+    async (sectionKey: SectionKey, page: number) => {
+      const config = SECTION_CONFIGS.find((s) => s.key === sectionKey);
+      if (!config) return;
+      setSectionResults((prev) => ({
+        ...prev,
+        [sectionKey]: { ...prev[sectionKey], isLoading: true, error: false },
+      }));
+      try {
+        const response = await dataProvider.getList("leads", {
+          filter: {
+            ...config.filter,
+            ...(searchQuery ? { q: searchQuery } : {}),
+          },
+          pagination: { page, perPage: SECTION_PER_PAGE },
+          sort: { field: sortField, order: sortOrder },
+        });
+        setSectionResults((prev) => ({
+          ...prev,
+          [sectionKey]: {
+            leads: response.data as Lead[],
+            total: response.total ?? 0,
+            isLoading: false,
+            error: false,
+          },
+        }));
+      } catch {
+        setSectionResults((prev) => ({
+          ...prev,
+          [sectionKey]: {
+            leads: [],
+            total: 0,
+            isLoading: false,
+            error: true,
+          },
+        }));
+      }
+    },
+    [dataProvider, searchQuery, sortField, sortOrder],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setSectionResults((prev) =>
+      SECTION_CONFIGS.reduce(
+        (acc, section) => ({
+          ...acc,
+          [section.key]: {
+            ...prev[section.key],
+            isLoading: true,
+            error: false,
+          },
+        }),
+        {} as Record<SectionKey, SectionResult>,
+      ),
+    );
+
+    const loadSections = async () => {
+      const pages = sectionPagesRef.current;
+      const rows = await Promise.all(
+        SECTION_CONFIGS.map(async (section) => {
+          try {
+            const response = await dataProvider.getList("leads", {
+              filter: {
+                ...section.filter,
+                ...(searchQuery ? { q: searchQuery } : {}),
+              },
+              pagination: {
+                page: pages[section.key] ?? 1,
+                perPage: SECTION_PER_PAGE,
+              },
+              sort: { field: sortField, order: sortOrder },
+            });
+            return {
+              key: section.key,
+              result: {
+                leads: response.data as Lead[],
+                total: response.total ?? 0,
+                isLoading: false,
+                error: false,
+              },
+            };
+          } catch {
+            return {
+              key: section.key,
+              result: {
+                leads: [],
+                total: 0,
+                isLoading: false,
+                error: true,
+              },
+            };
+          }
+        }),
+      );
+
+      if (cancelled) return;
+
+      setSectionResults((prev) => {
+        const next = { ...prev };
+        rows.forEach(({ key, result }) => {
+          next[key] = result;
+        });
+        return next;
+      });
+    };
+
+    void loadSections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dataProvider,
+    refreshTick,
+    searchQuery,
+    sortField,
+    sortOrder,
+  ]);
+
   const handleLeadSelect = useCallback((lead: Lead) => {
     setSelectedLeadId(lead.id);
   }, []);
 
-  const sortedLeads = useMemo(() => {
-    const list = [...(leads ?? [])];
-    const field = sort?.field ?? "updated_at";
-    const order = sort?.order ?? "DESC";
-    const compareBySort = compareLeads(field, order);
-    return list.sort((a, b) => {
-      const priorityCmp = getLeadPriorityRank(a) - getLeadPriorityRank(b);
-      return priorityCmp || compareBySort(a, b);
-    });
-  }, [leads, sort]);
+  const handleRefresh = useCallback(() => {
+    refresh();
+    setRefreshTick((value) => value + 1);
+  }, [refresh]);
 
-  if (isPending) {
-    return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <LeadCardSkeleton key={i} />
-        ))}
-      </div>
-    );
-  }
+  const allSections = useMemo(
+    () =>
+      SECTION_CONFIGS.map((section) => ({
+        ...section,
+        ...sectionResults[section.key],
+        page: sectionPages[section.key] ?? 1,
+      })),
+    [sectionPages, sectionResults],
+  );
 
-  if (error) {
-    return (
-      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
-        Không tải được danh sách ứng viên.
-      </div>
-    );
-  }
+  const isAnySectionLoading = allSections.some((section) => section.isLoading);
+  const hasAnyLead = allSections.some((section) => section.total > 0);
+  const hasEverySectionError = allSections.every((section) => section.error);
 
-  if (!sortedLeads || sortedLeads.length === 0) {
+  if (
+    !isAnySectionLoading &&
+    !hasAnyLead &&
+    !searchQuery &&
+    !hasEverySectionError
+  ) {
     return (
       <EmptyState
         icon={<Users className="size-6" />}
         title="Chưa có ứng viên"
         description="Ứng viên được tạo tự động khi ứng viên nhắn tin qua Zalo. Nhấp vào một ứng viên để xem chi tiết."
         actions={
-          <Button variant="outline" size="sm" onClick={() => refresh()}>
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw className="size-4" />
             Làm mới
           </Button>
@@ -108,17 +292,39 @@ export const LeadListContent = () => {
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {sortedLeads.map((lead) => (
-          <LeadCard
-            key={lead.id}
-            lead={lead}
-            showStageBadge={!hasActiveStage}
-            onClick={handleLeadSelect}
-          />
+      <div className="space-y-6">
+        <LeadPriorityLegend />
+        {allSections.map((section) => (
+          <LeadSection
+            key={section.key}
+            title={section.title}
+            leads={section.leads}
+            total={section.total}
+            page={section.page}
+            perPage={SECTION_PER_PAGE}
+            isPriority={section.isPriority}
+            isLoading={section.isLoading}
+            error={section.error}
+            emptyText={
+              section.key === "needs_reply"
+                ? "Không có ứng viên cần trả lời."
+                : "Không có ứng viên trong mục này."
+            }
+            onPageChange={(page) => {
+              setSectionPages((prev) => ({ ...prev, [section.key]: page }));
+              fetchSection(section.key, page);
+            }}
+          >
+            {section.leads.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                onClick={handleLeadSelect}
+              />
+            ))}
+          </LeadSection>
         ))}
       </div>
-      <ListPagination rowsPerPageOptions={[20, 50, 100]} className="pt-4" />
       <Sheet
         open={!!selectedLeadId}
         onOpenChange={(open) => !open && setSelectedLeadId(null)}
@@ -143,20 +349,160 @@ export const LeadListContent = () => {
   );
 };
 
-const LeadCardSkeleton = () => (
-  <div className="rounded-xl border bg-card p-4">
-    <div className="flex items-center gap-3">
-      <Skeleton shimmer className="size-9 shrink-0 rounded-full" />
-      <div className="flex-1 space-y-2">
-        <Skeleton shimmer className="h-4 w-1/3 rounded" />
-        <Skeleton shimmer className="h-3 w-1/2 rounded" />
+const PRIORITY_LEGEND = [
+  {
+    label: "Cần chăm sóc",
+    className:
+      "border-rose-300/70 bg-rose-100/80 text-rose-700 dark:border-rose-500/45 dark:bg-rose-950/45 dark:text-rose-300",
+  },
+  {
+    label: "Cần theo dõi",
+    className:
+      "border-amber-300/70 bg-amber-100/80 text-amber-700 dark:border-amber-500/45 dark:bg-amber-950/45 dark:text-amber-300",
+  },
+  {
+    label: "Bình thường",
+    className: "border-border bg-muted text-muted-foreground",
+  },
+];
+
+const LeadPriorityLegend = () => (
+  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+    <span className="font-medium text-foreground">Mức độ ưu tiên</span>
+    {PRIORITY_LEGEND.map((item) => (
+      <span key={item.label} className="inline-flex items-center gap-1.5">
+        <span
+          className={cn(
+            "inline-flex size-5 items-center justify-center rounded-full border ring-1 ring-border/60",
+            item.className,
+          )}
+        >
+          <UserRound className="size-3" aria-hidden="true" />
+        </span>
+        {item.label}
+      </span>
+    ))}
+  </div>
+);
+
+const LeadSection = ({
+  title,
+  leads,
+  total,
+  page,
+  perPage,
+  emptyText,
+  isLoading,
+  error,
+  isPriority,
+  onPageChange,
+  children,
+}: {
+  title: string;
+  leads: Lead[];
+  total: number;
+  page: number;
+  perPage: number;
+  emptyText: string;
+  isLoading: boolean;
+  error: boolean;
+  isPriority?: boolean;
+  onPageChange: (page: number) => void;
+  children: ReactNode;
+}) => {
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const start = total === 0 ? 0 : (page - 1) * perPage + 1;
+  const end = Math.min(total, page * perPage);
+  const showPager = total > perPage;
+
+  return (
+    <section className="space-y-3">
+      <div
+        className={cn(
+          "flex min-h-9 items-center justify-between gap-3 border-b border-border/70 pb-2",
+          isPriority && "border-primary/25",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <h2
+            className={cn(
+              "truncate text-sm font-semibold text-foreground",
+              isPriority && "text-primary",
+            )}
+          >
+            {title}
+          </h2>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
+            {total}
+          </span>
+        </div>
+        {isLoading && (
+          <span className="text-xs font-medium text-muted-foreground">
+            Đang cập nhật
+          </span>
+        )}
       </div>
-    </div>
-    <div className="mt-4 space-y-2 border-y border-border/70 py-2 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0 sm:border-y-0 sm:py-0">
-      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
-      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
-      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
-      <Skeleton shimmer className="h-5 rounded sm:h-12 sm:rounded-lg" />
+
+      {error ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-5 text-sm text-destructive">
+          Không tải được danh sách ứng viên.
+        </div>
+      ) : leads.length > 0 ? (
+        <div className={CARD_GRID_CLASS}>{children}</div>
+      ) : isLoading ? (
+        <div className={CARD_GRID_CLASS}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <LeadCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-border/80 px-4 py-5 text-sm text-muted-foreground">
+          {emptyText}
+        </div>
+      )}
+
+      {showPager && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span className="tabular-nums">
+            {start}-{end} / {total}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border/70 bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isLoading || page <= 1}
+              onClick={() => onPageChange(Math.max(1, page - 1))}
+              aria-label={`Trang trước của ${title}`}
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <span className="min-w-16 text-center tabular-nums">
+              {page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border/70 bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isLoading || page >= totalPages}
+              onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+              aria-label={`Trang tiếp theo của ${title}`}
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
+
+const LeadCardSkeleton = () => (
+  <div className="rounded-lg border bg-card px-2.5 py-1.5">
+    <div className="flex items-center gap-2">
+      <Skeleton shimmer className="size-7 shrink-0 rounded-full" />
+      <div className="min-w-0 flex-1">
+        <Skeleton shimmer className="h-3.5 w-1/2 rounded" />
+      </div>
+      <Skeleton shimmer className="size-7 shrink-0 rounded-md" />
     </div>
   </div>
 );

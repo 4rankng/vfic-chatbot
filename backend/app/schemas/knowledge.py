@@ -63,6 +63,8 @@ class KnowledgeDocumentListResponse(BaseModel):
 class UploadRequest(BaseModel):
     """JSON text upload (kept for the Drive path / programmatic clients)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     file_name: str
     content: str
     drive_file_id: str | None = None
@@ -72,11 +74,15 @@ class UploadRequest(BaseModel):
 class KnowledgeDocumentUpdate(BaseModel):
     """Admin-editable document metadata."""
 
+    model_config = ConfigDict(extra="forbid")
+
     file_name: str | None = None
     project_id: uuid.UUID | None = None
 
 
 class SearchTestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     query: str
     top_k: int = 10
     project_id: uuid.UUID | None = None

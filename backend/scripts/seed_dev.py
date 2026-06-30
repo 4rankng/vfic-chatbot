@@ -13,9 +13,8 @@ Or from repo root:
 """
 from __future__ import annotations
 
-import asyncio
-import random
 import json
+import random
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -349,12 +348,9 @@ def make_leads(users: list[User], jobs: list[Job], convos: list[Conversation]) -
                      "Công nhân kho vận"]
     stages_weights = [
         (LeadStage.NEW, 8),
-        (LeadStage.ENGAGED, 7),
-        (LeadStage.QUALIFIED, 5),
-        (LeadStage.APPLIED, 4),
-        (LeadStage.HIRED, 3),
-        (LeadStage.LOST, 5),
-        (LeadStage.UNQUALIFIED, 3),
+        (LeadStage.CONTACTING, 10),
+        (LeadStage.REGISTERED, 9),
+        (LeadStage.SKIPPED, 8),
     ]
 
     stages_pool: list[LeadStage] = []
@@ -373,12 +369,9 @@ def make_leads(users: list[User], jobs: list[Job], convos: list[Conversation]) -
 
         score_map = {
             LeadStage.NEW: None,
-            LeadStage.ENGAGED: LeadScore.warm,
-            LeadStage.QUALIFIED: LeadScore.hot,
-            LeadStage.APPLIED: LeadScore.hot,
-            LeadStage.HIRED: LeadScore.hot,
-            LeadStage.LOST: LeadScore.not_interested,
-            LeadStage.UNQUALIFIED: LeadScore.not_interested,
+            LeadStage.CONTACTING: LeadScore.warm,
+            LeadStage.REGISTERED: LeadScore.hot,
+            LeadStage.SKIPPED: LeadScore.not_interested,
         }
 
         lead = Lead(
@@ -395,17 +388,15 @@ def make_leads(users: list[User], jobs: list[Job], convos: list[Conversation]) -
             expected_salary=f"{rng.randint(6, 12)} triệu" if rng.random() > 0.3 else None,
             lead_score=score_map[stage],
             lead_stage=stage,
-            intent_score=round(rng.uniform(0.3, 1.0), 2) if stage in (LeadStage.QUALIFIED, LeadStage.APPLIED, LeadStage.HIRED) else None,
-            qualification_reasons=["Đạt yêu cầu tuổi", "Có kinh nghiệm"] if stage == LeadStage.QUALIFIED else [],
-            assigned_recruiter_id=users[1 + (i % 2)].id if stage in (LeadStage.ENGAGED, LeadStage.QUALIFIED, LeadStage.APPLIED) else None,
+            intent_score=round(rng.uniform(0.3, 1.0), 2) if stage == LeadStage.REGISTERED else None,
+            qualification_reasons=["Đạt yêu cầu tuổi", "Có kinh nghiệm"] if stage == LeadStage.REGISTERED else [],
+            assigned_recruiter_id=users[1 + (i % 2)].id if stage in (LeadStage.CONTACTING, LeadStage.REGISTERED) else None,
             notes=None,
             created_at=created,
             updated_at=created + timedelta(hours=rng.randint(1, 48)),
         )
-        if stage == LeadStage.LOST:
-            lead.notes = "Không liên lạc được sau 3 lần gọi"
-        elif stage == LeadStage.UNQUALIFIED:
-            lead.notes = "Ngoài độ tuổi quy định"
+        if stage == LeadStage.SKIPPED:
+            lead.notes = "Bỏ qua: không phù hợp hoặc không liên lạc được"
         leads.append(lead)
     return leads
 
@@ -414,12 +405,9 @@ def make_lead_events(leads: list[Lead], users: list[User]) -> list[LeadEvent]:
     events: list[LeadEvent] = []
     event_types_by_stage: dict[LeadStage, list[str]] = {
         LeadStage.NEW: ["created", "auto_tag"],
-        LeadStage.ENGAGED: ["created", "auto_tag", "first_contact", "followed_up"],
-        LeadStage.QUALIFIED: ["created", "auto_tag", "first_contact", "followed_up", "qualified"],
-        LeadStage.APPLIED: ["created", "auto_tag", "first_contact", "qualified", "applied"],
-        LeadStage.HIRED: ["created", "auto_tag", "first_contact", "qualified", "applied", "hired"],
-        LeadStage.LOST: ["created", "auto_tag", "first_contact", "lost"],
-        LeadStage.UNQUALIFIED: ["created", "auto_tag", "unqualified"],
+        LeadStage.CONTACTING: ["created", "auto_tag", "first_contact", "followed_up"],
+        LeadStage.REGISTERED: ["created", "auto_tag", "first_contact", "registered"],
+        LeadStage.SKIPPED: ["created", "auto_tag", "skipped"],
     }
 
     for lead in leads:
@@ -438,11 +426,11 @@ def make_lead_events(leads: list[Lead], users: list[User]) -> list[LeadEvent]:
 def make_followup_tasks(leads: list[Lead], users: list[User]) -> list[FollowUpTask]:
     tasks: list[FollowUpTask] = []
     for i, lead in enumerate(leads):
-        if lead.lead_stage in (LeadStage.ENGAGED, LeadStage.QUALIFIED, LeadStage.APPLIED):
+        if lead.lead_stage in (LeadStage.CONTACTING, LeadStage.REGISTERED):
             tasks.append(FollowUpTask(
                 lead_id=lead.id,
-                due_at=hours_ago(-rng.randint(1, 72)) if lead.lead_stage == LeadStage.APPLIED else hours_ago(-rng.randint(-48, 24)),
-                note="Gọi lại hỏi tiến độ hồ sơ" if lead.lead_stage == LeadStage.APPLIED else "Liên hệ tư vấn chi tiết công việc",
+                due_at=hours_ago(-rng.randint(1, 72)) if lead.lead_stage == LeadStage.REGISTERED else hours_ago(-rng.randint(-48, 24)),
+                note="Gọi lại hỏi tiến độ đăng ký" if lead.lead_stage == LeadStage.REGISTERED else "Liên hệ tư vấn chi tiết công việc",
                 status=rng.choice([FollowupStatus.PENDING, FollowupStatus.DONE]),
                 created_by=users[1 + (i % 2)].id,
                 completed_at=hours_ago(2) if rng.random() > 0.5 else None,
@@ -454,11 +442,6 @@ def make_conversations(users: list[User]) -> list[Conversation]:
     convos: list[Conversation] = []
     modes = [ConversationMode.BOT, ConversationMode.BOT, ConversationMode.BOT,
              ConversationMode.HUMAN, ConversationMode.SEMI_AUTO, ConversationMode.CLOSED]
-    names = ["Anh Tuấn", "Chị Mai", "Lan Anh", "Anh Hoàng", "Minh Quân", "Thu Hà",
-             "Đức Trí", "Bích Ngọc", "Thành Đạt", "Hương Giang", "Quốc Bảo", "Phương Linh",
-             "Văn Kiệt", "Thảo Vy", "Xuân Hạnh", "Yên Nhi", "Anh Khoa", "Bảo Ngọc",
-             "Chiến Thắng", "Diệu Anh", "Em Dâu", "Phúc Lâm", "Gia Hân", "Hải Đăng",
-             "Khải Vy"]
 
     for i in range(25):
         mode = modes[i % len(modes)]
@@ -1072,8 +1055,8 @@ def seed() -> None:
 
         db.commit()
         print("\n✅ Dev database seeded successfully!")
-        print(f"   Users: admin@vfic.dev / lan.nguyen@vfic.dev / minh.tran@vfic.dev")
-        print(f"   Password: admin123")
+        print("   Users: admin@vfic.dev / lan.nguyen@vfic.dev / minh.tran@vfic.dev")
+        print("   Password: admin123")
         print(f"   35 leads, 25 conversations, {len(msgs)} messages across 4 projects")
 
 

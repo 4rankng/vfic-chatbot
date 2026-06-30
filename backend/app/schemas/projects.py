@@ -41,12 +41,16 @@ class ProjectListResponse(BaseModel):
 
 
 class ProjectCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     slug: str
     name: str
     is_active: bool = True
 
 
 class ProjectUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     is_active: bool | None = None
     default_persona_id: uuid.UUID | None = None
@@ -85,6 +89,8 @@ class FeatureListResponse(BaseModel):
 
 class FeatureUpdate(BaseModel):
     """Recruiter/admin edit of a single extracted feature value."""
+
+    model_config = ConfigDict(extra="forbid")
 
     value_text: str | None = None
     value_json: dict[str, Any] | None = None

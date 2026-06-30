@@ -41,6 +41,8 @@ class LeadListResponse(BaseModel):
 
 
 class LeadUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     version: int | None = None
     name: str | None = None
     phone: str | None = None
@@ -55,17 +57,24 @@ class LeadUpdate(BaseModel):
     expected_salary: str | None = None
     notes: str | None = None
     lead_score: LeadScore | None = None
+    lead_stage: LeadStage | None = None
 
 
 class AssignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     recruiter_id: uuid.UUID
 
 
 class StageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     stage: LeadStage
 
 
 class FollowUpCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     due_at: datetime
     note: str | None = None
 

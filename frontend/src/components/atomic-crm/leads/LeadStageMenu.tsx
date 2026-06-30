@@ -42,7 +42,7 @@ export const LeadStageMenu = () => {
   const handleSelect = (stage: string) => {
     if (isPending || stage === lead.lead_stage) return;
 
-    let updateData: Partial<Lead> & { closed_reason?: string } = {
+    const updateData: Partial<Lead> & { closed_reason?: string } = {
       lead_stage: stage,
     };
 
@@ -60,9 +60,15 @@ export const LeadStageMenu = () => {
         previousData: lead,
       },
       {
-        mutationMode: "optimistic",
-        onSuccess: () =>
-          notify("Đã cập nhật giai đoạn", { type: "success", undoable: true }),
+        mutationMode: "pessimistic",
+        onSuccess: (updatedLead) => {
+          window.dispatchEvent(
+            new CustomEvent("vfic:lead-list-refresh", {
+              detail: { lead_id: updatedLead.id },
+            }),
+          );
+          notify("Đã cập nhật giai đoạn", { type: "success" });
+        },
         onError: (error) =>
           notify(
             isRlsError(error)

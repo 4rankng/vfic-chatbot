@@ -38,6 +38,14 @@ async def list_leads(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=200),
     stage: LeadStage | None = None,
+    needs_reply: bool = Query(
+        False,
+        description="Return leads in the Cần trả lời queue.",
+    ),
+    exclude_needs_reply: bool = Query(
+        False,
+        description="Exclude Cần trả lời leads from results. Kept for API compatibility; stage sections normally include all leads.",
+    ),
     zalo_id: str | None = None,
     zalo_ids: str | None = Query(None, description="Comma-separated list of zalo ids (IN filter)"),
     q: str | None = Query(None, description="Case-insensitive search over name/phone/desired_job/zalo_id"),
@@ -52,6 +60,8 @@ async def list_leads(
         page=page,
         per_page=per_page,
         stage=stage,
+        needs_reply=needs_reply,
+        exclude_needs_reply=exclude_needs_reply,
         zalo_id=zalo_id,
         zalo_ids=zalo_id_list or None,
         q=q,
@@ -67,10 +77,18 @@ async def get_lead(lead_id: int, _user: User = Depends(get_current_user), db: As
 
 
 @router.patch("/{lead_id}", response_model=LeadOut)
-async def update_lead(lead_id: int, body: LeadUpdate, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
+async def update_lead(lead_id: int, body: LeadUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
     lead = await _load(lead_id, db)
+    changes = body.model_dump(exclude_unset=True)
     try:
-        return LeadOut.model_validate(await LeadService(db).update(lead, body.model_dump(exclude_unset=True)))
+        stage = changes.pop("lead_stage", None)
+        service = LeadService(db)
+        if stage is not None:
+            lead = await service.set_stage(lead, stage, actor=user)
+            changes.pop("version", None)
+        if changes:
+            lead = await service.update(lead, changes)
+        return LeadOut.model_validate(lead)
     except LeadConflict:
         raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 

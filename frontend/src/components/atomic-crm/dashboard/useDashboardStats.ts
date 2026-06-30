@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { LEAD_STAGES } from "../types";
 import { apiJson } from "../providers/rest/api";
 
-// Funnel KPIs (total leads, per-stage breakdown, qualified/hired rate, human
+// Funnel KPIs (total leads, per-stage breakdown, registered rate, human
 // takeover count) all derive from ONE server-side aggregate — GET
 // /dashboard/metrics — not a client-side dump of lead/conversation rows. The
 // previous useGetList(perPage=N) design exceeded the per_page<=200 list cap

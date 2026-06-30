@@ -35,7 +35,7 @@ async def find_eligible_conversations(db) -> list[Conversation]:
     - ``followup_count < cap``
     - ``last_followup_attempt_at`` is old enough (failed-send cooldown)
     - ``bot_locked_until`` is clear
-    - lead stage is ``NEW / ENGAGED / QUALIFIED``
+    - lead stage is ``NEW / CONTACTING / REGISTERED``
     - lead score is not ``not_interested``
     - lead showed interest (``desired_job`` non-empty OR ``lead_score`` in ``hot/warm``)
 
@@ -70,7 +70,7 @@ async def find_eligible_conversations(db) -> list[Conversation]:
           AND (c.last_followup_attempt_at IS NULL
                OR c.last_followup_attempt_at < :now_minus_cooldown)
           AND (c.bot_locked_until IS NULL OR c.bot_locked_until < now())
-          AND l.lead_stage IN ('NEW', 'ENGAGED', 'QUALIFIED')
+          AND l.lead_stage IN ('NEW', 'CONTACTING', 'REGISTERED')
           AND (l.lead_score IS NULL OR l.lead_score <> 'not_interested')
           AND (l.lead_score IN ('hot', 'warm')
                OR (l.desired_job IS NOT NULL AND l.desired_job <> ''))

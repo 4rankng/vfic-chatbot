@@ -40,7 +40,7 @@ const ProjectEditContent = () => {
       await dataProvider.update("projects", {
         id: project.id,
         previousData: project,
-        data: { ...data, id: project.id },
+        data,
       });
       notify("Đã lưu.", { type: "success" });
       redirect("/projects");

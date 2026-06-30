@@ -92,7 +92,8 @@ const buildListQuery = (
     if (value === undefined || value === null || value === "") continue;
     // ra filter keys pass straight through as query params; the backend honours
     // the ones it knows (mode/status/zalo_chat_id/needs_attention on
-    // conversations; stage/zalo_id/zalo_ids on leads) and ignores the rest.
+    // conversations; stage/needs_reply/zalo_id/zalo_ids on leads) and ignores
+    // the rest.
     const wireValue =
       resource === "conversations" && (key === "mode" || key === "status")
         ? String(value).toUpperCase()
@@ -279,15 +280,21 @@ const getDataProviderWithCustomMethods = () => ({
   },
 
   async disableUser(userId: string) {
-    return apiJson<ApiRecord>(`${BASE}/users/${encodeURIComponent(userId)}/disable`, {
-      method: "POST",
-    });
+    return apiJson<ApiRecord>(
+      `${BASE}/users/${encodeURIComponent(userId)}/disable`,
+      {
+        method: "POST",
+      },
+    );
   },
 
   async enableUser(userId: string) {
-    return apiJson<ApiRecord>(`${BASE}/users/${encodeURIComponent(userId)}/enable`, {
-      method: "POST",
-    });
+    return apiJson<ApiRecord>(
+      `${BASE}/users/${encodeURIComponent(userId)}/enable`,
+      {
+        method: "POST",
+      },
+    );
   },
 
   // Sign-up is disabled. VFIC accounts are provisioned out-of-band by an admin.

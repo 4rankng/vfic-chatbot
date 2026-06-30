@@ -10,6 +10,8 @@ from app.models.job import JobStatus
 
 
 class JobBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str
     company_id: uuid.UUID
     factory_name: str | None = None
@@ -37,6 +39,8 @@ class JobCreate(JobBase):
 
 
 class JobUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = None
     province: str | None = None
     salary_min: int | None = None
@@ -65,6 +69,8 @@ class JobSearchResult(BaseModel):
 
 
 class JobSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     query: str = ""
     top_k: int = 25
 

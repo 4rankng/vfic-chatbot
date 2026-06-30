@@ -67,6 +67,7 @@ export type Lead = {
   qualification_reasons?: string[];
   lead_score: LeadScoreValue | null;
   lead_stage: string;
+  next_action_at?: string | null;
   created_at: string;
   updated_at: string;
   // Extra live columns (returned by select("*")); surfaced for derived tags /
@@ -256,12 +257,9 @@ export interface LabeledValue {
 // Order = recruitment funnel. Used across LeadShow, LeadCard, LeadColumn, Dashboard.
 export const LEAD_STAGES = [
   { value: "NEW", label: "Mới", color: "bg-slate-500" },
-  { value: "ENGAGED", label: "Đang liên hệ", color: "bg-blue-500" },
-
-  { value: "APPLIED", label: "Đã ứng tuyển", color: "bg-amber-500" },
-  { value: "HIRED", label: "Đã tuyển", color: "bg-emerald-500" },
-  { value: "LOST", label: "Đã mất", color: "bg-rose-500" },
-  { value: "UNQUALIFIED", label: "Không đạt", color: "bg-zinc-500" },
+  { value: "CONTACTING", label: "Đang liên hệ", color: "bg-blue-500" },
+  { value: "REGISTERED", label: "Đã đăng ký", color: "bg-amber-500" },
+  { value: "SKIPPED", label: "Bỏ qua", color: "bg-zinc-500" },
 ] as const;
 
 export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];

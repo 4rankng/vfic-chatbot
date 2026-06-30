@@ -1,34 +1,18 @@
-import {
-  AvatarFallback,
-  AvatarImage,
-  Avatar as ShadcnAvatar,
-} from "@/components/ui/avatar";
+import { Avatar as ShadcnAvatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { UserRound } from "lucide-react";
 import { useRecordContext } from "ra-core";
 
 import type { Lead } from "../types";
 
-const initials = (name?: string) => {
-  if (!name) return "UV";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-};
-
-const palette = [
-  "bg-gradient-to-br from-purple-400 to-indigo-500 text-white border-transparent",
-  "bg-gradient-to-br from-pink-400 to-rose-400 text-white border-transparent",
-  "bg-gradient-to-br from-emerald-400 to-teal-500 text-white border-transparent",
-  "bg-gradient-to-br from-cyan-400 to-blue-500 text-white border-transparent",
-  "bg-gradient-to-br from-orange-400 to-orange-600 text-white border-transparent",
-  "bg-gradient-to-br from-violet-400 to-fuchsia-500 text-white border-transparent",
-];
-
-const paletteFor = (seed?: string) => {
-  if (!seed) return palette[0];
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return palette[h % palette.length];
+const priorityTone = (score: Lead["lead_score"]) => {
+  if (score === "hot") {
+    return "border-rose-300/70 bg-rose-100/80 text-rose-700 dark:border-rose-500/45 dark:bg-rose-950/45 dark:text-rose-300";
+  }
+  if (score === "warm") {
+    return "border-amber-300/70 bg-amber-100/80 text-amber-700 dark:border-amber-500/45 dark:bg-amber-950/45 dark:text-amber-300";
+  }
+  return "border-border bg-muted text-muted-foreground";
 };
 
 export const LeadAvatar = ({
@@ -55,15 +39,12 @@ export const LeadAvatar = ({
     <ShadcnAvatar
       className={cn(
         sizeClass,
-        "font-semibold ring-1 ring-border",
-        paletteFor(r.name),
+        "items-center justify-center border ring-1 ring-border/60",
+        priorityTone(r.lead_score),
         className,
       )}
     >
-      <AvatarImage src={(r as any).avatar?.src} alt={r.name} />
-      <AvatarFallback className="bg-transparent">
-        {initials(r.name)}
-      </AvatarFallback>
+      <UserRound className="size-1/2" aria-hidden="true" />
     </ShadcnAvatar>
   );
 };

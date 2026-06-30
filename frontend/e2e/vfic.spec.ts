@@ -32,9 +32,10 @@ test.describe.fixme("VFIC CRM end-to-end", () => {
     });
 
     // Check if pipeline stages are visible
-    await expect(page.locator("text=NEW")).toBeVisible();
-    await expect(page.locator("text=QUALIFIED")).toBeVisible();
-    await expect(page.locator("text=HIRED")).toBeVisible();
+    await expect(page.locator("text=Mới")).toBeVisible();
+    await expect(page.locator("text=Đang liên hệ")).toBeVisible();
+    await expect(page.locator("text=Đã đăng ký")).toBeVisible();
+    await expect(page.locator("text=Bỏ qua")).toBeVisible();
   });
 
   test("should navigate to conversations inbox", async ({ page }) => {

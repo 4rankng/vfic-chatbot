@@ -21,11 +21,13 @@ Contract reproduced (see ``app/services/zalo_bot_service.py``):
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import logging
 import os
+import random
 import time
 import uuid
-import logging
 
 import httpx
 from fastapi import FastAPI, Request
@@ -46,11 +48,26 @@ app = FastAPI(title="Zalo Mock Server")
 
 BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "8000"))
 WEBHOOK_URL = f"http://localhost:{BACKEND_PORT}/webhooks/zalo"
+AUTO_REPLY_DELAY = float(os.environ.get("AUTO_REPLY_DELAY", "1.5"))
 
 # In-memory conversation store: {chat_id: [event, ...]}
 # Each event: {"role": "user"|"bot"|"typing"|"system", "text": ..., "ts": float}
 _conversations: dict[str, list[dict]] = {}
 _msg_counter = 0
+
+# Sample replies a "user" sends back when the bot messages them.
+_AUTO_REPLIES = [
+    "dạ vâng, em hiểu rồi ạ",
+    "cảm ơn anh/chị nhiều nhé",
+    "cho em hỏi thêm một chút được không ạ",
+    "em muốn biết thêm về mức lương ạ",
+    "dạ, em muốn ứng tuyển vị trí này ạ",
+    "ok em sẽ gửi hồ sơ sớm ạ",
+    "thời gian làm việc như thế nào ạ",
+    "em có thể liên hệ qua số điện thoại không ạ",
+    "dạ vâng, em sẽ xem xét ạ",
+    "cho em hỏi yêu cầu công việc gì ạ",
+]
 
 
 def _next_id() -> int:
@@ -65,6 +82,45 @@ def _record(chat_id: str, role: str, text: str = "") -> None:
 
 def _ts_ms() -> int:
     return int(time.time() * 1000)
+
+
+# ---------------------------------------------------------------------------
+# Auto-reply: simulate user responding after bot sends a message
+# ---------------------------------------------------------------------------
+
+
+async def _fire_user_reply(chat_id: str) -> None:
+    """Background task: wait briefly then POST a simulated user reply
+    back to the backend webhook so the full round-trip works in dev."""
+    await asyncio.sleep(AUTO_REPLY_DELAY)
+
+    reply_text = random.choice(_AUTO_REPLIES)
+    payload = {
+        "update_id": _next_id(),
+        "message": {
+            "message_id": _next_id(),
+            "date": int(time.time()),
+            "chat": {"id": chat_id},
+            "from": {"id": chat_id, "display_name": "Mock User"},
+            "text": reply_text,
+        },
+    }
+
+    _record(chat_id, "user", reply_text)
+    logger.info("AUTO-REPLY chat=%s  text=%s", chat_id, reply_text[:100])
+
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.post(WEBHOOK_URL, json=payload)
+        resp_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        logger.info(
+            "AUTO-REPLY WEBHOOK %s  %s",
+            resp.status_code,
+            json.dumps(resp_json, ensure_ascii=False)[:200],
+        )
+    except Exception as exc:
+        logger.error("AUTO-REPLY webhook POST failed: %s", exc)
+        _record(chat_id, "system", f"auto-reply error: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +153,8 @@ async def bot_method(token: str, method: str, request: Request) -> JSONResponse:
     if method in ("sendMessage", "sendPhoto", "sendSticker", "sendVoice"):
         reply_text = body.get("text") or body.get("caption") or ""
         _record(chat_id, "bot", reply_text)
+        # Simulate user replying back after a short delay.
+        asyncio.create_task(_fire_user_reply(chat_id))
         return JSONResponse(
             {
                 "ok": True,

@@ -21,7 +21,6 @@ from app.models.conversation import (
 from app.models.lead import Lead, LeadStage
 from app.models.user import Role, User
 from app.services.conversation.state import ConversationConflict, ConversationState, utcnow
-from app.services.lead_events import LeadEventBus
 from app.services.lead_service import LeadConflict, LeadService
 from app.services.presence import _get_viewers, join_viewing, leave_viewing
 
@@ -388,7 +387,7 @@ async def test_lead_set_stage_optimistic_conflict():
 
     service = LeadService(db)
     with pytest.raises(LeadConflict):
-        await service.set_stage(lead, LeadStage.ENGAGED, actor=_make_user())
+        await service.set_stage(lead, LeadStage.CONTACTING, actor=_make_user())
 
 
 # --- Presence tests (mocked Redis) ---

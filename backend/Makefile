@@ -8,6 +8,7 @@ PROD_DIR      := /opt/vfic
 IMAGE_NAME    := franknguyenvd/vfic-backend
 GIT_SHA       := $(shell git rev-parse --short HEAD)
 BUILDER       := bb
+PY            := ./.venv/bin/python
 
 # Deploy opens ~9 sequential SSH sessions. Reuse ONE master connection
 # (ControlMaster) so a single transient refusal ("ssh: connect to host ...
@@ -28,8 +29,8 @@ db:
 		echo "==> Created backend/.env from .env.example (localhost dev URLs). Set API keys to exercise the bot."; \
 	fi
 	@echo "==> Applying Alembic baseline (idempotent)..."
-	@. .venv/bin/activate && alembic upgrade head || echo "  (alembic skipped — ensure backend/.venv exists: pip install -e .[dev])"
-	@. .venv/bin/activate && python -m scripts.create_admin --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true
+	@$(PY) -m alembic upgrade head || echo "  (alembic skipped — ensure backend/.venv exists: pip install -e .[dev])"
+	@$(PY) -m scripts.create_admin --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true
 	@echo "==> Dev DB ready. Adminer: http://localhost:8082 (server: postgres, db: vfic, user/pass: vfic/vfic)"
 
 # ---- Kill any process bound to $(1) (a port number). ----
@@ -76,10 +77,10 @@ dev: db
 		export ZALO_BOT_API_BASE="http://localhost:$(ZALO_MOCK_PORT)"; \
 		export ZALO_BOT_TOKEN="dev-mock-token"; \
 		REDIS_URL="$$(grep "^REDIS_URL=" .env | cut -d= -f2-)"; \
-		(. .venv/bin/activate && exec uvicorn app.main:app --reload --port $(BACKEND_PORT)) & \
-		(. .venv/bin/activate && exec rq worker ingest --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
-		(. .venv/bin/activate && exec rq worker webhook_high persistence_low --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
-		(. .venv/bin/activate && exec python -m mock_servers.zalo_mock --port $(ZALO_MOCK_PORT)) & \
+		(exec $(PY) -m uvicorn app.main:app --reload --port $(BACKEND_PORT)) & \
+		(exec $(PY) -m rq.cli worker ingest --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
+		(exec $(PY) -m rq.cli worker webhook_high persistence_low --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
+		(exec $(PY) -m mock_servers.zalo_mock --port $(ZALO_MOCK_PORT)) & \
 		(cd ../frontend && exec npm run dev -- --port $(FRONTEND_PORT) --strictPort) & wait'
 
 # ---- Build & push the AMD64 backend image to DockerHub. ----

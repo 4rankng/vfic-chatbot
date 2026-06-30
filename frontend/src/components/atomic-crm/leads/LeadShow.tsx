@@ -10,7 +10,7 @@ import { DeleteButton } from "@/components/admin";
 import { TopToolbar } from "../layout/TopToolbar";
 import { chatRepository } from "../conversations/chatRepository";
 import { ChatThread } from "../conversations/ChatThread";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { Lead, Conversation, Message } from "../types";
 import { LeadAvatar } from "./LeadAvatar";
@@ -19,10 +19,29 @@ import { LeadInfoPanel } from "./LeadInfoPanel";
 import { LeadScoreBar } from "./LeadScoreBar";
 import { LeadStageBadge } from "./LeadStageBadge";
 import { useLeadPresence, type ViewerInfo } from "./useLeadPresence";
-import { Bot, Eye, MessageSquare } from "lucide-react";
+import {
+  Bot,
+  Briefcase,
+  Calendar,
+  Check,
+  CircleDollarSign,
+  Copy,
+  Eye,
+  Hash,
+  MapPin,
+  MessageSquare,
+  Phone,
+  User,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PresenceViewers = ({ viewers, typingUsers }: { viewers: ViewerInfo[]; typingUsers: ViewerInfo[] }) => {
+const PresenceViewers = ({
+  viewers,
+  typingUsers,
+}: {
+  viewers: ViewerInfo[];
+  typingUsers: ViewerInfo[];
+}) => {
   if (viewers.length === 0 && typingUsers.length === 0) return null;
   const names = viewers.map((v) => v.name || "Nhân viên").join(", ");
   return (
@@ -32,7 +51,8 @@ const PresenceViewers = ({ viewers, typingUsers }: { viewers: ViewerInfo[]; typi
       {typingUsers.length > 0 && (
         <span className="text-primary">
           {" · "}
-          {typingUsers.map((u) => u.name || "Nhân viên").join(", ")} đang nhập...
+          {typingUsers.map((u) => u.name || "Nhân viên").join(", ")} đang
+          nhập...
         </span>
       )}
     </div>
@@ -221,7 +241,10 @@ export const LeadShowContent = () => {
   return (
     <div className="mt-2 flex flex-col gap-4">
       <LeadHero />
-      <PresenceViewers viewers={presence.viewers} typingUsers={presence.typingUsers} />
+      <PresenceViewers
+        viewers={presence.viewers}
+        typingUsers={presence.typingUsers}
+      />
       <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
         <div className="flex flex-col gap-4">
           <LeadInfoPanel />
@@ -279,7 +302,10 @@ export const LeadShowContentMobile = () => {
           </div>
         )}
       </section>
-      <PresenceViewers viewers={presence.viewers} typingUsers={presence.typingUsers} />
+      <PresenceViewers
+        viewers={presence.viewers}
+        typingUsers={presence.typingUsers}
+      />
       <LeadInfoPanel />
       <LeadChat zaloId={record.zalo_id} />
     </div>
@@ -306,6 +332,193 @@ const formatClock = (iso?: string | null): string => {
   }).format(d);
 };
 
+const formatDateTimeCompact = (iso?: string | null): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+};
+
+const cleanText = (value?: string | number | null) => {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+};
+
+const CompactCopy = ({ value }: { value: string }) => {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* best effort */
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      onClick={handleCopy}
+      title="Sao chép"
+      aria-label="Sao chép"
+    >
+      {copied ? (
+        <Check className="size-3.5 text-emerald-600" />
+      ) : (
+        <Copy className="size-3.5" />
+      )}
+    </button>
+  );
+};
+
+const CompactFact = ({
+  icon,
+  label,
+  value,
+  copyable,
+  mono,
+  className,
+}: {
+  icon: ReactNode;
+  label: string;
+  value?: string | null;
+  copyable?: boolean;
+  mono?: boolean;
+  className?: string;
+}) => {
+  const text = cleanText(value);
+  return (
+    <div
+      className={cn(
+        "grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 border-b border-border/70 px-3 py-2 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0",
+        className,
+      )}
+    >
+      <span className="mt-0.5 text-muted-foreground">{icon}</span>
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </div>
+        <div
+          className={cn(
+            "mt-0.5 flex min-w-0 items-center gap-1.5 text-[13px] leading-5",
+            text ? "text-foreground" : "italic text-muted-foreground",
+            mono && "font-mono tabular-nums",
+          )}
+        >
+          <span className="min-w-0 truncate">{text || "Chưa cung cấp"}</span>
+          {text && copyable && <CompactCopy value={text} />}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CompactLeadDrawerDetails = ({ lead }: { lead: Lead }) => {
+  const location = [cleanText(lead.region), cleanText(lead.living_area)]
+    .filter(Boolean)
+    .join(" · ");
+  const created = formatDateTimeCompact(lead.created_at);
+  const updated = formatDateTimeCompact(lead.updated_at);
+  const displayName = cleanText(lead.name) || "Chưa rõ tên ứng viên";
+  const job = cleanText(lead.desired_job);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <section className="rounded-lg border border-border bg-card/80 px-3 py-3">
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3">
+          <LeadAvatar record={lead} size="lg" className="size-12" />
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="truncate text-xl font-bold leading-6 tracking-tight text-foreground">
+                  {displayName}
+                </h2>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  {lead.phone && <span>{lead.phone}</span>}
+                  {lead.phone && job && <span aria-hidden>·</span>}
+                  {job && <span className="truncate">{job}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <LeadStageBadge stage={lead.lead_stage} className="h-6 text-xs" />
+              <LeadScoreBar
+                score={lead.lead_score}
+                className="h-6 text-[10px]"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-lg border border-border bg-card/80">
+        <div className="grid sm:grid-cols-2">
+          <CompactFact
+            icon={<Phone className="size-4" />}
+            label="Điện thoại"
+            value={lead.phone}
+            copyable
+          />
+          <CompactFact
+            icon={<MessageSquare className="size-4" />}
+            label="Zalo ID"
+            value={lead.zalo_id}
+            copyable
+            mono
+          />
+          <CompactFact
+            icon={<Briefcase className="size-4" />}
+            label="Công việc"
+            value={lead.desired_job}
+          />
+          <CompactFact
+            icon={<CircleDollarSign className="size-4" />}
+            label="Lương"
+            value={lead.expected_salary}
+          />
+          <CompactFact
+            icon={<MapPin className="size-4" />}
+            label="Khu vực"
+            value={location}
+          />
+          <CompactFact
+            icon={<User className="size-4" />}
+            label="Kinh nghiệm"
+            value={lead.years_experience}
+          />
+          <CompactFact
+            icon={<Calendar className="size-4" />}
+            label="Tạo"
+            value={created}
+          />
+          <CompactFact
+            icon={<Calendar className="size-4" />}
+            label="Cập nhật"
+            value={updated}
+          />
+          {lead.notes && (
+            <CompactFact
+              icon={<Hash className="size-4" />}
+              label="Ghi chú"
+              value={lead.notes}
+              className="sm:col-span-2 sm:[&:nth-last-child(-n+2)]:border-b sm:!border-b-0"
+            />
+          )}
+        </div>
+      </section>
+    </div>
+  );
+};
+
 type PreviewStatus = "loading" | "empty" | "error" | "ready";
 
 const LeadChatPreview = ({
@@ -326,11 +539,11 @@ const LeadChatPreview = ({
 
   if (status === "loading") {
     return (
-      <Card>
-        <CardHeader className="pb-3">{title}</CardHeader>
-        <CardContent className="flex flex-col gap-2">
+      <Card className="gap-2 rounded-lg py-3">
+        <CardHeader className="px-3 pb-0">{title}</CardHeader>
+        <CardContent className="flex flex-col gap-1.5 px-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-6 w-full rounded-md" />
+            <Skeleton key={i} className="h-7 w-full rounded-md" />
           ))}
         </CardContent>
       </Card>
@@ -339,15 +552,15 @@ const LeadChatPreview = ({
 
   if (status === "empty") {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="rounded-full bg-muted p-3">
-            <Bot className="size-6 text-muted-foreground" />
+      <Card className="rounded-lg py-0">
+        <CardContent className="flex items-center gap-3 px-3 py-3">
+          <div className="shrink-0 rounded-md bg-muted p-2">
+            <Bot className="size-5 text-muted-foreground" />
           </div>
-          <div>
-            <p className="text-sm font-medium">Chưa có tin nhắn</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Khi ứng viên nhắn tin trên Zalo, nội dung sẽ hiển thị tại đây.
+          <div className="min-w-0">
+            <p className="text-sm font-medium leading-5">Chưa có tin nhắn</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Nội dung Zalo sẽ hiển thị tại đây.
             </p>
           </div>
         </CardContent>
@@ -357,8 +570,8 @@ const LeadChatPreview = ({
 
   if (status === "error") {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center gap-3 p-6 text-center">
+      <Card className="rounded-lg py-0">
+        <CardContent className="flex items-center justify-between gap-3 px-3 py-3">
           <p className="text-sm font-medium text-destructive">
             Không thể tải tin nhắn
           </p>
@@ -371,9 +584,9 @@ const LeadChatPreview = ({
   }
 
   return (
-    <Card aria-label="Tin nhắn gần đây">
-      <CardHeader className="pb-3">{title}</CardHeader>
-      <CardContent className="flex flex-col gap-1.5" aria-live="polite">
+    <Card className="gap-2 rounded-lg py-3" aria-label="Tin nhắn gần đây">
+      <CardHeader className="px-3 pb-0">{title}</CardHeader>
+      <CardContent className="flex flex-col gap-1.5 px-3" aria-live="polite">
         {messages.map((m) => {
           const outbound = m.type === "outbound";
           return (
@@ -472,10 +685,10 @@ export const LeadShowContentSheet = () => {
 
   if (isPending) {
     return (
-      <div className="flex flex-col gap-4 p-4 md:p-6">
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
-        <Skeleton className="h-40 w-full rounded-xl" />
+      <div className="flex flex-col gap-3 p-3 md:p-4">
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-48 w-full rounded-lg" />
+        <Skeleton className="h-24 w-full rounded-lg" />
       </div>
     );
   }
@@ -483,9 +696,8 @@ export const LeadShowContentSheet = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-        <LeadHero />
-        <LeadInfoPanel />
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
+        <CompactLeadDrawerDetails lead={record} />
         <LeadChatPreview
           messages={messages}
           status={status}
@@ -493,8 +705,8 @@ export const LeadShowContentSheet = () => {
         />
       </div>
       {conversationId && (
-        <div className="shrink-0 border-t border-border bg-card/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-          <Button asChild className="h-11 w-full text-sm font-semibold">
+        <div className="shrink-0 border-t border-border bg-card/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          <Button asChild className="h-10 w-full text-sm font-semibold">
             <Link to={`/conversations?id=${conversationId}`}>
               <MessageSquare className="size-4" />
               Mở cuộc trò chuyện

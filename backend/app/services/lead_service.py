@@ -12,11 +12,12 @@ import uuid
 from datetime import datetime
 from typing import Awaitable, Callable
 
-from sqlalchemy import case, desc, func, or_, select, update
+from sqlalchemy import and_, case, desc, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.prompts.lead_memory import LEAD_EXTRACT_SYSTEM_PROMPT
-from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadStage
+from app.models.conversation import Conversation, ConversationMode
+from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadStage
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
 from app.services.lead_events import LeadEventBus
@@ -207,12 +208,15 @@ class LeadService:
         page: int = 1,
         per_page: int = 25,
         stage: LeadStage | None = None,
+        needs_reply: bool = False,
+        exclude_needs_reply: bool = False,
         zalo_id: str | None = None,
         zalo_ids: list[str] | None = None,
         q: str | None = None,
         sort_by: str | None = None,
         order: str | None = "desc",
     ) -> tuple[list[Lead], int]:
+        await self.materialize_conversation_leads(viewer)
         base = select(Lead)
         if viewer.role != Role.admin:
             base = base.where(or_(Lead.assigned_recruiter_id == viewer.id, Lead.assigned_recruiter_id.is_(None)))
@@ -233,6 +237,13 @@ class LeadService:
                     ua(Lead.zalo_id).ilike(ua(pat)),
                 )
             )
+        attention_condition = self._needs_reply_condition(viewer)
+        if needs_reply:
+            base = base.where(attention_condition)
+        elif exclude_needs_reply:
+            # Use IS NOT TRUE to avoid dropping rows where the OR yields NULL
+            # (e.g. lead with next_action_at IS NULL and no matching branch).
+            base = base.where(attention_condition.isnot(True))
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
         sort_col = _LEAD_SORT.get((sort_by or "").lower()) or Lead.updated_at
         priority_order = case(
@@ -240,15 +251,114 @@ class LeadService:
             (Lead.lead_score == "warm", 1),
             else_=2,
         )
+        attention_order = case(
+            (self._unanswered_conversation_exists(viewer), 0),
+            (self._due_followup_exists(), 1),
+            (Lead.next_action_at <= func.now(), 1),
+            (Lead.lead_score == "hot", 2),
+            else_=3,
+        )
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
+        order_by = [priority_order.asc(), order_expr]
+        if needs_reply:
+            order_by = [attention_order.asc(), priority_order.asc(), order_expr]
         rows = (
             await self.db.scalars(
-                base.order_by(priority_order.asc(), order_expr)
+                base.order_by(*order_by)
                 .offset((page - 1) * per_page)
                 .limit(per_page)
             )
         ).all()
         return list(rows), int(total or 0)
+
+    async def materialize_conversation_leads(self, viewer: User) -> None:
+        """Ensure every visible chat has a lead card.
+
+        Conversations are the source of "current chats"; lead extraction can run
+        later or fail to produce profile fields. The CRM board still needs a
+        stable card for that chat, defaulting to the Mới stage.
+        """
+        params: dict[str, object] = {}
+        scope_sql = ""
+        if viewer.role != Role.admin:
+            scope_sql = """
+              AND (
+                c.assigned_recruiter_id = :viewer_id
+                OR c.assigned_recruiter_id IS NULL
+              )
+            """
+            params["viewer_id"] = viewer.id
+
+        await self.db.execute(text("SELECT pg_advisory_xact_lock(hashtext('materialize_conversation_leads'))"))
+        await self.db.execute(
+            text(
+                f"""
+                INSERT INTO public.leads (
+                  zalo_id,
+                  lead_stage,
+                  assigned_recruiter_id,
+                  created_at,
+                  updated_at
+                )
+                SELECT
+                  c.zalo_chat_id,
+                  'NEW'::lead_stage,
+                  c.assigned_recruiter_id,
+                  c.created_at,
+                  c.updated_at
+                FROM public.conversations c
+                WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM public.leads l
+                  WHERE l.zalo_id = c.zalo_chat_id
+                )
+                {scope_sql}
+                ON CONFLICT (zalo_id) DO NOTHING
+                """
+            ),
+            params,
+        )
+        await self.db.commit()
+
+    def _unanswered_conversation_exists(self, viewer: User):
+        conditions = [
+            Conversation.zalo_chat_id == Lead.zalo_id,
+            Conversation.status == "OPEN",
+            Conversation.mode.in_([ConversationMode.HUMAN, ConversationMode.SEMI_AUTO]),
+            Conversation.last_inbound_at.is_not(None),
+            or_(
+                Conversation.last_outbound_at.is_(None),
+                Conversation.last_inbound_at > Conversation.last_outbound_at,
+            ),
+        ]
+        if viewer.role != Role.admin:
+            conditions.append(
+                or_(
+                    Conversation.assigned_recruiter_id == viewer.id,
+                    Conversation.assigned_recruiter_id.is_(None),
+                )
+            )
+        return select(Conversation.id).where(*conditions).exists()
+
+    def _due_followup_exists(self):
+        return (
+            select(FollowUpTask.id)
+            .where(
+                FollowUpTask.lead_id == Lead.id,
+                FollowUpTask.status == FollowupStatus.PENDING,
+                FollowUpTask.due_at <= func.now(),
+            )
+            .exists()
+        )
+
+    def _needs_reply_condition(self, viewer: User):
+        not_skipped = Lead.lead_stage != LeadStage.SKIPPED
+        return or_(
+            and_(not_skipped, self._unanswered_conversation_exists(viewer)),
+            and_(not_skipped, Lead.lead_score == "hot"),
+            and_(not_skipped, Lead.next_action_at.isnot(None), Lead.next_action_at <= func.now()),
+            and_(not_skipped, self._due_followup_exists()),
+        )
 
     async def update(self, lead: Lead, changes: dict) -> Lead:
         """Optimistic-concurrency update: rejects stale writes with LeadConflict."""

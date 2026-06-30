@@ -32,12 +32,9 @@ class LeadScore(str, enum.Enum):
 
 class LeadStage(str, enum.Enum):
     NEW = "NEW"
-    ENGAGED = "ENGAGED"
-    QUALIFIED = "QUALIFIED"
-    APPLIED = "APPLIED"
-    HIRED = "HIRED"
-    LOST = "LOST"
-    UNQUALIFIED = "UNQUALIFIED"
+    CONTACTING = "CONTACTING"
+    REGISTERED = "REGISTERED"
+    SKIPPED = "SKIPPED"
 
 
 class FollowupStatus(str, enum.Enum):

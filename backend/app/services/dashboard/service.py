@@ -3,6 +3,8 @@ suppression rate, failed sends, bot errors. Scoped to the viewer (admin = global
 recruiter = assigned)."""
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_get_json, cache_set_json
@@ -16,13 +18,12 @@ from app.services.dashboard.repository import DashboardRepository
 # stable order including zero-count stages, so the client never has to sort.
 _LEAD_STAGE_ORDER = (
     "NEW",
-    "ENGAGED",
-    "QUALIFIED",
-    "APPLIED",
-    "HIRED",
-    "LOST",
-    "UNQUALIFIED",
+    "CONTACTING",
+    "REGISTERED",
+    "SKIPPED",
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardService:
@@ -60,8 +61,8 @@ class DashboardService:
         recent_turns = await repo.recent_turns_count(5)
 
         total_leads = sum(counts_by_stage.values())
-        qualified_count = counts_by_stage.get("QUALIFIED", 0)
-        hired_count = counts_by_stage.get("HIRED", 0)
+        qualified_count = counts_by_stage.get("REGISTERED", 0)
+        hired_count = 0  # no HIRED stage in the 4-stage model
         bot_run_count = int(bot_summary["total"] or 0)
         bot_sent_count = int(bot_summary["sent"] or 0)
         stage_breakdown = [

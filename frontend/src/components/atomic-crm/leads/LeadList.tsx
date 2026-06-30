@@ -19,7 +19,7 @@ const LeadPageHeader = () => {
 
 export const LeadList = () => {
   return (
-    <ListBase perPage={100} sort={{ field: "updated_at", order: "DESC" }}>
+    <ListBase perPage={1} sort={{ field: "updated_at", order: "DESC" }}>
       <div className="mt-4 px-4 pb-8">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
           <LeadPageHeader />

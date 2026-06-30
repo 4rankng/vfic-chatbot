@@ -2,6 +2,13 @@ import type { Lead } from "../types";
 
 export type LeadsByStage = Record<string, Lead[]>;
 
+export const getLeadStageLabel = (
+  stage: string | null | undefined,
+  leadStages: readonly { value: string; label: string }[],
+) => {
+  return leadStages.find((s) => s.value === stage)?.label ?? stage ?? "";
+};
+
 export const getLeadsByStage = (
   unorderedLeads: Lead[],
   leadStages: readonly { value: string; label: string }[],

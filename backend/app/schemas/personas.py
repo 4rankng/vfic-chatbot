@@ -39,6 +39,8 @@ class PersonaListResponse(BaseModel):
 
 
 class PersonaCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1)
     body_md: str = Field(min_length=1)
     slug: str | None = None  # derived from name if absent
@@ -47,6 +49,8 @@ class PersonaCreate(BaseModel):
 
 
 class PersonaUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     body_md: str | None = None
     notes: str | None = None
