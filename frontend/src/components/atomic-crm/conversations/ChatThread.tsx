@@ -27,8 +27,6 @@ import {
 } from "./chatEdgeScroll";
 import {
   measuredOrEstimatedMessageRowHeight,
-  scrollTopAfterAnchorOffsetChange,
-  scrollTopAfterPrependHeightChange,
 } from "./chatScrollIndex";
 import { Bot, Sparkles, UserRound } from "lucide-react";
 
@@ -64,19 +62,13 @@ const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
 const DEFAULT_CHAT_ITEM_HEIGHT_PX = 96;
-const ANCHOR_RESTORE_FRAMES = 20;
 const HISTORY_PREFETCH_DISTANCE_PX = 1;
+const CHAT_AT_BOTTOM_THRESHOLD_PX = 96;
+const CHAT_AT_TOP_THRESHOLD_PX = 48;
 const VIRTUOSO_INCREASE_VIEWPORT_BY = { top: 2400, bottom: 800 };
 const VIRTUOSO_MIN_OVERSCAN_ITEM_COUNT = { top: 8, bottom: 4 };
 const AVATAR_PLACEHOLDER_STYLE: CSSProperties = { width: 32 };
 const MESSAGE_TEXT_CHUNK_CHARS = 320;
-
-type ScrollAnchor = {
-  id: string;
-  offsetTop: number;
-  scrollTop: number;
-  scrollHeight: number;
-};
 
 type MessageKind = ReturnType<typeof classify>;
 
@@ -268,7 +260,6 @@ export const ChatThread = ({
   const composerWrapRef = useRef<HTMLElement>(null);
   const scrollerElRef = useRef<HTMLElement | null>(null);
   const detachScrollerListenersRef = useRef<(() => void) | null>(null);
-  const anchorRestoreTokenRef = useRef(0);
   const measuredMessageHeightsRef = useRef(new Map<string, number>());
   const initialJumpDoneRef = useRef(false);
   const initialBottomSettleUntilRef = useRef(0);
@@ -445,107 +436,6 @@ export const ChatThread = ({
     return measured;
   }, []);
 
-  const findMessageElement = useCallback(
-    (scrollerEl: HTMLElement, messageId: string) =>
-      Array.from(
-        scrollerEl.querySelectorAll<HTMLElement>("[data-message-id]"),
-      ).find((el) => el.dataset.messageId === messageId) ?? null,
-    [],
-  );
-
-  const cancelAnchorRestore = useCallback(() => {
-    anchorRestoreTokenRef.current += 1;
-    scrollerElRef.current?.removeAttribute("data-anchor-restoring");
-  }, []);
-
-  const captureScrollAnchor = useCallback((): ScrollAnchor | null => {
-    const scrollerEl = scrollerElRef.current;
-    if (!scrollerEl) return null;
-
-    const scrollerTop = scrollerEl.getBoundingClientRect().top;
-    const anchorEl =
-      Array.from(
-        scrollerEl.querySelectorAll<HTMLElement>("[data-message-id]"),
-      ).find((el) => el.getBoundingClientRect().bottom > scrollerTop + 1) ??
-      null;
-    const id = anchorEl?.dataset.messageId;
-    if (!anchorEl || !id) return null;
-
-    return {
-      id,
-      offsetTop: anchorEl.getBoundingClientRect().top - scrollerTop,
-      scrollTop: scrollerEl.scrollTop,
-      scrollHeight: scrollerEl.scrollHeight,
-    };
-  }, []);
-
-  const restoreScrollAnchor = useCallback(
-    (anchor: ScrollAnchor | null, onComplete?: () => void) => {
-      if (!anchor) {
-        onComplete?.();
-        return;
-      }
-
-      let frame = 0;
-      let isComplete = false;
-      const restoreToken = anchorRestoreTokenRef.current + 1;
-      anchorRestoreTokenRef.current = restoreToken;
-      scrollerElRef.current?.setAttribute("data-anchor-restoring", "true");
-      const finish = () => {
-        if (isComplete) return;
-        isComplete = true;
-        scrollerElRef.current?.removeAttribute("data-anchor-restoring");
-        onComplete?.();
-      };
-      const tick = () => {
-        const scrollerEl = scrollerElRef.current;
-        if (!scrollerEl) {
-          finish();
-          return;
-        }
-        if (anchorRestoreTokenRef.current !== restoreToken) {
-          finish();
-          return;
-        }
-
-        const anchorEl = findMessageElement(scrollerEl, anchor.id);
-        if (!anchorEl) {
-          const nextScrollTop = scrollTopAfterPrependHeightChange(
-            anchor,
-            scrollerEl.scrollHeight,
-          );
-          if (Math.abs(scrollerEl.scrollTop - nextScrollTop) > 0.5) {
-            scrollerEl.scrollTop = nextScrollTop;
-            lastScrollTopRef.current = scrollerEl.scrollTop;
-          }
-        } else {
-          const currentOffset =
-            anchorEl.getBoundingClientRect().top -
-            scrollerEl.getBoundingClientRect().top;
-          const nextScrollTop = scrollTopAfterAnchorOffsetChange(
-            scrollerEl.scrollTop,
-            anchor.offsetTop,
-            currentOffset,
-          );
-          if (Math.abs(scrollerEl.scrollTop - nextScrollTop) > 0.5) {
-            scrollerEl.scrollTop = nextScrollTop;
-            lastScrollTopRef.current = scrollerEl.scrollTop;
-          }
-        }
-
-        frame += 1;
-        if (frame < ANCHOR_RESTORE_FRAMES) {
-          requestAnimationFrame(tick);
-          return;
-        }
-        finish();
-      };
-
-      requestAnimationFrame(tick);
-    },
-    [findMessageElement],
-  );
-
   const loadOlderFromTop = useCallback(() => {
     if (!initialJumpDoneRef.current) return;
     if (!readyForMoreRef.current) return;
@@ -556,25 +446,16 @@ export const ChatThread = ({
     if (now - lastLoadMoreAtRef.current < 350) return;
     lastLoadMoreAtRef.current = now;
 
-    const anchor = captureScrollAnchor();
     readyForMoreRef.current = false;
     isPrependingHistoryRef.current = true;
-    void loadMore(visibleMessages[0].id).then((added) => {
-      if (added <= 0) {
-        isPrependingHistoryRef.current = false;
-        return;
-      }
-      restoreScrollAnchor(anchor, () => {
-        isPrependingHistoryRef.current = false;
-      });
+    void loadMore(visibleMessages[0].id).then(() => {
+      isPrependingHistoryRef.current = false;
     });
   }, [
     hasMore,
     isLoadingMore,
     visibleMessages,
     loadMore,
-    captureScrollAnchor,
-    restoreScrollAnchor,
   ]);
 
   useEffect(() => {
@@ -635,9 +516,17 @@ export const ChatThread = ({
     return () => window.removeEventListener("resize", onResize);
   }, [syncComposerTextarea]);
 
-  // Arm "load more" only after the user scrolls away from the bottom (i.e.
-  // scrolls up to read history). A freshly opened thread parks at the newest
-  // message, so the top being visible there must NOT trigger a fetch.
+  const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
+    isAtBottomRef.current = atBottom;
+    if (atBottom) {
+      readyForMoreRef.current = false;
+      setHasNewerMessages(false);
+    }
+  }, []);
+
+  // Arm "load more" only after a genuine upward scroll. A freshly opened
+  // thread parks at the newest message, so top visibility alone must not fetch
+  // history.
   const setScrollerRef = useCallback(
     (el: HTMLElement | Window | null) => {
       detachScrollerListenersRef.current?.();
@@ -648,9 +537,6 @@ export const ChatThread = ({
       if (!scrollerEl) return;
 
       lastScrollTopRef.current = scrollerEl.scrollTop;
-      isAtBottomRef.current =
-        scrollerEl.scrollTop + scrollerEl.clientHeight >=
-        scrollerEl.scrollHeight - 1;
       const onScroll = () => {
         const previousTop = lastScrollTopRef.current;
         const currentTop = scrollerEl.scrollTop;
@@ -660,14 +546,6 @@ export const ChatThread = ({
           scrollHeight: scrollerEl.scrollHeight,
           clientHeight: scrollerEl.clientHeight,
         };
-        const atBottom =
-          currentTop + scrollerEl.clientHeight >= scrollerEl.scrollHeight - 1;
-        isAtBottomRef.current = atBottom;
-        if (atBottom) {
-          readyForMoreRef.current = false;
-          setHasNewerMessages(false);
-          return;
-        }
         if (currentTop < previousTop) {
           readyForMoreRef.current = true;
           if (
@@ -682,9 +560,6 @@ export const ChatThread = ({
         }
       };
       const onWheel = (event: WheelEvent) => {
-        if (scrollerEl.hasAttribute("data-anchor-restoring")) {
-          cancelAnchorRestore();
-        }
         if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
         if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
           readyForMoreRef.current = true;
@@ -693,21 +568,14 @@ export const ChatThread = ({
         event.preventDefault();
         event.stopPropagation();
       };
-      const onTouchMove = () => {
-        if (scrollerEl.hasAttribute("data-anchor-restoring")) {
-          cancelAnchorRestore();
-        }
-      };
       scrollerEl.addEventListener("scroll", onScroll, { passive: true });
       scrollerEl.addEventListener("wheel", onWheel, { passive: false });
-      scrollerEl.addEventListener("touchmove", onTouchMove, { passive: true });
       detachScrollerListenersRef.current = () => {
         scrollerEl.removeEventListener("scroll", onScroll);
         scrollerEl.removeEventListener("wheel", onWheel);
-        scrollerEl.removeEventListener("touchmove", onTouchMove);
       };
     },
-    [cancelAnchorRestore],
+    [],
   );
 
   useEffect(
@@ -818,6 +686,9 @@ export const ChatThread = ({
           computeItemKey={(_, m) => `${m.conversation_id}:${m.id}`}
           firstItemIndex={firstItemIndex}
           startReached={handleStartReached}
+          atBottomStateChange={handleAtBottomStateChange}
+          atBottomThreshold={CHAT_AT_BOTTOM_THRESHOLD_PX}
+          atTopThreshold={CHAT_AT_TOP_THRESHOLD_PX}
           followOutput={followOutput}
           totalListHeightChanged={handleTotalListHeightChanged}
           defaultItemHeight={DEFAULT_CHAT_ITEM_HEIGHT_PX}

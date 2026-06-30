@@ -5,8 +5,6 @@ import {
   estimateMessageRowHeight,
   firstItemIndexAfterPrepend,
   measuredOrEstimatedMessageRowHeight,
-  scrollTopAfterAnchorOffsetChange,
-  scrollTopAfterPrependHeightChange,
 } from "./chatScrollIndex";
 
 describe("chat scroll index helpers", () => {
@@ -21,20 +19,6 @@ describe("chat scroll index helpers", () => {
 
   it("never lets firstItemIndex go negative", () => {
     expect(firstItemIndexAfterPrepend(2, 10)).toBe(0);
-  });
-
-  it("keeps the same optical point when prepended rows increase total scroll height", () => {
-    expect(
-      scrollTopAfterPrependHeightChange(
-        { scrollTop: 900, scrollHeight: 2_000 },
-        2_640,
-      ),
-    ).toBe(1_540);
-  });
-
-  it("corrects scrollTop by the measured anchor offset delta", () => {
-    expect(scrollTopAfterAnchorOffsetChange(1_540, 120, 164)).toBe(1_584);
-    expect(scrollTopAfterAnchorOffsetChange(1_540, 120, 86)).toBe(1_506);
   });
 
   it("estimates long multi-line messages as tall rows before Virtuoso measures them", () => {

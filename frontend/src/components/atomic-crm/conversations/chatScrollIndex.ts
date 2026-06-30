@@ -14,23 +14,6 @@ export const firstItemIndexAfterPrepend = (
   prependedCount: number,
 ) => Math.max(0, currentFirstItemIndex - Math.max(0, prependedCount));
 
-export type ChatScrollAnchorMetrics = {
-  offsetTop: number;
-  scrollTop: number;
-  scrollHeight: number;
-};
-
-export const scrollTopAfterPrependHeightChange = (
-  anchor: Pick<ChatScrollAnchorMetrics, "scrollTop" | "scrollHeight">,
-  currentScrollHeight: number,
-) => anchor.scrollTop + (currentScrollHeight - anchor.scrollHeight);
-
-export const scrollTopAfterAnchorOffsetChange = (
-  currentScrollTop: number,
-  anchorOffsetTop: number,
-  currentOffsetTop: number,
-) => currentScrollTop + (currentOffsetTop - anchorOffsetTop);
-
 export type MessageHeightCache = Map<string, number>;
 
 export const measuredOrEstimatedMessageRowHeight = (

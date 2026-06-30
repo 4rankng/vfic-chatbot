@@ -1023,15 +1023,11 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   overflow-anchor: auto;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   touch-action: pan-y;
   scrollbar-width: none;
   background: var(--chat-bg);
   will-change: scroll-position;
-}
-:is(.inbox-bg-container, .chat-surface)
-  .chat-scroller[data-anchor-restoring="true"] {
-  scroll-behavior: auto;
 }
 :is(.inbox-bg-container, .chat-surface) .chat-scroller::-webkit-scrollbar {
   display: none;
