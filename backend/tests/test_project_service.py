@@ -2,10 +2,10 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from app.models.user import Role
 from app.schemas.projects import ProjectUpdate
+from app.services.errors import ForbiddenError
 from app.services.project_service import ProjectService
 
 
@@ -135,12 +135,11 @@ async def test_project_update_recruiter_cannot_change_persona_assignment():
     persona = SimpleNamespace(id=persona_id)
     db = _FakeUpdateDb(project, persona)
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(ForbiddenError):
         await ProjectService(db).update(
             project.id,
             ProjectUpdate(default_persona_id=persona_id),
             _actor(Role.recruiter),
         )
 
-    assert exc.value.status_code == 403
     assert project.default_persona_id is None
