@@ -23,9 +23,13 @@ def get_redis() -> aioredis.Redis:
 
 
 def get_redis_sync() -> redis.Redis:
-    """Lazily-built singleton SYNC redis client (for RQ workers)."""
+    """Lazily-built singleton SYNC redis client.
+
+    Keep responses as bytes here. RQ stores pickled job payloads in Redis, and
+    redis-py with ``decode_responses=True`` tries to UTF-8 decode those binary
+    values before RQ can unpickle them.
+    """
     global _sync
     if _sync is None:
-        _sync = redis.from_url(_settings.redis_url, decode_responses=True)
+        _sync = redis.from_url(_settings.redis_url, decode_responses=False)
     return _sync
-
