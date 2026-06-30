@@ -128,7 +128,7 @@ export const chatRepository = {
    */
   async getConversationMessages(
     conversationId: string,
-    options?: { limit?: number; beforeId?: string },
+    options?: { limit?: number; beforeId?: string; signal?: AbortSignal },
   ): Promise<{ messages: Message[]; hasMore: boolean }> {
     const limit = options?.limit ?? 10;
     const sp = new URLSearchParams({ limit: String(limit) });
@@ -137,6 +137,7 @@ export const chatRepository = {
     }
     const body = await apiJson<ListEnvelope>(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${sp.toString()}`,
+      { signal: options?.signal },
     );
     const mapped = sortMessagesChronologically(
       (body.data ?? []).map(toMessage),

@@ -32,6 +32,9 @@ export const useConversationRealtime = (conversationId?: string) => {
     INITIAL_CHAT_FIRST_ITEM_INDEX,
   );
   const isFetchingRef = useRef(false);
+  const activeConversationRef = useRef<string | undefined>(conversationId);
+  const requestSeqRef = useRef(0);
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
   // Mirror `messages` into a ref so loadMore can read the latest set
   // synchronously. A setMessages functional updater runs later (during render),
   // so it can't itself return the count of newly-prepended rows; the ref lets
@@ -42,55 +45,114 @@ export const useConversationRealtime = (conversationId?: string) => {
     messagesRef.current = messages;
   }, [messages]);
 
-  const fetchInitial = useCallback(async () => {
-    if (!conversationId) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const { messages: mapped, hasMore: apiHasMore } =
-        await chatRepository.getConversationMessages(conversationId, {
-          limit: CHAT_MESSAGES_PAGE_SIZE,
-        });
-      const chronological = sortMessagesChronologically(mapped);
-      // Merge, don't replace: a realtime INSERT between subscribe() and this
-      // resolve is already in state, and a blind setMessages(mapped) would
-      // drop it (the fetch predates the insert). Union by id, fetched-first.
-      setMessages((prev) => {
-        if (prev.length === 0) return chronological;
-        return mergeChronological(prev, chronological);
-      });
-      setHasMore(apiHasMore);
-    } catch {
-      setMessages([]);
-      setHasMore(false);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [conversationId]);
-
+  // Per-conversation isolation guards (defense-in-depth):
+  //   cancelled         — this mount's effect was cleaned up (React strictness / double-invokes)
+  //   requestSeqRef     — stale-mount guard: monotonic counter, rejects callbacks from a prior
+  //                       conversationId mount cycle (catches temporal identity drift)
+  //   activeConversationRef — stale-entity guard: rejects callbacks whose conversationId no longer
+  //                           matches the selected conversation (catches entity identity drift)
   useEffect(() => {
+    const activeConversationId = conversationId;
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
+    activeConversationRef.current = activeConversationId;
+    isFetchingRef.current = false;
+    loadMoreAbortRef.current?.abort();
+    loadMoreAbortRef.current = null;
     setMessages([]);
     setHasMore(false);
     setFirstItemIndex(INITIAL_CHAT_FIRST_ITEM_INDEX);
-    fetchInitial();
+    setIsLoading(true);
 
-    if (!conversationId) return;
+    let cancelled = false;
+    const initialFetchAbort = new AbortController();
+
+    const fetchInitial = async () => {
+      if (!activeConversationId) {
+        if (!cancelled && requestSeqRef.current === requestSeq) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const { messages: mapped, hasMore: apiHasMore } =
+          await chatRepository.getConversationMessages(activeConversationId, {
+            limit: CHAT_MESSAGES_PAGE_SIZE,
+            signal: initialFetchAbort.signal,
+          });
+        // Stale-response guard: see invariant block above
+        if (
+          cancelled ||
+          requestSeqRef.current !== requestSeq ||
+          activeConversationRef.current !== activeConversationId
+        ) {
+          return;
+        }
+        const chronological = sortMessagesChronologically(mapped);
+        // Merge, don't replace: a realtime INSERT between subscribe() and this
+        // resolve is already in state, and a blind setMessages(mapped) would
+        // drop it (the fetch predates the insert). Union by id, fetched-first.
+        setMessages((prev) => {
+          if (prev.length === 0) return chronological;
+          return mergeChronological(prev, chronological);
+        });
+        setHasMore(apiHasMore);
+      } catch {
+        if (
+          !cancelled &&
+          requestSeqRef.current === requestSeq &&
+          activeConversationRef.current === activeConversationId
+        ) {
+          setMessages([]);
+          setHasMore(false);
+        }
+      } finally {
+        if (!cancelled && requestSeqRef.current === requestSeq) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void fetchInitial();
+
+    if (!activeConversationId) {
+      return () => {
+        cancelled = true;
+        initialFetchAbort.abort();
+        loadMoreAbortRef.current?.abort();
+        loadMoreAbortRef.current = null;
+      };
+    }
 
     let cleanup: (() => void) | undefined;
     try {
-      cleanup = chatRepository.subscribeToMessages(conversationId, (latest) => {
-        setMessages((prev) => mergeRealtimePage(prev, latest));
-      });
+      cleanup = chatRepository.subscribeToMessages(
+        activeConversationId,
+        (latest) => {
+          // Stale-response guard: see invariant block above
+          if (
+            cancelled ||
+            requestSeqRef.current !== requestSeq ||
+            activeConversationRef.current !== activeConversationId
+          ) {
+            return;
+          }
+          setMessages((prev) => mergeRealtimePage(prev, latest));
+        },
+      );
     } catch {
       // Realtime is best-effort; the initial REST fetch still renders history.
     }
 
     return () => {
+      cancelled = true;
+      initialFetchAbort.abort();
+      loadMoreAbortRef.current?.abort();
+      loadMoreAbortRef.current = null;
       cleanup?.();
     };
-  }, [conversationId, fetchInitial]);
+  }, [conversationId]);
 
   // Stable identity so the consumer's useCallback(handleStartReached) memo
   // holds across renders — without this the startReached handler is rebuilt
@@ -100,15 +162,28 @@ export const useConversationRealtime = (conversationId?: string) => {
       if (isFetchingRef.current || !hasMore || !conversationId) {
         return 0;
       }
+      const activeConversationId = conversationId;
+      const requestSeq = requestSeqRef.current;
+      const loadMoreAbort = new AbortController();
+      loadMoreAbortRef.current?.abort();
+      loadMoreAbortRef.current = loadMoreAbort;
       isFetchingRef.current = true;
       setIsLoadingMore(true);
 
       try {
         const { messages: older, hasMore: apiHasMore } =
-          await chatRepository.getConversationMessages(conversationId, {
+          await chatRepository.getConversationMessages(activeConversationId, {
             limit: CHAT_MESSAGES_PAGE_SIZE,
             beforeId: earliestId,
+            signal: loadMoreAbort.signal,
           });
+        // Stale-response guard: see invariant block above
+        if (
+          requestSeqRef.current !== requestSeq ||
+          activeConversationRef.current !== activeConversationId
+        ) {
+          return 0;
+        }
         setHasMore(apiHasMore);
         // Return the number of fetched messages that are genuinely new vs current
         // state — NOT older.length. subscribeToMessages unions the newest page on
@@ -127,14 +202,28 @@ export const useConversationRealtime = (conversationId?: string) => {
         setMessages((prev) => mergeChronological(prev, older));
         return added;
       } catch {
+        if (
+          requestSeqRef.current !== requestSeq ||
+          activeConversationRef.current !== activeConversationId
+        ) {
+          return 0;
+        }
         // A failed load-more must not keep re-firing on every scroll-to-top
         // (hasMore stays true -> the backend gets spammed with failing
         // requests). Stop the loop; reopening the conversation retries.
         setHasMore(false);
         return 0;
       } finally {
-        setIsLoadingMore(false);
-        isFetchingRef.current = false;
+        if (
+          requestSeqRef.current === requestSeq &&
+          activeConversationRef.current === activeConversationId
+        ) {
+          setIsLoadingMore(false);
+          isFetchingRef.current = false;
+          if (loadMoreAbortRef.current === loadMoreAbort) {
+            loadMoreAbortRef.current = null;
+          }
+        }
       }
     },
     [hasMore, conversationId],

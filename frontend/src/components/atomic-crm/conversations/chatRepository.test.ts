@@ -27,18 +27,27 @@ import { chatRepository } from "./chatRepository";
  */
 const stubJson = (
   json: () => Promise<unknown>,
-): { fetch: typeof globalThis.fetch; lastUrl: () => string } => {
+): {
+  fetch: typeof globalThis.fetch;
+  lastInit: () => RequestInit | undefined;
+  lastUrl: () => string;
+} => {
   let url = "";
-  const fn = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+  let init: RequestInit | undefined;
+  const fn = vi.fn(
+    async (input: RequestInfo | URL, requestInit?: RequestInit): Promise<Response> => {
     url = typeof input === "string" ? input : (input as URL).toString();
+    init = requestInit;
     return {
       ok: true,
       status: 200,
       json: json as () => Promise<unknown>,
     } as unknown as Response;
-  });
+    },
+  );
   return {
     fetch: fn as unknown as typeof globalThis.fetch,
+    lastInit: () => init,
     lastUrl: () => url,
   };
 };
@@ -150,6 +159,19 @@ describe("chatRepository.getConversationMessages", () => {
     });
     expect(lastUrl()).toContain("limit=10");
     expect(lastUrl()).toContain("before=42");
+  });
+
+  it("passes AbortSignal through to the HTTP request", async () => {
+    const controller = new AbortController();
+    const { fetch, lastInit } = stubJson(async () => ({ data: [], total: 0 }));
+    globalThis.fetch = fetch;
+
+    await chatRepository.getConversationMessages("c1", {
+      limit: 10,
+      signal: controller.signal,
+    });
+
+    expect(lastInit()?.signal).toBe(controller.signal);
   });
 });
 

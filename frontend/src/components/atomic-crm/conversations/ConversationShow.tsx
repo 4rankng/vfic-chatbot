@@ -129,7 +129,7 @@ export const ConversationShowContent = ({
   const refresh = useRefresh();
   const [clearOpen, setClearOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const [threadKey, setThreadKey] = useState(0);
+  const [threadVersion, setThreadVersion] = useState(0);
 
   const handleClearHistory = async () => {
     setClearing(true);
@@ -137,7 +137,7 @@ export const ConversationShowContent = ({
       await dataProvider.clearConversationHistory(record!.id);
       notify("Đã xóa lịch sử chat.", { type: "success" });
       setClearOpen(false);
-      setThreadKey((k) => k + 1);
+      setThreadVersion((k) => k + 1);
       refresh();
     } catch (e) {
       notify((e as Error).message, { type: "error" });
@@ -259,7 +259,7 @@ export const ConversationShowContent = ({
       </header>
 
       <ChatThread
-        key={threadKey}
+        key={`${record?.id ?? "empty"}:${threadVersion}`}
         conversationId={record?.id ?? ""}
         conversation={record}
         isBotModeOverride={isBotMode}
