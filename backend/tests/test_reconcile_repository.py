@@ -1,9 +1,9 @@
 """Tests for find_reconcile_candidates — the loop-free recovery predicate.
 
 Pure unit tests with mocked DB sessions. The critical assertions verify that
-the SQL predicate is loop-safe: only ``WORKER``-newest or ``BOT/PENDING``-newest
-conversations are returned; ``BOT/SENT``, ``BOT/SUPPRESSED``, and in-grace messages
-are excluded.
+the SQL predicate is loop-safe: only ``WORKER``-newest, ``BOT/PENDING``-newest,
+or ``BOT/FAILED``-newest conversations are returned; ``BOT/SENT``,
+``BOT/SUPPRESSED``, and in-grace messages are excluded.
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ async def test_returns_empty_list_when_no_candidates():
 
 
 async def test_sql_contains_loop_free_predicate():
-    """The SQL must check for WORKER or BOT/PENDING as the newest message.
+    """The SQL must check for WORKER or recoverable BOT statuses as newest.
 
     This is the core loop-safety guarantee: a completed turn (SENT or SUPPRESSED)
     leaves BOT/SENT or BOT/SUPPRESSED as newest → neither matches → excluded.
@@ -66,10 +66,10 @@ async def test_sql_contains_loop_free_predicate():
     call_args = db.scalars.call_args
     sql_text = str(call_args[0][0])  # the text(...) clause
 
-    # Loop-safety: must match WORKER or BOT+PENDING (NOT SENT or SUPPRESSED)
+    # Loop-safety: must match WORKER or BOT+PENDING/FAILED (NOT SENT/SUPPRESSED)
     assert "m.sender = 'WORKER'" in sql_text
     assert "m.sender = 'BOT'" in sql_text
-    assert "m.delivery_status = 'PENDING'" in sql_text
+    assert "m.delivery_status IN ('PENDING', 'FAILED')" in sql_text
 
     # Must NOT match SENT or SUPPRESSED
     assert "SENT" not in sql_text

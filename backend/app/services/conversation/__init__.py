@@ -54,6 +54,9 @@ class ConversationService:
     async def last_messages(self, *args, **kwargs):
         return await self.repo.last_messages(*args, **kwargs)
 
+    async def latest_message(self, *args, **kwargs):
+        return await self.repo.latest_message(*args, **kwargs)
+
     async def messages_page(self, *args, **kwargs):
         return await self.repo.messages_page(*args, **kwargs)
 

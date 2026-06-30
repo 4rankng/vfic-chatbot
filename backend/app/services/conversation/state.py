@@ -189,9 +189,25 @@ class ConversationState:
         started_at: datetime,
         sent: bool,
         pending_message_id: int | None = None,
+        external_error: str | None = None,
+        zalo_message_id: str | None = None,
     ) -> Message:
-        """Log a bot_run + the (possibly suppressed) BOT message; clears the lock."""
-        outcome = BotRunOutcome.SENT if sent else BotRunOutcome.SUPPRESSED
+        """Log a bot_run + BOT message; clears the lock.
+
+        ``sent=False`` means either ownership suppression or delivery failure.
+        ``external_error`` disambiguates real send failures so recovery can
+        retry them instead of treating them as completed suppressed turns.
+        """
+        outcome = (
+            BotRunOutcome.ERROR
+            if external_error
+            else BotRunOutcome.SENT if sent else BotRunOutcome.SUPPRESSED
+        )
+        delivery_status = (
+            DeliveryStatus.FAILED
+            if external_error
+            else DeliveryStatus.SENT if sent else DeliveryStatus.SUPPRESSED
+        )
         run = BotRun(
             conversation_id=conv.id,
             version_at_start=version_at_start,
@@ -213,9 +229,9 @@ class ConversationState:
             ):
                 pending_msg.body = reply
                 pending_msg.bot_run_id = run.id
-                pending_msg.delivery_status = (
-                    DeliveryStatus.SENT if sent else DeliveryStatus.SUPPRESSED
-                )
+                pending_msg.delivery_status = delivery_status
+                pending_msg.external_error = external_error
+                pending_msg.zalo_message_id = zalo_message_id
                 msg = pending_msg
         if msg is None:
             msg = Message(
@@ -223,11 +239,13 @@ class ConversationState:
                 sender=MessageSender.BOT,
                 body=reply,
                 bot_run_id=run.id,
-                delivery_status=DeliveryStatus.SENT if sent else DeliveryStatus.SUPPRESSED,
+                delivery_status=delivery_status,
+                external_error=external_error,
+                zalo_message_id=zalo_message_id,
             )
             self.db.add(msg)
         conv.bot_locked_until = None
-        if sent:
+        if delivery_status == DeliveryStatus.SENT:
             conv.last_outbound_at = utcnow()
         await self.db.commit()
         await self.db.refresh(msg)

@@ -307,14 +307,20 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
             # refresh to read committed version/mode — see recheck_ownership docstring
             await svc.db.refresh(conv)
             owned = await svc.recheck_ownership(conv, state.version_at_start)
+            send_result = None
             if owned:
-                await deps.zalo.send(conv.zalo_chat_id, ERROR_REPLY)
+                send_result = await deps.zalo.send(conv.zalo_chat_id, ERROR_REPLY)
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=ERROR_REPLY,
-                started_at=started, sent=owned,
+                started_at=started, sent=bool(send_result and send_result.ok),
                 pending_message_id=state.pending_message_id,
+                external_error=send_result.error if send_result and not send_result.ok else None,
+                zalo_message_id=send_result.msg_id if send_result else None,
             )
-            return {"outcome": "error", "reply": ERROR_REPLY}
+            return {
+                "outcome": "error" if send_result is None or send_result.ok else "send_failed",
+                "reply": ERROR_REPLY,
+            }
 
         state.reply = raw
 
@@ -349,12 +355,20 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
         await svc.db.refresh(conv)
         owned = await svc.recheck_ownership(conv, state.version_at_start)
         if owned:
-            await deps.zalo.send(conv.zalo_chat_id, candidate)
+            send_result = await deps.zalo.send(conv.zalo_chat_id, candidate)
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
-                started_at=started, sent=True,
+                started_at=started, sent=send_result.ok,
                 pending_message_id=state.pending_message_id,
+                external_error=None if send_result.ok else send_result.error,
+                zalo_message_id=send_result.msg_id,
             )
+            if not send_result.ok:
+                return {
+                    "outcome": "send_failed",
+                    "reason": send_result.error,
+                    "reply": candidate,
+                }
             # Lead/memory extraction runs only after a real reply was sent (mirrors the
             # legacy "Should Persist?" gate, which never extracted on greetings/suppressed).
             if deps.persist is not None:

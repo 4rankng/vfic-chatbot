@@ -190,6 +190,16 @@ class ConversationRepository:
         ).all()
         return list(reversed(rows))
 
+    async def latest_message(self, conv: Conversation) -> Message | None:
+        return (
+            await self.db.scalars(
+                select(Message)
+                .where(Message.conversation_id == conv.id)
+                .order_by(desc(Message.created_at), desc(Message.id))
+                .limit(1)
+            )
+        ).first()
+
     async def messages_page(
         self, conv: Conversation, limit: int = 50, before_id: int | None = None
     ) -> list[Message]:
@@ -258,20 +268,26 @@ class ConversationRepository:
         max_age_seconds: int,
         limit: int,
     ) -> list[Conversation]:
-        """Conversations whose newest message is unanswered or stuck-PENDING.
+        """Conversations whose newest message is unanswered or recoverable BOT failure.
 
         Loop-free predicate: a completed turn (sent or suppressed) leaves a
         ``BOT/SENT`` or ``BOT/SUPPRESSED`` row as the newest message, so it is
-        excluded.  Only ``WORKER`` (never processed) or ``BOT/PENDING`` (turn
-        started but never completed) qualify.
+        excluded.  Only ``WORKER`` (never processed), ``BOT/PENDING`` (turn
+        started but never completed), or ``BOT/FAILED`` (Zalo rejected delivery)
+        qualify.
 
         SEMI_AUTO 5-min-inactivity is NOT in SQL — it is re-checked in Python
         inside the tick (depends on ``taken_over_at``/``updated_at``).
         """
         now_minus_grace = now - timedelta(seconds=grace_seconds)
         now_minus_max_age = now - timedelta(seconds=max_age_seconds)
-        rows = (
-            await self.db.scalars(
+        # NOTE: use select(Conversation).from_statement(text(...)) instead of
+        # db.scalars(text(...)) — the latter returns only the first column (c.id
+        # as a raw asyncpg UUID) rather than a Conversation ORM instance, causing
+        # AttributeError downstream in reconcile_worker when it accesses conv.id.
+        stmt = (
+            select(Conversation)
+            .from_statement(
                 text(
                     """
                     SELECT c.*
@@ -291,7 +307,10 @@ class ConversationRepository:
                               )
                               AND (
                                   m.sender = 'WORKER'
-                                  OR (m.sender = 'BOT' AND m.delivery_status = 'PENDING')
+                                  OR (
+                                      m.sender = 'BOT'
+                                      AND m.delivery_status IN ('PENDING', 'FAILED')
+                                  )
                               )
                               AND m.created_at < :now_minus_grace
                               AND m.created_at > :now_minus_max_age
@@ -299,13 +318,13 @@ class ConversationRepository:
                      ORDER BY c.last_inbound_at DESC NULLS LAST
                      LIMIT :limit
                     """
-                ),
-                {
-                    "now": now,
-                    "now_minus_grace": now_minus_grace,
-                    "now_minus_max_age": now_minus_max_age,
-                    "limit": limit,
-                },
+                )
             )
-        ).all()
+        )
+        rows = (await self.db.scalars(stmt, {
+            "now": now,
+            "now_minus_grace": now_minus_grace,
+            "now_minus_max_age": now_minus_max_age,
+            "limit": limit,
+        })).all()
         return list(rows)

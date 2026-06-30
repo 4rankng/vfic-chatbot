@@ -51,6 +51,22 @@ def _make_worker_msg(body: str = "xin chào") -> Message:
     return msg
 
 
+def _make_bot_msg(
+    *,
+    status: DeliveryStatus = DeliveryStatus.PENDING,
+    body: str = "Đang soạn trả lời...",
+) -> Message:
+    msg = Message(
+        sender=MessageSender.BOT,
+        delivery_status=status,
+        body=body,
+        conversation_id=uuid.uuid4(),
+    )
+    msg.id = 2
+    msg.created_at = datetime(2026, 6, 30, 11, 51, 0, tzinfo=timezone.utc)
+    return msg
+
+
 def _mock_db_for_scan(candidates: list) -> AsyncMock:
     """Mock db session for the initial candidate scan."""
     db = AsyncMock()
@@ -63,6 +79,7 @@ def _mock_db_for_scan(candidates: list) -> AsyncMock:
 def _mock_db_for_process(
     conv: Conversation,
     worker_msg: Message | None = None,
+    latest_msg: Message | None = None,
     lock_acquired: bool = True,
 ) -> AsyncMock:
     """Mock db session for per-candidate processing."""
@@ -73,10 +90,21 @@ def _mock_db_for_process(
     execute_result = MagicMock()
     execute_result.rowcount = 1 if lock_acquired else 0
     db.execute = AsyncMock(return_value=execute_result)
-    # latest_unanswered_worker_message → db.scalars(select(...)).first()
-    mock_scalars_result = MagicMock()
-    mock_scalars_result.first.return_value = worker_msg
-    db.scalars = AsyncMock(return_value=mock_scalars_result)
+    def _scalar_result(value: Message | None) -> MagicMock:
+        result = MagicMock()
+        result.first.return_value = value
+        return result
+
+    actual_latest = latest_msg if latest_msg is not None else worker_msg
+    if actual_latest is not None and actual_latest.sender == MessageSender.BOT:
+        db.scalars = AsyncMock(
+            side_effect=[
+                _scalar_result(actual_latest),
+                _scalar_result(worker_msg),
+            ]
+        )
+    else:
+        db.scalars = AsyncMock(return_value=_scalar_result(actual_latest))
     return db
 
 
@@ -85,6 +113,7 @@ def _mock_redis(*, setnx_ok: bool = True) -> MagicMock:
     redis = MagicMock()
     redis.set.return_value = setnx_ok
     redis.get.return_value = b"0"
+    redis.pipeline.return_value = redis
     return redis
 
 
@@ -151,7 +180,7 @@ async def test_happy_path_enqueues_recovery(mock_session_cls, mock_enqueue):
     assert call_kwargs["conversation_id"] == str(conv.id)
     assert call_kwargs["version_at_start"] == conv.version
     assert call_kwargs["user_text"] == "xin chào"
-    assert mock_redis.incr.call_count >= 1
+    assert mock_redis.incrby.call_count >= 1
     mock_redis.set.assert_any_call("reconcile_unanswered_gauge", "1")
 
 
@@ -176,7 +205,7 @@ async def test_skip_locked_conversation(mock_session_cls, mock_enqueue):
     await _sweep(mock_redis)
 
     mock_enqueue.assert_not_called()
-    mock_redis.incr.assert_any_call("reconcile_skipped_locked_total")
+    mock_redis.incrby.assert_any_call("reconcile_skipped_locked_total", 1)
 
 
 # --- SEMI_AUTO gating: human active → skip ---
@@ -242,7 +271,7 @@ async def test_enqueue_fail_releases_lock(mock_session_cls, mock_enqueue):
     await _sweep(mock_redis)
 
     mock_enqueue.assert_called_once()
-    mock_redis.incr.assert_any_call("reconcile_enqueue_failed_total")
+    mock_redis.incrby.assert_any_call("reconcile_enqueue_failed_total", 1)
     assert conv.bot_locked_until is None
 
 
@@ -278,8 +307,9 @@ async def test_mark_stale_pending_called(mock_session_cls, mock_enqueue):
     mock_redis = _mock_redis()
     conv = _make_conv()
     worker_msg = _make_worker_msg()
+    bot_msg = _make_bot_msg(status=DeliveryStatus.PENDING)
     mock_db_scan = _mock_db_for_scan([conv])
-    mock_db_proc = _mock_db_for_process(conv, worker_msg)
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=bot_msg)
 
     mock_cm = AsyncMock()
     mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
@@ -288,3 +318,30 @@ async def test_mark_stale_pending_called(mock_session_cls, mock_enqueue):
     await _sweep(mock_redis)
 
     assert mock_db_proc.execute.called
+    mock_redis.incrby.assert_any_call("reconcile_stale_pending_total", 1)
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_failed_bot_send_is_reenqueued(mock_session_cls, mock_enqueue):
+    """BOT/FAILED newest means Zalo rejected delivery; retry latest worker text."""
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(
+        conv,
+        worker_msg,
+        latest_msg=failed_bot_msg,
+    )
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_called_once()
+    assert mock_enqueue.call_args[0][0]["user_text"] == "bạn ăn tối chưa?"
+    mock_redis.incrby.assert_any_call("reconcile_failed_send_total", 1)

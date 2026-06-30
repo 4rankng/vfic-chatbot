@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _RECONCILE_REENQUEUED = "reconcile_re_enqueues_total"
 _RECONCILE_STALE_PENDING = "reconcile_stale_pending_total"
 _RECONCILE_UNANSWERED_INBOUND = "reconcile_unanswered_inbound_total"
+_RECONCILE_FAILED_SEND = "reconcile_failed_send_total"
 _RECONCILE_SKIPPED_LOCKED = "reconcile_skipped_locked_total"
 _RECONCILE_ENQUEUE_FAILED = "reconcile_enqueue_failed_total"
 _RECONCILE_UNANSWERED_GAUGE = "reconcile_unanswered_gauge"
@@ -90,6 +91,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     re_enqueued = 0
     stale_pending = 0
     unanswered_inbound = 0
+    failed_send = 0
     skipped_locked = 0
     enqueue_failed = 0
 
@@ -115,16 +117,15 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                 # Refresh version AFTER acquiring lock to avoid stale optimistic-lock.
                 await db.refresh(conv_fresh)
 
-                # Determine reason from the newest message (re-fetch from repo).
+                # Determine reason from the actual newest message.
                 repo = ConversationRepository(db)
-                newest = await repo.latest_unanswered_worker_message(conv_fresh)
-                is_stale = (
-                    newest is not None
-                    and newest.sender.name != "WORKER"
-                ) if newest else False
+                newest = await repo.latest_message(conv_fresh)
+                if newest is None:
+                    await svc.state.release_lock(conv_fresh)
+                    continue
 
                 # Get the inbound text to reply to.
-                if newest and newest.sender.name == "WORKER":
+                if newest.sender.name == "WORKER":
                     user_text = newest.body
                     reason = "unanswered_inbound"
                 else:
@@ -143,7 +144,13 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     )
                     msg = (await db.scalars(stmt)).first()
                     user_text = msg.body if msg else ""
-                    reason = "stale_pending" if is_stale else "unanswered_inbound"
+                    if newest.delivery_status.name == "PENDING":
+                        reason = "stale_pending"
+                    elif newest.delivery_status.name == "FAILED":
+                        reason = "failed_send"
+                    else:
+                        await svc.state.release_lock(conv_fresh)
+                        continue
 
                 if not user_text:
                     # No inbound text to reply to — release and skip.
@@ -166,12 +173,14 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     continue
 
                 # ── Success: now safe to mark orphaned BOT/PENDING as FAILED ──
-                if is_stale:
+                if reason == "stale_pending":
                     await svc.state.mark_stale_pending_failed(conv_fresh.id)
 
                 re_enqueued += 1
                 if reason == "stale_pending":
                     stale_pending += 1
+                elif reason == "failed_send":
+                    failed_send += 1
                 else:
                     unanswered_inbound += 1
                 logger.info(
@@ -202,6 +211,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_STALE_PENDING, stale_pending)
     if unanswered_inbound:
         pipe.incrby(_RECONCILE_UNANSWERED_INBOUND, unanswered_inbound)
+    if failed_send:
+        pipe.incrby(_RECONCILE_FAILED_SEND, failed_send)
     if skipped_locked:
         pipe.incrby(_RECONCILE_SKIPPED_LOCKED, skipped_locked)
     if enqueue_failed:

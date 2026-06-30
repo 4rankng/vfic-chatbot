@@ -103,14 +103,16 @@ async def _run_job_async(job: dict) -> None:
                 svc = ConversationService(db)
                 conv = await svc.get(uuid.UUID(state.conversation_id))
                 if conv is not None:
-                    await deps.zalo.send(conv.zalo_chat_id, DEGRADATION_REPLY)
+                    send_result = await deps.zalo.send(conv.zalo_chat_id, DEGRADATION_REPLY)
                     await svc.record_bot_outcome(
                         conv,
                         version_at_start=state.version_at_start,
                         reply=DEGRADATION_REPLY,
                         started_at=started_at,
-                        sent=True,
+                        sent=send_result.ok,
                         pending_message_id=state.pending_message_id,
+                        external_error=None if send_result.ok else send_result.error,
+                        zalo_message_id=send_result.msg_id,
                     )
             except Exception:  # noqa: BLE001
                 logger.error("failed to send degradation reply", exc_info=True)

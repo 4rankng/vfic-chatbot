@@ -668,8 +668,8 @@ export const LeadShowContentSheet = () => {
   if (!record) return null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-3 pb-4 md:p-4">
         <CompactLeadDrawerDetails lead={record} />
         <LeadChatPreview
           messages={messages}
@@ -683,8 +683,8 @@ export const LeadShowContentSheet = () => {
         />
       </div>
       {conversationId !== null && (
-        <div className="shrink-0 border-t border-border bg-card/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-          <Button asChild className="h-10 w-full text-sm font-semibold">
+        <div className="shrink-0 border-t border-border/80 bg-background/95 px-3 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-10px_28px_rgba(26,34,40,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_-12px_32px_rgba(0,0,0,0.28)]">
+          <Button asChild className="h-11 w-full rounded-lg text-sm font-semibold">
             <Link to={`/conversations?id=${conversationId}`}>
               <MessageSquare className="size-4" />
               Mở cuộc trò chuyện
