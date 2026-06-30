@@ -4,10 +4,15 @@ Owns the COALESCE-based upsert the ORM cannot express: a non-empty existing valu
 is never overwritten with null/empty (the live 'Merge Lead' behavior). Verbatim
 port of the SQL that lived in ``lead_service._UPSQL``.
 """
+
 from __future__ import annotations
 
-from sqlalchemy import text
+from datetime import datetime
+
+from sqlalchemy import desc, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.lead import FollowUpTask, Lead, LeadEvent
 
 
 class LeadRepository:
@@ -27,6 +32,56 @@ class LeadRepository:
         row = await self.db.execute(_FETCH_SQL, {"zalo_id": zalo_id})
         result = row.mappings().first()
         return dict(result) if result else None
+
+    async def optimistic_apply(self, lead_id: int, current_version: int, **values) -> bool:
+        """Execute optimistic-concurrency update + commit. Returns True if row was updated.
+
+        The caller handles ``LeadConflict`` on False and performs post-update refresh
+        and business logic (events, audit). The double-commit pattern in assign/set_stage
+        is preserved by the caller committing events/audit separately.
+        """
+        res = await self.db.execute(
+            update(Lead)
+            .where(
+                Lead.id == lead_id,
+                Lead.version == current_version,
+            )
+            .values(**values, updated_at=func.now())
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        return res.rowcount > 0
+
+    async def list_events(self, lead_id: int) -> list[LeadEvent]:
+        return list(
+            (
+                await self.db.scalars(
+                    select(LeadEvent)
+                    .where(LeadEvent.lead_id == lead_id)
+                    .order_by(desc(LeadEvent.created_at))
+                )
+            ).all()
+        )
+
+    async def list_followups(self, lead_id: int) -> list[FollowUpTask]:
+        return list(
+            (
+                await self.db.scalars(
+                    select(FollowUpTask)
+                    .where(FollowUpTask.lead_id == lead_id)
+                    .order_by(FollowUpTask.due_at)
+                )
+            ).all()
+        )
+
+    async def create_followup(
+        self, lead_id: int, due_at: datetime, note: str | None, created_by
+    ) -> FollowUpTask:
+        fu = FollowUpTask(lead_id=lead_id, due_at=due_at, note=note, created_by=created_by)
+        self.db.add(fu)
+        await self.db.commit()
+        await self.db.refresh(fu)
+        return fu
 
 
 _FETCH_SQL = text(

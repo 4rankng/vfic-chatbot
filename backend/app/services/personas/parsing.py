@@ -51,7 +51,6 @@ def parse_persona_markdown(text: str) -> tuple[str, str | None, str | None, str]
 def _parse_persona_frontmatter(raw: str, errors: list[str]) -> dict[str, Any]:
     """Minimal key:value frontmatter parser (flat only, no nested objects)."""
     out: dict[str, Any] = {}
-    current_key: str | None = None
     for line_no, line in enumerate(raw.splitlines(), start=1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
@@ -60,7 +59,6 @@ def _parse_persona_frontmatter(raw: str, errors: list[str]) -> dict[str, Any]:
             continue
         key, value = line.split(":", 1)
         key = key.strip()
-        current_key = key  # noqa: F841 — preserved from original parser
         value = value.strip()
         out[key] = value  # persona frontmatter is always scalar
     return out
