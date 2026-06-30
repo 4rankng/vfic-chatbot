@@ -6,16 +6,17 @@ tests guard against accidental deletion/corruption of persona.md and verify the
 7-part framework stays intact, plus spot-check that critical operational rules
 survived the restructure.
 """
+
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
 
 from app.graph.context import active_projects_index
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
 from app.schemas.personas import PersonaUpdate
+from app.services.errors import NotFoundError
 from app.services.persona_service import PersonaService
 
 EXPECTED_SECTIONS = [
@@ -86,13 +87,12 @@ async def test_active_projects_index_includes_project_persona_overrides(monkeypa
 
 @pytest.mark.asyncio
 async def test_persona_service_update_returns_404_for_missing_id():
-    """PersonaService.update raises 404 when persona not found."""
+    """PersonaService.update raises NotFoundError when persona not found."""
     mock_db = AsyncMock()
     mock_db.get.return_value = None
 
     svc = PersonaService(mock_db)
     admin = SimpleNamespace(id=uuid.uuid4())
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError):
         await svc.update(uuid.uuid4(), PersonaUpdate(), admin)
-    assert exc_info.value.status_code == 404
