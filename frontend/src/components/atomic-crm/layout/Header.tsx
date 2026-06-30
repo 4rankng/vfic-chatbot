@@ -44,7 +44,7 @@ const Header = () => {
       return "/knowledge_sources";
     if (matchPath("/users/*", location.pathname)) return "/users";
     if (matchPath("/personas/*", location.pathname)) return "/personas";
-    // Unmatched secondary routes (e.g. /settings, /profile, /users) leave no
+    // Unmatched secondary routes (e.g. /settings, /profile) leave no
     // pill highlighted, matching the prior behavior.
     return false;
   }, [location.pathname]);
@@ -191,52 +191,15 @@ const Header = () => {
             </DropdownMenu>
           </nav>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 2xl:flex 2xl:gap-2">
-            {isAdmin && (
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-2 2xl:flex">
+            {[...coreItems, ...functionItems].map((item) => (
               <NavPill
-                label={translate("ra.page.dashboard")}
-                to="/"
-                isActive={currentPath === "/"}
+                key={item.to}
+                label={item.label}
+                to={item.to}
+                isActive={item.isActive}
               />
-            )}
-            <NavPill
-              label={translate("resources.leads.name", { smart_count: 2 })}
-              to="/leads"
-              isActive={currentPath === "/leads"}
-            />
-            <NavPill
-              label={translate("resources.conversations.name", {
-                smart_count: 2,
-              })}
-              to="/conversations"
-              isActive={currentPath === "/conversations"}
-            />
-            <NavPill
-              label="Dự án"
-              to="/projects"
-              isActive={currentPath === "/projects"}
-            />
-            {isAdmin && (
-              <NavPill
-                label="Kiến thức"
-                to="/knowledge_sources"
-                isActive={currentPath === "/knowledge_sources"}
-              />
-            )}
-            {isAdmin && (
-              <NavPill
-                label="Agent"
-                to="/personas"
-                isActive={currentPath === "/personas"}
-              />
-            )}
-            {isAdmin && (
-              <NavPill
-                label="Tài khoản"
-                to="/users"
-                isActive={currentPath === "/users"}
-              />
-            )}
+            ))}
           </nav>
 
           {/* Actions */}

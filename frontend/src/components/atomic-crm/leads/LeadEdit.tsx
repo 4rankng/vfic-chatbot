@@ -37,9 +37,14 @@ const ContactEditContent = () => {
         version: (record as Record<string, unknown>).version,
       } as Record<string, unknown>;
       return await save?.(data);
-    } catch (error: any) {
-      const status = error?.status || error?.body?.status;
-      const detail = error?.body?.detail || error?.message;
+    } catch (error: unknown) {
+      const err = error as {
+        status?: number;
+        body?: { status?: number; detail?: string };
+        message?: string;
+      };
+      const status = err.status || err.body?.status;
+      const detail = err.body?.detail || err.message;
       if (status === 409) {
         notify(
           detail || "Vừa được nhân viên khác thay đổi. Vui lòng làm mới.",

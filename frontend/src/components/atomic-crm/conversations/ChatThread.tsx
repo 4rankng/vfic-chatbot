@@ -215,13 +215,13 @@ const ChatMessageRow = memo(
       >
         {kind === "user" ? (
           <>
-            {bubble}
             {avatar}
+            {bubble}
           </>
         ) : (
           <>
-            {avatar}
             {bubble}
+            {avatar}
           </>
         )}
       </div>

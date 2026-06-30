@@ -60,16 +60,11 @@ const leadScoreLabel = (score: Lead["lead_score"]) =>
 const leadStageLabel = (stage: Lead["lead_stage"]) =>
   LEAD_STAGES.find((item) => item.value === stage)?.label ?? stage;
 
-const profileRows = (lead: Lead) => [
-  { label: "Họ tên", value: lead.name },
-  { label: "Số điện thoại", value: lead.phone },
-  { label: "Công việc mong muốn", value: lead.desired_job },
-  { label: "Lương mong muốn", value: lead.expected_salary },
-  { label: "Tỉnh / thành", value: lead.region },
-  { label: "Khu vực sinh sống", value: lead.living_area },
-  { label: "Kinh nghiệm", value: lead.years_experience },
-  { label: "Ghi chú", value: lead.notes },
-];
+const profileRows = (lead: Lead) =>
+  EDITABLE_FIELDS.map(({ field, label }) => ({
+    label,
+    value: lead[field],
+  }));
 
 const SYSTEM_ROWS: Array<{ label: string; key: keyof Lead }> = [
   { label: "Zalo ID", key: "zalo_id" },

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useDataProvider, useGetList, useNotify, useRefresh } from "ra-core";
+import {
+  useDataProvider,
+  useGetList,
+  useGetOne,
+  useNotify,
+  useRefresh,
+} from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,8 +43,6 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
   );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [personaSearch, setPersonaSearch] = useState("");
-  const [selectedPersonaRecord, setSelectedPersonaRecord] =
-    useState<Persona | null>(null);
   const [saving, setSaving] = useState(false);
   const { data: personas, isPending } = useGetList<Persona>("personas", {
     pagination: { page: 1, perPage: 25 },
@@ -50,24 +54,11 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
     setSelected(project.default_persona_id ?? GLOBAL_DEFAULT_VALUE);
   }, [project.default_persona_id]);
 
-  useEffect(() => {
-    if (!project.default_persona_id) {
-      setSelectedPersonaRecord(null);
-      return;
-    }
-    let cancelled = false;
-    dataProvider
-      .getOne("personas", { id: project.default_persona_id })
-      .then((response) => {
-        if (!cancelled) setSelectedPersonaRecord(response.data as Persona);
-      })
-      .catch(() => {
-        if (!cancelled) setSelectedPersonaRecord(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dataProvider, project.default_persona_id]);
+  const { data: selectedPersonaRecord } = useGetOne<Persona>(
+    "personas",
+    { id: project.default_persona_id! },
+    { enabled: !!project.default_persona_id },
+  );
 
   const selectedPersona = useMemo(
     () =>

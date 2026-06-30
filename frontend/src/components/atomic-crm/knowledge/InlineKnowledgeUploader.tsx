@@ -10,7 +10,6 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -104,12 +103,6 @@ export const InlineKnowledgeUploader = () => {
             </p>
           </div>
         </div>
-        <Badge
-          variant="secondary"
-          className="kb-mono hidden shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold sm:inline-flex"
-        >
-          0 nguồn
-        </Badge>
       </div>
 
       <div className="mt-6 grid gap-5">

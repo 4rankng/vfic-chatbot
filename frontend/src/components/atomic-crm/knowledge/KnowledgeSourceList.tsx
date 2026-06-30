@@ -33,7 +33,6 @@ const KnowledgeSourceListContent = () => {
   const {
     isPending,
     sources,
-    pageSources,
     total,
     query,
     setQuery,
@@ -43,13 +42,13 @@ const KnowledgeSourceListContent = () => {
 
   const { selectedId, setSelectedId } =
     useMasterDetailSelection<KnowledgeSource>({
-      data: pageSources,
+      data: sources,
       autoSelectNewlyAppeared: true,
     });
 
   const selectedSource =
-    pageSources.find((source) => String(source.id) === selectedId) ??
-    pageSources[0] ??
+    sources.find((source) => String(source.id) === selectedId) ??
+    sources[0] ??
     null;
   const uploadProjectId =
     projectFilter !== ALL_PROJECTS ? projectFilter : selectedSource?.project_id;
@@ -139,7 +138,7 @@ const KnowledgeSourceListContent = () => {
           <SourceSelectorSkeleton />
         ) : sources.length === 0 ? (
           <InlineKnowledgeUploader />
-        ) : pageSources.length === 0 ? (
+        ) : sources.length === 0 ? (
           <EmptyState
             icon={<FileText className="size-6" />}
             title="Không tìm thấy tài liệu"
@@ -160,7 +159,7 @@ const KnowledgeSourceListContent = () => {
         ) : (
           <>
             <SourceSelector
-              sources={pageSources}
+              sources={sources}
               selectedSource={selectedSource}
               total={total}
               onSelect={setSelectedId}
@@ -192,9 +191,9 @@ const SourceSelector = ({
   total,
   onSelect,
 }: {
-  sources: ReturnType<typeof useKnowledgeSourceFilters>["pageSources"];
+  sources: ReturnType<typeof useKnowledgeSourceFilters>["sources"];
   selectedSource:
-    | ReturnType<typeof useKnowledgeSourceFilters>["pageSources"][number]
+    | ReturnType<typeof useKnowledgeSourceFilters>["sources"][number]
     | null;
   total: number;
   onSelect: (id: string) => void;

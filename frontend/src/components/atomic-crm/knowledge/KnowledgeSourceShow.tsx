@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import {
   ShowBase,
-  useDataProvider,
+  useGetOne,
   useNotify,
   useRecordContext,
   useRedirect,
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Archive, BookOpen, Pencil, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
-import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { formatDateTime } from "../automation/botRunMeta";
 import { stageLabel, stageTone } from "./stageTone";
 import { isCanonicalSource } from "./knowledgePipelineUtils";
@@ -37,27 +36,12 @@ const KnowledgeSourceShowContent = () => {
   const notify = useNotify();
   const refresh = useRefresh();
   const redirect = useRedirect();
-  const dataProvider = useDataProvider<CrmDataProvider>();
-  const [project, setProject] = useState<Project | null>(null);
-
-  useEffect(() => {
-    if (!source?.project_id) {
-      setProject(null);
-      return;
-    }
-    let cancelled = false;
-    dataProvider
-      .getOne("projects", { id: source.project_id })
-      .then((response) => {
-        if (!cancelled) setProject(response.data as Project);
-      })
-      .catch(() => {
-        if (!cancelled) setProject(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dataProvider, source?.project_id]);
+  const projectId = source?.project_id ?? "";
+  const { data: project } = useGetOne<Project>(
+    "projects",
+    { id: projectId },
+    { enabled: projectId !== "" },
+  );
 
   if (!source) return null;
 

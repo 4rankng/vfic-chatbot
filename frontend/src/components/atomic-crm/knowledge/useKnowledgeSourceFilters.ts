@@ -48,7 +48,6 @@ export const useKnowledgeSourceFilters = () => {
   return {
     isPending,
     sources,
-    pageSources: sources,
     total: total ?? 0,
     query,
     setQuery,

@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { useDataProvider, useGetList, useNotify, useRefresh } from "ra-core";
+import { useMemo, useState } from "react";
+import {
+  useDataProvider,
+  useGetList,
+  useGetOne,
+  useNotify,
+  useRefresh,
+} from "ra-core";
 import { Check, ChevronsUpDown, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,33 +39,17 @@ export const ProjectPicker = ({
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
-  const [selectedProjectRecord, setSelectedProjectRecord] =
-    useState<Project | null>(null);
   const trimmedSearch = search.trim();
+  const { data: selectedProjectRecord } = useGetOne<Project>(
+    "projects",
+    { id: value! },
+    { enabled: !!value },
+  );
   const { data: searchedProjects } = useGetList<Project>("projects", {
     pagination: { page: 1, perPage: 25 },
     sort: { field: "name", order: "ASC" },
     filter: trimmedSearch ? { q: trimmedSearch } : {},
   });
-
-  useEffect(() => {
-    if (!value) {
-      setSelectedProjectRecord(null);
-      return;
-    }
-    let cancelled = false;
-    dataProvider
-      .getOne("projects", { id: value })
-      .then((response) => {
-        if (!cancelled) setSelectedProjectRecord(response.data as Project);
-      })
-      .catch(() => {
-        if (!cancelled) setSelectedProjectRecord(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dataProvider, value]);
 
   const availableProjects = useMemo(() => {
     const map = new Map<string, Project>();
