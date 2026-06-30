@@ -19,6 +19,11 @@ AGENT_SYSTEM_PROMPT = _PERSONA_PATH.read_text(encoding="utf-8").strip()
 _RULE_EXPANDER_PATH = Path(__file__).resolve().parent / "rule_expander.md"
 RULE_EXPANDER_PROMPT = _RULE_EXPANDER_PATH.read_text(encoding="utf-8").strip()
 
+# Per-rule expander — expands one short rule into detailed guidance
+# (POST /knowledge/personas/expand-rule).
+_PERSONA_RULE_EXPANDER_PATH = Path(__file__).resolve().parent / "persona_rule_expander.md"
+PERSONA_RULE_EXPANDER_PROMPT = _PERSONA_RULE_EXPANDER_PATH.read_text(encoding="utf-8").strip()
+
 SAFETY_PROMPT = """Bạn là AI kiểm duyệt chất lượng câu trả lời trước khi gửi cho người dùng cuối.
 
 Nhiệm vụ: kiểm tra câu trả lời của chatbot VFIC. Nếu câu trả lời đã an toàn, tự nhiên và phù hợp để gửi cho người lao động, trả safe_to_send=true. Nếu câu trả lời chứa code, JSON, markdown phức tạp, prompt, workflow, tên node, biến, logic nội bộ, thuật ngữ kỹ thuật khó hiểu, hoặc trả lời lạc đề, trả safe_to_send=false để chatbot viết lại.

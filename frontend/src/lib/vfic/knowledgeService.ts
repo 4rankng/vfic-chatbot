@@ -162,14 +162,30 @@ export const activatePersona = (id: string) =>
   });
 
 /**
- * Expand a short description into a full 7-part persona body via the
- * rule-expander LLM. Admin-only; the caller previews/edits before saving.
+ * Expand a short description (+ optional rules) into a full 7-part persona
+ * body via the rule-expander LLM. Admin-only; the caller previews/edits before saving.
  */
-export const generatePersona = (description: string) =>
+export const generatePersona = (
+  description: string,
+  rules?: string[],
+) =>
   apiJson<{ body_md: string }>(`${BASE}/knowledge/personas/generate`, {
     method: "POST",
-    body: { description },
+    body: { description, rules: rules ?? [] },
   });
+
+/**
+ * Expand one short rule into 2–5 lines of detailed persona guidance.
+ * Admin-only; used interactively in the multi-rule editor.
+ */
+export const expandPersonaRule = (short_rule_text: string) =>
+  apiJson<{ expanded: string }>(
+    `${BASE}/knowledge/personas/expand-rule`,
+    {
+      method: "POST",
+      body: { short_rule_text },
+    },
+  );
 
 export const reindexProject = (id: string) =>
   apiJson<ApiRecord>(`${BASE}/knowledge/projects/${encodeURIComponent(id)}/reindex`, {

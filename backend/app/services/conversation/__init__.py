@@ -85,6 +85,9 @@ class ConversationService:
     async def record_bot_outcome(self, *args, **kwargs):
         return await self.state.record_bot_outcome(*args, **kwargs)
 
+    async def record_bot_pending(self, *args, **kwargs):
+        return await self.state.record_bot_pending(*args, **kwargs)
+
     async def take_over(self, *args, **kwargs):
         return await self.state.take_over(*args, **kwargs)
 

@@ -322,10 +322,10 @@ const ReadinessHero = ({
       >
         {extracting ? (
           // Indeterminate pulse — no fake sequential progress.
-          <div className="absolute inset-y-0 left-0 w-1/3 animate-pulse rounded-full bg-primary/60" />
+          <div className="absolute inset-y-0 left-0 w-1/3 animate-pulse rounded-full bg-feature-ready/60" />
         ) : (
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-500"
+            className="absolute inset-y-0 left-0 rounded-full bg-feature-ready transition-all duration-500"
             style={{ width: `${pct}%` }}
           />
         )}
@@ -385,7 +385,7 @@ const FeatureGroup = ({
                 <span
                   className={cn(
                     "h-[18px] w-1 shrink-0 rounded-full",
-                    ready ? "bg-feature-ready" : "bg-feature-gap",
+                    ready ? "bg-feature-ready/80" : "bg-feature-gap",
                   )}
                 />
                 <span className="flex min-w-0 flex-1 flex-col gap-1 text-foreground">
@@ -468,7 +468,10 @@ const FeatureCard = ({
               {feature.name_vi}
             </span>
             {ready ? (
-              <Badge className="bg-feature-ready text-[10px] text-primary-foreground">
+              <Badge
+                variant="outline"
+                className="border-feature-ready/25 bg-feature-ready-soft text-[10px] text-feature-ready"
+              >
                 Đầy đủ
               </Badge>
             ) : (

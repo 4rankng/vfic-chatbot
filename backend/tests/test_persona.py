@@ -6,8 +6,17 @@ tests guard against accidental deletion/corruption of persona.md and verify the
 7-part framework stays intact, plus spot-check that critical operational rules
 survived the restructure.
 """
+import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import pytest
+from fastapi import HTTPException
+
+from app.graph.context import active_projects_index
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
+from app.schemas.personas import PersonaUpdate
+from app.services.persona_service import PersonaService
 
 EXPECTED_SECTIONS = [
     "### 1. Vai trò của tôi",
@@ -43,3 +52,47 @@ def test_persona_has_exactly_seven_sections():
 def test_persona_preserves_critical_rules():
     for needle in CRITICAL_RULES:
         assert needle in AGENT_SYSTEM_PROMPT, f"missing critical rule text: {needle!r}"
+
+
+@pytest.mark.asyncio
+async def test_active_projects_index_includes_project_persona_overrides(monkeypatch):
+    class _Repo:
+        def __init__(self, _db):
+            pass
+
+        async def active_projects_with_card(self):
+            return [
+                SimpleNamespace(
+                    slug="lg-display",
+                    name="LG Display",
+                    summary="Tuyển công nhân sản xuất",
+                    index_card={"key_roles": ["Operator"], "location": "Hai Phong"},
+                    persona_name="Persona LGD",
+                    persona_body_md="### Vai trò\nTư vấn riêng cho LG Display.",
+                )
+            ]
+
+    monkeypatch.setattr("app.graph.context.RetrievalRepository", _Repo)
+
+    prompt = await active_projects_index(SimpleNamespace())
+
+    assert "=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ===" in prompt
+    assert "lg-display (LG Display)" in prompt
+    assert "=== PERSONA RIÊNG THEO DỰ ÁN ===" in prompt
+    assert "Slug: lg-display" in prompt
+    assert "Agent: Persona LGD" in prompt
+    assert "Tư vấn riêng cho LG Display." in prompt
+
+
+@pytest.mark.asyncio
+async def test_persona_service_update_returns_404_for_missing_id():
+    """PersonaService.update raises 404 when persona not found."""
+    mock_db = AsyncMock()
+    mock_db.get.return_value = None
+
+    svc = PersonaService(mock_db)
+    admin = SimpleNamespace(id=uuid.uuid4())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await svc.update(uuid.uuid4(), PersonaUpdate(), admin)
+    assert exc_info.value.status_code == 404

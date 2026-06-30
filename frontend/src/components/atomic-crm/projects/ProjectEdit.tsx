@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { ProjectFeatures } from "./ProjectFeatures";
+import { ProjectPersonaPanel } from "./ProjectPersonaPanel";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
 import { DeleteButton } from "@/components/admin";
@@ -82,6 +83,8 @@ const ProjectEditContent = () => {
         </CardContent>
       </Card>
 
+      {isAdmin && <ProjectPersonaPanel project={project} />}
+
       <Card className="mt-4 max-w-2xl">
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
@@ -119,11 +122,7 @@ const ProjectEditContent = () => {
         </CardContent>
       </Card>
 
-      <ProjectFeatures
-        projectId={project.id}
-        editable
-        canExtract={isAdmin}
-      />
+      <ProjectFeatures projectId={project.id} editable canExtract={isAdmin} />
 
       {isAdmin && (
         <KnowledgeUpload

@@ -13,7 +13,7 @@ export const PersonaCreate = () => {
       await dataProvider.create("personas", {
         data: { name: v.name, body_md: v.body_md, notes: v.notes || null },
       });
-      notify("Đã tạo persona.", { type: "success" });
+      notify("Đã tạo Agent.", { type: "success" });
       redirect("/personas");
     } catch (e) {
       notify((e as Error).message, { type: "error" });
@@ -22,14 +22,16 @@ export const PersonaCreate = () => {
 
   return (
     <CreateBase resource="personas">
-      <TopToolbar>
-        <h2 className="mr-auto text-xl font-semibold">Tạo persona</h2>
-      </TopToolbar>
-      <PersonaForm
-        initial={{ name: "", body_md: "", notes: "" }}
-        submitLabel="Tạo persona"
-        onSubmit={onSubmit}
-      />
+      <div className="mx-auto w-full max-w-6xl">
+        <TopToolbar>
+          <h2 className="mr-auto text-xl font-semibold">Tạo Agent</h2>
+        </TopToolbar>
+        <PersonaForm
+          initial={{ name: "", body_md: "", notes: "" }}
+          submitLabel="Tạo Agent"
+          onSubmit={onSubmit}
+        />
+      </div>
     </CreateBase>
   );
 };

@@ -172,6 +172,7 @@ class ConversationState:
         reply: str,
         started_at: datetime,
         sent: bool,
+        pending_message_id: int | None = None,
     ) -> Message:
         """Log a bot_run + the (possibly suppressed) BOT message; clears the lock."""
         outcome = BotRunOutcome.SENT if sent else BotRunOutcome.SUPPRESSED
@@ -185,17 +186,53 @@ class ConversationState:
         )
         self.db.add(run)
         await self.db.flush()
-        msg = Message(
-            conversation_id=conv.id,
-            sender=MessageSender.BOT,
-            body=reply,
-            bot_run_id=run.id,
-            delivery_status=DeliveryStatus.SENT if sent else DeliveryStatus.SUPPRESSED,
-        )
-        self.db.add(msg)
+        msg = None
+        if pending_message_id is not None:
+            pending_msg = await self.db.get(Message, pending_message_id)
+            if (
+                pending_msg is not None
+                and pending_msg.conversation_id == conv.id
+                and pending_msg.sender == MessageSender.BOT
+                and pending_msg.delivery_status == DeliveryStatus.PENDING
+            ):
+                pending_msg.body = reply
+                pending_msg.bot_run_id = run.id
+                pending_msg.delivery_status = (
+                    DeliveryStatus.SENT if sent else DeliveryStatus.SUPPRESSED
+                )
+                msg = pending_msg
+        if msg is None:
+            msg = Message(
+                conversation_id=conv.id,
+                sender=MessageSender.BOT,
+                body=reply,
+                bot_run_id=run.id,
+                delivery_status=DeliveryStatus.SENT if sent else DeliveryStatus.SUPPRESSED,
+            )
+            self.db.add(msg)
         conv.bot_locked_until = None
         if sent:
             conv.last_outbound_at = utcnow()
+        await self.db.commit()
+        await self.db.refresh(msg)
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
+        return msg
+
+    async def record_bot_pending(
+        self,
+        conv: Conversation,
+        *,
+        body: str = "Đang soạn trả lời...",
+    ) -> Message:
+        """Persist a visible pending BOT row without touching the version guard."""
+        msg = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.BOT,
+            body=body,
+            delivery_status=DeliveryStatus.PENDING,
+        )
+        self.db.add(msg)
         await self.db.commit()
         await self.db.refresh(msg)
         await self.events.message_created(msg, conv)

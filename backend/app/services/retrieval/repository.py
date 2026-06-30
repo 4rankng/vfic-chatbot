@@ -348,11 +348,16 @@ class RetrievalRepository:
         ).all()
 
     async def active_projects_with_card(self) -> list:
-        """name/slug/summary/index_card of active projects (master-index prompt block)."""
+        """Active projects for the master-index prompt, including persona overrides."""
         return (
             await self.db.execute(
                 text(
-                    "SELECT name, slug, summary, index_card FROM projects WHERE is_active ORDER BY name"
+                    "SELECT p.name, p.slug, p.summary, p.index_card, "
+                    "       pe.name AS persona_name, pe.body_md AS persona_body_md "
+                    "FROM projects p "
+                    "LEFT JOIN personas pe ON pe.id = p.default_persona_id AND pe.is_active "
+                    "WHERE p.is_active "
+                    "ORDER BY p.name"
                 )
             )
         ).all()

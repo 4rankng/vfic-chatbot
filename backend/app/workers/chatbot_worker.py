@@ -110,6 +110,7 @@ async def _run_job_async(job: dict) -> None:
                         reply=DEGRADATION_REPLY,
                         started_at=started_at,
                         sent=True,
+                        pending_message_id=state.pending_message_id,
                     )
             except Exception:  # noqa: BLE001
                 logger.error("failed to send degradation reply", exc_info=True)

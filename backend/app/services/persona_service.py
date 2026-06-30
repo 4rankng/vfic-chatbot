@@ -18,16 +18,18 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import text
+
 from app.models.persona import Persona
 from app.models.user import User
-from app.schemas.personas import PersonaCreate, PersonaUpdate, _slugify
+from app.schemas.personas import PersonaCreate, PersonaUpdate, _slugify, ProjectMini
 from app.services.audit_service import record_audit
 from app.services.ratelimit import enforce_persona_generate_rate_limit
 
 logger = logging.getLogger(__name__)
 
 _PERSONA_USER_TEMPLATE = (
-    "Mở rộng mô tả sau thành một persona HOÀN CHỈNH cho chatbot VFIC, theo ĐÚNG 7 phần "
+    "Mở rộng mô tả sau thành một Agent HOÀN CHỈNH cho chatbot VFIC, theo ĐÚNG 7 phần "
     "với giữ nguyên các tiêu đề tiếng Việt sau:\n"
     "### Vai trò của tôi là gì?\n"
     "### Ai cần tôi giúp?\n"
@@ -37,21 +39,45 @@ _PERSONA_USER_TEMPLATE = (
     "### Tôi nên giao tiếp thế nào?\n"
     "### Mẹo bổ sung?\n\n"
     "Yêu cầu đầu ra:\n"
-    "- Chỉ xuất persona 7 phần, KHÔNG thêm mục 'NGUỒN', 'BẢNG TRUY VẤN Ý NGHĨA', "
+    "- Chỉ xuất Agent 7 phần, KHÔNG thêm mục 'NGUỒN', 'BẢNG TRUY VẤN Ý NGHĨA', "
     "citations hay ghi chú kiểm tra trung thành.\n"
     "- Giữ nguyên ý mô tả; làm rõ + thêm ví dụ/edge case ở các phần khi phù hợp; tiếng Việt chuẩn.\n\n"
     "Mô tả: {desc}"
 )
 
+_PERSONA_USER_TEMPLATE_WITH_RULES = (
+    "Mở rộng mô tả sau thành một Agent HOÀN CHỈNH cho chatbot VFIC, theo ĐÚNG 7 phần "
+    "với giữ nguyên các tiêu đề tiếng Việt sau:\n"
+    "### Vai trò của tôi là gì?\n"
+    "### Ai cần tôi giúp?\n"
+    "### Tôi hoàn thành công việc thế nào?\n"
+    "### Tôi nên tránh điều gì?\n"
+    "### Kết quả nào cần theo dõi?\n"
+    "### Tôi nên giao tiếp thế nào?\n"
+    "### Mẹo bổ sung?\n\n"
+    "Yêu cầu đầu ra:\n"
+    "- Chỉ xuất Agent 7 phần, KHÔNG thêm mục 'NGUỒN', 'BẢNG TRUY VẤN Ý NGHĨA', "
+    "citations hay ghi chú kiểm tra trung thành.\n"
+    "- Giữ nguyên ý mô tả; làm rõ + thêm ví dụ/edge case ở các phần khi phù hợp; tiếng Việt chuẩn.\n"
+    "- Tích hợp MỌI quy tắc bổ sung vào phần phù hợp trong 7 phần trên (Vai trò, Tránh, "
+    "Giao tiếp, Mẹo bổ sung, v.v.). Không tạo phần riêng cho quy tắc.\n\n"
+    "Mô tả: {desc}\n\n"
+    "CÁC LUẬT BỔ SUNG (tích hợp vào Agent):\n{rules}"
+)
 
-def _persona_user_message(description: str) -> str:
-    return _PERSONA_USER_TEMPLATE.format(desc=description.strip())
+
+def _persona_user_message(description: str, rules: list[str] | None = None) -> str:
+    desc = description.strip()
+    if rules:
+        rules_block = "\n".join(f"- {r.strip()}" for r in rules if r.strip())
+        return _PERSONA_USER_TEMPLATE_WITH_RULES.format(desc=desc, rules=rules_block)
+    return _PERSONA_USER_TEMPLATE.format(desc=desc)
 
 
 async def _get(pid: uuid.UUID, db: AsyncSession) -> Persona:
     p = await db.get(Persona, pid)
     if p is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "persona not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found")
     return p
 
 
@@ -60,9 +86,24 @@ class PersonaService:
         self.db = db
 
     async def list(self) -> list[Persona]:
-        return list(
+        rows = list(
             (await self.db.scalars(select(Persona).order_by(Persona.created_at.desc()))).all()
         )
+        # Enrich with assigned projects (projects whose default_persona_id = persona.id).
+        try:
+            result = await self.db.execute(
+                text("SELECT id, name, slug, default_persona_id FROM projects WHERE default_persona_id IS NOT NULL")
+            )
+            project_map: dict[str, list[ProjectMini]] = {}
+            for r in result.all():
+                pid = str(r.default_persona_id)
+                project_map.setdefault(pid, []).append(ProjectMini(id=r.id, name=r.name, slug=r.slug))
+            for persona in rows:
+                persona._assigned_projects = project_map.get(str(persona.id), [])
+        except Exception:  # noqa: BLE001
+            for persona in rows:
+                persona._assigned_projects = []
+        return rows
 
     async def create(self, body: PersonaCreate, admin: User) -> Persona:
         slug = (body.slug or _slugify(body.name)).strip() or _slugify(body.name)
@@ -85,7 +126,7 @@ class PersonaService:
                 await self.db.commit()
             except Exception as exc2:  # noqa: BLE001
                 await self.db.rollback()
-                raise HTTPException(status.HTTP_409_CONFLICT, f"persona create failed: {exc2}") from exc2
+                raise HTTPException(status.HTTP_409_CONFLICT, f"Agent create failed: {exc2}") from exc2
         await record_audit(
             self.db, action="create_persona", actor_id=admin.id, target_type="persona", target_id=str(persona.id)
         )
@@ -120,7 +161,7 @@ class PersonaService:
     async def activate(self, persona_id: uuid.UUID) -> Persona:
         persona = await _get(persona_id, self.db)
         if persona.project_id is not None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "activation is for global personas only")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "activation is for global Agents only")
         return await self._activate(persona)
 
     async def _activate(self, persona: Persona) -> Persona:
@@ -143,8 +184,8 @@ class PersonaService:
         await self.db.refresh(persona)
         return persona
 
-    async def generate(self, admin: User, description: str) -> str:
-        """Expand a short description into a full 7-part persona body_md via MiniMax.
+    async def generate(self, admin: User, description: str, rules: list[str] | None = None) -> str:
+        """Expand a short description (+ optional rules) into a full 7-part persona body_md.
 
         Best-effort per-admin throttle; the MiniMax expander is imported lazily so
         langchain_openai is pulled in only when generation runs, keeping the web-process
@@ -156,18 +197,44 @@ class PersonaService:
 
         try:
             expand = build_persona_expander()
-            body_md = (await expand(_persona_user_message(description))).strip()
+            body_md = (await expand(_persona_user_message(description, rules))).strip()
         except Exception as exc:  # noqa: BLE001
             logger.exception("persona generation failed")
             raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, "Sinh persona thất bại. Vui lòng thử lại."
+                status.HTTP_502_BAD_GATEWAY, "Tạo Agent thất bại. Vui lòng thử lại."
             ) from exc
         if not body_md:
             raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, "Sinh persona thất bại. Vui lòng thử lại."
+                status.HTTP_502_BAD_GATEWAY, "Tạo Agent thất bại. Vui lòng thử lại."
             )
         await record_audit(
             self.db, action="generate_persona", actor_id=admin.id, target_type="persona", target_id=None
         )
         await self.db.commit()  # record_audit only flushes
         return body_md
+
+    async def expand_rule(self, admin: User, short_rule_text: str) -> str:
+        """Expand one short rule into 2–5 lines of detailed persona guidance.
+
+        Uses a dedicated per-rule expander prompt. Best-effort throttle; 502 on failure.
+        """
+        await enforce_persona_generate_rate_limit(admin.id)
+        from app.graph.factories import build_rule_expander
+
+        try:
+            expand = build_rule_expander()
+            expanded = (await expand(short_rule_text.strip())).strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("rule expansion failed")
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, "Mở rộng quy tắc thất bại. Vui lòng thử lại."
+            ) from exc
+        if not expanded:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, "Mở rộng quy tắc thất bại. Vui lòng thử lại."
+            )
+        await record_audit(
+            self.db, action="expand_rule", actor_id=admin.id, target_type="persona", target_id=None
+        )
+        await self.db.commit()
+        return expanded

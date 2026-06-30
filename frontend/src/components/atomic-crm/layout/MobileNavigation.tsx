@@ -12,6 +12,7 @@ import {
   Home,
   MessageCircle,
   MoreHorizontal,
+  Sparkles,
   UserCog,
   Users,
 } from "lucide-react";
@@ -44,6 +45,7 @@ export const MobileNavigation = () => {
     if (matchPath("/knowledge_sources/*", location.pathname))
       return "/knowledge_sources";
     if (matchPath("/users/*", location.pathname)) return "/users";
+    if (matchPath("/personas/*", location.pathname)) return "/personas";
     if (matchPath("/profile", location.pathname)) return "/profile";
     return false;
   }, [location.pathname]);
@@ -81,6 +83,14 @@ export const MobileNavigation = () => {
               Icon: UserCog,
               label: "Tài khoản",
               isActive: currentPath === "/users",
+            }
+          : null,
+        isAdmin
+          ? {
+              href: "/personas",
+              Icon: Sparkles,
+              label: "Agent",
+              isActive: currentPath === "/personas",
             }
           : null,
       ].filter(Boolean) as NavigationItem[],

@@ -30,6 +30,7 @@ class PersonaOut(BaseModel):
     created_by: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
+    assigned_projects: list[ProjectMini] = []
 
 
 class PersonaListResponse(BaseModel):
@@ -55,7 +56,26 @@ class PersonaGenerateRequest(BaseModel):
     """Short description the rule-expander LLM expands into a full persona body_md."""
 
     description: str = Field(min_length=1, max_length=2000)
+    rules: list[str] = Field(default_factory=list)
 
 
 class PersonaGenerateResponse(BaseModel):
     body_md: str
+
+
+class PersonaExpandRuleRequest(BaseModel):
+    """One short rule the per-rule expander expands into detailed guidance."""
+
+    short_rule_text: str = Field(min_length=1, max_length=500)
+
+
+class PersonaExpandRuleResponse(BaseModel):
+    expanded: str
+
+
+class ProjectMini(BaseModel):
+    """Minimal project representation used in persona assignment lists."""
+
+    id: uuid.UUID
+    name: str
+    slug: str

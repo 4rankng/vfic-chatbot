@@ -13,15 +13,14 @@
   --border-strong: #c7cdbc;
   --border-glass: rgba(222, 226, 216, 0.4);
 
-  --brand: var(--primary);
-  --brand-hover: var(--primary);
-  --brand-light: var(--color-amber-soft, rgba(224, 112, 31, 0.13));
-
   /* Private inbox accent (steel = handoff/agent). Renamed from --accent to
      avoid colliding with the shadcn --accent hover-surface token, which is
      defined globally in index.css and consumed by ~50 primitives app-wide. */
   --inbox-accent: #3d5a73;
   --inbox-accent-light: #dce5ea;
+  --brand: var(--inbox-accent);
+  --brand-hover: color-mix(in oklab, var(--inbox-accent) 88%, black);
+  --brand-light: var(--inbox-accent-light);
 
   --success: var(--color-green, #2e9e63);
   --success-light: rgba(46, 158, 99, 0.15);
@@ -41,8 +40,8 @@
   --chat-bg: var(--background);
   --chat-bubble-in: #ffffff;
   --chat-bubble-out: #d9fdd3;
-  --chat-bubble-user: var(--primary);
-  --chat-bubble-user-text: var(--primary-foreground);
+  --chat-bubble-user: var(--inbox-accent);
+  --chat-bubble-user-text: #ffffff;
   --chat-bubble-bot: #ffffff;
   --chat-bubble-agent: var(--inbox-accent-light);
   --chat-bubble-agent-text: #24384a;
@@ -63,15 +62,15 @@
   --border-strong: rgba(148, 163, 184, 0.12);
   --border-glass: rgba(148, 163, 184, 0.05);
 
-  --brand: var(--primary);
-  --brand-hover: var(--primary);
-  --brand-light: rgba(240, 126, 47, 0.12);
+  --brand: #5f7f9a;
+  --brand-hover: #7592aa;
+  --brand-light: #193144;
 
   --chat-bg: #080c14;
   --chat-bubble-in: #161f30;
   --chat-bubble-out: #1b3d2b;
-  --chat-bubble-user: var(--primary);
-  --chat-bubble-user-text: var(--primary-foreground);
+  --chat-bubble-user: #2b4a62;
+  --chat-bubble-user-text: #f8fafc;
   --chat-bubble-bot: #161f30;
   --chat-bubble-agent: #193144;
   --chat-bubble-agent-text: var(--ink);
@@ -440,8 +439,8 @@
   transform: translateY(-1px);
 }
 .inbox-bg-container .conversation.needs-attention {
-  border-color: color-mix(in srgb, var(--brand) 26%, transparent);
-  background: color-mix(in srgb, var(--brand-light) 58%, transparent);
+  border-color: color-mix(in srgb, var(--success) 24%, transparent);
+  background: color-mix(in srgb, var(--success-light) 45%, transparent);
 }
 .inbox-bg-container .conversation.needs-attention::after {
   content: "";
@@ -452,7 +451,7 @@
   background: var(--inbox-accent);
 }
 .inbox-bg-container .conversation.active {
-  background: var(--brand-light);
+  background: color-mix(in srgb, var(--brand-light) 62%, var(--surface-solid));
   border-color: transparent;
   box-shadow: none;
 }
@@ -463,7 +462,7 @@
   top: 10px;
   bottom: 10px;
   width: 3px;
-  background: var(--brand);
+  background: color-mix(in srgb, var(--brand) 88%, var(--surface-solid));
   border-radius: 3px;
 }
 
@@ -919,6 +918,31 @@
   width: 15px;
   height: 15px;
 }
+.inbox-bg-container .profile-info-btn {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--rad-sm);
+  background: var(--brand);
+  color: var(--primary-foreground);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.inbox-bg-container .profile-info-btn:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.inbox-bg-container .profile-info-btn .icon {
+  width: 15px;
+  height: 15px;
+}
 .inbox-bg-container .mode-menu-chevron {
   width: 12px;
   height: 12px;
@@ -1213,11 +1237,32 @@
   min-width: 0;
 }
 :is(.inbox-bg-container, .chat-surface) .bubble-time-inline {
-  justify-self: end;
   font-size: 11px;
   font-weight: 500;
   color: var(--ink-faint);
   line-height: 1;
+}
+:is(.inbox-bg-container, .chat-surface) .bubble-meta-inline {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+:is(.inbox-bg-container, .chat-surface) .delivery-status {
+  font-weight: 600;
+  color: var(--ink-faint);
+}
+:is(.inbox-bg-container, .chat-surface) .delivery-status.pending {
+  color: var(--inbox-accent);
+}
+:is(.inbox-bg-container, .chat-surface) .delivery-status.failed {
+  color: var(--destructive);
+}
+:is(.inbox-bg-container, .chat-surface) .delivery-status.suppressed {
+  color: var(--ink-muted);
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.user .bubble-time-inline {
   color: color-mix(in oklab, var(--chat-bubble-user-text) 72%, transparent);
@@ -1320,7 +1365,9 @@
   font-weight: 650;
   -webkit-text-fill-color: var(--ink-muted);
 }
-:is(.inbox-bg-container, .chat-surface) .composer.disabled textarea::placeholder {
+:is(.inbox-bg-container, .chat-surface)
+  .composer.disabled
+  textarea::placeholder {
   color: var(--ink-muted);
   opacity: 1;
 }
@@ -1725,9 +1772,6 @@
     backdrop-filter: blur(4px);
     z-index: 2;
   }
-  .inbox-bg-container .mobile-toggle.profile-toggle {
-    display: inline-grid;
-  }
   .inbox-bg-container .mode-segment {
     min-width: 88px;
   }
@@ -1883,6 +1927,16 @@
   }
   .inbox-bg-container .mode-menu-trigger span,
   .inbox-bg-container .mode-menu-chevron {
+    display: none;
+  }
+  .inbox-bg-container .profile-info-btn {
+    width: 38px;
+    height: 38px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 999px;
+  }
+  .inbox-bg-container .profile-info-btn span {
     display: none;
   }
   .inbox-bg-container .chat-mode-chip {

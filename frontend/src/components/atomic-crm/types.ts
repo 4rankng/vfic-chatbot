@@ -99,6 +99,7 @@ export type Message = {
   conversation_id: string;
   type: "inbound" | "outbound" | "system";
   content: string;
+  delivery_status?: "pending" | "sent" | "failed" | "suppressed";
   // Backend `data` jsonb. Carries recruiter_id on recruiter-sent messages
   // (the direction discriminator read in ChatThread). Narrowed from `any`.
   data: { recruiter_id?: string | null } | null;
@@ -231,6 +232,7 @@ export type Persona = {
   created_by?: string | null;
   created_at: string;
   updated_at: string;
+  assigned_projects?: { id: string; name: string; slug: string }[];
 } & Pick<RaRecord, "id">;
 
 export type DealStage = {

@@ -236,7 +236,7 @@ const ReadinessRing = ({
         fill="none"
         strokeWidth="3.5"
         strokeLinecap="round"
-        stroke="var(--primary)"
+        stroke="var(--feature-ready)"
         strokeDasharray={
           known
             ? `${dash} ${RING_CIRCUMFERENCE}`
@@ -293,7 +293,7 @@ const StatsRibbon = ({
                 fill="none"
                 strokeWidth="3.5"
                 strokeLinecap="round"
-                stroke="var(--primary)"
+                stroke="var(--feature-ready)"
                 strokeDasharray={`${dash} ${RING_CIRCUMFERENCE}`}
                 className="transition-all duration-500"
               />

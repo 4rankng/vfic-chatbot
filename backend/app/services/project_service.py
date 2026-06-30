@@ -23,7 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
-from app.models.user import User
+from app.models.persona import Persona
+from app.models.user import Role, User
 from app.schemas.projects import (
     BusRouteOut,
     BusStopOut,
@@ -174,7 +175,13 @@ class ProjectService:
             proj.name = body.name.strip()
         if body.is_active is not None:
             proj.is_active = body.is_active
-        if body.default_persona_id is not None:
+        if "default_persona_id" in body.model_fields_set:
+            if actor.role != Role.admin:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "admin only")
+            if body.default_persona_id is not None:
+                persona = await self.db.get(Persona, body.default_persona_id)
+                if persona is None:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found")
             proj.default_persona_id = body.default_persona_id
         await record_audit(
             self.db, action="update_project", actor_id=actor.id, target_type="project", target_id=str(proj.id)

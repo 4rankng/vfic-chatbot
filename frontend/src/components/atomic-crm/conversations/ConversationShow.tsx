@@ -187,6 +187,18 @@ export const ConversationShowContent = ({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
+          <button
+            type="button"
+            className="profile-info-btn"
+            onClick={() => setIsProfileOpen(true)}
+            aria-label="Xem hồ sơ ứng viên"
+            title="Xem hồ sơ ứng viên"
+          >
+            <svg className="icon">
+              <use href="#i-panel" />
+            </svg>
+            <span>Hồ sơ</span>
+          </button>
           {activeMode === "closed" && (
             <span className="chat-mode-chip" title="Hội thoại đã đóng">
               <svg className="icon">
@@ -195,15 +207,6 @@ export const ConversationShowContent = ({
               <span>Đã đóng</span>
             </span>
           )}
-          <button
-            className="icon-btn small mobile-toggle profile-toggle"
-            onClick={() => setIsProfileOpen(true)}
-            aria-label="Mở hồ sơ ứng viên"
-          >
-            <svg className="icon">
-              <use href="#i-panel" />
-            </svg>
-          </button>
         </div>
       </header>
 

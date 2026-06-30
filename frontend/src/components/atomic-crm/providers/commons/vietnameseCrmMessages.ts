@@ -51,8 +51,8 @@ export const vietnameseCrmMessages = {
       forcedCaseName: "Dự án",
     },
     personas: {
-      name: "Persona |||| Persona",
-      forcedCaseName: "Persona",
+      name: "Agent |||| Agent",
+      forcedCaseName: "Agent",
     },
     users: {
       name: "Tài khoản |||| Tài khoản",

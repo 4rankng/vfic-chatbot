@@ -10,10 +10,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.models.conversation import Conversation, ConversationMode, ConversationStatus
+from app.models.conversation import (
+    Conversation,
+    ConversationMode,
+    ConversationStatus,
+    DeliveryStatus,
+    Message,
+    MessageSender,
+)
 from app.models.lead import Lead, LeadStage
 from app.models.user import Role, User
-from app.services.conversation.state import ConversationConflict, ConversationState
+from app.services.conversation.state import ConversationConflict, ConversationState, utcnow
 from app.services.lead_events import LeadEventBus
 from app.services.lead_service import LeadConflict, LeadService
 from app.services.presence import _get_viewers, join_viewing, leave_viewing
@@ -196,6 +203,71 @@ async def test_semi_auto_conflict_when_owned_by_other():
         await state.semi_auto(conv, recruiter)
 
     assert exc_info.value.owner_name == "Owner Name"
+
+
+@pytest.mark.asyncio
+async def test_record_bot_pending_does_not_bump_version():
+    conv = _make_conv(version=7)
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    events = AsyncMock()
+    state = ConversationState(db, MagicMock(), events)
+
+    msg = await state.record_bot_pending(conv)
+
+    assert msg.sender == MessageSender.BOT
+    assert msg.delivery_status == DeliveryStatus.PENDING
+    assert conv.version == 7
+    events.message_created.assert_awaited_once()
+    events.conversation_updated.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_record_bot_outcome_updates_pending_message_in_place():
+    conv = _make_conv(version=3)
+    pending = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body="Đang soạn trả lời...",
+        delivery_status=DeliveryStatus.PENDING,
+    )
+    pending.id = 42
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    async def _flush():
+        for call in db.add.call_args_list:
+            obj = call.args[0]
+            if hasattr(obj, "proposed_reply"):
+                obj.id = 99
+
+    db.flush = AsyncMock(side_effect=_flush)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.get = AsyncMock(return_value=pending)
+    events = AsyncMock()
+    state = ConversationState(db, MagicMock(), events)
+
+    msg = await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Câu trả lời cuối cùng",
+        started_at=utcnow(),
+        sent=True,
+        pending_message_id=42,
+    )
+
+    assert msg is pending
+    assert pending.body == "Câu trả lời cuối cùng"
+    assert pending.delivery_status == DeliveryStatus.SENT
+    assert pending.bot_run_id is not None
+    assert conv.bot_locked_until is None
+    assert conv.last_outbound_at is not None
+    events.message_created.assert_awaited_once()
+    events.conversation_updated.assert_awaited_once()
 
 
 # --- LeadService optimistic concurrency tests ---

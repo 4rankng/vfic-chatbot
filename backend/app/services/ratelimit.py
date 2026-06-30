@@ -33,7 +33,7 @@ async def enforce_persona_generate_rate_limit(admin_id: uuid.UUID) -> None:
         if count > _PERSONA_GEN_RATE_LIMIT:
             raise HTTPException(
                 status.HTTP_429_TOO_MANY_REQUESTS,
-                "Bạn đã sinh persona quá nhiều lần. Vui lòng thử lại sau vài phút.",
+                "Bạn đã tạo Agent bằng AI quá nhiều lần. Vui lòng thử lại sau vài phút.",
             )
     except HTTPException:
         raise

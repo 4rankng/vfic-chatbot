@@ -17,11 +17,14 @@ from app.core.db import get_db
 from app.models.user import User
 from app.schemas.personas import (
     PersonaCreate,
+    PersonaExpandRuleRequest,
+    PersonaExpandRuleResponse,
     PersonaGenerateRequest,
     PersonaGenerateResponse,
     PersonaListResponse,
     PersonaOut,
     PersonaUpdate,
+    ProjectMini,
 )
 from app.services.persona_service import PersonaService
 
@@ -33,7 +36,12 @@ async def list_personas(
     _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> PersonaListResponse:
     rows = await PersonaService(db).list()
-    return PersonaListResponse(data=[PersonaOut.model_validate(p) for p in rows], total=len(rows))
+    out = []
+    for p in rows:
+        d = PersonaOut.model_validate(p)
+        d.assigned_projects = getattr(p, "_assigned_projects", [])
+        out.append(d)
+    return PersonaListResponse(data=out, total=len(rows))
 
 
 @router.post("", response_model=PersonaOut, status_code=status.HTTP_201_CREATED)
@@ -73,5 +81,15 @@ async def generate_persona(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> PersonaGenerateResponse:
-    body_md = await PersonaService(db).generate(admin, body.description)
+    body_md = await PersonaService(db).generate(admin, body.description, rules=body.rules)
     return PersonaGenerateResponse(body_md=body_md)
+
+
+@router.post("/expand-rule", response_model=PersonaExpandRuleResponse)
+async def expand_rule(
+    body: PersonaExpandRuleRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PersonaExpandRuleResponse:
+    expanded = await PersonaService(db).expand_rule(admin, body.short_rule_text)
+    return PersonaExpandRuleResponse(expanded=expanded)

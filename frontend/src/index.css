@@ -95,10 +95,10 @@
   --border: oklch(0.9069 0.0141 124.6); /* #dee2d8 */
   --input: oklch(0.9069 0.0141 124.6); /* #dee2d8 */
   --ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
-  --feature-ready: var(--primary);
+  --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
-    var(--primary) 8%,
+    var(--color-green) 8%,
     var(--background)
   );
   --feature-gap: var(--muted-foreground);
@@ -152,10 +152,10 @@
   --border: oklch(0.33 0.02 263); /* dark hairline */
   --input: oklch(0.33 0.02 263); /* dark hairline */
   --ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
-  --feature-ready: var(--primary);
+  --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
-    var(--primary) 14%,
+    var(--color-green) 14%,
     var(--background)
   );
   --feature-gap: var(--muted-foreground);

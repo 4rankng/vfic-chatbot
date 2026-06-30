@@ -19,6 +19,7 @@ from app.graph.prompts import AGENT_SYSTEM_PROMPT
 from app.services.retrieval import RetrievalRepository
 
 _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ==="
+_PROJECT_PERSONA_HEADER = "\n\n=== PERSONA RIÊNG THEO DỰ ÁN ==="
 
 _RUNTIME_RETRIEVAL_RULES = """
 
@@ -51,11 +52,11 @@ def _strip_stale_refusal_rules(persona: str) -> str:
 
 
 async def resolve_persona(db: AsyncSession) -> str:
-    """Return the active global persona body, or persona.md if none is active."""
+    """Return the active global persona body (stripped of stale refusal rules), or persona.md if none is active."""
     try:
         body = await RetrievalRepository(db).active_persona_body()
         if body and body.strip():
-            return body.strip()
+            return _strip_stale_refusal_rules(body.strip())
     except Exception:  # noqa: BLE001
         pass
     return AGENT_SYSTEM_PROMPT
@@ -70,6 +71,7 @@ async def active_projects_index(db: AsyncSession) -> str:
     if not rows:
         return ""
     lines: list[str] = []
+    persona_groups: dict[tuple[str, str], list[str]] = {}
     for r in rows:
         card = r.index_card or {}
         roles = ", ".join(card.get("key_roles") or [])
@@ -82,7 +84,15 @@ async def active_projects_index(db: AsyncSession) -> str:
         if loc:
             seg += f"; địa điểm: {loc}"
         lines.append(seg)
-    return (
+
+        persona_body = _strip_stale_refusal_rules(
+            str(getattr(r, "persona_body_md", "") or "")
+        )
+        if persona_body:
+            persona_name = str(getattr(r, "persona_name", "") or "Agent dự án")
+            persona_groups.setdefault((persona_name, persona_body), []).append(str(r.slug))
+
+    prompt = (
         _INDEX_HEADER
         + "\n" + "\n".join(lines)
         + "\nKhi ứng viên quan tâm một dự án cụ thể: với câu hỏi về thu nhập/lương, ca làm, tăng ca, "
@@ -92,6 +102,17 @@ async def active_projects_index(db: AsyncSession) -> str:
           "không dùng get_product_features thay cho lịch xe chi tiết. "
           "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."
     )
+    if persona_groups:
+        blocks = [
+            "Khi cuộc hội thoại đã xác định ứng viên đang nói về một trong các slug dưới đây, "
+            "áp dụng Agent tương ứng cho phần tư vấn dự án đó. Nếu chưa xác định dự án, dùng Agent mặc định.",
+        ]
+        for (persona_name, persona_body), slugs in persona_groups.items():
+            blocks.append(
+                f"\nSlug: {', '.join(slugs)}\nAgent: {persona_name}\n{persona_body}"
+            )
+        prompt += _PROJECT_PERSONA_HEADER + "\n" + "\n".join(blocks)
+    return prompt
 
 
 async def build_system_prompt(db: AsyncSession) -> str:

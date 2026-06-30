@@ -9,5 +9,5 @@ export default {
   list: PersonaList,
   create: PersonaCreate,
   edit: PersonaEdit,
-  recordRepresentation: (record?: Persona) => record?.name ?? "Persona",
+  recordRepresentation: (record?: Persona) => record?.name ?? "Agent",
 };

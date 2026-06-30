@@ -38,6 +38,24 @@ describe("mergeChronological", () => {
 
     expect(result.map((m) => m.id)).toEqual(["2", "1"]);
   });
+
+  it("replaces a message when only delivery status changes", () => {
+    const pending = {
+      ...msg(20),
+      delivery_status: "pending" as const,
+    };
+    const sent = {
+      ...pending,
+      delivery_status: "sent" as const,
+    };
+
+    const result = mergeChronological([pending], [sent]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).not.toBe(pending);
+    expect(result[0]).toBe(sent);
+    expect(result[0].delivery_status).toBe("sent");
+  });
 });
 
 describe("mergeRealtimePage", () => {

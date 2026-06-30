@@ -250,6 +250,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
 
     typing_task = asyncio.create_task(_typing_heartbeat(deps, conv.zalo_chat_id))
     started = _now()
+    pending_msg = await svc.record_bot_pending(conv)
+    state.pending_message_id = pending_msg.id
 
     try:
         # --- agent ---
@@ -273,6 +275,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=ERROR_REPLY,
                 started_at=started, sent=owned,
+                pending_message_id=state.pending_message_id,
             )
             return {"outcome": "error", "reply": ERROR_REPLY}
 
@@ -313,6 +316,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
                 started_at=started, sent=True,
+                pending_message_id=state.pending_message_id,
             )
             # Lead/memory extraction runs only after a real reply was sent (mirrors the
             # legacy "Should Persist?" gate, which never extracted on greetings/suppressed).
@@ -329,6 +333,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
         await svc.record_bot_outcome(
             conv, version_at_start=state.version_at_start, reply=candidate,
             started_at=started, sent=False,
+            pending_message_id=state.pending_message_id,
         )
         return {"outcome": "suppressed", "reply": candidate}
     finally:

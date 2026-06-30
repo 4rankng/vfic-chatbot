@@ -59,6 +59,11 @@ const toMessage = (row: ApiRecord): Message => {
     conversation_id: String(row.conversation_id ?? ""),
     type,
     content: String(row.body ?? ""),
+    delivery_status: String(row.delivery_status ?? "sent").toLowerCase() as
+      | "pending"
+      | "sent"
+      | "failed"
+      | "suppressed",
     data: { recruiter_id: recruiterId },
     created_at: String(row.created_at ?? new Date().toISOString()),
   };

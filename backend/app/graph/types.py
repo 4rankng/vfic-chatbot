@@ -31,6 +31,7 @@ class BotRunState:
     user_name: str = ""
     attempt: int = 0
     reply: str = ""
+    pending_message_id: int | None = None
 
 
 @dataclass

@@ -1,10 +1,27 @@
-import { User, Users } from "lucide-react";
+import {
+  BookOpen,
+  Briefcase,
+  ChevronDown,
+  Home,
+  MessageCircle,
+  Sparkles,
+  User,
+  UserCog,
+  Users,
+} from "lucide-react";
 import { usePermissions, useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
 import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
 import { UserMenu } from "@/components/admin/user-menu";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { NavPill } from "./topbar/NavPills";
@@ -26,10 +43,71 @@ const Header = () => {
     if (matchPath("/knowledge_sources/*", location.pathname))
       return "/knowledge_sources";
     if (matchPath("/users/*", location.pathname)) return "/users";
+    if (matchPath("/personas/*", location.pathname)) return "/personas";
     // Unmatched secondary routes (e.g. /settings, /profile, /users) leave no
     // pill highlighted, matching the prior behavior.
     return false;
   }, [location.pathname]);
+
+  const dashboardItem = isAdmin
+    ? {
+        label: translate("ra.page.dashboard"),
+        to: "/",
+        isActive: currentPath === "/",
+        Icon: Home,
+      }
+    : null;
+
+  const coreItems = [
+    dashboardItem,
+    {
+      label: translate("resources.leads.name", { smart_count: 2 }),
+      to: "/leads",
+      isActive: currentPath === "/leads",
+      Icon: Users,
+    },
+    {
+      label: translate("resources.conversations.name", { smart_count: 2 }),
+      to: "/conversations",
+      isActive: currentPath === "/conversations",
+      Icon: MessageCircle,
+    },
+  ].filter(Boolean);
+
+  const functionItems = [
+    {
+      label: "Dự án",
+      to: "/projects",
+      isActive: currentPath === "/projects",
+      Icon: Briefcase,
+    },
+    isAdmin
+      ? {
+          label: "Kiến thức",
+          to: "/knowledge_sources",
+          isActive: currentPath === "/knowledge_sources",
+          Icon: BookOpen,
+        }
+      : null,
+    isAdmin
+      ? {
+          label: "Agent",
+          to: "/personas",
+          isActive: currentPath === "/personas",
+          Icon: Sparkles,
+        }
+      : null,
+    isAdmin
+      ? {
+          label: "Tài khoản",
+          to: "/users",
+          isActive: currentPath === "/users",
+          Icon: UserCog,
+        }
+      : null,
+  ].filter(Boolean);
+
+  const functionMenuActive = functionItems.some((item) => item?.isActive);
 
   return (
     <div className="sticky top-0 z-40 px-4 pt-3 md:pt-4 lg:px-6">
@@ -54,7 +132,66 @@ const Header = () => {
           </Link>
 
           {/* Pill nav */}
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 md:flex lg:gap-2">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 md:flex 2xl:hidden">
+            {coreItems.map((item) =>
+              item ? (
+                <NavPill
+                  key={item.to}
+                  label={item.label}
+                  to={item.to}
+                  isActive={item.isActive}
+                />
+              ) : null,
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    "h-9 rounded-lg px-2 text-[0.68rem] font-semibold uppercase tracking-normal lg:px-3 lg:text-xs",
+                    functionMenuActive
+                      ? "bg-muted/70 text-foreground shadow-sm dark:bg-muted/40"
+                      : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      functionMenuActive ? "bg-primary" : "bg-transparent",
+                    )}
+                  />
+                  Chức năng
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="center"
+                sideOffset={10}
+                className="w-56 rounded-xl p-2 shadow-[0_16px_45px_rgba(15,23,42,0.16)]"
+              >
+                {functionItems.map((item) =>
+                  item ? (
+                    <DropdownMenuItem
+                      key={item.to}
+                      asChild
+                      className={cn(
+                        "rounded-lg px-3 py-2.5 text-sm",
+                        item.isActive && "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <Link to={item.to} className="flex items-center gap-3">
+                        <item.Icon className="size-4" />
+                        <span className="font-medium">{item.label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null,
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </nav>
+
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 2xl:flex 2xl:gap-2">
             {isAdmin && (
               <NavPill
                 label={translate("ra.page.dashboard")}
@@ -84,6 +221,13 @@ const Header = () => {
                 label="Kiến thức"
                 to="/knowledge_sources"
                 isActive={currentPath === "/knowledge_sources"}
+              />
+            )}
+            {isAdmin && (
+              <NavPill
+                label="Agent"
+                to="/personas"
+                isActive={currentPath === "/personas"}
               />
             )}
             {isAdmin && (

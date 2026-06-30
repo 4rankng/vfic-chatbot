@@ -58,6 +58,25 @@ def build_persona_expander():
     return expand
 
 
+def build_rule_expander():
+    """Per-rule expander: async (short_rule) -> expanded guidance (2–5 lines).
+
+    Uses the persona-rule-expander system prompt (persona_rule_expander.md) and
+    the agent model (M2.7) at temperature 0.4. Same lazy-import discipline as
+    build_persona_expander.
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from app.graph.prompts import PERSONA_RULE_EXPANDER_PROMPT
+
+    llm = _chat_for_role("agent", temperature=0.4)
+
+    async def expand(short_rule: str) -> str:
+        return (await llm.ainvoke([SystemMessage(content=PERSONA_RULE_EXPANDER_PROMPT), HumanMessage(content=short_rule)])).content
+
+    return expand
+
+
 def make_minimax_llm_json():
     """(system, user) -> json_text callable for the LLM training pipeline.
 
