@@ -1022,7 +1022,7 @@
   padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  overflow-anchor: auto;
+  overflow-anchor: none;
   scroll-behavior: auto;
   touch-action: pan-y;
   scrollbar-width: none;
@@ -1035,7 +1035,7 @@
 
 :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
   padding: 32px !important;
-  overflow-anchor: auto;
+  overflow-anchor: none;
 }
 
 :is(.inbox-bg-container, .chat-surface) .chat-history-top-spacer {
@@ -1129,7 +1129,7 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow-anchor: auto;
+  overflow-anchor: none;
   contain: layout style paint;
   filter: none;
   backdrop-filter: none;

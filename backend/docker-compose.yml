@@ -40,10 +40,10 @@ services:
     healthcheck:
       # uvicorn serves /health on :8000. Python is guaranteed in the image (no curl dep).
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
-      interval: 15s
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 10s
     restart: unless-stopped
 
   # RQ worker: chatbot runs (user-facing latency) + lead/memory persistence.
