@@ -13,7 +13,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, update
+from sqlalchemy import or_, text, update
 
 from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
 from app.models.conversation import (
@@ -239,6 +239,27 @@ class ConversationState:
         await self.events.conversation_updated(conv)
         return msg
 
+    async def mark_stale_pending_failed(self, conv_id: uuid.UUID) -> int:
+        """Flip any BOT/PENDING message rows for this conversation to FAILED.
+
+        Call ONLY after ``acquire_lock()`` succeeded, so no live turn owns these
+        rows.  Returns the number of rows updated.  No version bump, no
+        ``last_outbound_at`` change, no events — the PENDING placeholder is
+        ephemeral UI chrome that a crashed turn left behind.
+        """
+        res = await self.db.execute(
+            update(Message)
+            .where(
+                Message.conversation_id == conv_id,
+                Message.sender == MessageSender.BOT,
+                Message.delivery_status == DeliveryStatus.PENDING,
+            )
+            .values(delivery_status=DeliveryStatus.FAILED)
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        return res.rowcount
+
     # --- proactive follow-up ---
 
     async def record_proactive_outcome(
@@ -453,6 +474,45 @@ class ConversationState:
             actor_id=actor.id,
             target_type="conversation",
             target_id=str(conv.id),
+        )
+        await self.db.commit()
+        await self.db.refresh(conv)
+        await self.events.conversation_updated(conv)
+        return conv
+
+    async def clear_history(self, conv: Conversation, actor: User) -> Conversation:
+        """Hard-delete all messages + bot_runs and reset the conversation shell.
+
+        The conversation row and its linked Lead are KEPT (zalo_chat_id identity
+        preserved for inbound routing). Irreversible; admin-only at the router.
+        """
+        await self.db.execute(
+            text("DELETE FROM messages WHERE conversation_id = :cid"), {"cid": conv.id}
+        )
+        await self.db.execute(
+            text("DELETE FROM bot_runs WHERE conversation_id = :cid"), {"cid": conv.id}
+        )
+        conv.mode = ConversationMode.BOT
+        conv.status = ConversationStatus.OPEN
+        conv.needs_human = False
+        conv.bot_locked_until = None
+        conv.taken_over_at = None
+        conv.assigned_recruiter_id = None
+        conv.unread_count = 0
+        conv.last_inbound_at = None
+        conv.last_outbound_at = None
+        conv.followup_count = 0
+        conv.last_followup_at = None
+        conv.last_followup_attempt_at = None
+        conv.followup_opted_out = False
+        conv.version += 1
+        await record_audit(
+            self.db,
+            action="clear_conversation_history",
+            actor_id=actor.id,
+            target_type="conversation",
+            target_id=str(conv.id),
+            payload={"hard_delete": "messages,bot_runs"},
         )
         await self.db.commit()
         await self.db.refresh(conv)

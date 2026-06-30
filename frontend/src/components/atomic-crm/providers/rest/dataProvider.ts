@@ -257,6 +257,14 @@ const getDataProviderWithCustomMethods = () => ({
     ).then((r) => normalize("conversations", r));
   },
 
+  // Admin: hard-delete all messages + bot_runs for a conversation (204).
+  async clearConversationHistory(conversationId: string) {
+    await apiJson<void>(
+      `${BASE}/conversations/${encodeURIComponent(conversationId)}/history`,
+      { method: "DELETE" },
+    );
+  },
+
   // Reset unread_count to 0. Returns the updated conversation (callers refresh).
   async markAsRead(conversationId: string) {
     return apiJson<ApiRecord>(

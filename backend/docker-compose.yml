@@ -55,7 +55,8 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    command: ["rq", "worker", "webhook_high", "persistence_low", "--url", "${REDIS_URL}"]
+    command: ["python", "-m", "app.workers.run_worker", "webhook_high", "persistence_low"]
+    stop_grace_period: 180s  # let rq finish the ≤150s turn on SIGTERM before SIGKILL
     deploy:
       replicas: 6
       resources:

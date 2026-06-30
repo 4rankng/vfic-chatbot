@@ -9,6 +9,7 @@ thin. Raw SQL stays where the ORM can't express it cleanly (``last_messages_batc
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta
 
 from sqlalchemy import and_, case, desc, func, or_, select, text
 
@@ -248,3 +249,63 @@ class ConversationRepository:
             )
         ).first()
         return None if answered is not None else worker_msg
+
+    async def find_reconcile_candidates(
+        self,
+        *,
+        now: datetime,
+        grace_seconds: int,
+        max_age_seconds: int,
+        limit: int,
+    ) -> list[Conversation]:
+        """Conversations whose newest message is unanswered or stuck-PENDING.
+
+        Loop-free predicate: a completed turn (sent or suppressed) leaves a
+        ``BOT/SENT`` or ``BOT/SUPPRESSED`` row as the newest message, so it is
+        excluded.  Only ``WORKER`` (never processed) or ``BOT/PENDING`` (turn
+        started but never completed) qualify.
+
+        SEMI_AUTO 5-min-inactivity is NOT in SQL — it is re-checked in Python
+        inside the tick (depends on ``taken_over_at``/``updated_at``).
+        """
+        now_minus_grace = now - timedelta(seconds=grace_seconds)
+        now_minus_max_age = now - timedelta(seconds=max_age_seconds)
+        rows = (
+            await self.db.scalars(
+                text(
+                    """
+                    SELECT c.*
+                      FROM conversations c
+                     WHERE c.mode IN ('BOT', 'SEMI_AUTO')
+                       AND (c.bot_locked_until IS NULL OR c.bot_locked_until < :now)
+                       AND c.status = 'OPEN'
+                       AND (c.followup_opted_out = FALSE OR c.followup_opted_out IS NULL)
+                       AND EXISTS (
+                           SELECT 1 FROM messages m
+                            WHERE m.conversation_id = c.id
+                              AND m.id = (
+                                  SELECT m2.id FROM messages m2
+                                   WHERE m2.conversation_id = c.id
+                                   ORDER BY m2.created_at DESC, m2.id DESC
+                                   LIMIT 1
+                              )
+                              AND (
+                                  m.sender = 'WORKER'
+                                  OR (m.sender = 'BOT' AND m.delivery_status = 'PENDING')
+                              )
+                              AND m.created_at < :now_minus_grace
+                              AND m.created_at > :now_minus_max_age
+                       )
+                     ORDER BY c.last_inbound_at DESC NULLS LAST
+                     LIMIT :limit
+                    """
+                ),
+                {
+                    "now": now,
+                    "now_minus_grace": now_minus_grace,
+                    "now_minus_max_age": now_minus_max_age,
+                    "limit": limit,
+                },
+            )
+        ).all()
+        return list(rows)

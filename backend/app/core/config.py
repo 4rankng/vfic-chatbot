@@ -139,6 +139,12 @@ class Settings(BaseSettings):
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
     chat_queue_max_depth: int = 40
 
+    # Reconcile sweep — recovers lost bot turns after worker crash / restart.
+    reconcile_interval_seconds: int = 60  # sweep cadence
+    reconcile_grace_seconds: int = 120  # min age before a msg is considered stuck
+    reconcile_max_age_seconds: int = 86400  # 24h cap
+    reconcile_batch_size: int = 50  # per-tick candidate cap
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

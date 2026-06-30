@@ -60,6 +60,20 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("proactive scheduler registration failed (non-fatal)")
 
+    # Register reconcile sweep tick (recovers lost bot turns after crash/restart).
+    try:
+        from app.workers.reconcile_worker import run_reconcile_tick
+
+        sched.schedule(
+            scheduled_time=datetime.now(timezone.utc),
+            func=run_reconcile_tick,
+            interval=settings.reconcile_interval_seconds,
+            repeat=None,
+        )
+        logger.info("reconcile sweep tick registered: interval=%ds", settings.reconcile_interval_seconds)
+    except Exception:  # noqa: BLE001
+        logger.exception("reconcile scheduler registration failed (non-fatal)")
+
     yield
     await engine.dispose()
     logger.info("vfic backend stopped")
@@ -110,6 +124,16 @@ async def metrics() -> dict:
         for name in ("webhook_high", "persistence_low", "ingest", "followup"):
             queues[name] = Queue(name, connection=conn).count  # O(1) Redis LLEN
         queues["workers"] = Worker.count(connection=conn)  # O(1) Redis SCARD
+        # Reconcile canary counters (written by reconcile_worker via Redis INCR/SET).
+        for key in (
+            "reconcile_re_enqueues_total",
+            "reconcile_stale_pending_total",
+            "reconcile_unanswered_inbound_total",
+            "reconcile_skipped_locked_total",
+            "reconcile_enqueue_failed_total",
+            "reconcile_unanswered_gauge",
+        ):
+            queues[key] = int(conn.get(key) or 0)
         return queues
 
     return await asyncio.to_thread(_collect)

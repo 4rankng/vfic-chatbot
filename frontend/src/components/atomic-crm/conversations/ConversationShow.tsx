@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
-import { useRecordContext, useGetList, ShowBase } from "ra-core";
+import {
+  useRecordContext,
+  useGetList,
+  ShowBase,
+  usePermissions,
+  useNotify,
+  useRefresh,
+  useDataProvider,
+} from "ra-core";
 import type { Conversation, Lead } from "../types";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { getLeadStatusColor } from "./conversationDisplay";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 import { ChatThread } from "./ChatThread";
@@ -16,6 +25,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Confirm } from "@/components/admin/confirm";
+import { Trash2 } from "lucide-react";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -104,6 +115,30 @@ export const ConversationShowContent = ({
   const activeModeOption = MODE_OPTIONS.find(
     (option) => option.mode === activeMode,
   );
+
+  const { permissions } = usePermissions();
+  const isAdmin = permissions === "admin";
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [threadKey, setThreadKey] = useState(0);
+
+  const handleClearHistory = async () => {
+    setClearing(true);
+    try {
+      await dataProvider.clearConversationHistory(record!.id);
+      notify("Đã xóa lịch sử chat.", { type: "success" });
+      setClearOpen(false);
+      setThreadKey((k) => k + 1);
+      refresh();
+    } catch (e) {
+      notify((e as Error).message, { type: "error" });
+    } finally {
+      setClearing(false);
+    }
+  };
 
   return (
     <section className="panel center-panel" aria-label="Nội dung trò chuyện">
@@ -199,6 +234,18 @@ export const ConversationShowContent = ({
             </svg>
             <span>Hồ sơ</span>
           </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="profile-info-btn"
+              title="Xóa chat"
+              aria-label="Xóa chat"
+              onClick={() => setClearOpen(true)}
+            >
+              <Trash2 className="icon" />
+              <span>Xóa chat</span>
+            </button>
+          )}
           {activeMode === "closed" && (
             <span className="chat-mode-chip" title="Hội thoại đã đóng">
               <svg className="icon">
@@ -211,6 +258,7 @@ export const ConversationShowContent = ({
       </header>
 
       <ChatThread
+        key={threadKey}
         conversationId={record?.id ?? ""}
         conversation={record}
         isBotModeOverride={isBotMode}
@@ -223,6 +271,17 @@ export const ConversationShowContent = ({
         open={isProfileOpen}
         onOpenChange={setIsProfileOpen}
         lead={lead}
+      />
+
+      <Confirm
+        isOpen={clearOpen}
+        title="Xóa toàn bộ lịch sử chat?"
+        content="Toàn bộ tin nhắn và nhật ký chatbot của hội thoại này sẽ bị xóa vĩnh viễn. Thông tin ứng viên và hội thoại được giữ lại. Hành động không thể hoàn tác."
+        confirm="Xóa vĩnh viễn"
+        confirmColor="warning"
+        loading={clearing}
+        onClose={() => setClearOpen(false)}
+        onConfirm={handleClearHistory}
       />
     </section>
   );

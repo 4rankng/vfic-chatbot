@@ -119,7 +119,7 @@ deploy:
 	@echo "==> Applying Alembic baseline (retries transient SSH refusals)..."
 	@ok=0; for i in 1 2 3 4 5; do \
 		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web alembic upgrade head" && { ok=1; break; }; \
-		echo "  alembic SSH refused (attempt $$i/5), retrying in 4s..."; sleep 4; \
+		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
 	done; [ $$ok -eq 1 ]
 	@echo "==> Creating bootstrap admin (idempotent)..."
 	@$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose run --rm web python -m scripts.create_admin --only-if-no-admins --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin' || true
@@ -143,12 +143,17 @@ adminer:
 	@(sleep 1 && (open http://localhost:18081 || xdg-open http://localhost:18081 || true)) &
 	@ssh -N -L 18081:127.0.0.1:8081 root@$(PROD_SERVER)
 
-# ---- Fast-track: pull + rolling restart backend containers only. ----
-# Used by root Makefile's deploy-backend after push. No compose sync,
-# no migrations, no bootstrap — just pull the latest image and recreate.
+# ---- Fast-track: pull, apply migrations, rolling-restart backend containers. ----
+# Used by root Makefile's deploy-backend after push. No compose sync, no
+# bootstrap — just pull the latest image, migrate, and recreate.
 deploy-restart:
 	@echo "==> Pulling backend image on $(PROD_SERVER)..."
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull web"
+	@echo "==> Applying Alembic migrations (idempotent)..."
+	@ok=0; for i in 1 2 3 4 5; do \
+		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web alembic upgrade head" && { ok=1; break; }; \
+		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
+	done; [ $$ok -eq 1 ]
 	@echo "==> Recreating backend containers..."
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d --force-recreate web worker-chatbot worker-ingest worker-followup scheduler"
 	@echo "==> Backend deploy done."

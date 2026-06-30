@@ -103,6 +103,9 @@ class ConversationService:
     async def reopen(self, *args, **kwargs):
         return await self.state.reopen(*args, **kwargs)
 
+    async def clear_history(self, *args, **kwargs):
+        return await self.state.clear_history(*args, **kwargs)
+
     async def mark_read(self, *args, **kwargs):
         return await self.state.mark_read(*args, **kwargs)
 

@@ -11,7 +11,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, require_admin
 from app.core.db import get_db
 from app.models.conversation import Conversation, ConversationMode, ConversationStatus
 from app.models.user import Role, User
@@ -230,6 +230,17 @@ async def mark_read(
     return ConversationOut.model_validate(
         await ConversationService(db).mark_read(await _load(conv_id, db))
     )
+
+
+@router.delete("/{conv_id}/history", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_conversation_history(
+    conv_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    conv = await _load(conv_id, db)
+    await ConversationService(db).clear_history(conv, admin)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{conv_id}/messages", response_model=MessageOut)
