@@ -92,36 +92,45 @@ def upgrade() -> None:
         )
 
     # -- H1: lead search expression trigram indexes ----------------------------
-    # The extension is installed in the ``extensions`` schema (0001_baseline),
-    # not ``public``.  ``unaccent(text)`` is IMMUTABLE when called single-arg
-    # with the default rules file.  The planner matches expression indexes to
-    # the existing ``extensions.unaccent(col) ILIKE extensions.unaccent('%q%')``
-    # predicates in lead_service.py automatically — no app code change needed.
+    # ``unaccent(text)`` from the pg_trgm extension is STABLE, not IMMUTABLE,
+    # so PostgreSQL rejects it inside index expressions.  The standard
+    # workaround is an IMMUTABLE wrapper function that delegates to the
+    # real unaccent.  The planner matches expression indexes to the existing
+    # ``extensions.unaccent(col) ILIKE extensions.unaccent('%q%')`` predicates
+    # in lead_service.py automatically — no app code change needed.
     # zalo_id is wrapped in unaccent in the app query (lead_service.py:233), so
     # the index expression must also include it for planner matching.
     with op.get_context().autocommit_block():
         op.execute(
             """
+            CREATE OR REPLACE FUNCTION public.immutable_unaccent(text)
+              RETURNS text
+              LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS
+              $$ SELECT extensions.unaccent($1) $$;
+            """
+        )
+        op.execute(
+            """
             CREATE INDEX CONCURRENTLY IF NOT EXISTS leads_name_unaccent_trgm_idx
-              ON public.leads USING gin (extensions.unaccent(name) gin_trgm_ops);
+              ON public.leads USING gin (public.immutable_unaccent(name) gin_trgm_ops);
             """
         )
         op.execute(
             """
             CREATE INDEX CONCURRENTLY IF NOT EXISTS leads_phone_unaccent_trgm_idx
-              ON public.leads USING gin (extensions.unaccent(phone) gin_trgm_ops);
+              ON public.leads USING gin (public.immutable_unaccent(phone) gin_trgm_ops);
             """
         )
         op.execute(
             """
             CREATE INDEX CONCURRENTLY IF NOT EXISTS leads_desired_job_unaccent_trgm_idx
-              ON public.leads USING gin (extensions.unaccent(desired_job) gin_trgm_ops);
+              ON public.leads USING gin (public.immutable_unaccent(desired_job) gin_trgm_ops);
             """
         )
         op.execute(
             """
             CREATE INDEX CONCURRENTLY IF NOT EXISTS leads_zalo_id_trgm_idx
-              ON public.leads USING gin (extensions.unaccent(zalo_id) gin_trgm_ops);
+              ON public.leads USING gin (public.immutable_unaccent(zalo_id) gin_trgm_ops);
             """
         )
 
@@ -150,6 +159,7 @@ def downgrade() -> None:
         op.execute(
             "DROP INDEX CONCURRENTLY IF EXISTS public.memories_embedding_halfvec_hnsw_idx"
         )
+        op.execute("DROP FUNCTION IF EXISTS public.immutable_unaccent(text)")
 
     # Restore A1-A3 redundant indexes (reverse of upgrade drops)
     with op.get_context().autocommit_block():
