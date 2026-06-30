@@ -16,7 +16,7 @@ export const vietnameseCrmMessages = {
       name: "Tin nhắn |||| Tin nhắn",
       forcedCaseName: "Tin nhắn",
       fields: {
-        mode: "Chế độ (bot/human)",
+        mode: "Chế độ trả lời",
         last_inbound_at: "Tin nhắn cuối",
         assigned_recruiter_id: "Người phụ trách",
       },
@@ -30,11 +30,11 @@ export const vietnameseCrmMessages = {
         error: "Gửi tin nhắn thất bại.",
       },
       takeover: {
-        success: "Đã tiếp nhận cuộc trò chuyện",
+        success: "Đã chuyển sang Tư vấn viên",
         error: "Tiếp nhận thất bại",
       },
       release: {
-        success: "Đã trả lại cho bot",
+        success: "Đã chuyển sang ChatBot",
         error: "Trả lại thất bại",
       },
     },

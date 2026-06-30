@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from typing import Awaitable, Callable
 
-from sqlalchemy import desc, func, or_, select, update
+from sqlalchemy import case, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.prompts.lead_memory import LEAD_EXTRACT_SYSTEM_PROMPT
@@ -219,8 +219,19 @@ class LeadService:
             )
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
         sort_col = _LEAD_SORT.get((sort_by or "").lower()) or Lead.updated_at
+        priority_order = case(
+            (Lead.lead_score == "hot", 0),
+            (Lead.lead_score == "warm", 1),
+            else_=2,
+        )
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
-        rows = (await self.db.scalars(base.order_by(order_expr).offset((page - 1) * per_page).limit(per_page))).all()
+        rows = (
+            await self.db.scalars(
+                base.order_by(priority_order.asc(), order_expr)
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
+        ).all()
         return list(rows), int(total or 0)
 
     async def update(self, lead: Lead, changes: dict) -> Lead:

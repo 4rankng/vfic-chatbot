@@ -21,6 +21,22 @@ class MemoryRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    async def list_for_chat(self, chat_id: str, *, limit: int = 100) -> list[dict]:
+        """Newest curated memory facts for one chat."""
+        rows = (
+            await self.db.execute(
+                text(
+                    "SELECT id, content, metadata, created_at "
+                    "FROM memories "
+                    "WHERE chat_id = :chat_id OR zalo_id = :chat_id "
+                    "ORDER BY created_at DESC, id DESC "
+                    "LIMIT :limit"
+                ),
+                {"chat_id": chat_id, "limit": limit},
+            )
+        ).mappings()
+        return [dict(row) for row in rows]
+
     async def fetch_canonical_keys(self, chat_id: str) -> set[str]:
         """Canonical keys already stored for this chat (the dedup set)."""
         rows = (

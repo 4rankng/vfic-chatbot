@@ -59,24 +59,6 @@ const formatTime = (iso?: string) => {
   }).format(d);
 };
 
-const QUICK_EMOJIS = [
-  "😊",
-  "👍",
-  "🙏",
-  "❤️",
-  "🎉",
-  "✅",
-  "💼",
-  "📍",
-  "📞",
-  "🚌",
-  "🏠",
-  "💰",
-  "⏰",
-  "📄",
-  "✨",
-  "🙌",
-];
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
@@ -267,12 +249,9 @@ export const ChatThread = ({
   const translate = useTranslate();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [emojiOpen, setEmojiOpen] = useState(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const composerRef = useRef<HTMLFormElement>(null);
   const composerWrapRef = useRef<HTMLElement>(null);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const scrollerElRef = useRef<HTMLElement | null>(null);
   const detachScrollerListenersRef = useRef<(() => void) | null>(null);
   const anchorRestoreTokenRef = useRef(0);
@@ -314,6 +293,14 @@ export const ChatThread = ({
       align: "end",
       behavior,
     });
+    if (behavior === "auto") {
+      requestAnimationFrame(() => {
+        const scrollerEl = scrollerElRef.current;
+        if (!scrollerEl) return;
+        scrollerEl.scrollTop = scrollerEl.scrollHeight;
+        lastScrollTopRef.current = scrollerEl.scrollTop;
+      });
+    }
   }, []);
 
   const scheduleScrollToNewest = useCallback(() => {
@@ -354,7 +341,6 @@ export const ChatThread = ({
     lastScrollTopRef.current = 0;
     lastLoadMoreAtRef.current = 0;
     setHasNewerMessages(false);
-    setEmojiOpen(false);
   }, [conversationId]);
 
   // Snap to the newest message instantly when a conversation opens, then let
@@ -628,19 +614,6 @@ export const ChatThread = ({
     return () => window.removeEventListener("resize", onResize);
   }, [syncComposerTextarea]);
 
-  useEffect(() => {
-    if (!emojiOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (composerRef.current?.contains(target)) return;
-      if (emojiPickerRef.current?.contains(target)) return;
-      setEmojiOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [emojiOpen]);
-
   // Arm "load more" only after the user scrolls away from the bottom (i.e.
   // scrolls up to read history). A freshly opened thread parks at the newest
   // message, so the top being visible there must NOT trigger a fetch.
@@ -771,19 +744,6 @@ export const ChatThread = ({
     }
   };
 
-  const insertEmoji = (emoji: string) => {
-    const textarea = textareaRef.current;
-    const start = textarea?.selectionStart ?? reply.length;
-    const end = textarea?.selectionEnd ?? reply.length;
-    const next = `${reply.slice(0, start)}${emoji}${reply.slice(end)}`;
-    setReply(next);
-    requestAnimationFrame(() => {
-      textarea?.focus();
-      const cursor = start + emoji.length;
-      textarea?.setSelectionRange(cursor, cursor);
-    });
-  };
-
   // Keep the Virtuoso component slots referentially stable except when the
   // loading flags actually change — otherwise typing in the composer would
   // recreate this object every keystroke and force Virtuoso to remount.
@@ -865,7 +825,7 @@ export const ChatThread = ({
             <svg className="icon">
               <use href="#i-bot" />
             </svg>
-            <span>AI đang trả lời cuộc trò chuyện này.</span>
+            <span>Đang dùng ChatBot cho cuộc trò chuyện này.</span>
             <button
               type="button"
               className="inline-takeover-btn"
@@ -876,40 +836,9 @@ export const ChatThread = ({
           </div>
         )}
         <form
-          ref={composerRef}
           className={`composer ${!canHumanReply ? "disabled" : ""}`}
           onSubmit={handleSend}
         >
-          {emojiOpen && (
-            <div
-              ref={emojiPickerRef}
-              className="emoji-picker"
-              role="menu"
-              aria-label="Chọn biểu tượng cảm xúc"
-            >
-              {QUICK_EMOJIS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className="emoji-option"
-                  onClick={() => insertEmoji(emoji)}
-                  aria-label={`Chèn ${emoji}`}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-          <button
-            type="button"
-            className="composer-action"
-            aria-label="Đính kèm"
-            disabled={!canHumanReply}
-          >
-            <svg className="icon">
-              <use href="#i-paperclip" />
-            </svg>
-          </button>
           <textarea
             ref={textareaRef}
             rows={1}
@@ -917,8 +846,8 @@ export const ChatThread = ({
               canHumanReply
                 ? "Nhập tin nhắn..."
                 : isBotMode
-                  ? "Chuyển sang Manual hoặc Semi auto để trả lời..."
-                  : "Hội thoại chưa sẵn sàng để trả lời..."
+                  ? "Đang dùng ChatBot"
+                  : "Chưa sẵn sàng"
             }
             disabled={!canHumanReply || isSending}
             value={reply}
@@ -930,18 +859,6 @@ export const ChatThread = ({
               }
             }}
           />
-          <button
-            type="button"
-            className="composer-action"
-            aria-label="Biểu tượng cảm xúc"
-            disabled={!canHumanReply}
-            aria-expanded={emojiOpen}
-            onClick={() => setEmojiOpen((open) => !open)}
-          >
-            <svg className="icon">
-              <use href="#i-smile" />
-            </svg>
-          </button>
           <button
             type="submit"
             className="composer-action send"

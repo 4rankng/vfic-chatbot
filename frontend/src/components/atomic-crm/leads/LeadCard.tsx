@@ -10,6 +10,7 @@ import {
   type TagStackTag,
   type TagTone,
 } from "@/components/ui/tag-stack";
+import { cn } from "@/lib/utils";
 
 // Derive a compact tag from the categorical lead score (hot/warm/not_interested).
 const scoreToTag = (score: Lead["lead_score"]): TagStackTag | null => {
@@ -92,10 +93,19 @@ const LeadCardContentBase = ({
     showStageBadge && stageLabel ? { label: stageLabel, tone: "default" } : null,
     areaLabel ? { label: areaLabel, tone: "default" } : null,
   ].filter((t): t is TagStackTag => t !== null);
+  const priorityClass =
+    lead.lead_score === "hot"
+      ? "lead-card-priority lead-card-priority-hot border-rose-300/80 bg-rose-50/45 hover:border-rose-400/80 hover:bg-rose-50/70 dark:border-rose-500/45 dark:bg-rose-950/20 dark:hover:border-rose-400/65"
+      : lead.lead_score === "warm"
+        ? "lead-card-priority lead-card-priority-warm border-amber-300/80 bg-amber-50/45 hover:border-amber-400/80 hover:bg-amber-50/70 dark:border-amber-500/45 dark:bg-amber-950/20 dark:hover:border-amber-400/65"
+        : "";
 
   return (
     <article
-      className="group w-full max-w-full cursor-pointer select-none overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:bg-accent/25"
+      className={cn(
+        "group w-full max-w-full cursor-pointer select-none overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors hover:border-primary/30 hover:bg-accent/25",
+        priorityClass,
+      )}
       onClick={handleClick}
     >
       <RecordContextProvider value={lead}>

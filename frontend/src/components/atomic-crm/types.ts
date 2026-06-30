@@ -54,16 +54,23 @@ export type Lead = {
   zalo_id: string;
   name: string;
   phone: string;
+  birth_year?: number | null;
+  age?: number | null;
+  living_area?: string | null;
+  address?: string | null;
+  gender?: string | null;
+  region?: string | null;
   desired_job: string;
+  years_experience?: string | null;
+  latest_company?: string | null;
   expected_salary: string;
+  qualification_reasons?: string[];
   lead_score: LeadScoreValue | null;
   lead_stage: string;
   created_at: string;
   updated_at: string;
   // Extra live columns (returned by select("*")); surfaced for derived tags /
   // timeline. Optional to stay backward-compatible with partial selections.
-  region?: string | null;
-  living_area?: string | null;
   notes?: string | null;
   version?: number;
 } & Pick<RaRecord, "id">;

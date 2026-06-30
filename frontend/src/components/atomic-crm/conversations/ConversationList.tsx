@@ -43,10 +43,10 @@ const getRelativeTimeString = (dateStr?: string) => {
 
 const conversationModeMeta = (mode: Conversation["mode"]) => {
   if (mode === "human")
-    return { label: "Manual", icon: "i-user", tone: "manual" };
+    return { label: "Tư vấn viên", icon: "i-user", tone: "manual" };
   if (mode === "semi_auto")
-    return { label: "Semi auto", icon: "i-sparkles", tone: "semi" };
-  if (mode === "bot") return { label: "Auto", icon: "i-bot", tone: "auto" };
+    return { label: "Bán tự động", icon: "i-sparkles", tone: "semi" };
+  if (mode === "bot") return { label: "Chatbot", icon: "i-bot", tone: "auto" };
   return { label: "Closed", icon: "i-bot", tone: "closed" };
 };
 

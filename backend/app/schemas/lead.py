@@ -90,3 +90,10 @@ class LeadEventOut(BaseModel):
     payload: dict
     actor_id: uuid.UUID | None = None
     created_at: datetime
+
+
+class LeadMemoryOut(BaseModel):
+    id: uuid.UUID
+    content: str
+    metadata: dict
+    created_at: datetime

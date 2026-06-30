@@ -33,6 +33,12 @@ const compareLeads =
     return order === "DESC" ? -cmp : cmp;
   };
 
+const getLeadPriorityRank = (lead: Lead) => {
+  if (lead.lead_score === "hot") return 0;
+  if (lead.lead_score === "warm") return 1;
+  return 2;
+};
+
 export const LeadListContent = () => {
   const {
     data: leads,
@@ -59,7 +65,11 @@ export const LeadListContent = () => {
     const list = [...(leads ?? [])];
     const field = sort?.field ?? "updated_at";
     const order = sort?.order ?? "DESC";
-    return list.sort(compareLeads(field, order));
+    const compareBySort = compareLeads(field, order);
+    return list.sort((a, b) => {
+      const priorityCmp = getLeadPriorityRank(a) - getLeadPriorityRank(b);
+      return priorityCmp || compareBySort(a, b);
+    });
   }, [leads, sort]);
 
   if (isPending) {

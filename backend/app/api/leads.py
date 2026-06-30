@@ -15,11 +15,13 @@ from app.schemas.lead import (
     FollowUpOut,
     LeadEventOut,
     LeadListResponse,
+    LeadMemoryOut,
     LeadOut,
     LeadUpdate,
     StageRequest,
 )
 from app.services.lead_service import LeadConflict, LeadService
+from app.services.memory_repository import MemoryRepository
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -107,6 +109,19 @@ async def list_followups(lead_id: int, _user: User = Depends(get_current_user), 
 async def list_events(lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[LeadEventOut]:
     await _load(lead_id, db)
     return [LeadEventOut.model_validate(e) for e in await LeadService(db).list_events(lead_id)]
+
+
+@router.get("/{lead_id}/memories", response_model=list[LeadMemoryOut])
+async def list_memories(
+    lead_id: int,
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[LeadMemoryOut]:
+    lead = await _load(lead_id, db)
+    if not lead.zalo_id:
+        return []
+    rows = await MemoryRepository(db).list_for_chat(lead.zalo_id)
+    return [LeadMemoryOut.model_validate(row) for row in rows]
 
 
 @router.get("/{lead_id}/presence")

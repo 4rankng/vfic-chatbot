@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { useRecordContext, useDataProvider, useNotify } from "ra-core";
-import type { Conversation, Lead } from "../types";
+import { useDataProvider, useNotify, useRecordContext } from "ra-core";
+import { apiJson } from "../providers/rest/api";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import type { Conversation, Lead } from "../types";
 import {
   Dialog,
   DialogContent,
@@ -17,26 +18,68 @@ type LeadProfilePanelProps = {
   lead?: Lead;
 };
 
-// Memoized so the heavy dialog body (edit form, three input rows, save flow)
-// does NOT re-render on every ConversationShow message-state change while the
-// dialog is closed. All hooks run unconditionally; the early return below the
-// hook block skips the expensive JSX tree when `open` is false.
+type LeadMemory = {
+  id: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+const EDITABLE_FIELDS: Array<keyof Lead> = [
+  "name",
+  "phone",
+  "desired_job",
+  "expected_salary",
+  "living_area",
+  "region",
+  "latest_company",
+  "notes",
+];
+
+const display = (value: unknown, fallback = "Chưa có dữ liệu") => {
+  if (value === undefined || value === null) return fallback;
+  const text = String(value).trim();
+  return text || fallback;
+};
+
+const profileRows = (lead: Lead) => [
+  { label: "Họ tên", value: lead.name },
+  { label: "Số điện thoại", value: lead.phone },
+  { label: "Zalo ID", value: lead.zalo_id },
+  { label: "Công việc mong muốn", value: lead.desired_job },
+  { label: "Lương mong muốn", value: lead.expected_salary },
+  { label: "Khu vực", value: [lead.region, lead.living_area].filter(Boolean).join(" · ") },
+  { label: "Công ty gần nhất", value: lead.latest_company },
+  { label: "Kinh nghiệm", value: lead.years_experience },
+  { label: "Ghi chú", value: lead.notes },
+];
+
+const editLabels: Record<string, string> = {
+  name: "Họ tên",
+  phone: "Số điện thoại",
+  desired_job: "Công việc mong muốn",
+  expected_salary: "Lương mong muốn",
+  living_area: "Khu vực sinh sống",
+  region: "Tỉnh / thành",
+  latest_company: "Công ty gần nhất",
+  notes: "Ghi chú nội bộ",
+};
+
 const LeadProfilePanelImpl = ({
   open,
   onOpenChange,
   lead: leadProp,
 }: LeadProfilePanelProps) => {
   const conversation = useRecordContext<Conversation>();
-  // Mirror into a ref (not a dep) so a parent background refetch doesn't
-  // re-trigger the open effect and discard an in-progress edit.
   const leadPropRef = useRef(leadProp);
   leadPropRef.current = leadProp;
   const dataProvider = useDataProvider<CrmDataProvider>();
-  const [lead, setLead] = useState<Lead | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [notFound, setNotFound] = useState(false);
   const notify = useNotify();
-
+  const [lead, setLead] = useState<Lead | null>(null);
+  const [memories, setMemories] = useState<LeadMemory[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Lead>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -44,15 +87,16 @@ const LeadProfilePanelImpl = ({
   const zaloChatId = conversation?.zalo_chat_id;
 
   useEffect(() => {
-    if (!zaloChatId || !open) {
-      if (!zaloChatId) {
-        setLead(null);
-        setNotFound(true);
-      }
+    if (!open) {
+      setIsEditing(false);
       return;
     }
-    // Reuse the parent's already-loaded lead instead of a duplicate getList;
-    // fall back to fetching only if it isn't loaded yet (first-open race).
+    if (!zaloChatId) {
+      setLead(null);
+      setNotFound(true);
+      return;
+    }
+
     const sharedLead = leadPropRef.current;
     if (sharedLead) {
       setLead(sharedLead);
@@ -60,6 +104,7 @@ const LeadProfilePanelImpl = ({
       setIsLoading(false);
       return;
     }
+
     let cancelled = false;
     setIsLoading(true);
     setNotFound(false);
@@ -86,19 +131,37 @@ const LeadProfilePanelImpl = ({
     };
   }, [dataProvider, zaloChatId, open]);
 
-  // Skip the heavy dialog body entirely while closed — ConversationShowContent
-  // re-renders on every message/keystroke, and without this early return the
-  // full edit-form tree would be evaluated even though Radix Dialog unmounts
-  // the portalled content. The Dialog wrapper still renders so Radix manages
-  // the open/close transition; its body is the part we short-circuit.
+  useEffect(() => {
+    if (!open || !lead?.id) {
+      setMemories([]);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingMemories(true);
+    apiJson<LeadMemory[]>(`/api/v1/leads/${lead.id}/memories`)
+      .then((rows) => {
+        if (!cancelled) setMemories(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setMemories([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingMemories(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lead?.id, open]);
+
   if (!open) return null;
 
   const handleEditClick = () => {
-    setEditData({
-      phone: lead?.phone || "",
-      desired_job: lead?.desired_job || "",
-      expected_salary: lead?.expected_salary || "",
-    });
+    const next: Partial<Lead> = {};
+    for (const field of EDITABLE_FIELDS) {
+      next[field] = (lead?.[field] as never) ?? "";
+    }
+    setEditData(next);
     setIsEditing(true);
   };
 
@@ -123,179 +186,162 @@ const LeadProfilePanelImpl = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-6 bg-card text-card-foreground border-border">
+      <DialogContent className="max-h-[min(760px,90vh)] max-w-2xl overflow-y-auto border-border bg-card p-6 text-card-foreground">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
-            <svg
-              className="icon size-5"
-              style={{ width: "18px", height: "18px" }}
-            >
+            <svg className="icon size-5" style={{ width: 18, height: 18 }}>
               <use href="#i-user" />
             </svg>
             Hồ sơ ứng viên
           </DialogTitle>
         </DialogHeader>
-        <div className="inbox-bg-container !p-0 !h-auto !w-auto bg-transparent">
-          <div className="profile-scroll" style={{ overflowY: "visible" }}>
-            {isLoading ? (
-              <div className="empty-state p-4 text-center">
-                Đang tải hồ sơ...
-              </div>
-            ) : notFound || !lead ? (
-              <div className="empty-state p-4 text-center">
-                Chưa liên kết hồ sơ ứng viên
-              </div>
-            ) : (
-              <>
-                <section className="profile-section !mt-2">
-                  <div className="section-head">
-                    <h3 className="text-foreground">Thông tin tuyển dụng</h3>
-                    {!isEditing ? (
-                      <button
-                        type="button"
-                        onClick={handleEditClick}
-                        className="cursor-pointer text-primary hover:underline"
-                      >
-                        Chỉnh sửa
-                      </button>
-                    ) : (
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          style={{ color: "var(--ink-muted)" }}
-                          onClick={() => setIsEditing(false)}
-                          disabled={isSaving}
-                          className="cursor-pointer hover:underline"
-                        >
-                          Hủy
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSave}
-                          disabled={isSaving}
-                          className="cursor-pointer text-primary hover:underline"
-                        >
-                          {isSaving ? "Đang lưu..." : "Lưu"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="detail-list">
-                    <div className="detail-row">
-                      <span className="detail-icon">
-                        <svg
-                          className="icon"
-                          style={{ width: "18px", height: "18px" }}
-                        >
-                          <use href="#i-phone" />
-                        </svg>
-                      </span>
-                      <div className="flex-1">
-                        <div className="detail-label">Số điện thoại</div>
-                        {!isEditing ? (
-                          <div
-                            className={`detail-value ${!lead.phone ? "missing cursor-pointer hover:text-[var(--brand)] transition-colors" : ""}`}
-                            onClick={() => !lead.phone && handleEditClick()}
-                          >
-                            {lead.phone || "Thêm số điện thoại"}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1 text-foreground"
-                            value={editData.phone || ""}
-                            onChange={(e) =>
-                              setEditData({
-                                ...editData,
-                                phone: e.target.value,
-                              })
-                            }
-                            placeholder="Nhập số điện thoại"
-                            disabled={isSaving}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-icon">
-                        <svg
-                          className="icon"
-                          style={{ width: "18px", height: "18px" }}
-                        >
-                          <use href="#i-briefcase" />
-                        </svg>
-                      </span>
-                      <div className="flex-1">
-                        <div className="detail-label">Công việc mong muốn</div>
-                        {!isEditing ? (
-                          <div
-                            className={`detail-value ${!lead.desired_job ? "missing cursor-pointer hover:text-[var(--brand)] transition-colors" : ""}`}
-                            onClick={() =>
-                              !lead.desired_job && handleEditClick()
-                            }
-                          >
-                            {lead.desired_job || "Thêm công việc"}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1 text-foreground"
-                            value={editData.desired_job || ""}
-                            onChange={(e) =>
-                              setEditData({
-                                ...editData,
-                                desired_job: e.target.value,
-                              })
-                            }
-                            placeholder="Nhập công việc"
-                            disabled={isSaving}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-icon">
-                        <svg
-                          className="icon"
-                          style={{ width: "18px", height: "18px" }}
-                        >
-                          <use href="#i-coins" />
-                        </svg>
-                      </span>
-                      <div className="flex-1">
-                        <div className="detail-label">Lương mong muốn</div>
-                        {!isEditing ? (
-                          <div
-                            className={`detail-value ${!lead.expected_salary ? "missing cursor-pointer hover:text-[var(--brand)] transition-colors" : ""}`}
-                            onClick={() =>
-                              !lead.expected_salary && handleEditClick()
-                            }
-                          >
-                            {lead.expected_salary || "Thêm mức lương"}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            className="w-full bg-transparent border-b border-border focus:border-primary outline-none transition-colors detail-value pb-1 mt-1 text-foreground"
-                            value={editData.expected_salary || ""}
-                            onChange={(e) =>
-                              setEditData({
-                                ...editData,
-                                expected_salary: e.target.value,
-                              })
-                            }
-                            placeholder="Nhập mức lương"
-                            disabled={isSaving}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </>
-            )}
+
+        {isLoading ? (
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+            Đang tải hồ sơ...
           </div>
-        </div>
+        ) : notFound || !lead ? (
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+            Chưa liên kết hồ sơ ứng viên
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <section className="rounded-lg border border-border bg-muted/20 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="truncate text-xl font-semibold text-foreground">
+                    {display(lead.name, "Chưa rõ tên ứng viên")}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    <span>{display(lead.phone, "Chưa có số điện thoại")}</span>
+                    {lead.lead_score ? <span>{lead.lead_score}</span> : null}
+                    {lead.lead_stage ? <span>{lead.lead_stage}</span> : null}
+                  </div>
+                </div>
+                {!isEditing ? (
+                  <button
+                    type="button"
+                    onClick={handleEditClick}
+                    className="shrink-0 text-sm font-medium text-primary hover:underline"
+                  >
+                    Chỉnh sửa
+                  </button>
+                ) : (
+                  <div className="flex shrink-0 gap-3 text-sm font-medium">
+                    <button
+                      type="button"
+                      style={{ color: "var(--ink-muted)" }}
+                      onClick={() => setIsEditing(false)}
+                      disabled={isSaving}
+                      className="hover:underline"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="text-primary hover:underline"
+                    >
+                      {isSaving ? "Đang lưu..." : "Lưu"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-border p-4">
+              <h3 className="text-sm font-semibold text-foreground">
+                Thông tin tuyển dụng
+              </h3>
+              {!isEditing ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {profileRows(lead).map((row) => (
+                    <div key={row.label} className="min-w-0">
+                      <div className="text-[11px] font-semibold uppercase text-muted-foreground">
+                        {row.label}
+                      </div>
+                      <div
+                        className={`mt-1 break-words text-sm ${row.value ? "text-foreground" : "text-muted-foreground"}`}
+                      >
+                        {display(row.value)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {EDITABLE_FIELDS.map((field) => (
+                    <label key={field} className="block min-w-0">
+                      <span className="text-[11px] font-semibold uppercase text-muted-foreground">
+                        {editLabels[String(field)]}
+                      </span>
+                      <input
+                        type="text"
+                        className="mt-1 w-full border-b border-border bg-transparent pb-1 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                        value={(editData[field] as string | null) ?? ""}
+                        onChange={(e) =>
+                          setEditData({
+                            ...editData,
+                            [field]: e.target.value,
+                          })
+                        }
+                        disabled={isSaving}
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {lead.qualification_reasons?.length ? (
+              <section className="rounded-lg border border-border p-4">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Lý do đánh giá
+                </h3>
+                <ul className="mt-2 space-y-2 text-sm text-foreground">
+                  {lead.qualification_reasons.map((reason) => (
+                    <li key={reason} className="flex gap-2">
+                      <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
+                      <span>{reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            <section className="rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Ghi nhớ từ hội thoại
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  {isLoadingMemories ? "Đang tải..." : `${memories.length} mục`}
+                </span>
+              </div>
+              {isLoadingMemories ? (
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Đang tải ghi nhớ...
+                </div>
+              ) : memories.length ? (
+                <ul className="mt-3 space-y-2">
+                  {memories.map((memory) => (
+                    <li
+                      key={memory.id}
+                      className="rounded-md bg-muted/30 px-3 py-2 text-sm leading-relaxed text-foreground"
+                    >
+                      {memory.content}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Chưa có ghi nhớ nào cho ứng viên này.
+                </div>
+              )}
+            </section>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

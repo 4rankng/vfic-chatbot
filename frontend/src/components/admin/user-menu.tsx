@@ -52,6 +52,7 @@ export function UserMenu() {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Mở menu tài khoản"
             className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted ml-1 transition-colors relative"
           >
             {identity?.avatar ? (

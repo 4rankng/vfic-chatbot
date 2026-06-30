@@ -375,4 +375,83 @@ body {
     background-repeat: no-repeat;
     animation: vfic-shimmer 1.4s ease-in-out infinite;
   }
+
+  @keyframes vfic-priority-attention {
+    0%,
+    100% {
+      box-shadow:
+        0 1px 2px rgb(15 23 42 / 0.08),
+        0 0 0 0 var(--priority-ring);
+    }
+    45% {
+      box-shadow:
+        0 16px 34px -24px var(--priority-glow-strong),
+        0 0 0 3px var(--priority-ring);
+    }
+  }
+
+  @keyframes vfic-priority-sheen {
+    0%,
+    56% {
+      opacity: 0;
+      transform: translateX(-120%);
+    }
+    70% {
+      opacity: 0.42;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(120%);
+    }
+  }
+
+  .lead-card-priority {
+    --priority-ring: rgb(244 63 94 / 0.22);
+    --priority-glow-strong: rgb(244 63 94 / 0.42);
+    position: relative;
+    isolation: isolate;
+    animation: vfic-priority-attention 2.8s ease-in-out infinite;
+    will-change: box-shadow;
+  }
+
+  .lead-card-priority::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      105deg,
+      transparent 20%,
+      var(--priority-sheen, rgb(244 63 94 / 0.16)) 48%,
+      transparent 76%
+    );
+    pointer-events: none;
+    animation: vfic-priority-sheen 3.8s ease-in-out infinite;
+  }
+
+  .lead-card-priority > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .lead-card-priority-hot {
+    --priority-ring: rgb(244 63 94 / 0.24);
+    --priority-glow-strong: rgb(244 63 94 / 0.48);
+    --priority-sheen: rgb(244 63 94 / 0.16);
+  }
+
+  .lead-card-priority-warm {
+    --priority-ring: rgb(245 158 11 / 0.24);
+    --priority-glow-strong: rgb(245 158 11 / 0.46);
+    --priority-sheen: rgb(245 158 11 / 0.16);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lead-card-priority,
+    .lead-card-priority::before {
+      animation: none;
+      will-change: auto;
+    }
+  }
 }

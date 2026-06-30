@@ -28,31 +28,31 @@ const MODE_OPTIONS: Array<{
 }> = [
   {
     mode: "human",
-    label: "Manual",
-    hint: "Human only",
-    title: "Manual mode - only human can chat to candidate",
+    label: "Tư vấn viên",
+    hint: "Người phụ trách",
+    title: "Tư vấn viên - chỉ nhân sự trả lời ứng viên",
     icon: "i-user",
   },
   {
     mode: "semi_auto",
-    label: "Semi auto",
-    hint: "5 min fallback",
-    title: "Semi auto - chatbot takes over if human is inactive for 5 minutes",
+    label: "Bán tự động",
+    hint: "ChatBot hỗ trợ",
+    title: "Bán tự động - ChatBot tiếp quản khi tư vấn viên không phản hồi",
     icon: "i-sparkles",
   },
   {
     mode: "bot",
-    label: "Auto",
-    hint: "Bot handles",
-    title: "Auto - chatbot handles the conversation",
+    label: "Chatbot",
+    hint: "ChatBot trả lời",
+    title: "Chatbot - ChatBot xử lý cuộc trò chuyện",
     icon: "i-bot",
   },
 ];
 
 const MODE_STATUS: Record<ConversationMode, string> = {
-  human: "Manual · recruiter replies",
-  semi_auto: "Semi auto · bot fallback",
-  bot: "Auto · bot replies",
+  human: "Tư vấn viên · nhân sự trả lời",
+  semi_auto: "Bán tự động · ChatBot hỗ trợ",
+  bot: "Chatbot · đang trả lời",
   closed: "Closed",
 };
 

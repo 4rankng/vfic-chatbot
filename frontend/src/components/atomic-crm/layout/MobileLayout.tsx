@@ -22,11 +22,12 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
       {!hideTopbar && <MobileHeader />}
       <ErrorBoundary FallbackComponent={Error}>
         <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
-          <div
+          <main
+            id="main-content"
             className={cn("min-h-dvh", hideTopbar ? "pb-24" : "pt-16 pb-24")}
           >
             {children}
-          </div>
+          </main>
         </Suspense>
       </ErrorBoundary>
       <MobileNavigation />
