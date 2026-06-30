@@ -18,3 +18,4 @@ docker-compose*.yml
 Caddyfile
 *.log
 .DS_Store
+graphify-out
