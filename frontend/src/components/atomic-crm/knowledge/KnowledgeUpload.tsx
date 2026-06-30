@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useGetList, useNotify, useRefresh } from "ra-core";
+import { useNotify, useRefresh } from "ra-core";
 import {
   CheckCircle2,
   ClipboardList,
@@ -20,24 +20,17 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   saveKnowledgeTemplate,
   uploadKnowledgeFile,
 } from "@/lib/vfic/knowledgeService";
-import type { Project } from "../types";
 import { cn } from "@/lib/utils";
 import {
   ACCEPTED_KNOWLEDGE_TYPES,
   formatFileSize,
 } from "./knowledgeUploadConfig";
+import { ProjectPicker } from "./ProjectPicker";
 
 interface KnowledgeUploadProps {
   open: boolean;
@@ -59,10 +52,6 @@ export const KnowledgeUpload = ({
 }: KnowledgeUploadProps) => {
   const notify = useNotify();
   const refresh = useRefresh();
-  const { data: projects } = useGetList<Project>("projects", {
-    pagination: { page: 1, perPage: 100 },
-    sort: { field: "name", order: "ASC" },
-  });
   const [projectId, setProjectId] = useState<string>(initialProjectId ?? "");
   const [mode, setMode] = useState<"file" | "paste">("file");
   const [file, setFile] = useState<File | null>(null);
@@ -75,11 +64,6 @@ export const KnowledgeUpload = ({
     !busy &&
     !!effectiveProjectId &&
     (mode === "paste" ? pasteText.trim().length > 0 : file !== null);
-
-  useEffect(() => {
-    if (!open || lockProject || projectId || !projects?.[0]?.id) return;
-    setProjectId(projects[0].id);
-  }, [lockProject, open, projectId, projects]);
 
   useEffect(() => {
     if (!open || !initialProjectId) return;
@@ -205,18 +189,10 @@ export const KnowledgeUpload = ({
               <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Dự án
               </label>
-              <Select value={effectiveProjectId} onValueChange={setProjectId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Chọn dự án" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(projects ?? []).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} ({p.slug})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ProjectPicker
+                value={effectiveProjectId}
+                onChange={setProjectId}
+              />
             </div>
           )}
 

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
-import { useGetList, useListContext } from "ra-core";
+import { useListContext } from "ra-core";
 
-import type { KnowledgeSource, Project } from "../types";
+import type { KnowledgeSource } from "../types";
 
 // Sentinel option values for the "all" project / stage filter selects.
 export const ALL_PROJECTS = "__all__";
@@ -21,21 +21,10 @@ export const useKnowledgeSourceFilters = () => {
     setPage,
     total,
   } = useListContext<KnowledgeSource>();
-  const { data: projects } = useGetList<Project>("projects", {
-    pagination: { page: 1, perPage: 100 },
-    sort: { field: "name", order: "ASC" },
-  });
-
-  const filters = filterValues ?? {};
+  const filters = useMemo(() => filterValues ?? {}, [filterValues]);
   const query = typeof filters.q === "string" ? filters.q : "";
   const projectFilter =
     typeof filters.project_id === "string" ? filters.project_id : ALL_PROJECTS;
-
-  const projectById = useMemo(() => {
-    const map = new Map<string, Project>();
-    for (const project of projects ?? []) map.set(String(project.id), project);
-    return map;
-  }, [projects]);
 
   const sources = useMemo(() => data ?? [], [data]);
 
@@ -64,8 +53,6 @@ export const useKnowledgeSourceFilters = () => {
 
   return {
     isPending,
-    projects,
-    projectById,
     sources,
     pageSources: sources,
     total: total ?? 0,

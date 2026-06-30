@@ -87,11 +87,20 @@ class ProjectService:
         per_page: int = 25,
         sort_by: str | None = None,
         order: str | None = "desc",
+        q: str | None = None,
     ) -> tuple[list[Project], int]:
-        q = select(Project)
+        query = select(Project)
         if is_active is not None:
-            q = q.where(Project.is_active == is_active)
-        total = await self.db.scalar(select(func.count()).select_from(q.subquery()))
+            query = query.where(Project.is_active == is_active)
+        if q:
+            pat = f"%{q.strip()}%"
+            ua = func.extensions.unaccent
+            query = query.where(
+                ua(Project.name).ilike(ua(pat))
+                | ua(Project.slug).ilike(ua(pat))
+                | ua(Project.summary).ilike(ua(pat))
+            )
+        total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
         sort_map = {
             "created_at": Project.created_at,
             "updated_at": Project.updated_at,
@@ -102,7 +111,7 @@ class ProjectService:
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
         rows = (
             await self.db.scalars(
-                q.order_by(order_expr)
+                query.order_by(order_expr)
                 .offset((page - 1) * per_page)
                 .limit(per_page)
             )
@@ -117,6 +126,7 @@ class ProjectService:
         per_page: int = 25,
         sort_by: str | None = None,
         order: str | None = "desc",
+        q: str | None = None,
     ) -> tuple[list[ProjectOut], int]:
         """List projects with per-project feature readiness attached.
 
@@ -129,6 +139,7 @@ class ProjectService:
             per_page=per_page,
             sort_by=sort_by,
             order=order,
+            q=q,
         )
         repo = JobFeatureValueRepo(self.db)
         ready = await repo.readiness_by_project([p.id for p in rows])

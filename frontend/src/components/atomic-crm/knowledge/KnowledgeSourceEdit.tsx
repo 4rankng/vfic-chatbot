@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   EditBase,
   useDataProvider,
-  useGetList,
   useNotify,
   useRecordContext,
   useRedirect,
@@ -10,26 +9,16 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
-import type { KnowledgeSource, Project } from "../types";
+import type { KnowledgeSource } from "../types";
+import { ProjectPicker } from "./ProjectPicker";
 
 const KnowledgeSourceEditContent = () => {
   const source = useRecordContext<KnowledgeSource>();
   const notify = useNotify();
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
-  const { data: projects } = useGetList<Project>("projects", {
-    pagination: { page: 1, perPage: 100 },
-    sort: { field: "name", order: "ASC" },
-  });
   const [submitting, setSubmitting] = useState(false);
   const [fileName, setFileName] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -37,8 +26,8 @@ const KnowledgeSourceEditContent = () => {
   useEffect(() => {
     if (!source) return;
     setFileName(source.file_name);
-    setProjectId(source.project_id ?? projects?.[0]?.id ?? "");
-  }, [projects, source]);
+    setProjectId(source.project_id ?? "");
+  }, [source]);
 
   if (!source) return null;
 
@@ -80,18 +69,7 @@ const KnowledgeSourceEditContent = () => {
           </label>
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             Dự án
-            <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn dự án" />
-              </SelectTrigger>
-              <SelectContent>
-                {(projects ?? []).map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name} ({project.slug})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ProjectPicker value={projectId} onChange={setProjectId} />
           </label>
           <Button type="submit" disabled={submitting || !projectId}>
             {submitting ? "Đang lưu..." : "Lưu"}

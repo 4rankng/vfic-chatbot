@@ -19,6 +19,7 @@ import { isPipelineActive } from "./knowledgePipelineUtils";
 import { InlineKnowledgeUploader } from "./InlineKnowledgeUploader";
 import { KnowledgeDetailPanel } from "./KnowledgeDetailPanel";
 import { ALL_PROJECTS, useKnowledgeSourceFilters } from "./useKnowledgeSourceFilters";
+import { ProjectPicker } from "./ProjectPicker";
 
 const KnowledgeSourceListContent = () => {
   const refresh = useRefresh();
@@ -27,8 +28,6 @@ const KnowledgeSourceListContent = () => {
 
   const {
     isPending,
-    projects,
-    projectById,
     sources,
     pageSources,
     total,
@@ -138,25 +137,28 @@ const KnowledgeSourceListContent = () => {
               className="h-10 rounded-[9px] border-border bg-card pl-9 text-sm"
             />
           </div>
-          <Select value={projectFilter} onValueChange={selectProject}>
-            <SelectTrigger className="h-10 rounded-[9px] border-border bg-card text-sm">
-              <SelectValue placeholder="Tất cả dự án" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_PROJECTS}>Tất cả dự án</SelectItem>
-              {(projects ?? []).map((project) => (
-                <SelectItem key={project.id} value={String(project.id)}>
-                  {project.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <ProjectPicker
+              value={projectFilter === ALL_PROJECTS ? "" : projectFilter}
+              onChange={selectProject}
+            />
+            {projectFilter !== ALL_PROJECTS && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => selectProject(ALL_PROJECTS)}
+                className="h-10 rounded-[9px]"
+              >
+                Tất cả
+              </Button>
+            )}
+          </div>
         </div>
 
         {isPending ? (
           <SourceSelectorSkeleton />
         ) : sources.length === 0 ? (
-          <InlineKnowledgeUploader projects={projects ?? []} />
+          <InlineKnowledgeUploader />
         ) : pageSources.length === 0 ? (
           <EmptyState
             icon={<FileText className="size-6" />}
@@ -180,7 +182,6 @@ const KnowledgeSourceListContent = () => {
             <SourceSelector
               sources={pageSources}
               selectedSource={selectedSource}
-              projectById={projectById}
               total={total}
               onSelect={setSelectedId}
             />
@@ -191,11 +192,6 @@ const KnowledgeSourceListContent = () => {
             {selectedSource ? (
               <KnowledgeDetailPanel
                 source={selectedSource}
-                project={
-                  selectedSource.project_id
-                    ? projectById.get(String(selectedSource.project_id))
-                    : undefined
-                }
               />
             ) : (
               <EmptyState
@@ -215,20 +211,14 @@ const KnowledgeSourceListContent = () => {
 const SourceSelector = ({
   sources,
   selectedSource,
-  projectById,
   total,
   onSelect,
 }: {
   sources: ReturnType<typeof useKnowledgeSourceFilters>["pageSources"];
   selectedSource: ReturnType<typeof useKnowledgeSourceFilters>["pageSources"][number] | null;
-  projectById: ReturnType<typeof useKnowledgeSourceFilters>["projectById"];
   total: number;
   onSelect: (id: string) => void;
 }) => {
-  const selectedProject = selectedSource?.project_id
-    ? projectById.get(String(selectedSource.project_id))
-    : undefined;
-
   return (
     <section className="border-y border-border py-3 sm:rounded-[14px] sm:border sm:bg-card sm:p-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -241,7 +231,7 @@ const SourceSelector = ({
           </Badge>
           {selectedSource && (
             <span className="kb-mono truncate text-xs text-muted-foreground">
-              {selectedProject?.name ?? "Chưa gắn dự án"} ·{" "}
+              {selectedSource.project_name ?? "Chưa gắn dự án"} ·{" "}
               {selectedSource.digest_meta?.unit_count ?? 0} đơn vị
             </span>
           )}
@@ -255,13 +245,10 @@ const SourceSelector = ({
           </SelectTrigger>
           <SelectContent className="max-h-96">
             {sources.map((source) => {
-              const project = source.project_id
-                ? projectById.get(String(source.project_id))
-                : undefined;
               return (
                 <SelectItem key={source.id} value={String(source.id)}>
                   <span className="block truncate">
-                    {source.file_name} · {project?.name ?? "Chưa gắn dự án"} ·{" "}
+                    {source.file_name} · {source.project_name ?? "Chưa gắn dự án"} ·{" "}
                     {source.digest_meta?.unit_count ?? 0} đơn vị
                   </span>
                 </SelectItem>

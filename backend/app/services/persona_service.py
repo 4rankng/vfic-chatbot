@@ -125,8 +125,17 @@ class PersonaService:
         per_page: int = 25,
         sort_by: str | None = None,
         order: str | None = "desc",
+        q: str | None = None,
     ) -> tuple[list[Persona], int]:
         query = select(Persona)
+        if q:
+            pat = f"%{q.strip()}%"
+            ua = func.extensions.unaccent
+            query = query.where(
+                ua(Persona.name).ilike(ua(pat))
+                | ua(Persona.slug).ilike(ua(pat))
+                | ua(Persona.notes).ilike(ua(pat))
+            )
         total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
         sort_map = {
             "created_at": Persona.created_at,
@@ -219,6 +228,28 @@ class PersonaService:
         if persona.project_id is not None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "activation is for global Agents only")
         return await self._activate(persona)
+
+    async def assign_to_all_projects(self, persona_id: uuid.UUID, admin: User) -> int:
+        await _get(persona_id, self.db)
+        result = await self.db.execute(
+            text(
+                "UPDATE projects "
+                "SET default_persona_id = :persona_id "
+                "WHERE default_persona_id IS DISTINCT FROM :persona_id"
+            ),
+            {"persona_id": persona_id},
+        )
+        changed = int(result.rowcount or 0)
+        await record_audit(
+            self.db,
+            action="assign_persona_all_projects",
+            actor_id=admin.id,
+            target_type="persona",
+            target_id=str(persona_id),
+            payload={"project_count": changed},
+        )
+        await self.db.commit()
+        return changed
 
     async def _activate(self, persona: Persona) -> Persona:
         """Deactivate other global personas, then activate this one (one transaction)."""

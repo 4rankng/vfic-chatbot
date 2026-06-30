@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.lead import FollowupStatus, LeadScore, LeadStage
 
@@ -37,6 +37,31 @@ class LeadOut(BaseModel):
 
 class LeadListResponse(BaseModel):
     data: list[LeadOut]
+    total: int
+
+
+class LeadBoardQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    q: str | None = None
+    sort: str | None = None
+    order: str | None = "desc"
+    per_page: int = Field(default=25, ge=1, le=100)
+    section_pages: dict[str, int] = Field(default_factory=dict)
+
+
+class LeadBoardSection(BaseModel):
+    key: str
+    title: str
+    data: list[LeadOut]
+    total: int
+    page: int
+    per_page: int
+    is_priority: bool = False
+
+
+class LeadBoardResponse(BaseModel):
+    sections: list[LeadBoardSection]
     total: int
 
 

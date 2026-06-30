@@ -10,8 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-import type { Lead } from "../types";
-import { LEAD_STAGES } from "./LeadListContent";
+import { LEAD_STAGES, type Lead } from "../types";
 
 // PostgREST emits HTTP 42501 (insufficient_privilege) when an RLS policy blocks
 // the write. Match broadly so a permission failure never surfaces as a generic

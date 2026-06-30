@@ -32,6 +32,7 @@ router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
 async def list_personas(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
+    q: str | None = Query(None, description="Case-insensitive search over Agent name, slug, notes"),
     sort: str | None = Query(None, description="Sort field (name, slug, created_at, updated_at)"),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
     _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
@@ -39,6 +40,7 @@ async def list_personas(
     rows, total = await PersonaService(db).list(
         page=page,
         per_page=per_page,
+        q=q,
         sort_by=sort,
         order=order,
     )
@@ -91,6 +93,16 @@ async def activate_persona(
     persona_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> PersonaOut:
     return PersonaOut.model_validate(await PersonaService(db).activate(persona_id))
+
+
+@router.post("/{persona_id}/assign-all-projects")
+async def assign_persona_to_all_projects(
+    persona_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    count = await PersonaService(db).assign_to_all_projects(persona_id, admin)
+    return {"updated": count}
 
 
 @router.get("/format/template")

@@ -161,6 +161,12 @@ export const activatePersona = (id: string) =>
     method: "POST",
   });
 
+export const assignPersonaToAllProjects = (id: string) =>
+  apiJson<{ updated: number }>(
+    `${BASE}/knowledge/personas/${encodeURIComponent(id)}/assign-all-projects`,
+    { method: "POST" },
+  );
+
 /** Download the persona template markdown file. */
 export const downloadPersonaTemplate = () =>
   apiRequest(`${BASE}/knowledge/personas/format/template`);

@@ -1,7 +1,7 @@
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ShowBase,
-  useGetList,
+  useDataProvider,
   useNotify,
   useRecordContext,
   useRedirect,
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Archive, BookOpen, Pencil, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { formatDateTime } from "../automation/botRunMeta";
 import { stageLabel, stageTone } from "./stageTone";
 import { isCanonicalSource } from "./knowledgePipelineUtils";
@@ -33,14 +34,29 @@ const KnowledgeSourceShowContent = () => {
   const notify = useNotify();
   const refresh = useRefresh();
   const redirect = useRedirect();
-  const { data: projects } = useGetList<Project>("projects", {
-    pagination: { page: 1, perPage: 100 },
-  });
-  if (!source) return null;
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const [project, setProject] = useState<Project | null>(null);
 
-  const projectName =
-    source.project_id &&
-    (projects ?? []).find((p) => p.id === source.project_id)?.name;
+  useEffect(() => {
+    if (!source?.project_id) {
+      setProject(null);
+      return;
+    }
+    let cancelled = false;
+    dataProvider
+      .getOne("projects", { id: source.project_id })
+      .then((response) => {
+        if (!cancelled) setProject(response.data as Project);
+      })
+      .catch(() => {
+        if (!cancelled) setProject(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataProvider, source?.project_id]);
+
+  if (!source) return null;
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     try {
@@ -78,7 +94,7 @@ const KnowledgeSourceShowContent = () => {
         <CardContent className="flex flex-col px-4 py-2">
           <Field label="Tên tài liệu" value={source.file_name} />
           <Field label="Nguồn" value={source.source} />
-          <Field label="Dự án" value={projectName ?? source.project_id} />
+          <Field label="Dự án" value={project?.name ?? source.project_id} />
           <Field label="Loại tệp" value={source.mime_type} />
           <Field
             label="Giai đoạn huấn luyện"

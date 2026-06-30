@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useDataProvider, useGetList, useNotify, useRefresh } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,20 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Globe2, Loader2, Sparkles, Workflow } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Globe2,
+  Loader2,
+  Sparkles,
+  Workflow,
+} from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Persona, Project } from "../types";
-import { activatePersona } from "@/lib/vfic/knowledgeService";
+import {
+  activatePersona,
+  assignPersonaToAllProjects,
+} from "@/lib/vfic/knowledgeService";
 
 interface PersonaAssignmentsProps {
   persona: Persona;
@@ -27,18 +37,17 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   const [savingProjectId, setSavingProjectId] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [activating, setActivating] = useState(false);
-  const { data: projects, isPending } = useGetList<Project>("projects", {
-    pagination: { page: 1, perPage: 50 },
+  const [page, setPage] = useState(1);
+  const perPage = 25;
+  const {
+    data: projects,
+    isPending,
+    total = 0,
+  } = useGetList<Project>("projects", {
+    pagination: { page, perPage },
     sort: { field: "name", order: "ASC" },
   });
-
-  const assignedProjects = useMemo(
-    () =>
-      (projects ?? []).filter(
-        (project) => project.default_persona_id === persona.id,
-      ),
-    [persona.id, projects],
-  );
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
 
   const updateProjectPersona = async (
     project: Project,
@@ -61,29 +70,13 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   };
 
   const assignToAllProjects = async () => {
-    const rows = projects ?? [];
-    if (rows.length === 0 || bulkSaving) return;
+    if (bulkSaving) return;
     setBulkSaving(true);
     try {
-      const results = await Promise.allSettled(
-        rows.map((project) =>
-          dataProvider.update("projects", {
-            id: project.id,
-            previousData: project,
-            data: { default_persona_id: persona.id },
-          }),
-        ),
-      );
-      const ok = results.filter((r) => r.status === "fulfilled").length;
-      const fail = results.length - ok;
-      if (fail === 0) {
-        notify(`Đã gán Agent cho ${ok} dự án.`, { type: "success" });
-      } else {
-        notify(
-          `Đã gán ${ok}/${results.length} dự án. ${fail} dự án thất bại.`,
-          { type: "warning" },
-        );
-      }
+      const result = await assignPersonaToAllProjects(persona.id);
+      notify(`Đã gán Agent cho tất cả dự án (${result.updated} cập nhật).`, {
+        type: "success",
+      });
       refresh();
     } catch (e) {
       notify((e as Error).message, { type: "error" });
@@ -149,9 +142,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
               variant="secondary"
               size="sm"
               onClick={assignToAllProjects}
-              disabled={
-                bulkSaving || isPending || (projects ?? []).length === 0
-              }
+              disabled={bulkSaving || total === 0}
             >
               {bulkSaving ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -166,15 +157,14 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
       <CardContent className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="rounded-lg border bg-muted/15 p-4">
           <div className="text-xs font-medium uppercase text-muted-foreground">
-            Dự án đang dùng
+            Tổng dự án
           </div>
           <div className="mt-2 text-3xl font-semibold tabular-nums">
-            {assignedProjects.length}
+            {total}
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {assignedProjects.length > 0
-              ? "Các dự án được đánh dấu sẽ ưu tiên Agent này."
-              : "Chưa có dự án nào gán riêng Agent này."}
+            Danh sách bên phải được phân trang từ backend. Dùng nút gán tất cả
+            để áp dụng cho toàn bộ dự án.
           </p>
         </div>
 
@@ -184,7 +174,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
               Dự án
             </span>
             <span className="text-xs text-muted-foreground tabular-nums">
-              {(projects ?? []).length} mục
+              {(projects ?? []).length} mục trên trang
             </span>
           </div>
           <div className="max-h-[360px] overflow-y-auto">
@@ -237,6 +227,35 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 })}
               </div>
             )}
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+            <span className="tabular-nums">
+              Trang {page} / {totalPages} ({total} dự án)
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-7"
+                disabled={isPending || page <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                <ChevronLeft className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-7"
+                disabled={isPending || page >= totalPages}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages, value + 1))
+                }
+              >
+                <ChevronRight className="size-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>

@@ -368,6 +368,16 @@ class KnowledgeService:
                 .limit(per_page)
             )
         ).all()
+        project_ids = {row.project_id for row in rows if row.project_id is not None}
+        if project_ids:
+            project_rows = (
+                await self.db.execute(
+                    select(Project.id, Project.name).where(Project.id.in_(project_ids))
+                )
+            ).all()
+            project_names = {row.id: row.name for row in project_rows}
+            for row in rows:
+                row.project_name = project_names.get(row.project_id)
         return list(rows), int(total or 0)
 
     async def reconcile(self, current_drive_ids: list[str]) -> int:

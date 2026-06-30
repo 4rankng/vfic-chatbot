@@ -2,11 +2,10 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { ShowBase, useDataProvider, useRefresh } from "ra-core";
+import { ShowBase, useRefresh } from "ra-core";
 import {
   Sheet,
   SheetContent,
@@ -29,8 +28,7 @@ import { LEAD_STAGES, type Lead } from "../types";
 import { LeadCard } from "./LeadCard";
 import { LeadShowContentSheet } from "./LeadShow";
 import type { LeadSort } from "./LeadsToolbar";
-
-export { LEAD_STAGES };
+import { apiJson } from "../providers/rest/api";
 
 const CARD_GRID_CLASS =
   "grid justify-start gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),240px))]";
@@ -42,28 +40,43 @@ type SectionKey = "needs_reply" | StageSectionKey;
 type SectionConfig = {
   key: SectionKey;
   title: string;
-  filter: Record<string, string | boolean>;
   isPriority?: boolean;
 };
 
 type SectionResult = {
+  key: string;
+  title: string;
   leads: Lead[];
   total: number;
+  page: number;
+  perPage: number;
+  isPriority?: boolean;
   isLoading: boolean;
   error: boolean;
+};
+
+type LeadBoardResponse = {
+  sections: {
+    key: string;
+    title: string;
+    data: Lead[];
+    total: number;
+    page: number;
+    per_page: number;
+    is_priority: boolean;
+  }[];
+  total: number;
 };
 
 const SECTION_CONFIGS: SectionConfig[] = [
   {
     key: "needs_reply",
     title: "Cần trả lời",
-    filter: { needs_reply: true },
     isPriority: true,
   },
   ...LEAD_STAGES.map((stage) => ({
     key: stage.value,
     title: stage.label,
-    filter: { stage: stage.value, exclude_needs_reply: true },
   })),
 ];
 
@@ -78,8 +91,13 @@ const createSectionResults = (isLoading: boolean) =>
     (acc, section) => ({
       ...acc,
       [section.key]: {
+        key: section.key,
+        title: section.title,
         leads: [],
         total: 0,
+        page: 1,
+        perPage: SECTION_PER_PAGE,
+        isPriority: section.isPriority,
         isLoading,
         error: false,
       },
@@ -96,7 +114,6 @@ export const LeadListContent = ({
   sort: LeadSort;
   onTotalChange: (total: number) => void;
 }) => {
-  const dataProvider = useDataProvider();
   const refresh = useRefresh();
   const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(
     null,
@@ -126,53 +143,6 @@ export const LeadListContent = ({
     };
   }, []);
 
-  // Ref so the load effect always reads the latest page numbers without
-  // re-triggering when a single section paginates.
-  const sectionPagesRef = useRef(sectionPages);
-  sectionPagesRef.current = sectionPages;
-
-  // Fetch a single section (used for pagination — no full reload).
-  const fetchSection = useCallback(
-    async (sectionKey: SectionKey, page: number) => {
-      const config = SECTION_CONFIGS.find((s) => s.key === sectionKey);
-      if (!config) return;
-      setSectionResults((prev) => ({
-        ...prev,
-        [sectionKey]: { ...prev[sectionKey], isLoading: true, error: false },
-      }));
-      try {
-        const response = await dataProvider.getList("leads", {
-          filter: {
-            ...config.filter,
-            ...(normalizedSearchQuery ? { q: normalizedSearchQuery } : {}),
-          },
-          pagination: { page, perPage: SECTION_PER_PAGE },
-          sort: { field: sortField, order: sortOrder },
-        });
-        setSectionResults((prev) => ({
-          ...prev,
-          [sectionKey]: {
-            leads: response.data as Lead[],
-            total: response.total ?? 0,
-            isLoading: false,
-            error: false,
-          },
-        }));
-      } catch {
-        setSectionResults((prev) => ({
-          ...prev,
-          [sectionKey]: {
-            leads: [],
-            total: 0,
-            isLoading: false,
-            error: true,
-          },
-        }));
-      }
-    },
-    [dataProvider, normalizedSearchQuery, sortField, sortOrder],
-  );
-
   useEffect(() => {
     let cancelled = false;
 
@@ -191,45 +161,60 @@ export const LeadListContent = ({
     );
 
     const loadSections = async () => {
-      const pages = sectionPagesRef.current;
-      // Fire all section fetches in parallel but update state progressively
-      // so a fast section renders without waiting for the slowest one.
-      SECTION_CONFIGS.forEach(async (section) => {
-        try {
-          const response = await dataProvider.getList("leads", {
-            filter: {
-              ...section.filter,
-              ...(normalizedSearchQuery ? { q: normalizedSearchQuery } : {}),
+      try {
+        const response = await apiJson<LeadBoardResponse>(
+          "/api/v1/leads/board",
+          {
+            method: "POST",
+            body: {
+              q: normalizedSearchQuery || undefined,
+              sort: sortField,
+              order: sortOrder,
+              per_page: SECTION_PER_PAGE,
+              section_pages: sectionPages,
             },
-            pagination: {
-              page: pages[section.key] ?? 1,
-              perPage: SECTION_PER_PAGE,
-            },
-            sort: { field: sortField, order: sortOrder },
-          });
-          if (cancelled) return;
-          setSectionResults((prev) => ({
-            ...prev,
-            [section.key]: {
-              leads: response.data as Lead[],
-              total: response.total ?? 0,
-              isLoading: false,
-              error: false,
-            },
-          }));
-        } catch {
-          if (cancelled) return;
-          setSectionResults((prev) => ({
-            ...prev,
-            [section.key]: {
-              leads: [],
-              total: 0,
-              isLoading: false,
-              error: true,
-            },
-          }));
-        }
-      });
+          },
+        );
+        if (cancelled) return;
+        setSectionResults(
+          response.sections.reduce(
+            (acc, section) => ({
+              ...acc,
+              [section.key as SectionKey]: {
+                key: section.key,
+                title: section.title,
+                leads: section.data,
+                total: section.total,
+                page: section.page,
+                perPage: section.per_page,
+                isPriority: section.is_priority,
+                isLoading: false,
+                error: false,
+              },
+            }),
+            {} as Record<SectionKey, SectionResult>,
+          ),
+        );
+        onTotalChange(response.total);
+      } catch {
+        if (cancelled) return;
+        setSectionResults((prev) =>
+          SECTION_CONFIGS.reduce(
+            (acc, section) => ({
+              ...acc,
+              [section.key]: {
+                ...prev[section.key],
+                leads: [],
+                total: 0,
+                isLoading: false,
+                error: true,
+              },
+            }),
+            {} as Record<SectionKey, SectionResult>,
+          ),
+        );
+        onTotalChange(0);
+      }
     };
 
     void loadSections();
@@ -238,9 +223,10 @@ export const LeadListContent = ({
       cancelled = true;
     };
   }, [
-    dataProvider,
+    onTotalChange,
     refreshTick,
     normalizedSearchQuery,
+    sectionPages,
     sortField,
     sortOrder,
   ]);
@@ -257,20 +243,14 @@ export const LeadListContent = ({
   const allSections = useMemo(
     () =>
       SECTION_CONFIGS.map((section) => ({
-        ...section,
         ...sectionResults[section.key],
-        page: sectionPages[section.key] ?? 1,
       })),
-    [sectionPages, sectionResults],
+    [sectionResults],
   );
 
   const isAnySectionLoading = allSections.some((section) => section.isLoading);
   const hasAnyLead = allSections.some((section) => section.total > 0);
   const hasEverySectionError = allSections.every((section) => section.error);
-
-  useEffect(() => {
-    onTotalChange(allSections.reduce((sum, section) => sum + section.total, 0));
-  }, [allSections, onTotalChange]);
 
   if (
     !isAnySectionLoading &&
@@ -315,7 +295,6 @@ export const LeadListContent = ({
             }
             onPageChange={(page) => {
               setSectionPages((prev) => ({ ...prev, [section.key]: page }));
-              fetchSection(section.key, page);
             }}
           >
             {section.leads.map((lead) => (

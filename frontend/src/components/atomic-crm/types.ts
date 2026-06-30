@@ -134,6 +134,7 @@ export type KnowledgeSource = {
   created_at: string;
   updated_at: string;
   project_id?: string | null;
+  project_name?: string | null;
   mime_type?: string | null;
   stage?: string;
   digest_summary?: string | null;

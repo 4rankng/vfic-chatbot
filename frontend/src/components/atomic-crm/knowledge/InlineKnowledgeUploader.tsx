@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNotify, useRefresh } from "ra-core";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import {
@@ -21,24 +21,14 @@ import {
   ACCEPTED_KNOWLEDGE_TYPES,
   formatFileSize,
 } from "./knowledgeUploadConfig";
-import type { Project } from "../types";
 import { ProjectPicker } from "./ProjectPicker";
-export const InlineKnowledgeUploader = ({
-  projects,
-}: {
-  projects: Project[];
-}) => {
+export const InlineKnowledgeUploader = () => {
   const notify = useNotify();
   const refresh = useRefresh();
   const [projectChoice, setProjectChoice] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!projectChoice && projects[0]?.id)
-      setProjectChoice(String(projects[0].id));
-  }, [projectChoice, projects]);
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
@@ -124,7 +114,6 @@ export const InlineKnowledgeUploader = ({
           </label>
           <ProjectPicker
             value={projectChoice}
-            projects={projects}
             onChange={setProjectChoice}
           />
         </div>

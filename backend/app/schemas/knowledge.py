@@ -22,6 +22,7 @@ class KnowledgeDocumentOut(BaseModel):
     updated_at: datetime
     # 0003 extensions
     project_id: uuid.UUID | None = None
+    project_name: str | None = None
     mime_type: str | None = None
     stage: str = "UPLOADED"
     digest_summary: str | None = None

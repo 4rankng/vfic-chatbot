@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useDataProvider, useNotify, useRefresh } from "ra-core";
+import { useEffect, useMemo, useState } from "react";
+import { useDataProvider, useGetList, useNotify, useRefresh } from "ra-core";
 import { Check, ChevronsUpDown, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,11 +21,9 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { normalizeSearch, slugifyProject } from "./projectPickerUtils";
 export const ProjectPicker = ({
   value,
-  projects,
   onChange,
 }: {
   value: string;
-  projects: Project[];
   onChange: (value: string) => void;
 }) => {
   const notify = useNotify();
@@ -35,28 +33,52 @@ export const ProjectPicker = ({
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
+  const [selectedProjectRecord, setSelectedProjectRecord] =
+    useState<Project | null>(null);
+  const trimmedSearch = search.trim();
+  const { data: searchedProjects } = useGetList<Project>("projects", {
+    pagination: { page: 1, perPage: 25 },
+    sort: { field: "name", order: "ASC" },
+    filter: trimmedSearch ? { q: trimmedSearch } : {},
+  });
+
+  useEffect(() => {
+    if (!value) {
+      setSelectedProjectRecord(null);
+      return;
+    }
+    let cancelled = false;
+    dataProvider
+      .getOne("projects", { id: value })
+      .then((response) => {
+        if (!cancelled) setSelectedProjectRecord(response.data as Project);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedProjectRecord(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataProvider, value]);
 
   const availableProjects = useMemo(() => {
     const map = new Map<string, Project>();
-    for (const project of projects) map.set(String(project.id), project);
+    for (const project of searchedProjects ?? []) {
+      map.set(String(project.id), project);
+    }
+    if (!trimmedSearch && selectedProjectRecord) {
+      map.set(String(selectedProjectRecord.id), selectedProjectRecord);
+    }
     for (const project of localProjects) map.set(String(project.id), project);
     return Array.from(map.values()).sort((a, b) =>
       a.name.localeCompare(b.name, "vi"),
     );
-  }, [localProjects, projects]);
+  }, [localProjects, searchedProjects, selectedProjectRecord, trimmedSearch]);
 
   const selectedProject = availableProjects.find(
     (project) => String(project.id) === value,
   );
-  const trimmedSearch = search.trim();
   const normalizedSearch = normalizeSearch(trimmedSearch);
-  const filteredProjects = normalizedSearch
-    ? availableProjects.filter((project) =>
-        normalizeSearch(`${project.name} ${project.slug}`).includes(
-          normalizedSearch,
-        ),
-      )
-    : availableProjects;
   const exactMatch = availableProjects.some(
     (project) => normalizeSearch(project.name) === normalizedSearch,
   );
@@ -126,7 +148,7 @@ export const ProjectPicker = ({
             if (
               event.key === "Enter" &&
               canCreate &&
-              filteredProjects.length === 0
+      availableProjects.length === 0
             ) {
               event.preventDefault();
               void createProject();
@@ -139,10 +161,10 @@ export const ProjectPicker = ({
             placeholder="Tìm hoặc tạo dự án..."
           />
           <CommandList>
-            {(filteredProjects.length > 0 || trimmedSearch) && (
+            {(availableProjects.length > 0 || trimmedSearch) && (
               <CommandGroup>
-                {filteredProjects.length > 0 ? (
-                  filteredProjects.map((project) => (
+                {availableProjects.length > 0 ? (
+                  availableProjects.map((project) => (
                     <CommandItem
                       key={project.id}
                       value={`${project.name} ${project.slug}`}

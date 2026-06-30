@@ -11,6 +11,9 @@ from app.models.lead import LeadStage
 from app.models.user import User
 from app.schemas.lead import (
     AssignRequest,
+    LeadBoardQuery,
+    LeadBoardResponse,
+    LeadBoardSection,
     FollowUpCreate,
     FollowUpOut,
     LeadEventOut,
@@ -69,6 +72,37 @@ async def list_leads(
         order=order,
     )
     return LeadListResponse(data=[LeadOut.model_validate(r) for r in rows], total=total)
+
+
+@router.post("/board", response_model=LeadBoardResponse)
+async def lead_board(
+    body: LeadBoardQuery,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LeadBoardResponse:
+    sections, total = await LeadService(db).board(
+        viewer=user,
+        section_pages=body.section_pages,
+        per_page=body.per_page,
+        q=body.q,
+        sort_by=body.sort,
+        order=body.order,
+    )
+    return LeadBoardResponse(
+        sections=[
+            LeadBoardSection(
+                key=section["key"],
+                title=section["title"],
+                data=[LeadOut.model_validate(row) for row in section["data"]],
+                total=section["total"],
+                page=section["page"],
+                per_page=section["per_page"],
+                is_priority=section["is_priority"],
+            )
+            for section in sections
+        ],
+        total=total,
+    )
 
 
 @router.get("/{lead_id}", response_model=LeadOut)

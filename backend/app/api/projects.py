@@ -35,6 +35,7 @@ async def list_projects(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     is_active: bool | None = Query(None),
+    q: str | None = Query(None, description="Case-insensitive search over project name, slug, summary"),
     sort: str | None = Query(None, description="Sort field (name, created_at, updated_at, is_active)"),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
     _user: User = Depends(require_recruiter),
@@ -46,6 +47,7 @@ async def list_projects(
         per_page=per_page,
         sort_by=sort,
         order=order,
+        q=q,
     )
     return ProjectListResponse(data=data, total=total)
 

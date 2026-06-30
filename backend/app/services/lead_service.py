@@ -177,6 +177,13 @@ _LEAD_SORT = {
     "lead_score": Lead.lead_score,
 }
 
+_LEAD_STAGE_TITLES = {
+    "NEW": "Mới",
+    "CONTACTING": "Đang liên hệ",
+    "REGISTERED": "Đã đăng ký",
+    "SKIPPED": "Bỏ qua",
+}
+
 
 class LeadExtractionService:
     @staticmethod
@@ -215,8 +222,10 @@ class LeadService:
         q: str | None = None,
         sort_by: str | None = None,
         order: str | None = "desc",
+        materialize: bool = True,
     ) -> tuple[list[Lead], int]:
-        await self.materialize_conversation_leads(viewer)
+        if materialize:
+            await self.materialize_conversation_leads(viewer)
         base = select(Lead)
         if viewer.role != Role.admin:
             base = base.where(or_(Lead.assigned_recruiter_id == viewer.id, Lead.assigned_recruiter_id.is_(None)))
@@ -270,6 +279,65 @@ class LeadService:
             )
         ).all()
         return list(rows), int(total or 0)
+
+    async def board(
+        self,
+        *,
+        viewer: User,
+        section_pages: dict[str, int],
+        per_page: int = 25,
+        q: str | None = None,
+        sort_by: str | None = None,
+        order: str | None = "desc",
+    ) -> tuple[list[dict], int]:
+        await self.materialize_conversation_leads(viewer)
+        sections: list[dict] = []
+        configs: list[dict] = [
+            {
+                "key": "needs_reply",
+                "title": "Cần trả lời",
+                "is_priority": True,
+                "kwargs": {"needs_reply": True},
+            },
+            *[
+                {
+                    "key": stage.value,
+                    "title": _LEAD_STAGE_TITLES.get(stage.value, stage.value),
+                    "is_priority": False,
+                    "kwargs": {
+                        "stage": stage,
+                        "exclude_needs_reply": True,
+                    },
+                }
+                for stage in LeadStage
+            ],
+        ]
+        total = 0
+        for config in configs:
+            page = max(1, int(section_pages.get(config["key"], 1) or 1))
+            rows, section_total = await self.list(
+                viewer=viewer,
+                page=page,
+                per_page=per_page,
+                q=q,
+                sort_by=sort_by,
+                order=order,
+                materialize=False,
+                **config["kwargs"],
+            )
+            total += section_total
+            sections.append(
+                {
+                    "key": config["key"],
+                    "title": config["title"],
+                    "data": rows,
+                    "total": section_total,
+                    "page": page,
+                    "per_page": per_page,
+                    "is_priority": config["is_priority"],
+                }
+            )
+        return sections, total
 
     _MATERIALIZE_SQL_ADMIN = text("""
         INSERT INTO public.leads (

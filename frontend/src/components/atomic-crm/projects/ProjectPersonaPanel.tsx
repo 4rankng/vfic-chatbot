@@ -4,17 +4,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, Loader2 } from "lucide-react";
+import { Bot, Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Persona, Project } from "../types";
+import { cn } from "@/lib/utils";
 
 const GLOBAL_DEFAULT_VALUE = "__global_default__";
 
@@ -29,23 +35,47 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
   const [selected, setSelected] = useState(
     project.default_persona_id ?? GLOBAL_DEFAULT_VALUE,
   );
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [personaSearch, setPersonaSearch] = useState("");
+  const [selectedPersonaRecord, setSelectedPersonaRecord] =
+    useState<Persona | null>(null);
   const [saving, setSaving] = useState(false);
   const { data: personas, isPending } = useGetList<Persona>("personas", {
-    pagination: { page: 1, perPage: 50 },
+    pagination: { page: 1, perPage: 25 },
     sort: { field: "name", order: "ASC" },
+    filter: personaSearch.trim() ? { q: personaSearch.trim() } : {},
   });
 
   useEffect(() => {
     setSelected(project.default_persona_id ?? GLOBAL_DEFAULT_VALUE);
   }, [project.default_persona_id]);
 
-  const globalPersona = useMemo(
-    () => (personas ?? []).find((persona) => persona.is_active),
-    [personas],
-  );
+  useEffect(() => {
+    if (!project.default_persona_id) {
+      setSelectedPersonaRecord(null);
+      return;
+    }
+    let cancelled = false;
+    dataProvider
+      .getOne("personas", { id: project.default_persona_id })
+      .then((response) => {
+        if (!cancelled) setSelectedPersonaRecord(response.data as Persona);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedPersonaRecord(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataProvider, project.default_persona_id]);
+
   const selectedPersona = useMemo(
-    () => (personas ?? []).find((persona) => persona.id === selected),
-    [personas, selected],
+    () =>
+      selected === GLOBAL_DEFAULT_VALUE
+        ? null
+        : ((personas ?? []).find((persona) => persona.id === selected) ??
+          selectedPersonaRecord),
+    [personas, selected, selectedPersonaRecord],
   );
   const hasChanged =
     selected !== (project.default_persona_id ?? GLOBAL_DEFAULT_VALUE);
@@ -89,22 +119,79 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
           <>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="project-persona">Agent dùng cho dự án</Label>
-              <Select value={selected} onValueChange={setSelected}>
-                <SelectTrigger id="project-persona" className="w-full">
-                  <SelectValue placeholder="Chọn Agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={GLOBAL_DEFAULT_VALUE}>
-                    Mặc định toàn hệ thống
-                    {globalPersona ? `: ${globalPersona.name}` : ""}
-                  </SelectItem>
-                  {(personas ?? []).map((persona) => (
-                    <SelectItem key={persona.id} value={persona.id}>
-                      {persona.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="project-persona"
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={pickerOpen}
+                    className="w-full justify-between"
+                  >
+                    <span className="truncate">
+                      {selected === GLOBAL_DEFAULT_VALUE
+                        ? "Mặc định toàn hệ thống"
+                        : selectedPersona?.name ?? "Chọn Agent"}
+                    </span>
+                    <ChevronsUpDown className="size-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[min(420px,calc(100vw-3rem))] p-0">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      value={personaSearch}
+                      onValueChange={setPersonaSearch}
+                      placeholder="Tìm Agent..."
+                    />
+                    <CommandList>
+                      <CommandGroup>
+                        <CommandItem
+                          value={GLOBAL_DEFAULT_VALUE}
+                          onSelect={() => {
+                            setSelected(GLOBAL_DEFAULT_VALUE);
+                            setPickerOpen(false);
+                            setPersonaSearch("");
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "size-4",
+                              selected !== GLOBAL_DEFAULT_VALUE && "opacity-0",
+                            )}
+                          />
+                          Mặc định toàn hệ thống
+                        </CommandItem>
+                        {(personas ?? []).map((persona) => (
+                          <CommandItem
+                            key={persona.id}
+                            value={`${persona.name} ${persona.slug}`}
+                            onSelect={() => {
+                              setSelected(persona.id);
+                              setSelectedPersonaRecord(persona);
+                              setPickerOpen(false);
+                              setPersonaSearch("");
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "size-4",
+                                selected !== persona.id && "opacity-0",
+                              )}
+                            />
+                            <span className="min-w-0 flex-1 truncate">
+                              {persona.name}
+                            </span>
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {persona.slug}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="text-sm text-muted-foreground">
               {selected === GLOBAL_DEFAULT_VALUE
