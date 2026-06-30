@@ -2,7 +2,6 @@
 
 - ``build_deps`` wires the full ``GraphDeps`` for the chatbot worker.
 - ``build_minimax_extractor`` — lead/memory extraction (persistence worker).
-- ``build_persona_expander`` — persona generation (persona admin endpoint).
 - ``make_minimax_llm_json`` — JSON-mode LLM for the knowledge training pipeline (ingest worker).
 
 ``GraphDeps`` is imported from :mod:`app.graph.types` (NOT ``app.graph.runner``), which
@@ -34,47 +33,6 @@ def build_minimax_extractor():
         return (await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])).content
 
     return extractor
-
-
-def build_persona_expander():
-    """Persona expander: async (user) -> full persona body_md.
-
-    Uses the rule-expander system prompt (rule_expander.md) as the system message
-    and the agent model (M2.7) at temperature 0.4 so generation has mild creativity.
-    langchain_openai imports lazily inside _minimax_chat, so defining this here does NOT
-    pull langchain into the web-process import path. The endpoint calls
-    build_persona_expander() on demand, and the system prompt (RULE_EXPANDER_PROMPT) is
-    imported inside the function body for the same reason.
-    """
-    from langchain_core.messages import HumanMessage, SystemMessage
-
-    from app.graph.prompts import RULE_EXPANDER_PROMPT
-
-    llm = _chat_for_role("agent", temperature=0.4)
-
-    async def expand(user: str) -> str:
-        return (await llm.ainvoke([SystemMessage(content=RULE_EXPANDER_PROMPT), HumanMessage(content=user)])).content
-
-    return expand
-
-
-def build_rule_expander():
-    """Per-rule expander: async (short_rule) -> expanded guidance (2–5 lines).
-
-    Uses the persona-rule-expander system prompt (persona_rule_expander.md) and
-    the agent model (M2.7) at temperature 0.4. Same lazy-import discipline as
-    build_persona_expander.
-    """
-    from langchain_core.messages import HumanMessage, SystemMessage
-
-    from app.graph.prompts import PERSONA_RULE_EXPANDER_PROMPT
-
-    llm = _chat_for_role("agent", temperature=0.4)
-
-    async def expand(short_rule: str) -> str:
-        return (await llm.ainvoke([SystemMessage(content=PERSONA_RULE_EXPANDER_PROMPT), HumanMessage(content=short_rule)])).content
-
-    return expand
 
 
 def make_minimax_llm_json():

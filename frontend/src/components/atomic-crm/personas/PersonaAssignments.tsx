@@ -2,10 +2,16 @@ import { useMemo, useState } from "react";
 import { useDataProvider, useGetList, useNotify, useRefresh } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Globe2, Loader2, Sparkles } from "lucide-react";
+import { Globe2, Loader2, Sparkles, Workflow } from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Persona, Project } from "../types";
 import { activatePersona } from "@/lib/vfic/knowledgeService";
@@ -101,11 +107,19 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   };
 
   return (
-    <Card className="mt-4 max-w-4xl">
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
-          <span>Phạm vi sử dụng Agent</span>
-          <div className="flex flex-wrap gap-2">
+    <Card className="mt-1 w-full rounded-lg py-0 shadow-sm">
+      <CardHeader className="border-b px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Workflow className="size-4 text-primary" />
+              Phạm vi sử dụng Agent
+            </CardTitle>
+            <CardDescription className="mt-1.5">
+              Chọn dự án dùng Agent này hoặc đặt làm mặc định toàn hệ thống.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
             {persona.is_active ? (
               <Badge
                 variant="outline"
@@ -147,65 +161,83 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
               Gán tất cả dự án
             </Button>
           </div>
-        </CardTitle>
+        </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 pt-0">
-        <div className="text-sm text-muted-foreground">
-          {assignedProjects.length > 0
-            ? `${assignedProjects.length} dự án đang dùng Agent này.`
-            : "Chưa có dự án nào gán riêng Agent này."}
+      <CardContent className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="rounded-lg border bg-muted/15 p-4">
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Dự án đang dùng
+          </div>
+          <div className="mt-2 text-3xl font-semibold tabular-nums">
+            {assignedProjects.length}
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {assignedProjects.length > 0
+              ? "Các dự án được đánh dấu sẽ ưu tiên Agent này."
+              : "Chưa có dự án nào gán riêng Agent này."}
+          </p>
         </div>
 
-        <div className="overflow-hidden rounded-md border">
-          {isPending ? (
-            <div className="space-y-3 p-4">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-8 w-full" />
-              ))}
-            </div>
-          ) : (projects ?? []).length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">
-              Chưa có dự án để gán Agent.
-            </div>
-          ) : (
-            <div className="divide-y">
-              {(projects ?? []).map((project) => {
-                const checked = project.default_persona_id === persona.id;
-                const saving = savingProjectId === project.id;
-                return (
-                  <label
-                    key={project.id}
-                    className="flex min-h-12 items-center gap-3 px-4 py-3 text-sm"
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={saving || bulkSaving}
-                      onCheckedChange={(value) =>
-                        updateProjectPersona(
-                          project,
-                          value === true ? persona.id : null,
-                        )
-                      }
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">
-                        {project.name}
+        <div className="overflow-hidden rounded-lg border bg-background/70">
+          <div className="flex h-10 items-center justify-between border-b bg-muted/20 px-4">
+            <span className="text-xs font-semibold uppercase text-muted-foreground">
+              Dự án
+            </span>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {(projects ?? []).length} mục
+            </span>
+          </div>
+          <div className="max-h-[360px] overflow-y-auto">
+            {isPending ? (
+              <div className="space-y-3 p-4">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : (projects ?? []).length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground">
+                Chưa có dự án để gán Agent.
+              </div>
+            ) : (
+              <div className="divide-y">
+                {(projects ?? []).map((project) => {
+                  const checked = project.default_persona_id === persona.id;
+                  const saving = savingProjectId === project.id;
+                  return (
+                    <label
+                      key={project.id}
+                      className="flex min-h-12 items-center gap-3 px-4 py-3 text-sm"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        disabled={saving || bulkSaving}
+                        onCheckedChange={(value) =>
+                          updateProjectPersona(
+                            project,
+                            value === true ? persona.id : null,
+                          )
+                        }
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">
+                          {project.name}
+                        </span>
+                        <span className="block truncate font-mono text-xs text-muted-foreground">
+                          {project.slug}
+                        </span>
                       </span>
-                      <span className="block truncate font-mono text-xs text-muted-foreground">
-                        {project.slug}
-                      </span>
-                    </span>
-                    {saving && <Loader2 className="size-4 animate-spin" />}
-                    {checked && (
-                      <Badge variant="outline" className="shrink-0">
-                        Đang gán
-                      </Badge>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          )}
+                      {saving && <Loader2 className="size-4 animate-spin" />}
+                      {checked && (
+                        <Badge variant="outline" className="shrink-0">
+                          Đang gán
+                        </Badge>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -161,31 +161,25 @@ export const activatePersona = (id: string) =>
     method: "POST",
   });
 
-/**
- * Expand a short description (+ optional rules) into a full 7-part persona
- * body via the rule-expander LLM. Admin-only; the caller previews/edits before saving.
- */
-export const generatePersona = (
-  description: string,
-  rules?: string[],
-) =>
-  apiJson<{ body_md: string }>(`${BASE}/knowledge/personas/generate`, {
-    method: "POST",
-    body: { description, rules: rules ?? [] },
-  });
+/** Download the persona template markdown file. */
+export const downloadPersonaTemplate = () =>
+  apiRequest(`${BASE}/knowledge/personas/format/template`);
 
-/**
- * Expand one short rule into 2–5 lines of detailed persona guidance.
- * Admin-only; used interactively in the multi-rule editor.
- */
-export const expandPersonaRule = (short_rule_text: string) =>
-  apiJson<{ expanded: string }>(
-    `${BASE}/knowledge/personas/expand-rule`,
-    {
-      method: "POST",
-      body: { short_rule_text },
-    },
-  );
+export type ImportedPersona = {
+  name: string;
+  body_md: string;
+  notes?: string | null;
+};
+
+/** Import (upload) a persona from a markdown file. Creates or overwrites by slug. */
+export const importPersona = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return apiJson<ImportedPersona>(`${BASE}/knowledge/personas/import`, {
+    method: "POST",
+    body: form,
+  });
+};
 
 export const reindexProject = (id: string) =>
   apiJson<ApiRecord>(`${BASE}/knowledge/projects/${encodeURIComponent(id)}/reindex`, {

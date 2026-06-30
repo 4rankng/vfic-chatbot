@@ -1,4 +1,4 @@
-"""Persona business logic: CRUD + activate (one active global) + LLM generation.
+"""Persona business logic: CRUD + activate (one active global) + template import.
 
 Extracted from the personas router so the router stays a thin HTTP layer (validate ->
 delegate -> serialize). ``activate`` transactionally deactivates the other global personas
@@ -6,13 +6,14 @@ first (via the ORM, replacing the router's raw SQL), so the ``personas_one_activ
 partial unique index never trips. ``resolve_persona`` (graph) reads the active body_md,
 falling back to persona.md when none is active.
 
-Raises ``HTTPException`` for not-found / conflict / rate-limit / LLM-failure outcomes
-(behavior-preserving vs. the legacy router).
+Raises ``HTTPException`` for not-found / conflict / validation outcomes.
 """
 from __future__ import annotations
 
 import logging
 import uuid
+from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
@@ -24,54 +25,71 @@ from app.models.persona import Persona
 from app.models.user import User
 from app.schemas.personas import PersonaCreate, PersonaUpdate, _slugify, ProjectMini
 from app.services.audit_service import record_audit
-from app.services.ratelimit import enforce_persona_generate_rate_limit
 
 logger = logging.getLogger(__name__)
 
-_PERSONA_USER_TEMPLATE = (
-    "Mở rộng mô tả sau thành một Agent HOÀN CHỈNH cho chatbot VFIC, theo ĐÚNG 7 phần "
-    "với giữ nguyên các tiêu đề tiếng Việt sau:\n"
-    "### Vai trò của tôi là gì?\n"
-    "### Ai cần tôi giúp?\n"
-    "### Tôi hoàn thành công việc thế nào?\n"
-    "### Tôi nên tránh điều gì?\n"
-    "### Kết quả nào cần theo dõi?\n"
-    "### Tôi nên giao tiếp thế nào?\n"
-    "### Mẹo bổ sung?\n\n"
-    "Yêu cầu đầu ra:\n"
-    "- Chỉ xuất Agent 7 phần, KHÔNG thêm mục 'NGUỒN', 'BẢNG TRUY VẤN Ý NGHĨA', "
-    "citations hay ghi chú kiểm tra trung thành.\n"
-    "- Giữ nguyên ý mô tả; làm rõ + thêm ví dụ/edge case ở các phần khi phù hợp; tiếng Việt chuẩn.\n\n"
-    "Mô tả: {desc}"
-)
-
-_PERSONA_USER_TEMPLATE_WITH_RULES = (
-    "Mở rộng mô tả sau thành một Agent HOÀN CHỈNH cho chatbot VFIC, theo ĐÚNG 7 phần "
-    "với giữ nguyên các tiêu đề tiếng Việt sau:\n"
-    "### Vai trò của tôi là gì?\n"
-    "### Ai cần tôi giúp?\n"
-    "### Tôi hoàn thành công việc thế nào?\n"
-    "### Tôi nên tránh điều gì?\n"
-    "### Kết quả nào cần theo dõi?\n"
-    "### Tôi nên giao tiếp thế nào?\n"
-    "### Mẹo bổ sung?\n\n"
-    "Yêu cầu đầu ra:\n"
-    "- Chỉ xuất Agent 7 phần, KHÔNG thêm mục 'NGUỒN', 'BẢNG TRUY VẤN Ý NGHĨA', "
-    "citations hay ghi chú kiểm tra trung thành.\n"
-    "- Giữ nguyên ý mô tả; làm rõ + thêm ví dụ/edge case ở các phần khi phù hợp; tiếng Việt chuẩn.\n"
-    "- Tích hợp MỌI quy tắc bổ sung vào phần phù hợp trong 7 phần trên (Vai trò, Tránh, "
-    "Giao tiếp, Mẹo bổ sung, v.v.). Không tạo phần riêng cho quy tắc.\n\n"
-    "Mô tả: {desc}\n\n"
-    "CÁC LUẬT BỔ SUNG (tích hợp vào Agent):\n{rules}"
-)
+_PERSONA_TEMPLATE_PATH = Path(__file__).resolve().parent / "personas" / "templates" / "persona_v1.md"
 
 
-def _persona_user_message(description: str, rules: list[str] | None = None) -> str:
-    desc = description.strip()
-    if rules:
-        rules_block = "\n".join(f"- {r.strip()}" for r in rules if r.strip())
-        return _PERSONA_USER_TEMPLATE_WITH_RULES.format(desc=desc, rules=rules_block)
-    return _PERSONA_USER_TEMPLATE.format(desc=desc)
+def load_persona_template() -> str:
+    return _PERSONA_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+
+def parse_persona_markdown(text: str) -> tuple[str, str | None, str | None, str]:
+    """Parse a persona markdown file with optional YAML frontmatter.
+
+    Returns ``(name, slug_or_None, notes_or_None, body_md)``.
+    Raises ``ValueError`` if *name* is missing/blank or body is empty.
+    """
+    errors: list[str] = []
+
+    # --- frontmatter split (hand-rolled, same shape as knowledge/canonical.py) ---
+    if not text.startswith("---\n"):
+        # No frontmatter — treat entire file as body; name will fail validation.
+        fm: dict[str, Any] = {}
+        body = text.strip()
+    else:
+        end = text.find("\n---", 4)
+        if end == -1:
+            errors.append("frontmatter closing --- delimiter is missing")
+            fm, body = {}, text
+        else:
+            raw = text[4:end].strip("\n")
+            body = text[end + 4 :].lstrip("\r\n")
+            fm = _parse_persona_frontmatter(raw, errors)
+
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    name = str(fm.get("name", "")).strip()
+    if not name:
+        raise ValueError("Frontmatter thiếu 'name' — tên Agent là bắt buộc.")
+
+    body_md = body.strip()
+    if not body_md:
+        raise ValueError("Nội dung Agent (body) trống — cần ít nhất 1 phần.")
+
+    slug = str(fm.get("slug", "")).strip() or None
+    notes = str(fm.get("notes", "")).strip() or None
+    return name, slug, notes, body_md
+
+
+def _parse_persona_frontmatter(raw: str, errors: list[str]) -> dict[str, Any]:
+    """Minimal key:value frontmatter parser (flat only, no nested objects)."""
+    out: dict[str, Any] = {}
+    current_key: str | None = None
+    for line_no, line in enumerate(raw.splitlines(), start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if ":" not in line:
+            errors.append(f"frontmatter line {line_no}: expected key: value")
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        current_key = key
+        value = value.strip()
+        out[key] = value  # persona frontmatter is always scalar
+    return out
 
 
 async def _get(pid: uuid.UUID, db: AsyncSession) -> Persona:
@@ -84,6 +102,21 @@ async def _get(pid: uuid.UUID, db: AsyncSession) -> Persona:
 class PersonaService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+
+    async def get(self, persona_id: uuid.UUID) -> Persona:
+        persona = await _get(persona_id, self.db)
+        # Enrich with assigned projects (same as list).
+        try:
+            result = await self.db.execute(
+                text("SELECT id, name, slug FROM projects WHERE default_persona_id = :pid"),
+                {"pid": persona_id},
+            )
+            persona._assigned_projects = [
+                ProjectMini(id=r.id, name=r.name, slug=r.slug) for r in result.all()
+            ]
+        except Exception:  # noqa: BLE001
+            persona._assigned_projects = []
+        return persona
 
     async def list(self) -> list[Persona]:
         rows = list(
@@ -184,57 +217,33 @@ class PersonaService:
         await self.db.refresh(persona)
         return persona
 
-    async def generate(self, admin: User, description: str, rules: list[str] | None = None) -> str:
-        """Expand a short description (+ optional rules) into a full 7-part persona body_md.
+    async def import_persona(self, text: str, admin: User) -> Persona:
+        """Import a persona from a markdown file (with optional YAML frontmatter).
 
-        Best-effort per-admin throttle; the MiniMax expander is imported lazily so
-        langchain_openai is pulled in only when generation runs, keeping the web-process
-        import path langchain-free. Nothing here auto-activates or persists a persona.
+        If a persona with the same slug already exists, overwrites its ``body_md``
+        (and optionally ``name``/``notes``). Otherwise creates a new persona.
         """
-        await enforce_persona_generate_rate_limit(admin.id)
-        # Imported lazily (see note above).
-        from app.graph.factories import build_persona_expander
+        name, slug, notes, body_md = parse_persona_markdown(text)
+        derived_slug = slug or _slugify(name)
 
-        try:
-            expand = build_persona_expander()
-            body_md = (await expand(_persona_user_message(description, rules))).strip()
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("persona generation failed")
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, "Tạo Agent thất bại. Vui lòng thử lại."
-            ) from exc
-        if not body_md:
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, "Tạo Agent thất bại. Vui lòng thử lại."
+        # Check for existing persona with this slug → overwrite
+        existing = (await self.db.scalars(
+            select(Persona).where(Persona.slug == derived_slug).limit(1)
+        )).first()
+
+        if existing:
+            existing.name = name
+            existing.body_md = body_md
+            if notes is not None:
+                existing.notes = notes
+            await record_audit(
+                self.db, action="import_persona", actor_id=admin.id,
+                target_type="persona", target_id=str(existing.id),
             )
-        await record_audit(
-            self.db, action="generate_persona", actor_id=admin.id, target_type="persona", target_id=None
-        )
-        await self.db.commit()  # record_audit only flushes
-        return body_md
+            await self.db.commit()
+            await self.db.refresh(existing)
+            return existing
 
-    async def expand_rule(self, admin: User, short_rule_text: str) -> str:
-        """Expand one short rule into 2–5 lines of detailed persona guidance.
-
-        Uses a dedicated per-rule expander prompt. Best-effort throttle; 502 on failure.
-        """
-        await enforce_persona_generate_rate_limit(admin.id)
-        from app.graph.factories import build_rule_expander
-
-        try:
-            expand = build_rule_expander()
-            expanded = (await expand(short_rule_text.strip())).strip()
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("rule expansion failed")
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, "Mở rộng quy tắc thất bại. Vui lòng thử lại."
-            ) from exc
-        if not expanded:
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, "Mở rộng quy tắc thất bại. Vui lòng thử lại."
-            )
-        await record_audit(
-            self.db, action="expand_rule", actor_id=admin.id, target_type="persona", target_id=None
-        )
-        await self.db.commit()
-        return expanded
+        # New persona
+        body = PersonaCreate(name=name, body_md=body_md, slug=slug, notes=notes)
+        return await self.create(body, admin)

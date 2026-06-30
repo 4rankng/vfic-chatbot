@@ -274,9 +274,13 @@ class FallbackLLM:
             return await self.fallback.ainvoke(messages, **kwargs)
 
 
-def _minimax_chat(model: str, *, temperature: float):
+def _minimax_chat(model: str, *, temperature: float, max_retries: int = 0):
     """OpenAI-compatible MiniMax client from settings. Shared construction so
     model / base_url / timeout cannot drift between build_deps and the extractor.
+
+    ``max_retries`` defaults to 0 because ``FallbackLLM`` already handles provider-
+    level retry; the openai library's built-in retry would just waste time (3× the
+    timeout) before the fallback kicks in.
     """
     from langchain_openai import ChatOpenAI
 
@@ -289,10 +293,11 @@ def _minimax_chat(model: str, *, temperature: float):
         base_url=s.minimax_base_url,
         timeout=s.minimax_request_timeout,
         temperature=temperature,
+        max_retries=max_retries,
     )
 
 
-def _openrouter_chat(model: str, *, temperature: float, timeout: int | None = None, json_mode: bool = False):
+def _openrouter_chat(model: str, *, temperature: float, timeout: int | None = None, json_mode: bool = False, max_retries: int = 0):
     """OpenAI-compatible OpenRouter client from settings."""
     from langchain_openai import ChatOpenAI
 
@@ -306,6 +311,7 @@ def _openrouter_chat(model: str, *, temperature: float, timeout: int | None = No
         base_url=s.openrouter_base_url,
         timeout=timeout or s.openrouter_request_timeout,
         temperature=temperature,
+        max_retries=max_retries,
         **kwargs,
     )
 
