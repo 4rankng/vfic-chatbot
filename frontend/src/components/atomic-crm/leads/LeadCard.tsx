@@ -35,7 +35,7 @@ const displayName = (lead: Lead) => {
   const name = lead.name?.trim();
   if (name) return name;
   const suffix = compactIdentifier(lead);
-  return suffix ? `Ứng viên Zalo ${suffix}` : "Ứng viên chưa định danh";
+  return suffix ? `Ứng viên ${suffix}` : "Ứng viên chưa định danh";
 };
 
 const clean = (value?: string | null) => value?.trim() || "";

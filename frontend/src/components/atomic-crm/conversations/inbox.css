@@ -398,6 +398,26 @@
   display: none;
 }
 
+.inbox-bg-container .infinite-scroll-sentinel {
+  display: grid;
+  min-height: 36px;
+  place-items: center;
+  padding: 6px 0 10px;
+}
+
+.inbox-bg-container .conversation-group + .conversation-group {
+  margin-top: 14px;
+}
+
+.inbox-bg-container .conversation-group-title {
+  padding: 6px 8px 8px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .inbox-bg-container .conversation {
   position: relative;
   display: grid;
@@ -541,6 +561,12 @@
   font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
+}
+.inbox-bg-container .mode-icon-chip {
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
 }
 .inbox-bg-container .mini-chip.bot {
   color: var(--brand);
@@ -1028,37 +1054,6 @@
   height: 16px;
   transform: rotate(90deg);
   color: var(--brand);
-}
-
-.inbox-bg-container .inbox-pagination {
-  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  padding: 8px 10px;
-}
-
-.inbox-bg-container .inbox-pagination-controls {
-  justify-content: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-  min-width: 0;
-}
-
-.inbox-bg-container .inbox-pagination-controls > div:first-child {
-  flex: 0 0 auto;
-}
-
-.inbox-bg-container .inbox-pagination-controls > div:first-child p {
-  display: none;
-}
-
-.inbox-bg-container .inbox-pagination-controls [data-slot="pagination"] {
-  width: auto;
-  flex: 0 0 auto;
-}
-
-.inbox-bg-container
-  .inbox-pagination-controls
-  [data-slot="pagination-content"] {
-  gap: 0;
 }
 
 :is(.inbox-bg-container, .chat-surface) .day-marker {

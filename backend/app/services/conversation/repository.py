@@ -137,7 +137,13 @@ class ConversationRepository:
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
         sort_col = _CONVERSATION_SORT.get((sort_by or "").lower()) or Conversation.updated_at
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
-        attention_expr = case(
+        mode_order_expr = case(
+            (Conversation.mode == ConversationMode.HUMAN, 0),
+            (Conversation.mode == ConversationMode.SEMI_AUTO, 1),
+            (Conversation.mode == ConversationMode.BOT, 2),
+            else_=3,
+        )
+        unanswered_expr = case(
             (
                 _unanswered_inbound_condition(),
                 1,
@@ -146,7 +152,7 @@ class ConversationRepository:
         )
         rows = (
             await self.db.scalars(
-                base.order_by(attention_expr.desc(), order_expr)
+                base.order_by(mode_order_expr.asc(), unanswered_expr.desc(), order_expr)
                 .offset((page - 1) * per_page)
                 .limit(per_page)
             )

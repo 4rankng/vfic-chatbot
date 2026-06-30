@@ -1,5 +1,10 @@
-import { useState, useMemo, useEffect, useCallback, memo } from "react";
-import { ListBase, useListContext, RecordContextProvider } from "ra-core";
+import { useState, useMemo, useEffect, useCallback, memo, useRef } from "react";
+import {
+  InfiniteListBase,
+  useInfinitePaginationContext,
+  useListContext,
+  RecordContextProvider,
+} from "ra-core";
 import { useSearchParams } from "react-router";
 import type { Conversation, Lead } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
@@ -7,7 +12,6 @@ import { InboxIcons } from "./InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ListPagination } from "@/components/admin";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadStatusColor } from "./conversationDisplay";
 import "./inbox.css";
@@ -18,7 +22,14 @@ type ConversationRow = Conversation & {
 };
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
-const CONVERSATION_ROWS_PER_PAGE_OPTIONS = [25, 50, 100, 200];
+const CONVERSATION_MODE_GROUPS: {
+  mode: Conversation["mode"] | "other";
+  label: string;
+}[] = [
+  { mode: "human", label: "Tư vấn viên" },
+  { mode: "semi_auto", label: "Bán tự động" },
+  { mode: "bot", label: "Chatbot" },
+];
 
 const needsVisibleAttention = (
   conversation: Conversation,
@@ -33,6 +44,13 @@ const needsVisibleAttention = (
     new Date(conversation.last_inbound_at).getTime() >
     new Date(conversation.last_outbound_at).getTime()
   );
+};
+
+const getConversationModePriority = (mode: Conversation["mode"]) => {
+  if (mode === "human") return 0;
+  if (mode === "semi_auto") return 1;
+  if (mode === "bot") return 2;
+  return 3;
 };
 
 const getRelativeTimeString = (dateStr?: string) => {
@@ -167,11 +185,14 @@ const ConversationListItem = memo(
               {needsAttention && (
                 <span className="mini-chip attention">Cần xử lý</span>
               )}
-              <span className={`mini-chip ${modeMeta.tone}`}>
-                <svg className="icon">
+              <span
+                className={`mini-chip mode-icon-chip ${modeMeta.tone}`}
+                aria-label={modeMeta.label}
+                title={modeMeta.label}
+              >
+                <svg className="icon" aria-hidden="true">
                   <use href={`#${modeMeta.icon}`} />
                 </svg>
-                {modeMeta.label}
               </span>
             </span>
           </span>
@@ -211,9 +232,13 @@ const ConversationListPanel = ({
   readIds: Set<string>;
 }) => {
   const { data: conversations, isPending } = useListContext<Conversation>();
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfinitePaginationContext();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const conversationIdsKey = useMemo(
     () => conversations?.map((c) => c.id).join("|") ?? "",
     [conversations],
@@ -283,6 +308,10 @@ const ConversationListPanel = ({
         return true;
       })
       .sort((a, b) => {
+        const aMode = getConversationModePriority(a.mode);
+        const bMode = getConversationModePriority(b.mode);
+        if (aMode !== bMode) return aMode - bMode;
+
         const aAttention = needsVisibleAttention(a, readIds) ? 1 : 0;
         const bAttention = needsVisibleAttention(b, readIds) ? 1 : 0;
         if (aAttention !== bAttention) return bAttention - aAttention;
@@ -296,6 +325,38 @@ const ConversationListPanel = ({
         );
       });
   }, [conversations, leads, snippets, query, readIds]);
+
+  const rowGroups = useMemo(() => {
+    const grouped = CONVERSATION_MODE_GROUPS.map((group) => ({
+      ...group,
+      rows: rows.filter((row) => row.mode === group.mode),
+    }));
+    const otherRows = rows.filter(
+      (row) => !CONVERSATION_MODE_GROUPS.some((group) => group.mode === row.mode),
+    );
+    if (otherRows.length > 0) {
+      grouped.push({ mode: "other", label: "Khác", rows: otherRows });
+    }
+    return grouped.filter((group) => group.rows.length > 0);
+  }, [rows]);
+
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    const marker = loadMoreRef.current;
+    if (!root || !marker || !hasNextPage || isFetchingNextPage) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          fetchNextPage();
+        }
+      },
+      { root, rootMargin: "160px 0px", threshold: 0.01 },
+    );
+
+    observer.observe(marker);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, rows.length]);
 
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
@@ -314,15 +375,10 @@ const ConversationListPanel = ({
         </label>
       </div>
 
-      <div className="section-label">
-        <span>Zalo cần chăm sóc</span>
-        <span>
-          {rows.filter((row) => needsVisibleAttention(row, readIds)).length} cần
-          xử lý · {rows.length} chat
-        </span>
-      </div>
-
-      <div className="conversations animate-in fade-in-0 duration-300">
+      <div
+        className="conversations animate-in fade-in-0 duration-300"
+        ref={scrollRootRef}
+      >
         {isPending ? (
           Array.from({ length: 6 }).map((_, i) => (
             <ConversationListItemSkeleton key={i} />
@@ -330,25 +386,35 @@ const ConversationListPanel = ({
         ) : rows.length === 0 ? (
           <div className="empty-state">Không tìm thấy hội thoại phù hợp.</div>
         ) : (
-          <>
-            {rows.map((c) => (
-              <ConversationListItem
-                key={c.id}
-                conversation={c}
-                isActive={selectedId === c.id}
-                onSelect={onSelect}
-                readIds={readIds}
-              />
-            ))}
-          </>
+          rowGroups.map((group) => (
+            <section className="conversation-group" key={group.mode}>
+              <div className="conversation-group-title">{group.label}</div>
+              {group.rows.map((c) => (
+                <ConversationListItem
+                  key={c.id}
+                  conversation={c}
+                  isActive={selectedId === c.id}
+                  onSelect={onSelect}
+                  readIds={readIds}
+                />
+              ))}
+            </section>
+          ))
         )}
-      </div>
 
-      <div className="inbox-pagination">
-        <ListPagination
-          rowsPerPageOptions={CONVERSATION_ROWS_PER_PAGE_OPTIONS}
-          className="inbox-pagination-controls"
-        />
+        {hasNextPage && (
+          <div
+            className="infinite-scroll-sentinel"
+            ref={loadMoreRef}
+            aria-hidden="true"
+          >
+            {isFetchingNextPage ? (
+              <ConversationListItemSkeleton />
+            ) : (
+              <span />
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -496,10 +562,10 @@ const ConversationListContent = () => {
 };
 
 export const ConversationList = () => (
-  // Real pagination (react-admin <Pagination>): the backend caps per_page at
-  // 200, and the inbox must page instead of "load everyone". Row previews come
-  // from /conversations/last-messages/batch regardless of page size.
-  <ListBase perPage={25} sort={CONVERSATION_LIST_SORT}>
+  // Infinite pagination keeps the inbox light while removing visible page
+  // controls. Row previews come from /conversations/last-messages/batch for the
+  // loaded rows only.
+  <InfiniteListBase perPage={25} sort={CONVERSATION_LIST_SORT}>
     <ConversationListContent />
-  </ListBase>
+  </InfiniteListBase>
 );
