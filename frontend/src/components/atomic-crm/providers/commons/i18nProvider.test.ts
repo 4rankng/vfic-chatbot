@@ -13,9 +13,7 @@ describe("i18nProvider", () => {
   });
 
   it("translates keys in Vietnamese", () => {
-    expect(i18nProvider.translate("crm.changelog.title")).toBe(
-      "Nhật ký thay đổi",
-    );
+    expect(i18nProvider.translate("crm.profile.title")).toBe("Hồ sơ cá nhân");
   });
 
   it("falls back to english catalog for missing keys in vietnamese", () => {

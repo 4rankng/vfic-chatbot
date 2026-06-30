@@ -448,9 +448,6 @@ export const englishCrmMessages = {
       active_leads: "Active Leads",
       drop_off: "Drop-off Rate",
     },
-    changelog: {
-      title: "Changelog",
-    },
     activity: {
       added_company: "%{name} added company",
       you_added_company: "You added company",

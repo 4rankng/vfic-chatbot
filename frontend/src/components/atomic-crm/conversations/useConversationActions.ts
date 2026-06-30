@@ -42,10 +42,14 @@ export const useConversationActions = (record?: Conversation) => {
             : "conversations.release.success";
       notify(key, { type: "success" });
       refresh();
-    } catch (e: unknown) {
-      notify(e instanceof Error ? e.message : "Không thể đổi chế độ hội thoại", {
-        type: "error",
-      });
+    } catch {
+      const errorKey =
+        nextMode === "human"
+          ? "conversations.takeover.error"
+          : nextMode === "semi_auto"
+            ? "Không thể bật chế độ bán tự động"
+            : "conversations.release.error";
+      notify(errorKey, { type: "error" });
     }
   };
 

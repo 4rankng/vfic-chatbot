@@ -30,7 +30,6 @@ import { Dashboard } from "../dashboard/Dashboard";
 import { MobileDashboard } from "../dashboard/MobileDashboard";
 import { Layout } from "../layout/Layout";
 import { MobileLayout } from "../layout/MobileLayout";
-import { ChangelogPage } from "../misc/ChangelogPage";
 import {
   getAuthProvider as defaultAuthProviderBuilder,
   getDataProvider as defaultDataProviderBuilder,
@@ -89,18 +88,12 @@ const ForgotPasswordPage = lazy(async () => {
   const mod = await import("../login/ForgotPasswordPage");
   return { default: mod.ForgotPasswordPage as ComponentType };
 });
-// NOTE: ChangelogPage is imported statically (top of file) rather than lazy
-// here — Header.tsx already imports it eagerly, so a lazy() wrapper would be
-// a no-op (Vite keeps it in the main chunk and warns). Keeping it static is
-// consistent and avoids the misleading split.
-
 // Static path constants — React.lazy wrappers do not expose the original
 // component's static `.path` property, so we mirror the values here.
 // Source of truth remains the static assignment in each page module; if a
 // path changes there, update this constant too.
 const PROFILE_PATH = "/profile";
 const FORGOT_PASSWORD_PATH = "/forgot-password";
-const CHANGELOG_PATH = "/changelog";
 const PUBLIC_HASH_PATHS = new Set(["/login", FORGOT_PASSWORD_PATH]);
 
 const RouteFallback = () => null;
@@ -356,7 +349,6 @@ export const CRM = ({
           path="/settings/profile"
           element={<Navigate to={PROFILE_PATH} replace />}
         />
-        <Route path={CHANGELOG_PATH} element={<ChangelogPage />} />
       </CustomRoutes>
       <CustomRoutes noLayout>
         <Route

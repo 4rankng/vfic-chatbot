@@ -123,11 +123,6 @@ Test the admin web app at `http://localhost:5173/` as an authenticated VFIC admi
 3. Open personas list and verify active persona is marked.
 4. Open persona detail/edit only if changes can be safely restored.
 
-## Changelog
-
-1. Open changelog from URL or account/menu entry.
-2. Verify content is VFIC-specific and does not expose upstream Atomic CRM release notes.
-
 ## Automated Checks
 
 - Run `npm run typecheck` from `frontend/`.
@@ -137,5 +132,5 @@ Test the admin web app at `http://localhost:5173/` as an authenticated VFIC admi
 ## Current Run Summary
 
 - Passed: login/logout, invalid login, password visibility, forgot-password page, dashboard, desktop route health, mobile route health, mobile More menu, lead search/detail/deep-link, conversation mode menu, knowledge search/upload dialog, user create/edit/delete, project create/edit/delete cleanup, profile edit/restore, theme toggle.
-- Fixed: unlabeled account menu trigger, missing mobile `main` landmark, inherited Atomic CRM changelog content.
+- Fixed: unlabeled account menu trigger and missing mobile `main` landmark.
 - Known data issue observed: dashboard reports one failed knowledge source, `faq-001-lg-display.md`, with `TypeError: 'coroutine' object is not subscriptable`; this appears to be real pipeline data surfaced by the app, not a frontend rendering bug.

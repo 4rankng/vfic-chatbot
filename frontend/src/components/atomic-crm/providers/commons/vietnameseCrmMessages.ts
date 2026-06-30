@@ -89,6 +89,16 @@ export const vietnameseCrmMessages = {
       forcedCaseName: "Nhãn",
     },
   },
+  conversations: {
+    takeover: {
+      success: "Đã chuyển sang Tư vấn viên",
+      error: "Tiếp nhận hội thoại thất bại",
+    },
+    release: {
+      success: "Đã chuyển sang ChatBot",
+      error: "Trả hội thoại về ChatBot thất bại",
+    },
+  },
   crm: {
     navigation: {
       label: "Điều hướng",
@@ -112,9 +122,6 @@ export const vietnameseCrmMessages = {
     },
     header: {
       import_data: "Nhập dữ liệu",
-    },
-    changelog: {
-      title: "Nhật ký thay đổi",
     },
     settings: {
       title: "Cài đặt",

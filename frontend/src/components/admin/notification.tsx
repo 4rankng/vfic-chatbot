@@ -87,7 +87,7 @@ export const Notification = (props: ToasterProps) => {
 
         toast[type](finalMessage, {
           duration,
-          position: type === "error" ? "top-center" : undefined,
+          position: props.position ?? "top-center",
           action: undoable
             ? {
                 label: translate("ra.action.undo"),
@@ -112,7 +112,7 @@ export const Notification = (props: ToasterProps) => {
         richColors
         theme={theme}
         closeButton
-        position="bottom-center"
+        position="top-center"
         {...props}
       />
     </CloseNotificationContext.Provider>

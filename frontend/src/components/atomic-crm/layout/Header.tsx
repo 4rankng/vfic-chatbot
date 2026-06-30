@@ -1,4 +1,4 @@
-import { FileText, User, Users } from "lucide-react";
+import { User, Users } from "lucide-react";
 import { usePermissions, useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
@@ -7,7 +7,6 @@ import { UserMenu } from "@/components/admin/user-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
-import { ChangelogPage } from "../misc/ChangelogPage";
 import { NavPill } from "./topbar/NavPills";
 import { NotificationsBell } from "./topbar/NotificationsBell";
 
@@ -140,19 +139,4 @@ export const ProfileMenu = () => {
   );
 };
 
-export const ChangelogMenuItem = () => {
-  const translate = useTranslate();
-  const userMenuContext = useUserMenu();
-  if (!userMenuContext) {
-    throw new Error("<ChangelogMenuItem> must be used inside <UserMenu>");
-  }
-  return (
-    <DropdownMenuItem asChild onClick={userMenuContext.onClose}>
-      <Link to={ChangelogPage.path} className="flex items-center gap-2">
-        <FileText />
-        {translate("crm.changelog.title")}
-      </Link>
-    </DropdownMenuItem>
-  );
-};
 export default Header;
