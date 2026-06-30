@@ -45,7 +45,7 @@ const LeadCardContentBase = ({
 
   return (
     <article
-      className="group w-full max-w-full cursor-pointer select-none overflow-hidden rounded-lg border border-border/70 bg-card px-2.5 py-1.5 shadow-xs transition-colors hover:border-primary/30 hover:bg-accent/25"
+      className="group w-full max-w-full cursor-pointer select-none overflow-hidden rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] transition-colors hover:border-primary/35 hover:bg-card hover:shadow-[0_4px_14px_rgba(26,34,40,0.11),0_1px_3px_rgba(26,34,40,0.08)] dark:border-border/80 dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)] dark:hover:border-primary/35 dark:hover:bg-accent/20"
       onClick={handleClick}
     >
       <RecordContextProvider value={lead}>

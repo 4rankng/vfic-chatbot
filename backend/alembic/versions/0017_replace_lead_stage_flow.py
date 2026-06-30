@@ -37,6 +37,10 @@ def upgrade() -> None:
 
         ALTER TABLE public.leads ALTER COLUMN lead_stage SET DEFAULT 'NEW';
         DROP TYPE lead_stage_old;
+
+        -- ALTER COLUMN TYPE drops all indexes that depend on the column;
+        -- recreate the stage index that the baseline (0001) defined.
+        CREATE INDEX IF NOT EXISTS leads_stage_idx ON public.leads (lead_stage);
         """
     )
 
@@ -66,5 +70,8 @@ def downgrade() -> None:
 
         ALTER TABLE public.leads ALTER COLUMN lead_stage SET DEFAULT 'NEW';
         DROP TYPE lead_stage_new;
+
+        -- Recreate the stage index dropped by ALTER COLUMN TYPE.
+        CREATE INDEX IF NOT EXISTS leads_stage_idx ON public.leads (lead_stage);
         """
     )

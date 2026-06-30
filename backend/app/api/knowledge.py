@@ -65,13 +65,30 @@ async def _load(doc_id: uuid.UUID, db: AsyncSession):
 
 @router.get("/documents", response_model=KnowledgeDocumentListResponse)
 async def list_documents(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     status_: KnowledgeStatus | None = Query(None, alias="status"),
     project_id: uuid.UUID | None = Query(None),
+    stage: str | None = Query(None),
+    needs_review: bool | None = Query(None),
+    q: str | None = Query(None, description="Case-insensitive search over source metadata and project name"),
+    sort: str | None = Query(None, description="Sort field (updated_at, created_at, file_name, stage, status)"),
+    order: str | None = Query("desc", description="Sort direction: asc | desc"),
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> KnowledgeDocumentListResponse:
-    docs = await KnowledgeService(db).list(status_=status_, project_id=project_id)
-    return KnowledgeDocumentListResponse(data=[KnowledgeDocumentOut.model_validate(d) for d in docs], total=len(docs))
+    docs, total = await KnowledgeService(db).list(
+        page=page,
+        per_page=per_page,
+        status_=status_,
+        project_id=project_id,
+        stage=stage,
+        needs_review=needs_review,
+        q=q,
+        sort_by=sort,
+        order=order,
+    )
+    return KnowledgeDocumentListResponse(data=[KnowledgeDocumentOut.model_validate(d) for d in docs], total=total)
 
 
 @router.get("/documents/{doc_id}", response_model=KnowledgeDocumentOut)

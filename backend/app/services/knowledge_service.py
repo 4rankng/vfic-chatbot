@@ -304,13 +304,71 @@ class KnowledgeService:
         emb = vec_literal(await embedder(query))
         return await KnowledgeChunkRepo(self.db).search_similar(emb, top_k, project_id=project_id)
 
-    async def list(self, *, status_: KnowledgeStatus | None = None, project_id: uuid.UUID | None = None) -> list[KnowledgeDocument]:
-        q = select(KnowledgeDocument)
+    async def list(
+        self,
+        *,
+        status_: KnowledgeStatus | None = None,
+        project_id: uuid.UUID | None = None,
+        stage: str | None = None,
+        needs_review: bool | None = None,
+        q: str | None = None,
+        sort_by: str | None = None,
+        order: str | None = "desc",
+        page: int = 1,
+        per_page: int = 25,
+    ) -> tuple[list[KnowledgeDocument], int]:
+        query = select(KnowledgeDocument).outerjoin(
+            Project,
+            KnowledgeDocument.project_id == Project.id,
+        )
         if status_ is not None:
-            q = q.where(KnowledgeDocument.status == status_)
+            query = query.where(KnowledgeDocument.status == status_)
         if project_id is not None:
-            q = q.where(KnowledgeDocument.project_id == project_id)
-        return list((await self.db.scalars(q.order_by(desc(KnowledgeDocument.created_at)))).all())
+            query = query.where(KnowledgeDocument.project_id == project_id)
+        if stage:
+            query = query.where(func.upper(KnowledgeDocument.stage) == stage.upper())
+        if needs_review is True:
+            flagged_count = func.coalesce(
+                func.jsonb_array_length(
+                    KnowledgeDocument.digest_meta["flagged_unit_indexes"]
+                ),
+                0,
+            )
+            query = query.where(
+                (flagged_count > 0)
+                | (KnowledgeDocument.status == KnowledgeStatus.FAILED)
+                | (func.upper(KnowledgeDocument.stage).in_(["FAILED", "ERROR"]))
+            )
+        if q:
+            pat = f"%{q.strip()}%"
+            ua = func.extensions.unaccent
+            query = query.where(
+                ua(KnowledgeDocument.file_name).ilike(ua(pat))
+                | ua(KnowledgeDocument.source).ilike(ua(pat))
+                | ua(KnowledgeDocument.mime_type).ilike(ua(pat))
+                | ua(KnowledgeDocument.digest_summary).ilike(ua(pat))
+                | ua(KnowledgeDocument.stage).ilike(ua(pat))
+                | ua(Project.name).ilike(ua(pat))
+            )
+
+        sort_map = {
+            "created_at": KnowledgeDocument.created_at,
+            "updated_at": KnowledgeDocument.updated_at,
+            "file_name": KnowledgeDocument.file_name,
+            "stage": KnowledgeDocument.stage,
+            "status": KnowledgeDocument.status,
+        }
+        sort_col = sort_map.get((sort_by or "").lower()) or KnowledgeDocument.created_at
+        order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
+        total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
+        rows = (
+            await self.db.scalars(
+                query.order_by(order_expr)
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
+        ).all()
+        return list(rows), int(total or 0)
 
     async def reconcile(self, current_drive_ids: list[str]) -> int:
         """Drop knowledge_documents whose drive_file_id is no longer in Drive (cascades chunks)."""

@@ -8,21 +8,19 @@ import {
   useRefresh,
 } from "ra-core";
 import {
-  Activity,
   Boxes,
   BusFront,
   ChevronLeft,
   ChevronRight,
-  FileText,
   HelpCircle,
   MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
-  Star,
   Upload,
 } from "lucide-react";
 import { DeleteButton } from "@/components/admin";
+import { ListPagination } from "@/components/admin/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,7 +53,7 @@ import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { ProjectFeatures } from "./ProjectFeatures";
 
 const ProjectListContent = () => {
-  const { data, isPending } = useListContext<Project>();
+  const { data, isPending, total } = useListContext<Project>();
   const { permissions } = usePermissions();
   const isAdmin = permissions === "admin";
   const canEdit = permissions === "admin" || permissions === "recruiter";
@@ -79,14 +77,6 @@ const ProjectListContent = () => {
   const selectedProject =
     projects.find((project) => project.id === selectedId) ?? projects[0] ??
     null;
-  const activeCount = projects.filter((project) => project.is_active).length;
-  const totalDocs = projects.reduce(
-    (sum, project) => sum + (project.knowledge_document_count ?? 0),
-    0,
-  );
-  const projectWithDocs = projects.filter(
-    (project) => (project.knowledge_document_count ?? 0) > 0,
-  ).length;
 
   return (
     <div className="min-h-[calc(100vh-7rem)] px-4 py-5 pb-24 md:px-0 md:py-0 md:pb-0">
@@ -96,8 +86,8 @@ const ProjectListContent = () => {
             Quản lý dự án
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Theo dõi thẻ sản phẩm, nguồn kiến thức và các đặc điểm sản phẩm mà
-            agent dùng khi tư vấn ứng viên.
+            {total ?? 0} dự án. Theo dõi thẻ sản phẩm, nguồn kiến thức và các
+            đặc điểm sản phẩm mà agent dùng khi tư vấn ứng viên.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refresh()}>
@@ -124,40 +114,6 @@ const ProjectListContent = () => {
           </>
         )}
       </TopToolbar>
-
-      <StatsRibbon
-        stats={[
-          {
-            icon: <Boxes className="size-4" />,
-            label: "Dự án",
-            value: String(projects.length),
-            detail: `${activeCount} đang hoạt động`,
-          },
-          {
-            icon: <Activity className="size-4" />,
-            label: "Tỷ lệ bật",
-            value: projects.length
-              ? `${Math.round((activeCount / projects.length) * 100)}%`
-              : "0%",
-            detail: "Agent ưu tiên dự án đang hoạt động",
-            progress: projects.length
-              ? Math.round((activeCount / projects.length) * 100)
-              : 0,
-          },
-          {
-            icon: <FileText className="size-4" />,
-            label: "Nguồn kiến thức",
-            value: String(totalDocs),
-            detail: `${projectWithDocs} dự án có tài liệu`,
-          },
-          {
-            icon: <Star className="size-4" />,
-            label: "Thẻ sản phẩm",
-            value: String(projects.filter((project) => project.summary).length),
-            detail: "Có tóm tắt / thẻ danh mục",
-          },
-        ]}
-      />
 
       <div className="mt-4 space-y-4">
         <ProjectSwitcher
@@ -188,6 +144,10 @@ const ProjectListContent = () => {
       {isAdmin && (
         <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
       )}
+      <ListPagination
+        rowsPerPageOptions={[10, 25, 50, 100]}
+        className="mt-4 justify-center"
+      />
     </div>
   );
 };
@@ -247,80 +207,6 @@ const ReadinessRing = ({
     </svg>
   );
 };
-
-const StatsRibbon = ({
-  stats,
-}: {
-  stats: {
-    icon: React.ReactNode;
-    label: string;
-    value: string;
-    detail: string;
-    /** Optional 0–100; when present, an SVG ring replaces the icon tile. */
-    progress?: number;
-  }[];
-}) => (
-  <div className="mt-4 grid overflow-hidden rounded-lg border bg-card/80 shadow-sm backdrop-blur-[1px] sm:grid-cols-2 lg:grid-cols-4">
-    {stats.map((stat) => {
-      const hasRing = typeof stat.progress === "number";
-      const dash = hasRing
-        ? (Math.max(0, Math.min(100, stat.progress as number)) / 100) *
-          RING_CIRCUMFERENCE
-        : 0;
-      return (
-        <div
-          key={stat.label}
-          className="flex min-h-12 items-center gap-3 border-b px-4 py-2 last:border-b-0 sm:[&:nth-child(2n)]:border-l lg:border-b-0 lg:border-l lg:first:border-l-0"
-        >
-          {hasRing ? (
-            <svg
-              viewBox="0 0 36 36"
-              className="size-9 shrink-0 -rotate-90"
-              aria-hidden="true"
-            >
-              <circle
-                cx="18"
-                cy="18"
-                r="15"
-                fill="none"
-                strokeWidth="3.5"
-                stroke="var(--border)"
-              />
-              <circle
-                cx="18"
-                cy="18"
-                r="15"
-                fill="none"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                stroke="var(--feature-ready)"
-                strokeDasharray={`${dash} ${RING_CIRCUMFERENCE}`}
-                className="transition-all duration-500"
-              />
-            </svg>
-          ) : (
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-              {stat.icon}
-            </span>
-          )}
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="text-lg font-semibold leading-none tabular-nums">
-                {stat.value}
-              </span>
-              <span className="truncate text-xs font-medium text-muted-foreground">
-                {stat.label}
-              </span>
-            </div>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {stat.detail}
-            </p>
-          </div>
-        </div>
-      );
-    })}
-  </div>
-);
 
 const ProjectStatusBadge = ({
   active,
@@ -746,7 +632,7 @@ const BusRouteCard = ({ route }: { route: BusRoute }) => (
 );
 
 export const ProjectList = () => (
-  <ListBase perPage={100} sort={{ field: "name", order: "ASC" }}>
+  <ListBase perPage={25} sort={{ field: "name", order: "ASC" }}>
     <ProjectListContent />
   </ListBase>
 );

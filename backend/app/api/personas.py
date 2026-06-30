@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,15 +30,24 @@ router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
 
 @router.get("", response_model=PersonaListResponse)
 async def list_personas(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    sort: str | None = Query(None, description="Sort field (name, slug, created_at, updated_at)"),
+    order: str | None = Query("desc", description="Sort direction: asc | desc"),
     _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> PersonaListResponse:
-    rows = await PersonaService(db).list()
+    rows, total = await PersonaService(db).list(
+        page=page,
+        per_page=per_page,
+        sort_by=sort,
+        order=order,
+    )
     out = []
     for p in rows:
         d = PersonaOut.model_validate(p)
         d.assigned_projects = getattr(p, "_assigned_projects", [])
         out.append(d)
-    return PersonaListResponse(data=out, total=len(rows))
+    return PersonaListResponse(data=out, total=total)
 
 
 @router.post("", response_model=PersonaOut, status_code=status.HTTP_201_CREATED)

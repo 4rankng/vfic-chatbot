@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import text
@@ -118,9 +118,32 @@ class PersonaService:
             persona._assigned_projects = []
         return persona
 
-    async def list(self) -> list[Persona]:
+    async def list(
+        self,
+        *,
+        page: int = 1,
+        per_page: int = 25,
+        sort_by: str | None = None,
+        order: str | None = "desc",
+    ) -> tuple[list[Persona], int]:
+        query = select(Persona)
+        total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
+        sort_map = {
+            "created_at": Persona.created_at,
+            "updated_at": Persona.updated_at,
+            "name": Persona.name,
+            "slug": Persona.slug,
+        }
+        sort_col = sort_map.get((sort_by or "").lower()) or Persona.created_at
+        order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
         rows = list(
-            (await self.db.scalars(select(Persona).order_by(Persona.created_at.desc()))).all()
+            (
+                await self.db.scalars(
+                    query.order_by(order_expr)
+                    .offset((page - 1) * per_page)
+                    .limit(per_page)
+                )
+            ).all()
         )
         # Enrich with assigned projects (projects whose default_persona_id = persona.id).
         try:
@@ -136,7 +159,7 @@ class PersonaService:
         except Exception:  # noqa: BLE001
             for persona in rows:
                 persona._assigned_projects = []
-        return rows
+        return rows, int(total or 0)
 
     async def create(self, body: PersonaCreate, admin: User) -> Persona:
         slug = (body.slug or _slugify(body.name)).strip() or _slugify(body.name)

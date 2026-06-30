@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ShowBase, useDataProvider, useListContext, useRefresh } from "ra-core";
+import { ShowBase, useDataProvider, useRefresh } from "ra-core";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { LEAD_STAGES, type Lead } from "../types";
 import { LeadCard } from "./LeadCard";
 import { LeadShowContentSheet } from "./LeadShow";
+import type { LeadSort } from "./LeadsToolbar";
 
 export { LEAD_STAGES };
 
@@ -62,7 +63,7 @@ const SECTION_CONFIGS: SectionConfig[] = [
   ...LEAD_STAGES.map((stage) => ({
     key: stage.value,
     title: stage.label,
-    filter: { stage: stage.value },
+    filter: { stage: stage.value, exclude_needs_reply: true },
   })),
 ];
 
@@ -86,8 +87,15 @@ const createSectionResults = (isLoading: boolean) =>
     {} as Record<SectionKey, SectionResult>,
   );
 
-export const LeadListContent = () => {
-  const { sort, filterValues } = useListContext<Lead>();
+export const LeadListContent = ({
+  searchQuery,
+  sort,
+  onTotalChange,
+}: {
+  searchQuery: string;
+  sort: LeadSort;
+  onTotalChange: (total: number) => void;
+}) => {
   const dataProvider = useDataProvider();
   const refresh = useRefresh();
   const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(
@@ -99,14 +107,13 @@ export const LeadListContent = () => {
   );
   const [refreshTick, setRefreshTick] = useState(0);
 
-  const filters = filterValues ?? {};
-  const searchQuery = typeof filters.q === "string" ? filters.q.trim() : "";
+  const normalizedSearchQuery = searchQuery.trim();
   const sortField = sort?.field ?? "updated_at";
   const sortOrder = sort?.order === "ASC" ? "ASC" : "DESC";
 
   useEffect(() => {
     setSectionPages(createSectionPages());
-  }, [searchQuery, sortField, sortOrder]);
+  }, [normalizedSearchQuery, sortField, sortOrder]);
 
   useEffect(() => {
     const refreshSections = () => setRefreshTick((value) => value + 1);
@@ -137,7 +144,7 @@ export const LeadListContent = () => {
         const response = await dataProvider.getList("leads", {
           filter: {
             ...config.filter,
-            ...(searchQuery ? { q: searchQuery } : {}),
+            ...(normalizedSearchQuery ? { q: normalizedSearchQuery } : {}),
           },
           pagination: { page, perPage: SECTION_PER_PAGE },
           sort: { field: sortField, order: sortOrder },
@@ -163,7 +170,7 @@ export const LeadListContent = () => {
         }));
       }
     },
-    [dataProvider, searchQuery, sortField, sortOrder],
+    [dataProvider, normalizedSearchQuery, sortField, sortOrder],
   );
 
   useEffect(() => {
@@ -185,51 +192,43 @@ export const LeadListContent = () => {
 
     const loadSections = async () => {
       const pages = sectionPagesRef.current;
-      const rows = await Promise.all(
-        SECTION_CONFIGS.map(async (section) => {
-          try {
-            const response = await dataProvider.getList("leads", {
-              filter: {
-                ...section.filter,
-                ...(searchQuery ? { q: searchQuery } : {}),
-              },
-              pagination: {
-                page: pages[section.key] ?? 1,
-                perPage: SECTION_PER_PAGE,
-              },
-              sort: { field: sortField, order: sortOrder },
-            });
-            return {
-              key: section.key,
-              result: {
-                leads: response.data as Lead[],
-                total: response.total ?? 0,
-                isLoading: false,
-                error: false,
-              },
-            };
-          } catch {
-            return {
-              key: section.key,
-              result: {
-                leads: [],
-                total: 0,
-                isLoading: false,
-                error: true,
-              },
-            };
-          }
-        }),
-      );
-
-      if (cancelled) return;
-
-      setSectionResults((prev) => {
-        const next = { ...prev };
-        rows.forEach(({ key, result }) => {
-          next[key] = result;
-        });
-        return next;
+      // Fire all section fetches in parallel but update state progressively
+      // so a fast section renders without waiting for the slowest one.
+      SECTION_CONFIGS.forEach(async (section) => {
+        try {
+          const response = await dataProvider.getList("leads", {
+            filter: {
+              ...section.filter,
+              ...(normalizedSearchQuery ? { q: normalizedSearchQuery } : {}),
+            },
+            pagination: {
+              page: pages[section.key] ?? 1,
+              perPage: SECTION_PER_PAGE,
+            },
+            sort: { field: sortField, order: sortOrder },
+          });
+          if (cancelled) return;
+          setSectionResults((prev) => ({
+            ...prev,
+            [section.key]: {
+              leads: response.data as Lead[],
+              total: response.total ?? 0,
+              isLoading: false,
+              error: false,
+            },
+          }));
+        } catch {
+          if (cancelled) return;
+          setSectionResults((prev) => ({
+            ...prev,
+            [section.key]: {
+              leads: [],
+              total: 0,
+              isLoading: false,
+              error: true,
+            },
+          }));
+        }
       });
     };
 
@@ -241,7 +240,7 @@ export const LeadListContent = () => {
   }, [
     dataProvider,
     refreshTick,
-    searchQuery,
+    normalizedSearchQuery,
     sortField,
     sortOrder,
   ]);
@@ -269,10 +268,14 @@ export const LeadListContent = () => {
   const hasAnyLead = allSections.some((section) => section.total > 0);
   const hasEverySectionError = allSections.every((section) => section.error);
 
+  useEffect(() => {
+    onTotalChange(allSections.reduce((sum, section) => sum + section.total, 0));
+  }, [allSections, onTotalChange]);
+
   if (
     !isAnySectionLoading &&
     !hasAnyLead &&
-    !searchQuery &&
+    !normalizedSearchQuery &&
     !hasEverySectionError
   ) {
     return (
@@ -469,7 +472,7 @@ const LeadSection = ({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border/70 bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] transition-colors hover:border-primary/35 hover:bg-card disabled:cursor-not-allowed disabled:opacity-50 dark:border-border/80 dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)] dark:hover:bg-accent/20"
               disabled={isLoading || page <= 1}
               onClick={() => onPageChange(Math.max(1, page - 1))}
               aria-label={`Trang trước của ${title}`}
@@ -481,7 +484,7 @@ const LeadSection = ({
             </span>
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border/70 bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] transition-colors hover:border-primary/35 hover:bg-card disabled:cursor-not-allowed disabled:opacity-50 dark:border-border/80 dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)] dark:hover:bg-accent/20"
               disabled={isLoading || page >= totalPages}
               onClick={() => onPageChange(Math.min(totalPages, page + 1))}
               aria-label={`Trang tiếp theo của ${title}`}
@@ -496,7 +499,7 @@ const LeadSection = ({
 };
 
 const LeadCardSkeleton = () => (
-  <div className="rounded-lg border bg-card px-2.5 py-1.5">
+  <div className="rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] dark:border-border/80 dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)]">
     <div className="flex items-center gap-2">
       <Skeleton shimmer className="size-7 shrink-0 rounded-full" />
       <div className="min-w-0 flex-1">

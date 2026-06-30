@@ -79,9 +79,9 @@
   --radius: 14px;
   --background: oklch(0.971 0.0067 115.7); /* #f5f6f1 */
   --foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --card: oklch(0.971 0.0067 115.7); /* #f5f6f1 */
+  --card: oklch(1 0 0); /* #ffffff */
   --card-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --popover: oklch(0.971 0.0067 115.7); /* #f5f6f1 */
+  --popover: oklch(1 0 0); /* #ffffff */
   --popover-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
   --primary: oklch(0.6652 0.1634 50.3); /* #e0701f */
   --primary-foreground: oklch(1 0 0); /* #ffffff */

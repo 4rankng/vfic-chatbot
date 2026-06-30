@@ -61,8 +61,9 @@ class DashboardService:
         recent_turns = await repo.recent_turns_count(5)
 
         total_leads = sum(counts_by_stage.values())
-        qualified_count = counts_by_stage.get("REGISTERED", 0)
-        hired_count = 0  # no HIRED stage in the 4-stage model
+        registered_count = counts_by_stage.get("REGISTERED", 0)
+        qualified_count = 0  # no distinct QUALIFIED stage in the 4-stage model
+        hired_count = registered_count  # REGISTERED is the closest funnel endpoint
         bot_run_count = int(bot_summary["total"] or 0)
         bot_sent_count = int(bot_summary["sent"] or 0)
         stage_breakdown = [

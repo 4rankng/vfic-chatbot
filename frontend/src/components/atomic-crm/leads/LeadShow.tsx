@@ -352,11 +352,15 @@ const cleanText = (value?: string | number | null) => {
 
 const CompactCopy = ({ value }: { value: string }) => {
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
     } catch {
       /* best effort */
     }

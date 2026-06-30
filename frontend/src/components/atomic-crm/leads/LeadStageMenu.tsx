@@ -92,8 +92,9 @@ export const LeadStageMenu = () => {
           // trigger undiscoverable on touch (no hover state). Mirrors the
           // always-visible treatment already applied to the call button.
           className={cn(
-            "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition",
-            "hover:bg-muted hover:text-foreground",
+            "inline-flex size-7 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition",
+            "hover:border-border hover:bg-card hover:text-foreground hover:shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)]",
+            "dark:hover:border-border/80 dark:hover:bg-accent/20 dark:hover:shadow-[0_2px_10px_rgba(0,0,0,0.28)]",
             "disabled:cursor-wait disabled:opacity-50",
           )}
         >
@@ -102,7 +103,7 @@ export const LeadStageMenu = () => {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-52"
+        className="w-52 border-border bg-popover shadow-[0_12px_28px_rgba(26,34,40,0.16),0_4px_10px_rgba(26,34,40,0.08)] dark:border-border/80 dark:shadow-[0_16px_32px_rgba(0,0,0,0.44)]"
         onClick={(e) => e.stopPropagation()}
       >
         <DropdownMenuLabel>Chuyển giai đoạn</DropdownMenuLabel>

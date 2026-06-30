@@ -271,6 +271,56 @@ class LeadService:
         ).all()
         return list(rows), int(total or 0)
 
+    _MATERIALIZE_SQL_ADMIN = text("""
+        INSERT INTO public.leads (
+          zalo_id,
+          lead_stage,
+          assigned_recruiter_id,
+          created_at,
+          updated_at
+        )
+        SELECT
+          c.zalo_chat_id,
+          'NEW'::lead_stage,
+          c.assigned_recruiter_id,
+          now(),
+          c.updated_at
+        FROM public.conversations c
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM public.leads l
+          WHERE l.zalo_id = c.zalo_chat_id
+        )
+        ON CONFLICT (zalo_id) DO NOTHING
+    """)
+
+    _MATERIALIZE_SQL_SCOPED = text("""
+        INSERT INTO public.leads (
+          zalo_id,
+          lead_stage,
+          assigned_recruiter_id,
+          created_at,
+          updated_at
+        )
+        SELECT
+          c.zalo_chat_id,
+          'NEW'::lead_stage,
+          c.assigned_recruiter_id,
+          now(),
+          c.updated_at
+        FROM public.conversations c
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM public.leads l
+          WHERE l.zalo_id = c.zalo_chat_id
+        )
+        AND (
+          c.assigned_recruiter_id = :viewer_id
+          OR c.assigned_recruiter_id IS NULL
+        )
+        ON CONFLICT (zalo_id) DO NOTHING
+    """)
+
     async def materialize_conversation_leads(self, viewer: User) -> None:
         """Ensure every visible chat has a lead card.
 
@@ -278,46 +328,17 @@ class LeadService:
         later or fail to produce profile fields. The CRM board still needs a
         stable card for that chat, defaulting to the Mới stage.
         """
-        params: dict[str, object] = {}
-        scope_sql = ""
-        if viewer.role != Role.admin:
-            scope_sql = """
-              AND (
-                c.assigned_recruiter_id = :viewer_id
-                OR c.assigned_recruiter_id IS NULL
-              )
-            """
-            params["viewer_id"] = viewer.id
+        params: dict[str, object] = (
+            {"viewer_id": viewer.id} if viewer.role != Role.admin else {}
+        )
+        sql = (
+            self._MATERIALIZE_SQL_SCOPED
+            if viewer.role != Role.admin
+            else self._MATERIALIZE_SQL_ADMIN
+        )
 
         await self.db.execute(text("SELECT pg_advisory_xact_lock(hashtext('materialize_conversation_leads'))"))
-        await self.db.execute(
-            text(
-                f"""
-                INSERT INTO public.leads (
-                  zalo_id,
-                  lead_stage,
-                  assigned_recruiter_id,
-                  created_at,
-                  updated_at
-                )
-                SELECT
-                  c.zalo_chat_id,
-                  'NEW'::lead_stage,
-                  c.assigned_recruiter_id,
-                  c.created_at,
-                  c.updated_at
-                FROM public.conversations c
-                WHERE NOT EXISTS (
-                  SELECT 1
-                  FROM public.leads l
-                  WHERE l.zalo_id = c.zalo_chat_id
-                )
-                {scope_sql}
-                ON CONFLICT (zalo_id) DO NOTHING
-                """
-            ),
-            params,
-        )
+        await self.db.execute(sql, params)
         await self.db.commit()
 
     def _unanswered_conversation_exists(self, viewer: User):

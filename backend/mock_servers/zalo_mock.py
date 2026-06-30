@@ -55,6 +55,11 @@ AUTO_REPLY_DELAY = float(os.environ.get("AUTO_REPLY_DELAY", "1.5"))
 _conversations: dict[str, list[dict]] = {}
 _msg_counter = 0
 
+# Track chat_ids that have already auto-replied to prevent infinite
+# bot→mock→webhook→bot loops.  Reset when a user manually sends via /mock/send.
+_auto_replied: set[str] = set()
+_background_tasks: set[asyncio.Task] = set()
+
 # Sample replies a "user" sends back when the bot messages them.
 _AUTO_REPLIES = [
     "dạ vâng, em hiểu rồi ạ",
@@ -92,6 +97,9 @@ def _ts_ms() -> int:
 async def _fire_user_reply(chat_id: str) -> None:
     """Background task: wait briefly then POST a simulated user reply
     back to the backend webhook so the full round-trip works in dev."""
+    if chat_id in _auto_replied:
+        return
+    _auto_replied.add(chat_id)
     await asyncio.sleep(AUTO_REPLY_DELAY)
 
     reply_text = random.choice(_AUTO_REPLIES)
@@ -154,7 +162,9 @@ async def bot_method(token: str, method: str, request: Request) -> JSONResponse:
         reply_text = body.get("text") or body.get("caption") or ""
         _record(chat_id, "bot", reply_text)
         # Simulate user replying back after a short delay.
-        asyncio.create_task(_fire_user_reply(chat_id))
+        task = asyncio.create_task(_fire_user_reply(chat_id))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
         return JSONResponse(
             {
                 "ok": True,
@@ -228,6 +238,8 @@ async def mock_send(request: Request) -> JSONResponse:
     }
 
     _record(chat_id, "user", text)
+    # Reset auto-reply so the next bot message triggers a fresh reply.
+    _auto_replied.discard(chat_id)
     logger.info("SEND chat=%s  text=%s", chat_id, text[:100])
 
     try:

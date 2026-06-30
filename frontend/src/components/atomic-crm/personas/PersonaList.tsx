@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListPagination } from "@/components/admin/list-pagination";
 import { Plus, Sparkles, Zap } from "lucide-react";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { Persona } from "../types";
@@ -133,12 +134,16 @@ const PersonaListContent = () => {
           )}
         </div>
       </Card>
+      <ListPagination
+        rowsPerPageOptions={[10, 25, 50, 100]}
+        className="mt-4 justify-center"
+      />
     </div>
   );
 };
 
 export const PersonaList = () => (
-  <ListBase perPage={100} sort={{ field: "name", order: "ASC" }}>
+  <ListBase perPage={25} sort={{ field: "name", order: "ASC" }}>
     <PersonaListContent />
   </ListBase>
 );

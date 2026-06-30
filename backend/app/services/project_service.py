@@ -79,21 +79,57 @@ class ProjectService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def list(self, is_active: bool | None = None) -> list[Project]:
-        q = select(Project).order_by(Project.created_at.desc())
+    async def list(
+        self,
+        is_active: bool | None = None,
+        *,
+        page: int = 1,
+        per_page: int = 25,
+        sort_by: str | None = None,
+        order: str | None = "desc",
+    ) -> tuple[list[Project], int]:
+        q = select(Project)
         if is_active is not None:
             q = q.where(Project.is_active == is_active)
-        return list((await self.db.scalars(q)).all())
+        total = await self.db.scalar(select(func.count()).select_from(q.subquery()))
+        sort_map = {
+            "created_at": Project.created_at,
+            "updated_at": Project.updated_at,
+            "name": Project.name,
+            "is_active": Project.is_active,
+        }
+        sort_col = sort_map.get((sort_by or "").lower()) or Project.created_at
+        order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
+        rows = (
+            await self.db.scalars(
+                q.order_by(order_expr)
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
+        ).all()
+        return list(rows), int(total or 0)
 
     async def list_with_readiness(
-        self, is_active: bool | None = None
-    ) -> list[ProjectOut]:
+        self,
+        is_active: bool | None = None,
+        *,
+        page: int = 1,
+        per_page: int = 25,
+        sort_by: str | None = None,
+        order: str | None = "desc",
+    ) -> tuple[list[ProjectOut], int]:
         """List projects with per-project feature readiness attached.
 
         One batched ``readiness_by_project`` query — no N+1. The catalog total is the
         active-feature count.
         """
-        rows = await self.list(is_active)
+        rows, row_total = await self.list(
+            is_active,
+            page=page,
+            per_page=per_page,
+            sort_by=sort_by,
+            order=order,
+        )
         repo = JobFeatureValueRepo(self.db)
         ready = await repo.readiness_by_project([p.id for p in rows])
         total = await repo.active_catalog_size()
@@ -106,7 +142,7 @@ class ProjectService:
                 ready=ready.get(p.id, 0), total=total
             )
             out.append(o)
-        return out
+        return out, row_total
 
     async def get(self, project_id: uuid.UUID) -> Project:
         return await self._require_project(project_id)

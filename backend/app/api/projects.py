@@ -32,12 +32,22 @@ router = APIRouter(prefix="/knowledge/projects", tags=["projects"])
 
 @router.get("", response_model=ProjectListResponse)
 async def list_projects(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     is_active: bool | None = Query(None),
+    sort: str | None = Query(None, description="Sort field (name, created_at, updated_at, is_active)"),
+    order: str | None = Query("desc", description="Sort direction: asc | desc"),
     _user: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectListResponse:
-    data = await ProjectService(db).list_with_readiness(is_active)
-    return ProjectListResponse(data=data, total=len(data))
+    data, total = await ProjectService(db).list_with_readiness(
+        is_active,
+        page=page,
+        per_page=per_page,
+        sort_by=sort,
+        order=order,
+    )
+    return ProjectListResponse(data=data, total=total)
 
 
 @router.get("/{project_id}", response_model=ProjectOut)

@@ -1,6 +1,7 @@
 import { ListBase, useListContext, useRedirect } from "ra-core";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListPagination } from "@/components/admin/list-pagination";
 import { Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
@@ -80,6 +81,10 @@ const BotRunListContent = () => {
           )}
         </div>
       </Card>
+      <ListPagination
+        rowsPerPageOptions={[10, 25, 50, 100]}
+        className="mt-4 justify-center"
+      />
     </div>
   );
 };
@@ -87,7 +92,7 @@ const BotRunListContent = () => {
 // ListBase provides the ListContext; the consumer that calls useListContext
 // must be a child of ListBase, not a sibling rendered alongside it.
 export const BotRunList = () => (
-  <ListBase perPage={100} sort={{ field: "started_at", order: "DESC" }}>
+  <ListBase perPage={25} sort={{ field: "started_at", order: "DESC" }}>
     <BotRunListContent />
   </ListBase>
 );

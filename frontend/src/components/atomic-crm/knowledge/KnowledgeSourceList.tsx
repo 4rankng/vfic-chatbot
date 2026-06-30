@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ListPagination } from "@/components/admin/list-pagination";
 import {
   Select,
   SelectContent,
@@ -29,26 +30,27 @@ const KnowledgeSourceListContent = () => {
     projects,
     projectById,
     sources,
-    filteredSources,
+    pageSources,
+    total,
     query,
     setQuery,
     projectFilter,
     selectProject,
   } = useKnowledgeSourceFilters();
 
-  // Keep the selection valid as the filtered list changes; default to the top.
+  // Keep the selection valid as the backend page changes; default to the top.
   useEffect(() => {
-    if (filteredSources.length === 0) {
+    if (pageSources.length === 0) {
       setSelectedId(null);
       return;
     }
     if (
       !selectedId ||
-      !filteredSources.some((source) => String(source.id) === selectedId)
+      !pageSources.some((source) => String(source.id) === selectedId)
     ) {
-      setSelectedId(String(filteredSources[0].id));
+      setSelectedId(String(pageSources[0].id));
     }
-  }, [filteredSources, selectedId]);
+  }, [pageSources, selectedId]);
 
   // Auto-select a source that newly appears mid-session (e.g., right after an
   // upload) so the user immediately sees its progress / extraction.
@@ -69,8 +71,8 @@ const KnowledgeSourceListContent = () => {
   }, [sources]);
 
   const selectedSource =
-    filteredSources.find((source) => String(source.id) === selectedId) ??
-    filteredSources[0] ??
+    pageSources.find((source) => String(source.id) === selectedId) ??
+    pageSources[0] ??
     null;
   const uploadProjectId =
     projectFilter !== ALL_PROJECTS ? projectFilter : selectedSource?.project_id;
@@ -155,7 +157,7 @@ const KnowledgeSourceListContent = () => {
           <SourceSelectorSkeleton />
         ) : sources.length === 0 ? (
           <InlineKnowledgeUploader projects={projects ?? []} />
-        ) : filteredSources.length === 0 ? (
+        ) : pageSources.length === 0 ? (
           <EmptyState
             icon={<FileText className="size-6" />}
             title="Không tìm thấy tài liệu"
@@ -176,10 +178,15 @@ const KnowledgeSourceListContent = () => {
         ) : (
           <>
             <SourceSelector
-              sources={filteredSources}
+              sources={pageSources}
               selectedSource={selectedSource}
               projectById={projectById}
+              total={total}
               onSelect={setSelectedId}
+            />
+            <ListPagination
+              rowsPerPageOptions={[10, 25, 50, 100]}
+              className="justify-center"
             />
             {selectedSource ? (
               <KnowledgeDetailPanel
@@ -209,11 +216,13 @@ const SourceSelector = ({
   sources,
   selectedSource,
   projectById,
+  total,
   onSelect,
 }: {
-  sources: ReturnType<typeof useKnowledgeSourceFilters>["filteredSources"];
-  selectedSource: ReturnType<typeof useKnowledgeSourceFilters>["filteredSources"][number] | null;
+  sources: ReturnType<typeof useKnowledgeSourceFilters>["pageSources"];
+  selectedSource: ReturnType<typeof useKnowledgeSourceFilters>["pageSources"][number] | null;
   projectById: ReturnType<typeof useKnowledgeSourceFilters>["projectById"];
+  total: number;
   onSelect: (id: string) => void;
 }) => {
   const selectedProject = selectedSource?.project_id
@@ -228,7 +237,7 @@ const SourceSelector = ({
             Nguồn đang xem
           </h3>
           <Badge variant="secondary" className="rounded-[8px]">
-            {sources.length} nguồn
+            {total} nguồn
           </Badge>
           {selectedSource && (
             <span className="kb-mono truncate text-xs text-muted-foreground">
@@ -273,7 +282,7 @@ const SourceSelectorSkeleton = () => (
 );
 
 export const KnowledgeSourceList = () => (
-  <ListBase perPage={100} sort={{ field: "updated_at", order: "DESC" }}>
+  <ListBase perPage={25} sort={{ field: "updated_at", order: "DESC" }}>
     <KnowledgeSourceListContent />
   </ListBase>
 );
