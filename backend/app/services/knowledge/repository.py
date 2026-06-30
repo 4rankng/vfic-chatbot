@@ -10,6 +10,7 @@ Encapsulates raw SQL the ORM cannot express cleanly:
 NO business logic, NO LLM calls. Repositories take a ``db: AsyncSession`` and execute
 SQL; coercion/orchestration live in ``coercion.py`` / ``pipeline.py``.
 """
+
 from __future__ import annotations
 
 import json
@@ -29,7 +30,9 @@ class KnowledgeChunkRepo:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def replace_for_doc(self, doc, units_with_vectors: list[tuple[dict, list[float]]]) -> None:
+    async def replace_for_doc(
+        self, doc, units_with_vectors: list[tuple[dict, list[float]]]
+    ) -> None:
         """Delete a document's existing chunks, then insert one row per (unit, vector).
 
         ``units_with_vectors`` is a list of ``(coerced_unit_dict, embedding_vector)`` in the
@@ -106,7 +109,9 @@ class KnowledgeChunkRepo:
                     "citation_label": (metadata.get("citation") or {}).get("label"),
                     "content_type": (metadata.get("chunk_metadata") or {}).get("content_type"),
                     "route_id": (metadata.get("chunk_metadata") or {}).get("route_id"),
-                    "effective_from": (metadata.get("document_metadata") or {}).get("effective_from"),
+                    "effective_from": (metadata.get("document_metadata") or {}).get(
+                        "effective_from"
+                    ),
                     "effective_to": (metadata.get("document_metadata") or {}).get("effective_to"),
                     "created_at": row["created_at"],
                 }
@@ -168,6 +173,16 @@ class KnowledgeChunkRepo:
             ).all()
         return [{"content": r.content, "similarity": float(r.similarity)} for r in rows]
 
+    async def reassign_project(self, doc_id: uuid.UUID, project_id: uuid.UUID | None) -> None:
+        """Move a document's chunks to a different project (or clear the project)."""
+        await self.db.execute(
+            text("UPDATE knowledge_chunks SET project_id = :pid WHERE document_id = :did"),
+            {
+                "pid": str(project_id) if project_id is not None else None,
+                "did": str(doc_id),
+            },
+        )
+
 
 _FEATURE_COLUMNS = (
     "jfv.id, jfv.project_id, jfv.feature_id, jfv.value_text, jfv.value_json, "
@@ -176,6 +191,25 @@ _FEATURE_COLUMNS = (
     "wfc.feature_key, wfc.name_vi, wfc.category, wfc.worker_question_vi"
 )
 _FEATURE_FROM = "job_feature_values jfv JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id"
+
+
+class KnowledgeDocumentRepo:
+    """Data access for ``knowledge_documents`` table."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def delete_orphans_by_drive_ids(self, current_drive_ids: list[str]) -> int:
+        """Drop documents whose drive_file_id is no longer in Drive (cascades chunks)."""
+        res = await self.db.execute(
+            text(
+                "DELETE FROM knowledge_documents WHERE drive_file_id IS NOT NULL "
+                "AND drive_file_id <> ALL(CAST(:ids AS text[]))"
+            ),
+            {"ids": current_drive_ids},
+        )
+        await self.db.commit()
+        return res.rowcount or 0
 
 
 class JobFeatureValueRepo:
@@ -366,9 +400,7 @@ class JobFeatureValueRepo:
             )
         ).first() is not None
 
-    async def readiness_by_project(
-        self, project_ids: Sequence[uuid.UUID]
-    ) -> dict[uuid.UUID, int]:
+    async def readiness_by_project(self, project_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
         """Batched ready-feature count per project.
 
         Ready = a value row exists, is not missing/unclear, and has non-empty
@@ -476,7 +508,10 @@ class ProjectIndexRepo:
                 "jsonb_set(COALESCE(index_card, '{}'::jsonb), '{highlights}', CAST(:hl AS jsonb)) "
                 "WHERE id = :pid"
             ),
-            {"hl": json.dumps([r.value_text for r in rows], ensure_ascii=False), "pid": str(project_id)},
+            {
+                "hl": json.dumps([r.value_text for r in rows], ensure_ascii=False),
+                "pid": str(project_id),
+            },
         )
         await self.db.commit()
 
@@ -497,20 +532,24 @@ async def rebuild_bus_timetable(db: AsyncSession) -> tuple[int, int]:
     from app.services.knowledge.bus_timetable.repository import BusTimetableRepo
 
     source = (
-        await db.execute(
-            text(
-                "SELECT kd.raw_text, p.slug AS project_slug "
-                "FROM knowledge_documents kd "
-                "JOIN projects p ON p.id = kd.project_id "
-                "WHERE kd.file_name = :fn "
-                "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
-                "  AND kd.raw_text IS NOT NULL "
-                "ORDER BY kd.updated_at DESC, kd.created_at DESC "
-                "LIMIT 1"
-            ),
-            {"fn": "LGDisplay.txt"},
+        (
+            await db.execute(
+                text(
+                    "SELECT kd.raw_text, p.slug AS project_slug "
+                    "FROM knowledge_documents kd "
+                    "JOIN projects p ON p.id = kd.project_id "
+                    "WHERE kd.file_name = :fn "
+                    "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
+                    "  AND kd.raw_text IS NOT NULL "
+                    "ORDER BY kd.updated_at DESC, kd.created_at DESC "
+                    "LIMIT 1"
+                ),
+                {"fn": "LGDisplay.txt"},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if source is None:
         return (0, 0)
     parsed = parse_bus_timetable(source["raw_text"])
@@ -525,6 +564,7 @@ async def rebuild_bus_timetable(db: AsyncSession) -> tuple[int, int]:
 __all__ = [
     "JobFeatureValueRepo",
     "KnowledgeChunkRepo",
+    "KnowledgeDocumentRepo",
     "ProjectIndexRepo",
     "rebuild_bus_timetable",
     "mark_document_failed_sync",

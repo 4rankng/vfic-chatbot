@@ -8,6 +8,7 @@ Two upload routes:
 ``process`` / ``reindex`` enqueue the same async pipeline. Pipeline progress is read back
 via ``GET /documents/{id}`` (``stage`` / ``digest_meta`` / ``error``).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -31,8 +32,13 @@ from app.schemas.knowledge import (
     SearchTestResult,
     UploadRequest,
 )
+from app.services.errors import NotFoundError
 from app.services.knowledge_service import KnowledgeFileExtractionError, KnowledgeService
-from app.services.knowledge.canonical import CanonicalValidationError, load_faq_template, load_template
+from app.services.knowledge.canonical import (
+    CanonicalValidationError,
+    load_faq_template,
+    load_template,
+)
 from app.workers.ingest_worker import enqueue_ingest
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -71,8 +77,12 @@ async def list_documents(
     project_id: uuid.UUID | None = Query(None),
     stage: str | None = Query(None),
     needs_review: bool | None = Query(None),
-    q: str | None = Query(None, description="Case-insensitive search over source metadata and project name"),
-    sort: str | None = Query(None, description="Sort field (updated_at, created_at, file_name, stage, status)"),
+    q: str | None = Query(
+        None, description="Case-insensitive search over source metadata and project name"
+    ),
+    sort: str | None = Query(
+        None, description="Sort field (updated_at, created_at, file_name, stage, status)"
+    ),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -88,7 +98,9 @@ async def list_documents(
         sort_by=sort,
         order=order,
     )
-    return KnowledgeDocumentListResponse(data=[KnowledgeDocumentOut.model_validate(d) for d in docs], total=total)
+    return KnowledgeDocumentListResponse(
+        data=[KnowledgeDocumentOut.model_validate(d) for d in docs], total=total
+    )
 
 
 @router.get("/documents/{doc_id}", response_model=KnowledgeDocumentOut)
@@ -119,8 +131,7 @@ async def download_raw_document(
         media_type="text/markdown; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="{fallback_filename}"; '
-                f"filename*=UTF-8''{quote(filename)}"
+                f"attachment; filename=\"{fallback_filename}\"; filename*=UTF-8''{quote(filename)}"
             )
         },
     )
@@ -149,7 +160,11 @@ async def update_document(
     db: AsyncSession = Depends(get_db),
 ) -> KnowledgeDocumentOut:
     service = KnowledgeService(db)
-    return KnowledgeDocumentOut.model_validate(await service.update(await _load(doc_id, db), body, actor=admin))
+    try:
+        result = await service.update(await _load(doc_id, db), body, actor=admin)
+    except NotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return KnowledgeDocumentOut.model_validate(result)
 
 
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -160,14 +175,24 @@ async def delete_document(
     await service.delete(await _load(doc_id, db), actor=admin)
 
 
-@router.post("/documents/upload", response_model=KnowledgeDocumentOut, status_code=status.HTTP_201_CREATED)
-async def upload(body: UploadRequest, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> KnowledgeDocumentOut:
-    doc = await KnowledgeService(db).upload(body.file_name, body.content, body.drive_file_id, body.project_id)
+@router.post(
+    "/documents/upload", response_model=KnowledgeDocumentOut, status_code=status.HTTP_201_CREATED
+)
+async def upload(
+    body: UploadRequest, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+) -> KnowledgeDocumentOut:
+    doc = await KnowledgeService(db).upload(
+        body.file_name, body.content, body.drive_file_id, body.project_id
+    )
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
     return KnowledgeDocumentOut.model_validate(doc)
 
 
-@router.post("/documents/upload-file", response_model=KnowledgeDocumentOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/documents/upload-file",
+    response_model=KnowledgeDocumentOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def upload_file(
     file: UploadFile = File(...),
     project_id: uuid.UUID | None = Form(None),
@@ -194,7 +219,9 @@ async def upload_file(
 
 
 @router.post("/documents/{doc_id}/process", response_model=KnowledgeDocumentOut)
-async def process(doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> KnowledgeDocumentOut:
+async def process(
+    doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+) -> KnowledgeDocumentOut:
     """(Re)run the async LLM training pipeline for a document."""
     doc = await _load(doc_id, db)
     enqueue_ingest(doc.id)
@@ -202,25 +229,42 @@ async def process(doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: 
 
 
 @router.post("/documents/{doc_id}/archive", response_model=KnowledgeDocumentOut)
-async def archive(doc_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> KnowledgeDocumentOut:
-    return KnowledgeDocumentOut.model_validate(await KnowledgeService(db).archive(await _load(doc_id, db), actor=admin))
+async def archive(
+    doc_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+) -> KnowledgeDocumentOut:
+    return KnowledgeDocumentOut.model_validate(
+        await KnowledgeService(db).archive(await _load(doc_id, db), actor=admin)
+    )
 
 
 @router.post("/documents/{doc_id}/reindex", response_model=KnowledgeDocumentOut)
-async def reindex(doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> KnowledgeDocumentOut:
+async def reindex(
+    doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+) -> KnowledgeDocumentOut:
     doc = await _load(doc_id, db)
     enqueue_ingest(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
 
 
 @router.post("/search-test", response_model=list[SearchTestResult])
-async def search_test(body: SearchTestRequest, embedder=Depends(get_embedder), _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> list[SearchTestResult]:
-    rows = await KnowledgeService(db).search_test(embedder, body.query, body.top_k, project_id=body.project_id)
+async def search_test(
+    body: SearchTestRequest,
+    embedder=Depends(get_embedder),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[SearchTestResult]:
+    rows = await KnowledgeService(db).search_test(
+        embedder, body.query, body.top_k, project_id=body.project_id
+    )
     return [SearchTestResult(**r) for r in rows]
 
 
-async def record_audit_safe(db: AsyncSession, action: str, actor_id: uuid.UUID, target_id: str) -> None:
+async def record_audit_safe(
+    db: AsyncSession, action: str, actor_id: uuid.UUID, target_id: str
+) -> None:
     from app.services.audit_service import record_audit
 
-    await record_audit(db, action=action, actor_id=actor_id, target_type="knowledge_document", target_id=target_id)
+    await record_audit(
+        db, action=action, actor_id=actor_id, target_type="knowledge_document", target_id=target_id
+    )
     await db.commit()

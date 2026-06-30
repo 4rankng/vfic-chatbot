@@ -11,16 +11,13 @@ Two ingest paths:
 Successful ingest publishes bot-usable knowledge immediately. Admins remove bad
 sources by archiving/replacing them rather than approving a review queue.
 """
+
 from __future__ import annotations
 
-from io import BytesIO
-from pathlib import Path
 import uuid
 from typing import Any, Awaitable, Callable
-from zipfile import BadZipFile, ZipFile
-from xml.etree import ElementTree as ET
 
-from sqlalchemy import desc, func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.vector import vec_literal
@@ -29,6 +26,7 @@ from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
+from app.services.errors import NotFoundError
 from app.services.knowledge import LLMJson
 from app.services.knowledge.canonical import (
     CANONICAL_SCHEMA_VERSIONS,
@@ -37,59 +35,20 @@ from app.services.knowledge.canonical import (
     parse_canonical_markdown,
     repair_canonical_markdown,
 )
-from app.services.knowledge.repository import KnowledgeChunkRepo, rebuild_bus_timetable
+from app.services.knowledge.file_extraction import (  # noqa: F401 — backward-compat re-export
+    DOCX_MIME_TYPE,
+    KnowledgeFileExtractionError,
+    _detect_upload_format,
+    _extract_docx_text,
+)
+from app.services.knowledge.repository import (
+    KnowledgeChunkRepo,
+    KnowledgeDocumentRepo,
+    rebuild_bus_timetable,
+)
 from app.services.storage import persist_original_upload
 
 Embedder = Callable[[str], Awaitable[list[float]]]
-
-DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-WORD_XML_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-
-
-class KnowledgeFileExtractionError(ValueError):
-    """Raised when an uploaded source file cannot be converted to ingestable text."""
-
-
-def _detect_upload_format(file_name: str, content_type: str) -> str:
-    suffix = Path(file_name or "").suffix.lower()
-    normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if suffix == ".docx" or normalized_type == DOCX_MIME_TYPE:
-        return "docx"
-    if suffix == ".md" or normalized_type in {"text/markdown", "text/x-markdown"}:
-        return "markdown"
-    if suffix == ".txt" or normalized_type.startswith("text/"):
-        return "text"
-    return suffix.removeprefix(".") or normalized_type or "binary"
-
-
-def _extract_docx_text(data: bytes) -> str:
-    """Extract paragraph text from a Word DOCX without adding runtime dependencies."""
-    try:
-        with ZipFile(BytesIO(data)) as archive:
-            document_xml = archive.read("word/document.xml")
-    except (BadZipFile, KeyError) as exc:
-        raise KnowledgeFileExtractionError("DOCX không hợp lệ hoặc thiếu nội dung Word.") from exc
-
-    try:
-        root = ET.fromstring(document_xml)
-    except ET.ParseError as exc:
-        raise KnowledgeFileExtractionError("Không đọc được nội dung XML trong DOCX.") from exc
-
-    paragraphs: list[str] = []
-    for paragraph in root.iter(f"{WORD_XML_NS}p"):
-        parts: list[str] = []
-        for node in paragraph.iter():
-            if node.tag == f"{WORD_XML_NS}t" and node.text:
-                parts.append(node.text)
-            elif node.tag == f"{WORD_XML_NS}tab":
-                parts.append("\t")
-            elif node.tag in {f"{WORD_XML_NS}br", f"{WORD_XML_NS}cr"}:
-                parts.append("\n")
-        text = "".join(parts).strip()
-        if text:
-            paragraphs.append(text)
-
-    return "\n\n".join(paragraphs)
 
 
 class KnowledgeService:
@@ -102,7 +61,13 @@ class KnowledgeService:
     async def list_chunks(self, doc_id: uuid.UUID, *, limit: int = 50) -> list[dict]:
         return await KnowledgeChunkRepo(self.db).list_for_doc(doc_id, limit=limit)
 
-    async def upload(self, file_name: str, content: str, drive_file_id: str | None = None, project_id: uuid.UUID | None = None) -> KnowledgeDocument:
+    async def upload(
+        self,
+        file_name: str,
+        content: str,
+        drive_file_id: str | None = None,
+        project_id: uuid.UUID | None = None,
+    ) -> KnowledgeDocument:
         doc = KnowledgeDocument(
             file_name=file_name,
             drive_file_id=drive_file_id,
@@ -133,7 +98,9 @@ class KnowledgeService:
         canonical = parse_canonical_markdown(raw_text) if enforce_canonical else None
         if canonical is not None and project_id is None:
             project_id = await self._resolve_project_from_canonical(canonical)
-        metadata, version = self._build_canonical_metadata(canonical, raw_text, extracted_text, repair)
+        metadata, version = self._build_canonical_metadata(
+            canonical, raw_text, extracted_text, repair
+        )
         metadata["source_file"] = source_metadata
         storage_path = persist_original_upload(file_name, data)
         doc = KnowledgeDocument(
@@ -196,7 +163,9 @@ class KnowledgeService:
         return project.id if project else None
 
     @staticmethod
-    def _build_canonical_metadata(canonical: Any, raw_text: str, original_text: str, repair: Any) -> tuple[dict, str | None]:
+    def _build_canonical_metadata(
+        canonical: Any, raw_text: str, original_text: str, repair: Any
+    ) -> tuple[dict, str | None]:
         """Assemble the metadata dict and version for a canonical document."""
         if canonical is None:
             return {}, None
@@ -226,7 +195,9 @@ class KnowledgeService:
         }
         return metadata, version
 
-    async def process(self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None) -> KnowledgeDocument:
+    async def process(
+        self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None
+    ) -> KnowledgeDocument:
         """Run the ingest pipeline.
 
         With ``llm_json`` -> full LLM ``KnowledgePipeline`` (digest/embed/index).
@@ -262,7 +233,13 @@ class KnowledgeService:
 
     async def archive(self, doc: KnowledgeDocument, *, actor: User) -> KnowledgeDocument:
         doc.status = KnowledgeStatus.ARCHIVED
-        await record_audit(self.db, action="archive_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=str(doc.id))
+        await record_audit(
+            self.db,
+            action="archive_knowledge",
+            actor_id=actor.id,
+            target_type="knowledge_document",
+            target_id=str(doc.id),
+        )
         await self.db.commit()
         from app.core.cache import bump_cache_version
 
@@ -270,37 +247,52 @@ class KnowledgeService:
         await self.db.refresh(doc)
         return doc
 
-    async def update(self, doc: KnowledgeDocument, body: KnowledgeDocumentUpdate, *, actor: User) -> KnowledgeDocument:
+    async def update(
+        self, doc: KnowledgeDocument, body: KnowledgeDocumentUpdate, *, actor: User
+    ) -> KnowledgeDocument:
         if body.file_name is not None:
             doc.file_name = body.file_name.strip()
         if "project_id" in body.model_fields_set:
             if body.project_id is not None and await self.db.get(Project, body.project_id) is None:
-                from fastapi import HTTPException, status
-
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "project not found")
+                raise NotFoundError("project not found")
             doc.project_id = body.project_id
-            await self.db.execute(
-                text("UPDATE knowledge_chunks SET project_id = :pid WHERE document_id = :did"),
-                {
-                    "pid": str(body.project_id) if body.project_id is not None else None,
-                    "did": str(doc.id),
-                },
-            )
-        await record_audit(self.db, action="update_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=str(doc.id))
+            await KnowledgeChunkRepo(self.db).reassign_project(doc.id, body.project_id)
+        await record_audit(
+            self.db,
+            action="update_knowledge",
+            actor_id=actor.id,
+            target_type="knowledge_document",
+            target_id=str(doc.id),
+        )
         await self.db.commit()
         await self.db.refresh(doc)
         return doc
 
     async def delete(self, doc: KnowledgeDocument, *, actor: User) -> None:
         target_id = str(doc.id)
-        await record_audit(self.db, action="delete_knowledge", actor_id=actor.id, target_type="knowledge_document", target_id=target_id)
+        await record_audit(
+            self.db,
+            action="delete_knowledge",
+            actor_id=actor.id,
+            target_type="knowledge_document",
+            target_id=target_id,
+        )
         await self.db.delete(doc)
         await self.db.commit()
 
-    async def reindex(self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None) -> KnowledgeDocument:
+    async def reindex(
+        self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None
+    ) -> KnowledgeDocument:
         return await self.process(embedder, doc, llm_json=llm_json)
 
-    async def search_test(self, embedder: Embedder, query: str, top_k: int = 10, *, project_id: uuid.UUID | None = None) -> list[dict]:
+    async def search_test(
+        self,
+        embedder: Embedder,
+        query: str,
+        top_k: int = 10,
+        *,
+        project_id: uuid.UUID | None = None,
+    ) -> list[dict]:
         emb = vec_literal(await embedder(query))
         return await KnowledgeChunkRepo(self.db).search_similar(emb, top_k, project_id=project_id)
 
@@ -329,9 +321,7 @@ class KnowledgeService:
             query = query.where(func.upper(KnowledgeDocument.stage) == stage.upper())
         if needs_review is True:
             flagged_count = func.coalesce(
-                func.jsonb_array_length(
-                    KnowledgeDocument.digest_meta["flagged_unit_indexes"]
-                ),
+                func.jsonb_array_length(KnowledgeDocument.digest_meta["flagged_unit_indexes"]),
                 0,
             )
             query = query.where(
@@ -363,9 +353,7 @@ class KnowledgeService:
         total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
         rows = (
             await self.db.scalars(
-                query.order_by(order_expr)
-                .offset((page - 1) * per_page)
-                .limit(per_page)
+                query.order_by(order_expr).offset((page - 1) * per_page).limit(per_page)
             )
         ).all()
         project_ids = {row.project_id for row in rows if row.project_id is not None}
@@ -382,12 +370,4 @@ class KnowledgeService:
 
     async def reconcile(self, current_drive_ids: list[str]) -> int:
         """Drop knowledge_documents whose drive_file_id is no longer in Drive (cascades chunks)."""
-        res = await self.db.execute(
-            text(
-                "DELETE FROM knowledge_documents WHERE drive_file_id IS NOT NULL "
-                "AND drive_file_id <> ALL(CAST(:ids AS text[]))"
-            ),
-            {"ids": current_drive_ids},
-        )
-        await self.db.commit()
-        return res.rowcount or 0
+        return await KnowledgeDocumentRepo(self.db).delete_orphans_by_drive_ids(current_drive_ids)

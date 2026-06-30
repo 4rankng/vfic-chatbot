@@ -1,0 +1,60 @@
+"""Pure file-format detection and DOCX text extraction for knowledge uploads.
+
+No DB/ORM imports — only file-format detection and DOCX text extraction.
+"""
+
+from __future__ import annotations
+
+from io import BytesIO
+from pathlib import Path
+from zipfile import BadZipFile, ZipFile
+from xml.etree import ElementTree as ET
+
+DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+WORD_XML_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+class KnowledgeFileExtractionError(ValueError):
+    """Raised when an uploaded source file cannot be converted to ingestable text."""
+
+
+def _detect_upload_format(file_name: str, content_type: str) -> str:
+    suffix = Path(file_name or "").suffix.lower()
+    normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if suffix == ".docx" or normalized_type == DOCX_MIME_TYPE:
+        return "docx"
+    if suffix == ".md" or normalized_type in {"text/markdown", "text/x-markdown"}:
+        return "markdown"
+    if suffix == ".txt" or normalized_type.startswith("text/"):
+        return "text"
+    return suffix.removeprefix(".") or normalized_type or "binary"
+
+
+def _extract_docx_text(data: bytes) -> str:
+    """Extract paragraph text from a Word DOCX without adding runtime dependencies."""
+    try:
+        with ZipFile(BytesIO(data)) as archive:
+            document_xml = archive.read("word/document.xml")
+    except (BadZipFile, KeyError) as exc:
+        raise KnowledgeFileExtractionError("DOCX không hợp lệ hoặc thiếu nội dung Word.") from exc
+
+    try:
+        root = ET.fromstring(document_xml)
+    except ET.ParseError as exc:
+        raise KnowledgeFileExtractionError("Không đọc được nội dung XML trong DOCX.") from exc
+
+    paragraphs: list[str] = []
+    for paragraph in root.iter(f"{WORD_XML_NS}p"):
+        parts: list[str] = []
+        for node in paragraph.iter():
+            if node.tag == f"{WORD_XML_NS}t" and node.text:
+                parts.append(node.text)
+            elif node.tag == f"{WORD_XML_NS}tab":
+                parts.append("\t")
+            elif node.tag in {f"{WORD_XML_NS}br", f"{WORD_XML_NS}cr"}:
+                parts.append("\n")
+        text = "".join(parts).strip()
+        if text:
+            paragraphs.append(text)
+
+    return "\n\n".join(paragraphs)
