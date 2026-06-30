@@ -43,7 +43,6 @@ const EDITABLE_FIELDS: Array<{
   { field: "expected_salary", label: "Lương mong muốn" },
   { field: "region", label: "Tỉnh / thành" },
   { field: "living_area", label: "Khu vực sinh sống" },
-  { field: "latest_company", label: "Công ty gần nhất" },
   { field: "years_experience", label: "Kinh nghiệm" },
   { field: "notes", label: "Ghi chú", multiline: true },
 ];
@@ -67,7 +66,6 @@ const profileRows = (lead: Lead) => [
   { label: "Lương mong muốn", value: lead.expected_salary },
   { label: "Tỉnh / thành", value: lead.region },
   { label: "Khu vực sinh sống", value: lead.living_area },
-  { label: "Công ty gần nhất", value: lead.latest_company },
   { label: "Kinh nghiệm", value: lead.years_experience },
   { label: "Ghi chú", value: lead.notes },
 ];
