@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 _RKEY_429 = "llm:minimax_429s"      # INCR on 429, EXPIRE 60 (rolling minute)
 _RKEY_INVOKE_COUNT = "llm:invoke_count"
 _RKEY_INVOKE_MS = "llm:invoke_total_ms"
+_RKEY_FALLBACK_COUNT = "llm:fallback_count"
 
 
 def _record_llm_latency(ms: int) -> None:
@@ -50,6 +51,18 @@ def _record_llm_429() -> None:
         r.expire(_RKEY_429, 60)  # rolling 1-minute window
     except Exception:  # noqa: BLE001
         logger.warning("failed to record llm 429 to redis", exc_info=True)
+
+
+def _record_llm_fallback() -> None:
+    """Increment primary->fallback LLM failover count (best-effort, non-fatal)."""
+    try:
+        from app.core.redis import get_redis_sync
+
+        r = get_redis_sync()
+        r.incr(_RKEY_FALLBACK_COUNT)
+        r.expire(_RKEY_FALLBACK_COUNT, 120)
+    except Exception:  # noqa: BLE001
+        logger.warning("failed to record llm fallback to redis", exc_info=True)
 ModelRole = Literal["agent", "safety", "digest"]
 
 
@@ -270,6 +283,7 @@ class FallbackLLM:
         try:
             return await self.primary.ainvoke(messages, **kwargs)
         except Exception:
+            _record_llm_fallback()
             logger.warning("Primary LLM failed, falling back to OpenRouter", exc_info=True)
             return await self.fallback.ainvoke(messages, **kwargs)
 

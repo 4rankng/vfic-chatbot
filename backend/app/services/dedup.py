@@ -1,4 +1,4 @@
-"""Message deduplication (8-second window) — port of the n8n 'Dedup Message' node.
+"""Message deduplication (8-second window).
 
 Zalo retries delivery, so the same msg_id can arrive twice within seconds. We claim
 atomically: insert into message_dedup(chat_id, msg_hash); if it already exists (and

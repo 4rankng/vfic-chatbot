@@ -62,7 +62,6 @@ export type Lead = {
   region?: string | null;
   desired_job: string;
   years_experience?: string | null;
-  latest_company?: string | null;
   expected_salary: string;
   qualification_reasons?: string[];
   lead_score: LeadScoreValue | null;
@@ -70,8 +69,7 @@ export type Lead = {
   next_action_at?: string | null;
   created_at: string;
   updated_at: string;
-  // Extra live columns (returned by select("*")); surfaced for derived tags /
-  // timeline. Optional to stay backward-compatible with partial selections.
+  // Extra live columns surfaced for derived tags / timeline.
   notes?: string | null;
   version?: number;
 } & Pick<RaRecord, "id">;

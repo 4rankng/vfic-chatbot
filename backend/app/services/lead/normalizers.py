@@ -1,7 +1,6 @@
-"""Pure normalisation functions for lead extraction (verbatim port of n8n 'Merge Lead').
+"""Pure normalisation functions for lead extraction.
 
-No DB/ORM imports — only string/number manipulation. Re-exported from
-``lead_service`` for backward compatibility with ``test_lead_extraction.py``.
+No DB/ORM imports — only string/number manipulation.
 """
 
 from __future__ import annotations
@@ -72,6 +71,46 @@ def normalize_lead_score(value) -> str | None:
     return score if score in ("hot", "warm", "not_interested") else None
 
 
+_NAME_STOP_RE = re.compile(
+    r"\b(?:số điện thoại|so dien thoai|sdt|phone|ở|o|muốn|muon|chưa|chua|"
+    r"có|co|làm|lam|kinh nghiệm|kinh nghiem)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def extract_self_reported_name(text: str | None) -> str | None:
+    """Extract explicit self-introduction names from short Vietnamese replies.
+
+    This is a narrow deterministic fallback for turns like "tôi tên Mai" when
+    the LLM lead extractor misses the `name` field but the bot/memory extractor
+    correctly understood it. It intentionally requires the word "tên" / "ten"
+    to avoid treating "tôi là công nhân" as a candidate name.
+    """
+    body = _pick(text)
+    if not body:
+        return None
+
+    patterns = [
+        r"(?:^|\b)(?:tôi|toi|mình|minh|em|e|anh|chị|chi)\s+"
+        r"(?:tên|ten)(?:\s+(?:là|la))?\s+(.+)$",
+        r"(?:^|\b)(?:tên|ten)\s+(?:tôi|toi|mình|minh|em|e|anh|chị|chi)"
+        r"(?:\s+(?:là|la))?\s+(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, body, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = _NAME_STOP_RE.split(match.group(1), maxsplit=1)[0]
+        candidate = re.split(r"[,.;:!?()\[\]\n\r]", candidate, maxsplit=1)[0]
+        candidate = re.sub(r"\s+", " ", candidate).strip(" -–—\"'“”‘’")
+        if not candidate:
+            continue
+        words = candidate.split()
+        if 1 <= len(words) <= 5 and all(re.search(r"[A-Za-zÀ-ỹĐđ]", w) for w in words):
+            return candidate
+    return None
+
+
 def current_year() -> int:
     return datetime.now().year
 
@@ -84,13 +123,7 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
     ext = parse_lead_json(raw)
     phone = normalize_phone(ext.get("phone"))
 
-    # Route free-text miscellanea (notes + legacy latest_company) into ``notes``.
-    _notes_parts: list[str] = []
-    for key in ("notes", "latest_company"):  # latest_company kept for prompt-transition compat
-        v = _pick(ext.get(key))
-        if v:
-            _notes_parts.append(v)
-    notes = "; ".join(_notes_parts) if _notes_parts else None
+    notes = _pick(ext.get("notes"))
 
     return {
         "zalo_id": chat_id,
@@ -104,7 +137,6 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
         "region": _pick(ext.get("region")),
         "desired_job": _pick(ext.get("desired_job")),
         "years_experience": _pick(ext.get("years_experience")),
-        "latest_company": None,  # pipeline no longer populates; column kept for backward-compat
         "expected_salary": _pick(ext.get("expected_salary")),
         "lead_score": normalize_lead_score(ext.get("lead_score")),
         "notes": notes,

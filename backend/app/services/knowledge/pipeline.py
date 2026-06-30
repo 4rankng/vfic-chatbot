@@ -39,7 +39,6 @@ from app.services.knowledge.coercion import (
 )
 from app.services.knowledge.canonical import (
     CANONICAL_SCHEMA_VERSIONS,
-    SCHEMA_VERSION,
     ParsedKnowledgeDocument,
     checksum_text,
     parse_canonical_markdown,

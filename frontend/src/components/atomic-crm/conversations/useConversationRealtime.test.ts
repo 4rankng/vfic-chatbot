@@ -140,8 +140,8 @@ describe("useConversationRealtime", () => {
     );
 
     const hook = await renderHook(
-      ({ conversationId }: { conversationId: string }) =>
-        useConversationRealtime(conversationId),
+      (props?: { conversationId: string }) =>
+        useConversationRealtime(props?.conversationId),
       { initialProps: { conversationId: "old-conversation" } },
     );
 
@@ -175,6 +175,46 @@ describe("useConversationRealtime", () => {
     ]);
   });
 
+  it("ignores messages whose conversation_id does not match the active thread", async () => {
+    const activePage = deferred<MessagesPage>();
+    let pushRealtime: ((messages: Message[]) => void) | undefined;
+
+    mockChatRepository.getConversationMessages.mockReturnValue(activePage.promise);
+    mockChatRepository.subscribeToMessages.mockImplementation(
+      (...args: unknown[]) => {
+        pushRealtime = args[1] as (messages: Message[]) => void;
+        return () => {
+          /* cleanup */
+        };
+      },
+    );
+
+    const hook = await renderHook(() =>
+      useConversationRealtime("active-conversation"),
+    );
+
+    await hook.act(async () => {
+      pushRealtime?.([msg(1, "other-conversation")]);
+    });
+    expect(hook.result.current.messages).toEqual([]);
+
+    await hook.act(async () => {
+      activePage.resolve({
+        messages: [msg(2, "other-conversation")],
+        hasMore: false,
+      });
+      await activePage.promise;
+    });
+    expect(hook.result.current.messages).toEqual([]);
+
+    await hook.act(async () => {
+      pushRealtime?.([msg(3, "active-conversation")]);
+    });
+    expect(hook.result.current.messages.map((message) => message.content)).toEqual([
+      "active-conversation message 3",
+    ]);
+  });
+
   it("discards middle-mount late resolve in a 3-way rapid switch (A→B→C, resolve C→A→B)", async () => {
     const pageA = deferred<MessagesPage>();
     const pageB = deferred<MessagesPage>();
@@ -189,8 +229,8 @@ describe("useConversationRealtime", () => {
     );
 
     const hook = await renderHook(
-      ({ conversationId }: { conversationId: string }) =>
-        useConversationRealtime(conversationId),
+      (props?: { conversationId: string }) =>
+        useConversationRealtime(props?.conversationId),
       { initialProps: { conversationId: "conv-a" } },
     );
 

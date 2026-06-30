@@ -1,7 +1,7 @@
-"""The 3 retrieval tools the agent may call (port of the n8n vector/postgres tools):
+"""Retrieval tools the agent may call:
 
   * search_user_memory  -> match_memories top-5 filtered by chat_id
-  * search_jobs         -> search_knowledge top-25
+  * search_knowledge    -> project-scoped semantic retrieval
   * search_bus_timetable-> complete structured bus route groups + stop times
 
 Each takes an injected embedder (Gemini) + async db session, so they are testable
@@ -163,13 +163,6 @@ async def search_knowledge(
     return result
 
 
-async def search_jobs(
-    db: AsyncSession, embedder: Embedder, query: str, top_k: int = 25
-) -> str:
-    """Back-compat unscoped search (delegates to search_knowledge)."""
-    return await search_knowledge(db, embedder, query, top_k=top_k)
-
-
 async def list_active_projects(db: AsyncSession) -> str:
     """Return the active-product catalog (name/slug/summary) for the agent."""
     rows = await RetrievalRepository(db).list_active_projects()
@@ -250,7 +243,6 @@ async def get_product_features(db: AsyncSession, project_slug: str) -> str:
 
 TOOLS_REGISTRY = {
     "search_user_memory": search_user_memory,
-    "search_jobs": search_jobs,
     "search_knowledge": search_knowledge,
     "list_active_projects": list_active_projects,
     "search_bus_timetable": search_bus_timetable,

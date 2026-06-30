@@ -342,11 +342,9 @@ def render_leaderboard(aggs: list[dict], baseline_label: str, sort_key: str = "l
             return -a.get("tps_mean", 0)
         return a.get("latency_p50", float("inf"))
 
-    baseline_entry = None
     baseline_p50 = None
     for a in aggs:
         if a["entry"].get("label") == baseline_label:
-            baseline_entry = a
             baseline_p50 = a.get("latency_p50")
             break
 
@@ -526,7 +524,7 @@ async def main() -> None:
         tool_schemas = TOOL_SCHEMAS
 
     print(f"{'='*90}")
-    print(f"  VFIC Chatbot — Speed Benchmark")
+    print("  VFIC Chatbot — Speed Benchmark")
     print(f"{'='*90}")
     print(f"  Baseline     : {baseline_label}")
     print(f"  Models       : {[e['label'] for e in entries]}")

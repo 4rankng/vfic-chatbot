@@ -126,6 +126,26 @@ async def test_recruiter_clear_history_returns_403(recruiter_transport):
 
 
 @pytest.mark.asyncio
+async def test_recruiter_direct_get_hidden_when_not_visible(recruiter_transport, mock_db):
+    """Direct UUID reads must use the same recruiter scope as list endpoints."""
+    conv_id = str(uuid.uuid4())
+
+    with patch("app.api.conversations.ConversationService") as MockSvc:
+        mock_svc_instance = AsyncMock()
+        mock_svc_instance.get_visible = AsyncMock(return_value=None)
+        MockSvc.return_value = mock_svc_instance
+
+        async with httpx.AsyncClient(
+            transport=recruiter_transport, base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/conversations/{conv_id}")
+
+    assert resp.status_code == 404
+    mock_db.get.assert_not_called()
+    mock_svc_instance.get_visible.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_clear_history_returns_404_for_missing(admin_user, mock_db):
     """DELETE /{conv_id}/history → 404 when conversation doesn't exist."""
     mock_db.get = AsyncMock(return_value=None)

@@ -170,7 +170,7 @@ export type CRMProps = {
  *
  * This component sets up and renders the main CRM application using `ra-core`. It provides
  * default configurations and themes but allows for customization through props. The component
- * seeds the store with any custom prop values for backwards compatibility.
+ * seeds the store with any custom prop values.
  *
  * @param {LabeledValue[]} companySectors - The list of company sectors used in the application.
  * @param {string} currency - The ISO 4217 currency code used to format monetary values (e.g. "USD", "EUR", "GBP").
@@ -240,8 +240,7 @@ export const CRM = ({
     setAuthGateReady(true);
   }, [authGateReady]);
 
-  // Seed the store with CRM prop values if not already stored
-  // (backwards compatibility for prop-based config)
+  // Seed the store with CRM prop values if not already stored.
   useEffect(() => {
     if (!store.getItem(CONFIGURATION_STORE_KEY)) {
       store.setItem(CONFIGURATION_STORE_KEY, {

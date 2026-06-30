@@ -1,12 +1,11 @@
 """Dependency factories for the graph's LLM/embedder wiring.
 
 - ``build_deps`` wires the full ``GraphDeps`` for the chatbot worker.
-- ``build_minimax_extractor`` — lead/memory extraction (persistence worker).
+- ``build_minimax_extractor`` — candidate extraction (persistence worker).
 - ``make_minimax_llm_json`` — JSON-mode LLM for the knowledge training pipeline (ingest worker).
 
-``GraphDeps`` is imported from :mod:`app.graph.types` (NOT ``app.graph.runner``), which
-breaks the old ``llm_real`` <-> ``runner`` import cycle. langchain_openai is imported
-lazily inside each factory so the web-process import path stays langchain-free.
+langchain_openai is imported lazily inside each factory so the web-process import path
+stays langchain-free.
 """
 from __future__ import annotations
 
@@ -20,11 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def build_minimax_extractor():
-    """MiniMax extractor (safety model, temp 0) for lead/memory extraction.
-
-    Shared by the persistence worker's lead + memory jobs so they cannot drift
-    from the safety-LLM wiring in build_deps.
-    """
+    """MiniMax extractor (safety model, temp 0) for candidate extraction."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
     llm = _chat_for_role("safety", temperature=0.0)

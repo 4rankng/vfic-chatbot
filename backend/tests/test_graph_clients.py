@@ -1,8 +1,4 @@
-"""Phase 4 characterization tests for graph clients + tool schemas/dispatch.
-
-Pure (no API keys, no network) — locks the behavior moved out of llm_real.py into
-clients.py + schemas.py so the split cannot regress it.
-"""
+"""Tests for graph clients + tool schemas/dispatch."""
 import pytest
 
 from app.graph.clients import GeminiEmbedder, _active_llm_provider, _chat_for_role, _minimax_chat
@@ -29,12 +25,10 @@ class _Settings:
     openrouter_request_timeout = 60
     openrouter_digest_timeout = 180
 
-# Tool names _dispatch_tool knows how to route (search_jobs is a back-compat alias with
-# no schema entry).
+# Tool names _dispatch_tool knows how to route.
 _DISPATCHED = {
     "search_user_memory",
     "search_knowledge",
-    "search_jobs",
     "list_active_projects",
     "search_bus_timetable",
     "get_product_features",

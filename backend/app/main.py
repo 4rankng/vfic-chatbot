@@ -151,7 +151,12 @@ async def health_queue() -> dict:
         from rq import Queue, Worker
 
         from app.core.redis import get_redis_sync
-        from app.graph.clients import _RKEY_429, _RKEY_INVOKE_COUNT, _RKEY_INVOKE_MS
+        from app.graph.clients import (
+            _RKEY_429,
+            _RKEY_FALLBACK_COUNT,
+            _RKEY_INVOKE_COUNT,
+            _RKEY_INVOKE_MS,
+        )
 
         conn = get_redis_sync()
         qd = Queue("webhook_high", connection=conn).count
@@ -163,6 +168,7 @@ async def health_queue() -> dict:
         invoke_total_ms = int(conn.get(_RKEY_INVOKE_MS) or 0)
         avg_latency_ms = round(invoke_total_ms / invoke_count) if invoke_count else 0
         minimax_429s_1m = int(conn.get(_RKEY_429) or 0)
+        llm_fallbacks_2m = int(conn.get(_RKEY_FALLBACK_COUNT) or 0)
 
         return {
             "queue_depth": qd,
@@ -171,6 +177,7 @@ async def health_queue() -> dict:
             "llm_avg_latency_ms": avg_latency_ms,
             "llm_invokes_last_2m": invoke_count,
             "minimax_429s_last_1m": minimax_429s_1m,
+            "llm_fallbacks_last_2m": llm_fallbacks_2m,
         }
 
     return await asyncio.to_thread(_collect)

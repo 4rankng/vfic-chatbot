@@ -23,8 +23,8 @@ from app.schemas.lead import (
     LeadUpdate,
     StageRequest,
 )
+from app.services.errors import ConflictError
 from app.services.lead import LeadService
-from app.services.lead_service import LeadConflict  # noqa: F401 — backward-compat alias
 from app.services.memory_repository import MemoryRepository
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -124,7 +124,7 @@ async def update_lead(lead_id: int, body: LeadUpdate, user: User = Depends(get_c
         if changes:
             lead = await service.update(lead, changes)
         return LeadOut.model_validate(lead)
-    except LeadConflict:
+    except ConflictError:
         raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 
@@ -133,7 +133,7 @@ async def assign_lead(lead_id: int, body: AssignRequest, user: User = Depends(ge
     lead = await _load(lead_id, db)
     try:
         return LeadOut.model_validate(await LeadService(db).assign(lead, body.recruiter_id, actor=user))
-    except LeadConflict:
+    except ConflictError:
         raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 
@@ -142,7 +142,7 @@ async def set_stage(lead_id: int, body: StageRequest, user: User = Depends(get_c
     lead = await _load(lead_id, db)
     try:
         return LeadOut.model_validate(await LeadService(db).set_stage(lead, body.stage, actor=user))
-    except LeadConflict:
+    except ConflictError:
         raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Awaitable, Callable
 
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,14 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.conversation import Conversation, ConversationMode
 from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadStage
 from app.models.user import Role, User
-from app.prompts.lead_memory import LEAD_EXTRACT_SYSTEM_PROMPT
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError
 from app.services.lead.events import LeadEventBus
-from app.services.lead.normalizers import normalize_lead
 from app.services.lead.repository import LeadRepository
-
-Extractor = Callable[[str, str], Awaitable[str]]
 
 # Whitelist of sortable lead columns. Unknown / absent sort keys fall back to
 # updated_at (the default inbox ordering). Keys are lower-cased to match the
@@ -41,25 +36,6 @@ _LEAD_STAGE_TITLES = {
     "REGISTERED": "Đã đăng ký",
     "SKIPPED": "Bỏ qua",
 }
-
-
-class LeadExtractionService:
-    @staticmethod
-    def user_turn(user_text: str, bot_output: str) -> str:
-        return f"Tin nhắn người dùng: {user_text or ''}\n\nPhản hồi của bot: {bot_output or ''}"
-
-    @staticmethod
-    async def extract(
-        extractor: Extractor, user_text: str, bot_output: str, chat_id: str
-    ) -> dict | None:
-        raw = await extractor(
-            LEAD_EXTRACT_SYSTEM_PROMPT, LeadExtractionService.user_turn(user_text, bot_output)
-        )
-        return normalize_lead(raw, chat_id)
-
-    @staticmethod
-    async def upsert(db: AsyncSession, lead: dict) -> int | None:
-        return await LeadRepository(db).upsert(lead)
 
 
 class LeadService:
@@ -220,10 +196,11 @@ class LeadService:
             if not await self.repo.optimistic_apply(lead.id, incoming_version, **changes):
                 await self.db.refresh(lead)
                 raise ConflictError("lead was modified by another recruiter")
+            await self.db.commit()
             await self.db.refresh(lead)
             await self.events.lead_updated(lead)
             return lead
-        # No version provided — apply directly (backward compat for internal callers)
+        # No version provided — trusted internal callers may apply direct updates.
         for k, v in changes.items():
             if hasattr(lead, k) and k not in ("id", "created_at", "updated_at"):
                 setattr(lead, k, v)
@@ -238,6 +215,7 @@ class LeadService:
         ):
             await self.db.refresh(lead)
             raise ConflictError("lead was modified by another recruiter")
+        await self.db.commit()
         await self.db.refresh(lead)
         self.db.add(
             LeadEvent(
@@ -267,6 +245,7 @@ class LeadService:
         ):
             await self.db.refresh(lead)
             raise ConflictError("lead was modified by another recruiter")
+        await self.db.commit()
         await self.db.refresh(lead)
         self.db.add(
             LeadEvent(
@@ -292,7 +271,9 @@ class LeadService:
     async def create_followup(
         self, lead: Lead, due_at: datetime, note: str | None, *, actor: User
     ) -> FollowUpTask:
-        return await self.repo.create_followup(lead.id, due_at, note, created_by=actor.id)
+        followup = await self.repo.create_followup(lead.id, due_at, note, created_by=actor.id)
+        await self.db.commit()
+        return followup
 
     async def list_events(self, lead_id: int) -> list[LeadEvent]:
         return await self.repo.list_events(lead_id)

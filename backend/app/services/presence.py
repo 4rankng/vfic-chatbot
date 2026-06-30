@@ -19,7 +19,6 @@ import logging
 
 from app.core.redis import get_redis
 from app.realtime.emitter import emit_event
-from app.realtime.socketio import _room_for_payload
 
 logger = logging.getLogger(__name__)
 

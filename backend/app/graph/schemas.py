@@ -12,14 +12,13 @@ from app.graph.tools import (
     get_product_features,
     list_active_projects,
     search_bus_timetable,
-    search_jobs,
     search_knowledge,
     search_user_memory,
 )
 
 logger = logging.getLogger(__name__)
 
-# OpenAI-compatible function schemas handed to MiniMax (descriptions match n8n).
+# OpenAI-compatible function schemas handed to MiniMax.
 TOOL_SCHEMAS = [
     {
         "type": "function",
@@ -119,8 +118,6 @@ async def _dispatch_tool(db, embedder, name: str, args: dict) -> str:
             result = await search_user_memory(db, embedder, args.get("chat_id", ""), args.get("query", ""))
         elif name == "search_knowledge":
             result = await search_knowledge(db, embedder, args.get("query", ""), args.get("project_slug"))
-        elif name == "search_jobs":  # back-compat: older turns may still call this name
-            result = await search_jobs(db, embedder, args.get("query", ""))
         elif name == "list_active_projects":
             result = await list_active_projects(db)
         elif name == "search_bus_timetable":

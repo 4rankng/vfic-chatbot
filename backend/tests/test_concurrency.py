@@ -21,7 +21,8 @@ from app.models.conversation import (
 from app.models.lead import Lead, LeadStage
 from app.models.user import Role, User
 from app.services.conversation.state import ConversationConflict, ConversationState, utcnow
-from app.services.lead_service import LeadConflict, LeadService
+from app.services.errors import ConflictError
+from app.services.lead import LeadService
 from app.services.presence import _get_viewers, join_viewing, leave_viewing
 
 
@@ -273,7 +274,7 @@ async def test_record_bot_outcome_updates_pending_message_in_place():
 
 @pytest.mark.asyncio
 async def test_lead_update_optimistic_conflict():
-    """Lead update with stale version raises LeadConflict (rowcount=0)."""
+    """Lead update with stale version raises ConflictError (rowcount=0)."""
     lead = _make_lead(id=1, version=1)
     db = AsyncMock()
 
@@ -284,7 +285,7 @@ async def test_lead_update_optimistic_conflict():
     db.flush = AsyncMock()
 
     service = LeadService(db)
-    with pytest.raises(LeadConflict):
+    with pytest.raises(ConflictError):
         await service.update(lead, {"version": 1, "name": "New Name"})
 
 
@@ -333,7 +334,7 @@ async def test_lead_update_without_version_skips_check():
 
 @pytest.mark.asyncio
 async def test_lead_assign_optimistic_conflict():
-    """Lead assign with stale version raises LeadConflict."""
+    """Lead assign with stale version raises ConflictError."""
     lead = _make_lead(id=1, version=2)
     recruiter = _make_user()
 
@@ -345,7 +346,7 @@ async def test_lead_assign_optimistic_conflict():
     db.add = MagicMock()
 
     service = LeadService(db)
-    with pytest.raises(LeadConflict):
+    with pytest.raises(ConflictError):
         await service.assign(lead, recruiter.id, actor=recruiter)
 
 
@@ -375,7 +376,7 @@ async def test_lead_assign_success():
 
 @pytest.mark.asyncio
 async def test_lead_set_stage_optimistic_conflict():
-    """Lead set_stage with stale version raises LeadConflict."""
+    """Lead set_stage with stale version raises ConflictError."""
     lead = _make_lead(id=1, version=1)
 
     db = AsyncMock()
@@ -386,7 +387,7 @@ async def test_lead_set_stage_optimistic_conflict():
     db.add = MagicMock()
 
     service = LeadService(db)
-    with pytest.raises(LeadConflict):
+    with pytest.raises(ConflictError):
         await service.set_stage(lead, LeadStage.CONTACTING, actor=_make_user())
 
 
@@ -444,7 +445,6 @@ def test_conversation_conflict_owner_name():
     assert str(exc2) == "taken"
 
 
-def test_lead_conflict_owner_name():
-    """LeadConflict is now a ConflictError alias — no owner_name attribute."""
-    exc = LeadConflict("modified")
+def test_conflict_error_message():
+    exc = ConflictError("modified")
     assert str(exc) == "modified"

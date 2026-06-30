@@ -450,7 +450,7 @@ async def test_post_missing_ok_field(settings: Settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_public_api_surface() -> None:
+async def test_public_api_surface() -> None:
     """Lock in the names callers are allowed to import — changes here are breaking.
 
     Compare string names (what ``dir()`` returns) to string names, not class

@@ -1,8 +1,7 @@
 """Data-access layer for leads.
 
-Owns all raw SQL: the COALESCE-based upsert, fetch, materialize, events,
-and follow-ups.  Raw-SQL port of the SQL that originally lived in the flat
-``lead_service`` module.
+Owns all raw SQL: the COALESCE-based upsert, fetch, materialize, events, and
+follow-ups.
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ from app.models.lead import FollowUpTask, Lead, LeadEvent
 _FETCH_SQL = text(
     """
     SELECT id, zalo_id, name, phone, birth_year, age, living_area, address, gender,
-           region, desired_job, years_experience, latest_company, expected_salary,
+           region, desired_job, years_experience, expected_salary,
            lead_score, lead_stage, notes, version
     FROM leads WHERE zalo_id = :zalo_id
     """
@@ -28,10 +27,10 @@ _FETCH_SQL = text(
 _UPSQL = text(
     """
     INSERT INTO leads (zalo_id, name, phone, birth_year, age, living_area, address, gender,
-        region, desired_job, years_experience, latest_company, expected_salary, lead_score,
+        region, desired_job, years_experience, expected_salary, lead_score,
         notes, version)
     VALUES (:zalo_id, :name, :phone, :birth_year, :age, :living_area, :address, :gender,
-        :region, :desired_job, :years_experience, :latest_company, :expected_salary, :lead_score,
+        :region, :desired_job, :years_experience, :expected_salary, :lead_score,
         :notes, 1)
     ON CONFLICT (zalo_id) DO UPDATE SET
         name = COALESCE(NULLIF(EXCLUDED.name,''), leads.name),
@@ -44,7 +43,6 @@ _UPSQL = text(
         region = COALESCE(NULLIF(EXCLUDED.region,''), leads.region),
         desired_job = COALESCE(NULLIF(EXCLUDED.desired_job,''), leads.desired_job),
         years_experience = COALESCE(NULLIF(EXCLUDED.years_experience,''), leads.years_experience),
-        latest_company = COALESCE(NULLIF(EXCLUDED.latest_company,''), leads.latest_company),
         expected_salary = COALESCE(NULLIF(EXCLUDED.expected_salary,''), leads.expected_salary),
         lead_score = COALESCE(EXCLUDED.lead_score, leads.lead_score),
         notes = CASE
@@ -124,7 +122,7 @@ class LeadRepository:
     async def upsert(self, lead: dict) -> int | None:
         """Insert or merge a normalised lead by ``zalo_id``; return the lead id."""
         row = await self.db.execute(_UPSQL, lead)
-        await self.db.commit()
+        await self.db.flush()
         return row.scalar()
 
     async def by_zalo_id(self, zalo_id: str) -> dict | None:
@@ -151,7 +149,7 @@ class LeadRepository:
             .values(**values, updated_at=func.now())
             .execution_options(synchronize_session=False)
         )
-        await self.db.commit()
+        await self.db.flush()
         return res.rowcount > 0
 
     async def list_events(self, lead_id: int, *, limit: int = 200) -> list[LeadEvent]:
@@ -183,7 +181,7 @@ class LeadRepository:
     ) -> FollowUpTask:
         fu = FollowUpTask(lead_id=lead_id, due_at=due_at, note=note, created_by=created_by)
         self.db.add(fu)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fu)
         return fu
 

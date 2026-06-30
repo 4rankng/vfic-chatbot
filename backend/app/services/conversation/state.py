@@ -1,8 +1,7 @@
 """Conversation state mutations + orchestration (the takeover race-guard core).
 
-Replaces the n8n Ensure / Run-Start-Guard / Acquire-Lock / Recheck-Ownership nodes and
-the vfic_take_over / release / mark_read edge functions. All state changes bump
-``version`` (the optimistic-lock token) and fan out a realtime event via the event bus.
+All state changes bump ``version`` (the optimistic-lock token) and fan out a realtime
+event via the event bus.
 
 Reads live in ``repository.py``; realtime publishing in ``events.py``.
 """
@@ -69,7 +68,7 @@ class ConversationState:
 
     Composes a ``ConversationRepository`` (for reads within mutations) and a
     ``ConversationEventBus`` (for publishing). Pure orchestration — no new business
-    rules vs. the legacy single class.
+    rules.
     """
 
     def __init__(self, db, repo, events) -> None:

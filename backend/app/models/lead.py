@@ -59,7 +59,6 @@ class Lead(Base):
     region: Mapped[str | None] = mapped_column(Text)
     desired_job: Mapped[str | None] = mapped_column(Text)
     years_experience: Mapped[str | None] = mapped_column(Text)
-    latest_company: Mapped[str | None] = mapped_column(Text)
     expected_salary: Mapped[str | None] = mapped_column(Text)
     lead_score: Mapped[LeadScore | None] = mapped_column(Enum(LeadScore, name="lead_score", create_type=False))
     lead_stage: Mapped[LeadStage] = mapped_column(

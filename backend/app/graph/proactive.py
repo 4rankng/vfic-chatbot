@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app.graph.safety import (
     fast_safety_filter,
@@ -300,7 +300,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
             return _outcome("suppressed", reason="48h_window_post_generation")
 
         # 10. Send
-        result = await deps.zalo.send(conv.zalo_chat_id, candidate)
+        result = await deps.zalo.send_message(conv.zalo_chat_id, candidate)
 
     except Exception as exc:
         logger.warning("proactive turn error: conversation=%s error=%s", conv.zalo_chat_id, exc)
@@ -309,7 +309,5 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
 
     # 11. Persist (always — clears lock, records SENT/FAILED message,
     #     handles cadence count)
-    msg = await svc.state.record_proactive_outcome(
-        conv, message=candidate, result=result
-    )
+    await svc.state.record_proactive_outcome(conv, message=candidate, result=result)
     return {"outcome": "sent" if result.ok else "send_failed", "reply": candidate}

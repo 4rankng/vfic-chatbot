@@ -8,7 +8,6 @@ them; they never crash the worker.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 
@@ -31,7 +30,9 @@ def enqueue_ingest(doc_id) -> None:
 def run_ingest_job(doc_id: str) -> None:
     """RQ job entrypoint (sync). Runs the async pipeline."""
     try:
-        asyncio.run(_run_job_async(doc_id))
+        from app.workers.async_runner import run_async
+
+        run_async(_run_job_async(doc_id))
     except Exception as exc:
         # RQ-level failures (notably JobTimeoutException from its death penalty)
         # can be raised outside the coroutine frame, bypassing _run_job_async's

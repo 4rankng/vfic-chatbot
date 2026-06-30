@@ -11,7 +11,6 @@ import pytest
 from app.graph.llm_semaphore import (
     LLMThrottled,
     RedisLlmSemaphore,
-    get_llm_semaphore,
     get_embed_semaphore,
 )
 
@@ -310,6 +309,27 @@ class TestRetry429:
         assert 1.5 <= sleep_args[0] <= 2.5
 
 
+class TestFallbackLLMObservability:
+    """Primary->fallback failovers are counted for ops visibility."""
+
+    @pytest.mark.asyncio
+    async def test_records_fallback_when_primary_fails(self):
+        from app.graph.clients import FallbackLLM
+
+        primary = AsyncMock()
+        primary.ainvoke = AsyncMock(side_effect=RuntimeError("primary down"))
+        fallback = AsyncMock()
+        fallback.ainvoke = AsyncMock(return_value=MagicMock(content="fallback ok"))
+
+        with patch("app.graph.clients._record_llm_fallback") as record:
+            result = await FallbackLLM(primary, fallback).ainvoke(["msg"])
+
+        assert result.content == "fallback ok"
+        record.assert_called_once()
+        primary.ainvoke.assert_called_once()
+        fallback.ainvoke.assert_called_once()
+
+
 # ── Degradation message in worker ───────────────────────────────────────────
 
 
@@ -345,7 +365,7 @@ class TestDegradationMessage:
 
         mock_deps = MagicMock()
         mock_deps.zalo = MagicMock()
-        mock_deps.zalo.send = AsyncMock()
+        mock_deps.zalo.send_message = AsyncMock()
 
         mock_svc = MagicMock()
         mock_svc.get = AsyncMock(return_value=mock_conv)
@@ -360,6 +380,6 @@ class TestDegradationMessage:
                         # Should NOT raise — LLMThrottled is caught
                         await _run_job_async(job)
 
-        mock_deps.zalo.send.assert_called_once()
-        sent_msg = mock_deps.zalo.send.call_args[0][1]
+        mock_deps.zalo.send_message.assert_called_once()
+        sent_msg = mock_deps.zalo.send_message.call_args[0][1]
         assert "Xin lỗi" in sent_msg

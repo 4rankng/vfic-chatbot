@@ -282,6 +282,13 @@ export const ChatThread = ({
     DEFAULT_COMPOSER_RESERVE_PX,
   );
   const [hasNewerMessages, setHasNewerMessages] = useState(false);
+  const visibleMessages = useMemo(
+    () =>
+      conversationId
+        ? messages.filter((message) => message.conversation_id === conversationId)
+        : [],
+    [conversationId, messages],
+  );
   // Load older messages only on a genuine upward scroll — not merely because
   // the top happens to be visible (which is the case the moment a thread opens,
   // when the initial page fits the viewport, and would otherwise auto-fetch the
@@ -362,13 +369,13 @@ export const ChatThread = ({
   // already at the bottom. Very tall bubbles can be measured after the first
   // snap, so totalListHeightChanged keeps the initial open pinned briefly.
   useEffect(() => {
-    if (messages.length > 0 && !initialJumpDoneRef.current) {
+    if (visibleMessages.length > 0 && !initialJumpDoneRef.current) {
       initialJumpDoneRef.current = true;
       initialBottomSettleUntilRef.current = performance.now() + 800;
       scrollToNewest();
       scheduleScrollToNewest();
     }
-  }, [messages, scheduleScrollToNewest, scrollToNewest]);
+  }, [visibleMessages, scheduleScrollToNewest, scrollToNewest]);
 
   const handleTotalListHeightChanged = useCallback(() => {
     if (!initialJumpDoneRef.current) return;
@@ -378,7 +385,7 @@ export const ChatThread = ({
     scheduleScrollToNewest();
   }, [scheduleScrollToNewest]);
 
-  const newestMessageId = messages[messages.length - 1]?.id ?? null;
+  const newestMessageId = visibleMessages[visibleMessages.length - 1]?.id ?? null;
   useEffect(() => {
     if (!newestMessageId) {
       newestMessageIdRef.current = null;
@@ -414,13 +421,13 @@ export const ChatThread = ({
 
   const messageHeightEstimates = useMemo(
     () =>
-      messages.map((message) =>
+      visibleMessages.map((message) =>
         measuredOrEstimatedMessageRowHeight(
           message,
           measuredMessageHeightsRef.current,
         ),
       ),
-    [messages],
+    [visibleMessages],
   );
 
   const measureMessageItem = useCallback<SizeFunction>((el, field) => {
@@ -543,7 +550,7 @@ export const ChatThread = ({
     if (!initialJumpDoneRef.current) return;
     if (!readyForMoreRef.current) return;
     if (isLoadingMore) return;
-    if (!hasMore || messages.length === 0) return;
+    if (!hasMore || visibleMessages.length === 0) return;
 
     const now = performance.now();
     if (now - lastLoadMoreAtRef.current < 350) return;
@@ -552,7 +559,7 @@ export const ChatThread = ({
     const anchor = captureScrollAnchor();
     readyForMoreRef.current = false;
     isPrependingHistoryRef.current = true;
-    void loadMore(messages[0].id).then((added) => {
+    void loadMore(visibleMessages[0].id).then((added) => {
       if (added <= 0) {
         isPrependingHistoryRef.current = false;
         return;
@@ -564,7 +571,7 @@ export const ChatThread = ({
   }, [
     hasMore,
     isLoadingMore,
-    messages,
+    visibleMessages,
     loadMore,
     captureScrollAnchor,
     restoreScrollAnchor,
@@ -734,13 +741,13 @@ export const ChatThread = ({
     (virtuosoIndex: number, m: Message) => {
       const kind = classify(m);
       const pos = virtuosoIndex - firstItemIndex;
-      const prevMsg = pos > 0 ? messages[pos - 1] : null;
+      const prevMsg = pos > 0 ? visibleMessages[pos - 1] : null;
       const prevKind = prevMsg ? classify(prevMsg) : null;
       const isGrouped = prevKind === kind;
 
       return <ChatMessageRow message={m} kind={kind} isGrouped={isGrouped} />;
     },
-    [messages, firstItemIndex],
+    [visibleMessages, firstItemIndex],
   );
 
   const handleSend = async (e: React.FormEvent) => {
@@ -807,8 +814,8 @@ export const ChatThread = ({
               "--chat-composer-reserve": `${composerReserve}px`,
             } as CSSProperties
           }
-          data={messages}
-          computeItemKey={(_, m) => m.id}
+          data={visibleMessages}
+          computeItemKey={(_, m) => `${m.conversation_id}:${m.id}`}
           firstItemIndex={firstItemIndex}
           startReached={handleStartReached}
           followOutput={followOutput}

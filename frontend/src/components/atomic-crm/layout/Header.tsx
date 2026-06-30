@@ -28,6 +28,8 @@ import { useRoleActions } from "../hooks/useRoleActions";
 import { NavPill } from "./topbar/NavPills";
 import { NotificationsBell } from "./topbar/NotificationsBell";
 
+const isPresent = <T,>(value: T | null): value is T => value !== null;
+
 const Header = () => {
   const { title } = useConfigurationContext();
   const location = useLocation();
@@ -72,7 +74,7 @@ const Header = () => {
       isActive: currentPath === "/conversations",
       Icon: MessageCircle,
     },
-  ].filter(Boolean);
+  ].filter(isPresent);
 
   const functionItems = [
     {
@@ -105,7 +107,7 @@ const Header = () => {
           Icon: UserCog,
         }
       : null,
-  ].filter(Boolean);
+  ].filter(isPresent);
 
   const functionMenuActive = functionItems.some((item) => item?.isActive);
 

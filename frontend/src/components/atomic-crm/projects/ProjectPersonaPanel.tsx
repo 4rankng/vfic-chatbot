@@ -162,7 +162,6 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
                             value={`${persona.name} ${persona.slug}`}
                             onSelect={() => {
                               setSelected(persona.id);
-                              setSelectedPersonaRecord(persona);
                               setPickerOpen(false);
                               setPersonaSearch("");
                             }}

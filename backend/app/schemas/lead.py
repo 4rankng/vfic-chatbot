@@ -23,7 +23,6 @@ class LeadOut(BaseModel):
     region: str | None = None
     desired_job: str | None = None
     years_experience: str | None = None
-    latest_company: str | None = None
     expected_salary: str | None = None
     lead_score: LeadScore | None = None
     lead_stage: LeadStage
@@ -78,7 +77,6 @@ class LeadUpdate(BaseModel):
     region: str | None = None
     desired_job: str | None = None
     years_experience: str | None = None
-    latest_company: str | None = None
     expected_salary: str | None = None
     notes: str | None = None
     lead_score: LeadScore | None = None

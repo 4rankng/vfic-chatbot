@@ -19,6 +19,11 @@ export {
 
 export const CHAT_MESSAGES_PAGE_SIZE = 10;
 
+const keepConversationMessages = (
+  messages: Message[],
+  conversationId: string,
+) => messages.filter((message) => message.conversation_id === conversationId);
+
 // Owns the realtime subscription + paginated message state for a conversation.
 // Extracted from ChatThread so the message-loading logic is reusable across any
 // shell and unit-testable in isolation (independent of the Virtuoso/composer UI).
@@ -89,13 +94,20 @@ export const useConversationRealtime = (conversationId?: string) => {
         ) {
           return;
         }
-        const chronological = sortMessagesChronologically(mapped);
+        const chronological = keepConversationMessages(
+          sortMessagesChronologically(mapped),
+          activeConversationId,
+        );
         // Merge, don't replace: a realtime INSERT between subscribe() and this
         // resolve is already in state, and a blind setMessages(mapped) would
         // drop it (the fetch predates the insert). Union by id, fetched-first.
         setMessages((prev) => {
-          if (prev.length === 0) return chronological;
-          return mergeChronological(prev, chronological);
+          const currentConversationMessages = keepConversationMessages(
+            prev,
+            activeConversationId,
+          );
+          if (currentConversationMessages.length === 0) return chronological;
+          return mergeChronological(currentConversationMessages, chronological);
         });
         setHasMore(apiHasMore);
       } catch {
@@ -138,7 +150,17 @@ export const useConversationRealtime = (conversationId?: string) => {
           ) {
             return;
           }
-          setMessages((prev) => mergeRealtimePage(prev, latest));
+          const currentLatest = keepConversationMessages(
+            latest,
+            activeConversationId,
+          );
+          if (currentLatest.length === 0) return;
+          setMessages((prev) =>
+            mergeRealtimePage(
+              keepConversationMessages(prev, activeConversationId),
+              currentLatest,
+            ),
+          );
         },
       );
     } catch {
@@ -171,7 +193,7 @@ export const useConversationRealtime = (conversationId?: string) => {
       setIsLoadingMore(true);
 
       try {
-        const { messages: older, hasMore: apiHasMore } =
+        const { messages: loadedOlder, hasMore: apiHasMore } =
           await chatRepository.getConversationMessages(activeConversationId, {
             limit: CHAT_MESSAGES_PAGE_SIZE,
             beforeId: earliestId,
@@ -184,6 +206,7 @@ export const useConversationRealtime = (conversationId?: string) => {
         ) {
           return 0;
         }
+        const older = keepConversationMessages(loadedOlder, activeConversationId);
         setHasMore(apiHasMore);
         // Return the number of fetched messages that are genuinely new vs current
         // state — NOT older.length. subscribeToMessages unions the newest page on

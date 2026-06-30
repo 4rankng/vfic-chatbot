@@ -7,8 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.lead_service import (
+from app.services.candidate_extraction import CandidateExtractionService
+from app.services.lead.normalizers import (
     _pick,
+    extract_self_reported_name,
     lead_profile_text,
     normalize_integer,
     normalize_lead,
@@ -16,6 +18,7 @@ from app.services.lead_service import (
     normalize_phone,
     parse_lead_json,
 )
+from app.services.lead.probing import ensure_lead_collection_question, lead_collection_question
 from app.services.memory_service import greeting_gate
 
 
@@ -160,7 +163,7 @@ class TestNormalizeLeadScore:
 
 
 # ---------------------------------------------------------------------------
-# normalize_lead — notes routing, latest_company→notes, full output
+# normalize_lead — notes routing and full output
 # ---------------------------------------------------------------------------
 
 class TestNormalizeLead:
@@ -180,19 +183,6 @@ class TestNormalizeLead:
         result = normalize_lead(raw, "zalo_1")
         assert result["notes"] == "xăm kín người, có xe máy"
 
-    def test_latest_company_routed_to_notes(self):
-        """Backward-compat: if old prompt still returns latest_company, route it to notes."""
-        raw = '{"name": "Minh", "latest_company": "Cty TNHH Hào Quang"}'
-        result = normalize_lead(raw, "zalo_1")
-        assert result["latest_company"] is None  # column no longer populated
-        assert result["notes"] == "Cty TNHH Hào Quang"
-
-    def test_notes_and_latest_company_merged(self):
-        """Both notes and latest_company present → joined."""
-        raw = '{"notes": "có xe máy", "latest_company": "Cty TNHH Hào Quang"}'
-        result = normalize_lead(raw, "zalo_1")
-        assert result["notes"] == "có xe máy; Cty TNHH Hào Quang"
-
     def test_no_chat_id_returns_none(self):
         assert normalize_lead('{"name": "Dũng"}', None) is None
 
@@ -210,6 +200,70 @@ class TestNormalizeLead:
         raw = '{"expected_salary": "9-11 triệu"}'
         result = normalize_lead(raw, "zalo_1")
         assert result["expected_salary"] == "9-11 triệu"
+
+
+# ---------------------------------------------------------------------------
+# extract_self_reported_name — deterministic fallback for "tôi tên ..."
+# ---------------------------------------------------------------------------
+
+class TestExtractSelfReportedName:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("tôi tên Mai", "Mai"),
+            ("em tên là Nguyễn Thị Mai, sdt 0987654321", "Nguyễn Thị Mai"),
+            ("Tên mình là Lan", "Lan"),
+        ],
+    )
+    def test_extracts_explicit_name_phrases(self, text, expected):
+        assert extract_self_reported_name(text) == expected
+
+    @pytest.mark.parametrize("text", ["tôi là công nhân", "muốn làm hè thôi ạ", "Mai"])
+    def test_does_not_guess_without_name_keyword(self, text):
+        assert extract_self_reported_name(text) is None
+
+
+class TestCandidateExtractionService:
+    @pytest.mark.asyncio
+    async def test_extracts_lead_patch_and_memory_facts_from_one_llm_call(self):
+        calls = 0
+
+        async def extractor(_system: str, _turn: str) -> str:
+            nonlocal calls
+            calls += 1
+            return """
+            {
+              "lead_patch": {
+                "name": null,
+                "phone": null,
+                "birth_year": null,
+                "age": null,
+                "living_area": null,
+                "address": null,
+                "gender": null,
+                "region": null,
+                "desired_job": "lao động thời vụ",
+                "years_experience": null,
+                "expected_salary": null,
+                "lead_score": "warm",
+                "notes": null
+              },
+              "memory_facts": ["Người dùng tên là Mai", "Muốn làm thời vụ"]
+            }
+            """
+
+        result = await CandidateExtractionService.extract(
+            extractor,
+            "tôi tên Mai",
+            "Rất vui được biết bạn, Mai!",
+            "zalo_1",
+        )
+
+        assert calls == 1
+        assert result.lead_patch["name"] == "Mai"
+        assert result.lead_patch["desired_job"] == "lao động thời vụ"
+        assert result.lead_patch["lead_score"] == "warm"
+        assert result.memory_facts == ["Người dùng tên là Mai", "Muốn làm thời vụ"]
 
 
 # ---------------------------------------------------------------------------
@@ -283,22 +337,13 @@ class TestGreetingGate:
 
 
 # ---------------------------------------------------------------------------
-# _lead_collection_question — priority + same-turn guards
+# lead_collection_question — priority + same-turn guards
 # ---------------------------------------------------------------------------
 
 class TestLeadCollectionQuestion:
-    """Tests for the probing question selection in runner.py."""
+    """Tests for the probing question selection."""
 
-    @pytest.fixture(autouse=True)
-    def _import_runner_helpers(self):
-        from app.graph.runner import (
-            _ASKABLE_FIELDS,
-            _FIELD_DETECT_KW,
-            _lead_collection_question,
-        )
-        self._ask = _lead_collection_question
-        self._askable = _ASKABLE_FIELDS
-        self._kw = _FIELD_DETECT_KW
+    _ask = staticmethod(lead_collection_question)
 
     def _msg(self, sender, body):
         return SimpleNamespace(sender=sender, body=body, delivery_status="SENT")
@@ -364,14 +409,11 @@ class TestLeadCollectionQuestion:
 
 
 # ---------------------------------------------------------------------------
-# _ensure_lead_collection_question — append-only (G7 fix)
+# ensure_lead_collection_question — append-only
 # ---------------------------------------------------------------------------
 
 class TestEnsureLeadCollectionQuestion:
-    @pytest.fixture(autouse=True)
-    def _import(self):
-        from app.graph.runner import _ensure_lead_collection_question
-        self._ensure = _ensure_lead_collection_question
+    _ensure = staticmethod(ensure_lead_collection_question)
 
     def test_no_question_returns_reply(self):
         assert self._ensure("hello", "") == "hello"
@@ -389,9 +431,8 @@ class TestEnsureLeadCollectionQuestion:
         assert "Chào bạn, tôi có thể giúp gì?" in result
 
     def test_never_replaces_last_paragraph(self):
-        """The old code replaced the model's last paragraph — now it always appends."""
+        """Always append the collection question without replacing model text."""
         reply = "Chào bạn!\n\nBạn quan tâm đến vị trí nào?"
         result = self._ensure(reply, "Bạn cho tôi xin tên?")
-        # Both paragraphs must survive — the old code would have replaced the last one
         assert "vị trí nào?" in result
         assert "tên" in result

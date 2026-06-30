@@ -50,6 +50,17 @@ class ConversationRepository:
     async def get(self, conv_id: uuid.UUID) -> Conversation | None:
         return await self.db.get(Conversation, conv_id)
 
+    async def get_visible(self, conv_id: uuid.UUID, *, viewer: User) -> Conversation | None:
+        stmt = select(Conversation).where(Conversation.id == conv_id)
+        if viewer.role != Role.admin:
+            stmt = stmt.where(
+                or_(
+                    Conversation.assigned_recruiter_id == viewer.id,
+                    Conversation.assigned_recruiter_id.is_(None),
+                )
+            )
+        return (await self.db.scalars(stmt)).first()
+
     async def get_by_zalo(self, zalo_chat_id: str) -> Conversation | None:
         return (
             await self.db.scalars(

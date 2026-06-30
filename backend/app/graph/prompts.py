@@ -3,8 +3,7 @@
 The agent persona lives in ``persona.md`` (next to this file) and is loaded at
 import time — edit that Markdown file to tune the bot's 7-part role definition;
 no Python changes are required. ``SAFETY_PROMPT`` and ``ERROR_REPLY`` are
-hand-maintained constants (historically mirrored from the legacy n8n workflow,
-which is now DR-only).
+hand-maintained constants.
 """
 
 from pathlib import Path

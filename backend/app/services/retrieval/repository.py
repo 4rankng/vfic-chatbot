@@ -135,25 +135,17 @@ class RetrievalRepository:
         seen: set[str] = set()
         return [term for term in terms if not (term in seen or seen.add(term))]
 
-    async def match_documents(
+    async def _match_document_vector_rows(
         self,
+        *,
         emb: str,
         top_k: int,
         filter_json: str,
-        *,
-        project_ids: list[str] | None = None,
-        query_text: str | None = None,
+        project_clause: str,
+        project_ids: list[str] | None,
     ) -> list:
-        """Top-k usable knowledge rows directly from chunks + documents.
-
-        The old path called the ``documents`` compatibility view. Migration 0010 removes
-        that view, so the app now owns the explicit query and returns namespaced
-        metadata for citations/effective-date handling.
-        """
-        project_clause = ""
         params: dict[str, object] = {"emb": emb, "k": top_k, "filter": filter_json}
         if project_ids:
-            project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
             params["pids"] = project_ids
         s = get_settings()
         if self._ann_enabled():
@@ -174,7 +166,7 @@ class RetrievalRepository:
                 "ORDER BY c.embedding <=> CAST(:emb AS vector) "
                 "LIMIT :k"
             )
-            vector_params = {
+            params = {
                 **params,
                 "floor": self.SIMILARITY_FLOOR,
                 "candidate_k": max(int(s.rag_ann_candidates), top_k),
@@ -190,27 +182,34 @@ class RetrievalRepository:
                 "ORDER BY c.embedding <=> CAST(:emb AS vector) "
                 "LIMIT :k"
             )
-            vector_params = {**params, "floor": self.SIMILARITY_FLOOR}
-        vector_rows = (await self.db.execute(text(vector_sql), vector_params)).all()
-        logger.debug(
-            "match_documents vector branch: %d rows (floor=%.2f)",
-            len(vector_rows), self.SIMILARITY_FLOOR,
-        )
-        terms = self._lexical_terms(query_text)
-        if not terms:
-            return vector_rows
+            params = {**params, "floor": self.SIMILARITY_FLOOR}
+        return (await self.db.execute(text(vector_sql), params)).all()
 
+    async def _match_document_lexical_rows(
+        self,
+        *,
+        top_k: int,
+        filter_json: str,
+        project_clause: str,
+        project_ids: list[str] | None,
+        terms: list[str],
+        emb: str,
+    ) -> list:
         lexical_terms = terms[:8]
         term_predicates = [
             f"c.search_text ILIKE :term_like_{i}" for i, _term in enumerate(lexical_terms)
         ]
         lexical_prefilter = " OR ".join(term_predicates) or "false"
-        lexical_params = {
-            **params,
+        params: dict[str, object] = {
+            "emb": emb,
+            "k": top_k,
+            "filter": filter_json,
             "terms": lexical_terms,
             **{f"term_like_{i}": f"%{term}%" for i, term in enumerate(lexical_terms)},
         }
-        lexical_rows = (
+        if project_ids:
+            params["pids"] = project_ids
+        return (
             await self.db.execute(
                 text(
                     "WITH haystack AS ("
@@ -236,9 +235,51 @@ class RetrievalRepository:
                     "ORDER BY lexical_hits DESC "
                     "LIMIT :k"
                 ),
-                lexical_params,
+                params,
             )
         ).all()
+
+    async def match_documents(
+        self,
+        emb: str,
+        top_k: int,
+        filter_json: str,
+        *,
+        project_ids: list[str] | None = None,
+        query_text: str | None = None,
+    ) -> list:
+        """Top-k usable knowledge rows directly from chunks + documents.
+
+        The old path called the ``documents`` compatibility view. Migration 0010 removes
+        that view, so the app now owns the explicit query and returns namespaced
+        metadata for citations/effective-date handling.
+        """
+        project_clause = ""
+        if project_ids:
+            project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
+        vector_rows = await self._match_document_vector_rows(
+            emb=emb,
+            top_k=top_k,
+            filter_json=filter_json,
+            project_clause=project_clause,
+            project_ids=project_ids,
+        )
+        logger.debug(
+            "match_documents vector branch: %d rows (floor=%.2f)",
+            len(vector_rows), self.SIMILARITY_FLOOR,
+        )
+        terms = self._lexical_terms(query_text)
+        if not terms:
+            return vector_rows
+
+        lexical_rows = await self._match_document_lexical_rows(
+            emb=emb,
+            top_k=top_k,
+            filter_json=filter_json,
+            project_clause=project_clause,
+            project_ids=project_ids,
+            terms=terms,
+        )
 
         # Lexical fills at most 2/3 of slots; vector always gets the remainder.
         lexical_cap = max(top_k * 2 // 3, 1)

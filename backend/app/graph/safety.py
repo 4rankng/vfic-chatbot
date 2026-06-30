@@ -1,12 +1,4 @@
-"""Safety / verdict / retry logic — VERBATIM ports of the n8n code nodes:
-
-  * Fast Safety Filter  (regex risk + markdown clean -> decide if M2.5 is needed)
-  * Verdict Parser      (parse M2.5 JSON verdict, lenient)
-  * Try Again           (retry_prompt builder + retry-exhausted fallback)
-
-These are the deterministic guards around the LLM; ported char-for-char from
-the original VFIC Chatbot n8n workflow (now retired) so the behavior is preserved.
-"""
+"""Deterministic safety, verdict parsing, and retry-prompt logic for bot replies."""
 from __future__ import annotations
 
 import json
@@ -24,8 +16,7 @@ _RISK_RE = re.compile(
 
 
 def fast_safety_filter(raw: str) -> dict:
-    """Port of the 'Fast Safety Filter' code node. Returns whether the M2.5 LLM
-    safety check is needed, plus a markdown-cleaned version of the reply."""
+    """Return whether an LLM safety check is needed plus a cleaned reply."""
     raw = (raw or "").strip()
     # MiniMax M2 reasoning models wrap deliberation in <think>…</think>; the
     # user-facing reply is what follows the last </think>. Never send reasoning.
@@ -64,7 +55,7 @@ def _to_bool(value) -> bool:
 
 
 def parse_verdict(raw) -> dict:
-    """Port of the 'Verdict Parser' code node (lenient JSON extraction)."""
+    """Parse the safety model verdict with lenient JSON extraction."""
     if isinstance(raw, dict):
         raw = json.dumps(raw)
     raw = str(raw if raw is not None else "").strip()

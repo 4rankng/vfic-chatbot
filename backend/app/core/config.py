@@ -73,8 +73,8 @@ class Settings(BaseSettings):
     # The webhook URL currently registered with Zalo (used for self-tests / status).
     zalo_bot_webhook_url: str = ""
 
-    # LLM providers. MiniMax remains the default for backwards compatibility;
-    # OpenRouter is also OpenAI-compatible and can be selected via *_ENABLE.
+    # LLM providers. MiniMax is the default primary provider; OpenRouter is also
+    # OpenAI-compatible and can be selected via *_ENABLE.
     minimax_enable: bool = True
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.io/v1"
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     openrouter_request_timeout: int = 60
     openrouter_digest_timeout: int = 180
 
-    # Embeddings: Google Gemini (3072-dim). KEPT from n8n.
+    # Embeddings: Google Gemini (3072-dim).
     gemini_api_key: str = ""
     gemini_embedding_model: str = "gemini-embedding-2"
     embedding_dim: int = 3072

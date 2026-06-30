@@ -140,7 +140,9 @@ export const chatRepository = {
       { signal: options?.signal },
     );
     const mapped = sortMessagesChronologically(
-      (body.data ?? []).map(toMessage),
+      (body.data ?? [])
+        .map(toMessage)
+        .filter((message) => message.conversation_id === conversationId),
     );
     return { messages: mapped, hasMore: mapped.length >= limit };
   },

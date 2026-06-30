@@ -1,0 +1,55 @@
+"""Prompt-context assembly for chatbot turns."""
+from __future__ import annotations
+
+from app.graph.types import _speaker
+from app.models.conversation import DeliveryStatus, Message, MessageSender
+
+
+def build_agent_user_text(
+    *,
+    chat_id: str,
+    current_user_text: str,
+    recent_messages: list[Message],
+    lead_profile: str = "",
+    lead_collection_instruction: str = "",
+) -> str:
+    """Give the agent the actual chat state, not just the latest short reply."""
+    history = [
+        m
+        for m in recent_messages
+        if (m.body or "").strip() and m.delivery_status != DeliveryStatus.SUPPRESSED
+    ]
+    if (
+        history
+        and history[-1].sender == MessageSender.WORKER
+        and history[-1].body.strip() == current_user_text.strip()
+    ):
+        history = history[:-1]
+
+    if history:
+        history_lines = [
+            f"- {_speaker(m)}: {m.body.strip()}" for m in history
+        ]
+    else:
+        history_lines = ["- (chưa có tin nhắn trước đó)"]
+
+    parts: list[str] = [
+        f"CHAT_ID để tra cứu memory khi cần: {chat_id}",
+    ]
+    if lead_profile:
+        parts += ["", lead_profile]
+    if lead_collection_instruction:
+        parts += ["", lead_collection_instruction]
+    parts += [
+        "",
+        "LỊCH SỬ GẦN ĐÂY (cũ -> mới):",
+        *history_lines,
+        "",
+        "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:",
+        current_user_text,
+        "",
+        "Hãy trả lời tin nhắn hiện tại dựa trên lịch sử trên. "
+        "Nếu đây là câu trả lời ngắn cho câu hỏi trước đó, tiếp tục đúng mạch hội thoại; "
+        "không chào lại hoặc hỏi lại thông tin đã có.",
+    ]
+    return "\n".join(parts)

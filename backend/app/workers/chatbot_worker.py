@@ -1,7 +1,6 @@
 """RQ worker: enqueue + run chatbot turns on the webhook_high queue."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 
@@ -39,15 +38,16 @@ def enqueue_chat_run(job: dict) -> bool:
 
 def run_chat_turn_job(job: dict) -> None:
     """RQ job entrypoint (sync). Runs the async graph turn."""
-    asyncio.run(_run_job_async(job))
+    from app.workers.async_runner import run_async
+
+    run_async(_run_job_async(job))
 
 
 def _enqueue_persist(persist_job: dict) -> None:
-    """Fire both lead + memory persistence after a SENT reply (best-effort)."""
-    from app.workers.persistence_worker import enqueue_persist_lead, enqueue_persist_memory
+    """Fire candidate extraction after a SENT reply (best-effort)."""
+    from app.workers.persistence_worker import enqueue_persist_candidate
 
-    enqueue_persist_lead(persist_job)
-    enqueue_persist_memory(persist_job)
+    enqueue_persist_candidate(persist_job)
 
 
 async def _run_job_async(job: dict) -> None:
@@ -88,7 +88,7 @@ async def _run_job_async(job: dict) -> None:
     )
     async with worker_session() as db:
         deps = await build_deps(db)
-        deps.persist = _enqueue_persist  # wire lead/memory extraction on SENT
+        deps.persist = _enqueue_persist  # wire candidate extraction on SENT
         started_at = _now()
         try:
             await run_turn(state, deps)
@@ -103,7 +103,10 @@ async def _run_job_async(job: dict) -> None:
                 svc = ConversationService(db)
                 conv = await svc.get(uuid.UUID(state.conversation_id))
                 if conv is not None:
-                    send_result = await deps.zalo.send(conv.zalo_chat_id, DEGRADATION_REPLY)
+                    send_result = await deps.zalo.send_message(
+                        conv.zalo_chat_id,
+                        DEGRADATION_REPLY,
+                    )
                     await svc.record_bot_outcome(
                         conv,
                         version_at_start=state.version_at_start,

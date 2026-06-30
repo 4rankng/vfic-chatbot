@@ -75,18 +75,21 @@ describe("chatRepository.getConversationMessages", () => {
       data: [
         {
           id: 1,
+          conversation_id: "c1",
           body: "b",
           sender: "BOT",
           created_at: "2026-06-29T02:15:00.000Z",
         },
         {
           id: 2,
+          conversation_id: "c1",
           body: "a",
           sender: "SYSTEM",
           created_at: "2026-06-29T01:22:00.000Z",
         },
         {
           id: 3,
+          conversation_id: "c1",
           body: "c",
           sender: "WORKER",
           created_at: "2026-06-29T13:41:00.000Z",
@@ -112,15 +115,34 @@ describe("chatRepository.getConversationMessages", () => {
   it("treats candidate sender variants and inbound direction as inbound", async () => {
     const { fetch } = stubJson(async () => ({
       data: [
-        { id: 4, body: "fallback inbound", sender: null, created_at: "t4" },
+        {
+          id: 4,
+          conversation_id: "c1",
+          body: "fallback inbound",
+          sender: null,
+          created_at: "t4",
+        },
         {
           id: 3,
+          conversation_id: "c1",
           body: "direction inbound",
           direction: "inbound",
           created_at: "t3",
         },
-        { id: 2, body: "candidate", sender: "CANDIDATE", created_at: "t2" },
-        { id: 1, body: "worker", sender: "WORKER", created_at: "t1" },
+        {
+          id: 2,
+          conversation_id: "c1",
+          body: "candidate",
+          sender: "CANDIDATE",
+          created_at: "t2",
+        },
+        {
+          id: 1,
+          conversation_id: "c1",
+          body: "worker",
+          sender: "WORKER",
+          created_at: "t1",
+        },
       ],
       total: 4,
     }));
@@ -140,7 +162,7 @@ describe("chatRepository.getConversationMessages", () => {
 
   it("reports hasMore=false on a partial page", async () => {
     const { fetch } = stubJson(async () => ({
-      data: [{ id: 1, body: "x", sender: "WORKER" }],
+      data: [{ id: 1, conversation_id: "c1", body: "x", sender: "WORKER" }],
       total: 1,
     }));
     globalThis.fetch = fetch;
@@ -172,6 +194,23 @@ describe("chatRepository.getConversationMessages", () => {
     });
 
     expect(lastInit()?.signal).toBe(controller.signal);
+  });
+
+  it("drops messages that do not belong to the requested conversation", async () => {
+    const { fetch } = stubJson(async () => ({
+      data: [
+        { id: 1, conversation_id: "other", body: "wrong", sender: "WORKER" },
+        { id: 2, conversation_id: "c1", body: "right", sender: "WORKER" },
+      ],
+      total: 2,
+    }));
+    globalThis.fetch = fetch;
+
+    const { messages } = await chatRepository.getConversationMessages("c1", {
+      limit: 10,
+    });
+
+    expect(messages.map((message) => message.content)).toEqual(["right"]);
   });
 });
 

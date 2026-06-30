@@ -10,7 +10,6 @@ type VficWindowConfig = {
   API_BASE?: string;
   REALTIME_URL?: string;
   SOCKET_URL?: string;
-  HUMAN_REPLY_WEBHOOK?: string;
 };
 
 const getWindowConfig = (): VficWindowConfig => {
@@ -46,9 +45,5 @@ export const vficConfig = {
    */
   get socketUrl(): string {
     return win.SOCKET_URL ?? env.VITE_SOCKET_URL ?? this.apiBaseUrl;
-  },
-  /** Legacy n8n human-reply webhook — optional, superseded by the REST endpoint. */
-  get humanReplyWebhookUrl(): string | null {
-    return win.HUMAN_REPLY_WEBHOOK ?? env.VITE_HUMAN_REPLY_WEBHOOK ?? null;
   },
 } as const;

@@ -1,8 +1,8 @@
 """ZaloWebhookService — the SYNCHRONOUS webhook handler (must ack < 1s).
 
-Port + ordering of the n8n trigger chain:
-  normalize -> dedup(8s) -> ensure conversation -> record_inbound -> run_start_guard
-  -> acquire_lock(30s mutex) -> send typing indicator -> enqueue RQ job
+Flow:
+  normalize -> dedup -> ensure conversation -> record_inbound -> run_start_guard
+  -> acquire_lock -> send typing indicator -> enqueue RQ job
 
 A Zalo typing indicator is fired from the webhook handler (fire-and-forget) so
 the user sees immediate feedback. The RQ worker's _typing_heartbeat keeps it

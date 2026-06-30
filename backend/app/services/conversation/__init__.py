@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from app.services.conversation.events import ConversationEventBus
 from app.services.conversation.repository import ConversationRepository
+from app.services.conversation.scheduler import enqueue_latest_unanswered_worker_message
 from app.services.conversation.state import ConversationConflict, ConversationState
 
 __all__ = ["ConversationConflict", "ConversationService"]
@@ -38,6 +39,9 @@ class ConversationService:
     # --- reads (delegate to repository) ---
     async def get(self, *args, **kwargs):
         return await self.repo.get(*args, **kwargs)
+
+    async def get_visible(self, *args, **kwargs):
+        return await self.repo.get_visible(*args, **kwargs)
 
     async def get_by_zalo(self, *args, **kwargs):
         return await self.repo.get_by_zalo(*args, **kwargs)
@@ -128,6 +132,12 @@ class ConversationService:
         """
         from app.services.zalo_bot_service import ZaloBotSender
 
-        result = await ZaloBotSender().send(conv.zalo_chat_id, body)
+        result = await ZaloBotSender().send_message(conv.zalo_chat_id, body)
         msg = await self.state.record_recruiter_message(conv, recruiter, body, result)
         return msg, result.ok
+
+    async def release_and_enqueue_unanswered(self, conv, actor, *, enqueue):
+        """Release a conversation to BOT mode and schedule any pending worker reply."""
+        released = await self.release(conv, actor)
+        await enqueue_latest_unanswered_worker_message(self, released, enqueue=enqueue)
+        return released

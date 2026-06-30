@@ -6,7 +6,6 @@ The ``scheduler`` container (``rqscheduler``) periodically enqueues the
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -26,7 +25,9 @@ def enqueue_followup(conversation_id: str) -> None:
 
 def run_followup_job(job: dict) -> None:
     """RQ job entrypoint (sync). Runs the async proactive turn."""
-    asyncio.run(_run_followup_async(job))
+    from app.workers.async_runner import run_async
+
+    run_async(_run_followup_async(job))
 
 
 async def _run_followup_async(job: dict) -> None:
@@ -72,7 +73,9 @@ async def _run_followup_async(job: dict) -> None:
 
 def run_proactive_followup_tick() -> None:
     """Scheduler tick (sync entrypoint). Scans eligible conversations and enqueues per-lead jobs."""
-    asyncio.run(_run_tick_async())
+    from app.workers.async_runner import run_async
+
+    run_async(_run_tick_async())
 
 
 async def _run_tick_async() -> None:

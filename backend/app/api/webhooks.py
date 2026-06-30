@@ -50,7 +50,10 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
         )
     # else: dev/test with no secret -> accept unchanged (ergonomics).
 
-    payload = json.loads(raw)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return JSONResponse({"detail": "invalid JSON body"}, status_code=400)
     result = await ZaloWebhookService.handle(db, payload, enqueue=enqueue_chat_run)
     code = 503 if result.get("status") == "enqueue_failed" else 200
     return JSONResponse(result, status_code=code)

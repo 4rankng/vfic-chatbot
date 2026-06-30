@@ -1,9 +1,8 @@
 """Conversation API: list/get/messages + mode changes/close/reopen/read + recruiter reply.
 
-The recruiter-reply endpoint (POST /{id}/messages) is the replacement for the n8n
-"Human Reply" webhook: it enforces JWT + ownership + human-capable mode, sends
-via Zalo (server-side token), inserts the RECRUITER message + audit, and fans
-out events.
+The recruiter-reply endpoint (POST /{id}/messages) enforces JWT + ownership +
+human-capable mode, sends via Zalo, inserts the recruiter message + audit, and
+fans out events.
 """
 
 import uuid
@@ -28,8 +27,11 @@ from app.workers.chatbot_worker import enqueue_chat_run
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
-async def _load(conv_id: uuid.UUID, db: AsyncSession) -> Conversation:
-    conv = await db.get(Conversation, conv_id)
+async def _load(conv_id: uuid.UUID, db: AsyncSession, user: User | None = None) -> Conversation:
+    if user is None:
+        conv = await db.get(Conversation, conv_id)
+    else:
+        conv = await ConversationService(db).get_visible(conv_id, viewer=user)
     if conv is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
     return conv
@@ -107,19 +109,19 @@ async def needs_attention(
 
 @router.get("/{conv_id}", response_model=ConversationOut)
 async def get_conversation(
-    conv_id: uuid.UUID, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
-    return ConversationOut.model_validate(await _load(conv_id, db))
+    return ConversationOut.model_validate(await _load(conv_id, db, user))
 
 
 @router.get("/{conv_id}/last-messages", response_model=list[MessageOut])
 async def last_messages(
     conv_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[MessageOut]:
-    conv = await _load(conv_id, db)
+    conv = await _load(conv_id, db, user)
     svc = ConversationService(db)
     return [MessageOut.model_validate(m) for m in await svc.last_messages(conv, limit)]
 
@@ -137,10 +139,10 @@ async def list_messages(
     before: int | None = Query(
         None, description="Cursor alias: return messages older than this message id"
     ),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageListResponse:
-    conv = await _load(conv_id, db)
+    conv = await _load(conv_id, db, user)
     svc = ConversationService(db)
     page_size = limit if limit is not None else per_page
     cursor = before if before is not None else before_id
@@ -152,7 +154,7 @@ async def list_messages(
 async def take_over(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
-    conv = await _load(conv_id, db)
+    conv = await _load(conv_id, db, user)
     try:
         conv = await ConversationService(db).take_over(conv, user)
     except ConversationConflict as exc:
@@ -168,25 +170,11 @@ async def release(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
     svc = ConversationService(db)
-    conv = await svc.release(await _load(conv_id, db), user)
-    pending = await svc.latest_unanswered_worker_message(conv)
-    if pending is not None and await svc.acquire_lock(conv.id):
-        enqueued = enqueue_chat_run(
-            {
-                "conversation_id": str(conv.id),
-                "version_at_start": conv.version,
-                "user_text": pending.body,
-                "user_name": "",
-                "received_at": pending.created_at.isoformat(),
-            }
-        )
-        if not enqueued:
-            await svc.release_lock(conv)
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "release enqueue failed for conversation %s; lock released", conv.id
-            )
+    conv = await svc.release_and_enqueue_unanswered(
+        await _load(conv_id, db, user),
+        user,
+        enqueue=enqueue_chat_run,
+    )
     return ConversationOut.model_validate(conv)
 
 
@@ -194,7 +182,7 @@ async def release(
 async def semi_auto(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
-    conv = await _load(conv_id, db)
+    conv = await _load(conv_id, db, user)
     try:
         conv = await ConversationService(db).semi_auto(conv, user)
     except ConversationConflict as exc:
@@ -210,7 +198,7 @@ async def close(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
     return ConversationOut.model_validate(
-        await ConversationService(db).close(await _load(conv_id, db), user)
+        await ConversationService(db).close(await _load(conv_id, db, user), user)
     )
 
 
@@ -219,16 +207,16 @@ async def reopen(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
     return ConversationOut.model_validate(
-        await ConversationService(db).reopen(await _load(conv_id, db), user)
+        await ConversationService(db).reopen(await _load(conv_id, db, user), user)
     )
 
 
 @router.post("/{conv_id}/read", response_model=ConversationOut)
 async def mark_read(
-    conv_id: uuid.UUID, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
     return ConversationOut.model_validate(
-        await ConversationService(db).mark_read(await _load(conv_id, db))
+        await ConversationService(db).mark_read(await _load(conv_id, db, user))
     )
 
 
@@ -251,7 +239,7 @@ async def send_recruiter_message(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageOut:
-    conv = await _load(conv_id, db)
+    conv = await _load(conv_id, db, user)
     owns = conv.assigned_recruiter_id == user.id
     allowed = conv.mode in (
         ConversationMode.HUMAN,

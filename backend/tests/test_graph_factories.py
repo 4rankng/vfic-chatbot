@@ -1,9 +1,4 @@
-"""Phase 4 characterization tests for the graph factories (GraphDeps wiring).
-
-``_minimax_chat`` is stubbed so no real MiniMax key / network is needed — the test
-verifies that ``build_deps`` still composes a fully-wired ``GraphDeps`` after the move
-out of llm_real.py into factories.py.
-"""
+"""Tests for graph factories and GraphDeps wiring."""
 import pytest
 
 from app.graph.clients import FallbackLLM, GeminiEmbedder, MiniMaxAgent, MiniMaxSafety

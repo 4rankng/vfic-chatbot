@@ -6,9 +6,8 @@ is no Authorization header. Inbound webhook authenticity is verified via the
 ``X-Bot-Api-Secret-Token`` shared secret (see ``app.api.webhooks``) — NOT the
 Zalo OA HMAC scheme.
 
-``ZaloBotSender.send`` / ``.typing`` are OA-era compatibility shims used by the
-graph runner + conversations router; the richer ``send_message`` / ``send_photo``
-/ ``send_sticker`` / ``send_voice`` methods are available for future use.
+Text, media, sticker, voice, and chat-action sends map directly to Bot Platform
+methods.
 
 Response envelope (per Zalo Bot Platform docs):
 
@@ -242,15 +241,6 @@ class ZaloBotSender:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
-
-    async def send(self, chat_id: str, text: str) -> SendResult:
-        """OA-era compatibility shim: ``send(chat_id, text)`` -> sendMessage.
-        Used by the graph runner + conversations router."""
-        return await self.send_message(chat_id, text)
-
-    async def typing(self, chat_id: str) -> SendResult:
-        """Show a typing indicator. Best-effort; callers swallow errors."""
-        return await self.send_chat_action(chat_id, "typing")
 
     async def send_message(
         self,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useRecordContext,
   useGetList,
@@ -9,6 +9,7 @@ import {
 } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import { getLeadStatusColor } from "./conversationDisplay";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 import { ChatThread } from "./ChatThread";
@@ -100,12 +101,42 @@ export const ConversationShowContent = ({
     [record?.zalo_chat_id],
   );
 
-  const { data: leadData } = useGetList(
+  const { data: leadData, refetch: refetchLead } = useGetList(
     "leads",
     leadListParams,
     leadListOptions,
   );
   const lead = leadData?.[0] as Lead | undefined;
+
+  useEffect(() => {
+    if (!lead?.id) return;
+    const leadId = String(lead.id);
+    const socket = getRealtimeSocket();
+    const handleLeadUpdated = (payload: {
+      id?: string | number;
+      lead_id?: string | number;
+      zalo_id?: string | null;
+    }) => {
+      const payloadLeadId = payload?.lead_id ?? payload?.id;
+      const sameLead =
+        payloadLeadId != null && String(payloadLeadId) === leadId;
+      const sameZalo =
+        !!payload?.zalo_id && payload.zalo_id === record?.zalo_chat_id;
+      if (!sameLead && !sameZalo) return;
+      void refetchLead();
+    };
+
+    socket.on("lead.updated", handleLeadUpdated);
+    if (!socket.connected) {
+      socket.connect();
+    }
+    socket.emit("join lead", { lead_id: lead.id });
+
+    return () => {
+      socket.off("lead.updated", handleLeadUpdated);
+      socket.emit("leave lead", { lead_id: lead.id });
+    };
+  }, [lead?.id, record?.zalo_chat_id, refetchLead]);
 
   const name =
     lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;

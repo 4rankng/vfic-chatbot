@@ -16,7 +16,6 @@ taken *before* touching any PENDING row → overlapping ticks cannot double-enqu
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -43,7 +42,9 @@ def enqueue_reconcile_tick_now() -> bool:
 
 def run_reconcile_tick() -> None:
     """Scheduler tick (sync entrypoint). Scans for lost bot turns and re-enqueues."""
-    asyncio.run(_run_tick_async())
+    from app.workers.async_runner import run_async
+
+    run_async(_run_tick_async())
 
 
 async def _run_tick_async() -> None:

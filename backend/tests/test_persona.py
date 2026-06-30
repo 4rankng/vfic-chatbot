@@ -1,10 +1,8 @@
 """Structural guard for the 7-part VFIC agent persona (persona.md).
 
-The persona is intentionally no longer byte-pinned to the legacy n8n workflow —
-it is hand-edited and config-driven (loaded from persona.md at import). These
-tests guard against accidental deletion/corruption of persona.md and verify the
-7-part framework stays intact, plus spot-check that critical operational rules
-survived the restructure.
+The persona is hand-edited and config-driven (loaded from persona.md at import).
+These tests guard against accidental deletion/corruption of persona.md and verify
+the 7-part framework stays intact, plus spot-check critical operational rules.
 """
 
 import uuid

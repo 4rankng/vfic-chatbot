@@ -8,7 +8,7 @@ graph/services imports (the whole point of extracting it from ``app.graph``).
 def test_prompts_package_has_no_graph_or_services_imports():
     import ast
 
-    import app.prompts.lead_memory as mod
+    import app.prompts.candidate_extraction as mod
 
     tree = ast.parse(open(mod.__file__).read()).body
     for node in tree:
@@ -21,10 +21,11 @@ def test_prompts_package_has_no_graph_or_services_imports():
             )
 
 
-def test_lead_memory_prompts_are_non_empty_and_shaped():
-    from app.prompts.lead_memory import LEAD_EXTRACT_SYSTEM_PROMPT, MEMORY_EXTRACT_PROMPT
+def test_candidate_extraction_prompt_is_non_empty_and_shaped():
+    from app.prompts.candidate_extraction import CANDIDATE_EXTRACT_SYSTEM_PROMPT
 
-    assert LEAD_EXTRACT_SYSTEM_PROMPT.strip().lower().startswith("bạn là")
-    assert "json" in LEAD_EXTRACT_SYSTEM_PROMPT.lower()
-    assert MEMORY_EXTRACT_PROMPT.strip().lower().startswith("bạn là")
-    assert "mảng json" in MEMORY_EXTRACT_PROMPT.lower()
+    prompt = CANDIDATE_EXTRACT_SYSTEM_PROMPT
+    assert prompt.strip().lower().startswith("bạn là")
+    assert "json" in prompt.lower()
+    assert "lead_patch" in prompt
+    assert "memory_facts" in prompt

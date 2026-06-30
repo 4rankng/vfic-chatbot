@@ -1,5 +1,4 @@
-"""Job CRUD + semantic search (match_documents over the documents VIEW, the same
-path the bot's search_jobs tool uses)."""
+"""Job CRUD + semantic search over the documents view."""
 from __future__ import annotations
 
 from typing import Awaitable, Callable
