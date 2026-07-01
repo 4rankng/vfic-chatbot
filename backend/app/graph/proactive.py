@@ -8,6 +8,7 @@ to mark it as a proactive send.
 
 Outcome dict keys: ``outcome`` (sent / suppressed / error), ``reason``, ``reply``.
 """
+
 from __future__ import annotations
 
 import json
@@ -157,6 +158,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
         PROACTIVE_SILENCE_LIMIT,
     )
     from app.graph.context import build_system_prompt
+    from app.services.proactive.repository import conversation_allowed_by_followup_rules
     from app.services.lead.repository import LeadRepository
     from app.services.lead import lead_profile_text
 
@@ -168,7 +170,9 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
 
     # 1. Re-check guards
     await deps.db.refresh(conv)
-    if conv.mode != "BOT" or conv.status != "OPEN":
+    mode_value = getattr(conv.mode, "value", conv.mode)
+    status_value = getattr(conv.status, "value", conv.status)
+    if mode_value not in {"BOT", "SEMI_AUTO"} or status_value != "OPEN":
         return _outcome("suppressed", reason="mode/status")
     if conv.followup_opted_out:
         return _outcome("suppressed", reason="opted_out")
@@ -178,6 +182,10 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
         return _outcome("suppressed", reason="locked")
     if not conv.last_inbound_at:
         return _outcome("suppressed", reason="no_inbound")
+
+    rule_allowed, rule_reason = await conversation_allowed_by_followup_rules(deps.db, conv)
+    if not rule_allowed:
+        return _outcome("suppressed", reason=rule_reason)
 
     # 2. 48h compliance (Python single-clock — same clock that wrote
     #    ``last_inbound_at`` via ``utcnow()`` in ``state.py``)
@@ -272,9 +280,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
             if verdict["safe_to_send"]:
                 candidate = verdict["final_answer"] or candidate
             else:
-                logger.info(
-                    "proactive safety blocked: conversation=%s", conv.zalo_chat_id
-                )
+                logger.info("proactive safety blocked: conversation=%s", conv.zalo_chat_id)
                 await svc.state.record_proactive_outcome(
                     conv, message=candidate, result=SendResult(ok=False, error="safety_blocked")
                 )
@@ -288,6 +294,11 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
             await svc.state.release_lock(conv)
             await deps.db.commit()
             return _outcome("suppressed", reason="opted_out_during_generation")
+        rule_allowed, rule_reason = await conversation_allowed_by_followup_rules(deps.db, conv)
+        if not rule_allowed:
+            await svc.state.release_lock(conv)
+            await deps.db.commit()
+            return _outcome("suppressed", reason=f"rule_{rule_reason}")
         owned = await svc.recheck_ownership(conv, version_at_start)
         if not owned:
             await svc.state.release_lock(conv)

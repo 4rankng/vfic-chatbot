@@ -33,7 +33,12 @@ const PersonaEditContent = () => {
       await dataProvider.update("personas", {
         id: persona.id,
         previousData: persona,
-        data: { name: v.name, body_md: v.body_md, notes: v.notes },
+        data: {
+          name: v.name,
+          body_md: v.body_md,
+          notes: v.notes,
+          followup_rules: v.followup_rules,
+        },
       });
       notify("Đã lưu.", { type: "success" });
       refresh();
@@ -133,6 +138,7 @@ const PersonaEditContent = () => {
           name: persona.name,
           body_md: persona.body_md,
           notes: persona.notes ?? "",
+          followup_rules: persona.followup_rules,
         }}
         submitLabel="Lưu"
         onSubmit={onSubmit}

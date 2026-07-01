@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   CheckCircle2,
   Download,
@@ -21,6 +23,13 @@ import {
   Upload,
 } from "lucide-react";
 import { importPersona } from "@/lib/vfic/knowledgeService";
+import {
+  LEAD_STAGES,
+  type LeadScoreValue,
+  type LeadStageValue,
+  type PersonaFollowupRule,
+  type PersonaFollowupRules,
+} from "../types";
 
 const PERSONA_SECTIONS = [
   {
@@ -84,6 +93,56 @@ export const PERSONA_TEMPLATE = PERSONA_SECTIONS.map(
 ).join("\n\n");
 
 const PERSONA_TEMPLATE_FILENAME = "mau-agent-vfic.md";
+
+const FOLLOWUP_SCORE_LABELS: Record<LeadScoreValue, string> = {
+  hot: "Hot",
+  warm: "Warm",
+  not_interested: "Cold",
+};
+
+const FOLLOWUP_SCORE_ORDER: LeadScoreValue[] = [
+  "hot",
+  "warm",
+  "not_interested",
+];
+
+export const defaultPersonaFollowupRules = (): PersonaFollowupRules => ({
+  hot: {
+    enabled: true,
+    cadence_hours: [10, 22, 46],
+    eligible_stages: ["NEW"],
+  },
+  warm: {
+    enabled: true,
+    cadence_hours: [22, 46],
+    eligible_stages: ["NEW"],
+  },
+  not_interested: {
+    enabled: true,
+    cadence_hours: [46],
+    eligible_stages: ["NEW"],
+  },
+});
+
+const normalizeFollowupRules = (
+  rules?: Partial<PersonaFollowupRules> | null,
+): PersonaFollowupRules => {
+  const defaults = defaultPersonaFollowupRules();
+  return {
+    hot: { ...defaults.hot, ...(rules?.hot ?? {}) },
+    warm: { ...defaults.warm, ...(rules?.warm ?? {}) },
+    not_interested: {
+      ...defaults.not_interested,
+      ...(rules?.not_interested ?? {}),
+    },
+  };
+};
+
+const parseCadenceInput = (value: string): number[] =>
+  value
+    .split(/[,\s]+/)
+    .map((part) => Number.parseInt(part.trim(), 10))
+    .filter((value) => Number.isFinite(value) && value > 0);
 
 const emptyPersonaSections = (): PersonaSectionValues =>
   PERSONA_SECTIONS.map(() => "");
@@ -174,6 +233,7 @@ export interface PersonaValues {
   name: string;
   body_md: string;
   notes: string;
+  followup_rules?: PersonaFollowupRules;
 }
 
 interface PersonaFormProps {
@@ -201,6 +261,9 @@ const PersonaForm = ({
     () => parsePersonaMarkdown(initial.body_md).extraMarkdown,
   );
   const [notes, setNotes] = useState(initial.notes ?? "");
+  const [followupRules, setFollowupRules] = useState<PersonaFollowupRules>(() =>
+    normalizeFollowupRules(initial.followup_rules),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
   const bodyMd = useMemo(
@@ -220,7 +283,12 @@ const PersonaForm = ({
     if (!name.trim() || submitting) return;
     setSubmitting(true);
     try {
-      await onSubmit({ name, body_md: bodyMd, notes });
+      await onSubmit({
+        name,
+        body_md: bodyMd,
+        notes,
+        followup_rules: followupRules,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -260,6 +328,9 @@ const PersonaForm = ({
       setSectionValues(parsed.sections);
       setExtraMarkdown(parsed.extraMarkdown);
       if (persona.notes != null) setNotes(persona.notes);
+      if (persona.followup_rules) {
+        setFollowupRules(normalizeFollowupRules(persona.followup_rules));
+      }
       notify(
         `Đã nhập Agent "${persona.name}" thành công. Hãy rà soát trước khi lưu.`,
         { type: "success" },
@@ -282,6 +353,33 @@ const PersonaForm = ({
   const contentLength = [...sectionValues, extraMarkdown]
     .join("\n")
     .trim().length;
+
+  const updateFollowupRule = (
+    score: LeadScoreValue,
+    patch: Partial<PersonaFollowupRule>,
+  ) => {
+    setFollowupRules((current) => ({
+      ...current,
+      [score]: {
+        ...current[score],
+        ...patch,
+      },
+    }));
+  };
+
+  const toggleFollowupStage = (
+    score: LeadScoreValue,
+    stage: LeadStageValue,
+    checked: boolean,
+  ) => {
+    const current = followupRules[score].eligible_stages;
+    const next = checked
+      ? Array.from(new Set([...current, stage]))
+      : current.filter((value) => value !== stage);
+    updateFollowupRule(score, {
+      eligible_stages: next.length > 0 ? next : ["NEW"],
+    });
+  };
 
   return (
     <Card className="w-full overflow-hidden rounded-xl py-0 shadow-sm">
@@ -439,6 +537,92 @@ const PersonaForm = ({
           </section>
 
           <section className="border-t bg-muted/10 px-4 py-4 sm:px-5">
+            <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+              <Sparkles className="size-4 text-primary" />
+              Tự động follow-up
+            </div>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {FOLLOWUP_SCORE_ORDER.map((score) => {
+                const rule = followupRules[score];
+                return (
+                  <div
+                    key={score}
+                    className="rounded-lg border bg-background p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">
+                          {FOLLOWUP_SCORE_LABELS[score]}
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Tính từ tin nhắn cuối của ứng viên
+                        </p>
+                      </div>
+                      <Switch
+                        checked={rule.enabled}
+                        onCheckedChange={(enabled) =>
+                          updateFollowupRule(score, { enabled })
+                        }
+                        aria-label={`Bật follow-up ${FOLLOWUP_SCORE_LABELS[score]}`}
+                      />
+                    </div>
+
+                    <div className="mt-4 grid gap-2">
+                      <Label
+                        htmlFor={`followup-cadence-${score}`}
+                        className="text-xs font-medium text-muted-foreground"
+                      >
+                        Mốc giờ
+                      </Label>
+                      <Input
+                        id={`followup-cadence-${score}`}
+                        value={rule.cadence_hours.join(" ")}
+                        onChange={(event) =>
+                          updateFollowupRule(score, {
+                            cadence_hours: parseCadenceInput(
+                              event.target.value,
+                            ),
+                          })
+                        }
+                        placeholder="VD: 10 22 46"
+                        className="h-9 font-mono text-sm"
+                      />
+                    </div>
+
+                    <div className="mt-4 grid gap-2">
+                      <div className="text-xs font-medium text-muted-foreground">
+                        Nhóm áp dụng
+                      </div>
+                      <div className="grid gap-2">
+                        {LEAD_STAGES.map((stage) => (
+                          <label
+                            key={stage.value}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <Checkbox
+                              checked={rule.eligible_stages.includes(
+                                stage.value,
+                              )}
+                              onCheckedChange={(checked) =>
+                                toggleFollowupStage(
+                                  score,
+                                  stage.value,
+                                  checked === true,
+                                )
+                              }
+                            />
+                            <span>{stage.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="border-t bg-muted/10 px-4 py-4 sm:px-5">
             <div className="grid gap-2">
               <Label htmlFor="persona-notes" className="text-sm font-semibold">
                 Ghi chú riêng tư
@@ -452,7 +636,7 @@ const PersonaForm = ({
             </div>
           </section>
 
-          <div className="sticky bottom-[72px] z-10 flex flex-col-reverse gap-2 border-t bg-card/95 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-end sm:px-5 md:bottom-0">
+          <div className="z-10 flex flex-col-reverse gap-2 border-t bg-card/95 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-end sm:px-5 md:sticky md:bottom-0">
             {extraActions}
             <Button
               type="submit"

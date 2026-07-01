@@ -15,7 +15,12 @@ export const PersonaCreate = () => {
   const onSubmit = async (v: PersonaValues) => {
     try {
       await dataProvider.create("personas", {
-        data: { name: v.name, body_md: v.body_md, notes: v.notes || null },
+        data: {
+          name: v.name,
+          body_md: v.body_md,
+          notes: v.notes || null,
+          followup_rules: v.followup_rules,
+        },
       });
       notify("Đã tạo Agent.", { type: "success" });
       redirect("/personas");
@@ -45,7 +50,12 @@ export const PersonaCreate = () => {
           </div>
         </TopToolbar>
         <PersonaForm
-          initial={{ name: "", body_md: "", notes: "" }}
+          initial={{
+            name: "",
+            body_md: "",
+            notes: "",
+            followup_rules: undefined,
+          }}
           submitLabel="Tạo Agent"
           onSubmit={onSubmit}
           onImported={() => redirect("/personas")}

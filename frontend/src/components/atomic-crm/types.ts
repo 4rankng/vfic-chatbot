@@ -227,6 +227,7 @@ export type Persona = {
   name: string;
   slug: string;
   body_md: string;
+  followup_rules: PersonaFollowupRules;
   is_active: boolean;
   notes?: string | null;
   created_by?: string | null;
@@ -234,6 +235,14 @@ export type Persona = {
   updated_at: string;
   assigned_projects?: { id: string; name: string; slug: string }[];
 } & Pick<RaRecord, "id">;
+
+export type PersonaFollowupRule = {
+  enabled: boolean;
+  cadence_hours: number[];
+  eligible_stages: LeadStageValue[];
+};
+
+export type PersonaFollowupRules = Record<LeadScoreValue, PersonaFollowupRule>;
 
 export type DealStage = {
   value: string;

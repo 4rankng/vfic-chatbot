@@ -10,6 +10,7 @@ import {
 } from "@/components/atomic-crm/providers/rest/api";
 import type {
   BusTimetableList,
+  PersonaFollowupRules,
   ProductFeature,
   ProductFeatureList,
 } from "@/components/atomic-crm/types";
@@ -17,8 +18,10 @@ import type {
 const BASE = "/api/v1";
 
 export type ApiRecord = Record<string, any>;
-const doc = (id: string) => `${BASE}/knowledge/documents/${encodeURIComponent(id)}`;
-const proj = (id: string) => `${BASE}/knowledge/projects/${encodeURIComponent(id)}`;
+const doc = (id: string) =>
+  `${BASE}/knowledge/documents/${encodeURIComponent(id)}`;
+const proj = (id: string) =>
+  `${BASE}/knowledge/projects/${encodeURIComponent(id)}`;
 
 export type KnowledgeUnit = {
   id: string;
@@ -101,7 +104,9 @@ export const uploadKnowledgeFile = async (
 export const downloadKnowledgeTemplate = async (
   kind: "knowledge" | "faq" = "knowledge",
 ): Promise<string> => {
-  const response = await apiRequest(`${BASE}/knowledge/format/template?kind=${kind}`);
+  const response = await apiRequest(
+    `${BASE}/knowledge/format/template?kind=${kind}`,
+  );
   if (!response.ok) {
     throw new ApiError(response.status, "Không tải được mẫu định dạng.");
   }
@@ -118,7 +123,9 @@ export const saveKnowledgeTemplate = async (
   const link = document.createElement("a");
   link.href = url;
   link.download =
-    kind === "faq" ? "vfic-faq-v1-template.md" : "vfic-knowledge-v1-template.md";
+    kind === "faq"
+      ? "vfic-faq-v1-template.md"
+      : "vfic-knowledge-v1-template.md";
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -157,9 +164,12 @@ export const getKnowledgeUnits = (id: string, limit = 50) =>
   apiJson<KnowledgeUnitList>(`${doc(id)}/chunks?limit=${limit}`);
 
 export const activatePersona = (id: string) =>
-  apiJson<ApiRecord>(`${BASE}/knowledge/personas/${encodeURIComponent(id)}/activate`, {
-    method: "POST",
-  });
+  apiJson<ApiRecord>(
+    `${BASE}/knowledge/personas/${encodeURIComponent(id)}/activate`,
+    {
+      method: "POST",
+    },
+  );
 
 export const assignPersonaToAllProjects = (id: string) =>
   apiJson<{ updated: number }>(
@@ -175,6 +185,7 @@ export type ImportedPersona = {
   name: string;
   body_md: string;
   notes?: string | null;
+  followup_rules?: PersonaFollowupRules;
 };
 
 /** Import (upload) a persona from a markdown file. Creates or overwrites by slug. */
@@ -188,9 +199,12 @@ export const importPersona = (file: File) => {
 };
 
 export const reindexProject = (id: string) =>
-  apiJson<ApiRecord>(`${BASE}/knowledge/projects/${encodeURIComponent(id)}/reindex`, {
-    method: "POST",
-  });
+  apiJson<ApiRecord>(
+    `${BASE}/knowledge/projects/${encodeURIComponent(id)}/reindex`,
+    {
+      method: "POST",
+    },
+  );
 
 // --- Worker product features (active per-project feature values) ---
 
@@ -210,7 +224,10 @@ export const getProjectFaq = (id: string, limit = 12) =>
 
 export type ProjectFaqPayload = Pick<ProjectFaq, "question" | "answer">;
 
-export const createProjectFaq = (projectId: string, payload: ProjectFaqPayload) =>
+export const createProjectFaq = (
+  projectId: string,
+  payload: ProjectFaqPayload,
+) =>
   apiJson<ProjectFaq>(`${proj(projectId)}/faq`, {
     method: "POST",
     body: payload,
@@ -237,7 +254,9 @@ export const deleteProjectFaq = (projectId: string, faqId: string) =>
 
 /** Synchronously re-extract active features from the project's latest posting (~5-10s). */
 export const extractProjectFeatures = (id: string) =>
-  apiJson<ProductFeatureList>(`${proj(id)}/features/extract`, { method: "POST" });
+  apiJson<ProductFeatureList>(`${proj(id)}/features/extract`, {
+    method: "POST",
+  });
 
 export type FeaturePatch = Partial<
   Pick<
@@ -251,7 +270,11 @@ export type FeaturePatch = Partial<
   >
 >;
 
-export const updateProjectFeature = (projectId: string, featureId: string, patch: FeaturePatch) =>
+export const updateProjectFeature = (
+  projectId: string,
+  featureId: string,
+  patch: FeaturePatch,
+) =>
   apiJson<ProductFeature>(
     `${proj(projectId)}/features/${encodeURIComponent(featureId)}`,
     { method: "PATCH", body: patch },

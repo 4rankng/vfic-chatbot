@@ -10,10 +10,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
 from app.graph.context import active_projects_index
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
-from app.schemas.personas import PersonaUpdate
+from app.schemas.personas import PersonaFollowupRule, PersonaUpdate, default_followup_rules_dict
 from app.services.errors import NotFoundError
 from app.services.persona_service import PersonaService
 
@@ -51,6 +52,45 @@ def test_persona_has_exactly_seven_sections():
 def test_persona_preserves_critical_rules():
     for needle in CRITICAL_RULES:
         assert needle in AGENT_SYSTEM_PROMPT, f"missing critical rule text: {needle!r}"
+
+
+def test_persona_followup_rule_defaults_match_product_spec():
+    rules = default_followup_rules_dict()
+
+    assert rules["hot"] == {
+        "enabled": True,
+        "cadence_hours": [10, 22, 46],
+        "eligible_stages": ["NEW"],
+    }
+    assert rules["warm"] == {
+        "enabled": True,
+        "cadence_hours": [22, 46],
+        "eligible_stages": ["NEW"],
+    }
+    assert rules["not_interested"] == {
+        "enabled": True,
+        "cadence_hours": [46],
+        "eligible_stages": ["NEW"],
+    }
+
+
+def test_persona_followup_rule_rejects_unsafe_cadence():
+    with pytest.raises(ValidationError):
+        PersonaFollowupRule(cadence_hours=[22, 10])
+
+    with pytest.raises(ValidationError):
+        PersonaFollowupRule(cadence_hours=[0])
+
+    with pytest.raises(ValidationError):
+        PersonaFollowupRule(cadence_hours=[48])
+
+    with pytest.raises(ValidationError):
+        PersonaFollowupRule(cadence_hours=[1, 2, 3, 4])
+
+    with pytest.raises(ValidationError):
+        PersonaFollowupRule(enabled=True, cadence_hours=[])
+
+    assert PersonaFollowupRule(enabled=False, cadence_hours=[]).cadence_hours == []
 
 
 @pytest.mark.asyncio

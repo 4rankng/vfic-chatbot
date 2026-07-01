@@ -101,6 +101,7 @@ class PersonaService:
             name=body.name.strip(),
             slug=slug,
             body_md=body.body_md,
+            followup_rules=body.followup_rules.model_dump(mode="json"),
             notes=body.notes,
             created_by=admin.id,
         )
@@ -138,12 +139,15 @@ class PersonaService:
             persona.body_md = body.body_md
         if body.notes is not None:
             persona.notes = body.notes
+        if body.followup_rules is not None:
+            persona.followup_rules = body.followup_rules.model_dump(mode="json")
         await record_audit(
             self.db,
             action="update_persona",
             actor_id=admin.id,
             target_type="persona",
             target_id=str(persona.id),
+            payload={"followup_rules_changed": body.followup_rules is not None},
         )
         await self.db.commit()
         await self.db.refresh(persona)
