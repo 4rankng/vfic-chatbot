@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.api import auth, bot_runs, conversations, dashboard, jobs, knowledge, leads, personas, projects, realtime, users, webhooks
 from app.core.config import PROACTIVE_TICK_INTERVAL_SECONDS, get_settings
+from app.workers.scheduler_utils import register_unique_tick
 from app.core.db import engine
 from app.core.errors import register_domain_exception_handlers
 from app.core.logging import request_id_ctx, setup_logging
@@ -37,43 +38,29 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("startup seeder failed (non-fatal)")
 
-    # Register proactive follow-up tick in rq-scheduler (idempotent — re-registering
-    # on every boot is safe and ensures the schedule survives scheduler restarts).
+    # Register the two periodic ticks in rq-scheduler. Each is registered through
+    # register_unique_tick so exactly ONE recurring job exists per tick — earlier
+    # boots stacked random-id duplicates that over-fired both ticks ~12x.
     try:
-        from datetime import datetime, timezone
-
         from rq_scheduler import Scheduler
 
         from app.core.redis import get_redis_sync
         from app.workers.followup_worker import run_proactive_followup_tick
-
-        conn = get_redis_sync()
-        sched = Scheduler(connection=conn, queue_name="followup")
-        # cancel_any is False by default in schedule(); the repeatable job id is
-        # derived from func.__name__ so re-registration is idempotent.
-        sched.schedule(
-            scheduled_time=datetime.now(timezone.utc),
-            func=run_proactive_followup_tick,
-            interval=PROACTIVE_TICK_INTERVAL_SECONDS,
-            repeat=None,  # repeat indefinitely
-        )
-        logger.info("proactive follow-up tick registered: interval=%ds", PROACTIVE_TICK_INTERVAL_SECONDS)
-    except Exception:  # noqa: BLE001
-        logger.exception("proactive scheduler registration failed (non-fatal)")
-
-    # Register reconcile sweep tick (recovers lost bot turns after crash/restart).
-    try:
         from app.workers.reconcile_worker import run_reconcile_tick
 
-        sched.schedule(
-            scheduled_time=datetime.now(timezone.utc),
-            func=run_reconcile_tick,
-            interval=settings.reconcile_interval_seconds,
-            repeat=None,
-        )
-        logger.info("reconcile sweep tick registered: interval=%ds", settings.reconcile_interval_seconds)
+        sched = Scheduler(connection=get_redis_sync(), queue_name="followup")
+        try:
+            register_unique_tick(sched, run_proactive_followup_tick, PROACTIVE_TICK_INTERVAL_SECONDS)
+            logger.info("proactive follow-up tick registered: interval=%ds", PROACTIVE_TICK_INTERVAL_SECONDS)
+        except Exception:  # noqa: BLE001
+            logger.exception("proactive scheduler registration failed (non-fatal)")
+        try:
+            register_unique_tick(sched, run_reconcile_tick, settings.reconcile_interval_seconds)
+            logger.info("reconcile sweep tick registered: interval=%ds", settings.reconcile_interval_seconds)
+        except Exception:  # noqa: BLE001
+            logger.exception("reconcile scheduler registration failed (non-fatal)")
     except Exception:  # noqa: BLE001
-        logger.exception("reconcile scheduler registration failed (non-fatal)")
+        logger.exception("rq-scheduler setup failed (non-fatal)")
 
     yield
     await engine.dispose()
