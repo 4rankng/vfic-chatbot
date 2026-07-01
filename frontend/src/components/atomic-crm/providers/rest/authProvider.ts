@@ -7,6 +7,7 @@ import {
   apiJson,
   clearTokens,
   getAccessToken,
+  refreshOnce,
   setTokens,
 } from "./api";
 
@@ -102,6 +103,12 @@ export const getAuthProvider = (): AuthProvider => {
           atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
         );
         if (payload.exp && payload.exp * 1000 < Date.now()) {
+          // Access token expired — try a silent refresh before giving up.
+          // The refresh token lives for 14 days, so this keeps the user logged
+          // in across browser restarts without re-entering credentials.
+          if (await refreshOnce()) {
+            return; // refreshed successfully
+          }
           clearTokens();
           clearIdentity();
           throw new Error("Token expired");

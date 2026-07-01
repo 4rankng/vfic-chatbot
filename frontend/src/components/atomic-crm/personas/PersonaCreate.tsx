@@ -31,7 +31,7 @@ export const PersonaCreate = () => {
 
   return (
     <CreateBase resource="personas">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 md:px-6 lg:px-0">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-12 md:px-6 md:pb-16 lg:px-0">
         <TopToolbar className="flex-col items-start justify-start gap-2">
           <Button
             variant="ghost"

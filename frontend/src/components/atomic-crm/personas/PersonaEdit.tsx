@@ -61,7 +61,7 @@ const PersonaEditContent = () => {
   const contentLength = getPersonaAuthoredContentLength(persona.body_md);
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 md:px-6 lg:px-0">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-12 md:px-6 md:pb-16 lg:px-0">
       <div className="rounded-lg border bg-card/80 p-4 shadow-sm backdrop-blur-sm md:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">

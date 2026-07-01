@@ -469,77 +469,15 @@ const PersonaForm = ({
             </section>
           </div>
 
-          <section className="px-4 py-4 sm:px-5">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <FileText className="size-4 text-primary" />
-              Nội dung Agent
-            </div>
-
-            <div className="mt-4 grid gap-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                {PERSONA_SECTIONS.map((section, index) => {
-                  const value = sectionValues[index] ?? "";
-                  const completed = value.trim().length > 0;
-
-                  return (
-                    <div
-                      key={section.title}
-                      className="rounded-lg border bg-background p-4"
-                    >
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-xs font-medium uppercase text-muted-foreground">
-                            Phần {index + 1}
-                          </div>
-                          <Label
-                            htmlFor={`persona-section-${index}`}
-                            className="mt-1 block text-sm font-semibold"
-                          >
-                            {section.title}
-                          </Label>
-                        </div>
-                        <Badge
-                          variant={completed ? "secondary" : "outline"}
-                          className="shrink-0"
-                        >
-                          {completed ? "Đã điền" : "Trống"}
-                        </Badge>
-                      </div>
-                      <Textarea
-                        id={`persona-section-${index}`}
-                        value={value}
-                        onChange={(event) =>
-                          updateSectionValue(index, event.target.value)
-                        }
-                        placeholder={section.hint}
-                        rows={6}
-                        className="min-h-[132px] resize-y bg-transparent text-sm leading-6 shadow-none"
-                      />
-                    </div>
-                  );
-                })}
-
-                {extraMarkdown && (
-                  <div className="rounded-lg border bg-background p-4 md:col-span-2">
-                    <div className="mb-3 text-sm font-semibold">
-                      Nội dung ngoài mẫu
-                    </div>
-                    <Textarea
-                      value={extraMarkdown}
-                      onChange={(event) => setExtraMarkdown(event.target.value)}
-                      rows={5}
-                      className="min-h-[120px] resize-y bg-transparent font-mono text-xs leading-5 shadow-none"
-                    />
-                  </div>
-                )}
+          <section className="border-b bg-muted/10 px-4 py-4 sm:px-5">
+            <div className="mb-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Sparkles className="size-4 text-primary" />
+                Tự động follow-up
               </div>
-            </div>
-          </section>
-
-          <section className="border-t bg-muted/10 px-4 py-4 sm:px-5">
-            <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="size-4 text-primary" />
-              Tự động follow-up
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cấu hình riêng cho Agent này theo Hot / Warm / Cold.
+              </p>
             </div>
             <div className="grid gap-3 lg:grid-cols-3">
               {FOLLOWUP_SCORE_ORDER.map((score) => {
@@ -619,6 +557,73 @@ const PersonaForm = ({
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          <section className="px-4 py-4 sm:px-5">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <FileText className="size-4 text-primary" />
+              Nội dung Agent
+            </div>
+
+            <div className="mt-4 grid gap-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                {PERSONA_SECTIONS.map((section, index) => {
+                  const value = sectionValues[index] ?? "";
+                  const completed = value.trim().length > 0;
+
+                  return (
+                    <div
+                      key={section.title}
+                      className="rounded-lg border bg-background p-4"
+                    >
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium uppercase text-muted-foreground">
+                            Phần {index + 1}
+                          </div>
+                          <Label
+                            htmlFor={`persona-section-${index}`}
+                            className="mt-1 block text-sm font-semibold"
+                          >
+                            {section.title}
+                          </Label>
+                        </div>
+                        <Badge
+                          variant={completed ? "secondary" : "outline"}
+                          className="shrink-0"
+                        >
+                          {completed ? "Đã điền" : "Trống"}
+                        </Badge>
+                      </div>
+                      <Textarea
+                        id={`persona-section-${index}`}
+                        value={value}
+                        onChange={(event) =>
+                          updateSectionValue(index, event.target.value)
+                        }
+                        placeholder={section.hint}
+                        rows={6}
+                        className="min-h-[132px] resize-y bg-transparent text-sm leading-6 shadow-none"
+                      />
+                    </div>
+                  );
+                })}
+
+                {extraMarkdown && (
+                  <div className="rounded-lg border bg-background p-4 md:col-span-2">
+                    <div className="mb-3 text-sm font-semibold">
+                      Nội dung ngoài mẫu
+                    </div>
+                    <Textarea
+                      value={extraMarkdown}
+                      onChange={(event) => setExtraMarkdown(event.target.value)}
+                      rows={5}
+                      className="min-h-[120px] resize-y bg-transparent font-mono text-xs leading-5 shadow-none"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 

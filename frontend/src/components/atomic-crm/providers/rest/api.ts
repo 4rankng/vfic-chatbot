@@ -104,7 +104,7 @@ const send = async (
 
 // Exchange the stored refresh token for a fresh access/refresh pair. Returns
 // false on any failure so the caller can surface the original 401.
-const refreshOnce = async (): Promise<boolean> => {
+export const refreshOnce = async (): Promise<boolean> => {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
   try {
