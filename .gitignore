@@ -69,3 +69,7 @@ graphify-out/
 # --- Misc generated artifacts ---
 *.log
 *.dump
+
+# --- Production backup bundles (contain LIVE secrets + DB dumps — NEVER commit) ---
+# Created by `make backup-full` (scripts/backup-droplet.sh).
+backups/

@@ -1,4 +1,4 @@
-.PHONY: dev deploy deploy-backend deploy-frontend adminer seed backup restore
+.PHONY: dev deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod
 
 # Local dev: frontend (vite) + backend (uvicorn --reload) on host, Postgres +
 # Redis + Adminer in docker. Delegates to backend/ (payroll pattern).
@@ -103,3 +103,19 @@ e.commit(); print(f'reset {r.rowcount} user(s)')" && \
 	.venv/bin/python -m scripts.create_admin --only-if-no-admins --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true && \
 	echo "Restore complete!" && \
 	echo "  All users reset to password: admin123"
+
+# ─── Full droplet backup / restore (delete + spin up later) ────────────────────
+# docs/DROPLET-BACKUP-RESTORE.md has the full runbook. Redis is intentionally
+# not backed up (scheduler re-registers its ticks; avoids the orphaned-job OOM).
+BACKUPS_DIR := $(CURDIR)/backups
+
+## backup-full: bundle /opt/vfic/.env + DB dump + KB uploads + Caddy TLS → backups/<ts>.zip
+backup-full:
+	@mkdir -p "$(BACKUPS_DIR)"
+	bash scripts/backup-droplet.sh
+
+## restore-prod: push a bundle onto a FRESH droplet (SSH, mirrors `deploy`).
+## Usage: make restore-prod BUNDLE=backups/vfic-droplet-backup-<TS> [HOST=root@bot.tingting.vip]
+restore-prod:
+	@test -n "$(BUNDLE)" || { echo "Usage: make restore-prod BUNDLE=backups/vfic-droplet-backup-<TS> [HOST=root@bot.tingting.vip]"; exit 2; }
+	bash scripts/restore-droplet.sh --bundle "$(BUNDLE)" --host "$(or $(HOST),root@bot.tingting.vip)"
