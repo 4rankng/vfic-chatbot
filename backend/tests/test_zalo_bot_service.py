@@ -63,7 +63,7 @@ def _patch_post(monkeypatch: pytest.MonkeyPatch, envelopes: list[dict[str, Any]]
     """
     cap = _Captured(calls=[])
 
-    async def fake_post(self, method: str, body: dict[str, Any] | None):
+    async def fake_post(self, method: str, body: dict[str, Any] | None, **_: Any):
         cap.calls.append((method, body))
         if envelopes:
             return envelopes.pop(0)

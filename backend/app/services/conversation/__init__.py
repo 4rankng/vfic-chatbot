@@ -130,9 +130,12 @@ class ConversationService:
         httpx/external deps at module load. ``record_recruiter_message`` (state) stays a
         decoupled, testable pure-persist that takes the send result as a param.
         """
-        from app.services.zalo_bot_service import ZaloBotSender
+        from app.services.integration_settings import IntegrationSettingsService
+        from app.services.zalo_sender import ZaloChannelSender
 
-        result = await ZaloBotSender().send_message(conv.zalo_chat_id, body)
+        cfg = await IntegrationSettingsService(self.db).resolve_zalo()
+        sender = ZaloChannelSender(cfg).for_conversation(conv)
+        result = await sender.send_message(conv.zalo_chat_id, body)
         msg = await self.state.record_recruiter_message(conv, recruiter, body, result)
         return msg, result.ok
 

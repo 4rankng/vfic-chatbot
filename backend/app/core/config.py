@@ -9,6 +9,12 @@ from typing import ClassVar
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
+# Zalo API endpoints (code constants, not admin-editable runtime settings)
+# ---------------------------------------------------------------------------
+ZALO_BOT_API_BASE: str = "https://bot-api.zaloplatforms.com"
+ZALO_OA_API_BASE: str = "https://openapi.zalo.me"
+
+# ---------------------------------------------------------------------------
 # Proactive follow-up constants (not configurable via env — policy is in code)
 # ---------------------------------------------------------------------------
 PROACTIVE_FOLLOWUP_GAPS_HOURS: list[int] = [6, 24, 46]
@@ -60,18 +66,27 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     password_reset_otp_ttl_minutes: int = 10
     password_reset_otp_attempt_limit: int = 5
+    # Server-side key for encrypting admin-managed integration secrets at rest.
+    # Dev may fall back to JWT_SECRET for local ergonomics; production must set it.
+    integration_settings_encryption_key: str = ""
 
     # Zalo Bot Platform (bot-api.zaloplatforms.com/bot{TOKEN}/...) — the single
     # Zalo integration for inbound + outbound. `zalo_bot_token` rides in the URL
     # path; `zalo_bot_webhook_secret` verifies inbound via X-Bot-Api-Secret-Token.
+    # Values here are bootstrap/dev fallbacks. In production the admin UI writes
+    # the same credentials to integration_settings, which runtime code prefers.
     zalo_bot_token: str = ""
     zalo_bot_webhook_secret: str = ""
-    zalo_bot_api_base: str = "https://bot-api.zaloplatforms.com"
     # Per-call HTTP timeout (s). Zalo recommends 30s for getUpdates long-polling;
     # sender methods usually complete in <5s, but we leave headroom.
     zalo_bot_request_timeout: int = 30
     # The webhook URL currently registered with Zalo (used for self-tests / status).
     zalo_bot_webhook_url: str = ""
+    # Zalo Official Account bootstrap/dev fallbacks. API base is a code constant:
+    # app.core.config.ZALO_OA_API_BASE.
+    zalo_oa_app_id: str = ""
+    zalo_oa_secret_key: str = ""
+    zalo_oa_access_token: str = ""
 
     # LLM providers. MiniMax is the default primary provider; OpenRouter is also
     # OpenAI-compatible and can be selected via *_ENABLE.
@@ -181,6 +196,11 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "JWT_SECRET must be overridden outside development "
                 "(the committed default is public and forgeable)."
+            )
+        if self.app_env != "development" and not self.integration_settings_encryption_key:
+            raise RuntimeError(
+                "INTEGRATION_SETTINGS_ENCRYPTION_KEY must be set outside development "
+                "so admin-managed integration secrets are encrypted at rest."
             )
         # allow_credentials=True is hardcoded in main.py (JWT in the Authorization
         # header needs credentialed CORS). A wildcard '*' origin with credentials

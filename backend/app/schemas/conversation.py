@@ -17,6 +17,7 @@ class ConversationOut(BaseModel):
 
     id: uuid.UUID
     zalo_chat_id: str
+    zalo_channel: str = "bot"
     mode: ConversationMode
     status: ConversationStatus
     needs_human: bool

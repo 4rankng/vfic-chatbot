@@ -28,7 +28,7 @@ from typing import Any, Literal
 
 import httpx
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, ZALO_BOT_API_BASE, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -97,21 +97,27 @@ class ZaloBotError(RuntimeError):
     """
 
 
-def _build_base_url(settings: Settings) -> str:
+def _build_base_url(_settings: Settings) -> str:
     """Compose the Bot Platform base URL; strips any trailing slash."""
-    return settings.zalo_bot_api_base.rstrip("/")
+    return ZALO_BOT_API_BASE.rstrip("/")
 
 
-def _method_url(settings: Settings, method: str) -> str:
+def _method_url(settings: Settings, method: str, token: str | None = None) -> str:
     """Compose ``{base}/bot{TOKEN}/{method}`` per the Bot Platform contract.
 
     The token is a URL-path component; callers MUST treat it as a secret
     even though it never reaches a header (never log the full URL).
     """
-    return f"{_build_base_url(settings)}/bot{settings.zalo_bot_token}/{method}"
+    return f"{_build_base_url(settings)}/bot{token or settings.zalo_bot_token}/{method}"
 
 
-async def _post(settings: Settings, method: str, body: dict[str, Any] | None) -> dict[str, Any]:
+async def _post(
+    settings: Settings,
+    method: str,
+    body: dict[str, Any] | None,
+    *,
+    token: str | None = None,
+) -> dict[str, Any]:
     """Single POST against the Bot Platform. Returns the parsed JSON envelope.
 
     Translates every failure mode into a dict so callers only need one
@@ -119,11 +125,12 @@ async def _post(settings: Settings, method: str, body: dict[str, Any] | None) ->
     injected via URL path, NOT an ``access_token`` header (different from
     the OA API).
     """
-    if not settings.zalo_bot_token:
+    resolved_token = token if token is not None else settings.zalo_bot_token
+    if not resolved_token:
         return {"ok": False, "description": "zalo_bot_token not configured"}
     if not body:
         body = {}
-    url = _method_url(settings, method)
+    url = _method_url(settings, method, resolved_token)
     try:
         async with httpx.AsyncClient(timeout=settings.zalo_bot_request_timeout) as client:
             resp = await client.post(url, json=body)
@@ -239,8 +246,9 @@ class ZaloBotSender:
     callers can use ``ZaloBotSender()`` to read ``get_settings()`` lazily.
     """
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, *, bot_token: str | None = None) -> None:
         self._settings = settings or get_settings()
+        self._bot_token = bot_token
 
     async def send_message(
         self,
@@ -274,7 +282,9 @@ class ZaloBotSender:
                 body["parse_mode"] = parse_mode
             if text_styles is not None:
                 body["text_styles"] = text_styles
-            result = _send_result(await _post(self._settings, "sendMessage", body))
+            result = _send_result(
+                await _post(self._settings, "sendMessage", body, token=self._bot_token)
+            )
             envelopes.append(result.raw or {})
             if result.msg_id:
                 message_ids.append(result.msg_id)
@@ -298,18 +308,28 @@ class ZaloBotSender:
         body: dict[str, Any] = {"chat_id": chat_id, "photo": photo}
         if caption is not None:
             body["caption"] = caption
-        return _send_result(await _post(self._settings, "sendPhoto", body))
+        return _send_result(await _post(self._settings, "sendPhoto", body, token=self._bot_token))
 
     async def send_sticker(self, chat_id: str, sticker: str) -> SendResult:
         """Send a sticker by id from stickers.zaloapp.com."""
         return _send_result(
-            await _post(self._settings, "sendSticker", {"chat_id": chat_id, "sticker": sticker})
+            await _post(
+                self._settings,
+                "sendSticker",
+                {"chat_id": chat_id, "sticker": sticker},
+                token=self._bot_token,
+            )
         )
 
     async def send_voice(self, chat_id: str, voice_url: str) -> SendResult:
         """Send a ``.aac`` voice URL. 1-1 only — group chats are silently dropped upstream."""
         return _send_result(
-            await _post(self._settings, "sendVoice", {"chat_id": chat_id, "voice_url": voice_url})
+            await _post(
+                self._settings,
+                "sendVoice",
+                {"chat_id": chat_id, "voice_url": voice_url},
+                token=self._bot_token,
+            )
         )
 
     async def send_chat_action(self, chat_id: str, action: ChatAction) -> SendResult:
@@ -319,7 +339,12 @@ class ZaloBotSender:
         errors. Zalo's envelope for this method is ``{ok: true}`` only —
         ``message_id`` will always be ``None``.
         """
-        envelope = await _post(self._settings, "sendChatAction", {"chat_id": chat_id, "action": action})
+        envelope = await _post(
+            self._settings,
+            "sendChatAction",
+            {"chat_id": chat_id, "action": action},
+            token=self._bot_token,
+        )
         # Custom projection: sendChatAction returns no ``result``, so the
         # generic ``_send_result`` (which looks for ``message_id``) would
         # always report ``msg_id=None``. That's fine — explicit for clarity.

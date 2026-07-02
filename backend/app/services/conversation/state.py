@@ -77,11 +77,14 @@ class ConversationState:
         self.events = events
 
     # --- webhook-side primitives (used by US-006 chatbot) ---
-    async def ensure(self, zalo_chat_id: str) -> Conversation:
+    async def ensure(self, zalo_chat_id: str, *, zalo_channel: str = "bot") -> Conversation:
         conv = await self.repo.get_by_zalo(zalo_chat_id)
         if conv is None:
-            conv = Conversation(zalo_chat_id=zalo_chat_id)
+            conv = Conversation(zalo_chat_id=zalo_chat_id, zalo_channel=zalo_channel)
             self.db.add(conv)
+            await self.db.flush()
+        elif not getattr(conv, "zalo_channel", None):
+            conv.zalo_channel = zalo_channel
             await self.db.flush()
         return conv
 

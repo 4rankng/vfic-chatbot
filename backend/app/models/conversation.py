@@ -61,6 +61,11 @@ class Conversation(Base):
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     zalo_chat_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    # Channel badge/source for the user-visible Zalo inbox. New channel-aware
+    # conversations scope zalo_chat_id as "{channel}:{external_id}".
+    zalo_channel: Mapped[str] = mapped_column(
+        String, nullable=False, default="bot", server_default="bot", index=True
+    )
     mode: Mapped[ConversationMode] = mapped_column(
         Enum(ConversationMode, name="conversation_mode", create_type=False),
         nullable=False,

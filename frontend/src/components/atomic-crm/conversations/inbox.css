@@ -591,6 +591,17 @@
   color: var(--ink-muted);
   background: var(--surface-hover);
 }
+.inbox-bg-container .mini-chip.channel {
+  padding-inline: 6px;
+}
+.inbox-bg-container .mini-chip.channel.oa {
+  color: var(--inbox-accent);
+  background: var(--inbox-accent-light);
+}
+.inbox-bg-container .mini-chip.channel.bot {
+  color: var(--ink-muted);
+  background: var(--surface-hover);
+}
 .inbox-bg-container .mini-chip.attention {
   color: var(--primary-foreground);
   background: var(--brand);

@@ -8,7 +8,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import auth, bot_runs, conversations, dashboard, jobs, knowledge, leads, personas, projects, realtime, users, webhooks
+from app.api import (
+    auth,
+    bot_runs,
+    conversations,
+    dashboard,
+    integrations,
+    jobs,
+    knowledge,
+    leads,
+    personas,
+    projects,
+    realtime,
+    users,
+    webhooks,
+)
 from app.core.config import PROACTIVE_TICK_INTERVAL_SECONDS, get_settings
 from app.workers.scheduler_utils import register_unique_tick
 from app.core.db import engine
@@ -89,6 +103,7 @@ app.include_router(projects.router, prefix=API_V1_PREFIX)
 app.include_router(personas.router, prefix=API_V1_PREFIX)
 app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
+app.include_router(integrations.router, prefix=API_V1_PREFIX)
 app.include_router(realtime.router, prefix="/realtime")
 app.include_router(webhooks.router)
 

@@ -48,16 +48,18 @@ def make_minimax_llm_json():
 
 async def build_deps(db):
     """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo)."""
-    from app.services.zalo_bot_service import ZaloBotSender
+    from app.services.integration_settings import IntegrationSettingsService
+    from app.services.zalo_sender import ZaloChannelSender
 
     s = get_settings()
     agent_llm = _chat_for_role("agent", temperature=0.3)
     safety_llm = _chat_for_role("safety", temperature=0.0)
     embedder = GeminiEmbedder(s)
+    zalo_config = await IntegrationSettingsService(db, settings=s).resolve_zalo()
     return GraphDeps(
         db=db,
         agent=MiniMaxAgent(agent_llm, embedder),
         safety=MiniMaxSafety(safety_llm),
         embedder=embedder,
-        zalo=ZaloBotSender(),
+        zalo=ZaloChannelSender(zalo_config),
     )

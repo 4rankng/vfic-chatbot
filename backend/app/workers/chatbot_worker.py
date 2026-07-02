@@ -103,7 +103,12 @@ async def _run_job_async(job: dict) -> None:
                 svc = ConversationService(db)
                 conv = await svc.get(uuid.UUID(state.conversation_id))
                 if conv is not None:
-                    send_result = await deps.zalo.send_message(
+                    sender = (
+                        deps.zalo.for_conversation(conv)
+                        if hasattr(deps.zalo, "for_conversation")
+                        else deps.zalo
+                    )
+                    send_result = await sender.send_message(
                         conv.zalo_chat_id,
                         DEGRADATION_REPLY,
                     )

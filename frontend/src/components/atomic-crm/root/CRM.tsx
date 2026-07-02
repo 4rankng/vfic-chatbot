@@ -26,6 +26,7 @@ import automation from "../automation";
 import knowledge from "../knowledge";
 import projects from "../projects";
 import personas from "../personas";
+import integrations from "../integrations";
 import { Dashboard } from "../dashboard/Dashboard";
 import { MobileDashboard } from "../dashboard/MobileDashboard";
 import { Layout } from "../layout/Layout";
@@ -365,6 +366,7 @@ export const CRM = ({
       <Resource name="knowledge_sources" {...knowledge} />
       <Resource name="projects" {...projects} />
       <Resource name="personas" {...personas} />
+      <Resource name="zalo_integrations" {...integrations} />
       {/* Users admin: always registered so /users resolves.
             Access is gated inside UserList (CanAccess) and via Header
             menu visibility — ra-core's static-children walker does not

@@ -77,6 +77,7 @@ export type Lead = {
 export type Conversation = {
   id: string;
   zalo_chat_id: string;
+  zalo_channel?: "bot" | "oa" | string;
   // Backend ConversationMode is BOT/HUMAN/SEMI_AUTO/CLOSED; the REST dataProvider
   // lower-cases it so render checks keep working.
   mode: "bot" | "human" | "semi_auto" | "closed";

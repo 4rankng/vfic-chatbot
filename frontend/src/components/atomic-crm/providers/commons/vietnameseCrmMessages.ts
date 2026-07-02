@@ -68,6 +68,10 @@ export const vietnameseCrmMessages = {
         new: "Tài khoản mới",
       },
     },
+    zalo_integrations: {
+      name: "Tích hợp Zalo |||| Tích hợp Zalo",
+      forcedCaseName: "Tích hợp Zalo",
+    },
     companies: {
       name: "Công ty |||| Công ty",
       forcedCaseName: "Công ty",

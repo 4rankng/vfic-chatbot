@@ -1,6 +1,6 @@
 """Locust load-test rig for the VFIC chatbot webhook endpoint.
 
-Drives POST /webhooks/zalo at configurable message rates to measure
+Drives POST /webhooks/zalo/chatbot at configurable message rates to measure
 end-to-end latency, error rates, and queue saturation under load.
 
 Usage (from the backend/ directory):
@@ -86,11 +86,11 @@ class ChatbotWebhookUser(HttpUser):
         """Send one simulated Zalo message to the webhook."""
         payload = self._build_payload()
         with self.client.post(
-            "/webhooks/zalo",
+            "/webhooks/zalo/chatbot",
             json=payload,
             headers=self._headers(),
             catch_response=True,
-            name="/webhooks/zalo",
+            name="/webhooks/zalo/chatbot",
         ) as response:
             if response.status_code != 200:
                 response.failure()

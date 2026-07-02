@@ -169,6 +169,7 @@ const ConversationListItem = memo(
     const modeMeta: ConversationModeMeta = conversationModeMeta(
       conversation.mode,
     );
+    const channel = conversation.zalo_channel === "oa" ? "oa" : "bot";
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
     const unread = readIds.has(conversation.id)
@@ -217,6 +218,9 @@ const ConversationListItem = memo(
               {needsAttention && (
                 <span className="mini-chip attention">Cần xử lý</span>
               )}
+              <span className={`mini-chip channel ${channel}`}>
+                {channel === "oa" ? "OA" : "BOT"}
+              </span>
               <span
                 className={`mini-chip mode-icon-chip ${modeMeta.tone}`}
                 aria-label={modeMeta.label}

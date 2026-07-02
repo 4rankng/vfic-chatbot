@@ -4,9 +4,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
-from app.services.zalo_bot_service import ZaloBotSender
 
 # TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
 # annotation is stringified by ``from __future__ import annotations`` anyway,
@@ -34,7 +34,7 @@ class GraphDeps:
     agent: AgentModel
     safety: SafetyModel
     embedder: Embedder
-    zalo: ZaloBotSender
+    zalo: Any
     # Fire-and-forget candidate extraction after a SENT reply.
     # None in tests -> persistence is skipped.
     persist: Callable[[dict], None] | None = None

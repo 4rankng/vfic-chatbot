@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class NormalizedMessage:
     zalo_chat_id: str
+    zalo_channel: str
     user_text: str
     user_name: str
     msg_id: str
@@ -37,7 +38,7 @@ class NormalizedMessage:
 
 class ZaloWebhookService:
     @staticmethod
-    def normalize(payload: dict) -> NormalizedMessage | None:
+    def normalize_bot(payload: dict) -> NormalizedMessage | None:
         """Extract a text message from a Zalo Bot Platform receive event.
         Returns None if not a processable text message.
 
@@ -59,6 +60,7 @@ class ZaloWebhookService:
         sender = msg.get("from") or {}
         return NormalizedMessage(
             zalo_chat_id=str(chat_id),
+            zalo_channel="bot",
             user_text=str(text_body),
             user_name=str(sender.get("display_name") or sender.get("name") or ""),
             msg_id=msg_id,
@@ -66,11 +68,47 @@ class ZaloWebhookService:
         )
 
     @staticmethod
+    def normalize_oa(payload: dict) -> NormalizedMessage | None:
+        """Extract a text message from a Zalo Official Account webhook event."""
+        if not isinstance(payload, dict):
+            return None
+        event_name = str(payload.get("event_name") or payload.get("event") or "")
+        if event_name and event_name not in {"user_send_text", "user_send_text_message"}:
+            return None
+
+        sender = payload.get("sender") or payload.get("from") or {}
+        message = payload.get("message") or {}
+        text_body = message.get("text") or payload.get("text")
+        user_id = sender.get("id") or sender.get("user_id") or payload.get("user_id")
+        if not text_body or not user_id:
+            return None
+        scoped_chat_id = f"oa:{user_id}"
+        msg_id = str(
+            message.get("msg_id")
+            or message.get("message_id")
+            or message.get("id")
+            or f"{scoped_chat_id}:{str(text_body)[:40]}"
+        )
+        return NormalizedMessage(
+            zalo_chat_id=scoped_chat_id,
+            zalo_channel="oa",
+            user_text=str(text_body),
+            user_name=str(sender.get("name") or sender.get("display_name") or ""),
+            msg_id=msg_id,
+            msg_hash=hashlib.sha256(f"oa:{msg_id}".encode("utf-8")).hexdigest()[:32],
+        )
+
+    @staticmethod
+    def normalize(payload: dict) -> NormalizedMessage | None:
+        return ZaloWebhookService.normalize_bot(payload)
+
+    @staticmethod
     async def handle(
         db: AsyncSession,
         payload: dict,
         *,
         enqueue: Callable[[dict], bool | Awaitable[bool]],
+        channel: str = "bot",
     ) -> dict:
         """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
@@ -78,7 +116,12 @@ class ZaloWebhookService:
         enqueued (Redis down / queue depth exceeded).  The caller translates
         this to HTTP 503 so the upstream (Zalo) retries.
         """
-        norm = ZaloWebhookService.normalize(payload)
+        normalizer = (
+            ZaloWebhookService.normalize_oa
+            if channel == "oa"
+            else ZaloWebhookService.normalize_bot
+        )
+        norm = normalizer(payload)
         if norm is None:
             return {"status": "ignored"}
 
@@ -86,7 +129,7 @@ class ZaloWebhookService:
             return {"status": "duplicate"}
 
         svc = ConversationService(db)
-        conv = await svc.ensure(norm.zalo_chat_id)
+        conv = await svc.ensure(norm.zalo_chat_id, zalo_channel=norm.zalo_channel)
         await db.refresh(conv)
         await svc.record_inbound(
             conv,
@@ -107,7 +150,8 @@ class ZaloWebhookService:
         # Fire-and-forget typing indicator so the user sees immediate feedback
         # while the RQ worker picks up the job. The worker's _typing_heartbeat
         # will keep the indicator alive during LLM generation.
-        asyncio.create_task(_fire_typing(norm.zalo_chat_id))
+        if norm.zalo_channel == "bot":
+            asyncio.create_task(_fire_typing(norm.zalo_chat_id))
 
         job = {
             "conversation_id": str(conv.id),
@@ -120,7 +164,7 @@ class ZaloWebhookService:
         if asyncio.iscoroutine(result):
             result = await result
         if result is False:
-            await svc.release_lock(conv.id)  # no worker will clear it
+            await svc.release_lock(conv)  # no worker will clear it
             return {"status": "enqueue_failed", "conversation_id": str(conv.id)}
         return {"status": "queued", "conversation_id": str(conv.id)}
 

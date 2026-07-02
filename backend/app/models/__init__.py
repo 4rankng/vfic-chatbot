@@ -8,6 +8,7 @@ from app.models.company import Company, Project
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeStatus
 from app.models.lead import FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage, FollowUpTask
 from app.models.job import Job, JobStatus
+from app.models.integration import IntegrationSetting
 from app.models.persona import Persona
 from app.models.password_reset import PasswordResetOtp
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
@@ -41,6 +42,7 @@ __all__ = [
     "FollowUpTask",
     "Job",
     "JobStatus",
+    "IntegrationSetting",
     "Persona",
     "PasswordResetOtp",
     "WorkerFeatureCatalog",

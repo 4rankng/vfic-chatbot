@@ -14,7 +14,7 @@ The backend points at this mock by setting ``ZALO_BOT_API_BASE`` to
 
 Contract reproduced (see ``app/services/zalo_bot_service.py``):
   - Outbound: ``POST {base}/bot{TOKEN}/{method}`` with JSON body.
-  - Inbound: Telegram-style payload POSTed to ``/webhooks/zalo``.
+  - Inbound: Telegram-style payload POSTed to ``/webhooks/zalo/chatbot``.
   - Response envelopes: ``{ok, result}`` / ``{ok, error_code, description}``.
 """
 
@@ -47,7 +47,7 @@ logger = logging.getLogger("zalo-mock")
 app = FastAPI(title="Zalo Mock Server")
 
 BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "8000"))
-WEBHOOK_URL = f"http://localhost:{BACKEND_PORT}/webhooks/zalo"
+WEBHOOK_URL = f"http://localhost:{BACKEND_PORT}/webhooks/zalo/chatbot"
 AUTO_REPLY_DELAY = float(os.environ.get("AUTO_REPLY_DELAY", "1.5"))
 
 # In-memory conversation store: {chat_id: [event, ...]}

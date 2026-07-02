@@ -46,6 +46,12 @@ ZALO_TYPING_HEARTBEAT_SECONDS = 4.0
 RECENT_HISTORY_LIMIT = 16
 
 
+def _zalo_for_conversation(deps: GraphDeps, conv):
+    if hasattr(deps.zalo, "for_conversation"):
+        return deps.zalo.for_conversation(conv)
+    return deps.zalo
+
+
 async def _agent_turn(
     state: BotRunState,
     deps: GraphDeps,
@@ -96,11 +102,11 @@ async def _agent_turn(
     return ensure_lead_collection_question(reply, lead_collection_question)
 
 
-async def _typing_heartbeat(deps: GraphDeps, chat_id: str) -> None:
+async def _typing_heartbeat(zalo, chat_id: str) -> None:
     """Keep Zalo's transient typing status visible while a turn is processing."""
     while True:
         try:
-            await deps.zalo.send_chat_action(chat_id, "typing")
+            await zalo.send_chat_action(chat_id, "typing")
         except Exception:  # noqa: BLE001
             pass
         await asyncio.sleep(ZALO_TYPING_HEARTBEAT_SECONDS)
@@ -112,9 +118,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
     conv = await svc.get(uuid.UUID(state.conversation_id))
     if conv is None:
         return {"outcome": "error", "reason": "conversation_not_found"}
+    zalo = _zalo_for_conversation(deps, conv)
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
 
-    typing_task = asyncio.create_task(_typing_heartbeat(deps, conv.zalo_chat_id))
+    typing_task = asyncio.create_task(_typing_heartbeat(zalo, conv.zalo_chat_id))
     started = _now()
     pending_msg = await svc.record_bot_pending(conv)
     state.pending_message_id = pending_msg.id
@@ -138,7 +145,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
             owned = await svc.recheck_ownership(conv, state.version_at_start)
             send_result = None
             if owned:
-                send_result = await deps.zalo.send_message(conv.zalo_chat_id, ERROR_REPLY)
+                send_result = await zalo.send_message(conv.zalo_chat_id, ERROR_REPLY)
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=ERROR_REPLY,
                 started_at=started, sent=bool(send_result and send_result.ok),
@@ -184,7 +191,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
         await svc.db.refresh(conv)
         owned = await svc.recheck_ownership(conv, state.version_at_start)
         if owned:
-            send_result = await deps.zalo.send_message(conv.zalo_chat_id, candidate)
+            send_result = await zalo.send_message(conv.zalo_chat_id, candidate)
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
                 started_at=started, sent=send_result.ok,

@@ -311,7 +311,8 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
             return _outcome("suppressed", reason="48h_window_post_generation")
 
         # 10. Send
-        result = await deps.zalo.send_message(conv.zalo_chat_id, candidate)
+        sender = deps.zalo.for_conversation(conv) if hasattr(deps.zalo, "for_conversation") else deps.zalo
+        result = await sender.send_message(conv.zalo_chat_id, candidate)
 
     except Exception as exc:
         logger.warning("proactive turn error: conversation=%s error=%s", conv.zalo_chat_id, exc)

@@ -132,7 +132,7 @@ deploy:
 	@echo "   adminer: make adminer"
 	@echo " Next: fill API keys in $(PROD_DIR)/.env, then:"
 	@echo "   ssh root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose up -d --force-recreate web worker-chatbot worker-ingest scheduler'"
-	@echo " Then flip the Zalo OA webhook -> https://$(PROD_SERVER)/webhooks/zalo"
+	@echo " Then flip the Zalo Chatbot webhook -> https://$(PROD_SERVER)/webhooks/zalo/chatbot"
 	@echo "==============================================================="
 
 # ---- Adminer over SSH tunnel (private; never public). ----
