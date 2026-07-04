@@ -28,10 +28,10 @@ import {
   useTranslateLabel,
 } from "ra-core";
 import { useNavigate } from "react-router";
-import { ArrowDownAZ, ArrowUpZA } from "lucide-react";
+import { ArrowDownAZ, ArrowUpZA, Inbox } from "lucide-react";
 import get from "lodash/get";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -301,9 +301,11 @@ const isPromise = (value: any): value is Promise<any> =>
 
 const DataTableEmpty = () => {
   return (
-    <Alert>
-      <AlertDescription>No results found.</AlertDescription>
-    </Alert>
+    <EmptyState
+      icon={<Inbox className="size-6" />}
+      title="Không tìm thấy kết quả"
+      description="Không có bản ghi nào để hiển thị."
+    />
   );
 };
 

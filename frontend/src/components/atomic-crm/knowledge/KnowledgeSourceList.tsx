@@ -72,9 +72,9 @@ const KnowledgeSourceListContent = () => {
             <p className="kb-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--kb-teal)]">
               Trung tâm kiến thức
             </p>
-            <h2 className="kb-display mt-2 text-3xl text-foreground sm:text-[34px]">
+            <h1 className="kb-display mt-2 text-3xl text-foreground sm:text-[34px]">
               Quản lý kiến thức
-            </h2>
+            </h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
               Theo dõi tài liệu theo từng dự án, trạng thái xử lý, và đánh dấu
               nguồn cần xem lại trước khi agent dùng trong hội thoại.
@@ -138,24 +138,6 @@ const KnowledgeSourceListContent = () => {
           <SourceSelectorSkeleton />
         ) : sources.length === 0 ? (
           <InlineKnowledgeUploader />
-        ) : sources.length === 0 ? (
-          <EmptyState
-            icon={<FileText className="size-6" />}
-            title="Không tìm thấy tài liệu"
-            description="Thử đổi bộ lọc hoặc tải thêm tài liệu cho dự án."
-            actions={
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setUploadOpen(true)}
-              >
-                <Upload className="size-4" />
-                Thêm tệp cho dự án
-              </Button>
-            }
-            className="rounded-[14px] bg-card"
-          />
         ) : (
           <>
             <SourceSelector
@@ -202,9 +184,9 @@ const SourceSelector = ({
     <section className="border-y border-border py-3 sm:rounded-[14px] sm:border sm:bg-card sm:p-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <h3 className="kb-display text-base text-foreground">
+          <h2 className="kb-display text-base text-foreground">
             Nguồn đang xem
-          </h3>
+          </h2>
           <Badge variant="secondary" className="rounded-[8px]">
             {total} nguồn
           </Badge>

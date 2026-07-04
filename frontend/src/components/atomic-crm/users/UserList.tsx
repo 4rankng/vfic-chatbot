@@ -129,7 +129,7 @@ const UserMobileList = () => {
 
   if (!data || data.length === 0) {
     return (
-      <Card className="mt-4 p-8 text-center md:hidden">
+      <Card role="status" className="mt-4 p-8 text-center md:hidden">
         <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-muted">
           <UserCog className="size-5 text-muted-foreground" />
         </div>

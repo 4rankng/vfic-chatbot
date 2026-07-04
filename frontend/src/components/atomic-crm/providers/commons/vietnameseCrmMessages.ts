@@ -290,7 +290,7 @@ export const vietnameseCrmMessages = {
     page: {
       access_denied: "Truy cập bị từ chối",
       create: "Tạo mới %{name}",
-      dashboard: "Dashboard",
+      dashboard: "Tổng quan",
       edit: "%{name} #%{id}",
       empty: "Chưa có %{name}",
       error: "Có lỗi xảy ra",

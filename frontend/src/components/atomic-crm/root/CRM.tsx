@@ -27,8 +27,6 @@ import knowledge from "../knowledge";
 import projects from "../projects";
 import personas from "../personas";
 import integrations from "../integrations";
-import { Dashboard } from "../dashboard/Dashboard";
-import { MobileDashboard } from "../dashboard/MobileDashboard";
 import { Layout } from "../layout/Layout";
 import { MobileLayout } from "../layout/MobileLayout";
 import {
@@ -69,6 +67,11 @@ const defaultAuthProvider = defaultAuthProviderBuilder();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      // Avoid refetch-on-every-mount and unbounded window-focus refetches.
+      // Realtime updates are driven by Socket.IO invalidations, which call
+      // invalidateQueries()/useRefresh() and bypass staleTime, so live data
+      // stays fresh without a network round-trip on every navigation.
+      staleTime: 30_000, // 30 seconds
       gcTime: 1000 * 60 * 60 * 24, // 24 hours
       networkMode: "offlineFirst",
     },
@@ -154,6 +157,10 @@ const RouteBoundary = ({ children }: { children: ReactNode }) => (
   <RouteErrorBoundary>
     <Suspense fallback={<RouteFallback />}>{children}</Suspense>
   </RouteErrorBoundary>
+);
+
+const ConversationWorkspaceDashboard = () => (
+  <Navigate to="/conversations" replace />
 );
 
 export type CRMProps = {
@@ -265,12 +272,12 @@ export const CRM = ({
   const isMobile = useIsMobile();
 
   // on login, pre-fetch the configuration to avoid a flickering
-  // when accessing the app for the first time
-  const wrappedAuthProvider = useMemo<AuthProvider>(
-    () => ({
-      ...authProvider,
-      login: async (params: any) => {
-        const result = await authProvider.login(params);
+  // when accessing the app for the first time. The prefetch runs in the
+  // background so it never gates the auth round-trip — for VFIC the endpoint
+  // returns {} and useConfigurationLoader is the real source of config.
+  const wrappedAuthProvider = useMemo<AuthProvider>(() => {
+    const prefetchConfiguration = () => {
+      void (async () => {
         try {
           const config = await dataProvider.getConfiguration();
           if (Object.keys(config).length > 0) {
@@ -279,6 +286,13 @@ export const CRM = ({
         } catch {
           // Non-critical: config will load via useConfigurationLoader
         }
+      })();
+    };
+    return {
+      ...authProvider,
+      login: async (params: any) => {
+        const result = await authProvider.login(params);
+        prefetchConfiguration();
         return result;
       },
       handleCallback: async (params: any) => {
@@ -288,14 +302,7 @@ export const CRM = ({
           );
         }
         const result = await authProvider.handleCallback(params);
-        try {
-          const config = await dataProvider.getConfiguration();
-          if (Object.keys(config).length > 0) {
-            store.setItem(CONFIGURATION_STORE_KEY, config);
-          }
-        } catch {
-          // Non-critical: config will load via useConfigurationLoader
-        }
+        prefetchConfiguration();
         return result;
       },
       logout: async (params: any) => {
@@ -306,9 +313,8 @@ export const CRM = ({
         }
         return authProvider.logout(params);
       },
-    }),
-    [authProvider, dataProvider, store],
-  );
+    };
+  }, [authProvider, dataProvider, store]);
 
   // P0 #1: a single <Admin> is rendered regardless of the viewport so that
   // crossing the 768px breakpoint no longer swaps the component type and
@@ -317,8 +323,7 @@ export const CRM = ({
   // QueryClient is passed into react-admin's CoreAdminContext, which owns the
   // single QueryClientProvider for the app.
   const resolvedLayout = layout ?? (isMobile ? MobileLayout : Layout);
-  const resolvedDashboard =
-    dashboard ?? (isMobile ? MobileDashboard : Dashboard);
+  const resolvedDashboard = dashboard ?? ConversationWorkspaceDashboard;
 
   if (!authGateReady) return null;
 

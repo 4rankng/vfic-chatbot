@@ -202,7 +202,7 @@ export const LeadShowContent = () => {
     return () => window.removeEventListener("vfic:lead-updated", handler);
   }, [refetch]);
 
-  if (isPending) {
+  if (isPending || isLoading || !record) {
     return (
       <div className="mt-2 flex flex-col gap-4">
         <Skeleton className="h-32 w-full rounded-xl" />
@@ -216,8 +216,6 @@ export const LeadShowContent = () => {
       </div>
     );
   }
-  if (isLoading || !record) return null;
-
   return (
     <div className="mt-2 flex flex-col gap-4">
       <LeadHero />
@@ -247,7 +245,7 @@ export const LeadShowContentMobile = () => {
     return () => window.removeEventListener("vfic:lead-updated", handler);
   }, [refetch]);
 
-  if (isPending) {
+  if (isPending || isLoading || !record) {
     return (
       <div className="flex flex-col gap-3 p-2">
         <Skeleton className="h-24 w-full rounded-xl" />
@@ -256,8 +254,6 @@ export const LeadShowContentMobile = () => {
       </div>
     );
   }
-  if (isLoading || !record) return null;
-
   return (
     <div className="flex flex-col gap-3">
       <section className="border-b border-border pb-3">
@@ -656,7 +652,7 @@ export const LeadShowContentSheet = () => {
           ? "ready"
           : "empty";
 
-  if (isPending) {
+  if (isPending || !record) {
     return (
       <div className="flex flex-col gap-3 p-3 md:p-4">
         <Skeleton className="h-20 w-full rounded-lg" />
@@ -665,8 +661,6 @@ export const LeadShowContentSheet = () => {
       </div>
     );
   }
-  if (!record) return null;
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-3 pb-4 md:p-4">
@@ -684,7 +678,10 @@ export const LeadShowContentSheet = () => {
       </div>
       {conversationId !== null && (
         <div className="shrink-0 border-t border-border/80 bg-background/95 px-3 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-10px_28px_rgba(26,34,40,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_-12px_32px_rgba(0,0,0,0.28)]">
-          <Button asChild className="h-11 w-full rounded-lg text-sm font-semibold">
+          <Button
+            asChild
+            className="h-11 w-full rounded-lg text-sm font-semibold"
+          >
             <Link to={`/conversations?id=${conversationId}`}>
               <MessageSquare className="size-4" />
               Mở cuộc trò chuyện

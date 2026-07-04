@@ -1,11 +1,19 @@
-import { useState, useMemo, useEffect, useCallback, memo, useRef } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  memo,
+  useRef,
+  useDeferredValue,
+} from "react";
 import {
   InfiniteListBase,
   useInfinitePaginationContext,
   useListContext,
   RecordContextProvider,
 } from "ra-core";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import type { Conversation, Lead } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "./InboxIcons";
@@ -13,14 +21,39 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
-import { getLeadStatusColor } from "./conversationDisplay";
-import { Bot, Handshake, UserRound, type LucideIcon } from "lucide-react";
+import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
+import {
+  Ban,
+  BookOpen,
+  Bot,
+  Briefcase,
+  Clock3,
+  Handshake,
+  Inbox,
+  MessageCircle,
+  Phone,
+  PhoneOff,
+  Sparkles,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
   _lead?: Lead | null;
   _snippet?: string;
 };
+
+type WorkspaceFilter =
+  | "all"
+  | "needs_attention"
+  | "has_phone"
+  | "missing_phone"
+  | "follow_up"
+  | "not_interested"
+  | "human"
+  | "semi_auto"
+  | "bot";
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 const CONVERSATION_MODE_GROUPS: {
@@ -45,6 +78,27 @@ const needsVisibleAttention = (
     new Date(conversation.last_inbound_at).getTime() >
     new Date(conversation.last_outbound_at).getTime()
   );
+};
+
+const hasLeadPhone = (lead?: Lead | null) => Boolean(lead?.phone?.trim());
+
+const hasFollowUp = (lead?: Lead | null) => Boolean(lead?.next_action_at);
+
+const isNotInterested = (lead?: Lead | null) =>
+  lead?.lead_score === "not_interested" || lead?.lead_stage === "SKIPPED";
+
+const matchesWorkspaceFilter = (
+  row: ConversationRow,
+  filter: WorkspaceFilter,
+  readIds: Set<string>,
+) => {
+  if (filter === "all") return true;
+  if (filter === "needs_attention") return needsVisibleAttention(row, readIds);
+  if (filter === "has_phone") return hasLeadPhone(row._lead);
+  if (filter === "missing_phone") return !hasLeadPhone(row._lead);
+  if (filter === "follow_up") return hasFollowUp(row._lead);
+  if (filter === "not_interested") return isNotInterested(row._lead);
+  return row.mode === filter;
 };
 
 const getConversationModePriority = (mode: Conversation["mode"]) => {
@@ -162,6 +216,7 @@ const ConversationListItem = memo(
     const name =
       lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
     const colors = getLeadStatusColor(lead);
+    const priority = getLeadPriorityChip(lead);
     // Preview = latest message snippet (batched via vfic_last_messages), falling
     // back to the contact's phone when no snippet is available yet.
     const subtitle = conversation._snippet || lead?.phone || "";
@@ -183,7 +238,9 @@ const ConversationListItem = memo(
           needsAttention ? "needs-attention" : ""
         }`}
         onClick={() => onSelect(conversation)}
-        aria-label={`Mở hội thoại với ${name}`}
+        aria-label={`Mở hội thoại với ${name}${
+          priority ? ` — ${priority.label}` : ""
+        }`}
       >
         <span
           className="avatar round"
@@ -215,8 +272,19 @@ const ConversationListItem = memo(
           <span className="conv-bottom">
             {subtitle && <span className="conv-preview">{subtitle}</span>}
             <span className="conv-badges">
+              {priority && (
+                <span className={`mini-chip priority-${priority.tone}`}>
+                  {priority.label}
+                </span>
+              )}
               {needsAttention && (
                 <span className="mini-chip attention">Cần xử lý</span>
+              )}
+              {lead && hasLeadPhone(lead) && (
+                <span className="mini-chip phone">Có SĐT</span>
+              )}
+              {lead && hasFollowUp(lead) && (
+                <span className="mini-chip followup">Follow-up</span>
               )}
               <span className={`mini-chip channel ${channel}`}>
                 {channel === "oa" ? "OA" : "BOT"}
@@ -253,10 +321,14 @@ const ConversationListPanel = ({
   selectedId,
   onSelect,
   readIds,
+  activeFilter,
+  onFilterChange,
 }: {
   selectedId: string | null;
   onSelect: (c: Conversation) => void;
   readIds: Set<string>;
+  activeFilter: WorkspaceFilter;
+  onFilterChange: (filter: WorkspaceFilter) => void;
 }) => {
   const { data: conversations, isPending } = useListContext<Conversation>();
   const { fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -264,6 +336,9 @@ const ConversationListPanel = ({
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  // Defer the query used for filtering so fast typing never blocks the input;
+  // the immediate `query` still drives the search box value.
+  const deferredQuery = useDeferredValue(query);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const conversationIdsKey = useMemo(
@@ -317,7 +392,7 @@ const ConversationListPanel = ({
     };
   }, [conversationIdsKey]);
 
-  const rows: ConversationRow[] = useMemo(() => {
+  const searchedRows: ConversationRow[] = useMemo(() => {
     if (!conversations) return [];
     return conversations
       .map((c) => ({
@@ -326,11 +401,11 @@ const ConversationListPanel = ({
         _snippet: snippets[c.zalo_chat_id] ?? "",
       }))
       .filter((c) => {
-        if (query) {
+        if (deferredQuery) {
           const haystack = [c.zalo_chat_id, c._lead?.name, c._lead?.phone]
             .filter(Boolean)
             .join(" ");
-          if (!vietnameseSearchIncludes(haystack, query)) return false;
+          if (!vietnameseSearchIncludes(haystack, deferredQuery)) return false;
         }
         return true;
       })
@@ -351,7 +426,34 @@ const ConversationListPanel = ({
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
       });
-  }, [conversations, leads, snippets, query, readIds]);
+  }, [conversations, leads, snippets, deferredQuery, readIds]);
+
+  const workspaceStats = useMemo<Record<WorkspaceFilter, number>>(
+    () => ({
+      all: searchedRows.length,
+      needs_attention: searchedRows.filter((row) =>
+        needsVisibleAttention(row, readIds),
+      ).length,
+      has_phone: searchedRows.filter((row) => hasLeadPhone(row._lead)).length,
+      missing_phone: searchedRows.filter((row) => !hasLeadPhone(row._lead))
+        .length,
+      follow_up: searchedRows.filter((row) => hasFollowUp(row._lead)).length,
+      not_interested: searchedRows.filter((row) => isNotInterested(row._lead))
+        .length,
+      human: searchedRows.filter((row) => row.mode === "human").length,
+      semi_auto: searchedRows.filter((row) => row.mode === "semi_auto").length,
+      bot: searchedRows.filter((row) => row.mode === "bot").length,
+    }),
+    [searchedRows, readIds],
+  );
+
+  const rows: ConversationRow[] = useMemo(
+    () =>
+      searchedRows.filter((row) =>
+        matchesWorkspaceFilter(row, activeFilter, readIds),
+      ),
+    [searchedRows, activeFilter, readIds],
+  );
 
   const rowGroups = useMemo(() => {
     const grouped = CONVERSATION_MODE_GROUPS.map((group) => ({
@@ -388,6 +490,11 @@ const ConversationListPanel = ({
 
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
+      <WorkspaceRail
+        activeFilter={activeFilter}
+        stats={workspaceStats}
+        onFilterChange={onFilterChange}
+      />
       <div className="inbox-tools">
         <label className="search">
           <svg className="icon">
@@ -412,7 +519,9 @@ const ConversationListPanel = ({
             <ConversationListItemSkeleton key={i} />
           ))
         ) : rows.length === 0 ? (
-          <div className="empty-state">Không tìm thấy hội thoại phù hợp.</div>
+          <div className="empty-state" role="status">
+            Không tìm thấy hội thoại phù hợp.
+          </div>
         ) : (
           rowGroups.map((group) => (
             <section className="conversation-group" key={group.mode}>
@@ -444,11 +553,74 @@ const ConversationListPanel = ({
   );
 };
 
+const WORKSPACE_FILTERS: Array<{
+  key: WorkspaceFilter;
+  label: string;
+  Icon: LucideIcon;
+}> = [
+  { key: "all", label: "Tất cả chat", Icon: Inbox },
+  { key: "needs_attention", label: "Cần trả lời", Icon: MessageCircle },
+  { key: "has_phone", label: "Có SĐT", Icon: Phone },
+  { key: "missing_phone", label: "Thiếu SĐT", Icon: PhoneOff },
+  { key: "follow_up", label: "Follow-up", Icon: Clock3 },
+  { key: "not_interested", label: "Không quan tâm", Icon: Ban },
+  { key: "human", label: "Tư vấn viên", Icon: UserRound },
+  { key: "semi_auto", label: "Bán tự động", Icon: Handshake },
+  { key: "bot", label: "Chatbot", Icon: Bot },
+];
+
+const WorkspaceRail = ({
+  activeFilter,
+  stats,
+  onFilterChange,
+}: {
+  activeFilter: WorkspaceFilter;
+  stats: Record<WorkspaceFilter, number>;
+  onFilterChange: (filter: WorkspaceFilter) => void;
+}) => (
+  <div className="workspace-rail" aria-label="Không gian làm việc">
+    <div className="workspace-title">
+      <span className="workspace-kicker">VFIC ChatOps</span>
+      <span>Hộp thoại tuyển dụng</span>
+    </div>
+    <div className="workspace-filter-list">
+      {WORKSPACE_FILTERS.map(({ key, label, Icon }) => (
+        <button
+          type="button"
+          key={key}
+          className={`workspace-filter ${activeFilter === key ? "active" : ""}`}
+          onClick={() => onFilterChange(key)}
+        >
+          <Icon className="icon" aria-hidden="true" />
+          <span>{label}</span>
+          <span className="workspace-count">{stats[key]}</span>
+        </button>
+      ))}
+    </div>
+    <div className="workspace-section-title">Agent</div>
+    <div className="workspace-link-list">
+      <Link to="/knowledge_sources" className="workspace-link">
+        <BookOpen className="icon" aria-hidden="true" />
+        <span>Training</span>
+      </Link>
+      <Link to="/personas" className="workspace-link">
+        <Sparkles className="icon" aria-hidden="true" />
+        <span>Agent</span>
+      </Link>
+      <Link to="/projects" className="workspace-link">
+        <Briefcase className="icon" aria-hidden="true" />
+        <span>Dự án</span>
+      </Link>
+    </div>
+  </div>
+);
+
 const ConversationListContent = () => {
   const { data: conversations } = useListContext<Conversation>();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<WorkspaceFilter>("all");
   const conversationIdsKey = useMemo(
     () => conversations?.map((c) => c.id).join("|") ?? "",
     [conversations],
@@ -559,20 +731,30 @@ const ConversationListContent = () => {
       }`}
     >
       <InboxIcons />
-      <main className={`app ${detailOpen ? "detail-open" : ""}`} id="app">
+      <main
+        className={`app ${detailOpen ? "detail-open" : ""} ${
+          selected && !isMobile ? "profile-open" : ""
+        }`}
+        id="app"
+      >
         <ConversationListPanel
           selectedId={selected?.id ?? null}
           onSelect={openConversation}
           readIds={pendingReadIds}
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
         />
 
         {selected ? (
           <RecordContextProvider value={selected}>
-            <ConversationShowContent onOpenList={backToList} />
+            <ConversationShowContent
+              onOpenList={backToList}
+              showWorkspacePanel={!isMobile}
+            />
           </RecordContextProvider>
         ) : (
           <section className="panel center-panel">
-            <div className="empty-state">
+            <div className="empty-state" role="status">
               Vui lòng chọn một cuộc trò chuyện từ danh sách.
             </div>
           </section>

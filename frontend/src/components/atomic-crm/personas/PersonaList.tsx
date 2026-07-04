@@ -1,3 +1,4 @@
+import { memo } from "react";
 import {
   ListBase,
   useListContext,
@@ -15,7 +16,7 @@ import { TopToolbar } from "../layout/TopToolbar";
 import type { Persona } from "../types";
 import { activatePersona } from "@/lib/vfic/knowledgeService";
 
-const PersonaRow = ({ persona }: { persona: Persona }) => {
+const PersonaRow = memo(({ persona }: { persona: Persona }) => {
   const redirect = useRedirect();
   const notify = useNotify();
   const refresh = useRefresh();
@@ -31,16 +32,28 @@ const PersonaRow = ({ persona }: { persona: Persona }) => {
     }
   };
 
+  // Outer element is a div (not a button) so the nested "Đặt mặc định" button
+  // doesn't create invalid <button>-in-<button> HTML. role+tabIndex+keyboard
+  // handler keep it accessible and activatable like the original button.
+  const onRowKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      redirect("edit", "personas", persona.id);
+    }
+  };
+
   const assignedLabel =
     persona.assigned_projects && persona.assigned_projects.length > 0
       ? persona.assigned_projects.map((p) => p.name).join(", ")
       : null;
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => redirect("edit", "personas", persona.id)}
-      className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:outline-none"
+      onKeyDown={onRowKeyDown}
+      className="flex w-full cursor-pointer items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:outline-none"
     >
       <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
         <Sparkles className="size-4" />
@@ -81,9 +94,10 @@ const PersonaRow = ({ persona }: { persona: Persona }) => {
           </Button>
         </div>
       )}
-    </button>
+    </div>
   );
-};
+});
+PersonaRow.displayName = "PersonaRow";
 
 const PersonaListContent = () => {
   const { data, isPending } = useListContext<Persona>();
@@ -121,7 +135,10 @@ const PersonaListContent = () => {
               ))}
             </div>
           ) : !data || data.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
+            <div
+              role="status"
+              className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground"
+            >
               <Sparkles className="size-10 opacity-50" />
               <p className="text-sm font-medium">Chưa có Agent nào</p>
             </div>

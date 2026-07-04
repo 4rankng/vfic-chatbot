@@ -103,7 +103,7 @@ export const MobileNavigation = () => {
         {
           href: "/",
           Icon: Home,
-          label: "Dashboard",
+          label: "Tổng quan",
           isActive: currentPath === "/",
         },
         {
@@ -190,7 +190,7 @@ export const MobileNavigation = () => {
                   )}
                 >
                   <MoreHorizontal className="size-4 shrink-0" />
-                  <span className="max-w-full truncate text-center text-[0.625rem] font-semibold leading-tight">
+                  <span className="max-w-full truncate text-center text-[0.6875rem] font-semibold leading-tight">
                     Thêm
                   </span>
                 </Button>
@@ -252,14 +252,14 @@ const NavigationButton = ({
       <span className="relative">
         <Icon className="size-4 shrink-0" />
         {badge > 0 ? (
-          <span className="absolute -right-3 -top-2 min-w-4 rounded-full border border-background bg-destructive px-1 py-0.5 text-[0.5625rem] font-bold leading-none text-white shadow-sm">
+          <span className="absolute -right-3 -top-2 min-w-4 rounded-full border border-background bg-destructive px-1 py-0.5 text-[0.625rem] font-bold leading-none text-white shadow-sm">
             {badge > 99 ? "99+" : badge}
           </span>
         ) : null}
       </span>
       <span
         className={cn(
-          "max-w-full truncate text-center text-[0.625rem] font-semibold leading-tight",
+          "max-w-full truncate text-center text-[0.6875rem] font-semibold leading-tight",
         )}
       >
         {label}

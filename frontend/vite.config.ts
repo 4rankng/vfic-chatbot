@@ -79,6 +79,25 @@ export default defineConfig({
           if (id.includes("/lucide-react/")) {
             return "lucide-vendor";
           }
+          // Routing (react-router + the react-router-dom compat shim)
+          if (id.includes("/react-router")) {
+            return "router-vendor";
+          }
+          // Realtime transport
+          if (id.includes("/socket.io-client/")) {
+            return "realtime-vendor";
+          }
+          // Forms (form state + file drop)
+          if (
+            id.includes("/react-hook-form/") ||
+            id.includes("/react-dropzone/")
+          ) {
+            return "forms-vendor";
+          }
+          // Virtualized message list
+          if (id.includes("/react-virtuoso/")) {
+            return "virtuoso-vendor";
+          }
         },
       },
     },

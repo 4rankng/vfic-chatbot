@@ -266,6 +266,8 @@ const PersonaForm = ({
   );
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const bodyMd = useMemo(
     () => composePersonaMarkdown(sectionValues, extraMarkdown),
     [extraMarkdown, sectionValues],
@@ -280,7 +282,13 @@ const PersonaForm = ({
   };
 
   const submit = async () => {
-    if (!name.trim() || submitting) return;
+    if (submitting) return;
+    if (!name.trim()) {
+      setNameError("Vui lòng nhập tên Agent.");
+      nameInputRef.current?.focus();
+      return;
+    }
+    setNameError(null);
     setSubmitting(true);
     try {
       await onSubmit({
@@ -423,15 +431,31 @@ const PersonaForm = ({
             <section className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_auto] lg:items-end">
               <div className="grid gap-2">
                 <Label htmlFor="persona-name" className="text-sm font-semibold">
-                  Tên Agent
+                  Tên Agent{" "}
+                  <span aria-hidden="true" className="text-destructive">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="persona-name"
+                  ref={nameInputRef}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  aria-invalid={nameError ? true : undefined}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (nameError) setNameError(null);
+                  }}
                   placeholder="VD: Trợ lý tuyển dụng LG Display"
                   className="h-11 text-base sm:text-sm lg:max-w-xl"
                 />
+                {nameError ? (
+                  <p
+                    role="alert"
+                    className="text-xs font-medium text-destructive"
+                  >
+                    {nameError}
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -643,11 +667,7 @@ const PersonaForm = ({
 
           <div className="z-10 flex flex-col-reverse gap-2 border-t bg-card/95 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-end sm:px-5 md:sticky md:bottom-0">
             {extraActions}
-            <Button
-              type="submit"
-              className="sm:min-w-32"
-              disabled={submitting || !name.trim()}
-            >
+            <Button type="submit" className="sm:min-w-32" disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />

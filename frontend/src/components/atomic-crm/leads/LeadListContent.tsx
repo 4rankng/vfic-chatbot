@@ -412,7 +412,10 @@ const LeadSection = ({
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border/80 px-4 py-5 text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="rounded-lg border border-dashed border-border/80 px-4 py-5 text-sm text-muted-foreground"
+        >
           {emptyText}
         </div>
       )}

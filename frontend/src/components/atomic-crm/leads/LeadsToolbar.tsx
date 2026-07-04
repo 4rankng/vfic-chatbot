@@ -46,7 +46,7 @@ export const LeadsToolbar = ({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[220px] flex-1">
+      <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
         <Input
           type="search"
           value={searchQuery}

@@ -85,17 +85,22 @@ export const KnowledgeUpload = ({
     });
   };
 
-  const { getRootProps, getInputProps, isDragActive, isDragReject } =
-    useDropzone({
-      accept: ACCEPTED_KNOWLEDGE_TYPES,
-      disabled: busy,
-      maxFiles: 1,
-      multiple: false,
-      onDrop: (acceptedFiles, rejectedFiles) => {
-        handleRejectedFiles(rejectedFiles);
-        setFile(acceptedFiles[0] ?? null);
-      },
-    });
+  const {
+    getRootProps,
+    getInputProps,
+    isDragActive,
+    isDragReject,
+    open: openFilePicker,
+  } = useDropzone({
+    accept: ACCEPTED_KNOWLEDGE_TYPES,
+    disabled: busy,
+    maxFiles: 1,
+    multiple: false,
+    onDrop: (acceptedFiles, rejectedFiles) => {
+      handleRejectedFiles(rejectedFiles);
+      setFile(acceptedFiles[0] ?? null);
+    },
+  });
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && busy) return;
@@ -229,7 +234,17 @@ export const KnowledgeUpload = ({
                     isDragReject && "border-destructive bg-destructive/10",
                     busy && "pointer-events-none opacity-70",
                   ),
+                  role: "button",
+                  tabIndex: busy ? -1 : 0,
+                  "aria-label": "Kéo thả hoặc chọn tệp để tải lên",
+                  "aria-disabled": busy || undefined,
                 })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openFilePicker();
+                  }
+                }}
               >
                 <input {...getInputProps()} />
                 <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-background text-primary shadow-xs ring-1 ring-border transition-transform group-hover:scale-105">

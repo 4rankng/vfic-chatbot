@@ -131,6 +131,19 @@
   --sidebar-accent-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
   --sidebar-border: oklch(0.2372 0.0257 244.3 / 0.09); /* rgba(20,32,42,0.09) */
   --sidebar-ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
+
+  /* Lead-priority avatar tones (inbox). bg tints use runtime var() so they
+     adapt per-theme; only the fixed ember/steel inks need a dark lift. */
+  --lead-hot-bg: color-mix(in oklab, var(--color-ember) 16%, var(--background));
+  --lead-hot-ink: var(--color-ember);
+  --lead-warm-bg: color-mix(in oklab, var(--primary) 18%, var(--background));
+  --lead-warm-ink: var(--primary);
+  --lead-cold-bg: color-mix(
+    in oklab,
+    var(--color-muted-dim) 16%,
+    var(--background)
+  );
+  --lead-cold-ink: var(--color-steel);
 }
 
 .dark {
@@ -183,6 +196,11 @@
     0.7107 0.0351 256.8 / 0.08
   ); /* rgba(148,163,184,0.08) */
   --sidebar-ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
+
+  /* Lift fixed ember/steel lead inks so they read on dark tinted surfaces;
+     --primary and the bg tints already adapt via runtime var(). */
+  --lead-hot-ink: oklch(0.68 0.19 29);
+  --lead-cold-ink: var(--muted-foreground);
 }
 
 a,
@@ -203,6 +221,20 @@ input {
   textarea,
   select {
     font-size: 16px !important;
+  }
+}
+
+/* Respect prefers-reduced-motion globally: neuter animations/transitions for
+   users who request reduced motion (a11y). Covers Radix + tw-animate-css
+   animations that aren't gated on their own. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -233,8 +265,10 @@ input[type="time"] {
    so every shadcn primitive + Tailwind utility (bg-background, bg-primary,
    text-muted-foreground, border-border, ...) re-skins to the mockup's warm
    paper / teal / rust / ochre look WITHOUT touching global :root or .dark.
-   Intentionally always-light (the mockup has no dark variant); the rest of
-   VFIC keeps its orange OKLCH tokens. See plan
+   Light values are the mockup's verbatim sRGB hex for fidelity; a warm dark
+   variant (.dark .kb-scope below) inverts lightness so dark-mode users get a
+   deep warm surface instead of a bright flash. The rest of VFIC keeps its
+   orange OKLCH tokens. See plan
    is-there-anything-you-rustling-lollipop.md + adr/ADR-oklch-token-convention.md.
    Values are the mockup's sRGB hex (verbatim) for fidelity; OKLCH normalization
    is a deferred consistency step.
@@ -272,6 +306,44 @@ input[type="time"] {
   --kb-font-display: "Fraunces", Georgia, "Times New Roman", serif;
   color: var(--foreground);
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Knowledge page — dark variant. Warm-dark inversion of the paper/ink/teal/
+   rust/ochre palette: paper → deep warm charcoal, ink → warm ivory, accents
+   lifted + slightly desaturated so they read on dark. Mirrors the global
+   .dark lightness-inversion convention (see lines above); body-text contrast
+   is ≥ 4.5:1 (foreground oklch(0.94) on background oklch(0.17); muted-foreground
+   oklch(0.71) on the same). Only the custom properties are re-declared —
+   .kb-scope's `color`/`font-family` resolve to the dark values automatically. */
+.dark .kb-scope {
+  --background: oklch(0.17 0.006 145); /* deep warm paper-charcoal */
+  --foreground: oklch(0.94 0.008 140); /* warm ivory ink */
+  --card: oklch(0.205 0.008 145); /* lifted surface */
+  --card-foreground: oklch(0.94 0.008 140);
+  --popover: oklch(0.205 0.008 145);
+  --popover-foreground: oklch(0.94 0.008 140);
+  --primary: oklch(0.94 0.008 140); /* ivory primary button (inverted ink) */
+  --primary-foreground: oklch(0.18 0.006 145);
+  --secondary: oklch(0.245 0.008 145); /* paper-deep */
+  --secondary-foreground: oklch(0.94 0.008 140);
+  --muted: oklch(0.225 0.008 145);
+  --muted-foreground: oklch(0.71 0.01 140);
+  --accent: oklch(0.27 0.03 155); /* dark teal-soft */
+  --accent-foreground: oklch(0.8 0.09 155);
+  --destructive: oklch(0.64 0.17 30); /* lifted rust */
+  --destructive-foreground: oklch(0.98 0.005 140);
+  --border: oklch(0.32 0.008 145);
+  --input: oklch(0.32 0.008 145);
+  --ring: oklch(0.72 0.1 155); /* lifted teal focus outline */
+  --kb-teal: oklch(0.72 0.1 155);
+  --kb-teal-soft: oklch(0.27 0.03 155);
+  --kb-rust: oklch(0.66 0.17 30);
+  --kb-rust-soft: oklch(0.28 0.04 30);
+  --kb-ochre: oklch(0.7 0.11 75);
+  --kb-ochre-soft: oklch(0.28 0.035 75);
+  --kb-ink-700: oklch(0.78 0.008 145);
+  --kb-ink-300: oklch(0.6 0.008 145);
+  --kb-line-strong: oklch(0.4 0.008 145);
 }
 .login-paper {
   background-color: var(--background);

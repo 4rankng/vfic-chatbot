@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   ListBase,
   useListContext,
@@ -512,7 +512,10 @@ const BusTimetableSection = ({ projectId }: { projectId: string }) => {
           ))}
         </div>
       ) : (
-        <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+        <p
+          role="status"
+          className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground"
+        >
           Chưa có lịch xe đưa đón được trích xuất cho dự án này.
         </p>
       )}
@@ -520,7 +523,7 @@ const BusTimetableSection = ({ projectId }: { projectId: string }) => {
   );
 };
 
-const BusRouteCard = ({ route }: { route: BusRoute }) => (
+const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
   <div className="rounded-md border bg-muted/15 p-3">
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
@@ -565,12 +568,16 @@ const BusRouteCard = ({ route }: { route: BusRoute }) => (
         ))}
       </div>
     ) : (
-      <p className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+      <p
+        role="status"
+        className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+      >
         Chưa có điểm đón cho tuyến này.
       </p>
     )}
   </div>
-);
+));
+BusRouteCard.displayName = "BusRouteCard";
 
 export const ProjectList = () => (
   <ListBase perPage={25} sort={{ field: "name", order: "ASC" }}>

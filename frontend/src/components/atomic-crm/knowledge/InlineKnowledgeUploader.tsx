@@ -36,7 +36,7 @@ export const InlineKnowledgeUploader = () => {
     });
   };
 
-  const { getRootProps, getInputProps, isDragActive, isDragReject } =
+  const { getRootProps, getInputProps, isDragActive, isDragReject, open } =
     useDropzone({
       accept: ACCEPTED_KNOWLEDGE_TYPES,
       disabled: busy,
@@ -132,7 +132,17 @@ export const InlineKnowledgeUploader = () => {
                 isDragReject && "border-destructive bg-destructive/10",
                 busy && "pointer-events-none opacity-70",
               ),
+              role: "button",
+              tabIndex: busy ? -1 : 0,
+              "aria-label": "Kéo thả hoặc chọn tệp kiến thức để tải lên",
+              "aria-disabled": busy || undefined,
             })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                open();
+              }
+            }}
           >
             <input {...getInputProps()} />
             <div className="flex max-w-[28rem] flex-col items-center">
