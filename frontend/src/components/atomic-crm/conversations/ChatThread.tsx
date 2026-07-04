@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  Fragment,
   useEffect,
   useLayoutEffect,
   useState,
@@ -10,11 +11,7 @@ import {
   type CSSProperties,
   type HTMLAttributes,
 } from "react";
-import {
-  Virtuoso,
-  type SizeFunction,
-  type VirtuosoHandle,
-} from "react-virtuoso";
+import { VList, type VListHandle } from "virtua";
 import { useDataProvider, useGetIdentity, useNotify, useTranslate } from "ra-core";
 import type { Conversation, Message } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
@@ -22,10 +19,9 @@ import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
 import {
-  shouldPrefetchOlderMessages,
-  shouldTrapEdgeWheel,
-} from "./chatEdgeScroll";
-import { measuredOrEstimatedMessageRowHeight } from "./chatScrollIndex";
+  useConversationMessages,
+  useConversationFlags,
+} from "./messageStore";
 import { Bot, Sparkles, UserRound } from "lucide-react";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
@@ -59,12 +55,11 @@ const formatTime = (iso?: string) => {
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
-const DEFAULT_CHAT_ITEM_HEIGHT_PX = 96;
-const HISTORY_PREFETCH_DISTANCE_PX = 1;
+// Distance from the bottom (px) within which the user is considered "at bottom"
+// — auto-scroll fires only when this is true. Mirrors Rocket.Chat's ~60px.
 const CHAT_AT_BOTTOM_THRESHOLD_PX = 96;
-const CHAT_AT_TOP_THRESHOLD_PX = 48;
-const VIRTUOSO_INCREASE_VIEWPORT_BY = { top: 2400, bottom: 800 };
-const VIRTUOSO_MIN_OVERSCAN_ITEM_COUNT = { top: 8, bottom: 4 };
+// Distance from the top (px) within which we trigger history load-more.
+const HISTORY_LOAD_TOP_THRESHOLD_PX = 100;
 const AVATAR_PLACEHOLDER_STYLE: CSSProperties = { width: 32 };
 const MESSAGE_TEXT_CHUNK_CHARS = 320;
 
@@ -240,58 +235,32 @@ export const ChatThread = ({
   onTakeoverOverride,
   showComposerTakeoverNotice = true,
 }: ChatThreadProps) => {
-  const {
-    messages,
-    isLoading,
-    isLoadingMore,
-    hasMore,
-    firstItemIndex,
-    loadMore,
-    insertOptimistic,
-    markOptimisticFailed,
-  } = useConversationRealtime(conversationId);
+  // Message state lives in the normalized store (persists across conversation
+  // switches). The hook drives data INTO the store; we read arrays out here.
+  const messages = useConversationMessages(conversationId);
+  const { isLoading, isLoadingMore, hasMore } = useConversationFlags(conversationId);
+  const { loadMore, insertOptimistic, markOptimisticFailed } =
+    useConversationRealtime(conversationId);
   const dataProvider = useDataProvider<CrmDataProvider>();
   const { identity } = useGetIdentity();
   const notify = useNotify();
   const translate = useTranslate();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+
+  // virtua refs + scroll state (Rocket.Chat pattern: mutable refs, not state,
+  // so scroll handlers stay synchronous and don't trigger re-renders).
+  const vlistRef = useRef<VListHandle>(null);
+  const scrollerElRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerWrapRef = useRef<HTMLElement>(null);
-  const scrollerElRef = useRef<HTMLElement | null>(null);
-  const detachScrollerListenersRef = useRef<(() => void) | null>(null);
-  const measuredMessageHeightsRef = useRef(new Map<string, number>());
-  const initialJumpDoneRef = useRef(false);
-  const initialBottomSettleUntilRef = useRef(0);
-  const initialBottomSettleRafRef = useRef<number | null>(null);
-  const lastScrollTopRef = useRef(0);
-  const lastLoadMoreAtRef = useRef(0);
   const isAtBottomRef = useRef(true);
-  const isPrependingHistoryRef = useRef(false);
+  const isPrependingRef = useRef(false);
+  const initialJumpDoneRef = useRef(false);
+  const lastLoadMoreAtRef = useRef(0);
   const newestMessageIdRef = useRef<string | null>(null);
-  const [composerReserve, setComposerReserve] = useState(
-    DEFAULT_COMPOSER_RESERVE_PX,
-  );
+  const [composerReserve, setComposerReserve] = useState(104);
   const [hasNewerMessages, setHasNewerMessages] = useState(false);
-  const visibleMessages = useMemo(
-    () =>
-      conversationId
-        ? messages.filter(
-            (message) => message.conversation_id === conversationId,
-          )
-        : [],
-    [conversationId, messages],
-  );
-  // Load older messages only on a genuine upward scroll — not merely because
-  // the top happens to be visible (which is the case the moment a thread opens,
-  // when the initial page fits the viewport, and would otherwise auto-fetch the
-  // whole history). Armed by the scroll listener below, disarmed after each
-  // page so one scroll-up = one page and the list can never run away.
-  const readyForMoreRef = useRef(false);
-  const loadOlderFromTopRef = useRef<() => void>(() => {
-    /* assigned below after the loader callback is created */
-  });
 
   const {
     isBotMode: internalIsBotMode,
@@ -302,111 +271,60 @@ export const ChatThread = ({
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
 
-  const scrollToNewest = useCallback((behavior: "auto" | "smooth" = "auto") => {
-    virtuosoRef.current?.scrollToIndex({
-      index: "LAST",
-      align: "end",
-      behavior,
-    });
-    if (behavior === "auto") {
-      requestAnimationFrame(() => {
-        const scrollerEl = scrollerElRef.current;
-        if (!scrollerEl) return;
-        scrollerEl.scrollTop = scrollerEl.scrollHeight;
-        lastScrollTopRef.current = scrollerEl.scrollTop;
-      });
-    }
+  // --- Scroll helpers (Rocket.Chat MessageList pattern) ---
+
+  const scrollToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = scrollerElRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
 
-  const scheduleScrollToNewest = useCallback(() => {
-    if (initialBottomSettleRafRef.current !== null) {
-      cancelAnimationFrame(initialBottomSettleRafRef.current);
-    }
-
-    initialBottomSettleRafRef.current = requestAnimationFrame(() => {
-      initialBottomSettleRafRef.current = null;
-      scrollToNewest();
-    });
-  }, [scrollToNewest]);
-
-  // Server-confirm the optimistic unread clear from the inbox list. Skips the
-  // round-trip when nothing is unread, and re-fires if a realtime inbound bumps
-  // the counter while the recruiter is viewing the thread. vfic_mark_read resets
-  // unread_count without touching updated_at (no inbox re-sort).
+  // Server-confirm the optimistic unread clear.
   useEffect(() => {
     if (!conversationId) return;
     if (!conversation || (conversation.unread_count ?? 0) === 0) return;
-    dataProvider.markAsRead(conversationId).catch(() => {
-      /* non-fatal: badge re-syncs on the next list load */
-    });
+    dataProvider.markAsRead(conversationId).catch(() => {});
   }, [conversationId, conversation, dataProvider]);
 
-  // Reset per-conversation state so each thread opens at its newest message.
+  // Reset per-conversation scroll state on switch.
   useEffect(() => {
     initialJumpDoneRef.current = false;
-    initialBottomSettleUntilRef.current = 0;
-    if (initialBottomSettleRafRef.current !== null) {
-      cancelAnimationFrame(initialBottomSettleRafRef.current);
-      initialBottomSettleRafRef.current = null;
-    }
-    readyForMoreRef.current = false;
     isAtBottomRef.current = true;
-    isPrependingHistoryRef.current = false;
+    isPrependingRef.current = false;
     newestMessageIdRef.current = null;
-    lastScrollTopRef.current = 0;
     lastLoadMoreAtRef.current = 0;
     setHasNewerMessages(false);
   }, [conversationId]);
 
-  // Snap to the newest message instantly when a conversation opens, then let
-  // Virtuoso's followOutput handle subsequent appends only when the user is
-  // already at the bottom. Very tall bubbles can be measured after the first
-  // snap, so totalListHeightChanged keeps the initial open pinned briefly.
+  // Initial snap-to-bottom when messages first arrive for a conversation.
   useEffect(() => {
-    if (visibleMessages.length > 0 && !initialJumpDoneRef.current) {
+    if (messages.length > 0 && !initialJumpDoneRef.current) {
       initialJumpDoneRef.current = true;
-      initialBottomSettleUntilRef.current = performance.now() + 800;
-      scrollToNewest();
-      scheduleScrollToNewest();
+      // Double-RAF to let virtua measure + lay out before scrolling.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => scrollToNewest()),
+      );
     }
-  }, [visibleMessages, scheduleScrollToNewest, scrollToNewest]);
+  }, [messages, scrollToNewest]);
 
-  const handleTotalListHeightChanged = useCallback(() => {
-    if (!initialJumpDoneRef.current) return;
-    if (isPrependingHistoryRef.current) return;
-    if (performance.now() > initialBottomSettleUntilRef.current) return;
-    if (readyForMoreRef.current) return;
-    scheduleScrollToNewest();
-  }, [scheduleScrollToNewest]);
-
-  const newestMessageId =
-    visibleMessages[visibleMessages.length - 1]?.id ?? null;
+  // Auto-scroll to bottom on new message IF the user is already at the bottom.
+  // If they've scrolled up, show the "new messages" jump button instead.
+  const newestMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
   useEffect(() => {
-    if (!newestMessageId) {
-      newestMessageIdRef.current = null;
+    if (!newestMessageId || !initialJumpDoneRef.current) {
+      newestMessageIdRef.current = newestMessageId;
       return;
     }
-
-    const previousNewestMessageId = newestMessageIdRef.current;
+    const prev = newestMessageIdRef.current;
     newestMessageIdRef.current = newestMessageId;
-    if (
-      previousNewestMessageId === null ||
-      previousNewestMessageId === newestMessageId ||
-      !initialJumpDoneRef.current
-    ) {
-      return;
-    }
-
-    if (isAtBottomRef.current) {
+    if (prev === null || prev === newestMessageId) return;
+    if (isAtBottomRef.current && !isPrependingRef.current) {
       setHasNewerMessages(false);
-      scheduleScrollToNewest();
-      return;
-    }
-
-    if (!isPrependingHistoryRef.current) {
+      scrollToNewest();
+    } else if (!isPrependingRef.current) {
       setHasNewerMessages(true);
     }
-  }, [newestMessageId, scheduleScrollToNewest]);
+  }, [newestMessageId, scrollToNewest]);
 
   const handleJumpToNewest = useCallback(() => {
     setHasNewerMessages(false);
@@ -414,239 +332,85 @@ export const ChatThread = ({
     scrollToNewest("smooth");
   }, [scrollToNewest]);
 
-  const messageHeightEstimates = useMemo(
-    () =>
-      visibleMessages.map((message) =>
-        measuredOrEstimatedMessageRowHeight(
-          message,
-          measuredMessageHeightsRef.current,
-        ),
-      ),
-    [visibleMessages],
-  );
-
-  const measureMessageItem = useCallback<SizeFunction>((el, field) => {
-    const rect = el.getBoundingClientRect();
-    const measured = Math.ceil(
-      field === "offsetWidth" ? rect.width : rect.height,
-    );
-    if (field === "offsetHeight" && measured > 0) {
-      const messageEl = el.querySelector<HTMLElement>("[data-message-id]");
-      const messageId = messageEl?.dataset.messageId;
-      if (messageId) {
-        measuredMessageHeightsRef.current.set(messageId, measured);
-      }
-    }
-    return measured;
-  }, []);
-
-  const loadOlderFromTop = useCallback(() => {
-    if (!initialJumpDoneRef.current) return;
-    if (!readyForMoreRef.current) return;
-    if (isLoadingMore) return;
-    if (!hasMore || visibleMessages.length === 0) return;
-
-    const now = performance.now();
-    if (now - lastLoadMoreAtRef.current < 350) return;
-    lastLoadMoreAtRef.current = now;
-
-    readyForMoreRef.current = false;
-    isPrependingHistoryRef.current = true;
-    void loadMore(visibleMessages[0].id).then(() => {
-      isPrependingHistoryRef.current = false;
-    });
-  }, [hasMore, isLoadingMore, visibleMessages, loadMore]);
-
-  useEffect(() => {
-    loadOlderFromTopRef.current = loadOlderFromTop;
-  }, [loadOlderFromTop]);
-
-  useEffect(
-    () => () => {
-      if (initialBottomSettleRafRef.current !== null) {
-        cancelAnimationFrame(initialBottomSettleRafRef.current);
-      }
-    },
-    [],
-  );
-
-  useLayoutEffect(() => {
-    const footer = composerWrapRef.current;
-    if (!footer) return;
-
-    const updateComposerReserve = () => {
-      const nextReserve = Math.ceil(
-        footer.getBoundingClientRect().height + COMPOSER_RESERVE_GAP_PX,
-      );
-      setComposerReserve((currentReserve) =>
-        currentReserve === nextReserve ? currentReserve : nextReserve,
-      );
-    };
-
-    updateComposerReserve();
-    if (typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(updateComposerReserve);
-    observer.observe(footer);
-    return () => observer.disconnect();
-  }, [showComposerTakeoverNotice, isBotMode]);
-
-  // Rocket.Chat useKeepAtBottom pattern: when the composer grows, an image
-  // lazy-loads, or any other non-message size change happens INSIDE the scroller
-  // while the user is pinned to the bottom, re-snap so the newest message stays
-  // visible. Without this, growing the composer (e.g. typing a multi-line reply)
-  // pushes the bottom message below the fold even though the user is "at the
-  // bottom". Only fires when isAtBottomRef.current is true (no yanking when the
-  // user has scrolled up to read history).
-  useEffect(() => {
-    const scrollerEl = scrollerElRef.current;
-    if (!scrollerEl || typeof ResizeObserver === "undefined") return;
-    // Observe the inner content element (the actual scrolling content, not the
-    // viewport-sized scroller itself). For Virtuoso this is the firstElementChild.
-    const contentEl = scrollerEl.firstElementChild as HTMLElement | null;
-    if (!contentEl) return;
-    const observer = new ResizeObserver(() => {
-      if (isAtBottomRef.current && !isPrependingHistoryRef.current) {
-        scrollToNewest("auto");
-      }
-    });
-    observer.observe(contentEl);
-    return () => observer.disconnect();
-  }, [scrollToNewest, conversationId]);
-
+  // --- Composer auto-grow + reserve ---
   const syncComposerTextarea = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-
     textarea.style.height = "auto";
-    const nextHeight = Math.min(
-      textarea.scrollHeight,
-      COMPOSER_TEXTAREA_MAX_HEIGHT,
-    );
+    const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT);
     textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY =
-      textarea.scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
+    textarea.style.overflowY = textarea.scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
   }, []);
 
   useLayoutEffect(() => {
     syncComposerTextarea();
   }, [reply, canHumanReply, isBotMode, syncComposerTextarea]);
 
-  useEffect(() => {
-    const onResize = () => syncComposerTextarea();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [syncComposerTextarea]);
+  useLayoutEffect(() => {
+    const footer = composerWrapRef.current;
+    if (!footer) return;
+    const update = () => {
+      const next = Math.ceil(footer.getBoundingClientRect().height + COMPOSER_RESERVE_GAP_PX);
+      setComposerReserve((cur) => (cur === next ? cur : next));
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const obs = new ResizeObserver(update);
+    obs.observe(footer);
+    return () => obs.disconnect();
+  }, [showComposerTakeoverNotice, isBotMode]);
 
-  const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
-    isAtBottomRef.current = atBottom;
-    if (atBottom) {
-      readyForMoreRef.current = false;
+  // Rocket.Chat useKeepAtBottom: ResizeObserver on the scroller content re-snaps
+  // to bottom on non-message size changes (composer grow, image load) — but only
+  // if the user is already at the bottom.
+  useEffect(() => {
+    const el = scrollerElRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const content = el.firstElementChild as HTMLElement | null;
+    if (!content) return;
+    const obs = new ResizeObserver(() => {
+      if (isAtBottomRef.current && !isPrependingRef.current) {
+        scrollToNewest();
+      }
+    });
+    obs.observe(content);
+    return () => obs.disconnect();
+  }, [scrollToNewest, conversationId]);
+
+  // --- Load-more (scroll up for older history) ---
+  const handleLoadMore = useCallback(() => {
+    if (!initialJumpDoneRef.current || isLoadingMore || !hasMore || messages.length === 0) return;
+    const now = performance.now();
+    if (now - lastLoadMoreAtRef.current < 350) return;
+    lastLoadMoreAtRef.current = now;
+    isPrependingRef.current = true;
+    void loadMore(messages[0].id).finally(() => {
+      isPrependingRef.current = false;
+    });
+  }, [hasMore, isLoadingMore, messages, loadMore]);
+
+  // --- virtua onScroll: at-bottom detection + top load-more ---
+  const handleScroll = useCallback((offset: number) => {
+    const el = scrollerElRef.current;
+    if (!el) return;
+    // At-bottom detection (Rocket.Chat: distance-from-bottom < threshold).
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const wasAtBottom = isAtBottomRef.current;
+    isAtBottomRef.current = distanceFromBottom < CHAT_AT_BOTTOM_THRESHOLD_PX;
+    if (isAtBottomRef.current && !wasAtBottom) {
       setHasNewerMessages(false);
     }
-  }, []);
+    // Top load-more: virtua fires onScroll with offset; near 0 = near top.
+    if (offset < HISTORY_LOAD_TOP_THRESHOLD_PX && initialJumpDoneRef.current) {
+      handleLoadMore();
+    }
+  }, [handleLoadMore]);
 
-  // Arm "load more" only after a genuine upward scroll. A freshly opened
-  // thread parks at the newest message, so top visibility alone must not fetch
-  // history.
-  const setScrollerRef = useCallback((el: HTMLElement | Window | null) => {
-    detachScrollerListenersRef.current?.();
-    detachScrollerListenersRef.current = null;
-
-    const scrollerEl = el instanceof HTMLElement ? el : null;
-    scrollerElRef.current = scrollerEl;
-    if (!scrollerEl) return;
-
-    lastScrollTopRef.current = scrollerEl.scrollTop;
-    const onScroll = () => {
-      const previousTop = lastScrollTopRef.current;
-      const currentTop = scrollerEl.scrollTop;
-      lastScrollTopRef.current = currentTop;
-      const metrics = {
-        scrollTop: currentTop,
-        scrollHeight: scrollerEl.scrollHeight,
-        clientHeight: scrollerEl.clientHeight,
-      };
-      if (currentTop < previousTop) {
-        readyForMoreRef.current = true;
-        if (
-          shouldPrefetchOlderMessages(
-            metrics,
-            previousTop,
-            HISTORY_PREFETCH_DISTANCE_PX,
-          )
-        ) {
-          loadOlderFromTopRef.current();
-        }
-      }
-    };
-    const onWheel = (event: WheelEvent) => {
-      if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
-      if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
-        readyForMoreRef.current = true;
-        loadOlderFromTopRef.current();
-      }
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    scrollerEl.addEventListener("scroll", onScroll, { passive: true });
-    scrollerEl.addEventListener("wheel", onWheel, { passive: false });
-    detachScrollerListenersRef.current = () => {
-      scrollerEl.removeEventListener("scroll", onScroll);
-      scrollerEl.removeEventListener("wheel", onWheel);
-    };
-  }, []);
-
-  useEffect(
-    () => () => {
-      detachScrollerListenersRef.current?.();
-      detachScrollerListenersRef.current = null;
-      scrollerElRef.current = null;
-    },
-    [],
-  );
-
-  const handleStartReached = useCallback(() => {
-    // Ignore the initial mount/snap top-touch and any fire that is not the
-    // result of a real upward scroll.
-    loadOlderFromTop();
-  }, [loadOlderFromTop]);
-
-  const followOutput = useCallback(
-    (isAtBottom: boolean) =>
-      !isPrependingHistoryRef.current && isAtBottom ? ("auto" as const) : false,
-    [],
-  );
-
-  // Stable identity for the Virtuoso `itemContent` callback. Without this the
-  // inline arrow at the call site rebuilds every render, and Virtuoso re-renders
-  // all visible message rows on every keystroke / new message. Deps are the two
-  // values read inside (the message list for grouping lookahead, and the
-  // firstItemIndex offset that shifts on prepend). Signature matches Virtuoso's
-  // native (index, item) order so it can be passed directly as `itemContent`.
-  const renderMessage = useCallback(
-    (virtuosoIndex: number, m: Message) => {
-      const kind = classify(m);
-      const pos = virtuosoIndex - firstItemIndex;
-      const prevMsg = pos > 0 ? visibleMessages[pos - 1] : null;
-      const prevKind = prevMsg ? classify(prevMsg) : null;
-      const isGrouped = prevKind === kind;
-
-      return <ChatMessageRow message={m} kind={kind} isGrouped={isGrouped} />;
-    },
-    [visibleMessages, firstItemIndex],
-  );
-
+  // --- Send (optimistic) ---
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = reply.trim();
     if (!trimmed || !canHumanReply) return;
-
-    // Optimistic insert (Rocket.Chat pattern): show the recruiter's message
-    // instantly with a "pending" badge. The realtime echo of the real (server-
-    // id'd) message replaces the temp automatically (see useConversationRealtime).
-    // Input is cleared immediately for responsiveness — the message is already
-    // visible in the thread.
     const recruiterId = identity?.id != null ? String(identity.id) : "";
     const tempId = recruiterId ? insertOptimistic(trimmed, recruiterId) : "";
     const sentText = trimmed;
@@ -654,89 +418,72 @@ export const ChatThread = ({
     setIsSending(true);
     try {
       await dataProvider.sendHumanReply(conversationId, sentText);
-      // On success the temp is replaced by the realtime echo; nothing to do.
-      // If no socket echo arrives (degraded), the temp stays as "pending" —
-      // acceptable fallback (the message was sent server-side).
     } catch (err: unknown) {
       const status = err instanceof HumanReplyError ? err.status : "error";
-      notify(translate(`resources.conversations.reply.${status}`), {
-        type: "error",
-      });
-      // Mark the optimistic message as failed so the user sees the error inline
-      // and can retry. The temp row stays visible with a "failed" badge.
+      notify(translate(`resources.conversations.reply.${status}`), { type: "error" });
       if (tempId) markOptimisticFailed(tempId);
-      // Restore the unsent text so the user can edit and resend.
       setReply(sentText);
     } finally {
       setIsSending(false);
     }
   };
 
-  // Keep the Virtuoso component slots referentially stable except when the
-  // loading flags actually change — otherwise typing in the composer would
-  // recreate this object every keystroke and force Virtuoso to remount.
-  const virtuosoComponents = useMemo(
-    () => ({
-      List: ChatItemList,
-      Header: () => (
-        <div className="chat-history-top-spacer">
-          {isLoadingMore ? (
-            <div
-              className="day-marker"
-              style={{ margin: "8px 0", background: "transparent" }}
-            >
-              <span>Đang tải tin nhắn cũ hơn...</span>
-            </div>
-          ) : null}
-        </div>
-      ),
-      Footer: () => <div className="chat-history-bottom-spacer" />,
-      EmptyPlaceholder: () =>
-        isLoading ? (
-          <div className="day-marker" style={{ background: "transparent" }}>
-            <span>Đang tải tin nhắn...</span>
-          </div>
-        ) : (
-          <div className="empty-state" role="status">
-            Chưa có tin nhắn nào.
-          </div>
-        ),
-    }),
-    [isLoading, isLoadingMore],
+  // --- Render ---
+
+  // Stable itemContent for virtua. Group consecutive same-kind messages.
+  const renderMessage = useCallback(
+    (index: number, m: Message) => {
+      const kind = classify(m);
+      const prevMsg = index > 0 ? messages[index - 1] : null;
+      const prevKind = prevMsg ? classify(prevMsg) : null;
+      const isGrouped = prevKind === kind;
+      return <ChatMessageRow message={m} kind={kind} isGrouped={isGrouped} />;
+    },
+    [messages],
   );
 
-  // Fragment — the host shell lays out the scroll surface (1fr) and composer
-  // (auto); the scroll shell only gives us a stable overlay layer.
   return (
     <>
-      <div className="chat-scroll-shell">
-        <Virtuoso
-          ref={virtuosoRef}
-          scrollerRef={setScrollerRef}
+      <div
+        className="chat-scroll-shell"
+        ref={(el) => {
+          // Capture the actual scrollable element (virtua renders it inside the
+          // VList wrapper). Query for the element that has overflow:auto/scroll.
+          const scroller = el?.querySelector<HTMLElement>(".chat-scroller");
+          scrollerElRef.current = scroller ?? null;
+        }}
+      >
+        <VList
+          ref={vlistRef}
           className="chat-scroller"
-          style={
-            {
-              height: "100%",
-              "--chat-composer-reserve": `${composerReserve}px`,
-            } as CSSProperties
-          }
-          data={visibleMessages}
-          computeItemKey={(_, m) => `${m.conversation_id}:${m.id}`}
-          firstItemIndex={firstItemIndex}
-          startReached={handleStartReached}
-          atBottomStateChange={handleAtBottomStateChange}
-          atBottomThreshold={CHAT_AT_BOTTOM_THRESHOLD_PX}
-          atTopThreshold={CHAT_AT_TOP_THRESHOLD_PX}
-          followOutput={followOutput}
-          totalListHeightChanged={handleTotalListHeightChanged}
-          defaultItemHeight={DEFAULT_CHAT_ITEM_HEIGHT_PX}
-          heightEstimates={messageHeightEstimates}
-          itemSize={measureMessageItem}
-          increaseViewportBy={VIRTUOSO_INCREASE_VIEWPORT_BY}
-          minOverscanItemCount={VIRTUOSO_MIN_OVERSCAN_ITEM_COUNT}
-          components={virtuosoComponents}
-          itemContent={renderMessage}
-        />
+          style={{
+            height: "100%",
+            "--chat-composer-reserve": `${composerReserve}px`,
+          } as CSSProperties}
+          shift={isPrependingRef.current /* anchor on prepend (history load) */}
+          onScroll={handleScroll}
+          overscan={800}
+        >
+          {isLoadingMore && (
+            <div className="chat-history-top-spacer">
+              <div className="day-marker" style={{ margin: "8px 0", background: "transparent" }}>
+                <span>Đang tải tin nhắn cũ hơn...</span>
+              </div>
+            </div>
+          )}
+          {messages.length === 0 && !isLoading ? (
+            <div className="chat-empty">
+              <span>Chưa có tin nhắn nào. Bắt đầu trò chuyện!</span>
+            </div>
+          ) : messages.length === 0 && isLoading ? (
+            <div className="chat-empty">
+              <span>Đang tải tin nhắn...</span>
+            </div>
+          ) : null}
+          {messages.map((m, i) => (
+            <Fragment key={`${m.conversation_id}:${m.id}`}>{renderMessage(i, m)}</Fragment>
+          ))}
+        </VList>
         {hasNewerMessages ? (
           <button
             type="button"
@@ -805,3 +552,4 @@ export const ChatThread = ({
     </>
   );
 };
+

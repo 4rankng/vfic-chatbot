@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+// Owns the realtime subscription + paginated fetching for a conversation.
+// Message STATE lives in the normalized messageStore (Zustand Map<id,msg>),
+// which persists across conversation switches — eliminating the A→B→A refetch
+// problem the prior per-mount useState had. This hook is now purely about
+// *driving data into the store* (initial fetch, load-more, realtime subscribe,
+// reconnect gap-fill, optimistic insert), not holding arrays.
+//
+// Rocket.Chat pattern: store = Map<id, msg>, sorted array derived at the
+// selector boundary, optimistic temps tracked for sweep-on-echo.
+
+import { useCallback, useEffect, useRef } from "react";
 import type { Message } from "../types";
 import { chatRepository } from "./chatRepository";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
@@ -7,10 +17,7 @@ import {
   mergeRealtimePage,
   sortMessagesChronologically,
 } from "./messageOrdering";
-import {
-  INITIAL_CHAT_FIRST_ITEM_INDEX,
-  firstItemIndexAfterPrepend,
-} from "./chatScrollIndex";
+import { useMessageStore } from "./messageStore";
 
 export {
   compareMessages,
@@ -25,42 +32,15 @@ const keepConversationMessages = (
   conversationId: string,
 ) => messages.filter((message) => message.conversation_id === conversationId);
 
-// Owns the realtime subscription + paginated message state for a conversation.
-// Extracted from ChatThread so the message-loading logic is reusable across any
-// shell and unit-testable in isolation (independent of the Virtuoso/composer UI).
-//
 export const useConversationRealtime = (conversationId?: string) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [firstItemIndex, setFirstItemIndex] = useState(
-    INITIAL_CHAT_FIRST_ITEM_INDEX,
-  );
+  // Drive the store from this hook. The store holds the actual state.
+  const store = useMessageStore();
   const isFetchingRef = useRef(false);
   const activeConversationRef = useRef<string | undefined>(conversationId);
   const requestSeqRef = useRef(0);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
-  // Optimistic-send tracking (Rocket.Chat pattern): temp ids of in-flight
-  // recruiter messages. On the realtime echo of a confirmed message we drop the
-  // matching temp so the real (server-id'd) row replaces it without a flicker.
-  const pendingOptimisticIdsRef = useRef<Set<string>>(new Set());
-  // Mirror `messages` into a ref so loadMore can read the latest set
-  // synchronously. A setMessages functional updater runs later (during render),
-  // so it can't itself return the count of newly-prepended rows; the ref lets
-  // loadMore compute that count against state that already reflects any realtime
-  // INSERT that landed during its await.
-  const messagesRef = useRef<Message[]>([]);
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
 
-  // Per-conversation isolation guards (defense-in-depth):
-  //   cancelled         — this mount's effect was cleaned up (React strictness / double-invokes)
-  //   requestSeqRef     — stale-mount guard: monotonic counter, rejects callbacks from a prior
-  //                       conversationId mount cycle (catches temporal identity drift)
-  //   activeConversationRef — stale-entity guard: rejects callbacks whose conversationId no longer
-  //                           matches the selected conversation (catches entity identity drift)
+  // Initial fetch + subscribe on conversation open/switch.
   useEffect(() => {
     const activeConversationId = conversationId;
     const requestSeq = requestSeqRef.current + 1;
@@ -69,29 +49,31 @@ export const useConversationRealtime = (conversationId?: string) => {
     isFetchingRef.current = false;
     loadMoreAbortRef.current?.abort();
     loadMoreAbortRef.current = null;
-    setMessages([]);
-    setHasMore(false);
-    setFirstItemIndex(INITIAL_CHAT_FIRST_ITEM_INDEX);
-    setIsLoading(true);
+
+    if (!activeConversationId) {
+      return;
+    }
+
+    // Reset the conversation's store state on open. If messages are already
+    // cached (e.g. returning from A→B→A), setMessages below will refresh them;
+    // but we mark loading so the UI shows a spinner briefly only if the cache
+    // is empty. To avoid wiping a warm cache on rapid switches, only reset when
+    // the conversation has no cached messages yet.
+    const existing = store.conversations.get(activeConversationId);
+    if (!existing || existing.byId.size === 0) {
+      store.reset(activeConversationId);
+    }
 
     let cancelled = false;
     const initialFetchAbort = new AbortController();
 
     const fetchInitial = async () => {
-      if (!activeConversationId) {
-        if (!cancelled && requestSeqRef.current === requestSeq) {
-          setIsLoading(false);
-        }
-        return;
-      }
-
       try {
         const { messages: mapped, hasMore: apiHasMore } =
           await chatRepository.getConversationMessages(activeConversationId, {
             limit: CHAT_MESSAGES_PAGE_SIZE,
             signal: initialFetchAbort.signal,
           });
-        // Stale-response guard: see invariant block above
         if (
           cancelled ||
           requestSeqRef.current !== requestSeq ||
@@ -103,51 +85,38 @@ export const useConversationRealtime = (conversationId?: string) => {
           sortMessagesChronologically(mapped),
           activeConversationId,
         );
-        // Merge, don't replace: a realtime INSERT between subscribe() and this
-        // resolve is already in state, and a blind setMessages(mapped) would
-        // drop it (the fetch predates the insert). Union by id, fetched-first.
-        setMessages((prev) => {
-          const currentConversationMessages = keepConversationMessages(
-            prev,
-            activeConversationId,
-          );
-          if (currentConversationMessages.length === 0) return chronological;
-          return mergeChronological(currentConversationMessages, chronological);
-        });
-        setHasMore(apiHasMore);
+        // setMessages replaces the conversation's set entirely (initial load).
+        // Any realtime insert that landed during the await is unioned in by
+        // merging against the current store snapshot first.
+        const current = useMessageStore
+          .getState()
+          .conversations.get(activeConversationId);
+        const merged =
+          current && current.byId.size > 0
+            ? mergeChronological(
+                Array.from(current.byId.values()),
+                chronological,
+              )
+            : chronological;
+        store.setMessages(activeConversationId, merged, apiHasMore);
       } catch {
         if (
           !cancelled &&
           requestSeqRef.current === requestSeq &&
           activeConversationRef.current === activeConversationId
         ) {
-          setMessages([]);
-          setHasMore(false);
-        }
-      } finally {
-        if (!cancelled && requestSeqRef.current === requestSeq) {
-          setIsLoading(false);
+          store.setMessages(activeConversationId, [], false);
         }
       }
     };
 
     void fetchInitial();
 
-    if (!activeConversationId) {
-      return () => {
-        cancelled = true;
-        initialFetchAbort.abort();
-        loadMoreAbortRef.current?.abort();
-        loadMoreAbortRef.current = null;
-      };
-    }
-
     let cleanup: (() => void) | undefined;
     try {
       cleanup = chatRepository.subscribeToMessages(
         activeConversationId,
         (latest) => {
-          // Stale-response guard: see invariant block above
           if (
             cancelled ||
             requestSeqRef.current !== requestSeq ||
@@ -160,45 +129,40 @@ export const useConversationRealtime = (conversationId?: string) => {
             activeConversationId,
           );
           if (currentLatest.length === 0) return;
-          // Drop optimistic temps for this conversation once the server echoes a
-          // real (server-id'd) outbound recruiter message — the real row replaces
-          // the temp without a flicker. Rocket.Chat reuses the client _id on the
-          // server; our backend doesn't, so we sweep by timestamp + content.
-          const pendingIds = pendingOptimisticIdsRef.current;
-          if (pendingIds.size > 0) {
+
+          // Sweep optimistic temps whose content+ts matches a real echo, then
+          // upsert the real page. Rocket.Chat reuses the client _id on confirm;
+          // our backend doesn't, so we sweep by content+timestamp.
+          const state = useMessageStore.getState();
+          const pending = state.pendingOptimistic.get(activeConversationId);
+          if (pending && pending.size > 0) {
             const realContentSet = new Set(
               currentLatest
                 .filter((m) => m.type === "outbound" && m.data?.recruiter_id)
                 .map((m) => `${m.content}|${m.created_at}`),
             );
             if (realContentSet.size > 0) {
-              setMessages((prev) => {
-                const kept = prev.filter((m) => {
-                  if (!pendingIds.has(m.id)) return true;
-                  // Keep the temp only if no real echo matches its content+ts.
-                  return !realContentSet.has(`${m.content}|${m.created_at}`);
-                });
-                if (kept.length !== prev.length) {
-                  // Temps were replaced; clear them from tracking.
-                  for (const id of pendingIds) {
-                    const stillPresent = kept.some((m) => m.id === id);
-                    if (!stillPresent) pendingIds.delete(id);
-                  }
+              for (const tempId of pending) {
+                const tempMsg = state.conversations
+                  .get(activeConversationId)
+                  ?.byId.get(tempId);
+                if (
+                  tempMsg &&
+                  realContentSet.has(`${tempMsg.content}|${tempMsg.created_at}`)
+                ) {
+                  store.remove(activeConversationId, tempId);
                 }
-                return mergeRealtimePage(
-                  keepConversationMessages(kept, activeConversationId),
-                  currentLatest,
-                );
-              });
-              return;
+              }
             }
           }
-          setMessages((prev) =>
-            mergeRealtimePage(
-              keepConversationMessages(prev, activeConversationId),
-              currentLatest,
-            ),
-          );
+
+          // Merge only messages in the loaded window (drop older-than-earliest).
+          const conv = useMessageStore
+            .getState()
+            .conversations.get(activeConversationId);
+          const currentArr = conv ? Array.from(conv.byId.values()) : [];
+          const inWindow = mergeRealtimePage(currentArr, currentLatest);
+          store.upsert(activeConversationId, inWindow);
         },
       );
     } catch {
@@ -212,42 +176,42 @@ export const useConversationRealtime = (conversationId?: string) => {
       loadMoreAbortRef.current = null;
       cleanup?.();
     };
-  }, [conversationId]);
+  }, [conversationId, store]);
 
   // Reconnect gap-fill (Rocket.Chat useLoadMissedMessages pattern): on Socket.IO
   // disconnect→reconnect, fetch any messages the server emitted while offline.
-  // Without this, messages sent during the disconnect window are silently lost
-  // to the client until the conversation is reopened. Uses the newest REAL
-  // (non-optimistic) message id as the cursor.
   useEffect(() => {
     if (!conversationId) return;
     const socket = getRealtimeSocket();
     let wasConnected = socket.connected;
 
     const onConnect = async () => {
-      if (wasConnected) return; // only fire on reconnect, not initial connect
+      if (wasConnected) return;
       wasConnected = true;
-      // Find the newest real (non-temp) message id currently loaded.
-      const realMessages = messagesRef.current.filter(
-        (m) => !pendingOptimisticIdsRef.current.has(m.id),
-      );
-      if (realMessages.length === 0) return;
-      const newest = realMessages[realMessages.length - 1];
+      // Newest real (non-temp) message id is the cursor.
+      const conv = useMessageStore.getState().conversations.get(conversationId);
+      if (!conv || conv.byId.size === 0) return;
+      let newestId: string | null = null;
+      const pending = useMessageStore
+        .getState()
+        .pendingOptimistic.get(conversationId);
+      for (let i = conv.sortedCache.length - 1; i >= 0; i--) {
+        const m = conv.sortedCache[i];
+        if (!pending?.has(m.id)) {
+          newestId = m.id;
+          break;
+        }
+      }
+      if (!newestId) return;
       try {
         const missed = await chatRepository.getMessagesSince(
           conversationId,
-          newest.id,
+          newestId,
         );
         if (missed.length === 0) return;
-        setMessages((prev) =>
-          mergeChronological(
-            keepConversationMessages(prev, conversationId),
-            missed,
-          ),
-        );
+        store.upsert(conversationId, missed);
       } catch {
-        // Best-effort: if the gap-fill fetch fails, the user can pull-to-refresh
-        // or reopen the conversation. Don't crash the realtime loop.
+        // Best-effort gap-fill.
       }
     };
     const onDisconnect = () => {
@@ -260,23 +224,24 @@ export const useConversationRealtime = (conversationId?: string) => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
     };
-  }, [conversationId]);
+  }, [conversationId, store]);
 
-  // Stable identity so the consumer's useCallback(handleStartReached) memo
-  // holds across renders — without this the startReached handler is rebuilt
-  // every keystroke and Virtuoso re-binds the scroll listener.
+  // Load-more (scroll up for older history). With virtua's `shift` prop handling
+  // scroll anchoring, we no longer track firstItemIndex — just fetch + upsert.
   const loadMore = useCallback(
-    async (earliestId: string): Promise<number> => {
-      if (isFetchingRef.current || !hasMore || !conversationId) {
-        return 0;
-      }
+    async (earliestId: string): Promise<void> => {
+      if (isFetchingRef.current || !conversationId) return;
+      const state = useMessageStore.getState();
+      const conv = state.conversations.get(conversationId);
+      if (!conv || !conv.hasMore) return;
+
       const activeConversationId = conversationId;
       const requestSeq = requestSeqRef.current;
       const loadMoreAbort = new AbortController();
       loadMoreAbortRef.current?.abort();
       loadMoreAbortRef.current = loadMoreAbort;
       isFetchingRef.current = true;
-      setIsLoadingMore(true);
+      store.setLoadingMore(activeConversationId, true);
 
       try {
         const { messages: loadedOlder, hasMore: apiHasMore } =
@@ -285,49 +250,30 @@ export const useConversationRealtime = (conversationId?: string) => {
             beforeId: earliestId,
             signal: loadMoreAbort.signal,
           });
-        // Stale-response guard: see invariant block above
         if (
           requestSeqRef.current !== requestSeq ||
           activeConversationRef.current !== activeConversationId
         ) {
-          return 0;
+          return;
         }
         const older = keepConversationMessages(loadedOlder, activeConversationId);
-        setHasMore(apiHasMore);
-        // Return the number of fetched messages that are genuinely new vs current
-        // state — NOT older.length. subscribeToMessages unions the newest page on
-        // every realtime event and can land during the await above, so some of
-        // `older` may already be in state; mergeChronological dedups those. If we
-        // returned older.length we would over-count the prepend and inflate
-        // Virtuoso's firstItemIndex, shifting every visible row to the wrong message.
-        const existingIds = new Set(messagesRef.current.map((m) => m.id));
-        const added = older.reduce(
-          (n, m) => n + (existingIds.has(m.id) ? 0 : 1),
-          0,
-        );
-        if (added > 0) {
-          setFirstItemIndex((i) => firstItemIndexAfterPrepend(i, added));
+        store.setHasMore(activeConversationId, apiHasMore);
+        if (older.length > 0) {
+          store.upsert(activeConversationId, older);
         }
-        setMessages((prev) => mergeChronological(prev, older));
-        return added;
       } catch {
         if (
-          requestSeqRef.current !== requestSeq ||
-          activeConversationRef.current !== activeConversationId
+          requestSeqRef.current === requestSeq ||
+          activeConversationRef.current === activeConversationId
         ) {
-          return 0;
+          store.setHasMore(activeConversationId, false);
         }
-        // A failed load-more must not keep re-firing on every scroll-to-top
-        // (hasMore stays true -> the backend gets spammed with failing
-        // requests). Stop the loop; reopening the conversation retries.
-        setHasMore(false);
-        return 0;
       } finally {
         if (
           requestSeqRef.current === requestSeq &&
           activeConversationRef.current === activeConversationId
         ) {
-          setIsLoadingMore(false);
+          store.setLoadingMore(activeConversationId, false);
           isFetchingRef.current = false;
           if (loadMoreAbortRef.current === loadMoreAbort) {
             loadMoreAbortRef.current = null;
@@ -335,16 +281,13 @@ export const useConversationRealtime = (conversationId?: string) => {
         }
       }
     },
-    [hasMore, conversationId],
+    [conversationId, store],
   );
 
-  // Insert an optimistic temp message (Rocket.Chat pattern). Returns the temp id
-  // so the caller can mark it failed on send error. The temp is auto-removed when
-  // the realtime echo of the real message arrives (see subscribeToMessages above).
+  // Insert an optimistic temp message. Returns the temp id.
   const insertOptimistic = useCallback(
     (content: string, recruiterId: string): string => {
       if (!conversationId) return "";
-      // Use a client-side UUID that won't collide with server ids.
       const tempId = `optimistic-${crypto.randomUUID()}`;
       const now = new Date().toISOString();
       const temp: Message = {
@@ -357,30 +300,36 @@ export const useConversationRealtime = (conversationId?: string) => {
         data: { recruiter_id: recruiterId },
         created_at: now,
       };
-      pendingOptimisticIdsRef.current.add(tempId);
-      setMessages((prev) => mergeChronological(prev, [temp]));
+      store.addPendingOptimistic(conversationId, tempId);
+      store.upsert(conversationId, [temp]);
       return tempId;
     },
-    [conversationId],
+    [conversationId, store],
   );
 
-  // Mark an optimistic message as failed (keep it visible with a failed badge so
-  // the user can retry), or remove it entirely. Used when sendHumanReply errors.
-  const markOptimisticFailed = useCallback((tempId: string) => {
-    pendingOptimisticIdsRef.current.delete(tempId);
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === tempId ? { ...m, delivery_status: "failed" as const } : m,
-      ),
-    );
-  }, []);
+  // Mark an optimistic message as failed (keep visible with failed badge).
+  const markOptimisticFailed = useCallback(
+    (tempId: string) => {
+      if (!conversationId) return;
+      store.patch(conversationId, tempId, { delivery_status: "failed" });
+      // No longer pending (it's now a failed real-visible row).
+      const pending = useMessageStore
+        .getState()
+        .pendingOptimistic.get(conversationId);
+      if (pending?.has(tempId)) {
+        const next = new Set(pending);
+        next.delete(tempId);
+        useMessageStore.setState((s) => {
+          const m = new Map(s.pendingOptimistic);
+          m.set(conversationId, next);
+          return { pendingOptimistic: m };
+        });
+      }
+    },
+    [conversationId, store],
+  );
 
   return {
-    messages,
-    isLoading,
-    isLoadingMore,
-    hasMore,
-    firstItemIndex,
     loadMore,
     insertOptimistic,
     markOptimisticFailed,
