@@ -148,6 +148,32 @@ export const chatRepository = {
   },
 
   /**
+   * Reconnect gap-fill (Rocket.Chat loadMissedMessages pattern): fetch every
+   * message NEWER than the client's newest known message id. Called on
+   * Socket.IO offline→online to recover messages the server emitted while the
+   * client was disconnected. Returns chronological order (oldest -> newest).
+   * Excludes optimistic temp messages by convention (caller passes the newest
+   * REAL message id, not a temp id).
+   */
+  async getMessagesSince(
+    conversationId: string,
+    sinceId: string,
+  ): Promise<Message[]> {
+    const sp = new URLSearchParams({
+      since_id: String(sinceId),
+      limit: "200",
+    });
+    const body = await apiJson<ListEnvelope>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${sp.toString()}`,
+    );
+    return sortMessagesChronologically(
+      (body.data ?? [])
+        .map(toMessage)
+        .filter((message) => message.conversation_id === conversationId),
+    );
+  },
+
+  /**
    * Approximate total message count for a contact's Zalo thread (lead timeline
    * activity signal). Resolves the conversation by zalo_chat_id, then reads the
    * messages page total (capped at the per_page ceiling).

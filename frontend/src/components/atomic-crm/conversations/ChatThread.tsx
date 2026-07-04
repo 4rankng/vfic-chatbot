@@ -15,7 +15,7 @@ import {
   type SizeFunction,
   type VirtuosoHandle,
 } from "react-virtuoso";
-import { useDataProvider, useNotify, useTranslate } from "ra-core";
+import { useDataProvider, useGetIdentity, useNotify, useTranslate } from "ra-core";
 import type { Conversation, Message } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
@@ -25,9 +25,7 @@ import {
   shouldPrefetchOlderMessages,
   shouldTrapEdgeWheel,
 } from "./chatEdgeScroll";
-import {
-  measuredOrEstimatedMessageRowHeight,
-} from "./chatScrollIndex";
+import { measuredOrEstimatedMessageRowHeight } from "./chatScrollIndex";
 import { Bot, Sparkles, UserRound } from "lucide-react";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
@@ -249,8 +247,11 @@ export const ChatThread = ({
     hasMore,
     firstItemIndex,
     loadMore,
+    insertOptimistic,
+    markOptimisticFailed,
   } = useConversationRealtime(conversationId);
   const dataProvider = useDataProvider<CrmDataProvider>();
+  const { identity } = useGetIdentity();
   const notify = useNotify();
   const translate = useTranslate();
   const [reply, setReply] = useState("");
@@ -276,7 +277,9 @@ export const ChatThread = ({
   const visibleMessages = useMemo(
     () =>
       conversationId
-        ? messages.filter((message) => message.conversation_id === conversationId)
+        ? messages.filter(
+            (message) => message.conversation_id === conversationId,
+          )
         : [],
     [conversationId, messages],
   );
@@ -376,7 +379,8 @@ export const ChatThread = ({
     scheduleScrollToNewest();
   }, [scheduleScrollToNewest]);
 
-  const newestMessageId = visibleMessages[visibleMessages.length - 1]?.id ?? null;
+  const newestMessageId =
+    visibleMessages[visibleMessages.length - 1]?.id ?? null;
   useEffect(() => {
     if (!newestMessageId) {
       newestMessageIdRef.current = null;
@@ -451,12 +455,7 @@ export const ChatThread = ({
     void loadMore(visibleMessages[0].id).then(() => {
       isPrependingHistoryRef.current = false;
     });
-  }, [
-    hasMore,
-    isLoadingMore,
-    visibleMessages,
-    loadMore,
-  ]);
+  }, [hasMore, isLoadingMore, visibleMessages, loadMore]);
 
   useEffect(() => {
     loadOlderFromTopRef.current = loadOlderFromTop;
@@ -491,6 +490,29 @@ export const ChatThread = ({
     observer.observe(footer);
     return () => observer.disconnect();
   }, [showComposerTakeoverNotice, isBotMode]);
+
+  // Rocket.Chat useKeepAtBottom pattern: when the composer grows, an image
+  // lazy-loads, or any other non-message size change happens INSIDE the scroller
+  // while the user is pinned to the bottom, re-snap so the newest message stays
+  // visible. Without this, growing the composer (e.g. typing a multi-line reply)
+  // pushes the bottom message below the fold even though the user is "at the
+  // bottom". Only fires when isAtBottomRef.current is true (no yanking when the
+  // user has scrolled up to read history).
+  useEffect(() => {
+    const scrollerEl = scrollerElRef.current;
+    if (!scrollerEl || typeof ResizeObserver === "undefined") return;
+    // Observe the inner content element (the actual scrolling content, not the
+    // viewport-sized scroller itself). For Virtuoso this is the firstElementChild.
+    const contentEl = scrollerEl.firstElementChild as HTMLElement | null;
+    if (!contentEl) return;
+    const observer = new ResizeObserver(() => {
+      if (isAtBottomRef.current && !isPrependingHistoryRef.current) {
+        scrollToNewest("auto");
+      }
+    });
+    observer.observe(contentEl);
+    return () => observer.disconnect();
+  }, [scrollToNewest, conversationId]);
 
   const syncComposerTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -527,56 +549,53 @@ export const ChatThread = ({
   // Arm "load more" only after a genuine upward scroll. A freshly opened
   // thread parks at the newest message, so top visibility alone must not fetch
   // history.
-  const setScrollerRef = useCallback(
-    (el: HTMLElement | Window | null) => {
-      detachScrollerListenersRef.current?.();
-      detachScrollerListenersRef.current = null;
+  const setScrollerRef = useCallback((el: HTMLElement | Window | null) => {
+    detachScrollerListenersRef.current?.();
+    detachScrollerListenersRef.current = null;
 
-      const scrollerEl = el instanceof HTMLElement ? el : null;
-      scrollerElRef.current = scrollerEl;
-      if (!scrollerEl) return;
+    const scrollerEl = el instanceof HTMLElement ? el : null;
+    scrollerElRef.current = scrollerEl;
+    if (!scrollerEl) return;
 
-      lastScrollTopRef.current = scrollerEl.scrollTop;
-      const onScroll = () => {
-        const previousTop = lastScrollTopRef.current;
-        const currentTop = scrollerEl.scrollTop;
-        lastScrollTopRef.current = currentTop;
-        const metrics = {
-          scrollTop: currentTop,
-          scrollHeight: scrollerEl.scrollHeight,
-          clientHeight: scrollerEl.clientHeight,
-        };
-        if (currentTop < previousTop) {
-          readyForMoreRef.current = true;
-          if (
-            shouldPrefetchOlderMessages(
-              metrics,
-              previousTop,
-              HISTORY_PREFETCH_DISTANCE_PX,
-            )
-          ) {
-            loadOlderFromTopRef.current();
-          }
-        }
+    lastScrollTopRef.current = scrollerEl.scrollTop;
+    const onScroll = () => {
+      const previousTop = lastScrollTopRef.current;
+      const currentTop = scrollerEl.scrollTop;
+      lastScrollTopRef.current = currentTop;
+      const metrics = {
+        scrollTop: currentTop,
+        scrollHeight: scrollerEl.scrollHeight,
+        clientHeight: scrollerEl.clientHeight,
       };
-      const onWheel = (event: WheelEvent) => {
-        if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
-        if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
-          readyForMoreRef.current = true;
+      if (currentTop < previousTop) {
+        readyForMoreRef.current = true;
+        if (
+          shouldPrefetchOlderMessages(
+            metrics,
+            previousTop,
+            HISTORY_PREFETCH_DISTANCE_PX,
+          )
+        ) {
           loadOlderFromTopRef.current();
         }
-        event.preventDefault();
-        event.stopPropagation();
-      };
-      scrollerEl.addEventListener("scroll", onScroll, { passive: true });
-      scrollerEl.addEventListener("wheel", onWheel, { passive: false });
-      detachScrollerListenersRef.current = () => {
-        scrollerEl.removeEventListener("scroll", onScroll);
-        scrollerEl.removeEventListener("wheel", onWheel);
-      };
-    },
-    [],
-  );
+      }
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!shouldTrapEdgeWheel(scrollerEl, event.deltaY)) return;
+      if (event.deltaY < 0 && scrollerEl.scrollTop <= 1) {
+        readyForMoreRef.current = true;
+        loadOlderFromTopRef.current();
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    scrollerEl.addEventListener("scroll", onScroll, { passive: true });
+    scrollerEl.addEventListener("wheel", onWheel, { passive: false });
+    detachScrollerListenersRef.current = () => {
+      scrollerEl.removeEventListener("scroll", onScroll);
+      scrollerEl.removeEventListener("wheel", onWheel);
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -620,17 +639,34 @@ export const ChatThread = ({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reply.trim() || !canHumanReply) return;
+    const trimmed = reply.trim();
+    if (!trimmed || !canHumanReply) return;
 
+    // Optimistic insert (Rocket.Chat pattern): show the recruiter's message
+    // instantly with a "pending" badge. The realtime echo of the real (server-
+    // id'd) message replaces the temp automatically (see useConversationRealtime).
+    // Input is cleared immediately for responsiveness — the message is already
+    // visible in the thread.
+    const recruiterId = identity?.id != null ? String(identity.id) : "";
+    const tempId = recruiterId ? insertOptimistic(trimmed, recruiterId) : "";
+    const sentText = trimmed;
+    setReply("");
     setIsSending(true);
     try {
-      await dataProvider.sendHumanReply(conversationId, reply);
-      setReply("");
+      await dataProvider.sendHumanReply(conversationId, sentText);
+      // On success the temp is replaced by the realtime echo; nothing to do.
+      // If no socket echo arrives (degraded), the temp stays as "pending" —
+      // acceptable fallback (the message was sent server-side).
     } catch (err: unknown) {
       const status = err instanceof HumanReplyError ? err.status : "error";
       notify(translate(`resources.conversations.reply.${status}`), {
         type: "error",
       });
+      // Mark the optimistic message as failed so the user sees the error inline
+      // and can retry. The temp row stays visible with a "failed" badge.
+      if (tempId) markOptimisticFailed(tempId);
+      // Restore the unsent text so the user can edit and resend.
+      setReply(sentText);
     } finally {
       setIsSending(false);
     }
@@ -661,7 +697,9 @@ export const ChatThread = ({
             <span>Đang tải tin nhắn...</span>
           </div>
         ) : (
-          <div className="empty-state">Chưa có tin nhắn nào.</div>
+          <div className="empty-state" role="status">
+            Chưa có tin nhắn nào.
+          </div>
         ),
     }),
     [isLoading, isLoadingMore],

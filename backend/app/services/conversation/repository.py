@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, case, desc, func, or_, select, text
+from sqlalchemy import and_, asc, case, desc, func, or_, select, text
 
 from app.models.conversation import (
     Conversation,
@@ -240,6 +240,45 @@ class ConversationRepository:
             )
         rows = (await self.db.scalars(stmt)).all()
         return list(reversed(rows))
+
+    async def messages_since(
+        self, conv: Conversation, since_id: int | None = None, limit: int = 200
+    ) -> list[Message]:
+        """Chronological list of messages NEWER than the `since_id` cursor (the
+        integer id of the newest currently-loaded message). Used for reconnect
+        gap-fill: when the Socket.IO transport reconnects after a disconnect, the
+        client calls this to fetch any messages the server emitted while it was
+        offline. Returns oldest-first (chronological) for direct merge into the
+        loaded window. If since_id is None/unknown, returns the newest page."""
+        stmt = (
+            select(Message)
+            .where(Message.conversation_id == conv.id)
+            .order_by(asc(Message.created_at), asc(Message.id))
+            .limit(limit)
+        )
+        if since_id is not None:
+            cursor = await self.db.get(Message, since_id)
+            if cursor is None or cursor.conversation_id != conv.id:
+                # Unknown cursor — fall back to newest page.
+                stmt = (
+                    select(Message)
+                    .where(Message.conversation_id == conv.id)
+                    .order_by(desc(Message.created_at), desc(Message.id))
+                    .limit(limit)
+                )
+                rows = (await self.db.scalars(stmt)).all()
+                return list(reversed(rows))
+            stmt = stmt.where(
+                or_(
+                    Message.created_at > cursor.created_at,
+                    and_(
+                        Message.created_at == cursor.created_at,
+                        Message.id > cursor.id,
+                    ),
+                )
+            )
+        rows = (await self.db.scalars(stmt)).all()
+        return list(rows)
 
     async def latest_unanswered_worker_message(self, conv: Conversation) -> Message | None:
         """Return the latest Zalo user message if no successful outbound follows it."""

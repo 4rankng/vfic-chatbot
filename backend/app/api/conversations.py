@@ -139,12 +139,22 @@ async def list_messages(
     before: int | None = Query(
         None, description="Cursor alias: return messages older than this message id"
     ),
+    since_id: int | None = Query(
+        None,
+        description="Reconnect gap-fill: return messages NEWER than this message id",
+    ),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageListResponse:
     conv = await _load(conv_id, db, user)
     svc = ConversationService(db)
     page_size = limit if limit is not None else per_page
+    if since_id is not None:
+        # Gap-fill path: fetch everything newer than the client's newest known msg.
+        msgs = await svc.messages_since(conv, since_id=since_id, limit=200)
+        return MessageListResponse(
+            data=[MessageOut.model_validate(m) for m in msgs], total=len(msgs)
+        )
     cursor = before if before is not None else before_id
     msgs = await svc.messages_page(conv, limit=page_size, before_id=cursor)
     return MessageListResponse(data=[MessageOut.model_validate(m) for m in msgs], total=len(msgs))

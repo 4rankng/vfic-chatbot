@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message } from "../types";
 import { chatRepository } from "./chatRepository";
+import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import {
   mergeChronological,
   mergeRealtimePage,
@@ -40,6 +41,10 @@ export const useConversationRealtime = (conversationId?: string) => {
   const activeConversationRef = useRef<string | undefined>(conversationId);
   const requestSeqRef = useRef(0);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
+  // Optimistic-send tracking (Rocket.Chat pattern): temp ids of in-flight
+  // recruiter messages. On the realtime echo of a confirmed message we drop the
+  // matching temp so the real (server-id'd) row replaces it without a flicker.
+  const pendingOptimisticIdsRef = useRef<Set<string>>(new Set());
   // Mirror `messages` into a ref so loadMore can read the latest set
   // synchronously. A setMessages functional updater runs later (during render),
   // so it can't itself return the count of newly-prepended rows; the ref lets
@@ -155,6 +160,39 @@ export const useConversationRealtime = (conversationId?: string) => {
             activeConversationId,
           );
           if (currentLatest.length === 0) return;
+          // Drop optimistic temps for this conversation once the server echoes a
+          // real (server-id'd) outbound recruiter message — the real row replaces
+          // the temp without a flicker. Rocket.Chat reuses the client _id on the
+          // server; our backend doesn't, so we sweep by timestamp + content.
+          const pendingIds = pendingOptimisticIdsRef.current;
+          if (pendingIds.size > 0) {
+            const realContentSet = new Set(
+              currentLatest
+                .filter((m) => m.type === "outbound" && m.data?.recruiter_id)
+                .map((m) => `${m.content}|${m.created_at}`),
+            );
+            if (realContentSet.size > 0) {
+              setMessages((prev) => {
+                const kept = prev.filter((m) => {
+                  if (!pendingIds.has(m.id)) return true;
+                  // Keep the temp only if no real echo matches its content+ts.
+                  return !realContentSet.has(`${m.content}|${m.created_at}`);
+                });
+                if (kept.length !== prev.length) {
+                  // Temps were replaced; clear them from tracking.
+                  for (const id of pendingIds) {
+                    const stillPresent = kept.some((m) => m.id === id);
+                    if (!stillPresent) pendingIds.delete(id);
+                  }
+                }
+                return mergeRealtimePage(
+                  keepConversationMessages(kept, activeConversationId),
+                  currentLatest,
+                );
+              });
+              return;
+            }
+          }
           setMessages((prev) =>
             mergeRealtimePage(
               keepConversationMessages(prev, activeConversationId),
@@ -173,6 +211,54 @@ export const useConversationRealtime = (conversationId?: string) => {
       loadMoreAbortRef.current?.abort();
       loadMoreAbortRef.current = null;
       cleanup?.();
+    };
+  }, [conversationId]);
+
+  // Reconnect gap-fill (Rocket.Chat useLoadMissedMessages pattern): on Socket.IO
+  // disconnect→reconnect, fetch any messages the server emitted while offline.
+  // Without this, messages sent during the disconnect window are silently lost
+  // to the client until the conversation is reopened. Uses the newest REAL
+  // (non-optimistic) message id as the cursor.
+  useEffect(() => {
+    if (!conversationId) return;
+    const socket = getRealtimeSocket();
+    let wasConnected = socket.connected;
+
+    const onConnect = async () => {
+      if (wasConnected) return; // only fire on reconnect, not initial connect
+      wasConnected = true;
+      // Find the newest real (non-temp) message id currently loaded.
+      const realMessages = messagesRef.current.filter(
+        (m) => !pendingOptimisticIdsRef.current.has(m.id),
+      );
+      if (realMessages.length === 0) return;
+      const newest = realMessages[realMessages.length - 1];
+      try {
+        const missed = await chatRepository.getMessagesSince(
+          conversationId,
+          newest.id,
+        );
+        if (missed.length === 0) return;
+        setMessages((prev) =>
+          mergeChronological(
+            keepConversationMessages(prev, conversationId),
+            missed,
+          ),
+        );
+      } catch {
+        // Best-effort: if the gap-fill fetch fails, the user can pull-to-refresh
+        // or reopen the conversation. Don't crash the realtime loop.
+      }
+    };
+    const onDisconnect = () => {
+      wasConnected = false;
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
     };
   }, [conversationId]);
 
@@ -252,6 +338,43 @@ export const useConversationRealtime = (conversationId?: string) => {
     [hasMore, conversationId],
   );
 
+  // Insert an optimistic temp message (Rocket.Chat pattern). Returns the temp id
+  // so the caller can mark it failed on send error. The temp is auto-removed when
+  // the realtime echo of the real message arrives (see subscribeToMessages above).
+  const insertOptimistic = useCallback(
+    (content: string, recruiterId: string): string => {
+      if (!conversationId) return "";
+      // Use a client-side UUID that won't collide with server ids.
+      const tempId = `optimistic-${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
+      const temp: Message = {
+        id: tempId,
+        zalo_message_id: "",
+        conversation_id: conversationId,
+        type: "outbound",
+        content,
+        delivery_status: "pending",
+        data: { recruiter_id: recruiterId },
+        created_at: now,
+      };
+      pendingOptimisticIdsRef.current.add(tempId);
+      setMessages((prev) => mergeChronological(prev, [temp]));
+      return tempId;
+    },
+    [conversationId],
+  );
+
+  // Mark an optimistic message as failed (keep it visible with a failed badge so
+  // the user can retry), or remove it entirely. Used when sendHumanReply errors.
+  const markOptimisticFailed = useCallback((tempId: string) => {
+    pendingOptimisticIdsRef.current.delete(tempId);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === tempId ? { ...m, delivery_status: "failed" as const } : m,
+      ),
+    );
+  }, []);
+
   return {
     messages,
     isLoading,
@@ -259,5 +382,7 @@ export const useConversationRealtime = (conversationId?: string) => {
     hasMore,
     firstItemIndex,
     loadMore,
+    insertOptimistic,
+    markOptimisticFailed,
   };
 };
