@@ -80,11 +80,7 @@ const ProjectListContent = () => {
     null;
 
   return (
-    <ProjectWorkspaceShell
-      total={projectTotal}
-      activeCount={activeCount}
-      documentCount={documentCount}
-    >
+    <ProjectWorkspaceShell>
       <div className="project-workspace-content">
         <div className="ops-page-shell project-page-shell">
           <header className="ops-command-header project-command-header">

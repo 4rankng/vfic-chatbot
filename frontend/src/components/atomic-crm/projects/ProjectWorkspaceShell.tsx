@@ -6,9 +6,6 @@ import "../conversations/inbox.css";
 
 type ProjectWorkspaceShellProps = {
   children: ReactNode;
-  total?: number;
-  activeCount?: number;
-  documentCount?: number;
 };
 
 export const ProjectWorkspaceShell = ({

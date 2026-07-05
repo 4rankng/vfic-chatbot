@@ -52,11 +52,7 @@ const ProjectEditContent = () => {
 
   const card = project.index_card ?? {};
   return (
-    <ProjectWorkspaceShell
-      total={1}
-      activeCount={project.is_active ? 1 : 0}
-      documentCount={project.knowledge_document_count ?? 0}
-    >
+    <ProjectWorkspaceShell>
       <div className="project-workspace-content">
         <div className="project-editor-header flex flex-wrap items-start gap-3 rounded-lg border p-4">
           <div className="mr-auto min-w-0">

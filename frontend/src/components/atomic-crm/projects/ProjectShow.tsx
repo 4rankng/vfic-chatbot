@@ -22,11 +22,7 @@ const ProjectShowContent = () => {
   const card = project.index_card ?? {};
 
   return (
-    <ProjectWorkspaceShell
-      total={1}
-      activeCount={project.is_active ? 1 : 0}
-      documentCount={project.knowledge_document_count ?? 0}
-    >
+    <ProjectWorkspaceShell>
       <div className="project-workspace-content">
         <div className="project-editor-header rounded-lg border p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">

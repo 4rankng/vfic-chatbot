@@ -27,8 +27,8 @@
 
   --rad-sm: 8px;
   --rad-md: 12px;
-  --rad-lg: 12px;
-  --rad-xl: 12px;
+  --rad-lg: var(--rad-md);
+  --rad-xl: var(--rad-md);
 
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.02);
   --shadow-md: 0 12px 32px rgba(31, 38, 135, 0.04);
@@ -80,6 +80,9 @@
   --brand: #c8a2c8;
   --brand-hover: #d8bfd8;
   --brand-light: rgba(200, 162, 200, 0.18);
+
+  --success: #22c55e;
+  --success-light: rgba(34, 197, 94, 0.18);
 
   --chat-bg: #080c14;
   --chat-bubble-in: #161f30;
@@ -3425,11 +3428,6 @@
   background: color-mix(in srgb, var(--brand-light) 70%, var(--surface-solid));
 }
 
-.inbox-bg-container .workspace-saved-view.active {
-  color: var(--brand);
-  background: color-mix(in srgb, var(--brand-light) 62%, var(--surface-solid));
-}
-
 .inbox-bg-container .workspace-link .icon {
   width: 13px;
   height: 13px;
@@ -3506,15 +3504,13 @@
     background: var(--workspace-hover);
   }
 
-  .inbox-bg-container .workspace-filter.active,
-  .inbox-bg-container .workspace-saved-view.active {
+  .inbox-bg-container .workspace-filter.active {
     color: var(--workspace-ink);
     border-color: var(--workspace-active-border);
     background: var(--workspace-active);
   }
 
-  .inbox-bg-container .workspace-filter.active .icon,
-  .inbox-bg-container .workspace-saved-view.active .icon {
+  .inbox-bg-container .workspace-filter.active .icon {
     color: var(--workspace-ink);
   }
 
@@ -3527,35 +3523,6 @@
     background: rgba(255, 255, 255, 0.18);
     color: var(--workspace-ink);
   }
-}
-
-.inbox-bg-container .workspace-collapsible {
-  display: grid;
-  gap: 4px;
-}
-
-.inbox-bg-container .workspace-collapsible > summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.inbox-bg-container .workspace-collapsible > summary::-webkit-details-marker {
-  display: none;
-}
-
-.inbox-bg-container .workspace-collapsible > summary::before {
-  content: "›";
-  display: inline-block;
-  margin-right: 6px;
-  transition: transform 0.2s var(--ease);
-}
-
-.inbox-bg-container .workspace-collapsible[open] > summary::before {
-  transform: rotate(90deg);
-}
-
-.inbox-bg-container .workspace-collapsible:not([open]) > .workspace-link-list {
-  display: none;
 }
 
 /* Inbox Tools */
@@ -4320,10 +4287,9 @@
     color 0.16s var(--ease);
 }
 .inbox-bg-container .mode-menu-item:hover,
-.inbox-bg-container .mode-menu-item:focus {
+.inbox-bg-container .mode-menu-item:focus-visible {
   background: var(--surface-hover);
   border-color: var(--border);
-  outline: 0;
 }
 .inbox-bg-container .mode-menu-item.active {
   border-color: color-mix(in srgb, var(--brand) 28%, transparent);
@@ -4392,8 +4358,8 @@
   transform: translateY(-1px);
 }
 .inbox-bg-container .context-info-btn.active {
-  background: var(--brand-pressed);
-  border-color: var(--brand-pressed);
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
   color: var(--primary-foreground);
 }
 .inbox-bg-container .profile-info-btn .icon {
@@ -4443,9 +4409,6 @@
     display: none;
   }
 
-  .inbox-bg-container .clear-history-btn {
-    display: none;
-  }
 }
 
 @container (max-width: 640px) {
@@ -4958,8 +4921,8 @@
   justify-content: space-between;
   gap: 10px;
   padding: 10px 16px;
-  border-bottom: 1px solid #e8e8e8;
-  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 .inbox-bg-container .profile-title {
   display: flex;
@@ -4967,7 +4930,7 @@
   gap: 10px;
   font-size: 15px;
   font-weight: 800;
-  color: #1d1c1d;
+  color: var(--ink);
   min-width: 0;
 }
 
@@ -4978,7 +4941,7 @@
 }
 
 .inbox-bg-container .profile-title-copy small {
-  color: #616061;
+  color: var(--ink-muted);
   font-size: 10px;
   font-weight: 760;
   line-height: 1.2;
@@ -4986,17 +4949,17 @@
 .inbox-bg-container .context-open-profile {
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
-  color: #611f69;
+  background: var(--surface);
+  color: var(--brand);
   font-size: 12px;
   font-weight: 800;
   transition: var(--transition);
 }
 .inbox-bg-container .context-open-profile:hover {
-  border-color: #611f69;
-  background: #f8f2fa;
+  border-color: var(--brand);
+  background: var(--brand-light);
 }
 
 .inbox-bg-container .context-header-actions {
@@ -5010,10 +4973,10 @@
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
-  color: #616061;
+  background: var(--surface);
+  color: var(--ink-muted);
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
@@ -5024,8 +4987,8 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 8px 12px;
-  border-bottom: 1px solid #e8e8e8;
-  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .inbox-bg-container .context-tab {
@@ -5033,7 +4996,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #616061;
+  color: var(--ink-muted);
   font-size: 12px;
   font-weight: 850;
   transition: var(--transition);
@@ -5041,15 +5004,15 @@
 
 .inbox-bg-container .context-tab:hover,
 .inbox-bg-container .context-tab.active {
-  background: #f4edf7;
-  color: #611f69;
+  background: var(--brand-light);
+  color: var(--brand);
 }
 
 .inbox-bg-container .profile-scroll {
   flex: 1;
   overflow-y: auto;
   padding: 0;
-  background: #ffffff;
+  background: var(--surface);
   scrollbar-width: none;
 }
 .inbox-bg-container .profile-scroll::-webkit-scrollbar {
@@ -5059,9 +5022,9 @@
 .inbox-bg-container .context-card {
   padding: 16px 18px;
   border: 0;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--border);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .inbox-bg-container .context-card + .context-card {
@@ -5074,9 +5037,9 @@
   padding: 16px 18px;
   margin: 0;
   border: 0;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--border);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .inbox-bg-container .context-overview-copy {
@@ -5084,7 +5047,7 @@
 }
 
 .inbox-bg-container .context-overview-kicker {
-  color: #611f69;
+  color: var(--brand);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -5093,7 +5056,7 @@
 
 .inbox-bg-container .context-overview-copy h2 {
   margin: 0;
-  color: #1d1c1d;
+  color: var(--ink);
   font-size: 15px;
   font-weight: 800;
   line-height: 1.3;
@@ -5102,7 +5065,7 @@
 
 .inbox-bg-container .context-overview-copy p {
   margin: 6px 0 0;
-  color: #616061;
+  color: var(--ink-muted);
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -5116,7 +5079,7 @@
 }
 
 .inbox-bg-container .context-subject-name {
-  color: #1d1c1d;
+  color: var(--ink);
   font-size: 12px;
   font-weight: 800;
   line-height: 1.35;
@@ -5124,7 +5087,7 @@
 }
 
 .inbox-bg-container .context-subject-role {
-  color: #616061;
+  color: var(--ink-muted);
   font-size: 11px;
   font-weight: 620;
   line-height: 1.35;
@@ -5144,10 +5107,10 @@
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
-  color: #1d1c1d;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 11px;
   font-weight: 750;
   overflow-wrap: anywhere;
@@ -5156,7 +5119,7 @@
 .inbox-bg-container .context-signal-grid .icon {
   width: 15px;
   height: 15px;
-  color: #611f69;
+  color: var(--brand);
 }
 
 .inbox-bg-container .context-tags {
@@ -5176,26 +5139,26 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: #ffffff;
-  color: #616061;
+  background: var(--surface);
+  color: var(--ink-muted);
   transition: var(--transition);
 }
 
 .inbox-bg-container .tag-add-button--labeled {
   gap: 5px;
   padding: 0 9px;
-  color: #611f69;
+  color: var(--brand);
   font-size: 11px;
   font-weight: 800;
 }
 
 .inbox-bg-container .tag-add-button:hover:not(:disabled),
 .inbox-bg-container .tag-add-button[aria-expanded="true"] {
-  border-color: #611f69;
-  color: #611f69;
-  background: #f8f2fa;
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-light);
 }
 
 .inbox-bg-container .tag-add-button:disabled {
@@ -5351,10 +5314,10 @@
   align-items: center;
   gap: 9px;
   padding: 0 11px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
-  color: #1d1c1d;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 12px;
   font-weight: 800;
   text-align: left;
@@ -5362,9 +5325,9 @@
 }
 
 .inbox-bg-container .context-action:first-child {
-  border-color: #611f69;
-  background: #611f69;
-  color: #ffffff;
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--primary-foreground);
 }
 
 .inbox-bg-container .context-action:hover:not(:disabled) {
@@ -5587,7 +5550,7 @@
   place-items: center;
   border-radius: var(--rad-sm);
   border: 1px solid var(--border);
-  background: #ffffff;
+  background: var(--surface);
   color: var(--ink-faint);
 }
 
@@ -5640,10 +5603,6 @@
   color: var(--success);
 }
 
-.inbox-bg-container .detail-list {
-  display: grid;
-  gap: 16px;
-}
 .inbox-bg-container .detail-row {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
@@ -5936,8 +5895,7 @@
     gap: 6px;
     justify-content: flex-end;
   }
-  .inbox-bg-container .profile-open-btn,
-  .inbox-bg-container .clear-history-btn {
+  .inbox-bg-container .profile-open-btn {
     display: none;
   }
   .inbox-bg-container .mode-control {
