@@ -12,16 +12,18 @@ import {
   type HTMLAttributes,
 } from "react";
 import { VList, type VListHandle } from "virtua";
-import { useDataProvider, useGetIdentity, useNotify, useTranslate } from "ra-core";
+import {
+  useDataProvider,
+  useGetIdentity,
+  useNotify,
+  useTranslate,
+} from "ra-core";
 import type { Conversation, Message } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
-import {
-  useConversationMessages,
-  useConversationFlags,
-} from "./messageStore";
+import { useConversationMessages, useConversationFlags } from "./messageStore";
 import { Bot, Sparkles, UserRound } from "lucide-react";
 
 // ChatThread is the reusable, shell-agnostic message thread + composer. It owns
@@ -55,8 +57,7 @@ const formatTime = (iso?: string) => {
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
 const COMPOSER_RESERVE_GAP_PX = 16;
-// Distance from the bottom (px) within which the user is considered "at bottom"
-// — auto-scroll fires only when this is true. Mirrors Rocket.Chat's ~60px.
+// Distance from the bottom (px) within which auto-scroll is allowed.
 const CHAT_AT_BOTTOM_THRESHOLD_PX = 96;
 // Distance from the top (px) within which we trigger history load-more.
 const HISTORY_LOAD_TOP_THRESHOLD_PX = 100;
@@ -238,7 +239,8 @@ export const ChatThread = ({
   // Message state lives in the normalized store (persists across conversation
   // switches). The hook drives data INTO the store; we read arrays out here.
   const messages = useConversationMessages(conversationId);
-  const { isLoading, isLoadingMore, hasMore } = useConversationFlags(conversationId);
+  const { isLoading, isLoadingMore, hasMore } =
+    useConversationFlags(conversationId);
   const { loadMore, insertOptimistic, markOptimisticFailed } =
     useConversationRealtime(conversationId);
   const dataProvider = useDataProvider<CrmDataProvider>();
@@ -248,8 +250,8 @@ export const ChatThread = ({
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  // virtua refs + scroll state (Rocket.Chat pattern: mutable refs, not state,
-  // so scroll handlers stay synchronous and don't trigger re-renders).
+  // Keep scroll state in refs so scroll handlers stay synchronous and avoid
+  // triggering re-renders.
   const vlistRef = useRef<VListHandle>(null);
   const scrollerElRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -259,7 +261,9 @@ export const ChatThread = ({
   const initialJumpDoneRef = useRef(false);
   const lastLoadMoreAtRef = useRef(0);
   const newestMessageIdRef = useRef<string | null>(null);
-  const [composerReserve, setComposerReserve] = useState(104);
+  const [composerReserve, setComposerReserve] = useState(
+    DEFAULT_COMPOSER_RESERVE_PX,
+  );
   const [hasNewerMessages, setHasNewerMessages] = useState(false);
 
   const {
@@ -270,8 +274,9 @@ export const ChatThread = ({
   const isBotMode = isBotModeOverride ?? internalIsBotMode;
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
-
-  // --- Scroll helpers (Rocket.Chat MessageList pattern) ---
+  const showTakeoverNotice = showComposerTakeoverNotice && isBotMode;
+  const showComposerForm = !isBotMode;
+  const showComposerFooter = showTakeoverNotice || showComposerForm;
 
   const scrollToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollerElRef.current;
@@ -309,7 +314,8 @@ export const ChatThread = ({
 
   // Auto-scroll to bottom on new message IF the user is already at the bottom.
   // If they've scrolled up, show the "new messages" jump button instead.
-  const newestMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
+  const newestMessageId =
+    messages.length > 0 ? messages[messages.length - 1].id : null;
   useEffect(() => {
     if (!newestMessageId || !initialJumpDoneRef.current) {
       newestMessageIdRef.current = newestMessageId;
@@ -337,9 +343,13 @@ export const ChatThread = ({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
-    const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT);
+    const nextHeight = Math.min(
+      textarea.scrollHeight,
+      COMPOSER_TEXTAREA_MAX_HEIGHT,
+    );
     textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = textarea.scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
+    textarea.style.overflowY =
+      textarea.scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
   }, []);
 
   useLayoutEffect(() => {
@@ -347,10 +357,16 @@ export const ChatThread = ({
   }, [reply, canHumanReply, isBotMode, syncComposerTextarea]);
 
   useLayoutEffect(() => {
+    if (!showComposerFooter) {
+      setComposerReserve(0);
+      return;
+    }
     const footer = composerWrapRef.current;
     if (!footer) return;
     const update = () => {
-      const next = Math.ceil(footer.getBoundingClientRect().height + COMPOSER_RESERVE_GAP_PX);
+      const next = Math.ceil(
+        footer.getBoundingClientRect().height + COMPOSER_RESERVE_GAP_PX,
+      );
       setComposerReserve((cur) => (cur === next ? cur : next));
     };
     update();
@@ -358,11 +374,10 @@ export const ChatThread = ({
     const obs = new ResizeObserver(update);
     obs.observe(footer);
     return () => obs.disconnect();
-  }, [showComposerTakeoverNotice, isBotMode]);
+  }, [showComposerFooter, showTakeoverNotice]);
 
-  // Rocket.Chat useKeepAtBottom: ResizeObserver on the scroller content re-snaps
-  // to bottom on non-message size changes (composer grow, image load) — but only
-  // if the user is already at the bottom.
+  // Re-snap to bottom on non-message size changes (composer grow, image load)
+  // only when the user is already at the bottom.
   useEffect(() => {
     const el = scrollerElRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -379,7 +394,13 @@ export const ChatThread = ({
 
   // --- Load-more (scroll up for older history) ---
   const handleLoadMore = useCallback(() => {
-    if (!initialJumpDoneRef.current || isLoadingMore || !hasMore || messages.length === 0) return;
+    if (
+      !initialJumpDoneRef.current ||
+      isLoadingMore ||
+      !hasMore ||
+      messages.length === 0
+    )
+      return;
     const now = performance.now();
     if (now - lastLoadMoreAtRef.current < 350) return;
     lastLoadMoreAtRef.current = now;
@@ -390,21 +411,27 @@ export const ChatThread = ({
   }, [hasMore, isLoadingMore, messages, loadMore]);
 
   // --- virtua onScroll: at-bottom detection + top load-more ---
-  const handleScroll = useCallback((offset: number) => {
-    const el = scrollerElRef.current;
-    if (!el) return;
-    // At-bottom detection (Rocket.Chat: distance-from-bottom < threshold).
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const wasAtBottom = isAtBottomRef.current;
-    isAtBottomRef.current = distanceFromBottom < CHAT_AT_BOTTOM_THRESHOLD_PX;
-    if (isAtBottomRef.current && !wasAtBottom) {
-      setHasNewerMessages(false);
-    }
-    // Top load-more: virtua fires onScroll with offset; near 0 = near top.
-    if (offset < HISTORY_LOAD_TOP_THRESHOLD_PX && initialJumpDoneRef.current) {
-      handleLoadMore();
-    }
-  }, [handleLoadMore]);
+  const handleScroll = useCallback(
+    (offset: number) => {
+      const el = scrollerElRef.current;
+      if (!el) return;
+      const distanceFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight;
+      const wasAtBottom = isAtBottomRef.current;
+      isAtBottomRef.current = distanceFromBottom < CHAT_AT_BOTTOM_THRESHOLD_PX;
+      if (isAtBottomRef.current && !wasAtBottom) {
+        setHasNewerMessages(false);
+      }
+      // Top load-more: virtua fires onScroll with offset; near 0 = near top.
+      if (
+        offset < HISTORY_LOAD_TOP_THRESHOLD_PX &&
+        initialJumpDoneRef.current
+      ) {
+        handleLoadMore();
+      }
+    },
+    [handleLoadMore],
+  );
 
   // --- Send (optimistic) ---
   const handleSend = async (e: React.FormEvent) => {
@@ -420,7 +447,9 @@ export const ChatThread = ({
       await dataProvider.sendHumanReply(conversationId, sentText);
     } catch (err: unknown) {
       const status = err instanceof HumanReplyError ? err.status : "error";
-      notify(translate(`resources.conversations.reply.${status}`), { type: "error" });
+      notify(translate(`resources.conversations.reply.${status}`), {
+        type: "error",
+      });
       if (tempId) markOptimisticFailed(tempId);
       setReply(sentText);
     } finally {
@@ -456,17 +485,21 @@ export const ChatThread = ({
         <VList
           ref={vlistRef}
           className="chat-scroller"
-          style={{
-            height: "100%",
-            "--chat-composer-reserve": `${composerReserve}px`,
-          } as CSSProperties}
+          style={
+            {
+              height: "100%",
+              "--chat-composer-reserve": `${composerReserve}px`,
+            } as CSSProperties
+          }
           shift={isPrependingRef.current /* anchor on prepend (history load) */}
           onScroll={handleScroll}
-          overscan={800}
         >
           {isLoadingMore && (
             <div className="chat-history-top-spacer">
-              <div className="day-marker" style={{ margin: "8px 0", background: "transparent" }}>
+              <div
+                className="day-marker"
+                style={{ margin: "8px 0", background: "transparent" }}
+              >
                 <span>Đang tải tin nhắn cũ hơn...</span>
               </div>
             </div>
@@ -481,7 +514,9 @@ export const ChatThread = ({
             </div>
           ) : null}
           {messages.map((m, i) => (
-            <Fragment key={`${m.conversation_id}:${m.id}`}>{renderMessage(i, m)}</Fragment>
+            <Fragment key={`${m.conversation_id}:${m.id}`}>
+              {renderMessage(i, m)}
+            </Fragment>
           ))}
         </VList>
         {hasNewerMessages ? (
@@ -499,57 +534,56 @@ export const ChatThread = ({
         ) : null}
       </div>
 
-      <footer ref={composerWrapRef} className="composer-wrap">
-        {showComposerTakeoverNotice && isBotMode && (
-          <div className="handoff-note">
-            <Bot className="icon" />
-            <span>Đang dùng ChatBot cho cuộc trò chuyện này.</span>
-            <button
-              type="button"
-              className="inline-takeover-btn"
-              onClick={handleTakeover}
+      {showComposerFooter && (
+        <footer ref={composerWrapRef} className="composer-wrap">
+          {showTakeoverNotice && (
+            <div className="handoff-note">
+              <Bot className="icon" />
+              <span>Đang dùng ChatBot cho cuộc trò chuyện này.</span>
+              <button
+                type="button"
+                className="inline-takeover-btn"
+                onClick={handleTakeover}
+              >
+                Tiếp quản
+              </button>
+            </div>
+          )}
+          {showComposerForm && (
+            <form
+              className={`composer ${!canHumanReply ? "disabled" : ""}`}
+              onSubmit={handleSend}
             >
-              Tiếp quản
-            </button>
-          </div>
-        )}
-        <form
-          className={`composer ${!canHumanReply ? "disabled" : ""}`}
-          onSubmit={handleSend}
-        >
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            placeholder={
-              canHumanReply
-                ? "Nhập tin nhắn..."
-                : isBotMode
-                  ? "Đang dùng ChatBot"
-                  : "Chưa sẵn sàng"
-            }
-            disabled={!canHumanReply || isSending}
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend(e);
-              }
-            }}
-          />
-          <button
-            type="submit"
-            className="composer-action send"
-            aria-label="Gửi tin nhắn"
-            disabled={!canHumanReply || isSending || !reply.trim()}
-          >
-            <svg className="icon">
-              <use href="#i-send" />
-            </svg>
-          </button>
-        </form>
-      </footer>
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                placeholder={
+                  canHumanReply ? "Nhập tin nhắn..." : "Chưa sẵn sàng"
+                }
+                disabled={!canHumanReply || isSending}
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(e);
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                className="composer-action send"
+                aria-label="Gửi tin nhắn"
+                disabled={!canHumanReply || isSending || !reply.trim()}
+              >
+                <svg className="icon">
+                  <use href="#i-send" />
+                </svg>
+              </button>
+            </form>
+          )}
+        </footer>
+      )}
     </>
   );
 };
-

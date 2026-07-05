@@ -1,4 +1,5 @@
 """Lead CRM API: list/get/update + assign/stage(+lead_events)/follow-ups/events."""
+
 from __future__ import annotations
 
 
@@ -16,10 +17,14 @@ from app.schemas.lead import (
     LeadBoardSection,
     FollowUpCreate,
     FollowUpOut,
+    LeadAssistOut,
+    LeadChatOpsActionResult,
     LeadEventOut,
     LeadListResponse,
     LeadMemoryOut,
     LeadOut,
+    LeadTagOut,
+    LeadTagsUpdate,
     LeadUpdate,
     StageRequest,
 )
@@ -52,8 +57,12 @@ async def list_leads(
     ),
     zalo_id: str | None = None,
     zalo_ids: str | None = Query(None, description="Comma-separated list of zalo ids (IN filter)"),
-    q: str | None = Query(None, description="Case-insensitive search over name/phone/desired_job/zalo_id"),
-    sort: str | None = Query(None, description="Sort field (updated_at, created_at, name, lead_stage, lead_score)"),
+    q: str | None = Query(
+        None, description="Case-insensitive search over name/phone/desired_job/zalo_id"
+    ),
+    sort: str | None = Query(
+        None, description="Sort field (updated_at, created_at, name, lead_stage, lead_score)"
+    ),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -107,12 +116,19 @@ async def lead_board(
 
 
 @router.get("/{lead_id}", response_model=LeadOut)
-async def get_lead(lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
+async def get_lead(
+    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> LeadOut:
     return LeadOut.model_validate(await _load(lead_id, db))
 
 
 @router.patch("/{lead_id}", response_model=LeadOut)
-async def update_lead(lead_id: int, body: LeadUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
+async def update_lead(
+    lead_id: int,
+    body: LeadUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LeadOut:
     lead = await _load(lead_id, db)
     changes = body.model_dump(exclude_unset=True)
     try:
@@ -129,16 +145,28 @@ async def update_lead(lead_id: int, body: LeadUpdate, user: User = Depends(get_c
 
 
 @router.post("/{lead_id}/assign", response_model=LeadOut)
-async def assign_lead(lead_id: int, body: AssignRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
+async def assign_lead(
+    lead_id: int,
+    body: AssignRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LeadOut:
     lead = await _load(lead_id, db)
     try:
-        return LeadOut.model_validate(await LeadService(db).assign(lead, body.recruiter_id, actor=user))
+        return LeadOut.model_validate(
+            await LeadService(db).assign(lead, body.recruiter_id, actor=user)
+        )
     except ConflictError:
         raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 
 @router.post("/{lead_id}/stage", response_model=LeadOut)
-async def set_stage(lead_id: int, body: StageRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> LeadOut:
+async def set_stage(
+    lead_id: int,
+    body: StageRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LeadOut:
     lead = await _load(lead_id, db)
     try:
         return LeadOut.model_validate(await LeadService(db).set_stage(lead, body.stage, actor=user))
@@ -146,20 +174,96 @@ async def set_stage(lead_id: int, body: StageRequest, user: User = Depends(get_c
         raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
 
 
-@router.post("/{lead_id}/follow-ups", response_model=FollowUpOut, status_code=status.HTTP_201_CREATED)
-async def create_followup(lead_id: int, body: FollowUpCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> FollowUpOut:
+@router.post(
+    "/{lead_id}/follow-ups", response_model=FollowUpOut, status_code=status.HTTP_201_CREATED
+)
+async def create_followup(
+    lead_id: int,
+    body: FollowUpCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FollowUpOut:
     lead = await _load(lead_id, db)
-    return FollowUpOut.model_validate(await LeadService(db).create_followup(lead, body.due_at, body.note, actor=user))
+    return FollowUpOut.model_validate(
+        await LeadService(db).create_followup(lead, body.due_at, body.note, actor=user)
+    )
+
+
+@router.get("/{lead_id}/tags", response_model=list[LeadTagOut])
+async def list_tags(
+    lead_id: int,
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[LeadTagOut]:
+    lead = await _load(lead_id, db)
+    return [
+        LeadTagOut.model_validate(tag) for tag in await LeadService(db).list_operational_tags(lead)
+    ]
+
+
+@router.put("/{lead_id}/tags", response_model=list[LeadTagOut])
+async def update_tags(
+    lead_id: int,
+    body: LeadTagsUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[LeadTagOut]:
+    lead = await _load(lead_id, db)
+    return [
+        LeadTagOut.model_validate(tag)
+        for tag in await LeadService(db).replace_manual_tags(
+            lead,
+            body.keys,
+            actor=user,
+            tags=[tag.model_dump() for tag in body.tags],
+        )
+    ]
+
+
+@router.get("/{lead_id}/assist", response_model=LeadAssistOut)
+async def get_chatops_assist(
+    lead_id: int,
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LeadAssistOut:
+    lead = await _load(lead_id, db)
+    return LeadAssistOut.model_validate(await LeadService(db).build_chatops_assist(lead))
+
+
+@router.post("/{lead_id}/chatops-actions/{action}", response_model=LeadChatOpsActionResult)
+async def run_chatops_action(
+    lead_id: int,
+    action: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LeadChatOpsActionResult:
+    lead = await _load(lead_id, db)
+    service = LeadService(db)
+    try:
+        updated = await service.apply_chatops_action(lead, action, actor=user)
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Thao tác ChatOps không hợp lệ")
+    return LeadChatOpsActionResult(
+        lead=LeadOut.model_validate(updated),
+        tags=[
+            LeadTagOut.model_validate(tag) for tag in await service.list_operational_tags(updated)
+        ],
+        assist=LeadAssistOut.model_validate(await service.build_chatops_assist(updated)),
+    )
 
 
 @router.get("/{lead_id}/follow-ups", response_model=list[FollowUpOut])
-async def list_followups(lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[FollowUpOut]:
+async def list_followups(
+    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[FollowUpOut]:
     await _load(lead_id, db)
     return [FollowUpOut.model_validate(f) for f in await LeadService(db).list_followups(lead_id)]
 
 
 @router.get("/{lead_id}/events", response_model=list[LeadEventOut])
-async def list_events(lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[LeadEventOut]:
+async def list_events(
+    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[LeadEventOut]:
     await _load(lead_id, db)
     return [LeadEventOut.model_validate(e) for e in await LeadService(db).list_events(lead_id)]
 
@@ -178,7 +282,9 @@ async def list_memories(
 
 
 @router.get("/{lead_id}/presence")
-async def get_lead_presence(lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+async def get_lead_presence(
+    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> dict:
     """Return current viewers and typing users for a lead."""
     from app.services.presence import get_typing_users, get_viewers
 

@@ -7,31 +7,34 @@ import { useLocation } from "react-router";
 import { cn } from "@/lib/utils";
 
 import { useConfigurationLoader } from "../root/useConfigurationLoader";
-import MobileHeader from "./MobileHeader";
 import { MobileNavigation } from "./MobileNavigation";
 
 export const MobileLayout = ({ children }: { children: ReactNode }) => {
   useConfigurationLoader();
   const location = useLocation();
-  const hideTopbar =
-    location.pathname.startsWith("/conversations") &&
-    new URLSearchParams(location.search).has("id");
+  const hashPath =
+    typeof window === "undefined"
+      ? ""
+      : window.location.hash.replace(/^#/, "").split("?")[0];
+  const isConversationRoute =
+    location.pathname.startsWith("/conversations") ||
+    hashPath.startsWith("/conversations");
+  const hideNavigation = isConversationRoute;
 
   return (
     <>
-      {!hideTopbar && <MobileHeader />}
       <ErrorBoundary FallbackComponent={Error}>
         <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
           <main
             id="main-content"
-            className={cn("min-h-dvh", hideTopbar ? "pb-24" : "pt-16 pb-24")}
+            className={cn("min-h-dvh", hideNavigation ? "" : "pb-24")}
           >
             {children}
           </main>
         </Suspense>
       </ErrorBoundary>
-      <MobileNavigation />
-      <Notification mobileOffset={{ bottom: "72px" }} />
+      {!hideNavigation && <MobileNavigation />}
+      <Notification mobileOffset={{ bottom: hideNavigation ? "16px" : "72px" }} />
     </>
   );
 };

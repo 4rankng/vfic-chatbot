@@ -74,6 +74,43 @@ export type Lead = {
   version?: number;
 } & Pick<RaRecord, "id">;
 
+export type LeadTag = {
+  key: string;
+  label: string;
+  tone: "good" | "warn" | "danger" | "info";
+  system: boolean;
+};
+
+export type LeadAssistMessage = {
+  sender: "candidate" | "recruiter" | "bot" | "system" | string;
+  body: string;
+  created_at: string;
+};
+
+export type LeadSignal = {
+  key: string;
+  name: string;
+  status: string;
+  active: boolean;
+  action?: string | null;
+};
+
+export type LeadAssist = {
+  summary: string;
+  missing: string[];
+  reply: string;
+  next_action: string;
+  mode_label: string;
+  signals: LeadSignal[];
+  recent_messages: LeadAssistMessage[];
+};
+
+export type LeadChatOpsActionResult = {
+  lead: Lead;
+  tags: LeadTag[];
+  assist: LeadAssist;
+};
+
 export type Conversation = {
   id: string;
   zalo_chat_id: string;

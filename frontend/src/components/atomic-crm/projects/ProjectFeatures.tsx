@@ -185,6 +185,7 @@ export const ProjectFeatures = ({
               size="sm"
               onClick={onExtract}
               disabled={extracting}
+              className="h-11"
               title="Trích xuất lại các đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
             >
               <Sparkles className="size-4" />
@@ -220,7 +221,7 @@ export const ProjectFeatures = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-full justify-center border border-dashed text-xs text-muted-foreground"
+                  className="h-11 w-full justify-center border border-dashed text-xs text-muted-foreground"
                   onClick={() => setShowDetail((s) => !s)}
                   aria-expanded={showDetail}
                 >
@@ -289,6 +290,7 @@ export const ProjectFeatures = ({
                     size="sm"
                     onClick={onExtract}
                     disabled={extracting}
+                    className="h-11"
                     title="Trích xuất lại các đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
                   >
                     <Sparkles className="size-4" />

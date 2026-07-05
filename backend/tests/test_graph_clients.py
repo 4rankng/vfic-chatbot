@@ -1,13 +1,23 @@
 """Tests for graph clients + tool schemas/dispatch."""
+
 import pytest
 
-from app.graph.clients import GeminiEmbedder, _active_llm_provider, _chat_for_role, _minimax_chat
+from app.graph.clients import (
+    GeminiEmbedder,
+    OpenRouterEmbedder,
+    _active_llm_provider,
+    _chat_for_role,
+    _minimax_chat,
+    build_embedder,
+)
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 
 
 class _Settings:
     gemini_api_key = ""
     gemini_embedding_model = "gemini-embedding-2"
+    embedding_provider = "openrouter"
+    embedding_dim = 3072
     minimax_enable = True
     minimax_api_key = ""
     minimax_base_url = "https://api.minimax.io/v1"
@@ -22,8 +32,11 @@ class _Settings:
     openrouter_agent_model = "deepseek/deepseek-v3.2"
     openrouter_safety_model = "deepseek/deepseek-v3.2"
     openrouter_digest_model = "deepseek/deepseek-v3.2"
+    openrouter_embedding_model = "openai/text-embedding-3-large"
+    openrouter_embedding_timeout = 60
     openrouter_request_timeout = 60
     openrouter_digest_timeout = 180
+
 
 # Tool names _dispatch_tool knows how to route.
 _DISPATCHED = {
@@ -59,6 +72,16 @@ async def test_gemini_embedder_missing_key_names_gemini():
         await GeminiEmbedder(_Settings()).batch(["hello"])
 
 
+@pytest.mark.asyncio
+async def test_openrouter_embedder_missing_key_names_openrouter():
+    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
+        await OpenRouterEmbedder(_Settings()).batch(["hello"])
+
+
+def test_build_embedder_uses_openrouter_by_default():
+    assert isinstance(build_embedder(_Settings()), OpenRouterEmbedder)
+
+
 def test_minimax_chat_missing_key_names_minimax(monkeypatch):
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
     with pytest.raises(RuntimeError, match="MINIMAX_API_KEY"):
@@ -67,6 +90,7 @@ def test_minimax_chat_missing_key_names_minimax(monkeypatch):
 
 def test_active_llm_provider_returns_minimax_when_both_enabled():
     """When both providers are enabled, minimax is primary (no XOR error)."""
+
     class _Both(_Settings):
         openrouter_enable = True
 

@@ -23,10 +23,10 @@ const SORT_OPTIONS: (LeadSort & { label: string })[] = [
 ];
 
 const toolbarBtnClass =
-  "inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] transition-colors hover:border-primary/35 hover:bg-card hover:shadow-[0_4px_14px_rgba(26,34,40,0.11),0_1px_3px_rgba(26,34,40,0.08)] dark:border-border/80 dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)] dark:hover:border-primary/35 dark:hover:bg-accent/20";
+  "inline-flex h-11 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] transition-colors hover:border-primary/35 hover:bg-card hover:shadow-[0_4px_14px_rgba(26,34,40,0.11),0_1px_3px_rgba(26,34,40,0.08)] dark:border-border/80 dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)] dark:hover:border-primary/35 dark:hover:bg-accent/20";
 
 const toolbarInputClass =
-  "border-border bg-card pr-16 shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] placeholder:text-muted-foreground/80 hover:border-primary/25 focus-visible:border-primary/45 dark:border-border/80 dark:bg-card dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)]";
+  "h-11 border-border bg-card pr-24 text-base shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)] placeholder:text-muted-foreground/80 hover:border-primary/25 focus-visible:border-primary/45 sm:text-sm dark:border-border/80 dark:bg-card dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)]";
 
 const toolbarMenuContentClass =
   "border-border bg-popover shadow-[0_12px_28px_rgba(26,34,40,0.16),0_4px_10px_rgba(26,34,40,0.08)] dark:border-border/80 dark:shadow-[0_16px_32px_rgba(0,0,0,0.44)]";
@@ -61,7 +61,7 @@ export const LeadsToolbar = ({
             variant="ghost"
             size="sm"
             onClick={() => onSearchQueryChange("")}
-            className="absolute right-8 top-1/2 size-6 -translate-y-1/2 rounded-full p-0 text-muted-foreground"
+            className="absolute right-7 top-1/2 size-11 -translate-y-1/2 rounded-full p-0 text-muted-foreground"
             aria-label="Xóa tìm kiếm"
           >
             <X className="size-3" />

@@ -91,7 +91,7 @@ export const LeadStageMenu = () => {
           // trigger undiscoverable on touch (no hover state). Mirrors the
           // always-visible treatment already applied to the call button.
           className={cn(
-            "inline-flex size-7 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition",
+            "inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition",
             "hover:border-border hover:bg-card hover:text-foreground hover:shadow-[0_2px_8px_rgba(26,34,40,0.08),0_1px_2px_rgba(26,34,40,0.06)]",
             "dark:hover:border-border/80 dark:hover:bg-accent/20 dark:hover:shadow-[0_2px_10px_rgba(0,0,0,0.28)]",
             "disabled:cursor-wait disabled:opacity-50",

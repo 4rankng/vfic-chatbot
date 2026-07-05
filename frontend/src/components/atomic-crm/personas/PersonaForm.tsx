@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from "react";
 import { useNotify } from "ra-core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,11 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import {
+  BotMessageSquare,
   CheckCircle2,
   Download,
   FileText,
   Loader2,
-  Sparkles,
   Upload,
 } from "lucide-react";
 import { importPersona } from "@/lib/vfic/knowledgeService";
@@ -30,67 +29,14 @@ import {
   type PersonaFollowupRule,
   type PersonaFollowupRules,
 } from "../types";
-
-const PERSONA_SECTIONS = [
-  {
-    title: "1. Vai trò của tôi",
-    hint: "Mô tả agent là ai, phục vụ mục đích gì, và nên tạo cảm giác như thế nào.",
-    aliases: ["Vai trò của tôi là gì?", "1. Vai trò của tôi (What's my job?)"],
-  },
-  {
-    title: "2. Ai sẽ cần sự hỗ trợ của tôi?",
-    hint: "Mô tả nhóm người dùng chính, bối cảnh, nhu cầu và mức độ quen công nghệ.",
-    aliases: [
-      "Ai cần tôi giúp?",
-      "2. Ai sẽ cần sự hỗ trợ của tôi? (Who will need my help?)",
-    ],
-  },
-  {
-    title: "3. Tôi thực hiện công việc như thế nào?",
-    hint: "Mô tả quy trình tư vấn, cách hỏi từng câu, nguyên tắc dùng công cụ và xử lý dữ liệu.",
-    aliases: [
-      "Tôi hoàn thành công việc thế nào?",
-      "3. Tôi thực hiện công việc như thế nào? (How do I get things done?)",
-    ],
-  },
-  {
-    title: "4. Tôi nên tránh điều gì?",
-    hint: "Liệt kê các giới hạn: không bịa dữ liệu, không lạc đề, không lộ thông tin, không dùng định dạng cấm.",
-    aliases: [
-      "Tôi nên tránh điều gì?",
-      "4. Tôi nên tránh điều gì? (What should I avoid?)",
-    ],
-  },
-  {
-    title: "5. Bạn muốn tôi theo dõi kết quả nào?",
-    hint: "Mô tả các kết quả cần thúc đẩy: lưu liên hệ, nắm nguyện vọng, đề xuất phù hợp, ứng tuyển.",
-    aliases: [
-      "Kết quả nào cần theo dõi?",
-      "5. Bạn muốn tôi theo dõi kết quả nào? (What results do you want me to track?)",
-    ],
-  },
-  {
-    title: "6. Tôi nên giao tiếp với mọi người như thế nào?",
-    hint: "Mô tả ngôn ngữ, xưng hô, thái độ, độ dài, emoji và mẫu định dạng đầu ra.",
-    aliases: [
-      "Tôi nên giao tiếp thế nào?",
-      "6. Tôi nên giao tiếp với mọi người như thế nào? (How should I talk to people?)",
-    ],
-  },
-  {
-    title: "7. Lưu ý thêm",
-    hint: "Ghi các quy tắc bổ sung, edge cases, ngày giờ hệ thống, lịch trình hoặc nhắc giới hạn hỗ trợ.",
-    aliases: ["Mẹo bổ sung?", "7. Lưu ý thêm (Any extra tips?)"],
-  },
-] as const;
-
-type PersonaSectionValues = string[];
-
-// 7-section persona scaffold (mirrors kb/ChatBotGuideline.md). Downloaded files
-// keep the prompts, but in-app completion only counts user-authored answers.
-export const PERSONA_TEMPLATE = PERSONA_SECTIONS.map(
-  (section) => `### ${section.title}\n(${section.hint})`,
-).join("\n\n");
+import {
+  composePersonaMarkdown,
+  defaultPersonaFollowupRules,
+  parsePersonaMarkdown,
+  PERSONA_SECTIONS,
+  PERSONA_TEMPLATE,
+  type PersonaSectionValues,
+} from "./personaMarkdown";
 
 const PERSONA_TEMPLATE_FILENAME = "mau-agent-vfic.md";
 
@@ -105,24 +51,6 @@ const FOLLOWUP_SCORE_ORDER: LeadScoreValue[] = [
   "warm",
   "not_interested",
 ];
-
-export const defaultPersonaFollowupRules = (): PersonaFollowupRules => ({
-  hot: {
-    enabled: true,
-    cadence_hours: [10, 22, 46],
-    eligible_stages: ["NEW"],
-  },
-  warm: {
-    enabled: true,
-    cadence_hours: [22, 46],
-    eligible_stages: ["NEW"],
-  },
-  not_interested: {
-    enabled: true,
-    cadence_hours: [46],
-    eligible_stages: ["NEW"],
-  },
-});
 
 const normalizeFollowupRules = (
   rules?: Partial<PersonaFollowupRules> | null,
@@ -143,91 +71,6 @@ const parseCadenceInput = (value: string): number[] =>
     .split(/[,\s]+/)
     .map((part) => Number.parseInt(part.trim(), 10))
     .filter((value) => Number.isFinite(value) && value > 0);
-
-const emptyPersonaSections = (): PersonaSectionValues =>
-  PERSONA_SECTIONS.map(() => "");
-
-const normalizeSectionTitle = (value: string) =>
-  value.trim().toLowerCase().replace(/\s+/g, " ");
-
-const stripTemplateHint = (value: string, hint: string) => {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith("(") && trimmed.endsWith(")")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    return "";
-  }
-  return trimmed === `(${hint})` || trimmed === hint ? "" : trimmed;
-};
-
-const parsePersonaMarkdown = (markdown: string) => {
-  const sections = emptyPersonaSections();
-  let extraMarkdown = "";
-  const matches = [...markdown.matchAll(/^###\s+(.+?)\s*$/gm)];
-
-  if (matches.length === 0) {
-    return {
-      sections,
-      extraMarkdown: markdown.trim(),
-    };
-  }
-
-  const leading = markdown.slice(0, matches[0].index).trim();
-  if (leading) extraMarkdown = leading;
-
-  matches.forEach((match, index) => {
-    const title = match[1] ?? "";
-    const start = (match.index ?? 0) + match[0].length;
-    const end =
-      index + 1 < matches.length
-        ? (matches[index + 1].index ?? markdown.length)
-        : markdown.length;
-    const content = markdown.slice(start, end).trim();
-    const normalizedTitle = normalizeSectionTitle(title);
-    const sectionIndex = PERSONA_SECTIONS.findIndex((section) =>
-      [section.title, ...section.aliases].some(
-        (candidate) => normalizeSectionTitle(candidate) === normalizedTitle,
-      ),
-    );
-
-    if (sectionIndex >= 0) {
-      sections[sectionIndex] = stripTemplateHint(
-        content,
-        PERSONA_SECTIONS[sectionIndex].hint,
-      );
-      return;
-    }
-
-    const block = `### ${title}\n${content}`.trim();
-    extraMarkdown = [extraMarkdown, block].filter(Boolean).join("\n\n");
-  });
-
-  return { sections, extraMarkdown };
-};
-
-const composePersonaMarkdown = (
-  sections: PersonaSectionValues,
-  extraMarkdown = "",
-) =>
-  [
-    ...PERSONA_SECTIONS.map(
-      (section, index) =>
-        `### ${section.title}\n\n${(sections[index] ?? "").trim()}`,
-    ),
-    extraMarkdown.trim(),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-export const getCompletedPersonaSectionCount = (markdown: string) =>
-  parsePersonaMarkdown(markdown).sections.filter((section) => section.trim())
-    .length;
-
-export const getPersonaAuthoredContentLength = (markdown: string) => {
-  const parsed = parsePersonaMarkdown(markdown);
-  return [...parsed.sections, parsed.extraMarkdown].join("\n").trim().length;
-};
 
 export interface PersonaValues {
   name: string;
@@ -390,16 +233,23 @@ const PersonaForm = ({
   };
 
   return (
-    <Card className="w-full overflow-hidden rounded-xl py-0 shadow-sm">
-      <CardHeader className="border-b bg-muted/20 px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="size-4 text-primary" />
-              Cấu hình Agent
-            </CardTitle>
+    <div className="persona-edit-surface">
+      <form
+        className="persona-edit-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <header className="persona-edit-formbar">
+          <div className="persona-edit-formbar-title">
+            <BotMessageSquare className="size-4 text-primary" />
+            <div>
+              <strong>Cấu hình Agent</strong>
+              <span>Viết prompt, follow-up và phạm vi vận hành.</span>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2 lg:justify-end">
+          <div className="persona-edit-formbar-metrics">
             <Badge variant="secondary" className="gap-1.5">
               <FileText className="size-3" />
               {completedSectionCount}/7 phần
@@ -416,271 +266,270 @@ const PersonaForm = ({
               {name.trim() ? "Có tên Agent" : "Chưa đặt tên"}
             </Badge>
           </div>
-        </div>
-      </CardHeader>
+        </header>
 
-      <CardContent className="px-0 py-0">
-        <form
-          className="flex flex-col"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit();
-          }}
-        >
-          <div className="border-b bg-background px-4 py-4 sm:px-5">
-            <section className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_auto] lg:items-end">
-              <div className="grid gap-2">
-                <Label htmlFor="persona-name" className="text-sm font-semibold">
-                  Tên Agent{" "}
-                  <span aria-hidden="true" className="text-destructive">
-                    *
-                  </span>
-                </Label>
-                <Input
-                  id="persona-name"
-                  ref={nameInputRef}
-                  value={name}
-                  aria-invalid={nameError ? true : undefined}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    if (nameError) setNameError(null);
-                  }}
-                  placeholder="VD: Trợ lý tuyển dụng LG Display"
-                  className="h-11 text-base sm:text-sm lg:max-w-xl"
-                />
-                {nameError ? (
-                  <p
-                    role="alert"
-                    className="text-xs font-medium text-destructive"
-                  >
-                    {nameError}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex flex-wrap gap-2 lg:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11"
-                  onClick={downloadTemplate}
-                >
-                  <Download className="size-4" />
-                  Tải mẫu
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11"
-                  disabled={importing}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {importing ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Upload className="size-4" />
-                  )}
-                  {importing ? "Đang nhập..." : "Nhập file"}
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".md,.txt,text/markdown,text/plain"
-                  className="hidden"
-                  onChange={onPersonaFileChange}
-                />
-              </div>
-            </section>
-          </div>
-
-          <section className="border-b bg-muted/10 px-4 py-4 sm:px-5">
-            <div className="mb-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Sparkles className="size-4 text-primary" />
-                Tự động follow-up
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Cấu hình riêng cho Agent này theo Hot / Warm / Cold.
+        <section className="persona-edit-identity">
+          <div className="persona-edit-name-field">
+            <Label htmlFor="persona-name" className="text-sm font-semibold">
+              Tên Agent{" "}
+              <span aria-hidden="true" className="text-destructive">
+                *
+              </span>
+            </Label>
+            <Input
+              id="persona-name"
+              ref={nameInputRef}
+              value={name}
+              aria-invalid={nameError ? true : undefined}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError(null);
+              }}
+              placeholder="VD: Trợ lý tuyển dụng LG Display"
+              className="h-11 text-base sm:text-sm lg:max-w-xl"
+            />
+            {nameError ? (
+              <p role="alert" className="text-xs font-medium text-destructive">
+                {nameError}
               </p>
+            ) : null}
+          </div>
+        </section>
+
+        <section
+          className="persona-edit-import-strip"
+          aria-label="Nhập file cấu hình Agent"
+        >
+          <div className="persona-edit-import-copy">
+            <span className="persona-edit-import-icon" aria-hidden="true">
+              <Upload className="size-4" />
+            </span>
+            <div>
+              <strong>Nhập file cấu hình</strong>
+              <p>Dùng file .md hoặc .txt để điền nhanh prompt trước khi sửa.</p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {FOLLOWUP_SCORE_ORDER.map((score) => {
-                const rule = followupRules[score];
+          </div>
+          <div className="persona-edit-import-actions">
+            <Button type="button" variant="outline" onClick={downloadTemplate}>
+              <Download className="size-4" />
+              Tải mẫu
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={importing}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {importing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Upload className="size-4" />
+              )}
+              {importing ? "Đang nhập..." : "Nhập file"}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md,.txt,text/markdown,text/plain"
+              className="hidden"
+              onChange={onPersonaFileChange}
+            />
+          </div>
+        </section>
+
+        <div className="persona-edit-grid">
+          <main className="persona-edit-main">
+            <section className="persona-edit-section-heading">
+              <div>
+                <span>Nội dung Agent</span>
+                <h2>Prompt làm việc</h2>
+              </div>
+              <p>
+                Mỗi phần là một khối hướng dẫn riêng. Giữ câu chữ ngắn, rõ,
+                kiểm soát được và dễ rà soát.
+              </p>
+            </section>
+
+            <div className="persona-edit-section-list">
+              {PERSONA_SECTIONS.map((section, index) => {
+                const value = sectionValues[index] ?? "";
+                const completed = value.trim().length > 0;
+
                 return (
-                  <div
-                    key={score}
-                    className="rounded-lg border bg-background p-4"
+                  <section
+                    key={section.title}
+                    className="persona-edit-prompt-block"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold">
-                          {FOLLOWUP_SCORE_LABELS[score]}
-                        </div>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          Tính từ tin nhắn cuối của ứng viên
-                        </p>
+                    <div className="persona-edit-prompt-head">
+                      <div className="min-w-0">
+                        <span>Phần {index + 1}</span>
+                        <Label
+                          htmlFor={`persona-section-${index}`}
+                          className="persona-edit-prompt-title"
+                        >
+                          {section.title.replace(/^\d+\.\s*/, "")}
+                        </Label>
                       </div>
-                      <Switch
-                        checked={rule.enabled}
-                        onCheckedChange={(enabled) =>
-                          updateFollowupRule(score, { enabled })
-                        }
-                        aria-label={`Bật follow-up ${FOLLOWUP_SCORE_LABELS[score]}`}
-                      />
-                    </div>
-
-                    <div className="mt-4 grid gap-2">
-                      <Label
-                        htmlFor={`followup-cadence-${score}`}
-                        className="text-xs font-medium text-muted-foreground"
+                      <Badge
+                        variant={completed ? "secondary" : "outline"}
+                        className="shrink-0"
                       >
-                        Mốc giờ
-                      </Label>
-                      <Input
-                        id={`followup-cadence-${score}`}
-                        value={rule.cadence_hours.join(" ")}
-                        onChange={(event) =>
-                          updateFollowupRule(score, {
-                            cadence_hours: parseCadenceInput(
-                              event.target.value,
-                            ),
-                          })
-                        }
-                        placeholder="VD: 10 22 46"
-                        className="h-9 font-mono text-sm"
-                      />
+                        {completed ? "Đã điền" : "Trống"}
+                      </Badge>
                     </div>
-
-                    <div className="mt-4 grid gap-2">
-                      <div className="text-xs font-medium text-muted-foreground">
-                        Nhóm áp dụng
-                      </div>
-                      <div className="grid gap-2">
-                        {LEAD_STAGES.map((stage) => (
-                          <label
-                            key={stage.value}
-                            className="flex items-center gap-2 text-sm"
-                          >
-                            <Checkbox
-                              checked={rule.eligible_stages.includes(
-                                stage.value,
-                              )}
-                              onCheckedChange={(checked) =>
-                                toggleFollowupStage(
-                                  score,
-                                  stage.value,
-                                  checked === true,
-                                )
-                              }
-                            />
-                            <span>{stage.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                    <Textarea
+                      id={`persona-section-${index}`}
+                      value={value}
+                      onChange={(event) =>
+                        updateSectionValue(index, event.target.value)
+                      }
+                      placeholder={section.hint}
+                      rows={index === 2 || index === 3 ? 12 : 7}
+                      className="persona-edit-textarea"
+                    />
+                  </section>
                 );
               })}
+
+              {extraMarkdown && (
+                <section className="persona-edit-prompt-block">
+                  <div className="persona-edit-prompt-head">
+                    <div>
+                      <span>Bổ sung</span>
+                      <Label className="persona-edit-prompt-title">
+                        Nội dung ngoài mẫu
+                      </Label>
+                    </div>
+                  </div>
+                  <Textarea
+                    value={extraMarkdown}
+                    onChange={(event) => setExtraMarkdown(event.target.value)}
+                    rows={6}
+                    className="persona-edit-textarea is-mono"
+                  />
+                </section>
+              )}
             </div>
-          </section>
+          </main>
 
-          <section className="px-4 py-4 sm:px-5">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <FileText className="size-4 text-primary" />
-              Nội dung Agent
-            </div>
-
-            <div className="mt-4 grid gap-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                {PERSONA_SECTIONS.map((section, index) => {
-                  const value = sectionValues[index] ?? "";
-                  const completed = value.trim().length > 0;
-
+          <aside className="persona-edit-rail">
+            <section className="persona-edit-rail-card">
+              <div className="persona-edit-rail-title">
+                <BotMessageSquare className="size-4 text-primary" />
+                Tự động follow-up
+              </div>
+              <p>Cấu hình theo mức ưu tiên của ứng viên.</p>
+              <div className="persona-followup-editor-list">
+                {FOLLOWUP_SCORE_ORDER.map((score) => {
+                  const rule = followupRules[score];
                   return (
                     <div
-                      key={section.title}
-                      className="rounded-lg border bg-background p-4"
+                      key={score}
+                      className="persona-followup-editor-card"
                     >
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-xs font-medium uppercase text-muted-foreground">
-                            Phần {index + 1}
-                          </div>
-                          <Label
-                            htmlFor={`persona-section-${index}`}
-                            className="mt-1 block text-sm font-semibold"
-                          >
-                            {section.title}
-                          </Label>
+                      <div className="persona-followup-editor-head">
+                        <div>
+                          <strong>{FOLLOWUP_SCORE_LABELS[score]}</strong>
+                          <span>Tính từ tin nhắn cuối của ứng viên</span>
                         </div>
-                        <Badge
-                          variant={completed ? "secondary" : "outline"}
-                          className="shrink-0"
-                        >
-                          {completed ? "Đã điền" : "Trống"}
-                        </Badge>
+                        <Switch
+                          checked={rule.enabled}
+                          onCheckedChange={(enabled) =>
+                            updateFollowupRule(score, { enabled })
+                          }
+                          aria-label={`Bật follow-up ${FOLLOWUP_SCORE_LABELS[score]}`}
+                        />
                       </div>
-                      <Textarea
-                        id={`persona-section-${index}`}
-                        value={value}
-                        onChange={(event) =>
-                          updateSectionValue(index, event.target.value)
-                        }
-                        placeholder={section.hint}
-                        rows={6}
-                        className="min-h-[132px] resize-y bg-transparent text-sm leading-6 shadow-none"
-                      />
+
+                      <div className="persona-followup-field">
+                        <Label
+                          htmlFor={`followup-cadence-${score}`}
+                          className="persona-followup-label"
+                        >
+                          Mốc giờ
+                        </Label>
+                        <Input
+                          id={`followup-cadence-${score}`}
+                          value={rule.cadence_hours.join(" ")}
+                          onChange={(event) =>
+                            updateFollowupRule(score, {
+                              cadence_hours: parseCadenceInput(
+                                event.target.value,
+                              ),
+                            })
+                          }
+                          placeholder="VD: 10 22 46"
+                          className="h-9 font-mono text-sm"
+                        />
+                      </div>
+
+                      <div className="persona-followup-field">
+                        <div className="persona-followup-label">
+                          Nhóm áp dụng
+                        </div>
+                        <div className="persona-followup-stage-list">
+                          {LEAD_STAGES.map((stage) => (
+                            <label
+                              key={stage.value}
+                              className="persona-followup-stage"
+                            >
+                              <Checkbox
+                                checked={rule.eligible_stages.includes(
+                                  stage.value,
+                                )}
+                                onCheckedChange={(checked) =>
+                                  toggleFollowupStage(
+                                    score,
+                                    stage.value,
+                                    checked === true,
+                                  )
+                                }
+                              />
+                              <span>{stage.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
-
-                {extraMarkdown && (
-                  <div className="rounded-lg border bg-background p-4 md:col-span-2">
-                    <div className="mb-3 text-sm font-semibold">
-                      Nội dung ngoài mẫu
-                    </div>
-                    <Textarea
-                      value={extraMarkdown}
-                      onChange={(event) => setExtraMarkdown(event.target.value)}
-                      rows={5}
-                      className="min-h-[120px] resize-y bg-transparent font-mono text-xs leading-5 shadow-none"
-                    />
-                  </div>
-                )}
               </div>
-            </div>
-          </section>
+            </section>
 
-          <section className="border-t bg-muted/10 px-4 py-4 sm:px-5">
-            <div className="grid gap-2">
-              <Label htmlFor="persona-notes" className="text-sm font-semibold">
+            <section className="persona-edit-rail-card">
+              <div className="persona-edit-rail-title">
+                <FileText className="size-4" />
                 Ghi chú riêng tư
+              </div>
+              <Label htmlFor="persona-notes" className="text-sm font-semibold">
+                Chỉ dùng nội bộ
               </Label>
-              <Input
+              <Textarea
                 id="persona-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="h-10"
+                rows={4}
+                className="persona-edit-notes"
               />
-            </div>
-          </section>
+            </section>
+          </aside>
+        </div>
 
-          <div className="z-10 flex flex-col-reverse gap-2 border-t bg-card/95 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-end sm:px-5 md:sticky md:bottom-0">
-            {extraActions}
-            <Button type="submit" className="sm:min-w-32" disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Đang lưu...
-                </>
-              ) : (
-                submitLabel
-              )}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        <footer className="persona-edit-savebar">
+          {extraActions}
+          <Button type="submit" className="sm:min-w-32" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Đang lưu...
+              </>
+            ) : (
+              submitLabel
+            )}
+          </Button>
+        </footer>
+      </form>
+    </div>
   );
 };
 

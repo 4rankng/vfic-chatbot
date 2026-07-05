@@ -1,19 +1,55 @@
 import { Suspense, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { useLocation } from "react-router";
 import { Notification } from "@/components/admin/notification";
 import { Error } from "@/components/admin/error";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 import { useConfigurationLoader } from "../root/useConfigurationLoader";
-import Header from "./Header";
 
 export const Layout = ({ children }: { children: ReactNode }) => {
   useConfigurationLoader();
+  const location = useLocation();
+  const hashPath =
+    typeof window === "undefined"
+      ? ""
+      : window.location.hash.replace(/^#/, "").split("?")[0];
+  const isDashboardWorkspace =
+    location.pathname === "/" && (hashPath === "" || hashPath === "/");
+  const isConversationWorkspace =
+    location.pathname.startsWith("/conversations") ||
+    hashPath.startsWith("/conversations");
+  const isKnowledgeWorkspace =
+    location.pathname.startsWith("/knowledge_sources") ||
+    hashPath.startsWith("/knowledge_sources");
+  const isIntegrationWorkspace =
+    location.pathname.startsWith("/settings") ||
+    hashPath.startsWith("/settings") ||
+    location.pathname.startsWith("/zalo_integrations") ||
+    hashPath.startsWith("/zalo_integrations");
+  const isPersonaWorkspace =
+    location.pathname.startsWith("/personas") ||
+    hashPath.startsWith("/personas");
+  const isProjectWorkspace =
+    location.pathname.startsWith("/projects") ||
+    hashPath.startsWith("/projects");
+  const isFullHeightWorkspace =
+    isDashboardWorkspace ||
+    isConversationWorkspace ||
+    isKnowledgeWorkspace ||
+    isIntegrationWorkspace ||
+    isPersonaWorkspace ||
+    isProjectWorkspace;
+
   return (
     <>
-      <Header />
       <main
-        className="max-w-[1440px] mx-auto pt-6 px-6 md:pt-8 md:px-8"
+        className={cn(
+          isFullHeightWorkspace
+            ? "h-dvh max-w-none overflow-hidden p-0"
+            : "max-w-[1440px] mx-auto px-6 py-6 md:px-8 md:py-8",
+        )}
         id="main-content"
       >
         <ErrorBoundary FallbackComponent={Error}>

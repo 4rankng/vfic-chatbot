@@ -1,4 +1,5 @@
 """Persistence worker tests for the combined candidate extraction job."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -20,16 +21,29 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
     fake_embedder = AsyncMock()
     fake_extractor = AsyncMock()
 
+    class _FakeIntegrationSettings:
+        def __init__(self, _db) -> None:
+            pass
+
+        async def resolve_openrouter(self):
+            return type("_Config", (), {"api_key": "sk-or-test"})()
+
+    class _FakeEmbedder:
+        batch = fake_embedder
+
     with (
         patch("app.workers._db.worker_session", fake_worker_session),
-        patch("app.graph.clients.GeminiEmbedder") as embedder_cls,
+        patch("app.graph.clients.build_embedder", return_value=_FakeEmbedder()),
+        patch(
+            "app.services.integration_settings.IntegrationSettingsService",
+            _FakeIntegrationSettings,
+        ),
         patch("app.workers.persistence_worker._build_extractor", return_value=fake_extractor),
         patch(
             "app.services.candidate_extraction.CandidateExtractionService.persist",
             new_callable=AsyncMock,
         ) as persist,
     ):
-        embedder_cls.return_value.batch = fake_embedder
         await _persist_candidate_async(
             {
                 "chat_id": "zalo_1",

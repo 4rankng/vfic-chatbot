@@ -47,9 +47,9 @@ export const englishCrmMessages = {
         new: "New user",
       },
     },
-    zalo_integrations: {
-      name: "Zalo Integration |||| Zalo Integrations",
-      forcedCaseName: "Zalo Integration",
+    settings: {
+      name: "Settings |||| Settings",
+      forcedCaseName: "Settings",
     },
     companies: {
       name: "Company |||| Companies",

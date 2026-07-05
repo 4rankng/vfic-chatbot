@@ -68,9 +68,9 @@ export const vietnameseCrmMessages = {
         new: "Tài khoản mới",
       },
     },
-    zalo_integrations: {
-      name: "Tích hợp Zalo |||| Tích hợp Zalo",
-      forcedCaseName: "Tích hợp Zalo",
+    settings: {
+      name: "Settings |||| Settings",
+      forcedCaseName: "Settings",
     },
     companies: {
       name: "Công ty |||| Công ty",
@@ -309,6 +309,7 @@ export const vietnameseCrmMessages = {
       page_out_of_boundaries_link: "Về trang cuối",
       page_range: "%{offsetBegin}-%{offsetEnd} trên tổng số %{total}",
       page_range_empty: "Không có kết quả",
+      page_rows_per_page: "Số dòng mỗi trang",
       prev: "Trang trước",
       skip_results: "Bỏ qua kết quả",
     },

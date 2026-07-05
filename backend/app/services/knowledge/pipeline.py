@@ -5,7 +5,7 @@ For one document it runs: extract -> digest -> embed -> index -> product feature
   extract  -> raw text (handled at upload; here we assume ``doc.raw_text`` is set)
   digest   -> the LLM cleans, semantic-splits, self-contained-rewrites, extracts
               metadata + retrieval questions, and flags faithfulness for each unit
-  embed    -> GeminiEmbedder.batch over the digested units
+  embed    -> configured embedder batch over the digested units
   index    -> regenerate the project's catalog card (the agent's master-index entry)
   features -> LLM-extract the 11 worker "product features" for the project (best-effort)
 
@@ -16,6 +16,7 @@ so the pipeline is unit-testable without API keys; a fake returns canned JSON.
 STRICT grounding rule (existing persona contract): every unit carries a verbatim
 ``source_quote``; low-confidence / inferred units are flagged, never silently invented.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -55,7 +56,7 @@ from app.services.knowledge.repository import (
 logger = logging.getLogger(__name__)
 
 # A function (system_prompt, user_text) -> raw JSON text. Injected so this module
-# stays free of langchain/google imports and is unit-testable with a fake.
+# stays free of provider SDK imports and is unit-testable with a fake.
 LLMJson = Callable[[str, str], Awaitable[str]]
 Embedder = Callable[[str], Awaitable[list[float]]]
 
@@ -63,7 +64,7 @@ Embedder = Callable[[str], Awaitable[list[float]]]
 class KnowledgePipeline:
     """Orchestrates digest -> embed -> index for one document.
 
-    Injected deps (testable): ``embedder`` (GeminiEmbedder-compatible) and
+    Injected deps (testable): ``embedder`` (configured-provider-compatible) and
     ``llm_json`` ((system, user) -> json text). Runs in the RQ ingest worker by default
     (``call_timeout`` unset -> the generous digest ceiling); web-process callers
     (``reindex``, feature re-extract) pass ``call_timeout`` = the tighter request timeout
@@ -71,7 +72,12 @@ class KnowledgePipeline:
     """
 
     def __init__(
-        self, db: AsyncSession, embedder: Embedder, llm_json: LLMJson, *, call_timeout: int | None = None
+        self,
+        db: AsyncSession,
+        embedder: Embedder,
+        llm_json: LLMJson,
+        *,
+        call_timeout: int | None = None,
     ) -> None:
         self.db = db
         self.embedder = embedder
@@ -113,7 +119,9 @@ class KnowledgePipeline:
         await self._store_units(doc, all_units)
 
         doc.digest_summary = " ".join(summary_parts).strip() or None
-        flagged = [i for i, u in enumerate(all_units) if u["confidence"] == "low" or u["is_inference"]]
+        flagged = [
+            i for i, u in enumerate(all_units) if u["confidence"] == "low" or u["is_inference"]
+        ]
         doc.digest_meta = {
             "section_count": len(sections),
             "unit_count": len(all_units),
@@ -159,7 +167,9 @@ class KnowledgePipeline:
         last_err: str | None = None
         for attempt in range(2):
             try:
-                raw = await self._llm_json_with_timeout(DIGEST_SYSTEM_PROMPT, section, purpose="digest")
+                raw = await self._llm_json_with_timeout(
+                    DIGEST_SYSTEM_PROMPT, section, purpose="digest"
+                )
                 payload = _parse_json_lenient(raw)
                 return validate_digest(payload)
             except DigestError as exc:
@@ -229,7 +239,9 @@ class KnowledgePipeline:
         if not rows:
             return
         corpus = "\n".join(f"- [{r.category}] {r.content}" for r in rows)
-        raw = await self._llm_json_with_timeout(INDEX_SYSTEM_PROMPT, corpus, purpose="project index")
+        raw = await self._llm_json_with_timeout(
+            INDEX_SYSTEM_PROMPT, corpus, purpose="project index"
+        )
         card = _parse_json_lenient(raw)
         if not isinstance(card, dict):
             return
@@ -334,9 +346,13 @@ class KnowledgePipeline:
         try:
             return await asyncio.wait_for(self.llm_json(system, user), timeout=timeout)
         except TimeoutError as exc:
-            raise TimeoutError(f"{get_settings().active_llm_provider} {purpose} timed out after {timeout}s") from exc
+            raise TimeoutError(
+                f"{get_settings().active_llm_provider} {purpose} timed out after {timeout}s"
+            ) from exc
 
-    async def _set_stage(self, doc, stage: str, *, status: str | None = None, error: str | None = None) -> None:
+    async def _set_stage(
+        self, doc, stage: str, *, status: str | None = None, error: str | None = None
+    ) -> None:
         doc.stage = stage
         doc.updated_at = datetime.now(UTC)
         if status is not None:
@@ -395,7 +411,11 @@ def _canonical_feature_answers(canonical_doc: ParsedKnowledgeDocument) -> dict[s
 
 def _canonical_project_summary(canonical_doc: ParsedKnowledgeDocument) -> str:
     overview = next(
-        (chunk.content for chunk in canonical_doc.chunks if chunk.section_title == "Company Overview"),
+        (
+            chunk.content
+            for chunk in canonical_doc.chunks
+            if chunk.section_title == "Company Overview"
+        ),
         "",
     )
     return _compact_text(overview) or canonical_doc.document_summary
@@ -403,7 +423,11 @@ def _canonical_project_summary(canonical_doc: ParsedKnowledgeDocument) -> str:
 
 def _canonical_location(canonical_doc: ParsedKnowledgeDocument) -> str:
     overview = next(
-        (chunk.content for chunk in canonical_doc.chunks if chunk.section_title == "Company Overview"),
+        (
+            chunk.content
+            for chunk in canonical_doc.chunks
+            if chunk.section_title == "Company Overview"
+        ),
         "",
     )
     match = re.search(r"\bat\s+(.+?)(?:\.|$)", overview, flags=re.IGNORECASE)

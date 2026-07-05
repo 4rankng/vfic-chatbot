@@ -7,12 +7,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
+  BotMessageSquare,
   BookOpen,
   Briefcase,
   Home,
   MessageCircle,
   MoreHorizontal,
-  Sparkles,
   UserCog,
   Users,
 } from "lucide-react";
@@ -88,7 +88,7 @@ export const MobileNavigation = () => {
         isAdmin
           ? {
               href: "/personas",
-              Icon: Sparkles,
+              Icon: BotMessageSquare,
               label: "Agent",
               isActive: currentPath === "/personas",
             }
@@ -190,7 +190,7 @@ export const MobileNavigation = () => {
                   )}
                 >
                   <MoreHorizontal className="size-4 shrink-0" />
-                  <span className="max-w-full truncate text-center text-[0.6875rem] font-semibold leading-tight">
+                  <span className="max-w-full text-center text-[0.6875rem] font-semibold leading-tight break-words">
                     Thêm
                   </span>
                 </Button>
@@ -259,7 +259,7 @@ const NavigationButton = ({
       </span>
       <span
         className={cn(
-          "max-w-full truncate text-center text-[0.6875rem] font-semibold leading-tight",
+          "max-w-full text-center text-[0.6875rem] font-semibold leading-tight break-words",
         )}
       >
         {label}

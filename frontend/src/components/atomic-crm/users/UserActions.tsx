@@ -34,6 +34,7 @@ export const UserActions = () => {
     type: "edit",
     id: record.id,
   });
+  const actionLabel = `Mở thao tác cho ${record.full_name || record.email}`;
 
   const toggleDisabled = async () => {
     try {
@@ -77,8 +78,9 @@ export const UserActions = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
-              title="Thao tác"
+              className="h-11 w-11 rounded-full"
+              aria-label={actionLabel}
+              title={actionLabel}
             >
               <MoreHorizontal className="size-4" />
             </Button>

@@ -27,6 +27,8 @@ import knowledge from "../knowledge";
 import projects from "../projects";
 import personas from "../personas";
 import integrations from "../integrations";
+import { Dashboard } from "../dashboard/Dashboard";
+import { MobileDashboard } from "../dashboard/MobileDashboard";
 import { Layout } from "../layout/Layout";
 import { MobileLayout } from "../layout/MobileLayout";
 import {
@@ -157,10 +159,6 @@ const RouteBoundary = ({ children }: { children: ReactNode }) => (
   <RouteErrorBoundary>
     <Suspense fallback={<RouteFallback />}>{children}</Suspense>
   </RouteErrorBoundary>
-);
-
-const ConversationWorkspaceDashboard = () => (
-  <Navigate to="/conversations" replace />
 );
 
 export type CRMProps = {
@@ -323,7 +321,8 @@ export const CRM = ({
   // QueryClient is passed into react-admin's CoreAdminContext, which owns the
   // single QueryClientProvider for the app.
   const resolvedLayout = layout ?? (isMobile ? MobileLayout : Layout);
-  const resolvedDashboard = dashboard ?? ConversationWorkspaceDashboard;
+  const resolvedDashboard =
+    dashboard ?? (isMobile ? MobileDashboard : Dashboard);
 
   if (!authGateReady) return null;
 
@@ -338,7 +337,7 @@ export const CRM = ({
       layout={resolvedLayout}
       dashboard={resolvedDashboard}
       requireAuth
-      disableTelemetry
+      disableTelemetry={disableTelemetry}
       {...rest}
     >
       <CustomRoutes>
@@ -353,6 +352,10 @@ export const CRM = ({
         <Route
           path="/settings/profile"
           element={<Navigate to={PROFILE_PATH} replace />}
+        />
+        <Route
+          path="/zalo_integrations/*"
+          element={<Navigate to="/settings" replace />}
         />
       </CustomRoutes>
       <CustomRoutes noLayout>
@@ -371,7 +374,7 @@ export const CRM = ({
       <Resource name="knowledge_sources" {...knowledge} />
       <Resource name="projects" {...projects} />
       <Resource name="personas" {...personas} />
-      <Resource name="zalo_integrations" {...integrations} />
+      <Resource name="settings" {...integrations} />
       {/* Users admin: always registered so /users resolves.
             Access is gated inside UserList (CanAccess) and via Header
             menu visibility — ra-core's static-children walker does not

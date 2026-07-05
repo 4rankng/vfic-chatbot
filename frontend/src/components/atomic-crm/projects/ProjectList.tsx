@@ -12,6 +12,8 @@ import {
   BusFront,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
+  FileText,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -22,7 +24,6 @@ import { DeleteButton } from "@/components/admin";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,15 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { TopToolbar } from "../layout/TopToolbar";
 import type { BusRoute, BusTimetableList, Project } from "../types";
 import {
   getProjectBusTimetable,
@@ -50,15 +43,44 @@ import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectFeatures } from "./ProjectFeatures";
 import { ProjectFaqEditor } from "./ProjectFaqEditor";
+import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 
 const ProjectListContent = () => {
   const { data, isPending, total } = useListContext<Project>();
   const { isAdmin, canEdit } = useRoleActions();
   const refresh = useRefresh();
   const redirect = useRedirect();
+  const notify = useNotify();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const projects = useMemo(() => data ?? [], [data]);
+  const activeCount = useMemo(
+    () => projects.filter((project) => project.is_active).length,
+    [projects],
+  );
+  const documentCount = useMemo(
+    () =>
+      projects.reduce(
+        (sum, project) => sum + (project.knowledge_document_count ?? 0),
+        0,
+      ),
+    [projects],
+  );
+  const readiness = useMemo(
+    () =>
+      projects.reduce(
+        (acc, project) => {
+          const totalFeatures = project.feature_readiness?.total ?? 0;
+          const readyFeatures = project.feature_readiness?.ready ?? 0;
+          return {
+            ready: acc.ready + readyFeatures,
+            total: acc.total + totalFeatures,
+          };
+        },
+        { ready: 0, total: 0 },
+      ),
+    [projects],
+  );
 
   const { selectedId, setSelectedId } = useMasterDetailSelection<Project>({
     data: projects,
@@ -69,77 +91,138 @@ const ProjectListContent = () => {
     projects[0] ??
     null;
 
-  return (
-    <div className="min-h-[calc(100vh-7rem)] px-4 py-5 pb-24 md:px-0 md:py-0 md:pb-0">
-      <TopToolbar className="flex-wrap items-start gap-3">
-        <div className="mr-auto min-w-0">
-          <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
-            Quản lý dự án
-          </h2>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            {total ?? 0} dự án. Theo dõi thẻ sản phẩm, nguồn kiến thức và các
-            đặc điểm sản phẩm mà agent dùng khi tư vấn ứng viên.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => refresh()}>
-          <RefreshCw className="size-4" />
-        </Button>
-        {isAdmin && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setUploadOpen(true)}
-            >
-              <Upload className="size-4" />
-              Tải kiến thức
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => redirect("create", "projects")}
-            >
-              <Plus className="size-4" />
-              Tạo dự án
-            </Button>
-          </>
-        )}
-      </TopToolbar>
+  const onReindex = async (project: Project) => {
+    try {
+      await reindexProject(String(project.id));
+      notify("Đã làm mới thẻ danh mục dự án.", { type: "success" });
+      refresh();
+    } catch (err) {
+      notify(`Thất bại: ${(err as Error).message}`, { type: "error" });
+    }
+  };
 
-      <div className="mt-4 space-y-4">
-        <ProjectSwitcher
-          projects={projects}
-          selectedProject={selectedProject}
-          selectedId={selectedId}
-          isPending={isPending}
-          isAdmin={isAdmin}
-          canEdit={canEdit}
-          onSelect={setSelectedId}
-        />
-        {selectedProject ? (
-          <ProjectDetailPanel
-            project={selectedProject}
-            isAdmin={isAdmin}
-            canEdit={canEdit}
+  return (
+    <ProjectWorkspaceShell
+      total={total ?? projects.length}
+      activeCount={activeCount}
+      documentCount={documentCount}
+    >
+      <div className="project-workspace-content">
+        <div className="ops-page-shell project-page-shell">
+          <header className="ops-command-header project-command-header">
+            <div className="ops-command-title">
+              <div className="ops-command-mark">
+                <Boxes className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="ops-kicker">Không gian dự án</p>
+                <h1>Dự án tuyển dụng</h1>
+                <p>
+                  Theo dõi thẻ sản phẩm, nguồn kiến thức và các đặc điểm mà
+                  chatbot dùng khi tư vấn ứng viên.
+                </p>
+              </div>
+            </div>
+            <div className="project-command-actions">
+              <Button
+                variant="outline"
+                onClick={() => refresh()}
+                className="h-11 rounded-[9px]"
+              >
+                <RefreshCw className="size-4" />
+                Làm mới
+              </Button>
+              {isAdmin && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setUploadOpen(true)}
+                    className="h-11 rounded-[9px]"
+                  >
+                    <Upload className="size-4" />
+                    Tải kiến thức
+                  </Button>
+                  <Button
+                    onClick={() => redirect("create", "projects")}
+                    className="h-11 rounded-[9px]"
+                  >
+                    <Plus className="size-4" />
+                    Tạo dự án
+                  </Button>
+                </>
+              )}
+            </div>
+          </header>
+
+          <section className="ops-status-strip project-status-strip">
+            <div>
+              <span className="ops-status-label">Tổng dự án</span>
+              <strong>{total ?? projects.length}</strong>
+            </div>
+            <div>
+              <span className="ops-status-label">Đang bật</span>
+              <strong>{activeCount}</strong>
+            </div>
+            <div>
+              <span className="ops-status-label">Tài liệu training</span>
+              <strong>{documentCount}</strong>
+            </div>
+            <div>
+              <span className="ops-status-label">Sẵn sàng tư vấn</span>
+              <strong>
+                {readiness.total > 0
+                  ? `${readiness.ready}/${readiness.total}`
+                  : "—"}
+              </strong>
+            </div>
+          </section>
+
+          <div className="project-layout-grid">
+            <ProjectDirectoryPanel
+              projects={projects}
+              selectedId={selectedId}
+              isPending={isPending}
+              onSelect={setSelectedId}
+            />
+            <ProjectSpotlightPanel
+              project={selectedProject}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+              onEdit={() =>
+                selectedProject &&
+                redirect("edit", "projects", selectedProject.id)
+              }
+              onReindex={() => selectedProject && onReindex(selectedProject)}
+              onDeleted={() => refresh()}
+            />
+          </div>
+
+          {selectedProject ? (
+            <ProjectDetailPanel
+              project={selectedProject}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+            />
+          ) : (
+            <EmptyState
+              icon={<Boxes className="size-6" />}
+              title="Chưa có dự án"
+              description="Tạo dự án mới hoặc tải kiến thức để agent có ngữ cảnh tư vấn."
+              className="min-h-[420px]"
+            />
+          )}
+
+          <ListPagination
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            className="ops-pagination"
           />
-        ) : (
-          <EmptyState
-            icon={<Boxes className="size-6" />}
-            title="Chưa có dự án"
-            description="Tạo dự án mới hoặc tải kiến thức để agent có ngữ cảnh tư vấn."
-            className="min-h-[420px]"
-          />
+        </div>
+
+        {isAdmin && (
+          <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
         )}
       </div>
-
-      {isAdmin && (
-        <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
-      )}
-      <ListPagination
-        rowsPerPageOptions={[10, 25, 50, 100]}
-        className="mt-4 justify-center"
-      />
-    </div>
+    </ProjectWorkspaceShell>
   );
 };
 
@@ -217,113 +300,196 @@ const ProjectStatusBadge = ({
   </Badge>
 );
 
-const ProjectSwitcher = ({
+const ProjectDirectoryPanel = ({
   projects,
-  selectedProject,
   selectedId,
   isPending,
-  isAdmin,
-  canEdit,
   onSelect,
 }: {
   projects: Project[];
-  selectedProject: Project | null;
   selectedId: string | null;
   isPending: boolean;
-  isAdmin: boolean;
-  canEdit: boolean;
   onSelect: (id: string) => void;
 }) => {
-  const notify = useNotify();
-  const refresh = useRefresh();
-  const redirect = useRedirect();
-
-  const onReindex = async () => {
-    if (!selectedProject) return;
-    try {
-      await reindexProject(String(selectedProject.id));
-      notify("Đã làm mới thẻ danh mục dự án.", { type: "success" });
-      refresh();
-    } catch (err) {
-      notify(`Thất bại: ${(err as Error).message}`, { type: "error" });
-    }
-  };
-
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 text-sm font-semibold">Dự án đang xem</div>
-          {isPending ? (
-            <Skeleton className="h-10 w-full max-w-md" />
-          ) : projects.length > 0 ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Select
-                value={selectedId ?? undefined}
-                onValueChange={(value) => onSelect(value)}
-              >
-                <SelectTrigger className="h-10 w-full sm:max-w-md">
-                  <SelectValue placeholder="Chọn dự án" />
-                </SelectTrigger>
-                <SelectContent className="max-h-80">
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={String(project.id)}>
-                      <span className="block truncate">
-                        {project.name} · {project.slug}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedProject && (
-                <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-                  <ProjectStatusBadge
-                    active={selectedProject.is_active}
-                    short
-                  />
-                  <ReadinessRing
-                    ready={selectedProject.feature_readiness?.ready}
-                    total={selectedProject.feature_readiness?.total ?? 16}
-                    size="size-7"
-                  />
-                  <span className="truncate tabular-nums">
-                    {typeof selectedProject.feature_readiness?.ready ===
-                    "number"
-                      ? `${selectedProject.feature_readiness.ready}/${selectedProject.feature_readiness?.total ?? 16} có thể tư vấn`
-                      : "Chưa có dữ liệu tư vấn"}
+    <section className="ops-panel project-directory-panel">
+      <div className="ops-panel-header">
+        <div className="ops-panel-title">
+          <p className="ops-panel-eyebrow">Danh mục dự án</p>
+          <h2>Dự án đang quản lý</h2>
+        </div>
+        <Badge variant="outline" className="border-border bg-background/70">
+          {projects.length} mục
+        </Badge>
+      </div>
+      <div className="project-directory-list">
+        {isPending ? (
+          <div className="project-directory-loading">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="project-directory-skeleton">
+                <Skeleton className="size-10 rounded-[10px]" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-44" />
+                  <Skeleton className="h-3 w-64 max-w-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : projects.length > 0 ? (
+          projects.map((project) => (
+            <button
+              key={project.id}
+              type="button"
+              className={cn(
+                "project-directory-row",
+                String(project.id) === selectedId && "is-active",
+              )}
+              onClick={() => onSelect(String(project.id))}
+              aria-pressed={String(project.id) === selectedId}
+            >
+              <div className="project-directory-avatar">
+                <Boxes className="size-4" />
+              </div>
+              <div className="project-directory-copy">
+                <div className="project-directory-title-line">
+                  <div className="min-w-0">
+                    <span className="project-directory-name">
+                      {project.name}
+                    </span>
+                    <span className="project-directory-slug">
+                      {project.slug}
+                    </span>
+                  </div>
+                  <ProjectStatusBadge active={project.is_active} short />
+                </div>
+                <div className="project-directory-meta">
+                  <span>
+                    <FileText className="size-3.5" />
+                    {project.knowledge_document_count ?? 0} tài liệu
+                  </span>
+                  <span>
+                    <CheckCircle2 className="size-3.5" />
+                    {typeof project.feature_readiness?.ready === "number"
+                      ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16}`
+                      : "Chưa đo"}
                   </span>
                 </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Chưa có dự án nào để chọn.
-            </p>
-          )}
-        </div>
-        {selectedProject && (
-          <div className="flex shrink-0 items-center gap-2">
-            {canEdit && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => redirect("edit", "projects", selectedProject.id)}
-              >
-                <Pencil className="size-4" />
-                Sửa thông tin
-              </Button>
-            )}
-            {isAdmin && (
-              <ProjectActionsMenu
-                project={selectedProject}
-                onReindex={onReindex}
-                onDeleted={() => refresh()}
-              />
-            )}
-          </div>
+              </div>
+            </button>
+          ))
+        ) : (
+          <EmptyState
+            icon={<Boxes className="size-6" />}
+            title="Chưa có dự án"
+            description="Tạo dự án mới để gom kiến thức và đặc điểm tư vấn."
+            className="project-empty-state"
+          />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
+  );
+};
+
+const ProjectSpotlightPanel = ({
+  project,
+  isAdmin,
+  canEdit,
+  onEdit,
+  onReindex,
+  onDeleted,
+}: {
+  project: Project | null;
+  isAdmin: boolean;
+  canEdit: boolean;
+  onEdit: () => void;
+  onReindex: () => void;
+  onDeleted: () => void;
+}) => {
+  if (!project) {
+    return (
+      <aside className="project-spotlight-panel">
+        <EmptyState
+          icon={<Boxes className="size-6" />}
+          title="Chọn dự án"
+          description="Thông tin vận hành của dự án sẽ hiện tại đây."
+          className="project-spotlight-empty"
+        />
+      </aside>
+    );
+  }
+
+  const readinessReady = project.feature_readiness?.ready;
+  const readinessTotal = project.feature_readiness?.total ?? 16;
+
+  return (
+    <aside className="project-spotlight-panel">
+      <div className="project-spotlight-top">
+        <ReadinessRing
+          ready={readinessReady}
+          total={readinessTotal}
+          size="size-12"
+        />
+        <div className="min-w-0">
+          <div className="project-spotlight-badges">
+            <ProjectStatusBadge active={project.is_active} />
+            <Badge variant="outline" className="border-border bg-muted/35">
+              {project.default_persona_id ? "Có agent" : "Chưa gắn agent"}
+            </Badge>
+          </div>
+          <h2>{project.name}</h2>
+          <p>{project.slug}</p>
+        </div>
+      </div>
+
+      <div className="project-spotlight-metrics">
+        <div>
+          <span>Tài liệu</span>
+          <strong>{project.knowledge_document_count ?? 0}</strong>
+        </div>
+        <div>
+          <span>Sẵn sàng</span>
+          <strong>
+            {typeof readinessReady === "number"
+              ? `${readinessReady}/${readinessTotal}`
+              : "—"}
+          </strong>
+        </div>
+      </div>
+
+      {project.summary || project.index_card?.summary ? (
+        <div className="project-summary-panel">
+          <span>Tóm tắt</span>
+          <p>{project.index_card?.summary ?? project.summary}</p>
+        </div>
+      ) : null}
+
+      <div className="project-spotlight-actions">
+        {canEdit && (
+          <Button variant="outline" size="sm" onClick={onEdit} className="h-11">
+            <Pencil className="size-4" />
+            Sửa thông tin
+          </Button>
+        )}
+        {isAdmin && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onReindex}
+              className="h-11"
+            >
+              <RefreshCw className="size-4" />
+              Làm mới thẻ
+            </Button>
+            <ProjectActionsMenu
+              project={project}
+              onReindex={onReindex}
+              onDeleted={onDeleted}
+            />
+          </>
+        )}
+      </div>
+    </aside>
   );
 };
 
@@ -342,7 +508,7 @@ const ProjectActionsMenu = ({
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 opacity-80 transition-opacity hover:opacity-100"
+          className="size-11 opacity-80 transition-opacity hover:opacity-100"
           aria-label={`Mở thao tác cho ${project.name}`}
         >
           <MoreHorizontal className="size-4" />
@@ -380,22 +546,24 @@ const ProjectDetailPanel = ({
   canEdit: boolean;
 }) => {
   return (
-    <ProjectFeatures
-      key={String(project.id)}
-      projectId={String(project.id)}
-      editable={canEdit}
-      canExtract={isAdmin}
-      extraContent={
-        <div className="space-y-5">
-          <ProjectFaqEditor
-            projectId={String(project.id)}
-            editable={canEdit}
-            embedded
-          />
-          <BusTimetableSection projectId={String(project.id)} />
-        </div>
-      }
-    />
+    <div className="project-detail-stack">
+      <ProjectFeatures
+        key={String(project.id)}
+        projectId={String(project.id)}
+        editable={canEdit}
+        canExtract={isAdmin}
+        extraContent={
+          <div className="space-y-5">
+            <ProjectFaqEditor
+              projectId={String(project.id)}
+              editable={canEdit}
+              embedded
+            />
+            <BusTimetableSection projectId={String(project.id)} />
+          </div>
+        }
+      />
+    </div>
   );
 };
 

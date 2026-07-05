@@ -1,7 +1,8 @@
 """Tests for graph factories and GraphDeps wiring."""
+
 import pytest
 
-from app.graph.clients import FallbackLLM, GeminiEmbedder, MiniMaxAgent, MiniMaxSafety
+from app.graph.clients import FallbackLLM, MiniMaxAgent, MiniMaxSafety, OpenRouterEmbedder
 from app.graph.factories import build_deps, make_minimax_llm_json
 from app.graph.types import GraphDeps
 
@@ -16,6 +17,12 @@ class _Settings:
     minimax_request_timeout = 60
     minimax_digest_timeout = 180
     openrouter_enable = False
+    embedding_provider = "openrouter"
+    embedding_dim = 3072
+    openrouter_base_url = "https://openrouter.ai/api/v1"
+    openrouter_api_key = ""
+    openrouter_embedding_model = "openai/text-embedding-3-large"
+    openrouter_embedding_timeout = 60
 
 
 class _SettingsWithFallback(_Settings):
@@ -41,7 +48,7 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     assert isinstance(deps, GraphDeps)
     assert isinstance(deps.agent, MiniMaxAgent)
     assert isinstance(deps.safety, MiniMaxSafety)
-    assert isinstance(deps.embedder, GeminiEmbedder)
+    assert isinstance(deps.embedder, OpenRouterEmbedder)
     assert deps.zalo is not None
 
 

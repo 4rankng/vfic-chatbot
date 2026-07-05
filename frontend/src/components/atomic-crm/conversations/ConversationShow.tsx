@@ -5,12 +5,14 @@ import {
   ShowBase,
   useNotify,
   useRefresh,
-  useDataProvider,
 } from "ra-core";
 import { Link } from "react-router";
-import type { Conversation, Lead } from "../types";
-import type { CrmDataProvider } from "../providers/rest/dataProvider";
-import { apiJson } from "../providers/rest/api";
+import type {
+  Conversation,
+  Lead,
+  LeadChatOpsActionResult,
+  LeadTag,
+} from "../types";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import { getLeadStatusColor } from "./conversationDisplay";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
@@ -19,7 +21,6 @@ import {
   type ConversationMode,
   useConversationActions,
 } from "./useConversationActions";
-import { useRoleActions } from "../hooks/useRoleActions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,21 +29,45 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Confirm } from "@/components/admin/confirm";
 import {
-  Ban,
   BookOpen,
   Bot,
+  BotMessageSquare,
   Briefcase,
-  Clock3,
+  BusFront,
+  CalendarDays,
+  CheckCircle2,
+  Check,
+  CircleDollarSign,
+  Copy,
+  FileBadge,
   Handshake,
+  Home,
+  MapPin,
+  NotepadText,
   Phone,
-  Save,
+  Plus,
   Sparkles,
-  Trash2,
   UserRound,
+  WandSparkles,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
+import {
+  deriveSystemTags,
+  dispatchLeadTagsUpdated,
+  fetchLeadAssist,
+  fetchLeadTags,
+  getAiAssistInsights,
+  getAutomationRecipes,
+  getTagMeta,
+  type ManualLeadTagInput,
+  OPERATIONAL_TAGS,
+  readRecentLeadTags,
+  rememberRecentLeadTags,
+  runLeadChatOpsAction,
+  saveLeadTags,
+} from "./chatOpsWorkspace";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -100,6 +125,7 @@ export const ConversationShowContent = ({
 }) => {
   const record = useRecordContext<Conversation>();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isContextOpen, setIsContextOpen] = useState(false);
   const leadListParams = useMemo(
     () => ({
       filter: { zalo_id: record?.zalo_chat_id },
@@ -165,29 +191,13 @@ export const ConversationShowContent = ({
   );
   const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
 
-  const { isAdmin } = useRoleActions();
-  const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
-  const [clearOpen, setClearOpen] = useState(false);
-  const [clearing, setClearing] = useState(false);
   const [quickSaving, setQuickSaving] = useState<string | null>(null);
-  const [threadVersion, setThreadVersion] = useState(0);
 
-  const handleClearHistory = async () => {
-    setClearing(true);
-    try {
-      await dataProvider.clearConversationHistory(record!.id);
-      notify("Đã xóa lịch sử chat.", { type: "success" });
-      setClearOpen(false);
-      setThreadVersion((k) => k + 1);
-      refresh();
-    } catch (e) {
-      notify((e as Error).message, { type: "error" });
-    } finally {
-      setClearing(false);
-    }
-  };
+  useEffect(() => {
+    setIsContextOpen(false);
+  }, [record?.id]);
 
   const refetchWorkspaceLead = async () => {
     await refetchLead();
@@ -198,81 +208,53 @@ export const ConversationShowContent = ({
     );
   };
 
-  const markNotInterested = async () => {
-    if (!lead) return;
-    setQuickSaving("not_interested");
+  const runChatOpsAction = async (
+    action: string,
+    savingKey: string,
+    successMessage: string,
+  ): Promise<LeadChatOpsActionResult | null> => {
+    if (!lead) return null;
+    setQuickSaving(savingKey);
     try {
-      await dataProvider.update("leads", {
-        id: lead.id,
-        data: {
-          lead_score: "not_interested",
-          lead_stage: "SKIPPED",
-          notes: lead.notes ?? "Ứng viên không quan tâm.",
-        },
-        previousData: lead,
-      });
-      notify("Đã gắn nhãn không quan tâm.", { type: "success" });
+      const result = await runLeadChatOpsAction(lead.id, action);
+      notify(successMessage, { type: "success" });
+      dispatchLeadTagsUpdated(lead.id);
       await refetchWorkspaceLead();
       refresh();
+      return result;
     } catch (e) {
-      notify((e as Error).message || "Không thể cập nhật ứng viên", {
+      notify((e as Error).message || "Không thể cập nhật ChatOps", {
         type: "error",
       });
+      return null;
     } finally {
       setQuickSaving(null);
     }
   };
 
-  const markContacting = async () => {
-    if (!lead) return;
-    setQuickSaving("contacting");
-    try {
-      await dataProvider.update("leads", {
-        id: lead.id,
-        data: { lead_stage: "CONTACTING" },
-        previousData: lead,
-      });
-      notify("Đã chuyển sang đang liên hệ.", { type: "success" });
-      await refetchWorkspaceLead();
-      refresh();
-    } catch (e) {
-      notify((e as Error).message || "Không thể cập nhật giai đoạn", {
-        type: "error",
-      });
-    } finally {
-      setQuickSaving(null);
+  const runPanelChatOpsAction = (action: string) => {
+    if (action === "mark_contacting") {
+      return runChatOpsAction(
+        action,
+        "contacting",
+        "Đã chuyển sang đang liên hệ.",
+      );
     }
-  };
-
-  const scheduleTomorrowFollowup = async () => {
-    if (!lead) return;
-    setQuickSaving("followup");
-    try {
-      const dueAt = new Date();
-      dueAt.setDate(dueAt.getDate() + 1);
-      dueAt.setHours(9, 0, 0, 0);
-      await apiJson(`/api/v1/leads/${lead.id}/follow-ups`, {
-        method: "POST",
-        body: {
-          due_at: dueAt.toISOString(),
-          note: "Theo dõi lại từ màn hình chat.",
-        },
-      });
-      await dataProvider.update("leads", {
-        id: lead.id,
-        data: { next_action_at: dueAt.toISOString() },
-        previousData: lead,
-      });
-      notify("Đã đặt lịch follow-up ngày mai.", { type: "success" });
-      await refetchWorkspaceLead();
-      refresh();
-    } catch (e) {
-      notify((e as Error).message || "Không thể đặt lịch follow-up", {
-        type: "error",
-      });
-    } finally {
-      setQuickSaving(null);
+    if (action === "schedule_followup") {
+      return runChatOpsAction(
+        action,
+        "followup",
+        "Đã đặt lịch follow-up ngày mai.",
+      );
     }
+    if (action === "mark_registered") {
+      return runChatOpsAction(action, "registered", "Đã chuyển sang đăng ký.");
+    }
+    return runChatOpsAction(
+      action,
+      "not_interested",
+      "Đã gắn nhãn không quan tâm.",
+    );
   };
 
   return (
@@ -331,52 +313,50 @@ export const ConversationShowContent = ({
                   </svg>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>Chế độ trả lời</DropdownMenuLabel>
-                <DropdownMenuSeparator />
+              <DropdownMenuContent
+                align="end"
+                sideOffset={10}
+                className="mode-menu-content"
+              >
+                <DropdownMenuLabel className="mode-menu-label">
+                  Chế độ trả lời
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="mode-menu-separator" />
                 {MODE_OPTIONS.map((option) => {
                   const isActive = activeMode === option.mode;
                   return (
                     <DropdownMenuItem
                       key={option.mode}
-                      disabled={isActive}
-                      onSelect={() => setConversationMode(option.mode)}
-                      className="items-start gap-3"
+                      onSelect={() => {
+                        if (!isActive) setConversationMode(option.mode);
+                      }}
+                      className={`mode-menu-item ${option.mode} ${isActive ? "active" : ""}`}
+                      aria-current={isActive ? "true" : undefined}
                     >
-                      <option.Icon className="mt-0.5 size-4 shrink-0" />
-                      <span className="grid gap-0.5">
-                        <span className="font-medium">{option.label}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {option.hint}
-                        </span>
+                      <span className="mode-menu-icon">
+                        <option.Icon className="icon" aria-hidden="true" />
+                      </span>
+                      <span className="mode-menu-copy">
+                        <span className="mode-menu-title">{option.label}</span>
+                        <span className="mode-menu-hint">{option.hint}</span>
+                      </span>
+                      <span className="mode-menu-check" aria-hidden="true">
+                        {isActive ? <Check className="icon" /> : null}
                       </span>
                     </DropdownMenuItem>
                   );
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            <button
-              type="button"
-              className="profile-info-btn"
-              onClick={() => setIsProfileOpen(true)}
-              aria-label="Xem hồ sơ ứng viên"
-              title="Xem hồ sơ ứng viên"
-            >
-              <svg className="icon">
-                <use href="#i-panel" />
-              </svg>
-              <span>Hồ sơ</span>
-            </button>
-            {isAdmin && (
+            {showWorkspacePanel && (
               <button
                 type="button"
-                className="profile-info-btn"
-                title="Xóa chat"
-                aria-label="Xóa chat"
-                onClick={() => setClearOpen(true)}
+                className={`profile-info-btn context-info-btn ${isContextOpen ? "active" : ""}`}
+                onClick={() => setIsContextOpen(true)}
+                aria-label="Mở ngữ cảnh hội thoại"
+                title="Mở ngữ cảnh hội thoại"
               >
-                <Trash2 className="icon" />
-                <span>Xóa chat</span>
+                <Sparkles className="icon" />
               </button>
             )}
             {activeMode === "closed" && (
@@ -389,7 +369,7 @@ export const ConversationShowContent = ({
         </header>
 
         <ChatThread
-          key={`${record?.id ?? "empty"}:${threadVersion}`}
+          key={record?.id ?? "empty"}
           conversationId={record?.id ?? ""}
           conversation={record}
           isBotModeOverride={isBotMode}
@@ -398,32 +378,30 @@ export const ConversationShowContent = ({
           showComposerTakeoverNotice={false}
         />
 
+        {showWorkspacePanel && isContextOpen && (
+          <button
+            type="button"
+            className="context-overlay-scrim"
+            aria-label="Đóng ngữ cảnh"
+            onClick={() => setIsContextOpen(false)}
+          />
+        )}
         <LeadProfilePanel
           open={isProfileOpen}
           onOpenChange={setIsProfileOpen}
           lead={lead}
         />
-
-        <Confirm
-          isOpen={clearOpen}
-          title="Xóa toàn bộ lịch sử chat?"
-          content="Toàn bộ tin nhắn và nhật ký chatbot của hội thoại này sẽ bị xóa vĩnh viễn. Thông tin ứng viên và hội thoại được giữ lại. Hành động không thể hoàn tác."
-          confirm="Xóa vĩnh viễn"
-          confirmColor="warning"
-          loading={clearing}
-          onClose={() => setClearOpen(false)}
-          onConfirm={handleClearHistory}
-        />
       </section>
       {showWorkspacePanel && (
         <ConversationContextPanel
           lead={lead}
+          conversation={record}
           activeMode={activeMode}
           saving={quickSaving}
+          open={isContextOpen}
+          onClose={() => setIsContextOpen(false)}
           onOpenProfile={() => setIsProfileOpen(true)}
-          onMarkContacting={markContacting}
-          onMarkNotInterested={markNotInterested}
-          onScheduleFollowup={scheduleTomorrowFollowup}
+          onRunChatOpsAction={runPanelChatOpsAction}
         />
       )}
     </>
@@ -436,167 +414,782 @@ const display = (value: unknown, fallback = "Chưa có dữ liệu") => {
   return text || fallback;
 };
 
+type ContextTab = "candidate" | "assist" | "agent";
+
+type CandidateInfoItem = {
+  key: string;
+  label: string;
+  value: string;
+  complete: boolean;
+  Icon: LucideIcon;
+};
+
+const hasMeaningfulValue = (value: unknown) =>
+  display(value) !== "Chưa có dữ liệu";
+
+const notesInclude = (notes: string | null | undefined, terms: string[]) => {
+  const normalized = notes?.toLocaleLowerCase("vi-VN") ?? "";
+  return terms.some((term) => normalized.includes(term));
+};
+
 const ConversationContextPanel = ({
   lead,
+  conversation,
   activeMode,
   saving,
+  open,
+  onClose,
   onOpenProfile,
-  onMarkContacting,
-  onMarkNotInterested,
-  onScheduleFollowup,
+  onRunChatOpsAction,
 }: {
   lead?: Lead;
+  conversation?: Conversation;
   activeMode: ConversationMode;
   saving: string | null;
+  open: boolean;
+  onClose: () => void;
   onOpenProfile: () => void;
-  onMarkContacting: () => void;
-  onMarkNotInterested: () => void;
-  onScheduleFollowup: () => void;
+  onRunChatOpsAction: (
+    action: string,
+  ) => Promise<LeadChatOpsActionResult | null>;
 }) => {
   const disabled = !lead || saving !== null;
-  const followupLabel = lead?.next_action_at
-    ? new Date(lead.next_action_at).toLocaleDateString("vi-VN")
-    : "Chưa đặt lịch";
+  const notify = useNotify();
+  const [activeTab, setActiveTab] = useState<ContextTab>("candidate");
+  const [serverTags, setServerTags] = useState<LeadTag[]>([]);
+  const [serverAssist, setServerAssist] = useState<
+    LeadChatOpsActionResult["assist"] | null
+  >(null);
+  const [tagSaving, setTagSaving] = useState<string | null>(null);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [customTagInput, setCustomTagInput] = useState("");
+  const [recentTags, setRecentTags] = useState<ManualLeadTagInput[]>(() =>
+    readRecentLeadTags(),
+  );
+  const candidateInfoItems = useMemo<CandidateInfoItem[]>(() => {
+    const notes = lead?.notes;
+    const dateOfBirth = lead?.birth_year
+      ? String(lead.birth_year)
+      : lead?.age
+        ? `${lead.age} tuổi`
+        : "";
+    const area = [lead?.region, lead?.living_area].filter(Boolean).join(" · ");
+    const hasCitizenId = notesInclude(notes, ["cccd", "cmnd", "căn cước"]);
+    const hasHousing = notesInclude(notes, [
+      "chỗ ở",
+      "cho o",
+      "nhà trọ",
+      "nha tro",
+      "ký túc",
+      "ky tuc",
+      "ktx",
+    ]);
+    const hasPickup = notesInclude(notes, [
+      "đưa đón",
+      "dua don",
+      "xe đưa",
+      "xe dua",
+      "xe đón",
+      "xe don",
+      "bus",
+      "tuyến xe",
+      "tuyen xe",
+    ]);
+    return [
+      {
+        key: "name",
+        label: "Họ tên",
+        value: display(lead?.name),
+        complete: hasMeaningfulValue(lead?.name),
+        Icon: UserRound,
+      },
+      {
+        key: "phone",
+        label: "Số điện thoại",
+        value: display(lead?.phone),
+        complete: hasMeaningfulValue(lead?.phone),
+        Icon: Phone,
+      },
+      {
+        key: "birth",
+        label: "Ngày sinh / tuổi",
+        value: display(dateOfBirth),
+        complete: Boolean(dateOfBirth),
+        Icon: CalendarDays,
+      },
+      {
+        key: "citizen-id",
+        label: "CCCD",
+        value: hasCitizenId ? "Đã ghi trong ghi chú" : "Cần hỏi thêm",
+        complete: hasCitizenId,
+        Icon: FileBadge,
+      },
+      {
+        key: "experience",
+        label: "Kinh nghiệm",
+        value: display(lead?.years_experience),
+        complete: hasMeaningfulValue(lead?.years_experience),
+        Icon: Briefcase,
+      },
+      {
+        key: "expectation",
+        label: "Mong muốn",
+        value: display(lead?.desired_job),
+        complete: hasMeaningfulValue(lead?.desired_job),
+        Icon: Handshake,
+      },
+      {
+        key: "salary",
+        label: "Mức lương",
+        value: display(lead?.expected_salary),
+        complete: hasMeaningfulValue(lead?.expected_salary),
+        Icon: CircleDollarSign,
+      },
+      {
+        key: "housing",
+        label: "Yêu cầu chỗ ở",
+        value: hasHousing ? "Đã ghi trong ghi chú" : "Cần hỏi thêm",
+        complete: hasHousing,
+        Icon: Home,
+      },
+      {
+        key: "pickup",
+        label: "Xe đưa đón",
+        value: hasPickup ? "Đã ghi trong ghi chú" : "Cần hỏi thêm",
+        complete: hasPickup,
+        Icon: BusFront,
+      },
+      {
+        key: "area",
+        label: "Khu vực",
+        value: display(area),
+        complete: Boolean(area),
+        Icon: MapPin,
+      },
+      {
+        key: "address",
+        label: "Địa chỉ hiện tại",
+        value: display(lead?.address),
+        complete: hasMeaningfulValue(lead?.address),
+        Icon: Home,
+      },
+      {
+        key: "notes",
+        label: "Ghi chú tuyển dụng",
+        value: display(lead?.notes),
+        complete: hasMeaningfulValue(lead?.notes),
+        Icon: NotepadText,
+      },
+    ];
+  }, [lead]);
+  const completedCandidateInfoCount = candidateInfoItems.filter(
+    (item) => item.complete,
+  ).length;
+  const fallbackTags = useMemo<LeadTag[]>(
+    () =>
+      deriveSystemTags(lead, conversation).map((key) => {
+        const meta = getTagMeta(key);
+        return { key, label: meta.label, tone: meta.tone, system: true };
+      }),
+    [lead, conversation],
+  );
+  const activeTags = serverTags.length > 0 ? serverTags : fallbackTags;
+  const activeTagSet = useMemo(
+    () => new Set(activeTags.map((tag) => tag.key)),
+    [activeTags],
+  );
+  const manualTags = useMemo<ManualLeadTagInput[]>(
+    () =>
+      activeTags
+        .filter((tag) => !tag.system)
+        .map((tag) => ({ key: tag.key, label: tag.label, tone: tag.tone })),
+    [activeTags],
+  );
+  const activeTagLabels = useMemo(
+    () => new Set(activeTags.map((tag) => tag.label.trim().toLowerCase())),
+    [activeTags],
+  );
+  const suggestedTags = useMemo<ManualLeadTagInput[]>(() => {
+    const candidates: ManualLeadTagInput[] = [];
+    if (!lead?.phone?.trim()) {
+      candidates.push({
+        key: "can_xin_sdt",
+        label: "Cần xin SĐT",
+        tone: "warn",
+      });
+    }
+    if (!lead?.desired_job?.trim()) {
+      candidates.push({
+        key: "chua_ro_cong_viec",
+        label: "Chưa rõ công việc",
+        tone: "info",
+      });
+    }
+    if (!lead?.region?.trim() && !lead?.living_area?.trim()) {
+      candidates.push({
+        key: "chua_ro_khu_vuc",
+        label: "Chưa rõ khu vực",
+        tone: "info",
+      });
+    }
+    if (!lead?.next_action_at) {
+      candidates.push({
+        key: "can_hen_follow_up",
+        label: "Cần hẹn follow-up",
+        tone: "info",
+      });
+    }
+    return candidates
+      .filter((tag) => !activeTagLabels.has(tag.label.toLowerCase()))
+      .slice(0, 2);
+  }, [activeTagLabels, lead]);
+  const availableRecentTags = useMemo(
+    () =>
+      recentTags
+        .filter((tag) => !activeTagSet.has(tag.key))
+        .filter((tag) => !activeTagLabels.has(tag.label.trim().toLowerCase()))
+        .slice(0, 4),
+    [activeTagLabels, activeTagSet, recentTags],
+  );
+  const fallbackAssist = useMemo(
+    () => getAiAssistInsights(lead, conversation),
+    [lead, conversation],
+  );
+  const fallbackRecipes = useMemo(
+    () => getAutomationRecipes(lead, conversation),
+    [lead, conversation],
+  );
+  const assist = {
+    summary: serverAssist?.summary ?? fallbackAssist.summary,
+    missing: serverAssist?.missing ?? fallbackAssist.missing,
+    reply: serverAssist?.reply ?? fallbackAssist.reply,
+    nextAction: serverAssist?.next_action ?? fallbackAssist.nextAction,
+    modeLabel: serverAssist?.mode_label ?? fallbackAssist.modeLabel,
+  };
+  const recipes = serverAssist?.signals ?? fallbackRecipes;
+
+  useEffect(() => {
+    if (!lead?.id) {
+      setServerTags([]);
+      setServerAssist(null);
+      setTagPickerOpen(false);
+      setCustomTagInput("");
+      return;
+    }
+    if (!open) return;
+    setTagPickerOpen(false);
+    setCustomTagInput("");
+    let cancelled = false;
+    (async () => {
+      try {
+        const [tags, assistPayload] = await Promise.all([
+          fetchLeadTags(lead.id),
+          fetchLeadAssist(lead.id),
+        ]);
+        if (cancelled) return;
+        setServerTags(tags);
+        setServerAssist(assistPayload);
+      } catch {
+        if (cancelled) return;
+        setServerTags([]);
+        setServerAssist(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lead?.id, conversation?.id, open]);
+
+  const saveManualTags = async (nextTags: ManualLeadTagInput[]) => {
+    if (!lead) return;
+    try {
+      const tags = await saveLeadTags(lead.id, nextTags);
+      setServerTags(tags);
+      const nextRecent = tags
+        .filter((tag) => !tag.system)
+        .map((tag) => ({ key: tag.key, label: tag.label, tone: tag.tone }));
+      rememberRecentLeadTags(nextRecent);
+      setRecentTags(readRecentLeadTags());
+      dispatchLeadTagsUpdated(lead.id);
+      notify("Đã cập nhật thẻ ứng viên.", { type: "success" });
+    } catch (e) {
+      notify((e as Error).message || "Không thể cập nhật thẻ", {
+        type: "error",
+      });
+      throw e;
+    }
+  };
+
+  const handleToggleTag = async (tag: ManualLeadTagInput) => {
+    if (!lead) return;
+    const current = new Map(manualTags.map((item) => [item.key, item]));
+    if (current.has(tag.key)) current.delete(tag.key);
+    else {
+      current.set(tag.key, {
+        key: tag.key,
+        label: tag.label.trim(),
+        tone: tag.tone ?? "info",
+      });
+    }
+    setTagSaving(tag.key);
+    try {
+      await saveManualTags(Array.from(current.values()));
+    } finally {
+      setTagSaving(null);
+    }
+  };
+
+  const handleAddCustomTag = async () => {
+    const label = customTagInput.trim();
+    if (!label || !lead) return;
+    if (activeTagLabels.has(label.toLowerCase())) {
+      setCustomTagInput("");
+      return;
+    }
+    setTagSaving(label);
+    try {
+      await saveManualTags([
+        ...manualTags,
+        { key: label, label, tone: "info" },
+      ]);
+      setCustomTagInput("");
+    } finally {
+      setTagSaving(null);
+    }
+  };
+
+  const handleRunAction = async (action?: string | null) => {
+    if (!action) return;
+    const result = await onRunChatOpsAction(action);
+    if (!result) return;
+    setServerTags(result.tags);
+    setServerAssist(result.assist);
+  };
+
+  const copySuggestedReply = async () => {
+    try {
+      await navigator.clipboard.writeText(assist.reply);
+      notify("Đã sao chép gợi ý trả lời.", { type: "success" });
+    } catch {
+      notify("Không thể sao chép gợi ý.", { type: "warning" });
+    }
+  };
 
   return (
-    <aside className="panel right-panel" aria-label="Bảng ngữ cảnh hội thoại">
+    <aside
+      className={`panel right-panel ${open ? "context-open" : ""}`}
+      aria-label="Bảng ngữ cảnh hội thoại"
+      aria-hidden={!open}
+    >
       <header className="profile-header">
         <div className="profile-title">
-          <UserRound className="icon" aria-hidden="true" />
-          <span>Ngữ cảnh</span>
+          <Sparkles className="icon" aria-hidden="true" />
+          <span className="profile-title-copy">
+            <span>Việc cần làm</span>
+            <small>Ngữ cảnh hội thoại</small>
+          </span>
         </div>
-        <button
-          type="button"
-          className="context-open-profile"
-          onClick={onOpenProfile}
-        >
-          Mở hồ sơ
-        </button>
+        <div className="context-header-actions">
+          <button
+            type="button"
+            className="context-open-profile"
+            onClick={onOpenProfile}
+          >
+            Mở hồ sơ
+          </button>
+          <button
+            type="button"
+            className="context-close"
+            onClick={onClose}
+            aria-label="Đóng ngữ cảnh"
+          >
+            ×
+          </button>
+        </div>
       </header>
+      <div className="context-tabs" role="tablist" aria-label="Nhóm ngữ cảnh">
+        <ContextTabButton
+          active={activeTab === "candidate"}
+          label="Tóm tắt"
+          onClick={() => setActiveTab("candidate")}
+        />
+        <ContextTabButton
+          active={activeTab === "assist"}
+          label="AI gợi ý"
+          onClick={() => setActiveTab("assist")}
+        />
+        <ContextTabButton
+          active={activeTab === "agent"}
+          label="Agent"
+          onClick={() => setActiveTab("agent")}
+        />
+      </div>
       <div className="profile-scroll">
-        <section className="context-card context-hero">
-          <div className="context-avatar">
-            <UserRound className="icon" aria-hidden="true" />
+        <section className="context-overview">
+          <div className="context-overview-copy">
+            <span className="context-overview-kicker">Thẻ ứng viên</span>
+            <h2>Phân loại hội thoại</h2>
+            <p>
+              Gắn thẻ để lọc lại ứng viên và nhắc đội tư vấn xử lý đúng việc.
+            </p>
           </div>
-          <div className="context-hero-copy">
-            <h2>{display(lead?.name, "Ứng viên chưa liên kết")}</h2>
-            <p>{display(lead?.desired_job, "Chưa có vị trí mong muốn")}</p>
+          <div className="context-subject">
+            <span className="context-subject-name">
+              {display(lead?.name, "Ứng viên chưa liên kết")}
+            </span>
+            <span className="context-subject-role">
+              {display(lead?.desired_job, "Chưa có vị trí mong muốn")}
+            </span>
           </div>
           <div className="context-tags">
-            <span className="tag">{MODE_STATUS[activeMode]}</span>
-            {lead?.phone ? <span className="tag good">Có SĐT</span> : null}
-            {lead?.lead_score === "not_interested" ? (
-              <span className="tag">Không quan tâm</span>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="context-card">
-          <div className="section-head">
-            <h3>Ứng viên</h3>
-          </div>
-          <div className="detail-list compact">
-            <ContextDetail
-              Icon={Phone}
-              label="Số điện thoại"
-              value={lead?.phone}
-            />
-            <ContextDetail
-              Icon={Briefcase}
-              label="Khu vực"
-              value={lead?.region ?? lead?.living_area}
-            />
-            <ContextDetail
-              Icon={Clock3}
-              label="Follow-up"
-              value={followupLabel}
-            />
-          </div>
-        </section>
-
-        <section className="context-card">
-          <div className="section-head">
-            <h3>Thao tác nhanh</h3>
-          </div>
-          <div className="context-action-grid">
-            <button
-              type="button"
-              className="context-action"
-              disabled={disabled}
-              onClick={onMarkContacting}
-            >
-              <Save className="icon" aria-hidden="true" />
-              <span>
-                {saving === "contacting" ? "Đang lưu..." : "Đang liên hệ"}
+            {activeTags.map((tag) => (
+              <span
+                key={tag.key}
+                className={`tag operational-tag ${tag.tone}`}
+                title={tag.system ? "Thẻ hệ thống tự cập nhật" : "Thẻ thủ công"}
+              >
+                {tag.label}
               </span>
-            </button>
+            ))}
             <button
               type="button"
-              className="context-action"
-              disabled={disabled}
-              onClick={onScheduleFollowup}
+              className="tag-add-button tag-add-button--labeled"
+              disabled={!lead}
+              aria-label="Thêm hoặc sửa thẻ ứng viên"
+              aria-expanded={tagPickerOpen}
+              onClick={() => setTagPickerOpen((open) => !open)}
+              title="Thêm hoặc sửa thẻ"
             >
-              <Clock3 className="icon" aria-hidden="true" />
-              <span>{saving === "followup" ? "Đang đặt..." : "Follow-up"}</span>
-            </button>
-            <button
-              type="button"
-              className="context-action danger"
-              disabled={disabled}
-              onClick={onMarkNotInterested}
-            >
-              <Ban className="icon" aria-hidden="true" />
-              <span>
-                {saving === "not_interested"
-                  ? "Đang lưu..."
-                  : "Không quan tâm"}
-              </span>
+              <Plus className="icon" aria-hidden="true" />
+              <span>Thẻ</span>
             </button>
           </div>
         </section>
 
-        <section className="context-card">
-          <div className="section-head">
-            <h3>Agent</h3>
-          </div>
-          <div className="context-link-list">
-            <Link to="/knowledge_sources" className="context-link">
-              <BookOpen className="icon" aria-hidden="true" />
-              <span>Training knowledge</span>
-            </Link>
-            <Link to="/personas" className="context-link">
-              <Sparkles className="icon" aria-hidden="true" />
-              <span>Manage agent</span>
-            </Link>
-            <Link to="/projects" className="context-link">
-              <Briefcase className="icon" aria-hidden="true" />
-              <span>Project catalog</span>
-            </Link>
-          </div>
-        </section>
+        {activeTab === "candidate" && (
+          <>
+            {tagPickerOpen && (
+              <section className="context-card">
+                <div className="section-head">
+                  <h3>Gắn thẻ</h3>
+                </div>
+                <div className="tag-custom-row">
+                  <input
+                    value={customTagInput}
+                    onChange={(event) => setCustomTagInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void handleAddCustomTag();
+                      }
+                    }}
+                    placeholder="Nhập thẻ riêng..."
+                    disabled={!lead || tagSaving !== null}
+                    aria-label="Thẻ tùy chỉnh"
+                  />
+                  <button
+                    type="button"
+                    disabled={
+                      !lead || !customTagInput.trim() || tagSaving !== null
+                    }
+                    onClick={() => {
+                      void handleAddCustomTag();
+                    }}
+                  >
+                    Thêm
+                  </button>
+                </div>
+                {suggestedTags.length > 0 && (
+                  <TagPickerGroup
+                    title="Gợi ý"
+                    tags={suggestedTags}
+                    activeTagSet={activeTagSet}
+                    tagSaving={tagSaving}
+                    disabled={!lead}
+                    onToggle={handleToggleTag}
+                  />
+                )}
+                {availableRecentTags.length > 0 && (
+                  <TagPickerGroup
+                    title="Gần đây"
+                    tags={availableRecentTags}
+                    activeTagSet={activeTagSet}
+                    tagSaving={tagSaving}
+                    disabled={!lead}
+                    onToggle={handleToggleTag}
+                  />
+                )}
+                <div className="tag-picker-label">Có sẵn</div>
+                <div className="tag-picker" aria-label="Gắn thẻ ứng viên">
+                  {OPERATIONAL_TAGS.map((tag) => {
+                    const selected = activeTagSet.has(tag.key);
+                    const activeTag = activeTags.find(
+                      (item) => item.key === tag.key,
+                    );
+                    const isSystemTag = Boolean(
+                      tag.system || activeTag?.system,
+                    );
+                    return (
+                      <button
+                        key={tag.key}
+                        type="button"
+                        className={`tag-picker-chip ${tag.tone} ${
+                          selected ? "active" : ""
+                        }`}
+                        disabled={!lead || isSystemTag || tagSaving === tag.key}
+                        onClick={() => {
+                          void handleToggleTag({
+                            key: tag.key,
+                            label: tag.label,
+                            tone: tag.tone,
+                          });
+                        }}
+                        title={
+                          isSystemTag ? "Thẻ hệ thống tự cập nhật" : tag.label
+                        }
+                      >
+                        {tagSaving === tag.key ? "Đang lưu..." : tag.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            <section className="context-card">
+              <div className="section-head">
+                <h3>Thông tin cần dùng</h3>
+                <span className="completion-pill">
+                  {completedCandidateInfoCount}/{candidateInfoItems.length}
+                </span>
+              </div>
+              <div className="candidate-info-grid">
+                {candidateInfoItems.map((item) => (
+                  <CandidateInfoRow key={item.key} item={item} />
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+
+        {activeTab === "assist" && (
+          <>
+            <section className="context-card">
+              <div className="section-head">
+                <h3>Gợi ý nhanh</h3>
+              </div>
+              <div className="assist-stack">
+                <div className="assist-block">
+                  <span className="assist-label">Tóm tắt</span>
+                  <p>{assist.summary}</p>
+                </div>
+                <div className="assist-block">
+                  <span className="assist-label">Thiếu thông tin</span>
+                  <p>
+                    {assist.missing.length > 0
+                      ? assist.missing.join(", ")
+                      : "Đủ trường chính"}
+                  </p>
+                </div>
+                <div className="assist-block suggested-reply">
+                  <span className="assist-label">Gợi ý trả lời</span>
+                  <p>{assist.reply}</p>
+                  <button
+                    type="button"
+                    className="inline-tool-btn"
+                    onClick={copySuggestedReply}
+                  >
+                    <Copy className="icon" aria-hidden="true" />
+                    <span>Sao chép</span>
+                  </button>
+                </div>
+                <div className="assist-block">
+                  <span className="assist-label">Bước tiếp theo</span>
+                  <p>{assist.nextAction}</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="context-card">
+              <div className="section-head">
+                <h3>Tín hiệu</h3>
+              </div>
+              <div className="recipe-list">
+                {recipes.map((recipe) => (
+                  <div
+                    key={recipe.key}
+                    className={`recipe-row ${recipe.active ? "active" : ""}`}
+                  >
+                    <Workflow className="icon" aria-hidden="true" />
+                    <span>
+                      <span className="recipe-name">{recipe.name}</span>
+                      <span className="recipe-status">{recipe.status}</span>
+                    </span>
+                    {recipe.action && (
+                      <button
+                        type="button"
+                        className="inline-tool-btn recipe-action"
+                        disabled={disabled}
+                        onClick={() => {
+                          void handleRunAction(recipe.action);
+                        }}
+                      >
+                        <span>Áp dụng</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+
+        {activeTab === "agent" && (
+          <section className="context-card">
+            <div className="section-head">
+              <h3>Sức khỏe agent</h3>
+            </div>
+            <div className="health-list">
+              <ContextStatus
+                Icon={WandSparkles}
+                label="Chế độ"
+                value={assist.modeLabel}
+                healthy={activeMode !== "closed"}
+              />
+              <ContextStatus
+                Icon={CheckCircle2}
+                label="Thông tin ứng viên"
+                value={
+                  assist.missing.length === 0
+                    ? "Đủ dữ liệu chính"
+                    : `Thiếu ${assist.missing.length} trường`
+                }
+                healthy={assist.missing.length === 0}
+              />
+              <ContextStatus
+                Icon={BookOpen}
+                label="Training"
+                value="Mở knowledge để kiểm tra nguồn"
+                healthy
+              />
+            </div>
+            <div className="context-link-list">
+              <Link to="/knowledge_sources" className="context-link">
+                <BookOpen className="icon" aria-hidden="true" />
+                <span>Training knowledge</span>
+              </Link>
+              <Link to="/personas" className="context-link">
+                <BotMessageSquare className="icon" aria-hidden="true" />
+                <span>Manage agent</span>
+              </Link>
+              <Link to="/projects" className="context-link">
+                <Briefcase className="icon" aria-hidden="true" />
+                <span>Project catalog</span>
+              </Link>
+            </div>
+          </section>
+        )}
       </div>
     </aside>
   );
 };
 
-const ContextDetail = ({
+const ContextTabButton = ({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    role="tab"
+    aria-selected={active}
+    className={`context-tab ${active ? "active" : ""}`}
+    onClick={onClick}
+  >
+    {label}
+  </button>
+);
+
+const TagPickerGroup = ({
+  title,
+  tags,
+  activeTagSet,
+  tagSaving,
+  disabled,
+  onToggle,
+}: {
+  title: string;
+  tags: ManualLeadTagInput[];
+  activeTagSet: Set<string>;
+  tagSaving: string | null;
+  disabled: boolean;
+  onToggle: (tag: ManualLeadTagInput) => Promise<void>;
+}) => (
+  <div className="tag-picker-group">
+    <div className="tag-picker-label">{title}</div>
+    <div className="tag-picker" aria-label={title}>
+      {tags.map((tag) => {
+        const selected = activeTagSet.has(tag.key);
+        return (
+          <button
+            key={`${title}-${tag.key}`}
+            type="button"
+            className={`tag-picker-chip ${tag.tone ?? "info"} ${
+              selected ? "active" : ""
+            }`}
+            disabled={disabled || tagSaving === tag.key}
+            onClick={() => {
+              void onToggle(tag);
+            }}
+          >
+            {tagSaving === tag.key ? "Đang lưu..." : tag.label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+);
+
+const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
+  const Icon = item.Icon;
+  return (
+    <div className={`candidate-info-row ${item.complete ? "filled" : ""}`}>
+      <span className="candidate-info-icon">
+        <Icon className="icon" aria-hidden="true" />
+      </span>
+      <span className="candidate-info-copy">
+        <span className="candidate-info-label">{item.label}</span>
+        <span className="candidate-info-value">{item.value}</span>
+      </span>
+      <span className="candidate-info-state" aria-hidden="true">
+        {item.complete ? <Check className="icon" /> : null}
+      </span>
+    </div>
+  );
+};
+
+const ContextStatus = ({
   Icon,
   label,
   value,
+  healthy,
 }: {
   Icon: LucideIcon;
   label: string;
-  value: unknown;
+  value: string;
+  healthy: boolean;
 }) => (
-  <div className="detail-row">
+  <div className={`context-status ${healthy ? "healthy" : "warning"}`}>
     <span className="detail-icon">
       <Icon className="icon" aria-hidden="true" />
     </span>
     <span>
       <span className="detail-label">{label}</span>
-      <span className={`detail-value ${value ? "" : "missing"}`}>
-        {display(value)}
-      </span>
+      <span className="detail-value">{value}</span>
     </span>
   </div>
 );

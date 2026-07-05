@@ -1,9 +1,10 @@
-"""LLM/embedder clients: GeminiEmbedder + MiniMax agent/safety + shared chat factory.
+"""LLM/embedder clients + MiniMax/OpenRouter agent/safety/digest factories.
 
 Heavy SDKs (google-genai, langchain-openai / langchain-core) are imported LAZILY inside
 methods so importing this module stays cheap and free of optional-dependency failures at
 import time. Tool schemas + dispatch live in ``schemas.py``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +20,7 @@ from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 logger = logging.getLogger(__name__)
 
 # ── LLM observability helpers (Redis-backed, process-agnostic) ──────────────
-_RKEY_429 = "llm:minimax_429s"      # INCR on 429, EXPIRE 60 (rolling minute)
+_RKEY_429 = "llm:minimax_429s"  # INCR on 429, EXPIRE 60 (rolling minute)
 _RKEY_INVOKE_COUNT = "llm:invoke_count"
 _RKEY_INVOKE_MS = "llm:invoke_total_ms"
 _RKEY_FALLBACK_COUNT = "llm:fallback_count"
@@ -63,6 +64,8 @@ def _record_llm_fallback() -> None:
         r.expire(_RKEY_FALLBACK_COUNT, 120)
     except Exception:  # noqa: BLE001
         logger.warning("failed to record llm fallback to redis", exc_info=True)
+
+
 ModelRole = Literal["agent", "safety", "digest"]
 
 
@@ -135,6 +138,9 @@ class GeminiEmbedder:
     async def embed(self, text: str) -> list[float]:
         return (await self.batch([text]))[0]
 
+    async def __call__(self, text: str) -> list[float]:
+        return await self.embed(text)
+
     async def batch(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts in chunked SDK calls.
 
@@ -143,14 +149,14 @@ class GeminiEmbedder:
         texts.  This method chunks into sub-batches to stay within limits
         and guarantee one vector per input.
         """
-        from app.graph.llm_semaphore import get_embed_semaphore
-        from google import genai
-
-        embed_sem = get_embed_semaphore()
         if not texts:
             return []
         if not self.s.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY is required for Gemini embeddings")
+        from app.graph.llm_semaphore import get_embed_semaphore
+        from google import genai
+
+        embed_sem = get_embed_semaphore()
         if self._client is None:
             self._client = genai.Client(api_key=self.s.gemini_api_key)
         all_vectors: list[list[float]] = []
@@ -158,7 +164,8 @@ class GeminiEmbedder:
             chunk = texts[i : i + self._EMBED_BATCH_SIZE]
             async with embed_sem:
                 resp = await self._client.aio.models.embed_content(
-                    model=self.s.gemini_embedding_model, contents=chunk,
+                    model=self.s.gemini_embedding_model,
+                    contents=chunk,
                 )
             if resp.embeddings:
                 all_vectors.extend(list(e.values) for e in resp.embeddings)
@@ -167,6 +174,78 @@ class GeminiEmbedder:
                 # caller (embed_with_fallback) can retry one-by-one.
                 all_vectors.extend([0.0] * (self.s.embedding_dim or 768) for _ in chunk)
         return all_vectors
+
+
+class OpenRouterEmbedder:
+    """OpenRouter embeddings client using the OpenAI-compatible embeddings API."""
+
+    _EMBED_BATCH_SIZE = 96
+
+    def __init__(
+        self,
+        settings=None,
+        *,
+        api_key: str | None = None,
+    ) -> None:
+        self.s = settings or get_settings()
+        self.api_key = api_key or self.s.openrouter_api_key
+
+    async def embed(self, text: str) -> list[float]:
+        return (await self.batch([text]))[0]
+
+    async def __call__(self, text: str) -> list[float]:
+        return await self.embed(text)
+
+    async def batch(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        if not self.api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter embeddings")
+
+        import httpx
+
+        url = f"{self.s.openrouter_base_url.rstrip('/')}/embeddings"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        all_vectors: list[list[float]] = []
+        for i in range(0, len(texts), self._EMBED_BATCH_SIZE):
+            chunk = texts[i : i + self._EMBED_BATCH_SIZE]
+            payload = {
+                "model": self.s.openrouter_embedding_model,
+                "input": chunk,
+                "dimensions": self.s.embedding_dim,
+            }
+            async with httpx.AsyncClient(timeout=self.s.openrouter_embedding_timeout) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            body = resp.json()
+            rows = sorted(body.get("data", []), key=lambda row: row.get("index", 0))
+            if len(rows) != len(chunk):
+                raise RuntimeError(
+                    f"OpenRouter embeddings returned {len(rows)} vectors for {len(chunk)} inputs"
+                )
+            vectors = [row.get("embedding") for row in rows]
+            if not all(isinstance(vector, list) and vector for vector in vectors):
+                raise RuntimeError("OpenRouter embeddings response did not include vectors")
+            all_vectors.extend([[float(value) for value in vector] for vector in vectors])
+        return all_vectors
+
+
+def build_embedder(
+    settings=None,
+    *,
+    openrouter_api_key: str | None = None,
+):
+    """Build the configured embedding client."""
+    s = settings or get_settings()
+    provider = (s.embedding_provider or "openrouter").strip().lower()
+    if provider == "openrouter":
+        return OpenRouterEmbedder(s, api_key=openrouter_api_key)
+    if provider == "gemini":
+        return GeminiEmbedder(s)
+    raise RuntimeError("EMBEDDING_PROVIDER must be 'openrouter' or 'gemini'")
 
 
 class MiniMaxAgent:
@@ -192,7 +271,12 @@ class MiniMaxAgent:
         messages = [SystemMessage(content=system)]
         if _should_prefetch_knowledge(user_text):
             try:
-                prefetched = await _dispatch_tool(db, embedder, "search_knowledge", {"query": user_text})
+                prefetched = await _dispatch_tool(
+                    db,
+                    embedder,
+                    "search_knowledge",
+                    {"query": user_text},
+                )
             except Exception:  # noqa: BLE001
                 logger.warning("Contact knowledge prefetch failed", exc_info=True)
             else:
@@ -201,7 +285,8 @@ class MiniMaxAgent:
                         content=(
                             "KẾT QUẢ TRA CỨU KB CHỦ ĐỘNG CHO CÂU HỎI LIÊN HỆ/ADMIN/SỐ ĐIỆN THOẠI:\n"
                             f"{prefetched}\n\n"
-                            "Nếu kết quả có liên hệ hoặc số điện thoại từ KB, hãy trả lời trực tiếp theo dữ liệu đó. "
+                            "Nếu kết quả có liên hệ hoặc số điện thoại từ KB, "
+                            "hãy trả lời trực tiếp theo dữ liệu đó. "
                             "Nếu không có, mới nói chưa có thông tin trong dữ liệu."
                         )
                     )
@@ -268,9 +353,7 @@ class FallbackLLM:
 
     def bind_tools(self, tools):
         bound_primary = (
-            self.primary.bind_tools(tools)
-            if hasattr(self.primary, "bind_tools")
-            else self.primary
+            self.primary.bind_tools(tools) if hasattr(self.primary, "bind_tools") else self.primary
         )
         bound_fallback = (
             self.fallback.bind_tools(tools)
@@ -288,7 +371,13 @@ class FallbackLLM:
             return await self.fallback.ainvoke(messages, **kwargs)
 
 
-def _minimax_chat(model: str, *, temperature: float, max_retries: int = 0):
+def _minimax_chat(
+    model: str,
+    *,
+    temperature: float,
+    max_retries: int = 0,
+    api_key: str | None = None,
+):
     """OpenAI-compatible MiniMax client from settings. Shared construction so
     model / base_url / timeout cannot drift between build_deps and the extractor.
 
@@ -296,14 +385,15 @@ def _minimax_chat(model: str, *, temperature: float, max_retries: int = 0):
     level retry; the openai library's built-in retry would just waste time (3× the
     timeout) before the fallback kicks in.
     """
+    s = get_settings()
+    resolved_api_key = api_key or s.minimax_api_key
+    if not resolved_api_key:
+        raise RuntimeError("MINIMAX_API_KEY is required for MiniMax chat")
     from langchain_openai import ChatOpenAI
 
-    s = get_settings()
-    if not s.minimax_api_key:
-        raise RuntimeError("MINIMAX_API_KEY is required for MiniMax chat")
     return ChatOpenAI(
         model=model,
-        api_key=s.minimax_api_key,
+        api_key=resolved_api_key,
         base_url=s.minimax_base_url,
         timeout=s.minimax_request_timeout,
         temperature=temperature,
@@ -311,17 +401,26 @@ def _minimax_chat(model: str, *, temperature: float, max_retries: int = 0):
     )
 
 
-def _openrouter_chat(model: str, *, temperature: float, timeout: int | None = None, json_mode: bool = False, max_retries: int = 0):
+def _openrouter_chat(
+    model: str,
+    *,
+    temperature: float,
+    timeout: int | None = None,
+    json_mode: bool = False,
+    max_retries: int = 0,
+    api_key: str | None = None,
+):
     """OpenAI-compatible OpenRouter client from settings."""
+    s = get_settings()
+    resolved_api_key = api_key or s.openrouter_api_key
+    if not resolved_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter chat")
     from langchain_openai import ChatOpenAI
 
-    s = get_settings()
-    if not s.openrouter_api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter chat")
     kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
     return ChatOpenAI(
         model=model,
-        api_key=s.openrouter_api_key,
+        api_key=resolved_api_key,
         base_url=s.openrouter_base_url,
         timeout=timeout or s.openrouter_request_timeout,
         temperature=temperature,
@@ -342,31 +441,43 @@ def _active_llm_provider(settings=None) -> Literal["minimax", "openrouter"]:
     raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
 
 
-def _chat_for_role(role: ModelRole, *, temperature: float, json_mode: bool = False):
+def _chat_for_role(
+    role: ModelRole,
+    *,
+    temperature: float,
+    json_mode: bool = False,
+    minimax_api_key: str | None = None,
+    openrouter_api_key: str | None = None,
+):
     """Build the OpenAI-compatible chat client for an agent/safety/digest role.
 
     When both MINIMAX_ENABLE and OPENROUTER_ENABLE are true, returns a ``FallbackLLM``
     that tries MiniMax first and automatically retries with OpenRouter on failure.
     """
-    from langchain_openai import ChatOpenAI
-
     s = get_settings()
     minimax_enabled = getattr(s, "minimax_enable", True)
     openrouter_enabled = getattr(s, "openrouter_enable", False)
 
     if not minimax_enabled and not openrouter_enabled:
-        raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
+        raise RuntimeError(
+            "No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true"
+        )
 
     # Build MiniMax client (primary when enabled)
     primary = None
     if minimax_enabled:
+        resolved_minimax_key = minimax_api_key or s.minimax_api_key
         if role == "digest":
-            if not s.minimax_api_key:
+            if not resolved_minimax_key:
                 raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
-            kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+            from langchain_openai import ChatOpenAI
+
+            kwargs = (
+                {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+            )
             primary = ChatOpenAI(
                 model=s.minimax_digest_model or s.minimax_agent_model,
-                api_key=s.minimax_api_key,
+                api_key=resolved_minimax_key,
                 base_url=s.minimax_base_url,
                 timeout=s.minimax_digest_timeout,
                 temperature=temperature,
@@ -374,18 +485,29 @@ def _chat_for_role(role: ModelRole, *, temperature: float, json_mode: bool = Fal
             )
         else:
             model = s.minimax_agent_model if role == "agent" else s.minimax_safety_model
-            primary = _minimax_chat(model, temperature=temperature)
+            primary = _minimax_chat(
+                model,
+                temperature=temperature,
+                api_key=resolved_minimax_key,
+            )
 
     # Build OpenRouter client (fallback when MiniMax is also enabled, or sole provider)
     fallback = None
     if openrouter_enabled:
+        resolved_openrouter_key = openrouter_api_key or s.openrouter_api_key
         model = {
             "agent": s.openrouter_agent_model,
             "safety": s.openrouter_safety_model,
             "digest": s.openrouter_digest_model or s.openrouter_agent_model,
         }[role]
         timeout = s.openrouter_digest_timeout if role == "digest" else s.openrouter_request_timeout
-        fallback = _openrouter_chat(model, temperature=temperature, timeout=timeout, json_mode=json_mode)
+        fallback = _openrouter_chat(
+            model,
+            temperature=temperature,
+            timeout=timeout,
+            json_mode=json_mode,
+            api_key=resolved_openrouter_key,
+        )
 
     if primary and fallback:
         return FallbackLLM(primary, fallback)

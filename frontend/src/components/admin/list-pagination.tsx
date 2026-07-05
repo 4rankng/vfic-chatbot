@@ -55,12 +55,27 @@ export const ListPagination = ({
     setPage,
   } = useListPaginationContext();
 
-  const pageStart = (page - 1) * perPage + 1;
-  const pageEnd = hasNextPage ? page * perPage : total;
+  const knownTotal = total ?? 0;
+  const resolvedTotal = knownTotal === -1 ? page * perPage : knownTotal;
+  const hasResults = resolvedTotal > 0;
+  const pageStart = hasResults ? (page - 1) * perPage + 1 : 0;
+  const pageEnd = hasResults
+    ? knownTotal === -1 || hasNextPage
+      ? page * perPage
+      : resolvedTotal
+    : 0;
+  const rangeLabel = hasResults
+    ? `${pageStart}-${pageEnd} / ${resolvedTotal}`
+    : translate("ra.navigation.page_range_empty", { _: "No results" });
 
   const boundaryCount = 1;
   const siblingCount = 1;
-  const count = total ? Math.ceil(total / perPage) : 1;
+  const count =
+    knownTotal === -1
+      ? page + (hasNextPage ? 1 : 0)
+      : knownTotal > 0
+        ? Math.ceil(knownTotal / perPage)
+        : 1;
 
   const range = (start: number, end: number) => {
     const length = end - start + 1;
@@ -132,20 +147,7 @@ export const ListPagination = ({
           </SelectContent>
         </Select>
       </div>
-      <div className="text-sm text-muted-foreground">
-        <Translate
-          i18nKey="ra.navigation.page_range_info"
-          options={{
-            offsetBegin: pageStart,
-            offsetEnd: pageEnd,
-            total: total === -1 ? pageEnd : total,
-          }}
-        >
-          {total != null
-            ? `${pageStart}-${pageEnd} of ${total === -1 ? pageEnd : total}`
-            : null}
-        </Translate>
-      </div>
+      <div className="text-sm text-muted-foreground">{rangeLabel}</div>
       <Pagination className="-w-full -mx-auto">
         <PaginationContent>
           <PaginationItem>

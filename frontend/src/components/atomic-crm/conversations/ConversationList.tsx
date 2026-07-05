@@ -6,6 +6,7 @@ import {
   memo,
   useRef,
   useDeferredValue,
+  type ReactNode,
 } from "react";
 import {
   InfiniteListBase,
@@ -13,7 +14,7 @@ import {
   useListContext,
   RecordContextProvider,
 } from "ra-core";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import type { Conversation, Lead } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "./InboxIcons";
@@ -23,20 +24,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
 import {
-  Ban,
-  BookOpen,
-  Bot,
-  Briefcase,
-  Clock3,
-  Handshake,
   Inbox,
   MessageCircle,
   Phone,
-  PhoneOff,
-  Sparkles,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
+import {
+  persistActiveWorkspaceFilter,
+  readActiveWorkspaceFilter,
+  type WorkspaceFilterKey,
+} from "./chatOpsWorkspace";
+import { WorkspaceIconRail } from "./WorkspaceShell";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
@@ -44,16 +43,7 @@ type ConversationRow = Conversation & {
   _snippet?: string;
 };
 
-type WorkspaceFilter =
-  | "all"
-  | "needs_attention"
-  | "has_phone"
-  | "missing_phone"
-  | "follow_up"
-  | "not_interested"
-  | "human"
-  | "semi_auto"
-  | "bot";
+type WorkspaceFilter = WorkspaceFilterKey;
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 const CONVERSATION_MODE_GROUPS: {
@@ -115,24 +105,18 @@ const getRelativeTimeString = (dateStr?: string) => {
 };
 
 const conversationModeMeta = (mode: Conversation["mode"]) => {
-  if (mode === "human")
-    return { label: "Tư vấn viên", Icon: UserRound, tone: "manual" };
-  if (mode === "semi_auto")
-    return { label: "Bán tự động", Icon: Handshake, tone: "semi" };
-  if (mode === "bot") return { label: "Chatbot", Icon: Bot, tone: "auto" };
-  return { label: "Closed", Icon: Bot, tone: "closed" };
-};
-
-type ConversationModeMeta = ReturnType<typeof conversationModeMeta> & {
-  Icon: LucideIcon;
+  if (mode === "human") return { label: "Tư vấn viên", tone: "manual" };
+  if (mode === "semi_auto") return { label: "Bán tự động", tone: "semi" };
+  if (mode === "bot") return { label: "Chatbot", tone: "auto" };
+  return { label: "Đã đóng", tone: "closed" };
 };
 
 // Hoisted static style objects so list rows don't allocate brand-new objects on
 // every render (defeats React.memo). These have no per-row variance.
 const UNREAD_BADGE_DOT_STYLE: React.CSSProperties = {
   position: "absolute",
-  top: -2,
-  right: -2,
+  top: 0,
+  right: 0,
   width: 12,
   height: 12,
   borderRadius: 9999,
@@ -142,8 +126,8 @@ const UNREAD_BADGE_DOT_STYLE: React.CSSProperties = {
 
 const UNREAD_BADGE_COUNT_STYLE: React.CSSProperties = {
   position: "absolute",
-  top: -6,
-  right: -6,
+  top: -1,
+  right: -1,
   minWidth: 18,
   height: 18,
   padding: "0 4px",
@@ -158,8 +142,8 @@ const UNREAD_BADGE_COUNT_STYLE: React.CSSProperties = {
 } as const;
 
 const AVATAR_ICON_STYLE: React.CSSProperties = {
-  width: "22px",
-  height: "22px",
+  width: "18px",
+  height: "18px",
 } as const;
 
 // Hoisted skeleton styles — same rationale as UNREAD_BADGE_*: avoid
@@ -221,16 +205,14 @@ const ConversationListItem = memo(
     // back to the contact's phone when no snippet is available yet.
     const subtitle = conversation._snippet || lead?.phone || "";
 
-    const modeMeta: ConversationModeMeta = conversationModeMeta(
-      conversation.mode,
-    );
+    const modeMeta = conversationModeMeta(conversation.mode);
     const channel = conversation.zalo_channel === "oa" ? "oa" : "bot";
+    const needsAttention = needsVisibleAttention(conversation, readIds);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
     const unread = readIds.has(conversation.id)
       ? 0
       : (conversation.unread_count ?? 0);
-    const needsAttention = needsVisibleAttention(conversation, readIds);
 
     return (
       <button
@@ -271,30 +253,17 @@ const ConversationListItem = memo(
           </span>
           <span className="conv-bottom">
             {subtitle && <span className="conv-preview">{subtitle}</span>}
-            <span className="conv-badges">
+            <span className="conv-meta-row">
               {priority && (
                 <span className={`mini-chip priority-${priority.tone}`}>
                   {priority.label}
                 </span>
               )}
-              {needsAttention && (
-                <span className="mini-chip attention">Cần xử lý</span>
-              )}
-              {lead && hasLeadPhone(lead) && (
-                <span className="mini-chip phone">Có SĐT</span>
-              )}
-              {lead && hasFollowUp(lead) && (
-                <span className="mini-chip followup">Follow-up</span>
-              )}
-              <span className={`mini-chip channel ${channel}`}>
-                {channel === "oa" ? "OA" : "BOT"}
-              </span>
               <span
-                className={`mini-chip mode-icon-chip ${modeMeta.tone}`}
-                aria-label={modeMeta.label}
+                className={`conv-mode-label ${modeMeta.tone}`}
                 title={modeMeta.label}
               >
-                <modeMeta.Icon className="icon" aria-hidden="true" />
+                {channel === "oa" ? "OA" : "Bot"} · {modeMeta.label}
               </span>
             </span>
           </span>
@@ -390,19 +359,30 @@ const ConversationListPanel = ({
     return () => {
       cancelled = true;
     };
-  }, [conversationIdsKey]);
+  }, [conversationIdsKey, conversations]);
 
   const searchedRows: ConversationRow[] = useMemo(() => {
     if (!conversations) return [];
     return conversations
-      .map((c) => ({
-        ...c,
-        _lead: leads[c.zalo_chat_id] ?? null,
-        _snippet: snippets[c.zalo_chat_id] ?? "",
-      }))
+      .map((c) => {
+        const lead = leads[c.zalo_chat_id] ?? null;
+        return {
+          ...c,
+          _lead: lead,
+          _snippet: snippets[c.zalo_chat_id] ?? "",
+        };
+      })
       .filter((c) => {
         if (deferredQuery) {
-          const haystack = [c.zalo_chat_id, c._lead?.name, c._lead?.phone]
+          const haystack = [
+            c.zalo_chat_id,
+            c._lead?.name,
+            c._lead?.phone,
+            c._lead?.desired_job,
+            c._lead?.region,
+            c._lead?.living_area,
+            c._snippet,
+          ]
             .filter(Boolean)
             .join(" ");
           if (!vietnameseSearchIncludes(haystack, deferredQuery)) return false;
@@ -494,21 +474,21 @@ const ConversationListPanel = ({
         activeFilter={activeFilter}
         stats={workspaceStats}
         onFilterChange={onFilterChange}
+        searchSlot={
+          <label className="search">
+            <svg className="icon">
+              <use href="#i-search" />
+            </svg>
+            <input
+              type="search"
+              placeholder="Tìm ứng viên hoặc số điện thoại"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <span className="search-key">⌘K</span>
+          </label>
+        }
       />
-      <div className="inbox-tools">
-        <label className="search">
-          <svg className="icon">
-            <use href="#i-search" />
-          </svg>
-          <input
-            type="search"
-            placeholder="Tìm ứng viên hoặc số điện thoại"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <span className="search-key">⌘K</span>
-        </label>
-      </div>
 
       <div
         className="conversations animate-in fade-in-0 duration-300"
@@ -558,31 +538,31 @@ const WORKSPACE_FILTERS: Array<{
   label: string;
   Icon: LucideIcon;
 }> = [
-  { key: "all", label: "Tất cả chat", Icon: Inbox },
+  { key: "all", label: "Tất cả", Icon: Inbox },
   { key: "needs_attention", label: "Cần trả lời", Icon: MessageCircle },
   { key: "has_phone", label: "Có SĐT", Icon: Phone },
-  { key: "missing_phone", label: "Thiếu SĐT", Icon: PhoneOff },
-  { key: "follow_up", label: "Follow-up", Icon: Clock3 },
-  { key: "not_interested", label: "Không quan tâm", Icon: Ban },
-  { key: "human", label: "Tư vấn viên", Icon: UserRound },
-  { key: "semi_auto", label: "Bán tự động", Icon: Handshake },
-  { key: "bot", label: "Chatbot", Icon: Bot },
 ];
+
+const getInitialWorkspaceFilter = (): WorkspaceFilter => {
+  const stored = readActiveWorkspaceFilter();
+  return WORKSPACE_FILTERS.some((filter) => filter.key === stored)
+    ? stored
+    : "all";
+};
 
 const WorkspaceRail = ({
   activeFilter,
   stats,
   onFilterChange,
+  searchSlot,
 }: {
   activeFilter: WorkspaceFilter;
   stats: Record<WorkspaceFilter, number>;
   onFilterChange: (filter: WorkspaceFilter) => void;
+  searchSlot: ReactNode;
 }) => (
   <div className="workspace-rail" aria-label="Không gian làm việc">
-    <div className="workspace-title">
-      <span className="workspace-kicker">VFIC ChatOps</span>
-      <span>Hộp thoại tuyển dụng</span>
-    </div>
+    <div className="inbox-tools">{searchSlot}</div>
     <div className="workspace-filter-list">
       {WORKSPACE_FILTERS.map(({ key, label, Icon }) => (
         <button
@@ -597,21 +577,6 @@ const WorkspaceRail = ({
         </button>
       ))}
     </div>
-    <div className="workspace-section-title">Agent</div>
-    <div className="workspace-link-list">
-      <Link to="/knowledge_sources" className="workspace-link">
-        <BookOpen className="icon" aria-hidden="true" />
-        <span>Training</span>
-      </Link>
-      <Link to="/personas" className="workspace-link">
-        <Sparkles className="icon" aria-hidden="true" />
-        <span>Agent</span>
-      </Link>
-      <Link to="/projects" className="workspace-link">
-        <Briefcase className="icon" aria-hidden="true" />
-        <span>Dự án</span>
-      </Link>
-    </div>
   </div>
 );
 
@@ -620,7 +585,9 @@ const ConversationListContent = () => {
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<WorkspaceFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<WorkspaceFilter>(() =>
+    getInitialWorkspaceFilter(),
+  );
   const conversationIdsKey = useMemo(
     () => conversations?.map((c) => c.id).join("|") ?? "",
     [conversations],
@@ -633,6 +600,11 @@ const ConversationListContent = () => {
   useEffect(() => {
     setPendingReadIds((current) => (current.size === 0 ? current : new Set()));
   }, [conversationIdsKey]);
+
+  const changeWorkspaceFilter = useCallback((filter: WorkspaceFilter) => {
+    setActiveFilter(filter);
+    persistActiveWorkspaceFilter(filter);
+  }, []);
 
   const urlId = searchParams.get("id");
   // On mobile the detail pane is shown iff a conversation id is in the URL, so
@@ -732,24 +704,23 @@ const ConversationListContent = () => {
     >
       <InboxIcons />
       <main
-        className={`app ${detailOpen ? "detail-open" : ""} ${
-          selected && !isMobile ? "profile-open" : ""
-        }`}
+        className={`app ${detailOpen ? "detail-open" : ""}`}
         id="app"
       >
+        <WorkspaceIconRail />
         <ConversationListPanel
           selectedId={selected?.id ?? null}
           onSelect={openConversation}
           readIds={pendingReadIds}
           activeFilter={activeFilter}
-          onFilterChange={setActiveFilter}
+          onFilterChange={changeWorkspaceFilter}
         />
 
         {selected ? (
           <RecordContextProvider value={selected}>
             <ConversationShowContent
               onOpenList={backToList}
-              showWorkspacePanel={!isMobile}
+              showWorkspacePanel
             />
           </RecordContextProvider>
         ) : (

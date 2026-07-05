@@ -1,8 +1,9 @@
 """LLM + embedding client boundaries (injectable for tests).
 
-Production: MiniMax M2.7 (agent) + M2.5 (safety) via OpenAI-compatible ChatOpenAI,
-Gemini embedding-2 via google-genai. Keys live server-side only. Tests inject fakes.
+Production: MiniMax/OpenRouter chat clients plus a configured 3072-dim embedder.
+Keys live server-side only. Tests inject fakes.
 """
+
 from __future__ import annotations
 
 from typing import Awaitable, Callable, Protocol

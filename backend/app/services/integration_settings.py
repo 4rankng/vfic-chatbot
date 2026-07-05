@@ -1,4 +1,5 @@
 """Database-backed integration settings with encrypted secret values."""
+
 from __future__ import annotations
 
 import base64
@@ -20,6 +21,8 @@ ZALO_BOT_WEBHOOK_SECRET = "zalo_bot_webhook_secret"
 ZALO_OA_APP_ID = "zalo_oa_app_id"
 ZALO_OA_SECRET_KEY = "zalo_oa_secret_key"
 ZALO_OA_ACCESS_TOKEN = "zalo_oa_access_token"
+MINIMAX_API_KEY = "minimax_api_key"
+OPENROUTER_API_KEY = "openrouter_api_key"
 
 ZALO_SETTING_KEYS = (
     ZALO_BOT_TOKEN,
@@ -28,6 +31,9 @@ ZALO_SETTING_KEYS = (
     ZALO_OA_SECRET_KEY,
     ZALO_OA_ACCESS_TOKEN,
 )
+
+MINIMAX_SETTING_KEYS = (MINIMAX_API_KEY,)
+OPENROUTER_SETTING_KEYS = (OPENROUTER_API_KEY,)
 
 
 @dataclass(frozen=True)
@@ -41,6 +47,25 @@ class ZaloRuntimeConfig:
     oa_api_base: str = ZALO_OA_API_BASE
 
 
+@dataclass(frozen=True)
+class MinimaxRuntimeConfig:
+    api_key: str = ""
+    base_url: str = ""
+    agent_model: str = ""
+    safety_model: str = ""
+
+
+@dataclass(frozen=True)
+class OpenRouterRuntimeConfig:
+    api_key: str = ""
+    base_url: str = ""
+    agent_model: str = ""
+    safety_model: str = ""
+    digest_model: str = ""
+    embedding_model: str = ""
+    embedding_dim: int = 3072
+
+
 class IntegrationSettingsCipher:
     """Small AES-GCM wrapper for settings secrets.
 
@@ -51,10 +76,7 @@ class IntegrationSettingsCipher:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
-        raw = (
-            self._settings.integration_settings_encryption_key
-            or self._settings.jwt_secret
-        )
+        raw = self._settings.integration_settings_encryption_key or self._settings.jwt_secret
         self._key = hashlib.sha256(raw.encode("utf-8")).digest()
 
     def encrypt(self, value: str) -> str:
@@ -114,14 +136,12 @@ class IntegrationSettingsService:
         return ZaloRuntimeConfig(
             bot_token=stored.get(ZALO_BOT_TOKEN) or self.settings.zalo_bot_token,
             bot_webhook_secret=(
-                stored.get(ZALO_BOT_WEBHOOK_SECRET)
-                or self.settings.zalo_bot_webhook_secret
+                stored.get(ZALO_BOT_WEBHOOK_SECRET) or self.settings.zalo_bot_webhook_secret
             ),
             oa_app_id=stored.get(ZALO_OA_APP_ID) or self.settings.zalo_oa_app_id,
             oa_secret_key=stored.get(ZALO_OA_SECRET_KEY) or self.settings.zalo_oa_secret_key,
             oa_access_token=(
-                stored.get(ZALO_OA_ACCESS_TOKEN)
-                or self.settings.zalo_oa_access_token
+                stored.get(ZALO_OA_ACCESS_TOKEN) or self.settings.zalo_oa_access_token
             ),
         )
 
@@ -150,6 +170,54 @@ class IntegrationSettingsService:
             },
             "zalo_bot_api_base": ZALO_BOT_API_BASE,
             "zalo_oa_api_base": ZALO_OA_API_BASE,
+        }
+
+    async def resolve_minimax(self) -> MinimaxRuntimeConfig:
+        stored = await self._stored_values(MINIMAX_SETTING_KEYS)
+        return MinimaxRuntimeConfig(
+            api_key=stored.get(MINIMAX_API_KEY) or self.settings.minimax_api_key,
+            base_url=self.settings.minimax_base_url,
+            agent_model=self.settings.minimax_agent_model,
+            safety_model=self.settings.minimax_safety_model,
+        )
+
+    async def admin_minimax_view(self) -> dict:
+        cfg = await self.resolve_minimax()
+        return {
+            "minimax_api_key": {
+                "configured": bool(cfg.api_key),
+                "preview": _preview(cfg.api_key),
+            },
+            "minimax_base_url": cfg.base_url,
+            "minimax_agent_model": cfg.agent_model,
+            "minimax_safety_model": cfg.safety_model,
+        }
+
+    async def resolve_openrouter(self) -> OpenRouterRuntimeConfig:
+        stored = await self._stored_values(OPENROUTER_SETTING_KEYS)
+        return OpenRouterRuntimeConfig(
+            api_key=stored.get(OPENROUTER_API_KEY) or self.settings.openrouter_api_key,
+            base_url=self.settings.openrouter_base_url,
+            agent_model=self.settings.openrouter_agent_model,
+            safety_model=self.settings.openrouter_safety_model,
+            digest_model=self.settings.openrouter_digest_model,
+            embedding_model=self.settings.openrouter_embedding_model,
+            embedding_dim=self.settings.embedding_dim,
+        )
+
+    async def admin_openrouter_view(self) -> dict:
+        cfg = await self.resolve_openrouter()
+        return {
+            "openrouter_api_key": {
+                "configured": bool(cfg.api_key),
+                "preview": _preview(cfg.api_key),
+            },
+            "openrouter_base_url": cfg.base_url,
+            "openrouter_agent_model": cfg.agent_model,
+            "openrouter_safety_model": cfg.safety_model,
+            "openrouter_digest_model": cfg.digest_model,
+            "openrouter_embedding_model": cfg.embedding_model,
+            "openrouter_embedding_dim": cfg.embedding_dim,
         }
 
     async def update_zalo(self, values: dict[str, str | None], *, actor_id) -> list[str]:
@@ -183,6 +251,83 @@ class IntegrationSettingsService:
                 actor_id=actor_id,
                 target_type="integration_settings",
                 target_id="zalo",
+                payload={"changed_keys": changed},
+            )
+            await self.db.commit()
+        return changed
+
+    async def update_minimax(self, values: dict[str, str | None], *, actor_id) -> list[str]:
+        changed: list[str] = []
+        for key, value in values.items():
+            if key not in MINIMAX_SETTING_KEYS or value is None:
+                continue
+            cleaned = value.strip()
+            if not cleaned:
+                continue
+            row = await self.db.get(IntegrationSetting, key)
+            encrypted = self.cipher.encrypt(cleaned)
+            if row is None:
+                row = IntegrationSetting(
+                    key=key,
+                    encrypted_value=encrypted,
+                    is_secret=True,
+                    updated_by=actor_id,
+                )
+                self.db.add(row)
+            else:
+                row.encrypted_value = encrypted
+                row.is_secret = True
+                row.updated_by = actor_id
+            changed.append(key)
+
+        if changed:
+            await record_audit(
+                self.db,
+                action="update_minimax_integration_settings",
+                actor_id=actor_id,
+                target_type="integration_settings",
+                target_id="minimax",
+                payload={"changed_keys": changed},
+            )
+            await self.db.commit()
+        return changed
+
+    async def update_openrouter(
+        self,
+        values: dict[str, str | None],
+        *,
+        actor_id,
+    ) -> list[str]:
+        changed: list[str] = []
+        for key, value in values.items():
+            if key not in OPENROUTER_SETTING_KEYS or value is None:
+                continue
+            cleaned = value.strip()
+            if not cleaned:
+                continue
+            row = await self.db.get(IntegrationSetting, key)
+            encrypted = self.cipher.encrypt(cleaned)
+            if row is None:
+                row = IntegrationSetting(
+                    key=key,
+                    encrypted_value=encrypted,
+                    is_secret=True,
+                    updated_by=actor_id,
+                )
+                self.db.add(row)
+            else:
+                row.encrypted_value = encrypted
+                row.is_secret = True
+                row.updated_by = actor_id
+            changed.append(key)
+
+        if changed:
+            await record_audit(
+                self.db,
+                action="update_openrouter_integration_settings",
+                actor_id=actor_id,
+                target_type="integration_settings",
+                target_id="openrouter",
                 payload={"changed_keys": changed},
             )
             await self.db.commit()

@@ -7,12 +7,13 @@
 langchain_openai is imported lazily inside each factory so the web-process import path
 stays langchain-free.
 """
+
 from __future__ import annotations
 
 import logging
 
 from app.core.config import get_settings
-from app.graph.clients import GeminiEmbedder, MiniMaxAgent, MiniMaxSafety, _chat_for_role
+from app.graph.clients import MiniMaxAgent, MiniMaxSafety, _chat_for_role, build_embedder
 from app.graph.types import GraphDeps
 
 logger = logging.getLogger(__name__)
@@ -25,12 +26,18 @@ def build_minimax_extractor():
     llm = _chat_for_role("safety", temperature=0.0)
 
     async def extractor(system: str, user: str) -> str:
-        return (await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])).content
+        return (
+            await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])
+        ).content
 
     return extractor
 
 
-def make_minimax_llm_json():
+def make_minimax_llm_json(
+    *,
+    minimax_api_key: str | None = None,
+    openrouter_api_key: str | None = None,
+):
     """(system, user) -> json_text callable for the LLM training pipeline.
 
     OpenAI-compatible MiniMax client with JSON-object response mode. Falls back to the
@@ -38,10 +45,19 @@ def make_minimax_llm_json():
     only, so the app/tests never need langchain-openai at import time.
     """
     from langchain_core.messages import HumanMessage, SystemMessage
-    llm = _chat_for_role("digest", temperature=0.1, json_mode=True)
+
+    llm = _chat_for_role(
+        "digest",
+        temperature=0.1,
+        json_mode=True,
+        minimax_api_key=minimax_api_key,
+        openrouter_api_key=openrouter_api_key,
+    )
 
     async def _call(system: str, user: str) -> str:
-        return (await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])).content
+        return (
+            await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])
+        ).content
 
     return _call
 
@@ -52,10 +68,23 @@ async def build_deps(db):
     from app.services.zalo_sender import ZaloChannelSender
 
     s = get_settings()
-    agent_llm = _chat_for_role("agent", temperature=0.3)
-    safety_llm = _chat_for_role("safety", temperature=0.0)
-    embedder = GeminiEmbedder(s)
-    zalo_config = await IntegrationSettingsService(db, settings=s).resolve_zalo()
+    integration_settings = IntegrationSettingsService(db, settings=s)
+    minimax_config = await integration_settings.resolve_minimax()
+    openrouter_config = await integration_settings.resolve_openrouter()
+    agent_llm = _chat_for_role(
+        "agent",
+        temperature=0.3,
+        minimax_api_key=minimax_config.api_key,
+        openrouter_api_key=openrouter_config.api_key,
+    )
+    safety_llm = _chat_for_role(
+        "safety",
+        temperature=0.0,
+        minimax_api_key=minimax_config.api_key,
+        openrouter_api_key=openrouter_config.api_key,
+    )
+    embedder = build_embedder(s, openrouter_api_key=openrouter_config.api_key)
+    zalo_config = await integration_settings.resolve_zalo()
     return GraphDeps(
         db=db,
         agent=MiniMaxAgent(agent_llm, embedder),

@@ -2,6 +2,7 @@
 
 Authorization is enforced here (replaces Supabase RLS + is_vfic_staff/admin helpers).
 """
+
 import uuid
 
 from fastapi import Depends, HTTPException, status
@@ -67,13 +68,13 @@ def require_recruiter(user: User = Depends(get_current_user)) -> User:
 
 
 def get_embedder():
-    """DI provider for the Gemini embedder.
+    """DI provider for the configured embedder.
 
-    Centralises ``app.graph.clients.GeminiEmbedder`` construction so routes (and the
+    Centralises ``app.graph.clients.build_embedder`` construction so routes (and the
     services they call) depend on this provider instead of reaching up into the graph
     layer. Imported lazily so langchain/google deps stay out of the web-process import
     path, matching the previous in-handler lazy import.
     """
-    from app.graph.clients import GeminiEmbedder
+    from app.graph.clients import build_embedder
 
-    return GeminiEmbedder()
+    return build_embedder()

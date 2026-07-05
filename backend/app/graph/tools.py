@@ -4,12 +4,13 @@
   * search_knowledge    -> project-scoped semantic retrieval
   * search_bus_timetable-> complete structured bus route groups + stop times
 
-Each takes an injected embedder (Gemini) + async db session, so they are testable
+Each takes an injected embedder + async db session, so they are testable
 without an LLM. STRICT rule (from the agent prompt): advise only from returned data.
 
 All SQL lives in ``app.services.retrieval.RetrievalRepository``; these functions own
 the embedding (a graph-layer concern) + the Vietnamese formatting only.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,7 +40,9 @@ async def _cached_embed(embedder: Embedder, query: str) -> list[float]:
     if not s.rag_cache_enabled:
         return await embedder(query)
     query_hash = sha256(query.encode("utf-8")).hexdigest()
-    key = f"embed:{s.gemini_embedding_model}:{s.embedding_dim}:{query_hash}"
+    provider = (s.embedding_provider or "openrouter").strip().lower()
+    model = s.openrouter_embedding_model if provider == "openrouter" else s.gemini_embedding_model
+    key = f"embed:{provider}:{model}:{s.embedding_dim}:{query_hash}"
     cached = await cache_get_json(key)
     if isinstance(cached, list) and cached:
         return [float(v) for v in cached]
@@ -72,6 +75,7 @@ async def search_user_memory(
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
     return result
 
+
 def _format_knowledge_row(r) -> str:
     """Format a single retrieval row into the agent-readable citation string."""
     metadata = getattr(r, "metadata", None) or {}
@@ -82,7 +86,11 @@ def _format_knowledge_row(r) -> str:
     anchor = citation.get("source_anchor") or metadata.get("source_anchor")
     effective = document_meta.get("effective_from")
     if document_meta.get("effective_to"):
-        effective = f"{effective} đến {document_meta.get('effective_to')}" if effective else document_meta.get("effective_to")
+        effective = (
+            f"{effective} đến {document_meta.get('effective_to')}"
+            if effective
+            else document_meta.get("effective_to")
+        )
     route = chunk_meta.get("route_id")
     suffix = f" Nguồn: {source}"
     if anchor:
@@ -105,7 +113,11 @@ def _format_knowledge_row(r) -> str:
 
 
 async def search_knowledge(
-    db: AsyncSession, embedder: Embedder, query: str, project_slug: str | None = None, top_k: int = 25
+    db: AsyncSession,
+    embedder: Embedder,
+    query: str,
+    project_slug: str | None = None,
+    top_k: int = 25,
 ) -> str:
     """Project-scoped semantic search over usable knowledge (the `documents` VIEW).
 
@@ -124,7 +136,9 @@ async def search_knowledge(
         project_ids = [str(pid)]
     s = get_settings()
     knowledge_version = await cache_version("knowledge") if s.rag_cache_enabled else "0"
-    cache_key = f"rag:knowledge:{_cache_digest(query, project_slug, top_k, project_ids, knowledge_version)}"
+    cache_key = (
+        f"rag:knowledge:{_cache_digest(query, project_slug, top_k, project_ids, knowledge_version)}"
+    )
     if s.rag_cache_enabled:
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
@@ -137,16 +151,16 @@ async def search_knowledge(
     faq_lines = [_format_knowledge_row(r) for r in faq_rows]
     faq_ids: set[str] = {str(getattr(r, "id", "")) for r in faq_rows}
 
-    rows = await repo.match_documents(
-        emb, top_k, "{}", project_ids=project_ids, query_text=query
-    )
+    rows = await repo.match_documents(emb, top_k, "{}", project_ids=project_ids, query_text=query)
     if not rows and not faq_lines:
         result = "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
         return result
     logger.debug(
         "search_knowledge: %d rows (project=%s), %d faq rows",
-        len(rows), project_slug, len(faq_lines),
+        len(rows),
+        project_slug,
+        len(faq_lines),
     )
     lines: list[str] = []
     if faq_lines:

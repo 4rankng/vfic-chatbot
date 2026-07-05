@@ -7,6 +7,7 @@
 # NOTE: do NOT add bare `lib/`, `build/`, or `dist/` here — they match source
 #       dirs like frontend/src/lib at depth. Build output is scoped per-project.
 # =============================================================================
+plans/
 
 # --- Secrets / env (NEVER commit) ---
 .env

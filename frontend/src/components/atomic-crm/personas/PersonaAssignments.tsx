@@ -12,11 +12,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  BotMessageSquare,
   ChevronLeft,
   ChevronRight,
   Globe2,
   Loader2,
-  Sparkles,
   Workflow,
 } from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
@@ -100,19 +100,19 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   };
 
   return (
-    <Card className="mt-1 w-full rounded-lg py-0 shadow-sm">
-      <CardHeader className="border-b px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <Card className="persona-assignment-surface">
+      <CardHeader className="persona-assignment-header">
+        <div className="persona-assignment-header-row">
           <div>
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle className="persona-assignment-title">
               <Workflow className="size-4 text-primary" />
               Phạm vi sử dụng Agent
             </CardTitle>
-            <CardDescription className="mt-1.5">
+            <CardDescription className="persona-assignment-description">
               Chọn dự án dùng Agent này hoặc đặt làm mặc định toàn hệ thống.
             </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2 lg:justify-end">
+          <div className="persona-assignment-actions">
             {persona.is_active ? (
               <Badge
                 variant="outline"
@@ -147,37 +147,37 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
               {bulkSaving ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Sparkles className="size-4" />
+                <BotMessageSquare className="size-4" />
               )}
               Gán tất cả dự án
             </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="rounded-lg border bg-muted/15 p-4">
-          <div className="text-xs font-medium uppercase text-muted-foreground">
+      <CardContent className="persona-assignment-content">
+        <div className="persona-assignment-summary">
+          <div>
             Tổng dự án
           </div>
-          <div className="mt-2 text-3xl font-semibold tabular-nums">
+          <strong>
             {total}
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
+          </strong>
+          <p>
             Danh sách bên phải được phân trang từ backend. Dùng nút gán tất cả
             để áp dụng cho toàn bộ dự án.
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-lg border bg-background/70">
-          <div className="flex h-10 items-center justify-between border-b bg-muted/20 px-4">
-            <span className="text-xs font-semibold uppercase text-muted-foreground">
+        <div className="persona-assignment-table">
+          <div className="persona-assignment-table-head">
+            <span>
               Dự án
             </span>
-            <span className="text-xs text-muted-foreground tabular-nums">
+            <span>
               {(projects ?? []).length} mục trên trang
             </span>
           </div>
-          <div className="max-h-[360px] overflow-y-auto">
+          <div className="persona-assignment-table-body">
             {isPending ? (
               <div className="space-y-3 p-4">
                 {Array.from({ length: 3 }).map((_, index) => (
@@ -196,7 +196,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                   return (
                     <label
                       key={project.id}
-                      className="flex min-h-12 items-center gap-3 px-4 py-3 text-sm"
+                      className="persona-assignment-row"
                     >
                       <Checkbox
                         checked={checked}
@@ -228,8 +228,8 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between gap-3 border-t bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
-            <span className="tabular-nums">
+          <div className="persona-assignment-pagination">
+            <span>
               Trang {page} / {totalPages} ({total} dự án)
             </span>
             <div className="flex items-center gap-1">

@@ -1,8 +1,10 @@
 """Lead schemas."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -122,6 +124,56 @@ class LeadEventOut(BaseModel):
     payload: dict
     actor_id: uuid.UUID | None = None
     created_at: datetime
+
+
+class LeadTagOut(BaseModel):
+    key: str
+    label: str
+    tone: Literal["good", "warn", "danger", "info"]
+    system: bool = False
+
+
+class LeadTagInput(BaseModel):
+    key: str = Field(min_length=1, max_length=48)
+    label: str | None = Field(default=None, max_length=64)
+    tone: Literal["good", "warn", "danger", "info"] = "info"
+
+
+class LeadTagsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    keys: list[str] = Field(default_factory=list, max_length=12)
+    tags: list[LeadTagInput] = Field(default_factory=list, max_length=12)
+
+
+class LeadAssistMessageOut(BaseModel):
+    sender: str
+    body: str
+    created_at: datetime
+
+
+class LeadSignalOut(BaseModel):
+    key: str
+    name: str
+    status: str
+    active: bool
+    action: str | None = None
+
+
+class LeadAssistOut(BaseModel):
+    summary: str
+    missing: list[str]
+    reply: str
+    next_action: str
+    mode_label: str
+    signals: list[LeadSignalOut]
+    recent_messages: list[LeadAssistMessageOut] = Field(default_factory=list)
+
+
+class LeadChatOpsActionResult(BaseModel):
+    lead: LeadOut
+    tags: list[LeadTagOut]
+    assist: LeadAssistOut
 
 
 class LeadMemoryOut(BaseModel):

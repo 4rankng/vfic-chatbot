@@ -79,7 +79,7 @@ export const KnowledgeDetailPanel = ({
   };
 
   return (
-    <section className="flex min-h-[620px] flex-col gap-4 bg-transparent text-foreground sm:rounded-[14px] sm:border sm:border-border sm:bg-card sm:p-5 lg:p-6">
+    <section className="knowledge-detail-panel flex min-h-[620px] flex-col gap-4 bg-transparent text-foreground sm:rounded-[14px] sm:border sm:border-border sm:bg-card sm:p-5 lg:p-6">
       {onBack && (
         <button
           type="button"
@@ -97,7 +97,7 @@ export const KnowledgeDetailPanel = ({
             {source.file_name}
           </h3>
           <p className="kb-mono mt-1 break-words text-[12.5px] text-muted-foreground">
-            {project?.name ?? "Chưa gắn dự án"} ·{" "}
+            {project?.name ?? source.project_name ?? "Chưa gắn dự án"} ·{" "}
             {source.mime_type || "Tài liệu"} · Cập nhật{" "}
             {getRelativeTimeString(source.updated_at ?? source.created_at)}
           </p>

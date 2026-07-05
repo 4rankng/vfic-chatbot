@@ -3,6 +3,7 @@
 Secrets (Zalo token, MiniMax/Gemini keys, DB password, JWT secret) live here and
 must NEVER reach the frontend — the CRM holds only the user JWT.
 """
+
 from functools import lru_cache
 from typing import ClassVar
 
@@ -108,7 +109,13 @@ class Settings(BaseSettings):
     openrouter_request_timeout: int = 60
     openrouter_digest_timeout: int = 180
 
-    # Embeddings: Google Gemini (3072-dim).
+    # Embeddings: OpenRouter by default (3072-dim) so knowledge indexing and
+    # retrieval can use the same admin-managed OpenRouter credential path as
+    # the digest/chat models. Gemini remains available as an explicit fallback
+    # provider for environments that still carry the older key.
+    embedding_provider: str = "openrouter"
+    openrouter_embedding_model: str = "openai/text-embedding-3-large"
+    openrouter_embedding_timeout: int = 60
     gemini_api_key: str = ""
     gemini_embedding_model: str = "gemini-embedding-2"
     embedding_dim: int = 3072
@@ -148,7 +155,9 @@ class Settings(BaseSettings):
 
     # Phase 2 scaling knobs (env-tunable). 0 = disabled (no-op default).
     llm_concurrency_limit: int = 0  # Redis-backed cross-process semaphore token count (0=disabled)
-    max_llm_calls_per_turn: int = 6  # agent tool-loop ceiling (replaces hardcoded DEFAULT_MAX_ITERS)
+    max_llm_calls_per_turn: int = (
+        6  # agent tool-loop ceiling (replaces hardcoded DEFAULT_MAX_ITERS)
+    )
     embed_concurrency_limit: int = 0  # separate Gemini embed semaphore (0=disabled)
     # Backpressure: reject enqueue when webhook_high depth reaches this.
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
@@ -171,7 +180,9 @@ class Settings(BaseSettings):
             return "OpenRouter"
         if self.minimax_enable:
             return "MiniMax"
-        raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
+        raise RuntimeError(
+            "No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true"
+        )
 
     @property
     def llm_fallback_enabled(self) -> bool:
@@ -179,11 +190,19 @@ class Settings(BaseSettings):
 
     @property
     def active_llm_request_timeout(self) -> int:
-        return self.openrouter_request_timeout if self.active_llm_provider == "OpenRouter" else self.minimax_request_timeout
+        return (
+            self.openrouter_request_timeout
+            if self.active_llm_provider == "OpenRouter"
+            else self.minimax_request_timeout
+        )
 
     @property
     def active_llm_digest_timeout(self) -> int:
-        return self.openrouter_digest_timeout if self.active_llm_provider == "OpenRouter" else self.minimax_digest_timeout
+        return (
+            self.openrouter_digest_timeout
+            if self.active_llm_provider == "OpenRouter"
+            else self.minimax_digest_timeout
+        )
 
     def model_post_init(self, __context) -> None:
         """Fail fast if the deployed environment keeps the dev JWT secret.

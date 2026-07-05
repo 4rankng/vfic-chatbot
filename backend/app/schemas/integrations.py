@@ -1,4 +1,5 @@
 """Schemas for admin-managed integrations."""
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -35,4 +36,43 @@ class ZaloIntegrationSettingsUpdate(BaseModel):
 class ZaloIntegrationTestOut(BaseModel):
     bot_configured: bool
     oa_configured: bool
+    missing: list[str]
+
+
+class MinimaxIntegrationSettingsOut(BaseModel):
+    minimax_api_key: SecretStatus
+    minimax_base_url: str
+    minimax_agent_model: str
+    minimax_safety_model: str
+
+
+class MinimaxIntegrationSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    minimax_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+
+
+class MinimaxIntegrationTestOut(BaseModel):
+    configured: bool
+    missing: list[str]
+
+
+class OpenRouterIntegrationSettingsOut(BaseModel):
+    openrouter_api_key: SecretStatus
+    openrouter_base_url: str
+    openrouter_agent_model: str
+    openrouter_safety_model: str
+    openrouter_digest_model: str
+    openrouter_embedding_model: str
+    openrouter_embedding_dim: int
+
+
+class OpenRouterIntegrationSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    openrouter_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+
+
+class OpenRouterIntegrationTestOut(BaseModel):
+    configured: bool
     missing: list[str]

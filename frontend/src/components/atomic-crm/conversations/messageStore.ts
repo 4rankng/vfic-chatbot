@@ -34,7 +34,7 @@ const emptyConv = (): ConversationMessageState => ({
   isLoadingMore: false,
 });
 
-const EMPTY_MESSAGES: Message[] = Object.freeze([]) as Message[];
+const EMPTY_MESSAGES: Message[] = [];
 
 type MessageStore = {
   conversations: Map<string, ConversationMessageState>;
@@ -63,7 +63,7 @@ type MessageStore = {
 };
 
 const recomputeSorted = (byId: Map<string, Message>): Message[] => {
-  if (byId.size === 0) return EMPTY_MESSAGES as Message[];
+  if (byId.size === 0) return EMPTY_MESSAGES;
   return Array.from(byId.values()).sort(compareMessages);
 };
 
@@ -209,22 +209,31 @@ export const useMessageStore = create<MessageStore>((set) => ({
  * reads when the underlying set is unchanged. */
 export const useConversationMessages = (convId: string | undefined): Message[] => {
   return useMessageStore((s) => {
-    if (!convId) return EMPTY_MESSAGES as Message[];
-    return s.conversations.get(convId)?.sortedCache ?? (EMPTY_MESSAGES as Message[]);
+    if (!convId) return EMPTY_MESSAGES;
+    return s.conversations.get(convId)?.sortedCache ?? EMPTY_MESSAGES;
   });
 };
 
 /** All loading/pagination flags for a conversation. */
 export const useConversationFlags = (convId: string | undefined) => {
-  return useMessageStore((s) => {
-    if (!convId) return { isLoading: true, isLoadingMore: false, hasMore: false };
+  const isLoading = useMessageStore((s) => {
+    if (!convId) return true;
     const c = s.conversations.get(convId);
-    return {
-      isLoading: c?.isLoading ?? true,
-      isLoadingMore: c?.isLoadingMore ?? false,
-      hasMore: c?.hasMore ?? false,
-    };
+    return c?.isLoading ?? true;
   });
+  const isLoadingMore = useMessageStore((s) => {
+    if (!convId) return false;
+    return s.conversations.get(convId)?.isLoadingMore ?? false;
+  });
+  const hasMore = useMessageStore((s) => {
+    if (!convId) return false;
+    return s.conversations.get(convId)?.hasMore ?? false;
+  });
+
+  return useMemo(
+    () => ({ isLoading, isLoadingMore, hasMore }),
+    [hasMore, isLoading, isLoadingMore],
+  );
 };
 
 /** The newest real (non-optimistic) message id for a conversation, or null.
@@ -241,6 +250,3 @@ export const getNewestRealMessageId = (convId: string): string | null => {
   }
   return null;
 };
-
-/** Stable empty-array sentinel for `useMemo` dependencies. */
-export const useEmptyMessagesSentinel = () => useMemo(() => EMPTY_MESSAGES as Message[], []);

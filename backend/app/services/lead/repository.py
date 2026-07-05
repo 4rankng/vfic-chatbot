@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import desc, func, select, text
+from sqlalchemy import delete, desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.lead import FollowUpTask, Lead, LeadEvent
+from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadTag
 
 # ── Raw SQL constants ──────────────────────────────────────────────
 
@@ -185,6 +185,51 @@ class LeadRepository:
         await self.db.refresh(fu)
         return fu
 
+    async def list_manual_tags(self, lead_id: int) -> list[LeadTag]:
+        return list(
+            (
+                await self.db.scalars(
+                    select(LeadTag).where(LeadTag.lead_id == lead_id).order_by(LeadTag.key)
+                )
+            ).all()
+        )
+
+    async def replace_manual_tags(
+        self,
+        lead_id: int,
+        tag_payloads: list[dict[str, str]],
+        *,
+        created_by,
+    ) -> list[LeadTag]:
+        next_keys = {payload["key"] for payload in tag_payloads}
+        if next_keys:
+            await self.db.execute(
+                delete(LeadTag)
+                .where(LeadTag.lead_id == lead_id)
+                .where(LeadTag.key.not_in(next_keys))
+            )
+        else:
+            await self.db.execute(delete(LeadTag).where(LeadTag.lead_id == lead_id))
+
+        existing = {tag.key: tag for tag in await self.list_manual_tags(lead_id)}
+        for payload in tag_payloads:
+            current = existing.get(payload["key"])
+            if current is None:
+                self.db.add(
+                    LeadTag(
+                        lead_id=lead_id,
+                        key=payload["key"],
+                        label=payload["label"],
+                        tone=payload["tone"],
+                        created_by=created_by,
+                    )
+                )
+                continue
+            current.label = payload["label"]
+            current.tone = payload["tone"]
+        await self.db.flush()
+        return await self.list_manual_tags(lead_id)
+
     async def materialize_conversation_leads(self, viewer_id: object | None = None) -> None:
         """Ensure every visible chat has a lead card.
 
@@ -192,11 +237,7 @@ class LeadRepository:
         later or fail to produce profile fields. The CRM board still needs a
         stable card for that chat, defaulting to the Mới stage.
         """
-        sql = (
-            _MATERIALIZE_SQL_SCOPED
-            if viewer_id is not None
-            else _MATERIALIZE_SQL_ADMIN
-        )
+        sql = _MATERIALIZE_SQL_SCOPED if viewer_id is not None else _MATERIALIZE_SQL_ADMIN
         params = {"viewer_id": viewer_id} if viewer_id is not None else {}
 
         await self.db.execute(

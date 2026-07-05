@@ -8,9 +8,8 @@ interface NeedsAttentionResponse {
 
 /**
  * Counts conversations where the latest user message is still unanswered.
- * Computed server-side via GET /conversations/needs-attention so the bell never
- * loads conversation rows. Shared by the desktop and mobile topbar bells so
- * both stay in sync.
+ * Computed server-side via GET /conversations/needs-attention so navigation
+ * badges never load conversation rows.
  */
 export const useNotifications = () => {
   const { data } = useQuery<NeedsAttentionResponse>({
@@ -21,5 +20,5 @@ export const useNotifications = () => {
   });
 
   const count = data?.count ?? 0;
-  return { count, hasNotifications: count > 0 };
+  return { count };
 };

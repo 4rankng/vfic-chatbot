@@ -3,6 +3,7 @@
 One job performs one LLM extraction and persists both lead_patch and memory_facts.
 Job fns are sync (RQ); they asyncio.run the async services.
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,15 +35,17 @@ def _build_extractor():
 
 
 async def _persist_candidate_async(job: dict) -> None:
-    from app.graph.clients import GeminiEmbedder
+    from app.graph.clients import build_embedder
     from app.services.candidate_extraction import CandidateExtractionService
+    from app.services.integration_settings import IntegrationSettingsService
     from app.workers._db import worker_session
 
     try:
         async with worker_session() as db:
+            openrouter_config = await IntegrationSettingsService(db).resolve_openrouter()
             await CandidateExtractionService.persist(
                 db,
-                GeminiEmbedder().batch,
+                build_embedder(openrouter_api_key=openrouter_config.api_key).batch,
                 _build_extractor(),
                 job["chat_id"],
                 job.get("user_text", ""),

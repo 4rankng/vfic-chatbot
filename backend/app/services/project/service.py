@@ -208,20 +208,27 @@ class ProjectService:
     async def reindex(self, project_id: uuid.UUID) -> Project:
         """Rebuild this project's catalog card (the master-index entry) from usable units."""
         proj = await self._require_project(project_id)
-        # Imported lazily so langchain/google deps stay out of the web-process import path.
+        # Imported lazily so langchain/provider deps stay out of the web-process import path.
         from app.core.config import get_settings
-        from app.graph.clients import GeminiEmbedder
+        from app.graph.clients import build_embedder
         from app.graph.factories import make_minimax_llm_json
+        from app.services.integration_settings import IntegrationSettingsService
         from app.services.knowledge import KnowledgePipeline
 
         try:
+            integration_settings = IntegrationSettingsService(self.db)
+            minimax_config = await integration_settings.resolve_minimax()
+            openrouter_config = await integration_settings.resolve_openrouter()
             # Web sync path: cap the LLM call at the request timeout (60s), NOT the digest
             # ceiling (180s) — this runs in the web process (web_concurrency=2), so a slow
             # MiniMax index rebuild must not stall the API.
             await KnowledgePipeline(
                 self.db,
-                GeminiEmbedder(),
-                make_minimax_llm_json(),
+                build_embedder(openrouter_api_key=openrouter_config.api_key),
+                make_minimax_llm_json(
+                    minimax_api_key=minimax_config.api_key,
+                    openrouter_api_key=openrouter_config.api_key,
+                ),
                 call_timeout=get_settings().active_llm_request_timeout,
             ).build_project_index(proj.id)
         except Exception as exc:  # noqa: BLE001
@@ -415,9 +422,13 @@ class ProjectService:
         await bump_cache_version("knowledge")
 
     async def _embed_faq_chunk(self, chunk_id: uuid.UUID, question: str, answer: str) -> None:
-        from app.graph.clients import GeminiEmbedder
+        from app.graph.clients import build_embedder
+        from app.services.integration_settings import IntegrationSettingsService
 
-        vector = await GeminiEmbedder()(f"{question}\n{answer}")
+        openrouter_config = await IntegrationSettingsService(self.db).resolve_openrouter()
+        vector = await build_embedder(openrouter_api_key=openrouter_config.api_key)(
+            f"{question}\n{answer}"
+        )
         await self.repo.set_chunk_embedding(chunk_id, vec_literal(vector))
 
     @staticmethod
@@ -430,11 +441,7 @@ class ProjectService:
 
     @staticmethod
     def _append_raw_faq(raw_text: str | None, question: str, answer: str) -> str:
-        block = (
-            f"\n\n### FAQ: {question}\n\n"
-            f"Question: {question}\n\n"
-            f"Answer: {answer}\n"
-        )
+        block = f"\n\n### FAQ: {question}\n\nQuestion: {question}\n\nAnswer: {answer}\n"
         return f"{(raw_text or '').rstrip()}{block}".strip()
 
     @staticmethod
@@ -507,20 +514,27 @@ class ProjectService:
             raise ConflictError(
                 "no source document with text for this project — upload a posting first"
             )
-        # Imported lazily (langchain/google deps kept out of the web-process import path).
+        # Imported lazily (langchain/provider deps kept out of the web-process import path).
         from app.core.config import get_settings
-        from app.graph.clients import GeminiEmbedder
+        from app.graph.clients import build_embedder
         from app.graph.factories import make_minimax_llm_json
+        from app.services.integration_settings import IntegrationSettingsService
         from app.services.knowledge import KnowledgePipeline
 
         try:
+            integration_settings = IntegrationSettingsService(self.db)
+            minimax_config = await integration_settings.resolve_minimax()
+            openrouter_config = await integration_settings.resolve_openrouter()
             # Reuses the exact ingest extraction path so manual + automatic extraction stay identical.
             # Web sync path: cap at the request timeout (60s), not the digest ceiling (180s) —
             # this blocking call runs in the web process (web_concurrency=2).
             await KnowledgePipeline(
                 self.db,
-                GeminiEmbedder(),
-                make_minimax_llm_json(),
+                build_embedder(openrouter_api_key=openrouter_config.api_key),
+                make_minimax_llm_json(
+                    minimax_api_key=minimax_config.api_key,
+                    openrouter_api_key=openrouter_config.api_key,
+                ),
                 call_timeout=get_settings().active_llm_request_timeout,
             ).extract_product_features(doc, [])
         except Exception as exc:  # noqa: BLE001

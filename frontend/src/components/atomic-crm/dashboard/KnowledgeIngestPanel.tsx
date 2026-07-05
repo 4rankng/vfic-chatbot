@@ -13,8 +13,11 @@ import {
   CheckCircle2,
   Clock3,
   Database,
+  Flame,
+  MessageCircle,
   Send,
   Server,
+  Timer,
 } from "lucide-react";
 import { Navigate, useNavigate } from "react-router";
 import { usePermissions } from "ra-core";
@@ -38,7 +41,7 @@ interface VariantConfig {
 
 const V: Record<Variant, VariantConfig> = {
   desktop: {
-    rootClass: "mx-auto flex w-full flex-col gap-5 pb-8",
+    rootClass: "dashboard-ops-stack mx-auto flex w-full flex-col gap-5 pb-8",
     cardClass: "bg-card/85",
     headerClass: "pb-3",
     contentClass: "px-5 pb-5",
@@ -48,7 +51,7 @@ const V: Record<Variant, VariantConfig> = {
     issueSubtitle: (minutes) => `${minutes} phút chưa cập nhật`,
   },
   mobile: {
-    rootClass: "mx-auto flex w-full flex-col gap-4 px-4 py-5",
+    rootClass: "mx-auto flex w-full flex-col gap-4 px-4 py-5 pb-28",
     cardClass: "border border-border bg-card shadow-xs",
     headerClass: "px-4 pb-3 pt-4",
     contentClass: "px-4 pb-4",
@@ -221,6 +224,92 @@ const DonutMetric = ({
   );
 };
 
+const DashboardCommandHeader = ({
+  openConversations,
+  hotLeads,
+  pendingFollowups,
+  activeTurns,
+}: {
+  openConversations: number;
+  hotLeads: number;
+  pendingFollowups: number;
+  activeTurns: number;
+}) => (
+  <header className="ops-command-header dashboard-command-header">
+    <div className="ops-command-title">
+      <div className="ops-command-mark">
+        <Activity className="size-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="ops-kicker">Trung tâm vận hành</p>
+        <h1>Tổng quan</h1>
+        <p>
+          Theo dõi sức khỏe chatbot, hội thoại cần xử lý và quy trình huấn
+          luyện kiến thức trong một màn hình vận hành.
+        </p>
+      </div>
+    </div>
+    <div className="dashboard-live-card" aria-label="Tín hiệu đang hoạt động">
+      <span>
+        <MessageCircle className="size-3.5" />
+        {openConversations} hội thoại mở
+      </span>
+      <span>
+        <Flame className="size-3.5" />
+        {hotLeads} lead nóng
+      </span>
+      <span>
+        <Timer className="size-3.5" />
+        {activeTurns + pendingFollowups} cần theo dõi
+      </span>
+    </div>
+  </header>
+);
+
+const DashboardStatusStrip = ({
+  totalLeads,
+  unreadConversationCount,
+  pendingFollowups,
+  turnsLast5min,
+  p95BotResponseSeconds,
+  webhookQueueDepth,
+}: {
+  totalLeads: number;
+  unreadConversationCount: number;
+  pendingFollowups: number;
+  turnsLast5min: number;
+  p95BotResponseSeconds: number;
+  webhookQueueDepth: number;
+}) => (
+  <section className="ops-status-strip dashboard-status-strip">
+    <div>
+      <span className="ops-status-label">Ứng viên</span>
+      <strong>{totalLeads}</strong>
+      <small>Tổng hồ sơ</small>
+    </div>
+    <div>
+      <span className="ops-status-label">Chưa đọc</span>
+      <strong>{unreadConversationCount}</strong>
+      <small>Hội thoại cần xem</small>
+    </div>
+    <div>
+      <span className="ops-status-label">Cần hẹn lại</span>
+      <strong>{pendingFollowups}</strong>
+      <small>Đang chờ xử lý</small>
+    </div>
+    <div>
+      <span className="ops-status-label">5 phút gần nhất</span>
+      <strong>{turnsLast5min}</strong>
+      <small>Lượt chatbot</small>
+    </div>
+    <div>
+      <span className="ops-status-label">P95 / Hàng đợi</span>
+      <strong>{formatSeconds(p95BotResponseSeconds)}</strong>
+      <small>{webhookQueueDepth} webhook đang chờ</small>
+    </div>
+  </section>
+);
+
 const ChatbotHealthCard = ({
   v,
   botRunCount,
@@ -258,7 +347,7 @@ const ChatbotHealthCard = ({
   return (
     <Card className={`${v.cardClass} lg:col-span-5 xl:col-span-4`}>
       {panelTitle(
-        "Chatbot health",
+        "Sức khỏe chatbot",
         "Ưu tiên tỷ lệ gửi, độ trễ và lỗi thật sự cần xử lý.",
         <Bot className="size-4" />,
         v,
@@ -267,12 +356,12 @@ const ChatbotHealthCard = ({
         <DonutMetric
           value={botSuccessRate}
           label="Tỷ lệ gửi thành công"
-          caption={`${botSentCount}/${botRunCount} phản hồi đã gửi. Đây là KPI chính thay vì nhìn từng counter rời rạc.`}
+          caption={`${botSentCount}/${botRunCount} phản hồi đã gửi. Đây là KPI chính thay vì nhìn từng chỉ số rời rạc.`}
           tone={successTone}
         />
         <div className="grid grid-cols-2 gap-3">
           <CompactMetric
-            label="Bot runs"
+            label="Lượt bot"
             value={botRunCount}
             icon={<Activity className="size-3.5" />}
           />
@@ -283,7 +372,7 @@ const ChatbotHealthCard = ({
             tone={latencyTone}
           />
           <CompactMetric
-            label="Bot errors"
+            label="Lỗi bot"
             value={botErrors}
             icon={<AlertTriangle className="size-3.5" />}
             tone={botErrors > 0 ? "bad" : "ok"}
@@ -352,8 +441,8 @@ const DeliveryMixCard = ({
   return (
     <Card className={`${v.cardClass} lg:col-span-7 xl:col-span-4`}>
       {panelTitle(
-        "Delivery mix",
-        "Biểu đồ outcome giúp thấy ngay bot đang gửi, bị chặn hay lỗi ở đâu.",
+        "Kết quả gửi tin",
+        "Tách rõ tin đã gửi, tin bị chặn và lỗi cần xử lý.",
         <Send className="size-4" />,
         v,
       )}
@@ -390,8 +479,8 @@ const KnowledgeStagesCard = ({
   return (
     <Card className={`${v.cardClass} lg:col-span-7`}>
       {panelTitle(
-        "Knowledge pipeline",
-        "Bento chart thay cho nhiều ô nhỏ: tổng quan trạng thái ingest trong một vùng.",
+        "Dữ liệu huấn luyện",
+        "Theo dõi nguồn đã sẵn sàng, nguồn lỗi và tài liệu đang xử lý.",
         <Database className="size-4" />,
         v,
       )}
@@ -474,7 +563,7 @@ const KnowledgeOpsCard = ({
   return (
     <Card className={`${v.cardClass} lg:col-span-5`}>
       {panelTitle(
-        "Ops attention",
+        "Cần chú ý",
         "Chỉ giữ những chỉ số cần hành động: worker, queue, stuck jobs và lỗi gần đây.",
         <Server className="size-4" />,
         v,
@@ -494,13 +583,13 @@ const KnowledgeOpsCard = ({
             tone={stuckCount > 0 ? "warn" : "ok"}
           />
           <CompactMetric
-            label="Queue ingest"
+            label="Hàng đợi xử lý"
             value={queueDepth}
             icon={<Database className="size-3.5" />}
             tone={queueDepth > 0 ? "busy" : "neutral"}
           />
           <CompactMetric
-            label="Worker"
+            label="Worker xử lý"
             value={workerCount}
             icon={<Server className="size-3.5" />}
             tone={workerTone}
@@ -574,6 +663,7 @@ const KnowledgeOpsCard = ({
 export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
   const { permissions } = usePermissions();
   const {
+    activeTurns,
     avgBotResponseSeconds,
     botErrors,
     botRunCount,
@@ -584,6 +674,14 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
     failedZaloSends,
     isPending,
     knowledgeIngest,
+    hotLeads,
+    openConversations,
+    pendingFollowups,
+    p95BotResponseSeconds,
+    totalLeads,
+    turnsLast5min,
+    unreadConversationCount,
+    webhookQueueDepth,
   } = useDashboardStats();
   const v = V[variant];
 
@@ -605,6 +703,21 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
 
   return (
     <div className={v.rootClass}>
+      <DashboardCommandHeader
+        openConversations={openConversations}
+        hotLeads={hotLeads}
+        pendingFollowups={pendingFollowups}
+        activeTurns={activeTurns}
+      />
+      <DashboardStatusStrip
+        totalLeads={totalLeads}
+        unreadConversationCount={unreadConversationCount}
+        pendingFollowups={pendingFollowups}
+        turnsLast5min={turnsLast5min}
+        p95BotResponseSeconds={p95BotResponseSeconds}
+        webhookQueueDepth={webhookQueueDepth}
+      />
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <ChatbotHealthCard
           v={v}

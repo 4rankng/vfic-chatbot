@@ -17,7 +17,11 @@ import {
   mergeRealtimePage,
   sortMessagesChronologically,
 } from "./messageOrdering";
-import { useMessageStore } from "./messageStore";
+import {
+  useConversationFlags,
+  useConversationMessages,
+  useMessageStore,
+} from "./messageStore";
 
 export {
   compareMessages,
@@ -25,7 +29,7 @@ export {
   mergeRealtimePage,
 } from "./messageOrdering";
 
-export const CHAT_MESSAGES_PAGE_SIZE = 10;
+export const CHAT_MESSAGES_PAGE_SIZE = 20;
 
 const keepConversationMessages = (
   messages: Message[],
@@ -34,7 +38,16 @@ const keepConversationMessages = (
 
 export const useConversationRealtime = (conversationId?: string) => {
   // Drive the store from this hook. The store holds the actual state.
-  const store = useMessageStore();
+  const resetMessages = useMessageStore((s) => s.reset);
+  const setMessages = useMessageStore((s) => s.setMessages);
+  const upsertMessages = useMessageStore((s) => s.upsert);
+  const removeMessage = useMessageStore((s) => s.remove);
+  const addPendingOptimistic = useMessageStore((s) => s.addPendingOptimistic);
+  const patchMessage = useMessageStore((s) => s.patch);
+  const setHasMore = useMessageStore((s) => s.setHasMore);
+  const setLoadingMore = useMessageStore((s) => s.setLoadingMore);
+  const messages = useConversationMessages(conversationId);
+  const flags = useConversationFlags(conversationId);
   const isFetchingRef = useRef(false);
   const activeConversationRef = useRef<string | undefined>(conversationId);
   const requestSeqRef = useRef(0);
@@ -59,9 +72,11 @@ export const useConversationRealtime = (conversationId?: string) => {
     // but we mark loading so the UI shows a spinner briefly only if the cache
     // is empty. To avoid wiping a warm cache on rapid switches, only reset when
     // the conversation has no cached messages yet.
-    const existing = store.conversations.get(activeConversationId);
+    const existing = useMessageStore
+      .getState()
+      .conversations.get(activeConversationId);
     if (!existing || existing.byId.size === 0) {
-      store.reset(activeConversationId);
+      resetMessages(activeConversationId);
     }
 
     let cancelled = false;
@@ -98,14 +113,14 @@ export const useConversationRealtime = (conversationId?: string) => {
                 chronological,
               )
             : chronological;
-        store.setMessages(activeConversationId, merged, apiHasMore);
+        setMessages(activeConversationId, merged, apiHasMore);
       } catch {
         if (
           !cancelled &&
           requestSeqRef.current === requestSeq &&
           activeConversationRef.current === activeConversationId
         ) {
-          store.setMessages(activeConversationId, [], false);
+          setMessages(activeConversationId, [], false);
         }
       }
     };
@@ -150,7 +165,7 @@ export const useConversationRealtime = (conversationId?: string) => {
                   tempMsg &&
                   realContentSet.has(`${tempMsg.content}|${tempMsg.created_at}`)
                 ) {
-                  store.remove(activeConversationId, tempId);
+                  removeMessage(activeConversationId, tempId);
                 }
               }
             }
@@ -162,7 +177,7 @@ export const useConversationRealtime = (conversationId?: string) => {
             .conversations.get(activeConversationId);
           const currentArr = conv ? Array.from(conv.byId.values()) : [];
           const inWindow = mergeRealtimePage(currentArr, currentLatest);
-          store.upsert(activeConversationId, inWindow);
+          upsertMessages(activeConversationId, inWindow);
         },
       );
     } catch {
@@ -176,7 +191,13 @@ export const useConversationRealtime = (conversationId?: string) => {
       loadMoreAbortRef.current = null;
       cleanup?.();
     };
-  }, [conversationId, store]);
+  }, [
+    conversationId,
+    removeMessage,
+    resetMessages,
+    setMessages,
+    upsertMessages,
+  ]);
 
   // Reconnect gap-fill (Rocket.Chat useLoadMissedMessages pattern): on Socket.IO
   // disconnect→reconnect, fetch any messages the server emitted while offline.
@@ -209,7 +230,7 @@ export const useConversationRealtime = (conversationId?: string) => {
           newestId,
         );
         if (missed.length === 0) return;
-        store.upsert(conversationId, missed);
+        upsertMessages(conversationId, missed);
       } catch {
         // Best-effort gap-fill.
       }
@@ -224,7 +245,7 @@ export const useConversationRealtime = (conversationId?: string) => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
     };
-  }, [conversationId, store]);
+  }, [conversationId, upsertMessages]);
 
   // Load-more (scroll up for older history). With virtua's `shift` prop handling
   // scroll anchoring, we no longer track firstItemIndex — just fetch + upsert.
@@ -241,7 +262,7 @@ export const useConversationRealtime = (conversationId?: string) => {
       loadMoreAbortRef.current?.abort();
       loadMoreAbortRef.current = loadMoreAbort;
       isFetchingRef.current = true;
-      store.setLoadingMore(activeConversationId, true);
+      setLoadingMore(activeConversationId, true);
 
       try {
         const { messages: loadedOlder, hasMore: apiHasMore } =
@@ -257,23 +278,23 @@ export const useConversationRealtime = (conversationId?: string) => {
           return;
         }
         const older = keepConversationMessages(loadedOlder, activeConversationId);
-        store.setHasMore(activeConversationId, apiHasMore);
+        setHasMore(activeConversationId, apiHasMore);
         if (older.length > 0) {
-          store.upsert(activeConversationId, older);
+          upsertMessages(activeConversationId, older);
         }
       } catch {
         if (
           requestSeqRef.current === requestSeq ||
           activeConversationRef.current === activeConversationId
         ) {
-          store.setHasMore(activeConversationId, false);
+          setHasMore(activeConversationId, false);
         }
       } finally {
         if (
           requestSeqRef.current === requestSeq &&
           activeConversationRef.current === activeConversationId
         ) {
-          store.setLoadingMore(activeConversationId, false);
+          setLoadingMore(activeConversationId, false);
           isFetchingRef.current = false;
           if (loadMoreAbortRef.current === loadMoreAbort) {
             loadMoreAbortRef.current = null;
@@ -281,7 +302,7 @@ export const useConversationRealtime = (conversationId?: string) => {
         }
       }
     },
-    [conversationId, store],
+    [conversationId, setHasMore, setLoadingMore, upsertMessages],
   );
 
   // Insert an optimistic temp message. Returns the temp id.
@@ -300,18 +321,18 @@ export const useConversationRealtime = (conversationId?: string) => {
         data: { recruiter_id: recruiterId },
         created_at: now,
       };
-      store.addPendingOptimistic(conversationId, tempId);
-      store.upsert(conversationId, [temp]);
+      addPendingOptimistic(conversationId, tempId);
+      upsertMessages(conversationId, [temp]);
       return tempId;
     },
-    [conversationId, store],
+    [addPendingOptimistic, conversationId, upsertMessages],
   );
 
   // Mark an optimistic message as failed (keep visible with failed badge).
   const markOptimisticFailed = useCallback(
     (tempId: string) => {
       if (!conversationId) return;
-      store.patch(conversationId, tempId, { delivery_status: "failed" });
+      patchMessage(conversationId, tempId, { delivery_status: "failed" });
       // No longer pending (it's now a failed real-visible row).
       const pending = useMessageStore
         .getState()
@@ -326,10 +347,12 @@ export const useConversationRealtime = (conversationId?: string) => {
         });
       }
     },
-    [conversationId, store],
+    [conversationId, patchMessage],
   );
 
   return {
+    messages,
+    ...flags,
     loadMore,
     insertOptimistic,
     markOptimisticFailed,

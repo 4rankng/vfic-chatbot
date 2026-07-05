@@ -1,6 +1,6 @@
 """Add Zalo channel metadata and integration settings.
 
-Revision ID: 0021_zalo_channels_and_integration_settings
+Revision ID: 0021_zalo_channels_settings
 Revises: 0020_persona_followup_rules
 Create Date: 2026-07-02
 """
@@ -8,7 +8,7 @@ Create Date: 2026-07-02
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0021_zalo_channels_and_integration_settings"
+revision = "0021_zalo_channels_settings"
 down_revision = "0020_persona_followup_rules"
 branch_labels = None
 depends_on = None

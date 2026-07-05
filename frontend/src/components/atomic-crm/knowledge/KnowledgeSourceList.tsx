@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ListBase, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
-import { FileText, RefreshCw, Search, Upload } from "lucide-react";
+import { BookOpen, FileText, RefreshCw, Search, Upload } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KnowledgeUpload } from "./KnowledgeUpload";
-import { isPipelineActive } from "./knowledgePipelineUtils";
+import {
+  flaggedCount,
+  isPipelineActive,
+  isPublished,
+} from "./knowledgePipelineUtils";
 import { InlineKnowledgeUploader } from "./InlineKnowledgeUploader";
 import { KnowledgeDetailPanel } from "./KnowledgeDetailPanel";
 import {
@@ -24,10 +28,15 @@ import {
   useKnowledgeSourceFilters,
 } from "./useKnowledgeSourceFilters";
 import { ProjectPicker } from "./ProjectPicker";
+import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
+import { InboxIcons } from "../conversations/InboxIcons";
+import { useIsMobile } from "@/hooks/use-mobile";
+import "../conversations/inbox.css";
 import type { KnowledgeSource } from "../types";
 
 const KnowledgeSourceListContent = () => {
   const refresh = useRefresh();
+  const isMobile = useIsMobile();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const {
@@ -63,28 +72,39 @@ const KnowledgeSourceListContent = () => {
 
   const hasActive = sources.some(isPipelineActive);
   const hasSources = sources.length > 0;
+  const readyCount = sources.filter(isPublished).length;
+  const processingCount = sources.filter(isPipelineActive).length;
+  const reviewCount = sources.reduce(
+    (sum, source) => sum + flaggedCount(source),
+    0,
+  );
+  const unitCount = sources.reduce(
+    (sum, source) => sum + (source.digest_meta?.unit_count ?? 0),
+    0,
+  );
 
-  return (
-    <div className="kb-scope min-h-[calc(100vh-4rem)] px-3 py-5 text-foreground sm:px-4 md:px-6 lg:py-8">
-      <div className="mx-auto flex max-w-[1180px] flex-col gap-4 sm:gap-5">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0 max-w-2xl">
-            <p className="kb-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--kb-teal)]">
-              Trung tâm kiến thức
-            </p>
-            <h1 className="kb-display mt-2 text-3xl text-foreground sm:text-[34px]">
-              Quản lý kiến thức
-            </h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Theo dõi tài liệu theo từng dự án, trạng thái xử lý, và đánh dấu
-              nguồn cần xem lại trước khi agent dùng trong hội thoại.
-            </p>
-            {hasActive && (
-              <p className="kb-mono mt-3 inline-flex items-center gap-2 rounded-[9px] bg-[var(--kb-teal-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--kb-teal)]">
-                <RefreshCw className="size-3.5 animate-spin" />
-                Đang xử lý — trang tự làm mới mỗi 5 giây.
+  const content = (
+    <div className="kb-scope knowledge-workspace-content text-foreground">
+      <div className="ops-page-shell knowledge-page-shell">
+        <header className="ops-command-header knowledge-command-header">
+          <div className="ops-command-title">
+            <div className="ops-command-mark">
+              <BookOpen className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="ops-kicker">Knowledge center</p>
+              <h1>Quản lý kiến thức</h1>
+              <p>
+                Theo dõi tài liệu theo từng dự án, trạng thái xử lý, và nguồn
+                cần xem lại trước khi agent dùng trong hội thoại.
               </p>
-            )}
+              {hasActive && (
+                <span className="ops-live-pill">
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  Đang xử lý, tự làm mới mỗi 5 giây
+                </span>
+              )}
+            </div>
           </div>
           {hasSources && (
             <Button
@@ -98,6 +118,29 @@ const KnowledgeSourceListContent = () => {
           )}
         </header>
 
+        <section className="ops-status-strip knowledge-status-strip">
+          <div>
+            <span className="ops-status-label">Nguồn</span>
+            <strong>{total}</strong>
+          </div>
+          <div>
+            <span className="ops-status-label">Sẵn sàng</span>
+            <strong>{readyCount}</strong>
+          </div>
+          <div>
+            <span className="ops-status-label">Đang xử lý</span>
+            <strong>{processingCount}</strong>
+          </div>
+          <div>
+            <span className="ops-status-label">Đơn vị</span>
+            <strong>{unitCount}</strong>
+          </div>
+          <div>
+            <span className="ops-status-label">Cần xem lại</span>
+            <strong>{reviewCount}</strong>
+          </div>
+        </section>
+
         <KnowledgeUpload
           open={uploadOpen}
           onOpenChange={setUploadOpen}
@@ -106,7 +149,7 @@ const KnowledgeSourceListContent = () => {
           }
         />
 
-        <div className="grid gap-2 min-[520px]:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="knowledge-filter-bar">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -116,7 +159,7 @@ const KnowledgeSourceListContent = () => {
               className="h-10 rounded-[9px] border-border bg-card pl-9 text-sm"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="knowledge-filter-actions">
             <ProjectPicker
               value={projectFilter === ALL_PROJECTS ? "" : projectFilter}
               onChange={selectProject}
@@ -137,7 +180,9 @@ const KnowledgeSourceListContent = () => {
         {isPending ? (
           <SourceSelectorSkeleton />
         ) : sources.length === 0 ? (
-          <InlineKnowledgeUploader />
+          <div className="ops-panel knowledge-empty-panel">
+            <InlineKnowledgeUploader />
+          </div>
         ) : (
           <>
             <SourceSelector
@@ -148,7 +193,7 @@ const KnowledgeSourceListContent = () => {
             />
             <ListPagination
               rowsPerPageOptions={[10, 25, 50, 100]}
-              className="justify-center"
+              className="ops-pagination"
             />
             {selectedSource ? (
               <KnowledgeDetailPanel source={selectedSource} />
@@ -163,6 +208,20 @@ const KnowledgeSourceListContent = () => {
           </>
         )}
       </div>
+    </div>
+  );
+
+  if (isMobile) return content;
+
+  return (
+    <div className="inbox-bg-container knowledge-workspace">
+      <InboxIcons />
+      <main className="app knowledge-app" id="app">
+        <WorkspaceIconRail />
+        <section className="panel center-panel knowledge-center-panel">
+          {content}
+        </section>
+      </main>
     </div>
   );
 };
@@ -181,17 +240,18 @@ const SourceSelector = ({
   onSelect: (id: string) => void;
 }) => {
   return (
-    <section className="border-y border-border py-3 sm:rounded-[14px] sm:border sm:bg-card sm:p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+    <section className="ops-panel knowledge-selector-panel">
+      <div className="ops-panel-header knowledge-selector-header">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <h2 className="kb-display text-base text-foreground">
-            Nguồn đang xem
-          </h2>
-          <Badge variant="secondary" className="rounded-[8px]">
+          <div className="ops-panel-title">
+            <p className="ops-panel-eyebrow">Source in focus</p>
+            <h2>Nguồn đang xem</h2>
+          </div>
+          <Badge variant="outline" className="border-border bg-background/70">
             {total} nguồn
           </Badge>
           {selectedSource && (
-            <span className="kb-mono truncate text-xs text-muted-foreground">
+            <span className="ops-meta-text">
               {selectedSource.project_name ?? "Chưa gắn dự án"} ·{" "}
               {selectedSource.digest_meta?.unit_count ?? 0} đơn vị
             </span>
@@ -201,7 +261,7 @@ const SourceSelector = ({
           value={selectedSource ? String(selectedSource.id) : undefined}
           onValueChange={onSelect}
         >
-          <SelectTrigger className="h-10 w-full rounded-[9px] border-border bg-background text-sm md:w-[360px] lg:w-[420px]">
+          <SelectTrigger className="h-10 w-full rounded-[9px] border-border bg-background text-sm md:w-[380px] lg:w-[460px]">
             <SelectValue placeholder="Chọn nguồn kiến thức" />
           </SelectTrigger>
           <SelectContent className="max-h-96">
@@ -224,9 +284,14 @@ const SourceSelector = ({
 };
 
 const SourceSelectorSkeleton = () => (
-  <section className="rounded-[14px] border border-border bg-card p-4">
-    <Skeleton className="h-4 w-32" />
-    <Skeleton className="mt-3 h-11 w-full" />
+  <section className="ops-panel p-4">
+    <div className="flex items-center gap-3">
+      <Skeleton className="size-10 rounded-[10px]" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-64 max-w-full" />
+      </div>
+    </div>
   </section>
 );
 

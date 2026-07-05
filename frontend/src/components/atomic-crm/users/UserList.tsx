@@ -61,14 +61,14 @@ const UserListContent = ({ title }: { title: string }) => (
         <h2 className="truncate text-2xl font-bold tracking-tight md:text-xl md:font-semibold">
           {title}
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground md:hidden">
+        <p className="mt-1 text-sm text-muted-foreground lg:hidden">
           Quản lý tài khoản và quyền truy cập nội bộ.
         </p>
       </div>
       <CreateUserButton />
     </TopToolbar>
     <UserMobileList />
-    <div className="mt-4 hidden md:block">
+    <div className="mt-4 hidden lg:block">
       <UserDesktopTable />
     </div>
   </div>
@@ -77,7 +77,7 @@ const UserListContent = ({ title }: { title: string }) => (
 const CreateUserButton = () => {
   const createPath = useCreatePath();
   return (
-    <Button asChild variant="outline" className="h-10 shrink-0 rounded-xl px-3">
+    <Button asChild variant="outline" className="h-11 shrink-0 rounded-xl px-3">
       <Link to={createPath({ resource: "users", type: "create" })}>
         <Plus className="size-4" />
         <span className="hidden min-[360px]:inline">Tạo</span>
@@ -101,7 +101,11 @@ const UserDesktopTable = () => (
     <DataTable.Col source="created_at" label="Ngày tạo">
       <DateField source="created_at" showTime />
     </DataTable.Col>
-    <DataTable.Col label="Thao tác">
+    <DataTable.Col
+      label="Thao tác"
+      disableSort
+      className="w-20 min-w-20 text-right"
+    >
       <UserActions />
     </DataTable.Col>
   </DataTable>
@@ -112,7 +116,7 @@ const UserMobileList = () => {
 
   if (isPending) {
     return (
-      <div className="mt-4 space-y-3 md:hidden">
+      <div className="mt-4 space-y-3 lg:hidden">
         {Array.from({ length: 4 }).map((_, index) => (
           <Card key={index} className="gap-3 p-4">
             <Skeleton className="h-5 w-40" />
@@ -129,7 +133,7 @@ const UserMobileList = () => {
 
   if (!data || data.length === 0) {
     return (
-      <Card role="status" className="mt-4 p-8 text-center md:hidden">
+      <Card role="status" className="mt-4 p-8 text-center lg:hidden">
         <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-muted">
           <UserCog className="size-5 text-muted-foreground" />
         </div>
@@ -142,7 +146,7 @@ const UserMobileList = () => {
   }
 
   return (
-    <div className="mt-4 space-y-3 md:hidden">
+    <div className="mt-4 space-y-3 lg:hidden">
       {data.map((user) => (
         <RecordContextProvider key={user.id} value={user}>
           <Card className="gap-3 overflow-hidden rounded-xl p-4">
