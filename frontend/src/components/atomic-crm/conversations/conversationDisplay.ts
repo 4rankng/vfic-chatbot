@@ -1,4 +1,4 @@
-import { LEAD_SCORES, type Lead } from "../types";
+import { type Lead } from "../types";
 
 export const getLeadStatusColor = (lead?: Lead | null) => {
   if (!lead) return { bg: "var(--surface-solid)", ink: "var(--ink-faint)" };
@@ -9,17 +9,18 @@ export const getLeadStatusColor = (lead?: Lead | null) => {
   return { bg: "var(--lead-cold-bg)", ink: "var(--lead-cold-ink)" };
 };
 
-// Non-color priority cue for the inbox row: a labelled chip whose TEXT conveys
-// the tier (readable without color, for colour-blind users). `tone` drives the
-// chip tint via the lead-priority CSS vars; the label is the accessible signal.
-// Reuses the canonical LEAD_SCORES labels. Returns null when no score is set.
+// Inbox rows show one recruiter-facing priority state. The backend still keeps
+// hot/warm as separate scores, but the list should not expose two priority tiers.
 export const getLeadPriorityChip = (
   lead?: Lead | null,
 ): { label: string; tone: "hot" | "warm" | "cold" } | null => {
   const score = lead?.lead_score;
   if (!score) return null;
-  const label = LEAD_SCORES.find((s) => s.value === score)?.label;
-  if (!label) return null;
-  const tone = score === "hot" ? "hot" : score === "warm" ? "warm" : "cold";
-  return { label, tone };
+  if (score === "hot" || score === "warm") {
+    return { label: "Ưu tiên", tone: "warm" };
+  }
+  if (score === "not_interested") {
+    return { label: "Không quan tâm", tone: "cold" };
+  }
+  return null;
 };

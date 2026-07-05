@@ -143,7 +143,6 @@ const ProjectEditContent = () => {
             </p>
             <p className="text-xs text-muted-foreground">
               Thẻ được LLM tạo tự động khi huấn luyện cơ sở kiến thức của dự án.
-              Bấm "Làm mới thẻ" trong danh sách để tạo lại.
             </p>
           </CardContent>
         </Card>

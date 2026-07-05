@@ -1,11 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import {
-  ListBase,
-  useListContext,
-  useNotify,
-  useRedirect,
-  useRefresh,
-} from "ra-core";
+import { ListBase, useListContext, useRedirect, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
 import {
   Boxes,
@@ -17,7 +11,6 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  RefreshCw,
   Upload,
 } from "lucide-react";
 import { DeleteButton } from "@/components/admin";
@@ -27,18 +20,13 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { BusRoute, BusTimetableList, Project } from "../types";
-import {
-  getProjectBusTimetable,
-  reindexProject,
-} from "@/lib/vfic/knowledgeService";
+import { getProjectBusTimetable } from "@/lib/vfic/knowledgeService";
 import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectFeatures } from "./ProjectFeatures";
@@ -50,7 +38,6 @@ const ProjectListContent = () => {
   const { isAdmin, canEdit } = useRoleActions();
   const refresh = useRefresh();
   const redirect = useRedirect();
-  const notify = useNotify();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const projects = useMemo(() => data ?? [], [data]);
@@ -85,25 +72,16 @@ const ProjectListContent = () => {
   const { selectedId, setSelectedId } = useMasterDetailSelection<Project>({
     data: projects,
   });
+  const projectTotal = total ?? projects.length;
 
   const selectedProject =
     projects.find((project) => project.id === selectedId) ??
     projects[0] ??
     null;
 
-  const onReindex = async (project: Project) => {
-    try {
-      await reindexProject(String(project.id));
-      notify("Đã làm mới thẻ danh mục dự án.", { type: "success" });
-      refresh();
-    } catch (err) {
-      notify(`Thất bại: ${(err as Error).message}`, { type: "error" });
-    }
-  };
-
   return (
     <ProjectWorkspaceShell
-      total={total ?? projects.length}
+      total={projectTotal}
       activeCount={activeCount}
       documentCount={documentCount}
     >
@@ -111,40 +89,27 @@ const ProjectListContent = () => {
         <div className="ops-page-shell project-page-shell">
           <header className="ops-command-header project-command-header">
             <div className="ops-command-title">
-              <div className="ops-command-mark">
-                <Boxes className="size-5" />
-              </div>
               <div className="min-w-0">
                 <p className="ops-kicker">Không gian dự án</p>
                 <h1>Dự án tuyển dụng</h1>
-                <p>
-                  Theo dõi thẻ sản phẩm, nguồn kiến thức và các đặc điểm mà
-                  chatbot dùng khi tư vấn ứng viên.
-                </p>
+                <p>Quản lý dự án, tài liệu training và trạng thái tư vấn.</p>
               </div>
             </div>
             <div className="project-command-actions">
-              <Button
-                variant="outline"
-                onClick={() => refresh()}
-                className="h-11 rounded-[9px]"
-              >
-                <RefreshCw className="size-4" />
-                Làm mới
-              </Button>
               {isAdmin && (
                 <>
                   <Button
                     variant="outline"
                     onClick={() => setUploadOpen(true)}
-                    className="h-11 rounded-[9px]"
+                    className="h-10 rounded-[8px]"
                   >
                     <Upload className="size-4" />
-                    Tải kiến thức
+                    Tải tài liệu
                   </Button>
                   <Button
                     onClick={() => redirect("create", "projects")}
-                    className="h-11 rounded-[9px]"
+                    variant={projects.length > 0 ? "outline" : "default"}
+                    className="h-10 rounded-[8px]"
                   >
                     <Plus className="size-4" />
                     Tạo dự án
@@ -154,48 +119,33 @@ const ProjectListContent = () => {
             </div>
           </header>
 
-          <section className="ops-status-strip project-status-strip">
-            <div>
-              <span className="ops-status-label">Tổng dự án</span>
-              <strong>{total ?? projects.length}</strong>
-            </div>
-            <div>
-              <span className="ops-status-label">Đang bật</span>
-              <strong>{activeCount}</strong>
-            </div>
-            <div>
-              <span className="ops-status-label">Tài liệu training</span>
-              <strong>{documentCount}</strong>
-            </div>
-            <div>
-              <span className="ops-status-label">Sẵn sàng tư vấn</span>
-              <strong>
+          {projects.length > 1 && (
+            <section className="project-rollup-strip">
+              <span>{projectTotal} dự án</span>
+              <span>{activeCount} đang bật</span>
+              <span>{documentCount} tài liệu</span>
+              <span>
                 {readiness.total > 0
-                  ? `${readiness.ready}/${readiness.total}`
-                  : "—"}
-              </strong>
-            </div>
-          </section>
+                  ? `${readiness.ready}/${readiness.total} sẵn sàng`
+                  : "Chưa đo readiness"}
+              </span>
+            </section>
+          )}
 
-          <div className="project-layout-grid">
-            <ProjectDirectoryPanel
-              projects={projects}
-              selectedId={selectedId}
-              isPending={isPending}
-              onSelect={setSelectedId}
-            />
-            <ProjectSpotlightPanel
-              project={selectedProject}
-              isAdmin={isAdmin}
-              canEdit={canEdit}
-              onEdit={() =>
-                selectedProject &&
-                redirect("edit", "projects", selectedProject.id)
-              }
-              onReindex={() => selectedProject && onReindex(selectedProject)}
-              onDeleted={() => refresh()}
-            />
-          </div>
+          <ProjectOperationsPanel
+            projects={projects}
+            selectedId={selectedId}
+            selectedProject={selectedProject}
+            isPending={isPending}
+            isAdmin={isAdmin}
+            canEdit={canEdit}
+            onSelect={setSelectedId}
+            onEdit={() =>
+              selectedProject &&
+              redirect("edit", "projects", selectedProject.id)
+            }
+            onDeleted={() => refresh()}
+          />
 
           {selectedProject ? (
             <ProjectDetailPanel
@@ -212,10 +162,12 @@ const ProjectListContent = () => {
             />
           )}
 
-          <ListPagination
-            rowsPerPageOptions={[10, 25, 50, 100]}
-            className="ops-pagination"
-          />
+          {projectTotal > 25 && (
+            <ListPagination
+              rowsPerPageOptions={[10, 25, 50, 100]}
+              className="ops-pagination"
+            />
+          )}
         </div>
 
         {isAdmin && (
@@ -223,62 +175,6 @@ const ProjectListContent = () => {
         )}
       </div>
     </ProjectWorkspaceShell>
-  );
-};
-
-// Circumference of the StatsRibbon progress ring (r=15 in a 36×36 viewBox).
-const RING_CIRCUMFERENCE = 2 * Math.PI * 15;
-
-// Shared readiness ring: reuses the exact SVG ring math from StatsRibbon
-// (viewBox 0 0 36 36, r=15, -rotate-90, primary stroke over border track).
-// Renders a muted dash when readiness is undefined (e.g. older API response).
-const ReadinessRing = ({
-  ready,
-  total,
-  size = "size-9",
-}: {
-  ready: number | undefined;
-  total: number;
-  size?: string;
-}) => {
-  const known = typeof ready === "number";
-  const pct = known ? Math.max(0, Math.min(100, (ready as number) / total)) : 0;
-  const dash = pct * RING_CIRCUMFERENCE;
-  return (
-    <svg
-      viewBox="0 0 36 36"
-      className={cn(size, "shrink-0 -rotate-90")}
-      role="img"
-      aria-label={
-        known
-          ? `${ready}/${total} có thể tư vấn`
-          : "Chưa có dữ liệu sẵn sàng tư vấn"
-      }
-    >
-      <circle
-        cx="18"
-        cy="18"
-        r="15"
-        fill="none"
-        strokeWidth="3.5"
-        stroke="var(--border)"
-      />
-      <circle
-        cx="18"
-        cy="18"
-        r="15"
-        fill="none"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-        stroke="var(--feature-ready)"
-        strokeDasharray={
-          known
-            ? `${dash} ${RING_CIRCUMFERENCE}`
-            : `${RING_CIRCUMFERENCE / 8} ${RING_CIRCUMFERENCE / 4}`
-        }
-        className={cn("transition-all duration-500", !known && "opacity-40")}
-      />
-    </svg>
   );
 };
 
@@ -300,118 +196,130 @@ const ProjectStatusBadge = ({
   </Badge>
 );
 
-const ProjectDirectoryPanel = ({
+const ProjectOperationsPanel = ({
   projects,
   selectedId,
+  selectedProject,
   isPending,
+  isAdmin,
+  canEdit,
   onSelect,
+  onEdit,
+  onDeleted,
 }: {
   projects: Project[];
   selectedId: string | null;
+  selectedProject: Project | null;
   isPending: boolean;
+  isAdmin: boolean;
+  canEdit: boolean;
   onSelect: (id: string) => void;
+  onEdit: () => void;
+  onDeleted: () => void;
 }) => {
   return (
-    <section className="ops-panel project-directory-panel">
-      <div className="ops-panel-header">
-        <div className="ops-panel-title">
-          <p className="ops-panel-eyebrow">Danh mục dự án</p>
-          <h2>Dự án đang quản lý</h2>
+    <section className="project-ops-panel">
+      <div className="project-selector-column">
+        <div className="project-section-heading">
+          <span>Danh mục dự án</span>
+          <strong>{projects.length} mục</strong>
         </div>
-        <Badge variant="outline" className="border-border bg-background/70">
-          {projects.length} mục
-        </Badge>
-      </div>
-      <div className="project-directory-list">
-        {isPending ? (
-          <div className="project-directory-loading">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="project-directory-skeleton">
-                <Skeleton className="size-10 rounded-[10px]" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-44" />
-                  <Skeleton className="h-3 w-64 max-w-full" />
+        <div className="project-directory-list">
+          {isPending ? (
+            <div className="project-directory-loading">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="project-directory-skeleton">
+                  <Skeleton className="size-10 rounded-[10px]" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-44" />
+                    <Skeleton className="h-3 w-64 max-w-full" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : projects.length > 0 ? (
-          projects.map((project) => (
-            <button
-              key={project.id}
-              type="button"
-              className={cn(
-                "project-directory-row",
-                String(project.id) === selectedId && "is-active",
-              )}
-              onClick={() => onSelect(String(project.id))}
-              aria-pressed={String(project.id) === selectedId}
-            >
-              <div className="project-directory-avatar">
-                <Boxes className="size-4" />
-              </div>
-              <div className="project-directory-copy">
-                <div className="project-directory-title-line">
-                  <div className="min-w-0">
-                    <span className="project-directory-name">
-                      {project.name}
+              ))}
+            </div>
+          ) : projects.length > 0 ? (
+            projects.map((project) => (
+              <button
+                key={project.id}
+                type="button"
+                className={cn(
+                  "project-directory-row",
+                  String(project.id) === selectedId && "is-active",
+                )}
+                onClick={() => onSelect(String(project.id))}
+                aria-pressed={String(project.id) === selectedId}
+              >
+                <div className="project-directory-avatar">
+                  <Boxes className="size-4" />
+                </div>
+                <div className="project-directory-copy">
+                  <div className="project-directory-title-line">
+                    <div className="min-w-0">
+                      <span className="project-directory-name">
+                        {project.name}
+                      </span>
+                      <span className="project-directory-slug">
+                        {project.slug}
+                      </span>
+                    </div>
+                    <ProjectStatusBadge active={project.is_active} short />
+                  </div>
+                  <div className="project-directory-meta">
+                    <span>
+                      <FileText className="size-3.5" />
+                      {project.knowledge_document_count ?? 0} tài liệu
                     </span>
-                    <span className="project-directory-slug">
-                      {project.slug}
+                    <span>
+                      <CheckCircle2 className="size-3.5" />
+                      {typeof project.feature_readiness?.ready === "number"
+                        ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16}`
+                        : "Chưa đo"}
                     </span>
                   </div>
-                  <ProjectStatusBadge active={project.is_active} short />
                 </div>
-                <div className="project-directory-meta">
-                  <span>
-                    <FileText className="size-3.5" />
-                    {project.knowledge_document_count ?? 0} tài liệu
-                  </span>
-                  <span>
-                    <CheckCircle2 className="size-3.5" />
-                    {typeof project.feature_readiness?.ready === "number"
-                      ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16}`
-                      : "Chưa đo"}
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))
-        ) : (
-          <EmptyState
-            icon={<Boxes className="size-6" />}
-            title="Chưa có dự án"
-            description="Tạo dự án mới để gom kiến thức và đặc điểm tư vấn."
-            className="project-empty-state"
-          />
-        )}
+              </button>
+            ))
+          ) : (
+            <EmptyState
+              icon={<Boxes className="size-6" />}
+              title="Chưa có dự án"
+              description="Tạo dự án mới để gom kiến thức và đặc điểm tư vấn."
+              className="project-empty-state"
+            />
+          )}
+        </div>
       </div>
+      <SelectedProjectSummary
+        project={selectedProject}
+        isAdmin={isAdmin}
+        canEdit={canEdit}
+        onEdit={onEdit}
+        onDeleted={onDeleted}
+      />
     </section>
   );
 };
 
-const ProjectSpotlightPanel = ({
+const SelectedProjectSummary = ({
   project,
   isAdmin,
   canEdit,
   onEdit,
-  onReindex,
   onDeleted,
 }: {
   project: Project | null;
   isAdmin: boolean;
   canEdit: boolean;
   onEdit: () => void;
-  onReindex: () => void;
   onDeleted: () => void;
 }) => {
   if (!project) {
     return (
-      <aside className="project-spotlight-panel">
+      <aside className="project-selected-summary">
         <EmptyState
           icon={<Boxes className="size-6" />}
           title="Chọn dự án"
-          description="Thông tin vận hành của dự án sẽ hiện tại đây."
+          description="Chọn một dự án để xem readiness, tài liệu và thiết lập agent."
           className="project-spotlight-empty"
         />
       </aside>
@@ -420,86 +328,66 @@ const ProjectSpotlightPanel = ({
 
   const readinessReady = project.feature_readiness?.ready;
   const readinessTotal = project.feature_readiness?.total ?? 16;
+  const readinessText =
+    typeof readinessReady === "number"
+      ? `${readinessReady}/${readinessTotal}`
+      : "Chưa đo";
 
   return (
-    <aside className="project-spotlight-panel">
-      <div className="project-spotlight-top">
-        <ReadinessRing
-          ready={readinessReady}
-          total={readinessTotal}
-          size="size-12"
-        />
+    <aside className="project-selected-summary">
+      <div className="project-selected-main">
         <div className="min-w-0">
-          <div className="project-spotlight-badges">
-            <ProjectStatusBadge active={project.is_active} />
-            <Badge variant="outline" className="border-border bg-muted/35">
-              {project.default_persona_id ? "Có agent" : "Chưa gắn agent"}
-            </Badge>
-          </div>
+          <div className="project-selected-eyebrow">Dự án đang chọn</div>
           <h2>{project.name}</h2>
-          <p>{project.slug}</p>
+          <div className="project-selected-slug">{project.slug}</div>
         </div>
-      </div>
-
-      <div className="project-spotlight-metrics">
-        <div>
-          <span>Tài liệu</span>
-          <strong>{project.knowledge_document_count ?? 0}</strong>
-        </div>
-        <div>
-          <span>Sẵn sàng</span>
-          <strong>
-            {typeof readinessReady === "number"
-              ? `${readinessReady}/${readinessTotal}`
-              : "—"}
-          </strong>
-        </div>
-      </div>
-
-      {project.summary || project.index_card?.summary ? (
-        <div className="project-summary-panel">
-          <span>Tóm tắt</span>
-          <p>{project.index_card?.summary ?? project.summary}</p>
-        </div>
-      ) : null}
-
-      <div className="project-spotlight-actions">
-        {canEdit && (
-          <Button variant="outline" size="sm" onClick={onEdit} className="h-11">
-            <Pencil className="size-4" />
-            Sửa thông tin
-          </Button>
-        )}
-        {isAdmin && (
-          <>
+        <div className="project-selected-actions">
+          {canEdit && (
             <Button
               variant="outline"
               size="sm"
-              onClick={onReindex}
-              className="h-11"
+              onClick={onEdit}
+              className="h-9"
             >
-              <RefreshCw className="size-4" />
-              Làm mới thẻ
+              <Pencil className="size-4" />
+              Sửa
             </Button>
-            <ProjectActionsMenu
-              project={project}
-              onReindex={onReindex}
-              onDeleted={onDeleted}
-            />
-          </>
-        )}
+          )}
+          {isAdmin && (
+            <ProjectActionsMenu project={project} onDeleted={onDeleted} />
+          )}
+        </div>
       </div>
+
+      <div className="project-health-row">
+        <ProjectStatusBadge active={project.is_active} />
+        <Badge variant="outline" className="border-border bg-muted/35">
+          {project.default_persona_id ? "Có agent" : "Chưa gắn agent"}
+        </Badge>
+        <span>
+          <FileText className="size-3.5" />
+          {project.knowledge_document_count ?? 0} tài liệu
+        </span>
+        <span>
+          <CheckCircle2 className="size-3.5" />
+          {readinessText} sẵn sàng
+        </span>
+      </div>
+
+      {(project.summary || project.index_card?.summary) && (
+        <p className="project-selected-summary-text">
+          {project.index_card?.summary ?? project.summary}
+        </p>
+      )}
     </aside>
   );
 };
 
 const ProjectActionsMenu = ({
   project,
-  onReindex,
   onDeleted,
 }: {
   project: Project;
-  onReindex: () => void;
   onDeleted: () => void;
 }) => {
   return (
@@ -508,18 +396,13 @@ const ProjectActionsMenu = ({
         <Button
           variant="ghost"
           size="icon"
-          className="size-11 opacity-80 transition-opacity hover:opacity-100"
+          className="size-9 opacity-80 transition-opacity hover:opacity-100"
           aria-label={`Mở thao tác cho ${project.name}`}
         >
           <MoreHorizontal className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem onSelect={onReindex}>
-          <RefreshCw className="size-4" />
-          Làm mới thẻ
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DeleteButton
           record={project}
           resource="projects"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNotify } from "ra-core";
-import { Plus, Pencil, RefreshCw, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -103,16 +103,6 @@ export const ProjectFaqEditor = ({
             Thêm
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={load}
-          disabled={loading}
-          title="Tải lại FAQ"
-        >
-          <RefreshCw className="size-4" />
-          Tải lại
-        </Button>
       </div>
     </div>
   );
@@ -296,7 +286,12 @@ const FaqRow = ({
             rows={4}
           />
           <div className="flex justify-end gap-1">
-            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={cancel}
+              disabled={saving}
+            >
               <X className="size-4" />
             </Button>
             <Button size="sm" onClick={save} disabled={saving}>

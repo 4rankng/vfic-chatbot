@@ -46,14 +46,6 @@ type ConversationRow = Conversation & {
 type WorkspaceFilter = WorkspaceFilterKey;
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
-const CONVERSATION_MODE_GROUPS: {
-  mode: Conversation["mode"] | "other";
-  label: string;
-}[] = [
-  { mode: "human", label: "Tư vấn viên" },
-  { mode: "semi_auto", label: "Bán tự động" },
-  { mode: "bot", label: "Chatbot" },
-];
 
 const needsVisibleAttention = (
   conversation: Conversation,
@@ -206,7 +198,6 @@ const ConversationListItem = memo(
     const subtitle = conversation._snippet || lead?.phone || "";
 
     const modeMeta = conversationModeMeta(conversation.mode);
-    const channel = conversation.zalo_channel === "oa" ? "oa" : "bot";
     const needsAttention = needsVisibleAttention(conversation, readIds);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
@@ -263,7 +254,7 @@ const ConversationListItem = memo(
                 className={`conv-mode-label ${modeMeta.tone}`}
                 title={modeMeta.label}
               >
-                {channel === "oa" ? "OA" : "Bot"} · {modeMeta.label}
+                {modeMeta.label}
               </span>
             </span>
           </span>
@@ -435,21 +426,6 @@ const ConversationListPanel = ({
     [searchedRows, activeFilter, readIds],
   );
 
-  const rowGroups = useMemo(() => {
-    const grouped = CONVERSATION_MODE_GROUPS.map((group) => ({
-      ...group,
-      rows: rows.filter((row) => row.mode === group.mode),
-    }));
-    const otherRows = rows.filter(
-      (row) =>
-        !CONVERSATION_MODE_GROUPS.some((group) => group.mode === row.mode),
-    );
-    if (otherRows.length > 0) {
-      grouped.push({ mode: "other", label: "Khác", rows: otherRows });
-    }
-    return grouped.filter((group) => group.rows.length > 0);
-  }, [rows]);
-
   useEffect(() => {
     const root = scrollRootRef.current;
     const marker = loadMoreRef.current;
@@ -485,7 +461,6 @@ const ConversationListPanel = ({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <span className="search-key">⌘K</span>
           </label>
         }
       />
@@ -503,19 +478,14 @@ const ConversationListPanel = ({
             Không tìm thấy hội thoại phù hợp.
           </div>
         ) : (
-          rowGroups.map((group) => (
-            <section className="conversation-group" key={group.mode}>
-              <div className="conversation-group-title">{group.label}</div>
-              {group.rows.map((c) => (
-                <ConversationListItem
-                  key={c.id}
-                  conversation={c}
-                  isActive={selectedId === c.id}
-                  onSelect={onSelect}
-                  readIds={readIds}
-                />
-              ))}
-            </section>
+          rows.map((c) => (
+            <ConversationListItem
+              key={c.id}
+              conversation={c}
+              isActive={selectedId === c.id}
+              onSelect={onSelect}
+              readIds={readIds}
+            />
           ))
         )}
 
@@ -703,10 +673,7 @@ const ConversationListContent = () => {
       }`}
     >
       <InboxIcons />
-      <main
-        className={`app ${detailOpen ? "detail-open" : ""}`}
-        id="app"
-      >
+      <main className={`app ${detailOpen ? "detail-open" : ""}`} id="app">
         <WorkspaceIconRail />
         <ConversationListPanel
           selectedId={selected?.id ?? null}

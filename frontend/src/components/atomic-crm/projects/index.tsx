@@ -15,7 +15,7 @@ const ProjectShow = lazy(() =>
 );
 
 // "Project" = a product in the agent's master index (e.g. the LG Display factory).
-// Admins create/activate projects, upload KB under them, and refresh the catalog card.
+// Admins create/activate projects and upload KB under them.
 export default {
   list: ProjectList,
   show: ProjectShow,

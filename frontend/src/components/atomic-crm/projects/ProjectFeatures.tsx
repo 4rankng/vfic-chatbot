@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Pencil,
-  RefreshCw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -175,9 +174,9 @@ export const ProjectFeatures = ({
   }, {});
 
   return (
-    <Card className="mt-0 overflow-hidden">
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
+    <Card className="project-features-card mt-0 overflow-hidden">
+      <CardHeader className="project-features-header">
+        <CardTitle className="project-features-title flex flex-wrap items-center justify-between gap-2">
           <span>Đặc điểm sản phẩm</span>
           {canExtract && hasFeatures && (
             <Button
@@ -185,16 +184,16 @@ export const ProjectFeatures = ({
               size="sm"
               onClick={onExtract}
               disabled={extracting}
-              className="h-11"
+              className="project-feature-extract h-9"
               title="Trích xuất lại các đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
             >
               <Sparkles className="size-4" />
-              {extracting ? "Đang trích xuất..." : "Trích xuất lại"}
+              {extracting ? "Đang trích xuất" : "Trích xuất"}
             </Button>
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 pt-2">
+      <CardContent className="project-features-content flex flex-col gap-4 pt-2">
         {loading ? (
           <div className="flex flex-col gap-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -211,17 +210,38 @@ export const ProjectFeatures = ({
 
             {hasFeatures ? (
               <div className="space-y-3">
-                <FeatureGroup
-                  tone="ready"
-                  count={readyCount}
-                  slots={readySlots}
-                />
-                <FeatureGroup tone="gap" count={gapCount} slots={gapSlots} />
+                {gapCount > 0 ? (
+                  <>
+                    <FeatureGroup
+                      tone="gap"
+                      count={gapCount}
+                      slots={gapSlots}
+                    />
+                    <FeatureGroup
+                      tone="ready"
+                      count={readyCount}
+                      slots={readySlots}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <FeatureGroup
+                      tone="ready"
+                      count={readyCount}
+                      slots={readySlots}
+                    />
+                    <FeatureGroup
+                      tone="gap"
+                      count={gapCount}
+                      slots={gapSlots}
+                    />
+                  </>
+                )}
 
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-11 w-full justify-center border border-dashed text-xs text-muted-foreground"
+                  className="project-feature-detail-toggle h-10 w-full justify-center border border-dashed text-xs text-muted-foreground"
                   onClick={() => setShowDetail((s) => !s)}
                   aria-expanded={showDetail}
                 >
@@ -277,7 +297,7 @@ export const ProjectFeatures = ({
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-md bg-muted/40 p-5 text-center text-muted-foreground">
-                <RefreshCw className="size-5 opacity-50" />
+                <Sparkles className="size-5 opacity-50" />
                 <p className="text-sm font-medium">Chưa có đặc điểm sản phẩm</p>
                 <p className="text-xs">
                   {editable
@@ -319,12 +339,12 @@ const ReadinessHero = ({
 }) => {
   const pct = totalSlots > 0 ? Math.round((readyCount / totalSlots) * 100) : 0;
   return (
-    <div className="space-y-2">
+    <div className="project-readiness-hero space-y-2">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono uppercase tracking-wide text-muted-foreground">
+        <span className="project-readiness-label text-muted-foreground">
           Sẵn sàng tư vấn
         </span>
-        <span className="text-sm font-semibold tabular-nums">
+        <span className="project-readiness-count text-sm font-semibold tabular-nums">
           {readyCount}/{totalSlots} có thể tư vấn
         </span>
       </div>
@@ -370,27 +390,29 @@ const FeatureGroup = ({
 }) => {
   const ready = tone === "ready";
   return (
-    <section className="space-y-2">
+    <section className="project-feature-group space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+        <h3 className="project-feature-group-title flex items-center gap-1.5">
           {ready ? (
             <CheckCircle2 className="size-4 text-feature-ready" />
           ) : (
             <AlertCircle className="size-4 text-feature-gap" />
           )}
-          {ready ? "Đầy đủ" : "Thiếu thông tin"}
+          {ready ? "Đã đủ thông tin" : "Cần bổ sung"}
         </h3>
-        <span className="text-xs text-muted-foreground">{count} mục</span>
+        <span className="project-feature-group-count text-muted-foreground">
+          {count} mục
+        </span>
       </div>
       {count > 0 ? (
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="project-feature-grid grid gap-2 md:grid-cols-2">
           {slots.map((f, i) => {
             const name = f?.name_vi ?? "Chưa trích xuất";
             return (
               <div
                 key={f?.id ?? `slot-${i}`}
                 className={cn(
-                  "flex items-start gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs",
+                  "project-feature-chip flex items-start gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs",
                   ready
                     ? "border-feature-ready/30 bg-feature-ready-soft"
                     : "border-feature-gap-border border-dashed bg-feature-gap-soft",
@@ -402,7 +424,7 @@ const FeatureGroup = ({
                     ready ? "bg-feature-ready/80" : "bg-feature-gap",
                   )}
                 />
-                <span className="flex min-w-0 flex-1 flex-col gap-1 text-foreground">
+                <span className="project-feature-chip-copy flex min-w-0 flex-1 flex-col gap-1 text-foreground">
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="truncate">{name}</span>
                   </span>
@@ -417,7 +439,7 @@ const FeatureGroup = ({
           })}
         </div>
       ) : (
-        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+        <p className="project-feature-empty rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
           {ready ? "Chưa có mục đầy đủ." : "Không còn mục thiếu thông tin."}
         </p>
       )}
