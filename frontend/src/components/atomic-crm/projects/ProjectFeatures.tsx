@@ -544,6 +544,7 @@ const FeatureCard = ({
             <Button
               size="sm"
               variant="ghost"
+              aria-label="Hủy chỉnh sửa đặc điểm"
               onClick={cancel}
               disabled={saving}
             >
@@ -558,6 +559,7 @@ const FeatureCard = ({
             size="sm"
             variant="ghost"
             className="shrink-0"
+            aria-label="Chỉnh sửa đặc điểm"
             onClick={() => setEditing(true)}
           >
             <Pencil className="size-3.5" />

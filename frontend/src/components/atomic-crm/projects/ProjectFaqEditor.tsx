@@ -137,6 +137,7 @@ export const ProjectFaqEditor = ({
               <Button
                 size="sm"
                 variant="ghost"
+                aria-label="Hủy thêm FAQ"
                 onClick={() => {
                   setNewDraft(emptyDraft());
                   setAdding(false);
@@ -289,6 +290,7 @@ const FaqRow = ({
             <Button
               size="sm"
               variant="ghost"
+              aria-label="Hủy chỉnh sửa FAQ"
               onClick={cancel}
               disabled={saving}
             >
@@ -320,6 +322,7 @@ const FaqRow = ({
                 variant="ghost"
                 onClick={() => setEditing(true)}
                 title="Chỉnh sửa FAQ"
+                aria-label="Chỉnh sửa FAQ"
               >
                 <Pencil className="size-4" />
               </Button>
@@ -329,6 +332,7 @@ const FaqRow = ({
                 onClick={remove}
                 disabled={deleting}
                 title="Xóa FAQ"
+                aria-label="Xóa FAQ"
               >
                 <Trash2 className="size-4" />
               </Button>

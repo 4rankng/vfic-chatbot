@@ -475,6 +475,8 @@ export const ChatThread = ({
     <>
       <div
         className="chat-scroll-shell"
+        aria-label="Luồng tin nhắn"
+        aria-busy={isLoading}
         ref={(el) => {
           // Capture the actual scrollable element (virtua renders it inside the
           // VList wrapper). Query for the element that has overflow:auto/scroll.
@@ -505,11 +507,11 @@ export const ChatThread = ({
             </div>
           )}
           {messages.length === 0 && !isLoading ? (
-            <div className="chat-empty">
+            <div className="chat-empty" role="status">
               <span>Chưa có tin nhắn nào. Bắt đầu trò chuyện!</span>
             </div>
           ) : messages.length === 0 && isLoading ? (
-            <div className="chat-empty">
+            <div className="chat-empty" role="status">
               <span>Đang tải tin nhắn...</span>
             </div>
           ) : null}

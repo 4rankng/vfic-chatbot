@@ -40,7 +40,7 @@ export const ProjectCreate = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Dự án
             </p>
-            <h2 className="mt-1 text-xl font-semibold">Tạo dự án</h2>
+            <h1 className="mt-1 text-xl font-semibold">Tạo dự án</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Tạo không gian huấn luyện riêng cho một dự án tuyển dụng.
             </p>

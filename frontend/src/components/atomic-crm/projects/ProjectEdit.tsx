@@ -59,9 +59,9 @@ const ProjectEditContent = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Dự án
             </p>
-            <h2 className="mt-1 truncate text-xl font-semibold">
+            <h1 className="mt-1 truncate text-xl font-semibold">
               Chỉnh sửa {project.name}
-            </h2>
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Cập nhật trạng thái, Agent mặc định và nguồn tri thức dùng khi tư
               vấn ứng viên.
