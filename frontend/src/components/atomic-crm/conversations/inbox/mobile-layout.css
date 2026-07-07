@@ -443,58 +443,58 @@
   .inbox-bg-container .takeover-btn span {
     display: none;
   }
-  :is(.inbox-bg-container, .chat-surface) .chat-scroller {
+  .inbox-bg-container .chat-scroller {
     padding: 14px 0 18px;
   }
-  :is(.inbox-bg-container, .chat-surface) .new-message-jump {
+  .inbox-bg-container .new-message-jump {
     bottom: 10px;
     min-height: 34px;
     max-width: calc(100% - 24px);
     padding: 0 10px 0 12px;
   }
-  :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
+  .inbox-bg-container .chat-scroller .chat-item-list {
     padding: 0 !important;
   }
-  :is(.inbox-bg-container, .chat-surface) .chat-history-bottom-spacer {
+  .inbox-bg-container .chat-history-bottom-spacer {
     height: var(--chat-composer-reserve, 92px);
   }
-  :is(.inbox-bg-container, .chat-surface) .system-event {
+  .inbox-bg-container .system-event {
     max-width: calc(100% - 16px);
     padding: 7px 10px;
     border-radius: var(--rad-md);
     font-size: var(--chat-fs-caption);
     line-height: var(--chat-lh-body);
   }
-  :is(.inbox-bg-container, .chat-surface) .message-row {
+  .inbox-bg-container .message-row {
     gap: 6px;
     margin-bottom: 8px;
     padding-inline: 12px;
   }
-  :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
+  .inbox-bg-container .message-row.grouped {
     margin-top: 0;
   }
-  :is(.inbox-bg-container, .chat-surface) .message-avatar {
+  .inbox-bg-container .message-avatar {
     width: 26px;
     height: 26px;
     flex: 0 0 26px;
   }
-  :is(.inbox-bg-container, .chat-surface) .message-avatar-placeholder {
+  .inbox-bg-container .message-avatar-placeholder {
     flex: 0 0 26px;
     width: 26px !important;
   }
-  :is(.inbox-bg-container, .chat-surface) .bubble {
+  .inbox-bg-container .bubble {
     max-width: min(78%, calc(100% - 38px));
     padding: 8px 12px;
     font-size: var(--chat-fs-message);
     line-height: var(--chat-lh-message);
   }
-  :is(.inbox-bg-container, .chat-surface) .composer-wrap {
+  .inbox-bg-container .composer-wrap {
     padding: 10px 12px;
   }
-  :is(.inbox-bg-container, .chat-surface) .composer {
+  .inbox-bg-container .composer {
     gap: 6px;
   }
-  :is(.inbox-bg-container, .chat-surface) .composer-action {
+  .inbox-bg-container .composer-action {
     width: 40px;
     height: 40px;
   }
@@ -503,11 +503,11 @@
 /* ---- Widescreen (>= 1536px): cap message line length for readability ----
    Gated above the laptop band (1024-1440) so laptop rendering is unchanged. */
 @media (min-width: 1536px) {
-  :is(.inbox-bg-container, .chat-surface) .bubble {
+  .inbox-bg-container .bubble {
     max-width: min(58%, 560px);
   }
-  :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list,
-  :is(.inbox-bg-container, .chat-surface) .composer-wrap {
+  .inbox-bg-container .chat-scroller .chat-item-list,
+  .inbox-bg-container .composer-wrap {
     padding-left: max(32px, calc((100% - 768px) / 2));
     padding-right: max(32px, calc((100% - 768px) / 2));
   }
@@ -522,11 +522,11 @@
   width: 18px;
   height: 18px;
 }
-:is(.inbox-bg-container, .chat-surface) .system-event .icon {
+.inbox-bg-container .system-event .icon {
   width: 14px;
   height: 14px;
 }
-:is(.inbox-bg-container, .chat-surface) .handoff-note .icon {
+.inbox-bg-container .handoff-note .icon {
   width: 16px;
   height: 16px;
 }

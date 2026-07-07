@@ -1,42 +1,44 @@
 /* inbox.css - Overhauled UI/UX */
 :root {
   --surface: var(--background);
-  --surface-solid: var(--background);
+  --surface-solid: var(--card);
   --surface-hover: var(--secondary);
 
   --ink: var(--foreground);
   --ink-muted: var(--muted-foreground);
-  --ink-faint: var(--muted-foreground);
+  --ink-faint: #9b9182;
 
   /* --border intentionally not redeclared here: inherit the global token from
      index.css (single source of truth). Only inbox-specific hairlines below. */
-  --border-strong: #cbd5e1; /* slate-300 */
-  --border-glass: rgba(203, 213, 225, 0.42);
+  --border-strong: #ded2bd;
+  --border-glass: rgba(222, 210, 189, 0.62);
 
   /* Private inbox accent. Renamed from --accent to
      avoid colliding with the shadcn --accent hover-surface token, which is
      defined globally in index.css and consumed by ~50 primitives app-wide.
      Tracks the global teal --primary so the inbox shares one brand color
      instead of carrying its own blue identity. */
-  --primary-soft: #eaf7f4; /* teal-tinted brand soft surface */
-  --primary-soft-border: #b7dcd6;
+  --primary-soft: #dcefeb;
+  --primary-soft-border: #cce5df;
   --inbox-accent: var(--primary);
   --inbox-accent-light: var(--primary-soft);
   --brand: var(--primary);
-  --brand-hover: #115e59; /* teal-800 */
+  --brand-hover: #1f5f58;
   --brand-light: var(--primary-soft);
 
-  --success: var(--color-green, #059669);
-  --success-light: color-mix(in oklab, var(--success) 15%, transparent);
+  --success: var(--color-green, #28786f);
+  --success-light: #dcefeb;
 
   --rad-sm: 8px;
   --rad-md: 12px;
   --rad-lg: var(--rad-md);
   --rad-xl: var(--rad-md);
 
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.02);
-  --shadow-md: 0 12px 32px rgba(31, 38, 135, 0.04);
-  --shadow-lg: 0 24px 64px rgba(31, 38, 135, 0.06);
+  --shadow-sm: 0 1px 2px rgba(79, 59, 31, 0.08);
+  --shadow-md:
+    0 2px 0 rgba(79, 59, 31, 0.05), 0 18px 42px rgba(79, 59, 31, 0.12);
+  --shadow-lg:
+    0 2px 0 rgba(79, 59, 31, 0.055), 0 10px 22px rgba(79, 59, 31, 0.1);
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --transition: 0.3s var(--ease);
@@ -109,34 +111,36 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: var(--background);
+  --chat-bg: #fbf6ea;
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
      stays neutral white; bot + admin (outgoing) own the brand teal-soft. */
-  --chat-bubble-in: #ffffff;
-  --chat-bubble-out: var(--primary-soft);
-  --chat-bubble-user: #ffffff;
+  --chat-bubble-in: #fffdf7;
+  --chat-bubble-out: #ecf6ef;
+  --chat-bubble-user: #fffdf7;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: var(--primary-soft);
-  --chat-bubble-agent: var(--primary-soft);
+  --chat-bubble-bot: #ecf6ef;
+  --chat-bubble-agent: #ecf6ef;
   --chat-bubble-agent-text: var(--ink);
-  --chat-header-bg: var(--background);
-  --chat-shadow: 0 1px 0.5px rgba(15, 23, 42, 0.06);
+  --chat-header-bg: rgba(255, 253, 247, 0.96);
+  --chat-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 2px 0 rgba(79, 59, 31, 0.055),
+    0 10px 22px rgba(79, 59, 31, 0.1);
 
-  /* Workspace sidebar/rail — neutral white surface + slate ink + teal active.
+  /* Workspace sidebar/rail — paper surface + ink + teal active.
      Dark variants re-declared in .dark below. */
-  --workspace-bg: #ffffff;
-  --workspace-bg-deep: #f8fafc;
+  --workspace-bg: #fffdf7;
+  --workspace-bg-deep: #fbf6ea;
   --workspace-border: var(--border);
-  --workspace-ink: #0f172a;
-  --workspace-muted: #475569;
-  --workspace-faint: #94a3b8;
-  --workspace-hover: #f1f5f9;
+  --workspace-ink: #27231d;
+  --workspace-muted: #5f594d;
+  --workspace-faint: #9b9182;
+  --workspace-hover: #fbf6ea;
   --workspace-active: var(--primary);
   --workspace-active-border: var(--primary-soft-border);
-  --workspace-switcher-bg: #ffffff;
-  --workspace-switcher-bg-deep: #f1f5f9;
+  --workspace-switcher-bg: #fbf6ea;
+  --workspace-switcher-bg-deep: #efe6d6;
   --workspace-switcher-active: var(--primary);
-  --workspace-switcher-hover: #f1f5f9;
+  --workspace-switcher-hover: #fffdf7;
 }
 
 @media (max-width: 767px) {

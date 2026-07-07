@@ -300,7 +300,7 @@ export interface LabeledValue {
 }
 
 // Lead stages — DB-CHECK canonical values (leads.lead_stage CHECK constraint).
-// Order = recruitment funnel. Used across LeadShow, LeadCard, LeadColumn, Dashboard.
+// Order = recruitment funnel. Consumed by PersonaForm and useDashboardStats.
 export const LEAD_STAGES = [
   { value: "NEW", label: "Mới", color: "bg-slate-500" },
   { value: "CONTACTING", label: "Đang liên hệ", color: "bg-blue-500" },
@@ -312,7 +312,7 @@ export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];
 
 // Lead scores — DB-CHECK canonical values (leads.lead_score CHECK constraint).
 // Categorical (hot / warm / not_interested), NOT a 0-100 numeric despite the
-// legacy column name. Used across LeadShow, LeadCard, LeadInfoPanel, ContactInputs.
+// legacy column name. Drives the LeadScoreValue type, used by PersonaForm.
 export const LEAD_SCORES = [
   { value: "hot", label: "Ưu tiên cao", color: "bg-rose-500" },
   { value: "warm", label: "Ưu tiên", color: "bg-amber-500" },

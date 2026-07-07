@@ -20,40 +20,30 @@
   text-rendering: optimizeLegibility;
 }
 
-.chat-surface {
-  font-family: var(--chat-font-family);
-  font-size: var(--chat-fs-body);
-  line-height: var(--chat-lh-body);
-  letter-spacing: 0;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-/* Chat-element + base-reset rules are scoped to :is(.inbox-bg-container,
-   .chat-surface) so the shared <ChatThread> renders identically inside the
-   inbox shell (.inbox-bg-container) AND on the lead page (.chat-surface).
-   :is() preserves the original specificity (0,2,0), so the inbox cascade is
-   unchanged. Inbox-shell layout rules stay scoped to .inbox-bg-container. */
-:is(.inbox-bg-container, .chat-surface) * {
+/* Chat-element + base-reset rules are scoped to .inbox-bg-container, where the
+   shared <ChatThread> renders. The former lead-page .chat-surface scope was
+   removed with the dead leads UI; inbox-shell layout rules also stay scoped to
+   .inbox-bg-container. */
+.inbox-bg-container * {
   box-sizing: border-box;
 }
-:is(.inbox-bg-container, .chat-surface) button,
-:is(.inbox-bg-container, .chat-surface) input,
-:is(.inbox-bg-container, .chat-surface) textarea {
+.inbox-bg-container button,
+.inbox-bg-container input,
+.inbox-bg-container textarea {
   font: inherit;
 }
-:is(.inbox-bg-container, .chat-surface) button {
+.inbox-bg-container button {
   color: inherit;
   cursor: pointer;
 }
-:is(.inbox-bg-container, .chat-surface) button:focus-visible,
-:is(.inbox-bg-container, .chat-surface) input:focus-visible,
-:is(.inbox-bg-container, .chat-surface) textarea:focus-visible {
+.inbox-bg-container button:focus-visible,
+.inbox-bg-container input:focus-visible,
+.inbox-bg-container textarea:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-:is(.inbox-bg-container, .chat-surface) .icon {
+.inbox-bg-container .icon {
   width: 16px;
   height: 16px;
   display: inline-block;
@@ -168,7 +158,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
+    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
     var(--surface);
 }
 
@@ -178,7 +168,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
+    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
     var(--surface);
 }
 
@@ -188,7 +178,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
+    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
     var(--surface);
 }
 
@@ -198,7 +188,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
+    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
     var(--surface);
 }
 
@@ -208,7 +198,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
+    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
     var(--surface);
 }
 
@@ -218,7 +208,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
+    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
     var(--surface);
 }
 
@@ -307,7 +297,7 @@
     .project-workspace-content
   )
   [data-slot="button"].text-white {
-  color: #ffffff;
+  color: var(--primary-foreground);
 }
 
 .inbox-bg-container

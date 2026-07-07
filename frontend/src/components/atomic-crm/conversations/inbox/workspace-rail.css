@@ -19,8 +19,7 @@
 }
 
 .inbox-bg-container .workspace-logo-tile,
-.inbox-bg-container .workspace-icon-action,
-.inbox-bg-container .workspace-rail-user {
+.inbox-bg-container .workspace-icon-action {
   width: 38px;
   height: 38px;
   flex: 0 0 38px;
@@ -39,15 +38,7 @@
 
 .inbox-bg-container .workspace-logo-tile {
   margin-bottom: 2px;
-  background: #ffffff;
-}
-
-.inbox-bg-container .workspace-logo-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  display: block;
-  object-fit: cover;
+  background: var(--workspace-bg);
 }
 
 .inbox-bg-container .workspace-icon-stack {
@@ -55,8 +46,7 @@
   gap: 6px;
 }
 
-.inbox-bg-container .workspace-icon-action .icon,
-.inbox-bg-container .workspace-rail-user .icon {
+.inbox-bg-container .workspace-icon-action .icon {
   width: 17px;
   height: 17px;
 }
@@ -68,17 +58,17 @@
 }
 
 .inbox-bg-container .workspace-logo-tile:hover {
-  background: #ffffff;
+  background: var(--workspace-bg);
   transform: translateY(-1px);
 }
 
 .inbox-bg-container .workspace-icon-action.active {
-  color: #ffffff;
+  color: var(--primary-foreground);
   background: var(--workspace-switcher-active);
 }
 
 .inbox-bg-container .workspace-logo-tile.active {
-  color: #ffffff;
+  color: var(--primary-foreground);
   background: var(--workspace-switcher-active);
 }
 
@@ -86,19 +76,6 @@
   margin-top: auto;
   color: var(--workspace-muted);
   background: var(--workspace-hover);
-}
-
-.inbox-bg-container .workspace-rail-user {
-  margin-top: auto;
-  overflow: hidden;
-  color: var(--workspace-ink);
-  background: var(--workspace-hover);
-}
-
-@media (max-height: 520px) and (min-width: 768px) {
-  .inbox-bg-container .workspace-rail-user {
-    display: none;
-  }
 }
 
 /* Conversation workspace rail */

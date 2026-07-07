@@ -135,7 +135,7 @@ const NavigationButton = ({
     className={cn(
       "relative h-14 w-full min-w-0 flex-col gap-0.5 rounded-[1.55rem] border border-transparent bg-transparent px-1 py-1 transition-all active:scale-[0.98]",
       isActive
-        ? "bg-[#def3e7] text-[#117b5f] shadow-[inset_0_0_0_1px_rgba(17,123,95,0.22)] hover:bg-[#d4efdf] hover:text-[#117b5f]"
+        ? "bg-[#eaf7f4] text-[#0f766e] shadow-[inset_0_0_0_1px_rgba(15,118,110,0.22)] hover:bg-[#eaf7f4] hover:text-[#0f766e]"
         : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
     )}
   >
@@ -143,7 +143,7 @@ const NavigationButton = ({
       <span
         className={cn(
           "relative grid size-8 place-items-center rounded-full transition-colors",
-          isActive ? "bg-[#117b5f] text-white shadow-sm" : "bg-transparent",
+          isActive ? "bg-[#0f766e] text-white shadow-sm" : "bg-transparent",
         )}
       >
         <Icon className="size-4 shrink-0" />

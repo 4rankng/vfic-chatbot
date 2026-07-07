@@ -26,14 +26,12 @@ import { useConversationRealtime } from "./useConversationRealtime";
 import { useConversationMessages, useConversationFlags } from "./messageStore";
 import { Bot, Sparkles, UserRound } from "lucide-react";
 
-// ChatThread is the reusable, shell-agnostic message thread + composer. It owns
-// the realtime subscription, the virtualised scroller (with all the snap /
-// load-more arming logic), the reply composer and the bot→human takeover
-// affordance. It renders a FRAGMENT (scroll shell + <footer/>) so the host
-// shell lays out the scroller (1fr) and composer (auto) — the inbox center-panel
-// grid and the lead-page .chat-surface grid both do this. Styling comes from the
-// .chat-surface scope in inbox.css (which also matches the inbox's own
-// .inbox-bg-container), so the thread looks identical in either shell.
+// ChatThread is the reusable message thread + composer. It owns the realtime
+// subscription, the virtualised scroller (with all the snap / load-more arming
+// logic), the reply composer and the bot→human takeover affordance. It renders a
+// FRAGMENT (scroll shell + <footer/>) so the host shell lays out the scroller
+// (1fr) and composer (auto) — the inbox center-panel grid does this. Styling
+// comes from the .inbox-bg-container scope in inbox.css.
 
 const classify = (
   msg: Message,

@@ -3,9 +3,8 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { Inbox } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getRelativeTimeString } from "@/lib/utils";
 import { TopToolbar } from "../layout/TopToolbar";
-import { getRelativeTimeString } from "../leads/leadUtils";
 import type { BotRun } from "../types";
 import { durationLabel, outcomeMeta } from "./botRunMeta";
 

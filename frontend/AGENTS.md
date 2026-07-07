@@ -59,13 +59,12 @@ Chat-specific calls (message history, last-message snippets, SSE subscribe)
 live in `src/components/atomic-crm/conversations/chatRepository.ts` and
 `src/lib/vfic/humanReplyService.ts`, which use the same REST client.
 
-### Resources (the five that exist)
+### Resources
 
 Declared in `src/components/atomic-crm/root/CRM.tsx`:
 
 | Resource | Module | Purpose |
 |---|---|---|
-| `leads` | `atomic-crm/leads/` | Candidate pipeline (list/show/create/edit) |
 | `conversations` | `atomic-crm/conversations/` | Zalo chat inbox + thread |
 | `bot_runs` | `atomic-crm/automation/` | Bot execution audit trail (read-only) |
 | `knowledge_sources` | `atomic-crm/knowledge/` | RAG document admin (read-only) |
@@ -88,7 +87,6 @@ src/
 │       ├── dashboard/      # recruiter/admin dashboard
 │       ├── knowledge/      # knowledge_sources admin
 │       ├── layout/         # app shell, header, topbar, notifications
-│       ├── leads/          # candidate pipeline
 │       ├── login/          # auth page
 │       ├── profiles/       # users resource
 │       ├── providers/      # dataProvider + authProvider + i18n (REST, not Supabase)

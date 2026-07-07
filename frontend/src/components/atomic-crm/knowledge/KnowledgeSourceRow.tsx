@@ -17,8 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
-import { getRelativeTimeString } from "../leads/leadUtils";
+import { cn, getRelativeTimeString } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";
 import {

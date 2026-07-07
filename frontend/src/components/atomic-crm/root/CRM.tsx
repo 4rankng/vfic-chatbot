@@ -340,7 +340,6 @@ export const CRM = ({
       {...rest}
     >
       <CustomRoutes>
-        <Route path="/leads/*" element={<Navigate to="/" replace />} />
         <Route
           path={PROFILE_PATH}
           element={

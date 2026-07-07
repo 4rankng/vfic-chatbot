@@ -5,12 +5,25 @@
 .inbox-bg-container,
 .mobile-dashboard-shell {
   color-scheme: light;
-  --surface: #f8fafc;
-  --surface-solid: #ffffff;
-  --surface-hover: #f1f5f9;
-  --ink: #0f172a;
-  --ink-muted: #475569;
-  --ink-faint: #94a3b8;
+  --paper-desk: #efe6d6;
+  --paper-desk-deep: #e8ddca;
+  --paper: #fffdf7;
+  --paper-soft: #fbf6ea;
+  --paper-warm: #f8edd8;
+  --paper-green: #ecf6ef;
+  --paper-blue: #eef4f7;
+  --paper-yellow: #fff6df;
+  --paper-line: #ded2bd;
+  --paper-line-soft: #ebe0cd;
+  --paper-teal-border: #cce5df;
+  --priority: #b96727;
+  --priority-bg: #fff1dd;
+  --surface: var(--paper-desk);
+  --surface-solid: var(--paper);
+  --surface-hover: var(--paper-soft);
+  --ink: #27231d;
+  --ink-muted: #5f594d;
+  --ink-faint: #9b9182;
   --background: var(--surface);
   --foreground: var(--ink);
   --card: var(--surface-solid);
@@ -21,60 +34,81 @@
   --muted-foreground: var(--ink-muted);
   --secondary: var(--surface-hover);
   --secondary-foreground: var(--ink);
-  --border-strong: #cbd5e1;
-  --border-glass: rgba(15, 23, 42, 0.08);
-  --primary-soft: #eaf7f4;
-  --primary-soft-border: #b7dcd6;
-  --inbox-accent: #0f766e;
-  --inbox-accent-light: #eaf7f4;
-  --brand: #0f766e;
-  --brand-hover: #115e59;
-  --brand-light: #eaf7f4;
-  --success: #059669;
-  --success-light: rgba(5, 150, 105, 0.12);
-  --warning: #ea580c;
-  --warning-light: #fff7ed;
-  --danger: #dc2626;
-  --danger-light: #fef2f2;
-  --info: #0f766e;
-  --info-light: #eaf7f4;
-  --chat-bg: #f8fafc;
-  --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #eaf7f4;
-  --chat-bubble-user: #ffffff;
-  --chat-bubble-user-text: #0f172a;
-  --chat-bubble-bot: #eaf7f4;
-  --chat-bubble-agent: #eaf7f4;
-  --chat-bubble-agent-text: #0f172a;
-  --chat-header-bg: rgba(248, 250, 252, 0.95);
-  --workspace-bg: #ffffff;
-  --workspace-bg-deep: #f8fafc;
-  --workspace-border: rgba(15, 23, 42, 0.1);
-  --workspace-ink: #0f172a;
-  --workspace-muted: #475569;
-  --workspace-faint: #94a3b8;
-  --workspace-hover: rgba(15, 118, 110, 0.08);
-  --workspace-active: #0f766e;
-  --workspace-active-border: #b7dcd6;
-  --workspace-switcher-bg: #ffffff;
-  --workspace-switcher-bg-deep: #f1f5f9;
-  --workspace-switcher-active: #0f766e;
-  --workspace-switcher-hover: #f1f5f9;
-  background: var(--surface);
+  --border: var(--paper-line);
+  --input: var(--paper-line);
+  --border-strong: var(--paper-line);
+  --border-glass: rgba(222, 210, 189, 0.62);
+  --primary-soft: #dcefeb;
+  --primary-soft-border: var(--paper-teal-border);
+  --inbox-accent: #28786f;
+  --inbox-accent-light: #dcefeb;
+  --brand: #28786f;
+  --brand-hover: #1f5f58;
+  --brand-light: #dcefeb;
+  --success: #28786f;
+  --success-light: #dcefeb;
+  --warning: var(--priority);
+  --warning-light: var(--priority-bg);
+  --danger: #b23a2e;
+  --danger-light: #f8e7e4;
+  --info: #28786f;
+  --info-light: #dcefeb;
+  --chat-bg:
+    linear-gradient(90deg, rgba(222, 210, 189, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(222, 210, 189, 0.06) 1px, transparent 1px),
+    rgba(251, 246, 234, 0.54);
+  --chat-bubble-in: var(--paper);
+  --chat-bubble-out: #ecf6ef;
+  --chat-bubble-user: var(--paper);
+  --chat-bubble-user-text: var(--ink);
+  --chat-bubble-bot: #ecf6ef;
+  --chat-bubble-agent: #ecf6ef;
+  --chat-bubble-agent-text: var(--ink);
+  --chat-header-bg: linear-gradient(
+    to bottom,
+    rgba(255, 253, 247, 0.98),
+    rgba(251, 246, 234, 0.96)
+  );
+  --workspace-bg: var(--paper);
+  --workspace-bg-deep: var(--paper-soft);
+  --workspace-border: var(--paper-line-soft);
+  --workspace-ink: var(--ink);
+  --workspace-muted: var(--ink-muted);
+  --workspace-faint: var(--ink-faint);
+  --workspace-hover: var(--paper-soft);
+  --workspace-active: #28786f;
+  --workspace-active-border: var(--paper-teal-border);
+  --workspace-switcher-bg: var(--paper-soft);
+  --workspace-switcher-bg-deep: var(--paper-desk);
+  --workspace-switcher-active: #28786f;
+  --workspace-switcher-hover: var(--paper);
+  --shadow-sm: 0 1px 2px rgba(79, 59, 31, 0.08);
+  --shadow-md:
+    0 2px 0 rgba(79, 59, 31, 0.05), 0 18px 42px rgba(79, 59, 31, 0.12);
+  --shadow-lg:
+    0 2px 0 rgba(79, 59, 31, 0.055), 0 10px 22px rgba(79, 59, 31, 0.1);
+  background:
+    radial-gradient(circle at 5% 2%, rgba(255, 255, 255, 0.9), transparent 30%),
+    radial-gradient(
+      circle at 85% 18%,
+      rgba(255, 246, 223, 0.7),
+      transparent 28%
+    ),
+    linear-gradient(135deg, var(--paper-desk), var(--paper-desk-deep));
   color: var(--ink);
 }
 
 .dark .inbox-bg-container,
 .dark .mobile-dashboard-shell {
-  --surface: #f8fafc;
-  --surface-solid: #ffffff;
-  --surface-hover: #f1f5f9;
-  --ink: #0f172a;
-  --ink-muted: #475569;
-  --border-strong: #cbd5e1;
-  --brand: #0f766e;
-  --brand-light: #eaf7f4;
-  background: var(--surface);
+  --surface: var(--paper-desk);
+  --surface-solid: var(--paper);
+  --surface-hover: var(--paper-soft);
+  --ink: #27231d;
+  --ink-muted: #5f594d;
+  --ink-faint: #9b9182;
+  --border-strong: var(--paper-line);
+  --brand: #28786f;
+  --brand-light: #dcefeb;
   color: var(--ink);
 }
 
@@ -114,7 +148,7 @@
   min-height: 100dvh;
   padding: 18px 16px 112px;
   background:
-    linear-gradient(180deg, rgba(17, 123, 95, 0.08), transparent 210px),
+    linear-gradient(180deg, rgba(40, 120, 111, 0.08), transparent 210px),
     var(--surface);
 }
 
@@ -137,7 +171,7 @@
 .recruiting-hero,
 .recruiting-panel,
 .project-rail-item {
-  border: 1px solid rgba(21, 34, 27, 0.09);
+  border: 1px solid var(--paper-line-soft);
   background: var(--surface-solid);
   box-shadow: none;
 }
@@ -202,9 +236,9 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid rgba(21, 34, 27, 0.1);
+  border: 1px solid var(--paper-line-soft);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--paper);
   color: var(--ink);
   padding: 0 14px;
   font-size: var(--crm-fs-action);
@@ -214,7 +248,7 @@
 .recruiting-action.primary {
   border-color: var(--brand);
   background: var(--brand);
-  color: #ffffff;
+  color: var(--primary-foreground);
 }
 
 .recruiting-project-rail {
@@ -251,7 +285,7 @@
 }
 
 .project-rail-item.active {
-  border-color: rgba(17, 123, 95, 0.22);
+  border-color: var(--paper-teal-border);
   background: var(--brand-light);
 }
 
@@ -263,7 +297,7 @@
   place-items: center;
   border-radius: 13px;
   background: var(--brand);
-  color: #ffffff;
+  color: var(--primary-foreground);
 }
 
 .project-rail-mark.danger {
@@ -315,8 +349,8 @@
   justify-content: space-between;
   gap: 9px;
   padding: 11px 12px;
-  border-bottom: 1px solid rgba(21, 34, 27, 0.08);
-  background: rgba(238, 243, 237, 0.62);
+  border-bottom: 1px solid var(--paper-line-soft);
+  background: color-mix(in srgb, var(--paper-soft) 82%, var(--paper));
 }
 
 .recruiting-panel-header h2 {
@@ -352,7 +386,7 @@
   align-items: center;
   gap: 12px;
   border: 0;
-  border-bottom: 1px solid rgba(21, 34, 27, 0.08);
+  border-bottom: 1px solid var(--paper-line-soft);
   background: transparent;
   color: var(--ink);
   padding: 10px 12px;
@@ -456,7 +490,7 @@
   align-items: center;
   gap: 12px;
   border: 0;
-  border-bottom: 1px solid rgba(21, 34, 27, 0.08);
+  border-bottom: 1px solid var(--paper-line-soft);
   background: transparent;
   color: var(--ink);
   padding: 12px 16px;
@@ -535,7 +569,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(21, 34, 27, 0.08);
+  border-bottom: 1px solid var(--paper-line-soft);
 }
 
 .readiness-row:last-child {
@@ -577,26 +611,31 @@
 }
 
 .inbox-bg-container .workspace-icon-rail {
-  background: #eef3ed;
-  border-right: 1px solid rgba(21, 34, 27, 0.08);
+  background: var(--paper-desk);
+  border-right: 1px solid var(--paper-line);
 }
 
 .inbox-bg-container .workspace-logo-tile,
 .inbox-bg-container .workspace-icon-action,
 .inbox-bg-container .workspace-rail-user {
-  background: #ffffff;
+  background: var(--paper);
+  border: 1px solid var(--paper-line-soft);
   color: var(--ink-muted);
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .inbox-bg-container .workspace-icon-action.active {
   background: var(--brand);
-  color: #ffffff;
+  border-color: var(--brand);
+  color: var(--primary-foreground);
+  box-shadow: 0 7px 18px rgba(40, 120, 111, 0.28);
 }
 
 .inbox-bg-container .workspace-logo-tile.active {
   background: var(--brand);
-  color: #ffffff;
+  border-color: var(--brand);
+  color: var(--primary-foreground);
+  box-shadow: 0 7px 18px rgba(40, 120, 111, 0.28);
 }
 
 .inbox-bg-container .left-panel {
@@ -606,7 +645,7 @@
 
 @media (min-width: 768px) {
   .inbox-bg-container .left-panel {
-    border-right: 1px solid rgba(21, 34, 27, 0.08);
+    border-right: 1px solid var(--paper-line-soft);
     background: var(--surface-solid);
     color: var(--ink);
   }
@@ -614,7 +653,7 @@
 
 .inbox-bg-container .workspace-rail {
   background:
-    linear-gradient(180deg, rgba(17, 123, 95, 0.07), transparent 180px),
+    linear-gradient(180deg, rgba(40, 120, 111, 0.07), transparent 180px),
     var(--surface-solid);
   color: var(--ink);
 }
@@ -630,23 +669,23 @@
 }
 
 .inbox-bg-container .search {
-  border-color: rgba(21, 34, 27, 0.08);
+  border-color: var(--paper-line-soft);
   background: var(--surface-hover);
   color: var(--ink-muted);
 }
 
 .inbox-bg-container .conversation {
-  border-color: rgba(21, 34, 27, 0.08);
-  background: #ffffff;
+  border-color: var(--paper-line-soft);
+  background: var(--paper);
 }
 
 .inbox-bg-container .conversation.active {
-  background: var(--brand-light);
+  background: var(--paper-green);
 }
 
 .inbox-bg-container .conversation.needs-attention {
-  border-color: rgba(190, 61, 61, 0.16);
-  background: color-mix(in srgb, var(--danger-light) 42%, #ffffff);
+  border-color: #f3d3aa;
+  background: color-mix(in srgb, var(--priority-bg) 48%, var(--paper));
 }
 
 .inbox-bg-container .conversation.active::before {
@@ -673,12 +712,12 @@
 }
 
 .inbox-bg-container .chat-header {
-  border-bottom-color: rgba(21, 34, 27, 0.08);
+  border-bottom-color: var(--paper-line-soft);
   background: var(--chat-header-bg);
 }
 
 .inbox-bg-container .mode-menu-trigger {
-  background: #ffffff;
+  background: var(--paper);
 }
 
 .inbox-bg-container .mode-menu-trigger.human {

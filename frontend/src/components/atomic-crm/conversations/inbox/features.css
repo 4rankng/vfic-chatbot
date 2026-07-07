@@ -48,12 +48,15 @@
     var(--surface-solid);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
-    0 16px 42px rgba(63, 14, 64, 0.035);
+    0 16px 42px rgba(15, 23, 42, 0.035);
 }
 
 .settings-workspace-content {
   --settings-accent: var(--success);
   --settings-accent-soft: var(--success-light);
+  background:
+    linear-gradient(180deg, rgba(80, 58, 30, 0.025), transparent 220px),
+    var(--workspace-bg-deep);
 }
 
 .settings-header-actions {
@@ -65,21 +68,21 @@
 }
 
 .settings-page-shell {
-  width: min(100%, 1280px);
+  width: min(100%, 1240px);
   gap: 0;
 }
 
 .settings-console {
   display: grid;
-  grid-template-columns: minmax(214px, 236px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(206px, 226px) minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
 }
 
 .settings-main {
   min-width: 0;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   scroll-margin-top: 18px;
 }
 
@@ -89,17 +92,11 @@
   display: grid;
   gap: 12px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-  border-radius: 12px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-solid) 97%, transparent),
-      color-mix(in srgb, var(--surface-hover) 22%, var(--surface-solid))
-    ),
-    var(--surface-solid);
+  border: 1px solid color-mix(in srgb, var(--workspace-border) 88%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--workspace-bg) 92%, transparent);
   padding: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  box-shadow: none;
 }
 
 .settings-side-nav-header {
@@ -260,22 +257,12 @@
 
 .settings-command-header {
   min-height: auto;
-  padding: 16px;
-  border-color: color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 12px;
-  background:
-    radial-gradient(
-      circle at 36px 28px,
-      color-mix(in srgb, var(--settings-accent) 10%, transparent),
-      transparent 72px
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-solid) 98%, transparent),
-      color-mix(in srgb, var(--surface-hover) 30%, var(--surface-solid))
-    ),
-    var(--surface-solid);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  padding: 14px 2px 18px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 76%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .settings-command-header .ops-command-title {
@@ -283,10 +270,10 @@
 }
 
 .settings-command-header .ops-command-mark {
-  width: 40px;
-  height: 40px;
-  border-color: color-mix(in srgb, var(--settings-accent) 24%, transparent);
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-color: color-mix(in srgb, var(--settings-accent) 22%, transparent);
+  border-radius: 9px;
   background: color-mix(
     in srgb,
     var(--settings-accent-soft) 68%,
@@ -303,7 +290,7 @@
 
 .settings-command-header h1 {
   margin-top: 2px;
-  font-size: var(--crm-fs-title-xl);
+  font-size: var(--crm-fs-title-lg);
   font-weight: var(--chat-fw-bold);
   letter-spacing: 0;
   line-height: var(--crm-lh-heading);
@@ -352,6 +339,7 @@
 
 .settings-command-header .settings-save-button {
   border-color: color-mix(in srgb, var(--settings-accent) 70%, transparent);
+  border-radius: 8px;
   background: var(--settings-accent);
   color: var(--primary-foreground);
 }
@@ -360,16 +348,7 @@
   background: color-mix(in srgb, var(--settings-accent) 88%, var(--ink));
 }
 
-.settings-command-header .settings-save-button:disabled {
-  border-color: color-mix(in srgb, var(--settings-accent) 18%, var(--border));
-  background: color-mix(
-    in srgb,
-    var(--settings-accent-soft) 76%,
-    var(--surface-solid)
-  );
-  color: color-mix(in srgb, var(--settings-accent) 68%, var(--ink-muted));
-  opacity: 1;
-}
+
 
 .profile-command-header {
   min-height: 104px;
@@ -594,7 +573,7 @@
 }
 
 .settings-grid-zalo {
-  grid-template-columns: minmax(300px, 0.76fr) minmax(420px, 1.24fr);
+  grid-template-columns: minmax(300px, 0.82fr) minmax(460px, 1.18fr);
 }
 
 .settings-grid-models {
@@ -615,11 +594,11 @@
   align-items: start;
   gap: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-solid) 96%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--workspace-border) 86%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--workspace-bg) 94%, transparent);
   padding: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  box-shadow: none;
   transition:
     border-color 0.18s var(--ease),
     transform 0.18s var(--ease);
@@ -635,10 +614,10 @@
   justify-content: space-between;
   gap: 12px;
   min-height: auto;
-  padding: 16px 14px;
+  padding: 14px 16px 12px;
   border-right: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  background: color-mix(in srgb, var(--surface-hover) 22%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 72%, transparent);
+  background: transparent;
 }
 
 .settings-card-title-group {
@@ -649,8 +628,8 @@
 }
 
 .settings-card-icon {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -691,8 +670,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   align-content: start;
-  gap: 12px 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 14px 16px 16px;
 }
 
 .settings-field {
@@ -718,13 +697,13 @@
 }
 
 .settings-card .settings-input {
-  min-height: 44px;
-  border-color: color-mix(in srgb, var(--border) 94%, transparent);
+  min-height: 42px;
+  border-color: color-mix(in srgb, var(--workspace-border) 88%, transparent);
   border-radius: 8px;
   background: color-mix(
     in srgb,
-    var(--surface-solid) 92%,
-    var(--surface-hover)
+    var(--workspace-bg) 78%,
+    var(--surface-solid)
   );
   color: var(--ink);
   font-size: var(--crm-fs-body);
@@ -777,34 +756,11 @@
   grid-column: 1 / -1;
 }
 
-.settings-oa-status {
+.settings-oa-fields {
+  min-width: 0;
   display: grid;
-  gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-hover) 36%, transparent);
-  padding: 12px;
-}
-
-.settings-oa-status.is-connected {
-  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
-  background: color-mix(
-    in srgb,
-    var(--success-light) 48%,
-    var(--surface-solid)
-  );
-}
-
-.settings-oa-status strong {
-  color: var(--ink);
-  font-size: var(--crm-fs-body-sm);
-  font-weight: var(--chat-fw-bold);
-  line-height: var(--crm-lh-title);
-}
-
-.settings-oa-status [data-slot="button"] {
-  width: fit-content;
-  min-height: var(--crm-control-height-md);
+  align-content: start;
+  gap: 12px;
 }
 
 .settings-advanced {
@@ -988,5 +944,5 @@
   border-radius: var(--rad-lg);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.38),
-    0 14px 34px rgba(63, 14, 64, 0.028);
+    0 14px 34px rgba(15, 23, 42, 0.028);
 }

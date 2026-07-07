@@ -772,7 +772,7 @@
   font-style: italic;
 }
 
-:is(.inbox-bg-container, .chat-surface) .empty-state {
+.inbox-bg-container .empty-state {
   display: grid;
   place-items: center;
   min-height: 300px;

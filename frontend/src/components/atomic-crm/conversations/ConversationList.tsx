@@ -84,7 +84,7 @@ const UNREAD_BADGE_COUNT_STYLE: React.CSSProperties = {
   padding: "0 4px",
   borderRadius: 9999,
   background: "var(--ember)",
-  color: "#fff",
+  color: "var(--primary-foreground)",
   fontSize: 10,
   fontWeight: 700,
   lineHeight: "18px",

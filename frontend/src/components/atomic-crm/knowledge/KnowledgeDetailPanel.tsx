@@ -21,7 +21,7 @@ import {
   downloadKnowledgeRawFile,
   reindexKnowledge,
 } from "@/lib/vfic/knowledgeService";
-import { getRelativeTimeString } from "../leads/leadUtils";
+import { getRelativeTimeString } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";
 import {
