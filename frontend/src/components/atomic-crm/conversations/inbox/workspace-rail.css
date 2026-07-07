@@ -7,15 +7,15 @@
   align-items: center;
   gap: 8px;
   padding: 8px 6px 10px;
-  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  border-right: 1px solid var(--workspace-border);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 25%),
+    linear-gradient(180deg, var(--workspace-hover), transparent 25%),
     linear-gradient(
       180deg,
       var(--workspace-switcher-bg),
       var(--workspace-switcher-bg-deep)
     );
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--workspace-muted);
 }
 
 .inbox-bg-container .workspace-logo-tile,
@@ -62,7 +62,7 @@
 }
 
 .inbox-bg-container .workspace-icon-action:hover {
-  color: #ffffff;
+  color: var(--workspace-active);
   background: var(--workspace-switcher-hover);
   transform: translateY(-1px);
 }
@@ -84,15 +84,15 @@
 
 .inbox-bg-container .workspace-icon-add {
   margin-top: auto;
-  color: rgba(255, 255, 255, 0.86);
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--workspace-muted);
+  background: var(--workspace-hover);
 }
 
 .inbox-bg-container .workspace-rail-user {
   margin-top: auto;
   overflow: hidden;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.14);
+  color: var(--workspace-ink);
+  background: var(--workspace-hover);
 }
 
 @media (max-height: 520px) and (min-width: 768px) {
@@ -224,8 +224,8 @@
   .inbox-bg-container .search input {
     height: 36px;
     color: var(--workspace-ink);
-    border-color: rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--workspace-border);
+    background: var(--workspace-hover);
     font-size: var(--crm-fs-input);
   }
 
@@ -235,8 +235,8 @@
 
   .inbox-bg-container .search input:focus {
     border-color: var(--workspace-active-border);
-    background: rgba(255, 255, 255, 0.13);
-    box-shadow: 0 0 0 3px rgba(219, 234, 254, 0.16);
+    background: var(--workspace-bg);
+    box-shadow: 0 0 0 3px var(--brand-light);
   }
 
   .inbox-bg-container .search:focus-within .icon {

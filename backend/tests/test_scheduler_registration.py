@@ -1,8 +1,6 @@
 """Tests for register_unique_tick — mock-based, no Redis/DB required."""
 
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from app.workers.scheduler_utils import register_unique_tick
 

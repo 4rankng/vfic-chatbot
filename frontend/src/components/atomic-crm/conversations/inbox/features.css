@@ -59,6 +59,7 @@
 .settings-header-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -70,15 +71,15 @@
 
 .settings-console {
   display: grid;
-  grid-template-columns: minmax(220px, 248px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(214px, 236px) minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
 }
 
 .settings-main {
   min-width: 0;
   display: grid;
-  gap: 14px;
+  gap: 16px;
   scroll-margin-top: 18px;
 }
 
@@ -122,6 +123,26 @@
 .settings-side-nav-list {
   display: grid;
   gap: 4px;
+}
+
+.settings-side-nav-group {
+  display: grid;
+  gap: 7px;
+}
+
+.settings-side-nav-group + .settings-side-nav-group {
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+}
+
+.settings-side-nav-group-label {
+  padding-inline: 4px;
+  color: var(--ink-muted);
+  font-size: var(--crm-fs-badge);
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0.06em;
+  line-height: var(--crm-lh-title);
+  text-transform: uppercase;
 }
 
 .settings-side-nav-link {
@@ -301,6 +322,32 @@
 .settings-command-header [data-slot="button"] {
   min-height: var(--crm-control-height-md);
   height: var(--crm-control-height-md);
+}
+
+.settings-change-pill {
+  min-height: var(--crm-control-height-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-solid) 84%, transparent);
+  color: var(--ink-muted);
+  padding: 0 11px;
+  font-size: var(--crm-fs-badge);
+  font-weight: var(--chat-fw-semibold);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.settings-change-pill.is-dirty {
+  border-color: color-mix(in srgb, var(--settings-accent) 30%, var(--border));
+  background: color-mix(
+    in srgb,
+    var(--settings-accent-soft) 72%,
+    var(--surface-solid)
+  );
+  color: var(--settings-accent);
 }
 
 .settings-command-header .settings-save-button {
@@ -542,8 +589,16 @@
 .settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 14px;
   align-items: start;
+}
+
+.settings-grid-zalo {
+  grid-template-columns: minmax(300px, 0.76fr) minmax(420px, 1.24fr);
+}
+
+.settings-grid-models {
+  grid-template-columns: minmax(320px, 0.78fr) minmax(460px, 1.22fr);
 }
 
 .settings-section-panel {
@@ -552,130 +607,12 @@
   scroll-margin-top: 18px;
 }
 
-.settings-section-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-solid) 88%, transparent);
-  padding: 13px 16px;
-}
-
-.settings-section-icon {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--settings-accent) 20%, transparent);
-  border-radius: 9px;
-  background: color-mix(
-    in srgb,
-    var(--settings-accent-soft) 58%,
-    var(--surface-solid)
-  );
-  color: var(--settings-accent);
-}
-
-.settings-section-heading h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--crm-fs-section-title);
-  font-weight: var(--chat-fw-bold);
-  line-height: var(--crm-lh-title);
-}
-
-.settings-section-heading p {
-  max-width: 72ch;
-  margin: 4px 0 0;
-  color: var(--ink-muted);
-  font-size: var(--crm-fs-body-sm);
-  font-weight: var(--chat-fw-medium);
-  line-height: var(--crm-lh-body);
-  text-wrap: pretty;
-}
-
-.settings-shortcut-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.settings-shortcut-card {
-  min-height: 78px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 12px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-solid) 98%, transparent),
-      color-mix(in srgb, var(--surface-hover) 18%, var(--surface-solid))
-    ),
-    var(--surface-solid);
-  color: var(--ink);
-  padding: 12px 14px;
-  text-decoration: none;
-  transition:
-    border-color 0.16s var(--ease),
-    background-color 0.16s var(--ease),
-    transform 0.16s var(--ease);
-}
-
-.settings-shortcut-card.is-primary {
-  border-color: color-mix(in srgb, var(--settings-accent) 22%, var(--border));
-  background: color-mix(
-    in srgb,
-    var(--settings-accent-soft) 34%,
-    var(--surface-solid)
-  );
-}
-
-.settings-shortcut-card:hover {
-  border-color: color-mix(in srgb, var(--settings-accent) 30%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--settings-accent-soft) 42%,
-    var(--surface-solid)
-  );
-  transform: translateY(-1px);
-}
-
-.settings-shortcut-card:active {
-  transform: translateY(1px);
-}
-
-.settings-shortcut-card > span:last-child {
-  min-width: 0;
-}
-
-.settings-shortcut-card strong {
-  display: block;
-}
-
-.settings-shortcut-card strong {
-  font-size: var(--crm-fs-body-sm);
-  font-weight: var(--chat-fw-bold);
-  line-height: var(--crm-lh-title);
-}
-
-.settings-shortcut-card p {
-  margin: 5px 0 0;
-  color: var(--ink-muted);
-  font-size: var(--crm-fs-hint);
-  font-weight: var(--chat-fw-medium);
-  line-height: var(--crm-lh-body);
-}
-
 .settings-card {
   container: settings-card / inline-size;
   position: relative;
   display: grid;
-  grid-template-columns: minmax(184px, 0.28fr) minmax(0, 1fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
@@ -692,20 +629,23 @@
   border-color: color-mix(in srgb, var(--settings-accent) 18%, var(--border));
 }
 
-.settings-card-wide {
-  grid-column: auto;
-}
-
 .settings-card-header {
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-height: auto;
   padding: 16px 14px;
-  border-right: 1px solid var(--border);
-  border-bottom: 0;
+  border-right: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   background: color-mix(in srgb, var(--surface-hover) 22%, transparent);
+}
+
+.settings-card-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
 }
 
 .settings-card-icon {
@@ -722,6 +662,13 @@
     var(--surface-solid)
   );
   color: var(--settings-accent);
+}
+
+.settings-card-meta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
 }
 
 .settings-card-header [data-slot="card-title"] {
@@ -742,7 +689,7 @@
 
 .settings-card-content {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   align-content: start;
   gap: 12px 14px;
   padding: 16px;
@@ -797,6 +744,100 @@
   line-height: var(--crm-lh-body);
 }
 
+.settings-readonly-field {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-hover) 34%, transparent);
+  padding: 10px 11px;
+}
+
+.settings-readonly-label {
+  color: var(--ink-muted);
+  font-size: var(--crm-fs-badge);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
+}
+
+.settings-readonly-field strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--crm-font-family);
+  font-size: var(--crm-fs-body-sm);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-advanced {
+  grid-column: 1 / -1;
+}
+
+.settings-oa-status {
+  display: grid;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-hover) 36%, transparent);
+  padding: 12px;
+}
+
+.settings-oa-status.is-connected {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+  background: color-mix(
+    in srgb,
+    var(--success-light) 48%,
+    var(--surface-solid)
+  );
+}
+
+.settings-oa-status strong {
+  color: var(--ink);
+  font-size: var(--crm-fs-body-sm);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--crm-lh-title);
+}
+
+.settings-oa-status [data-slot="button"] {
+  width: fit-content;
+  min-height: var(--crm-control-height-md);
+}
+
+.settings-advanced {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-solid) 86%, transparent);
+}
+
+.settings-advanced-summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--ink);
+  padding: 0 12px;
+  font-size: var(--crm-fs-body-sm);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
+}
+
+.settings-advanced-summary::marker {
+  color: var(--settings-accent);
+}
+
+.settings-advanced-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 12px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: 14px;
+}
+
 .settings-status-badge {
   flex: 0 0 auto;
   min-height: 20px;
@@ -819,8 +860,15 @@
   color: var(--ink-muted);
 }
 
-@container settings-card (max-width: 720px) {
+@container settings-card (max-width: 560px) {
   .settings-card-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1120px) {
+  .settings-grid-zalo,
+  .settings-grid-models {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -833,6 +881,10 @@
   .settings-side-nav {
     position: relative;
     top: auto;
+  }
+
+  .settings-side-nav-group + .settings-side-nav-group {
+    padding-top: 8px;
   }
 
   .settings-side-nav-list {
@@ -873,24 +925,25 @@
     padding: 6px 8px;
   }
 
+  .settings-workspace-content .settings-side-nav-group-label {
+    display: none;
+  }
+
   .settings-workspace-content .settings-side-nav-copy span {
     display: none;
   }
 
-  .settings-workspace-content .settings-shortcut-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+  .settings-workspace-content .settings-header-actions {
+    justify-content: stretch;
   }
 
-  .settings-workspace-content .settings-shortcut-card {
-    min-height: 64px;
+  .settings-workspace-content .settings-change-pill,
+  .settings-workspace-content .settings-save-button {
+    flex: 1 1 100%;
+  }
+
+  .settings-workspace-content .settings-card-header {
     align-items: flex-start;
-    gap: 8px;
-    padding: 10px;
-  }
-
-  .settings-workspace-content .settings-shortcut-card p {
-    display: none;
   }
 }
 

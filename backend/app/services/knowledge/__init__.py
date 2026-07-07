@@ -23,7 +23,10 @@ from app.services.knowledge.canonical import (
     parse_canonical_markdown,
 )
 from app.services.knowledge.extraction import split_for_digest
-from app.services.knowledge.file_extraction import KnowledgeFileExtractionError
+from app.services.knowledge.file_extraction import (
+    KnowledgeFileExtractionError,
+    extract_text,
+)
 from app.services.knowledge.pipeline import (
     Embedder,
     KnowledgePipeline,
@@ -42,6 +45,7 @@ __all__ = [
     "CANONICAL_SCHEMA_VERSIONS",
     "CanonicalValidationError",
     "SCHEMA_VERSION",
+    "extract_text",
     "load_template",
     "parse_canonical_markdown",
     "split_for_digest",

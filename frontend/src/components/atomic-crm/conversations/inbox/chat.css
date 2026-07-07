@@ -545,7 +545,7 @@
 
 :is(.inbox-bg-container, .chat-surface) .chat-scroller {
   min-height: 0;
-  padding: 0;
+  padding: clamp(18px, 2vw, 28px) 0 clamp(20px, 2.2vw, 32px);
   overflow-y: auto;
   overscroll-behavior: contain;
   overflow-anchor: none;
@@ -560,7 +560,7 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
-  padding: 32px !important;
+  padding: 0 !important;
   overflow-anchor: none;
 }
 
@@ -650,8 +650,9 @@
 :is(.inbox-bg-container, .chat-surface) .message-row {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-inline: clamp(24px, 3vw, 44px);
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -663,6 +664,7 @@
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
   margin-top: 0;
+  margin-bottom: 6px;
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-row.user {
@@ -696,11 +698,11 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble {
-  max-width: min(56%, 500px);
+  max-width: min(62%, 560px);
   min-width: 0;
-  padding: 6px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: var(--chat-fs-message);
   line-height: var(--chat-lh-message);
   overflow-wrap: anywhere;
@@ -732,7 +734,7 @@
   border-top-left-radius: 3px;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.user.grouped .bubble {
-  border-top-left-radius: 10px;
+  border-top-left-radius: 12px;
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-row.bot .bubble {
@@ -749,7 +751,7 @@
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.bot.grouped .bubble,
 :is(.inbox-bg-container, .chat-surface) .message-row.agent.grouped .bubble {
-  border-top-right-radius: 10px;
+  border-top-right-radius: 12px;
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble-content {

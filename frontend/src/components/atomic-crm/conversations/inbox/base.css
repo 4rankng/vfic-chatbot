@@ -101,9 +101,7 @@
 @media (min-width: 768px) {
   .inbox-bg-container .left-panel {
     border-right: 1px solid var(--workspace-border);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 26%),
-      var(--workspace-bg);
+    background: var(--workspace-bg);
     color: var(--workspace-ink);
   }
 }
@@ -170,7 +168,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
     var(--surface);
 }
 
@@ -180,7 +178,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
     var(--surface);
 }
 
@@ -190,7 +188,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
     var(--surface);
 }
 
@@ -200,7 +198,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
     var(--surface);
 }
 
@@ -210,7 +208,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
     var(--surface);
 }
 
@@ -220,7 +218,7 @@
   min-height: 0;
   overflow-y: auto;
   background:
-    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 180px),
     var(--surface);
 }
 

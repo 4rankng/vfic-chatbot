@@ -58,3 +58,41 @@ def _extract_docx_text(data: bytes) -> str:
             paragraphs.append(text)
 
     return "\n\n".join(paragraphs)
+
+
+def _extract_xlsx_text(data: bytes) -> str:
+    """Flatten an XLSX workbook to tab-separated rows (one row per line)."""
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(BytesIO(data), read_only=True, data_only=True)
+    except Exception as exc:  # noqa: BLE001 — openpyxl raises several concrete types
+        raise KnowledgeFileExtractionError("XLSX không hợp lệ hoặc không đọc được.") from exc
+    try:
+        lines: list[str] = []
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                cells = ["" if cell is None else str(cell) for cell in row]
+                if any(cell.strip() for cell in cells):
+                    lines.append("\t".join(cells))
+    finally:
+        wb.close()
+    return "\n".join(lines)
+
+
+def extract_text(file_name: str, content_type: str, data: bytes | str) -> str:
+    """Convert an uploaded source file to ingestable plain text.
+
+    Dispatches by detected format: DOCX and XLSX are parsed; everything text-like
+    (txt, md, csv, JSON, …) is decoded as UTF-8. Raises ``KnowledgeFileExtractionError``
+    on a structurally invalid binary file; an undecodable text file surfaces its
+    ``UnicodeDecodeError`` to the caller (upload handler) as a hard failure.
+    """
+    if isinstance(data, str):
+        return data
+    fmt = _detect_upload_format(file_name, content_type)
+    if fmt == "docx":
+        return _extract_docx_text(data)
+    if fmt == "xlsx":
+        return _extract_xlsx_text(data)
+    return data.decode("utf-8")

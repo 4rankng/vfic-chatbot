@@ -363,12 +363,18 @@ class TestDegradationMessage:
         mock_conv = MagicMock()
         mock_conv.zalo_chat_id = "test_zalo_id"
 
+        # The worker binds the outbound sender via deps.zalo.for_conversation(conv),
+        # then awaits sender.send_message(chat_id, text). The awaitable must live on
+        # the BOUND sender, not on deps.zalo directly.
+        mock_sender = MagicMock()
+        mock_sender.send_message = AsyncMock()
         mock_deps = MagicMock()
         mock_deps.zalo = MagicMock()
-        mock_deps.zalo.send_message = AsyncMock()
+        mock_deps.zalo.for_conversation = MagicMock(return_value=mock_sender)
 
         mock_svc = MagicMock()
         mock_svc.get = AsyncMock(return_value=mock_conv)
+        mock_svc.record_bot_outcome = AsyncMock()
 
         # Patch lazy imports at their SOURCE modules
         with patch("app.workers._db.worker_session", return_value=mock_db):
@@ -380,6 +386,6 @@ class TestDegradationMessage:
                         # Should NOT raise — LLMThrottled is caught
                         await _run_job_async(job)
 
-        mock_deps.zalo.send_message.assert_called_once()
-        sent_msg = mock_deps.zalo.send_message.call_args[0][1]
+        mock_sender.send_message.assert_called_once()
+        sent_msg = mock_sender.send_message.call_args[0][1]
         assert "Xin lỗi" in sent_msg

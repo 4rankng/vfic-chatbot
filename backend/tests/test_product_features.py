@@ -18,7 +18,10 @@ from app.models.knowledge import KnowledgeStatus
 from app.services.knowledge import KnowledgePipeline
 from app.services.knowledge_service import KnowledgeService
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.skip(reason="integration test: needs live DB + fixtures (moved out of unit suite)"),
+]
 
 
 class _FakeEmbedder:

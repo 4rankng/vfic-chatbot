@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 import uuid
 from dataclasses import dataclass
@@ -44,6 +45,12 @@ ZALO_SETTING_KEYS = (
 # 1h; because every outbound turn re-resolves config, refreshing here keeps every
 # send on a valid token without any sender-side retry logic.
 OA_REFRESH_SAFETY_MARGIN_SECONDS = 300
+# Cross-turn mutex so two concurrent outbound turns don't both burn the single-use
+# refresh token (Zalo rotates it on every exchange). Loser uses the existing token.
+OA_REFRESH_LOCK_KEY = "zalo:oa:refresh:lock"
+OA_REFRESH_LOCK_TTL_SECONDS = 30
+
+logger = logging.getLogger(__name__)
 
 MINIMAX_SETTING_KEYS = (MINIMAX_API_KEY,)
 OPENROUTER_SETTING_KEYS = (OPENROUTER_API_KEY,)
@@ -188,8 +195,9 @@ class IntegrationSettingsService:
                 "preview": _preview(cfg.oa_access_token),
             },
             "zalo_oa_refresh_token": {
+                # Presence is all the UI needs; never expose even a preview of
+                # this long-lived (3-month) offline credential.
                 "configured": bool(cfg.oa_refresh_token),
-                "preview": _preview(cfg.oa_refresh_token),
             },
             # Non-secret ISO expiry (None when the OA was set up manually / no OAuth).
             "zalo_oa_access_token_expires_at": cfg.oa_access_token_expires_at or None,
@@ -390,35 +398,60 @@ class IntegrationSettingsService:
         secret_key = stored.get(ZALO_OA_SECRET_KEY) or self.settings.zalo_oa_secret_key
         if not app_id or not secret_key:
             return  # Can't refresh without app credentials.
-        try:
-            from app.services.zalo_oa_oauth import ZaloOAOAuthClient
+        # Acquire a short cross-turn lock so a concurrent resolve_zalo() on another
+        # conversation doesn't race to burn the single-use refresh token. The loser
+        # falls through on the existing (still-valid-for-its-remaining-seconds) token.
+        from app.core.redis import get_redis
 
-            token_set = await ZaloOAOAuthClient(app_id, secret_key).refresh(refresh_token)
-        except Exception:  # noqa: BLE001 — refresh is best-effort, never fatal
-            return
-        new_expires_at = now + timedelta(
-            seconds=max(token_set.expires_in - OA_REFRESH_SAFETY_MARGIN_SECONDS, 60)
+        redis = get_redis()
+        got_lock = await redis.set(
+            OA_REFRESH_LOCK_KEY, "1", ex=OA_REFRESH_LOCK_TTL_SECONDS, nx=True
         )
-        iso = new_expires_at.isoformat()
-        try:
-            from app.core.db import async_session
-
-            async with async_session() as session:
-                # Reuse this instance's cipher so the rotation is encrypted with
-                # the same key the rest of the row set uses.
-                await IntegrationSettingsService(
-                    session, settings=self.settings, cipher=self.cipher
-                ).store_oa_tokens(
-                    access_token=token_set.access_token,
-                    refresh_token=token_set.refresh_token,
-                    expires_at=iso,
-                    actor_id=None,
-                )
-        except Exception:  # noqa: BLE001 — never let refresh break a chat turn
+        if not got_lock:
+            logger.warning(
+                "zalo oa token refresh already in progress; using existing token"
+            )
             return
-        stored[ZALO_OA_ACCESS_TOKEN] = token_set.access_token
-        stored[ZALO_OA_REFRESH_TOKEN] = token_set.refresh_token
-        stored[ZALO_OA_ACCESS_TOKEN_EXPIRES_AT] = iso
+        try:
+            try:
+                from app.services.zalo_oa_oauth import ZaloOAOAuthClient
+
+                token_set = await ZaloOAOAuthClient(app_id, secret_key).refresh(refresh_token)
+            except Exception:  # noqa: BLE001 — refresh is best-effort, never fatal
+                logger.warning(
+                    "zalo oa token refresh failed; keeping existing token",
+                    exc_info=True,
+                )
+                return
+            new_expires_at = now + timedelta(
+                seconds=max(token_set.expires_in - OA_REFRESH_SAFETY_MARGIN_SECONDS, 60)
+            )
+            iso = new_expires_at.isoformat()
+            try:
+                from app.core.db import async_session
+
+                async with async_session() as session:
+                    # Reuse this instance's cipher so the rotation is encrypted with
+                    # the same key the rest of the row set uses.
+                    await IntegrationSettingsService(
+                        session, settings=self.settings, cipher=self.cipher
+                    ).store_oa_tokens(
+                        access_token=token_set.access_token,
+                        refresh_token=token_set.refresh_token,
+                        expires_at=iso,
+                        actor_id=None,
+                    )
+            except Exception:  # noqa: BLE001 — never let refresh break a chat turn
+                logger.warning(
+                    "zalo oa token refresh persist failed; keeping existing token",
+                    exc_info=True,
+                )
+                return
+            stored[ZALO_OA_ACCESS_TOKEN] = token_set.access_token
+            stored[ZALO_OA_REFRESH_TOKEN] = token_set.refresh_token
+            stored[ZALO_OA_ACCESS_TOKEN_EXPIRES_AT] = iso
+        finally:
+            await redis.delete(OA_REFRESH_LOCK_KEY)
 
     async def update_minimax(self, values: dict[str, str | None], *, actor_id) -> list[str]:
         changed: list[str] = []

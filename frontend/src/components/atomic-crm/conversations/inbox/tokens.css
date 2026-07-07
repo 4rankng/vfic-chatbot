@@ -10,20 +10,24 @@
 
   /* --border intentionally not redeclared here: inherit the global token from
      index.css (single source of truth). Only inbox-specific hairlines below. */
-  --border-strong: #c8d3e2;
+  --border-strong: #cbd5e1; /* slate-300 */
   --border-glass: rgba(203, 213, 225, 0.42);
 
   /* Private inbox accent. Renamed from --accent to
      avoid colliding with the shadcn --accent hover-surface token, which is
-     defined globally in index.css and consumed by ~50 primitives app-wide. */
-  --inbox-accent: #2563eb;
-  --inbox-accent-light: #eff6ff;
-  --brand: var(--inbox-accent);
-  --brand-hover: #1d4ed8;
-  --brand-light: var(--inbox-accent-light);
+     defined globally in index.css and consumed by ~50 primitives app-wide.
+     Tracks the global teal --primary so the inbox shares one brand color
+     instead of carrying its own blue identity. */
+  --primary-soft: #eaf7f4; /* teal-tinted brand soft surface */
+  --primary-soft-border: #b7dcd6;
+  --inbox-accent: var(--primary);
+  --inbox-accent-light: var(--primary-soft);
+  --brand: var(--primary);
+  --brand-hover: #115e59; /* teal-800 */
+  --brand-light: var(--primary-soft);
 
-  --success: var(--color-green, #2e9e63);
-  --success-light: rgba(46, 158, 99, 0.15);
+  --success: var(--color-green, #059669);
+  --success-light: color-mix(in oklab, var(--success) 15%, transparent);
 
   --rad-sm: 8px;
   --rad-md: 12px;
@@ -106,29 +110,33 @@
   --crm-fs-hint: var(--crm-fs-meta);
 
   --chat-bg: var(--background);
+  /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
+     stays neutral white; bot + admin (outgoing) own the brand teal-soft. */
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #dcfce7;
+  --chat-bubble-out: var(--primary-soft);
   --chat-bubble-user: #ffffff;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #dcfce7;
-  --chat-bubble-agent: #e0f2fe;
-  --chat-bubble-agent-text: #0f172a;
+  --chat-bubble-bot: var(--primary-soft);
+  --chat-bubble-agent: var(--primary-soft);
+  --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: var(--background);
-  --chat-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.08);
+  --chat-shadow: 0 1px 0.5px rgba(15, 23, 42, 0.06);
 
-  --workspace-bg: #5572aa;
-  --workspace-bg-deep: #496393;
-  --workspace-border: rgba(255, 255, 255, 0.12);
-  --workspace-ink: #f6f8f4;
-  --workspace-muted: rgba(246, 248, 244, 0.72);
-  --workspace-faint: rgba(246, 248, 244, 0.48);
-  --workspace-hover: rgba(255, 255, 255, 0.1);
-  --workspace-active: rgba(30, 64, 175, 0.72);
-  --workspace-active-border: rgba(219, 234, 254, 0.38);
-  --workspace-switcher-bg: #4e6da8;
-  --workspace-switcher-bg-deep: #425e94;
-  --workspace-switcher-active: rgba(255, 255, 255, 0.16);
-  --workspace-switcher-hover: rgba(255, 255, 255, 0.1);
+  /* Workspace sidebar/rail — neutral white surface + slate ink + teal active.
+     Dark variants re-declared in .dark below. */
+  --workspace-bg: #ffffff;
+  --workspace-bg-deep: #f8fafc;
+  --workspace-border: var(--border);
+  --workspace-ink: #0f172a;
+  --workspace-muted: #475569;
+  --workspace-faint: #94a3b8;
+  --workspace-hover: #f1f5f9;
+  --workspace-active: var(--primary);
+  --workspace-active-border: var(--primary-soft-border);
+  --workspace-switcher-bg: #ffffff;
+  --workspace-switcher-bg-deep: #f1f5f9;
+  --workspace-switcher-active: var(--primary);
+  --workspace-switcher-hover: #f1f5f9;
 }
 
 @media (max-width: 767px) {
@@ -167,23 +175,42 @@
   --border-strong: rgba(148, 163, 184, 0.12);
   --border-glass: rgba(148, 163, 184, 0.05);
 
-  --brand: #c8a2c8;
-  --brand-hover: #d8bfd8;
-  --brand-light: rgba(200, 162, 200, 0.18);
+  --primary-soft: color-mix(in oklab, var(--primary) 20%, var(--background));
+  --primary-soft-border: color-mix(in oklab, var(--primary) 38%, transparent);
+  --brand: var(--primary);
+  --brand-hover: color-mix(in oklab, var(--primary) 88%, white);
+  --brand-light: var(--primary-soft);
 
   --success: #22c55e;
   --success-light: rgba(34, 197, 94, 0.18);
 
   --chat-bg: #080c14;
+  /* Dark bubbles: candidate neutral dark slate; bot/admin own a lifted teal-soft
+     that stays distinguishable from the #080c14 chat bg. */
   --chat-bubble-in: #161f30;
-  --chat-bubble-out: #123821;
+  --chat-bubble-out: var(--primary-soft);
   --chat-bubble-user: #161f30;
   --chat-bubble-user-text: #f8fafc;
-  --chat-bubble-bot: #123821;
-  --chat-bubble-agent: #10243d;
+  --chat-bubble-bot: var(--primary-soft);
+  --chat-bubble-agent: var(--primary-soft);
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: #0f1524;
   --chat-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+
+  /* Dark workspace sidebar/rail — dark slate surface + light ink + teal active. */
+  --workspace-bg: #0f172a;
+  --workspace-bg-deep: #111827;
+  --workspace-border: oklch(0.33 0.02 263);
+  --workspace-ink: #f1f5f9;
+  --workspace-muted: rgba(241, 245, 249, 0.72);
+  --workspace-faint: rgba(148, 163, 184, 0.62);
+  --workspace-hover: rgba(148, 163, 184, 0.14);
+  --workspace-active: var(--primary);
+  --workspace-active-border: rgba(45, 212, 191, 0.45);
+  --workspace-switcher-bg: #0f172a;
+  --workspace-switcher-bg-deep: #0b1220;
+  --workspace-switcher-active: var(--primary);
+  --workspace-switcher-hover: rgba(148, 163, 184, 0.16);
 
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);

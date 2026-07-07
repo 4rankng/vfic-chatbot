@@ -54,6 +54,21 @@ def _oauth_redirect_uri(settings: Settings, request: Request) -> str:
     return f"{scheme}://{host}/api/v1/admin/integrations/zalo/oauth/callback"
 
 
+def _postmessage_target(settings: Settings, request: Request) -> str:
+    """Origin allowed to receive the OAuth result postMessage.
+
+    The popup is opened by the CRM tab; that tab's origin is the only valid
+    target. Prefer the opener's own ``Origin`` header (sent on the /start fetch),
+    validated against CORS_ORIGINS so an attacker can't retarget the message by
+    spoofing the header. Fall back to the first configured origin. Never '*'.
+    """
+    allowed = settings.cors_origins_list
+    opener = request.headers.get("origin")
+    if opener and opener in allowed:
+        return opener
+    return allowed[0] if allowed else ""
+
+
 def _callback_html(target_origin: str, *, payload: dict) -> HTMLResponse:
     """Tiny page that hands the result to the opening CRM window, then closes.
 
@@ -146,8 +161,12 @@ async def start_zalo_oa_oauth(
         )
     settings = get_settings()
     redirect_uri = _oauth_redirect_uri(settings, request)
+    # The popup's result is postMessage'd to the CRM tab that opened it. Capture
+    # THAT origin now (validated against CORS) so the public callback can target
+    # it exactly instead of guessing from config ordering.
+    target_origin = _postmessage_target(settings, request)
     state = secrets.token_urlsafe(32)
-    await redis_set_state(state, admin.id, redirect_uri)
+    await redis_set_state(state, admin.id, redirect_uri, target_origin)
     authorize_url = ZaloOAOAuthClient(cfg.oa_app_id, cfg.oa_secret_key).build_authorize_url(
         redirect_uri, state
     )
@@ -170,13 +189,14 @@ async def zalo_oa_oauth_callback(
     postMessages the result to the opening CRM window, then closes the popup.
     """
     settings = get_settings()
-    target_origin = (
-        settings.cors_origins_list[0] if settings.cors_origins_list else "*"
-    )
+    # Best-available target before the state is consumed (used only for the
+    # pre-state error paths). Once the state is read, the opener origin pinned in
+    # /start takes over — never '*' and never guessed from public headers.
+    default_origin = settings.cors_origins_list[0] if settings.cors_origins_list else ""
 
-    def fail(message: str) -> HTMLResponse:
+    def fail(message: str, origin: str = default_origin) -> HTMLResponse:
         return _callback_html(
-            target_origin, payload={"type": "zalo_oauth_error", "message": message}
+            origin, payload={"type": "zalo_oauth_error", "message": message}
         )
 
     if error:
@@ -191,21 +211,24 @@ async def zalo_oa_oauth_callback(
         session_payload = json.loads(raw)
     except (TypeError, ValueError):
         return fail("Phiên kết nối bị hỏng.")
-    redirect_uri = session_payload.get("redirect_uri") or _oauth_redirect_uri(
-        settings, request
-    )
+    # Both values were pinned in /start; trust them, never the public callback
+    # request headers (which an attacker could influence via proxy forwarding).
+    redirect_uri = session_payload.get("redirect_uri")
+    target_origin = session_payload.get("target_origin") or default_origin
     admin_id_raw = session_payload.get("admin_id")
+    if not redirect_uri:
+        return fail("Phiên kết nối bị hỏng (thiếu redirect_uri).", target_origin)
 
     svc = IntegrationSettingsService(db)
     cfg = await svc.resolve_zalo()
     if not cfg.oa_app_id or not cfg.oa_secret_key:
-        return fail("OA App ID / secret chưa cấu hình — không thể đổi token.")
+        return fail("OA App ID / secret chưa cấu hình — không thể đổi token.", target_origin)
     try:
         token_set = await ZaloOAOAuthClient(cfg.oa_app_id, cfg.oa_secret_key).exchange_code(
             code, redirect_uri
         )
     except ZaloOAOAuthError as exc:
-        return fail(f"Đổi token thất bại: {exc}")
+        return fail(f"Đổi token thất bại: {exc}", target_origin)
     expires_at = datetime.now(timezone.utc) + timedelta(
         seconds=max(token_set.expires_in - _OA_TOKEN_SAFETY_MARGIN_SECONDS, 60)
     )
@@ -237,12 +260,19 @@ async def disconnect_zalo_oa(
     return ZaloOAuthDisconnectOut(disconnected=True)
 
 
-async def redis_set_state(state: str, admin_id: uuid.UUID, redirect_uri: str) -> None:
-    """Store a single-use, time-boxed OAuth state in Redis."""
+async def redis_set_state(
+    state: str, admin_id: uuid.UUID, redirect_uri: str, target_origin: str
+) -> None:
+    """Store a single-use, time-boxed OAuth state in Redis.
+
+    Carries the opener origin + redirect_uri so the public callback never has to
+    trust its own request headers for either.
+    """
     payload = json.dumps(
         {
             "admin_id": str(admin_id),
             "redirect_uri": redirect_uri,
+            "target_origin": target_origin,
             "created_at": time.time(),
         }
     )
@@ -273,7 +303,8 @@ async def fetch_oa_display_name(access_token: str) -> str:
     for key in ("oa_name", "name"):
         value = inner.get(key)
         if value:
-            return str(value)
+            # Cap so a pathological upstream payload can't push a huge toast.
+            return str(value)[:200]
     return ""
 
 

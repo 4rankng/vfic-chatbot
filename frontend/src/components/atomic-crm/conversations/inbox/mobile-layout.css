@@ -444,7 +444,7 @@
     display: none;
   }
   :is(.inbox-bg-container, .chat-surface) .chat-scroller {
-    padding: 0;
+    padding: 14px 0 18px;
   }
   :is(.inbox-bg-container, .chat-surface) .new-message-jump {
     bottom: 10px;
@@ -453,7 +453,7 @@
     padding: 0 10px 0 12px;
   }
   :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
-    padding: 20px 12px !important;
+    padding: 0 !important;
   }
   :is(.inbox-bg-container, .chat-surface) .chat-history-bottom-spacer {
     height: var(--chat-composer-reserve, 92px);
@@ -467,7 +467,8 @@
   }
   :is(.inbox-bg-container, .chat-surface) .message-row {
     gap: 6px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    padding-inline: 12px;
   }
   :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
     margin-top: 0;
@@ -483,6 +484,7 @@
   }
   :is(.inbox-bg-container, .chat-surface) .bubble {
     max-width: min(78%, calc(100% - 38px));
+    padding: 8px 12px;
     font-size: var(--chat-fs-message);
     line-height: var(--chat-lh-message);
   }

@@ -62,18 +62,6 @@ const getRelativeTimeString = (dateStr?: string) => {
   return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 };
 
-const conversationModeMeta = (mode: Conversation["mode"]) => {
-  if (mode === "human") return { label: "Tư vấn viên", tone: "manual" };
-  if (mode === "semi_auto") return { label: "Bán tự động", tone: "semi" };
-  if (mode === "bot") return { label: "Chatbot", tone: "auto" };
-  return { label: "Đã đóng", tone: "closed" };
-};
-
-const conversationChannelMeta = (channel?: Conversation["zalo_channel"]) => {
-  if (channel === "oa") return { label: "OA", tone: "oa" };
-  return { label: "Bot", tone: "bot" };
-};
-
 // Hoisted static style objects so list rows don't allocate brand-new objects on
 // every render (defeats React.memo). These have no per-row variance.
 const UNREAD_BADGE_DOT_STYLE: React.CSSProperties = {
@@ -167,8 +155,6 @@ const ConversationListItem = memo(
     // back to the contact's phone when no snippet is available yet.
     const subtitle = conversation._snippet || lead?.phone || "";
 
-    const modeMeta = conversationModeMeta(conversation.mode);
-    const channelMeta = conversationChannelMeta(conversation.zalo_channel);
     const priorityChip = getLeadPriorityChip(lead);
     const needsAttention = needsVisibleAttention(conversation, readIds);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
@@ -214,28 +200,16 @@ const ConversationListItem = memo(
           </span>
           <span className="conv-bottom">
             {subtitle && <span className="conv-preview">{subtitle}</span>}
-            <span className="conv-meta-row">
-              <span
-                className={`mini-chip ${modeMeta.tone}`}
-                title={modeMeta.label}
-              >
-                {modeMeta.label}
-              </span>
-              <span
-                className={`mini-chip channel ${channelMeta.tone}`}
-                title={`Kênh Zalo ${channelMeta.label}`}
-              >
-                {channelMeta.label}
-              </span>
-              {priorityChip ? (
+            {priorityChip ? (
+              <span className="conv-meta-row">
                 <span
                   className={`mini-chip priority-${priorityChip.tone}`}
                   title={priorityChip.label}
                 >
                   {priorityChip.label}
                 </span>
-              ) : null}
-            </span>
+              </span>
+            ) : null}
           </span>
         </span>
       </button>

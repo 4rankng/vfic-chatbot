@@ -138,7 +138,6 @@
   )
   :is(
     .dashboard-candidate-main strong,
-    .settings-shortcut-card strong,
     .project-directory-name,
     .persona-directory-row strong,
     .project-rail-item strong
@@ -167,7 +166,6 @@
     .project-command-header p:not(.ops-kicker),
     .profile-card-header p,
     .profile-session-content p,
-    .settings-shortcut-card p,
     .dashboard-empty-list,
     .project-directory-meta,
     .project-health-row,

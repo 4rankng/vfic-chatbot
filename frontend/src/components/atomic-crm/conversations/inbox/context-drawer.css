@@ -657,7 +657,7 @@
   padding: 8px 10px;
   border: 1px dashed color-mix(in srgb, var(--ink-faint) 26%, var(--border));
   border-radius: var(--rad-sm);
-  background: color-mix(in srgb, var(--surface-solid) 82%, #f7f5f8);
+  background: color-mix(in srgb, var(--surface-solid) 82%, var(--surface-hover));
 }
 
 .inbox-bg-container .candidate-info-row.filled {

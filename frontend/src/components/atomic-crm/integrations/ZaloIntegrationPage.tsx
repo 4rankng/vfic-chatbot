@@ -5,14 +5,11 @@ import {
   Briefcase,
   CheckCircle2,
   Cpu,
-  FileText,
-  KeyRound,
   MessageCircle,
   PlugZap,
   QrCode,
   Save,
   Settings,
-  ShieldCheck,
   Unplug,
   UsersRound,
   Workflow,
@@ -96,62 +93,49 @@ const emptyOpenRouterForm: OpenRouterFormState = {
   openrouter_api_key: "",
 };
 
-type SettingsNavItem =
-  | {
-      type: "section";
-      sectionId: string;
-      label: string;
-      description: string;
-      Icon: LucideIcon;
-      active?: boolean;
-    }
-  | {
-      type: "link";
-      href: string;
-      label: string;
-      description: string;
-      Icon: LucideIcon;
-      active?: boolean;
-    };
+type SettingsSectionNavItem = {
+  sectionId: string;
+  label: string;
+  description: string;
+  Icon: LucideIcon;
+};
 
-const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
+type SettingsWorkspaceLink = {
+  href: string;
+  label: string;
+  description: string;
+  Icon: LucideIcon;
+};
+
+const SETTINGS_SECTION_ITEMS: SettingsSectionNavItem[] = [
   {
-    type: "section",
-    sectionId: "settings-overview",
-    label: "Tổng quan",
-    description: "Dự án, agent, mô hình",
-    Icon: Settings,
-  },
-  {
-    type: "link",
-    href: "/projects",
-    label: "Dự án",
-    description: "Knowledge base và FAQ",
-    Icon: Briefcase,
-  },
-  {
-    type: "link",
-    href: "/personas",
-    label: "Agent tư vấn",
-    description: "Giọng trả lời theo dự án",
-    Icon: Workflow,
-  },
-  {
-    type: "section",
     sectionId: "settings-zalo-channel",
     label: "Kênh Zalo",
     description: "Bot Platform và OA",
     Icon: MessageCircle,
   },
   {
-    type: "section",
     sectionId: "settings-ai-models",
     label: "Model AI",
     description: "Minimax, OpenRouter",
     Icon: Cpu,
   },
+];
+
+const SETTINGS_WORKSPACE_LINKS: SettingsWorkspaceLink[] = [
   {
-    type: "link",
+    href: "/projects",
+    label: "Dự án",
+    description: "Knowledge base và FAQ",
+    Icon: Briefcase,
+  },
+  {
+    href: "/personas",
+    label: "Agent tư vấn",
+    description: "Giọng trả lời theo dự án",
+    Icon: Workflow,
+  },
+  {
     href: "/users",
     label: "Người dùng",
     description: "Tài khoản quản trị",
@@ -161,12 +145,31 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
 
 const REQUIRED_SETTING_COUNT = 7;
 
+const countConfigured = (
+  statuses: Array<SecretStatus | PlainStatus | undefined>,
+) => statuses.filter((status) => status?.configured).length;
+
 const FieldStatus = ({ status }: { status: SecretStatus | PlainStatus }) => (
   <Badge
     variant="outline"
     className={`settings-status-badge ${status.configured ? "is-ready" : "is-missing"}`}
   >
     {status.configured ? "Đã cấu hình" : "Thiếu"}
+  </Badge>
+);
+
+const SettingsCountBadge = ({
+  configured,
+  total,
+}: {
+  configured: number;
+  total: number;
+}) => (
+  <Badge
+    variant="outline"
+    className={`settings-status-badge ${configured === total ? "is-ready" : "is-missing"}`}
+  >
+    {configured}/{total}
   </Badge>
 );
 
@@ -275,9 +278,9 @@ const ReadOnlySetting = ({
   value: string;
   hint?: string;
 }) => (
-  <div className="settings-field">
-    <Label>{label}</Label>
-    <Input readOnly value={value} className="settings-input" />
+  <div className="settings-readonly-field">
+    <span className="settings-readonly-label">{label}</span>
+    <strong title={value}>{value || "Chưa tải"}</strong>
     {hint ? <p className="settings-field-hint">{hint}</p> : null}
   </div>
 );
@@ -286,24 +289,29 @@ const SettingsCard = ({
   title,
   description,
   icon,
+  meta,
   children,
   className = "",
 }: {
   title: string;
   description?: string;
   icon: ReactNode;
+  meta?: ReactNode;
   children: ReactNode;
   className?: string;
 }) => (
   <section className={`settings-card ${className}`}>
     <div className="settings-card-header">
-      <div className="settings-card-icon">{icon}</div>
-      <div className="min-w-0">
-        <div data-slot="card-title">{title}</div>
-        {description ? (
-          <p className="settings-card-description">{description}</p>
-        ) : null}
+      <div className="settings-card-title-group">
+        <div className="settings-card-icon">{icon}</div>
+        <div className="min-w-0">
+          <div data-slot="card-title">{title}</div>
+          {description ? (
+            <p className="settings-card-description">{description}</p>
+          ) : null}
+        </div>
       </div>
+      {meta ? <div className="settings-card-meta">{meta}</div> : null}
     </div>
     <div className="settings-card-content">{children}</div>
   </section>
@@ -311,71 +319,34 @@ const SettingsCard = ({
 
 const SettingsSectionPanel = ({
   id,
-  title,
-  description,
-  icon,
   children,
 }: {
   id: string;
-  title: string;
-  description: string;
-  icon: ReactNode;
   children: ReactNode;
 }) => (
   <section className="settings-section-panel" id={id}>
-    <div className="settings-section-heading">
-      <div className="settings-section-icon">{icon}</div>
-      <div className="min-w-0">
-        <h2>{title}</h2>
-        <p>{description}</p>
-      </div>
-    </div>
     {children}
   </section>
 );
 
-const CORE_SETTINGS_LINKS: Array<{
-  href: string;
-  title: string;
+const SettingsNavLinkContent = ({
+  label,
+  description,
+  Icon,
+}: {
+  label: string;
   description: string;
   Icon: LucideIcon;
-  primary?: boolean;
-}> = [
-  {
-    href: "/projects",
-    title: "Thiết lập dự án",
-    description:
-      "Mỗi dự án gồm knowledge base, FAQ và dữ liệu tư vấn trong cùng một workspace.",
-    Icon: Briefcase,
-    primary: true,
-  },
-  {
-    href: "/personas",
-    title: "Agent tư vấn",
-    description:
-      "Chọn giọng tư vấn và phân công agent sau khi dữ liệu dự án sẵn sàng.",
-    Icon: FileText,
-  },
-];
-
-const SettingsShortcutGrid = () => (
-  <section className="settings-shortcut-grid" aria-label="Thiết lập chính">
-    {CORE_SETTINGS_LINKS.map(({ href, title, description, Icon, primary }) => (
-      <Link
-        key={title}
-        to={href}
-        className={`settings-shortcut-card${primary ? " is-primary" : ""}`}
-      >
-        <span className="settings-card-icon">
-          <Icon className="size-4" />
-        </span>
-        <span>
-          <strong>{title}</strong>
-          <p>{description}</p>
-        </span>
-      </Link>
-    ))}
-  </section>
+}) => (
+  <>
+    <span className="settings-side-nav-icon">
+      <Icon className="size-4" />
+    </span>
+    <span className="settings-side-nav-copy">
+      <strong>{label}</strong>
+      <span>{description}</span>
+    </span>
+  </>
 );
 
 const scrollToSettingsSection = (sectionId: string) => {
@@ -412,49 +383,47 @@ const SettingsSideNav = ({
           : `${configuredCount}/${REQUIRED_SETTING_COUNT}`}
       </strong>
     </div>
-    <nav className="settings-side-nav-list">
-      {SETTINGS_NAV_ITEMS.map((item) => {
-        const Icon = item.Icon;
-        const content = (
-          <>
-            <span className="settings-side-nav-icon">
-              <Icon className="size-4" />
-            </span>
-            <span className="settings-side-nav-copy">
-              <strong>{item.label}</strong>
-              <span>{item.description}</span>
-            </span>
-          </>
-        );
+    <div className="settings-side-nav-group">
+      <span className="settings-side-nav-group-label">Trong trang</span>
+      <nav className="settings-side-nav-list">
+        {SETTINGS_SECTION_ITEMS.map((item) => {
+          const active = item.sectionId === activeSectionId;
 
-        if (item.type === "link") {
           return (
-            <Link
+            <button
               key={item.label}
-              to={item.href}
-              className={`settings-side-nav-link${
-                item.active ? " is-active" : ""
-              }`}
+              type="button"
+              className={`settings-side-nav-link${active ? " is-active" : ""}`}
+              onClick={() => onSectionSelect(item.sectionId)}
             >
-              {content}
-            </Link>
+              <SettingsNavLinkContent
+                label={item.label}
+                description={item.description}
+                Icon={item.Icon}
+              />
+            </button>
           );
-        }
-
-        const active = item.sectionId === activeSectionId;
-
-        return (
-          <button
+        })}
+      </nav>
+    </div>
+    <div className="settings-side-nav-group">
+      <span className="settings-side-nav-group-label">Liên kết</span>
+      <nav className="settings-side-nav-list">
+        {SETTINGS_WORKSPACE_LINKS.map((item) => (
+          <Link
             key={item.label}
-            type="button"
-            className={`settings-side-nav-link${active ? " is-active" : ""}`}
-            onClick={() => onSectionSelect(item.sectionId)}
+            to={item.href}
+            className="settings-side-nav-link"
           >
-            {content}
-          </button>
-        );
-      })}
-    </nav>
+            <SettingsNavLinkContent
+              label={item.label}
+              description={item.description}
+              Icon={item.Icon}
+            />
+          </Link>
+        ))}
+      </nav>
+    </div>
     <div className="settings-side-nav-footer">
       <CheckCircle2 className="size-4" />
       <span>Khóa bí mật được lưu mã hóa ở backend.</span>
@@ -477,7 +446,9 @@ export const ZaloIntegrationPage = () => {
     useState<MinimaxFormState>(emptyMinimaxForm);
   const [openRouterForm, setOpenRouterForm] =
     useState<OpenRouterFormState>(emptyOpenRouterForm);
-  const [activeSectionId, setActiveSectionId] = useState("settings-overview");
+  const [activeSectionId, setActiveSectionId] = useState(
+    "settings-zalo-channel",
+  );
   const [saving, setSaving] = useState(false);
   const [oaConnecting, setOaConnecting] = useState(false);
   const [oaDisconnecting, setOaDisconnecting] = useState(false);
@@ -612,12 +583,15 @@ export const ZaloIntegrationPage = () => {
         "/api/v1/admin/integrations/zalo/oauth/start",
         { method: "POST" },
       );
-      const popup = window.open(authorize_url, "zalo_oauth", "width=560,height=720");
+      const popup = window.open(
+        authorize_url,
+        "zalo_oauth",
+        "width=560,height=720",
+      );
       if (!popup) {
-        notify(
-          "Vui lòng cho phép cửa sổ popup để quét mã QR kết nối OA.",
-          { type: "warning" },
-        );
+        notify("Vui lòng cho phép cửa sổ popup để quét mã QR kết nối OA.", {
+          type: "warning",
+        });
         return;
       }
       oauthPopupRef.current = popup;
@@ -629,12 +603,15 @@ export const ZaloIntegrationPage = () => {
       };
       const onMessage = (event: MessageEvent) => {
         if (event.origin !== oauthExpectedOrigin) return;
-        const data = event.data as
-          | { type?: string; oa_name?: string; message?: string }
-          | null;
+        const data = event.data as {
+          type?: string;
+          oa_name?: string;
+          message?: string;
+        } | null;
         if (
           !data ||
-          (data.type !== "zalo_oauth_success" && data.type !== "zalo_oauth_error")
+          (data.type !== "zalo_oauth_success" &&
+            data.type !== "zalo_oauth_error")
         ) {
           return;
         }
@@ -646,7 +623,9 @@ export const ZaloIntegrationPage = () => {
           );
           void load();
         } else {
-          notify(`Kết nối OA thất bại: ${data.message ?? ""}`, { type: "error" });
+          notify(`Kết nối OA thất bại: ${data.message ?? ""}`, {
+            type: "error",
+          });
         }
       };
       // If the admin closes the popup without finishing, drop the listener so it
@@ -686,7 +665,7 @@ export const ZaloIntegrationPage = () => {
   };
 
   const configuredCount = useMemo(() => {
-    const statuses: Array<SecretStatus | PlainStatus | undefined> = [
+    return countConfigured([
       settings?.zalo_bot_token,
       settings?.zalo_bot_webhook_secret,
       settings?.zalo_oa_app_id,
@@ -694,9 +673,7 @@ export const ZaloIntegrationPage = () => {
       settings?.zalo_oa_access_token,
       minimaxSettings?.minimax_api_key,
       openRouterSettings?.openrouter_api_key,
-    ];
-
-    return statuses.filter((status) => status?.configured).length;
+    ]);
   }, [minimaxSettings, openRouterSettings, settings]);
 
   const renderInWorkspace = (content: ReactNode) => {
@@ -738,46 +715,53 @@ export const ZaloIntegrationPage = () => {
             onSectionSelect={selectSettingsSection}
           />
 
-          <div className="settings-main" id="settings-overview">
+          <div className="settings-main">
             <header className="ops-command-header settings-command-header">
               <div className="ops-command-title">
                 <div className="ops-command-mark">
                   <Settings className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="ops-kicker">Thiết lập dự án</p>
-                  <h1>Cấu hình hệ thống</h1>
+                  <p className="ops-kicker">Trung tâm cấu hình</p>
+                  <h1>Cài đặt hệ thống</h1>
                   <p>
-                    Quản lý dự án, agent tư vấn, kênh Zalo và model AI trong
-                    cùng một bảng cài đặt.
+                    Gom các khóa tích hợp, kết nối Zalo và model AI theo đúng
+                    thứ tự vận hành.
                   </p>
                 </div>
               </div>
               <div className="settings-header-actions">
+                <span
+                  className={`settings-change-pill${hasChanges ? " is-dirty" : ""}`}
+                >
+                  {hasChanges ? "Có thay đổi chưa lưu" : "Đã đồng bộ"}
+                </span>
                 <Button
                   className="settings-save-button"
                   onClick={save}
                   disabled={saving || !hasChanges}
                 >
                   <Save className="size-4" />
-                  Lưu
+                  Lưu cấu hình
                 </Button>
               </div>
             </header>
 
-            <SettingsShortcutGrid />
-
-            <SettingsSectionPanel
-              id="settings-zalo-channel"
-              title="Kênh Zalo"
-              description="Kết nối Bot Platform và Official Account để nhận, gửi và đồng bộ hội thoại."
-              icon={<MessageCircle className="size-4" />}
-            >
-              <div className="settings-grid">
+            <SettingsSectionPanel id="settings-zalo-channel">
+              <div className="settings-grid settings-grid-zalo">
                 <SettingsCard
-                  title="ChatBot"
-                  description="Token Bot Platform và khóa xác minh webhook."
+                  title="Bot Platform"
+                  description="Nhận webhook và gửi phản hồi tự động từ chatbot."
                   icon={<PlugZap className="size-4" />}
+                  meta={
+                    <SettingsCountBadge
+                      configured={countConfigured([
+                        settings?.zalo_bot_token,
+                        settings?.zalo_bot_webhook_secret,
+                      ])}
+                      total={2}
+                    />
+                  }
                 >
                   <SecretInput
                     id="zalo_bot_token"
@@ -801,8 +785,18 @@ export const ZaloIntegrationPage = () => {
 
                 <SettingsCard
                   title="Tài khoản OA"
-                  description="Thông tin Official Account dùng cho kênh OA."
-                  icon={<KeyRound className="size-4" />}
+                  description="App ID, quyền OA và đường dẫn dự phòng khi cần dán token thủ công."
+                  icon={<QrCode className="size-4" />}
+                  meta={
+                    <SettingsCountBadge
+                      configured={countConfigured([
+                        settings?.zalo_oa_app_id,
+                        settings?.zalo_oa_secret_key,
+                        settings?.zalo_oa_access_token,
+                      ])}
+                      total={3}
+                    />
+                  }
                 >
                   <div className="settings-field">
                     <div className="flex items-center justify-between gap-3">
@@ -821,40 +815,100 @@ export const ZaloIntegrationPage = () => {
                         setValue("zalo_oa_app_id", event.target.value)
                       }
                     />
+                    <p className="settings-field-hint">
+                      App ID từ Zalo for Developers — bắt buộc trước khi quét
+                      QR.
+                    </p>
                   </div>
-                  <SecretInput
-                    id="zalo_oa_secret_key"
-                    label="Khóa bí mật OA"
-                    status={
-                      settings?.zalo_oa_secret_key ?? { configured: false }
-                    }
-                    value={form.zalo_oa_secret_key}
-                    onChange={setValue}
-                  />
-                  <SecretInput
-                    id="zalo_oa_access_token"
-                    label="Token truy cập OA"
-                    status={
-                      settings?.zalo_oa_access_token ?? { configured: false }
-                    }
-                    value={form.zalo_oa_access_token}
-                    onChange={setValue}
-                  />
+
+                  {settings?.zalo_oa_connected ? (
+                    <div className="settings-oa-status is-connected">
+                      <div className="flex items-center justify-between gap-3">
+                        <strong>Đã kết nối Official Account</strong>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={disconnectOa}
+                          disabled={oaDisconnecting}
+                        >
+                          <Unplug className="size-4" />
+                          Ngắt kết nối
+                        </Button>
+                      </div>
+                      {settings.zalo_oa_access_token_expires_at ? (
+                        <p className="settings-field-hint">
+                          Token tự làm mới trước khi hết hạn. Làm mới kế tiếp:{" "}
+                          {new Date(
+                            settings.zalo_oa_access_token_expires_at,
+                          ).toLocaleString("vi-VN", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="settings-oa-status">
+                      <Button onClick={connectOa} disabled={oaConnecting}>
+                        <QrCode className="size-4" />
+                        {oaConnecting ? "Đang mở cửa sổ..." : "Kết nối OA"}
+                      </Button>
+                      <p className="settings-field-hint">
+                        Cửa sổ popup hiện mã QR Zalo — mở app Zalo, quét mã và
+                        đồng ý cấp quyền quản lý OA.
+                      </p>
+                    </div>
+                  )}
+
+                  <details className="settings-advanced">
+                    <summary className="settings-advanced-summary">
+                      Nâng cao — dán token thủ công
+                    </summary>
+                    <div className="settings-advanced-content">
+                      <SecretInput
+                        id="zalo_oa_secret_key"
+                        label="Khóa bí mật OA"
+                        status={
+                          settings?.zalo_oa_secret_key ?? { configured: false }
+                        }
+                        value={form.zalo_oa_secret_key}
+                        onChange={setValue}
+                      />
+                      <SecretInput
+                        id="zalo_oa_access_token"
+                        label="Token truy cập OA"
+                        status={
+                          settings?.zalo_oa_access_token ?? {
+                            configured: false,
+                          }
+                        }
+                        value={form.zalo_oa_access_token}
+                        onChange={setValue}
+                      />
+                      <p className="settings-field-hint">
+                        Đường dẫn khôi phục: kết nối qua QR sẽ tự động ghi đè
+                        hai giá trị này.
+                      </p>
+                    </div>
+                  </details>
                 </SettingsCard>
               </div>
             </SettingsSectionPanel>
 
-            <SettingsSectionPanel
-              id="settings-ai-models"
-              title="Model AI"
-              description="Quản lý khóa model chính, model safety và embedding phục vụ trả lời có căn cứ."
-              icon={<ShieldCheck className="size-4" />}
-            >
-              <div className="settings-grid">
+            <SettingsSectionPanel id="settings-ai-models">
+              <div className="settings-grid settings-grid-models">
                 <SettingsCard
                   title="Minimax"
                   description="Model chính cho agent và kiểm tra safety."
                   icon={<Bot className="size-4" />}
+                  meta={
+                    <SettingsCountBadge
+                      configured={countConfigured([
+                        minimaxSettings?.minimax_api_key,
+                      ])}
+                      total={1}
+                    />
+                  }
                 >
                   <MinimaxSecretInput
                     id="minimax_api_key"
@@ -879,7 +933,14 @@ export const ZaloIntegrationPage = () => {
                   title="OpenRouter"
                   description="Fallback, digest và embedding cho knowledge base."
                   icon={<Cpu className="size-4" />}
-                  className="settings-card-wide"
+                  meta={
+                    <SettingsCountBadge
+                      configured={countConfigured([
+                        openRouterSettings?.openrouter_api_key,
+                      ])}
+                      total={1}
+                    />
+                  }
                 >
                   <OpenRouterSecretInput
                     id="openrouter_api_key"

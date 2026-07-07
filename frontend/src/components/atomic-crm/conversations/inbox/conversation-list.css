@@ -8,36 +8,63 @@
 
 @media (min-width: 768px) {
   .inbox-bg-container .conversations {
-    padding: 8px 8px 14px;
+    padding: 10px 10px 16px;
     background: var(--workspace-bg-deep);
   }
 
   .inbox-bg-container .conversation {
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 10px;
+    padding: 8px 10px;
     border-radius: 8px;
+    border-color: color-mix(
+      in srgb,
+      var(--workspace-border) 78%,
+      transparent
+    );
+    background: var(--workspace-bg);
     color: var(--workspace-muted);
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.025);
   }
 
   .inbox-bg-container .conversation:hover {
-    background: var(--workspace-hover);
+    border-color: var(--workspace-active-border);
+    background: color-mix(
+      in srgb,
+      var(--workspace-hover) 72%,
+      var(--workspace-bg)
+    );
     transform: none;
   }
 
   .inbox-bg-container .conversation.active {
-    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--workspace-active-border);
+    background: color-mix(
+      in srgb,
+      var(--brand-light) 78%,
+      var(--workspace-bg)
+    );
+    box-shadow:
+      inset 0 0 0 1px
+        color-mix(in srgb, var(--workspace-active) 14%, transparent),
+      0 1px 2px rgba(15, 23, 42, 0.04);
   }
 
   .inbox-bg-container .conversation.needs-attention {
-    border-color: rgba(46, 158, 99, 0.3);
-    background: rgba(46, 158, 99, 0.12);
+    border-color: color-mix(in srgb, var(--success) 30%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--success-light) 42%,
+      var(--workspace-bg)
+    );
   }
 
   .inbox-bg-container .conversation.active::before,
   .inbox-bg-container .conversation.needs-attention::after {
     left: 0;
-    top: 9px;
-    bottom: 9px;
+    top: 50%;
+    bottom: auto;
+    height: 22px;
+    transform: translateY(-50%);
   }
 
   .inbox-bg-container .conv-name {
@@ -51,12 +78,12 @@
   }
 
   .inbox-bg-container .avatar {
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 0 0 1px var(--workspace-border);
   }
 
   .inbox-bg-container .mini-chip.channel.bot,
   .inbox-bg-container .mini-chip.closed {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--workspace-hover);
     color: var(--workspace-muted);
   }
 }
@@ -86,7 +113,7 @@
   transition: var(--transition);
 }
 .inbox-bg-container .conversation + .conversation {
-  margin-top: 3px;
+  margin-top: 6px;
 }
 .inbox-bg-container .conversation:hover {
   background: var(--surface-hover);
@@ -99,10 +126,13 @@
 .inbox-bg-container .conversation.needs-attention::after {
   content: "";
   position: absolute;
-  inset: 10px auto 10px 0;
+  left: 0;
+  top: 50%;
   width: 3px;
+  height: 22px;
   border-radius: 3px;
   background: var(--inbox-accent);
+  transform: translateY(-50%);
 }
 .inbox-bg-container .conversation.active {
   background: color-mix(in srgb, var(--brand-light) 62%, var(--surface-solid));
@@ -113,11 +143,13 @@
   content: "";
   position: absolute;
   left: 0;
-  top: 10px;
-  bottom: 10px;
+  top: 50%;
+  bottom: auto;
   width: 3px;
+  height: 22px;
   background: color-mix(in srgb, var(--brand) 88%, var(--surface-solid));
   border-radius: 3px;
+  transform: translateY(-50%);
 }
 
 .inbox-bg-container .avatar {
@@ -288,54 +320,103 @@
 
 @media (min-width: 768px) {
   .inbox-bg-container .conversations {
-    padding: 10px 8px 16px;
+    padding: 10px 10px 16px;
   }
 
   .inbox-bg-container .conversation {
     grid-template-columns: 34px minmax(0, 1fr);
     align-items: start;
     gap: 10px;
-    padding: 8px 9px;
-    border-radius: 7px;
-    border-color: transparent;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border-color: color-mix(
+      in srgb,
+      var(--workspace-border) 82%,
+      transparent
+    );
+    background: var(--workspace-bg);
     color: var(--workspace-muted);
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.025);
+  }
+
+  .inbox-bg-container .conversation + .conversation {
+    margin-top: 8px;
   }
 
   .inbox-bg-container .conversation:hover {
-    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--workspace-active-border);
+    background: color-mix(
+      in srgb,
+      var(--workspace-hover) 74%,
+      var(--workspace-bg)
+    );
     transform: none;
   }
 
   .inbox-bg-container .conversation.active {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--workspace-active-border);
+    background: color-mix(
+      in srgb,
+      var(--brand-light) 78%,
+      var(--workspace-bg)
+    );
+    box-shadow:
+      inset 0 0 0 1px
+        color-mix(in srgb, var(--workspace-active) 14%, transparent),
+      0 1px 2px rgba(15, 23, 42, 0.04);
   }
 
   .inbox-bg-container .conversation.needs-attention {
-    border-color: transparent;
-    background: transparent;
+    border-color: color-mix(
+      in srgb,
+      var(--success) 30%,
+      var(--workspace-border)
+    );
+    background: color-mix(
+      in srgb,
+      var(--success-light) 42%,
+      var(--workspace-bg)
+    );
   }
 
   .inbox-bg-container .conversation.needs-attention:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(
+      in srgb,
+      var(--success-light) 50%,
+      var(--workspace-bg)
+    );
   }
 
   .inbox-bg-container .conversation.needs-attention::after {
-    display: none;
+    display: block;
   }
 
   .inbox-bg-container .conversation.active::before {
     left: 0;
-    top: 8px;
-    bottom: 8px;
+    top: 50%;
+    bottom: auto;
+    height: 22px;
     background: var(--workspace-active);
+    transform: translateY(-50%);
+  }
+
+  .inbox-bg-container .conversation.needs-attention::after {
+    left: 0;
+    top: 50%;
+    bottom: auto;
+    height: 22px;
+    transform: translateY(-50%);
+  }
+
+  .inbox-bg-container .conversation.active.needs-attention::after {
+    display: none;
   }
 
   .inbox-bg-container .avatar {
     width: 34px;
     height: 34px;
     margin-top: 2px;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 0 0 1px var(--workspace-border);
   }
 
   .inbox-bg-container .conv-body {
