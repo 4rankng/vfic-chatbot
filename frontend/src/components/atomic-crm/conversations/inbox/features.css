@@ -1,5 +1,6 @@
 .knowledge-workspace-content,
 .settings-workspace-content,
+.profile-workspace-content,
 .dashboard-workspace-content,
 .project-workspace-content {
   min-height: 100%;
@@ -58,13 +59,18 @@
 }
 
 .settings-page-shell {
-  width: min(100%, 1240px);
+  width: min(100%, 1080px);
+  gap: 10px;
+}
+
+.profile-page-shell {
+  width: min(100%, 760px);
   gap: 12px;
 }
 
 .settings-command-header {
-  min-height: 96px;
-  padding: 14px 16px;
+  min-height: auto;
+  padding: 12px 14px;
   border-radius: 10px;
   background:
     linear-gradient(
@@ -77,116 +83,289 @@
 }
 
 .settings-command-header .ops-command-title {
-  gap: 10px;
+  gap: 9px;
 }
 
 .settings-command-header .ops-command-mark {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
 }
 
 .settings-command-header .ops-kicker {
-  font-size: 10px;
-  font-weight: 780;
+  font-size: var(--crm-fs-eyebrow);
+  font-weight: var(--chat-fw-semibold);
   letter-spacing: 0.06em;
 }
 
 .settings-command-header h1 {
   margin-top: 2px;
-  font-size: clamp(22px, 1.8vw, 26px);
-  font-weight: 760;
+  font-size: var(--crm-fs-title-lg);
+  font-weight: var(--chat-fw-bold);
   letter-spacing: 0;
-  line-height: 1.08;
+  line-height: var(--crm-lh-heading);
 }
 
 .settings-command-header p:not(.ops-kicker) {
   max-width: 74ch;
   margin-top: 5px;
   color: var(--ink-muted);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--crm-fs-body-sm);
+  line-height: var(--crm-lh-body);
 }
 
 .settings-command-header [data-slot="button"] {
+  min-height: var(--crm-control-height-md);
+  height: var(--crm-control-height-md);
+}
+
+.profile-command-header {
+  min-height: 104px;
+  padding: 16px;
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-solid) 98%, transparent),
+      color-mix(in srgb, var(--surface-hover) 34%, var(--surface-solid))
+    ),
+    var(--surface-solid);
+  box-shadow: none;
+}
+
+.profile-command-header .ops-command-title {
+  gap: 10px;
+}
+
+.profile-command-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+}
+
+.profile-command-header .ops-kicker {
+  font-size: var(--crm-fs-eyebrow);
+  font-weight: var(--chat-fw-semibold);
+  letter-spacing: 0.06em;
+}
+
+.profile-command-header h1 {
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--crm-fs-title-lg);
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0;
+  line-height: var(--crm-lh-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-command-header p:not(.ops-kicker) {
+  max-width: 74ch;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: var(--crm-fs-body-sm);
+  line-height: var(--crm-lh-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-card {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--border) 92%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-solid) 94%, var(--surface));
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.profile-card-content {
+  padding: 0;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-hover) 28%, transparent);
+}
+
+.profile-card-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--brand) 20%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand-light) 52%, var(--surface-solid));
+  color: var(--brand);
+}
+
+.profile-card-header h2,
+.profile-session-content h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--crm-fs-body);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--crm-lh-title);
+}
+
+.profile-card-header p,
+.profile-session-content p {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: var(--crm-fs-hint);
+  font-weight: var(--chat-fw-medium);
+  line-height: var(--crm-lh-body);
+}
+
+.profile-field-grid {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.profile-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.profile-field-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+}
+
+.profile-field-label,
+.profile-field-editing [data-slot="form-label"] {
+  color: var(--ink);
+  font-size: var(--crm-fs-eyebrow);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
+}
+
+.profile-field-value {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(
+    in srgb,
+    var(--surface-solid) 90%,
+    var(--surface-hover)
+  );
+  color: var(--ink);
+  padding: 0 12px;
+  font-size: var(--crm-fs-body);
+  font-weight: var(--chat-fw-regular);
+  line-height: var(--crm-lh-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-input,
+.profile-select-trigger {
+  min-height: 44px;
+  border-color: var(--border);
+  border-radius: 8px;
+  background: color-mix(
+    in srgb,
+    var(--surface-solid) 90%,
+    var(--surface-hover)
+  );
+  color: var(--ink);
+  font-size: var(--crm-fs-body);
+  font-weight: var(--chat-fw-regular);
+  line-height: var(--crm-lh-body);
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.profile-action-button {
   min-height: 44px;
   height: 44px;
   border-radius: 8px;
   padding-inline: 12px;
-  font-size: 13px;
-  font-weight: 680;
+  font-size: var(--crm-fs-action);
+  font-weight: var(--chat-fw-semibold);
 }
 
-.settings-status-strip > div {
-  min-height: 58px;
-  gap: 4px;
-  padding: 10px 12px;
-}
-
-.settings-status-strip .ops-status-label {
-  font-size: 10px;
-  font-weight: 760;
-  letter-spacing: 0.06em;
-}
-
-.settings-status-strip strong {
-  display: inline-flex;
+.profile-session-content {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 760;
-  line-height: 1.15;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
 }
 
-.settings-status-strip strong span {
-  width: 7px;
-  height: 7px;
+.profile-logout-button {
   flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--ink-faint);
+  border-color: color-mix(in srgb, var(--destructive) 30%, var(--border));
+  color: var(--destructive);
 }
 
-.settings-metric.is-ready strong span {
-  background: var(--success);
-}
-
-.settings-metric.is-missing strong span {
-  background: color-mix(in srgb, var(--ink-muted) 56%, transparent);
-}
-
-.settings-status-strip small {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.25;
+.profile-mobile-shell {
+  min-height: 100dvh;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--chat-font-family);
+  font-size: var(--chat-fs-body);
+  line-height: var(--chat-lh-body);
 }
 
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
 }
 
 .settings-shortcut-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 .settings-shortcut-card {
-  min-height: 88px;
+  min-height: 66px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--surface-solid) 94%, var(--surface));
   color: var(--ink);
-  padding: 12px;
+  padding: 10px 12px;
   text-decoration: none;
   transition:
     border-color 0.16s var(--ease),
     background-color 0.16s var(--ease);
+}
+
+.settings-shortcut-card.is-primary {
+  border-color: color-mix(in srgb, var(--brand) 26%, var(--border));
+  background: color-mix(in srgb, var(--brand-light) 26%, var(--surface-solid));
 }
 
 .settings-shortcut-card:hover {
@@ -194,36 +373,55 @@
   background: color-mix(in srgb, var(--brand-light) 32%, var(--surface-solid));
 }
 
+.settings-shortcut-card > span:last-child {
+  min-width: 0;
+}
+
 .settings-shortcut-card strong {
   display: block;
 }
 
 .settings-shortcut-card strong {
-  font-size: 13px;
-  font-weight: 820;
-  line-height: 1.2;
+  font-size: var(--crm-fs-body-sm);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--crm-lh-title);
+}
+
+.settings-shortcut-card p {
+  margin: 5px 0 0;
+  color: var(--ink-muted);
+  font-size: var(--crm-fs-hint);
+  font-weight: var(--chat-fw-medium);
+  line-height: var(--crm-lh-body);
 }
 
 .settings-card {
+  container: settings-card / inline-size;
+  display: grid;
+  grid-template-columns: minmax(160px, 0.22fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
   overflow: hidden;
   border-color: color-mix(in srgb, var(--border) 92%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--surface-solid) 94%, var(--surface));
+  padding: 0;
   box-shadow: none;
 }
 
 .settings-card-wide {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .settings-card-header {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   gap: 9px;
-  min-height: 58px;
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--border);
+  min-height: auto;
+  padding: 14px 12px;
+  border-right: 1px solid var(--border);
+  border-bottom: 0;
   background: color-mix(in srgb, var(--surface-hover) 28%, transparent);
 }
 
@@ -241,16 +439,17 @@
 
 .settings-card-header [data-slot="card-title"] {
   color: var(--ink);
-  font-size: 14px;
-  font-weight: 740;
-  line-height: 1.2;
+  font-size: var(--crm-fs-body);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--crm-lh-title);
 }
 
 .settings-card-content {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  align-content: start;
+  gap: 12px 14px;
+  padding: 14px;
 }
 
 .settings-field {
@@ -259,11 +458,20 @@
   min-width: 0;
 }
 
+.settings-field > .flex {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.settings-field > .flex > label {
+  min-width: 0;
+}
+
 .settings-field label {
   color: var(--ink);
-  font-size: 11px;
-  font-weight: 720;
-  line-height: 1.25;
+  font-size: var(--crm-fs-eyebrow);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
 }
 
 .settings-card .settings-input {
@@ -276,23 +484,24 @@
     var(--surface-hover)
   );
   color: var(--ink);
-  font-size: 14px;
-  font-weight: 450;
-  line-height: 1.3;
+  font-size: var(--crm-fs-body);
+  font-weight: var(--chat-fw-regular);
+  line-height: var(--crm-lh-body);
 }
 
 .settings-field-hint {
   color: var(--ink-muted);
-  font-size: 10.5px;
-  line-height: 1.35;
+  font-size: var(--crm-fs-hint);
+  line-height: var(--crm-lh-body);
 }
 
 .settings-status-badge {
+  flex: 0 0 auto;
   min-height: 18px;
   border-radius: 5px;
   padding: 0 6px;
-  font-size: 10px;
-  font-weight: 720;
+  font-size: var(--crm-fs-badge);
+  font-weight: var(--chat-fw-semibold);
   line-height: 1;
 }
 
@@ -308,13 +517,35 @@
   color: var(--ink-muted);
 }
 
+@container settings-card (max-width: 720px) {
+  .settings-card-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .settings-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-card-header {
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .settings-card-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .settings-access-denied {
   display: grid;
   min-height: 220px;
   place-items: center;
   padding: 24px;
   color: var(--ink-muted);
-  font-size: 14px;
+  font-size: var(--crm-fs-body);
 }
 
 .dashboard-live-card {
@@ -332,8 +563,8 @@
   align-items: center;
   gap: 7px;
   color: var(--ink-muted);
-  font-size: 12px;
-  font-weight: 760;
+  font-size: var(--crm-fs-hint);
+  font-weight: var(--chat-fw-semibold);
 }
 
 .dashboard-live-card svg {
@@ -351,4 +582,3 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.38),
     0 14px 34px rgba(63, 14, 64, 0.028);
 }
-

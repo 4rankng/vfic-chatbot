@@ -13,8 +13,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 15px;
-  font-weight: 800;
+  font-size: var(--chat-fs-section-title);
+  font-weight: var(--chat-fw-bold);
   color: var(--ink);
   min-width: 0;
 }
@@ -27,19 +27,19 @@
 
 .inbox-bg-container .profile-title-copy small {
   color: var(--ink-muted);
-  font-size: 10px;
-  font-weight: 760;
-  line-height: 1.2;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-medium);
+  line-height: var(--chat-lh-tight);
 }
 .inbox-bg-container .context-open-profile {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--brand);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-bold);
   transition: var(--transition);
 }
 .inbox-bg-container .context-open-profile:hover {
@@ -55,8 +55,8 @@
 
 .inbox-bg-container .context-close {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -82,8 +82,8 @@
   border-radius: 6px;
   background: transparent;
   color: var(--ink-muted);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-bold);
   transition: var(--transition);
 }
 
@@ -133,26 +133,26 @@
 
 .inbox-bg-container .context-overview-kicker {
   color: var(--brand);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .inbox-bg-container .context-overview-copy h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.3;
+  font-size: var(--chat-fs-section-title);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--chat-lh-title);
   overflow-wrap: anywhere;
 }
 
 .inbox-bg-container .context-overview-copy p {
   margin: 6px 0 0;
   color: var(--ink-muted);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--chat-fs-meta);
+  line-height: var(--chat-lh-body);
   overflow-wrap: anywhere;
 }
 
@@ -165,17 +165,17 @@
 
 .inbox-bg-container .context-subject-name {
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.35;
+  font-size: var(--chat-fs-body);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--chat-lh-body);
   overflow-wrap: anywhere;
 }
 
 .inbox-bg-container .context-subject-role {
   color: var(--ink-muted);
-  font-size: 11px;
-  font-weight: 620;
-  line-height: 1.35;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-medium);
+  line-height: var(--chat-lh-body);
   overflow-wrap: anywhere;
 }
 
@@ -196,8 +196,8 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 11px;
-  font-weight: 750;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-semibold);
   overflow-wrap: anywhere;
 }
 
@@ -235,8 +235,8 @@
   gap: 5px;
   padding: 0 9px;
   color: var(--brand);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
 }
 
 .inbox-bg-container .tag-add-button:hover:not(:disabled),
@@ -298,8 +298,8 @@
   border-radius: 10px;
   background: var(--surface-solid);
   color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--chat-fs-body);
+  font-weight: var(--chat-fw-medium);
   outline: 0;
   transition: var(--transition);
 }
@@ -316,8 +316,8 @@
   border-radius: 10px;
   background: var(--brand);
   color: var(--primary-foreground);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-bold);
   transition: var(--transition);
 }
 
@@ -340,9 +340,9 @@
 
 .inbox-bg-container .tag-picker-label {
   color: var(--ink-muted);
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -353,8 +353,8 @@
   border-radius: 999px;
   background: var(--surface-solid);
   color: var(--ink-muted);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
   transition: var(--transition);
 }
 
@@ -403,8 +403,8 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-bold);
   text-align: left;
   transition: var(--transition);
 }
@@ -455,17 +455,17 @@
 
 .inbox-bg-container .assist-label {
   color: var(--ink-faint);
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .inbox-bg-container .assist-block p {
   margin: 0;
   color: var(--ink);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--chat-fs-meta);
+  line-height: var(--chat-lh-body);
 }
 
 .inbox-bg-container .suggested-reply {
@@ -484,8 +484,8 @@
   border-radius: var(--rad-sm);
   background: var(--surface-solid);
   color: var(--brand);
-  font-size: 11px;
-  font-weight: 850;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
 }
 
 .inbox-bg-container .context-status,
@@ -525,8 +525,8 @@
 
 .inbox-bg-container .recipe-name {
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-bold);
 }
 
 .inbox-bg-container .recipe-action {
@@ -537,7 +537,7 @@
 .inbox-bg-container .recipe-status {
   margin-top: 2px;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--chat-fs-caption);
 }
 
 .inbox-bg-container .context-link-list {
@@ -555,8 +555,8 @@
   border-radius: var(--rad-sm);
   background: var(--surface-solid);
   color: var(--ink-muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-bold);
   text-decoration: none;
   transition: var(--transition);
 }
@@ -576,13 +576,13 @@
 }
 .inbox-bg-container .section-head h3 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: var(--chat-fs-body);
+  font-weight: var(--chat-fw-bold);
   color: var(--ink);
 }
 .inbox-bg-container .section-head button {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-semibold);
   color: var(--brand);
   border: 0;
   background: none;
@@ -599,8 +599,8 @@
   border-radius: 999px;
   background: var(--brand-light);
   color: var(--brand);
-  font-size: 11px;
-  font-weight: 850;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
   line-height: 1;
   white-space: nowrap;
 }
@@ -659,19 +659,19 @@
 
 .inbox-bg-container .candidate-info-label {
   color: var(--ink-faint);
-  font-size: 10px;
-  font-weight: 850;
-  line-height: 1.15;
-  letter-spacing: 0.05em;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--chat-lh-tight);
+  letter-spacing: 0;
   text-transform: uppercase;
   overflow-wrap: anywhere;
 }
 
 .inbox-bg-container .candidate-info-value {
   color: var(--ink-faint);
-  font-size: 12px;
-  font-weight: 720;
-  line-height: 1.35;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-medium);
+  line-height: var(--chat-lh-body);
   overflow-wrap: anywhere;
 }
 
@@ -712,19 +712,19 @@
 }
 .inbox-bg-container .detail-label {
   display: block;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.2;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--chat-lh-tight);
   color: var(--ink-faint);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 .inbox-bg-container .detail-value {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.42;
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-medium);
+  line-height: var(--chat-lh-body);
   color: var(--ink);
   word-wrap: break-word;
   overflow-wrap: break-word;
@@ -739,8 +739,7 @@
   place-items: center;
   min-height: 300px;
   color: var(--ink-faint);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--chat-fs-body);
+  font-weight: var(--chat-fw-medium);
   text-align: center;
 }
-

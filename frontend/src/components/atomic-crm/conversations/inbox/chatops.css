@@ -51,8 +51,8 @@
 .ops-kicker,
 .ops-panel-eyebrow {
   color: var(--ink-muted);
-  font-size: 11px;
-  font-weight: 850;
+  font-size: var(--crm-fs-eyebrow);
+  font-weight: var(--chat-fw-bold);
   letter-spacing: 0.08em;
   line-height: 1.2;
   text-transform: uppercase;
@@ -61,18 +61,35 @@
 .ops-command-header h1 {
   margin: 4px 0 0;
   color: var(--ink);
-  font-size: clamp(28px, 3vw, 40px);
-  font-weight: 850;
-  line-height: 1;
+  font-size: var(--crm-fs-title-xl);
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0;
+  line-height: var(--crm-lh-heading);
 }
 
 .ops-command-header p:not(.ops-kicker) {
   max-width: 68ch;
   margin: 8px 0 0;
   color: var(--ink-muted);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: var(--crm-fs-body);
+  line-height: var(--crm-lh-body);
   text-wrap: pretty;
+}
+
+.ops-command-header [data-slot="button"] {
+  min-height: var(--crm-control-height-md);
+  height: var(--crm-control-height-md);
+  border-radius: var(--crm-control-radius);
+  gap: 8px;
+  padding-inline: var(--crm-control-pad-x);
+  font-size: var(--crm-fs-control);
+  font-weight: var(--crm-fw-semibold);
+  line-height: var(--crm-lh-title);
+}
+
+.ops-command-header [data-slot="button"] svg {
+  width: var(--crm-control-icon);
+  height: var(--crm-control-icon);
 }
 
 .ops-live-pill {
@@ -86,8 +103,8 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--brand-light) 64%, transparent);
   color: var(--brand);
-  font-size: 12px;
-  font-weight: 760;
+  font-size: var(--crm-fs-hint);
+  font-weight: var(--chat-fw-semibold);
 }
 
 .ops-status-strip {
@@ -122,8 +139,8 @@
 
 .ops-status-label {
   color: var(--ink-muted);
-  font-size: 11px;
-  font-weight: 850;
+  font-size: var(--crm-fs-eyebrow);
+  font-weight: var(--chat-fw-bold);
   letter-spacing: 0.08em;
   line-height: 1.2;
   text-transform: uppercase;
@@ -131,17 +148,17 @@
 
 .ops-status-strip strong {
   color: var(--ink);
-  font-size: 22px;
-  font-weight: 850;
+  font-size: var(--crm-fs-value-lg);
+  font-weight: var(--chat-fw-bold);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .ops-status-strip small {
   color: var(--ink-muted);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.25;
+  font-size: var(--crm-fs-hint);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
 }
 
 .ops-panel {
@@ -174,16 +191,16 @@
 .ops-panel-title h2 {
   margin: 4px 0 0;
   color: var(--ink);
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1.2;
+  font-size: var(--crm-fs-title-md);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--crm-lh-title);
 }
 
 .ops-meta-text {
   min-width: 0;
   color: var(--ink-muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--crm-fs-hint);
   overflow-wrap: anywhere;
 }
 
@@ -191,4 +208,3 @@
   justify-content: flex-end;
   padding-right: 2px;
 }
-

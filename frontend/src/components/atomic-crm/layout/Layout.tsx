@@ -34,13 +34,17 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   const isProjectWorkspace =
     location.pathname.startsWith("/projects") ||
     hashPath.startsWith("/projects");
+  const isProfileWorkspace =
+    location.pathname.startsWith("/profile") ||
+    hashPath.startsWith("/profile");
   const isFullHeightWorkspace =
     isDashboardWorkspace ||
     isConversationWorkspace ||
     isKnowledgeWorkspace ||
     isIntegrationWorkspace ||
     isPersonaWorkspace ||
-    isProjectWorkspace;
+    isProjectWorkspace ||
+    isProfileWorkspace;
 
   return (
     <>

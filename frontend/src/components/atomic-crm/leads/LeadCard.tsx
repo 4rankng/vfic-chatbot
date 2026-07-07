@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { useRedirect, RecordContextProvider } from "ra-core";
+import { RecordContextProvider } from "ra-core";
 
 import { type Lead } from "../types";
 import { LeadAvatar } from "./LeadAvatar";
@@ -27,15 +27,8 @@ interface LeadCardProps {
 // change. The list passes a stable onClick (useCallback in LeadListContent)
 // so the only driver of re-renders is the lead object reference itself.
 const LeadCardContentBase = ({ lead, onClick }: LeadCardProps) => {
-  const redirect = useRedirect();
   const handleClick = () => {
-    if (onClick) {
-      onClick(lead);
-    } else {
-      redirect(`/leads/${lead.id}/show`, undefined, undefined, undefined, {
-        _scrollToTop: false,
-      });
-    }
+    onClick?.(lead);
   };
 
   const identifierSuffix = compactIdentifier(lead);

@@ -4,20 +4,16 @@ import {
   Bot,
   Briefcase,
   Cpu,
-  Database,
+  FileText,
   KeyRound,
-  MessageCircle,
   PlugZap,
-  RefreshCw,
   Save,
   Settings,
-  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -221,82 +217,60 @@ const SettingsCard = ({
   children: ReactNode;
   className?: string;
 }) => (
-  <Card className={`settings-card ${className}`}>
-    <CardHeader className="settings-card-header">
+  <section className={`settings-card ${className}`}>
+    <div className="settings-card-header">
       <div className="settings-card-icon">{icon}</div>
       <div className="min-w-0">
-        <CardTitle>{title}</CardTitle>
+        <div data-slot="card-title">{title}</div>
       </div>
-    </CardHeader>
-    <CardContent className="settings-card-content">{children}</CardContent>
-  </Card>
+    </div>
+    <div className="settings-card-content">{children}</div>
+  </section>
 );
 
 const CORE_SETTINGS_LINKS: Array<{
   href: string;
   title: string;
+  description: string;
   Icon: LucideIcon;
+  primary?: boolean;
 }> = [
   {
     href: "/projects",
-    title: "Project",
+    title: "Thiết lập dự án",
+    description:
+      "Mỗi dự án gồm knowledge base, FAQ và dữ liệu tư vấn trong cùng một workspace.",
     Icon: Briefcase,
-  },
-  {
-    href: "/knowledge_sources",
-    title: "Data ingestion",
-    Icon: Database,
+    primary: true,
   },
   {
     href: "/personas",
-    title: "Persona",
-    Icon: Sparkles,
-  },
-  {
-    href: "/settings",
-    title: "Kênh chat",
-    Icon: MessageCircle,
+    title: "Agent tư vấn",
+    description:
+      "Chọn giọng tư vấn và phân công agent sau khi dữ liệu dự án sẵn sàng.",
+    Icon: FileText,
   },
 ];
 
 const SettingsShortcutGrid = () => (
   <section className="settings-shortcut-grid" aria-label="Thiết lập chính">
-    {CORE_SETTINGS_LINKS.map(({ href, title, Icon }) => (
-      <Link key={title} to={href} className="settings-shortcut-card">
+    {CORE_SETTINGS_LINKS.map(({ href, title, description, Icon, primary }) => (
+      <Link
+        key={title}
+        to={href}
+        className={`settings-shortcut-card${primary ? " is-primary" : ""}`}
+      >
         <span className="settings-card-icon">
           <Icon className="size-4" />
         </span>
         <span>
           <strong>{title}</strong>
+          <p>{description}</p>
         </span>
       </Link>
     ))}
   </section>
 );
-
-const SettingsMetric = ({
-  label,
-  status,
-  detail,
-}: {
-  label: string;
-  status: SecretStatus | PlainStatus | undefined;
-  detail: string;
-}) => {
-  const configured = Boolean(status?.configured);
-  return (
-    <div
-      className={`settings-metric ${configured ? "is-ready" : "is-missing"}`}
-    >
-      <span className="ops-status-label">{label}</span>
-      <strong>
-        <span aria-hidden="true" />
-        {configured ? "Sẵn sàng" : "Thiếu"}
-      </strong>
-      <small>{detail}</small>
-    </div>
-  );
-};
 
 export const ZaloIntegrationPage = () => {
   const translate = useTranslate();
@@ -313,29 +287,23 @@ export const ZaloIntegrationPage = () => {
     useState<MinimaxFormState>(emptyMinimaxForm);
   const [openRouterForm, setOpenRouterForm] =
     useState<OpenRouterFormState>(emptyOpenRouterForm);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
-    setLoading(true);
-    try {
-      const [data, minimaxData, openRouterData] = await Promise.all([
-        apiJson<ZaloSettings>("/api/v1/admin/integrations/zalo"),
-        apiJson<MinimaxSettings>("/api/v1/admin/integrations/minimax"),
-        apiJson<OpenRouterSettings>("/api/v1/admin/integrations/openrouter"),
-      ]);
-      setSettings(data);
-      setMinimaxSettings(minimaxData);
-      setOpenRouterSettings(openRouterData);
-      setForm((current) => ({
-        ...current,
-        zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
-      }));
-      setMinimaxForm(emptyMinimaxForm);
-      setOpenRouterForm(emptyOpenRouterForm);
-    } finally {
-      setLoading(false);
-    }
+    const [data, minimaxData, openRouterData] = await Promise.all([
+      apiJson<ZaloSettings>("/api/v1/admin/integrations/zalo"),
+      apiJson<MinimaxSettings>("/api/v1/admin/integrations/minimax"),
+      apiJson<OpenRouterSettings>("/api/v1/admin/integrations/openrouter"),
+    ]);
+    setSettings(data);
+    setMinimaxSettings(minimaxData);
+    setOpenRouterSettings(openRouterData);
+    setForm((current) => ({
+      ...current,
+      zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
+    }));
+    setMinimaxForm(emptyMinimaxForm);
+    setOpenRouterForm(emptyOpenRouterForm);
   };
 
   useEffect(() => {
@@ -468,24 +436,16 @@ export const ZaloIntegrationPage = () => {
               <Settings className="size-5" />
             </div>
             <div className="min-w-0">
+              <p className="ops-kicker">Thiết lập dự án</p>
               <h1>Cấu hình hệ thống</h1>
+              <p>
+                Dự án là trung tâm: tạo dự án, nạp knowledge base, kiểm tra
+                dữ liệu rồi mới bật agent và model AI.
+              </p>
             </div>
           </div>
           <div className="settings-header-actions">
-            <Button
-              variant="outline"
-              onClick={load}
-              disabled={loading || saving}
-              className="h-10 rounded-[9px]"
-            >
-              <RefreshCw className="size-4" />
-              Làm mới
-            </Button>
-            <Button
-              onClick={save}
-              disabled={saving || !hasChanges}
-              className="h-10 rounded-[9px]"
-            >
+            <Button onClick={save} disabled={saving || !hasChanges}>
               <Save className="size-4" />
               Lưu
             </Button>
@@ -494,32 +454,9 @@ export const ZaloIntegrationPage = () => {
 
         <SettingsShortcutGrid />
 
-        <section className="ops-status-strip settings-status-strip">
-          <SettingsMetric
-            label="Nền tảng bot"
-            status={settings?.zalo_bot_token}
-            detail="Webhook nhận tin"
-          />
-          <SettingsMetric
-            label="Tài khoản OA"
-            status={settings?.zalo_oa_access_token}
-            detail="Gửi phản hồi"
-          />
-          <SettingsMetric
-            label="Minimax"
-            status={minimaxSettings?.minimax_api_key}
-            detail="LLM chính"
-          />
-          <SettingsMetric
-            label="OpenRouter"
-            status={openRouterSettings?.openrouter_api_key}
-            detail="Dự phòng + embedding"
-          />
-        </section>
-
         <div className="settings-grid">
           <SettingsCard
-            title="Nền tảng bot"
+            title="ChatBot"
             icon={<PlugZap className="size-4" />}
           >
             <SecretInput
@@ -537,13 +474,6 @@ export const ZaloIntegrationPage = () => {
               }
               value={form.zalo_bot_webhook_secret}
               onChange={setValue}
-            />
-            <ReadOnlySetting
-              label="API gốc"
-              value={
-                settings?.zalo_bot_api_base ??
-                "https://bot-api.zaloplatforms.com"
-              }
             />
           </SettingsCard>
 
@@ -581,10 +511,6 @@ export const ZaloIntegrationPage = () => {
               value={form.zalo_oa_access_token}
               onChange={setValue}
             />
-            <ReadOnlySetting
-              label="API gốc"
-              value={settings?.zalo_oa_api_base ?? "https://openapi.zalo.me"}
-            />
           </SettingsCard>
 
           <SettingsCard title="Minimax" icon={<Bot className="size-4" />}>
@@ -596,17 +522,11 @@ export const ZaloIntegrationPage = () => {
               onChange={setMinimaxValue}
             />
             <ReadOnlySetting
-              label="API gốc"
-              value={
-                minimaxSettings?.minimax_base_url ?? "https://api.minimax.io/v1"
-              }
-            />
-            <ReadOnlySetting
-              label="Model chatbot"
+              label="Model ChatBot"
               value={minimaxSettings?.minimax_agent_model ?? ""}
             />
             <ReadOnlySetting
-              label="Model kiểm tra an toàn"
+              label="Model Safety"
               value={minimaxSettings?.minimax_safety_model ?? ""}
             />
           </SettingsCard>
@@ -626,13 +546,6 @@ export const ZaloIntegrationPage = () => {
               onChange={setOpenRouterValue}
             />
             <ReadOnlySetting
-              label="API gốc"
-              value={
-                openRouterSettings?.openrouter_base_url ??
-                "https://openrouter.ai/api/v1"
-              }
-            />
-            <ReadOnlySetting
               label="Model tóm tắt huấn luyện"
               value={openRouterSettings?.openrouter_digest_model ?? ""}
               hint="Tạo digest JSON và catalog card từ tài liệu thô."
@@ -647,11 +560,11 @@ export const ZaloIntegrationPage = () => {
               hint="Dùng cho indexing và retrieval; giữ 3072 chiều để tương thích pgvector hiện tại."
             />
             <ReadOnlySetting
-              label="Model chatbot"
+              label="Model ChatBot"
               value={openRouterSettings?.openrouter_agent_model ?? ""}
             />
             <ReadOnlySetting
-              label="Model kiểm tra an toàn"
+              label="Model Safety"
               value={openRouterSettings?.openrouter_safety_model ?? ""}
             />
           </SettingsCard>

@@ -1,0 +1,534 @@
+/* Mobile Utilities */
+.inbox-bg-container .mobile-toggle {
+  display: none;
+}
+.inbox-bg-container .backdrop {
+  display: none;
+}
+.inbox-bg-container .context-overlay-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  border: 0;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(2px);
+  cursor: default;
+}
+
+@media (max-width: 1180px) {
+  .inbox-bg-container .app {
+    grid-template-columns: 56px 300px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .app.dashboard-app,
+  .inbox-bg-container .app.knowledge-app,
+  .inbox-bg-container .app.settings-app,
+  .inbox-bg-container .app.profile-app,
+  .inbox-bg-container .app.persona-app,
+  .inbox-bg-container .app.project-app {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .right-panel {
+    width: 360px;
+    max-width: calc(100% - 60px);
+  }
+  .inbox-bg-container .mode-segment {
+    min-width: 88px;
+  }
+  .inbox-bg-container .mode-segment-hint {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) and (min-width: 768px) {
+  .inbox-bg-container .app {
+    grid-template-columns: 54px minmax(240px, 38%) minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .app.dashboard-app,
+  .inbox-bg-container .app.knowledge-app,
+  .inbox-bg-container .app.settings-app,
+  .inbox-bg-container .app.profile-app,
+  .inbox-bg-container .app.persona-app,
+  .inbox-bg-container .app.project-app {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .chat-header {
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 8px 10px;
+    min-height: 104px;
+    padding: 10px 14px;
+  }
+
+  .inbox-bg-container .header-person {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .inbox-bg-container .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .inbox-bg-container .mode-control {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inbox-bg-container .mode-segment {
+    min-width: 0;
+    width: auto;
+  }
+}
+
+/* ---- Mobile (<= 767px): list-first master/detail ----
+   The JS gate (useIsMobile @ 768px) and this block share one boundary, so the
+   drawer only fires once MobileAdmin has mounted. The conversation LIST is the
+   default pane; tapping a row pushes ?id=<conv> (detail-open) and the detail
+   slides in from the right; the browser back button / in-app back clears it. */
+@media (max-width: 767px) {
+  .inbox-bg-container {
+    /* Conversation routes own the full mobile viewport; no global top/bottom app bar. */
+    padding: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
+  .inbox-bg-container.conversation-open {
+    margin-top: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
+  .inbox-bg-container .app {
+    grid-template-columns: 1fr;
+  }
+  .inbox-bg-container .workspace-icon-rail {
+    display: none;
+  }
+  .inbox-bg-container .workspace-rail {
+    gap: 10px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    border-bottom: 0;
+    background: var(--surface-solid);
+  }
+
+  .inbox-bg-container:not(.conversation-open) .conversations {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .inbox-bg-container .workspace-title-row {
+    min-height: 44px;
+  }
+
+  .inbox-bg-container .workspace-heading {
+    font-size: var(--chat-fs-page-title);
+    line-height: 1.08;
+    letter-spacing: 0;
+  }
+
+  .inbox-bg-container .inbox-tools {
+    padding: 0;
+  }
+
+  .inbox-bg-container .search .icon {
+    left: 17px;
+    width: 19px;
+    height: 19px;
+  }
+
+  .inbox-bg-container .search input {
+    height: 48px;
+    padding-inline: 48px 18px;
+    border-color: transparent;
+    border-radius: 999px;
+    background: color-mix(
+      in srgb,
+      var(--surface-hover) 82%,
+      var(--surface-solid)
+    );
+    font-size: 16px;
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--border) 42%, transparent);
+  }
+
+  .inbox-bg-container .conversations {
+    padding: 0 16px 112px;
+    background: var(--surface-solid);
+  }
+
+  .inbox-bg-container .conversation {
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    min-height: 68px;
+    padding: 10px 0;
+    border-radius: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  }
+
+  .inbox-bg-container .conversation + .conversation {
+    margin-top: 0;
+  }
+
+  .inbox-bg-container .conversation:hover {
+    background: transparent;
+    transform: none;
+  }
+
+  .inbox-bg-container .conversation.active {
+    background: transparent;
+  }
+
+  .inbox-bg-container .conversation.active::before,
+  .inbox-bg-container .conversation.needs-attention::after {
+    display: none;
+  }
+
+  .inbox-bg-container .avatar {
+    width: 48px;
+    height: 48px;
+    font-size: var(--chat-fs-section-title);
+  }
+
+  .inbox-bg-container .conv-top {
+    align-items: start;
+  }
+
+  .inbox-bg-container .conv-name {
+    font-size: var(--chat-fs-list-title);
+    font-weight: var(--chat-fw-bold);
+    line-height: var(--chat-lh-title);
+  }
+
+  .inbox-bg-container .conv-time {
+    color: var(--success);
+    font-size: var(--chat-fs-meta);
+    font-weight: var(--chat-fw-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .inbox-bg-container .conv-preview {
+    font-size: var(--chat-fs-list-preview);
+    line-height: var(--chat-lh-body);
+  }
+
+  .inbox-bg-container .conv-bottom {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+  }
+  .inbox-bg-container .conv-meta-row {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  /* List: in-flow, full-width, visible by default. */
+  .inbox-bg-container .left-panel {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    border-right: 0;
+    box-shadow: none;
+    transform: none;
+    visibility: visible;
+    transition: none;
+  }
+  .inbox-bg-container .app.detail-open .left-panel {
+    display: none;
+  }
+  /* Detail: off-canvas to the right until a conversation is selected. */
+  .inbox-bg-container .center-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    background: var(--surface);
+    box-shadow: -24px 0 64px rgba(0, 0, 0, 0.2);
+    transform: translateX(105%);
+    visibility: hidden;
+    transition:
+      transform 0.3s var(--ease),
+      visibility 0.3s;
+  }
+  .inbox-bg-container .app.detail-open .center-panel {
+    position: relative;
+    inset: auto;
+    min-height: 0;
+    height: 100%;
+    transform: translateX(0);
+    visibility: visible;
+  }
+  .inbox-bg-container .app.detail-open .backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 2;
+  }
+  .inbox-bg-container .right-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+  .inbox-bg-container .right-panel.context-open {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    border-left: 0;
+    box-shadow: none;
+    z-index: 70;
+  }
+  .inbox-bg-container .context-overlay-scrim {
+    position: fixed;
+    z-index: 65;
+  }
+  .inbox-bg-container .mobile-toggle.list-toggle {
+    display: inline-grid;
+  }
+  .inbox-bg-container .chat-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    min-height: 60px;
+  }
+  .inbox-bg-container .chat-header .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .inbox-bg-container .header-person {
+    width: 100%;
+  }
+  .inbox-bg-container .header-actions {
+    width: auto;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .inbox-bg-container .profile-open-btn {
+    display: none;
+  }
+  .inbox-bg-container .mode-control {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px;
+    padding: 3px;
+  }
+  .inbox-bg-container .mode-segment {
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0;
+  }
+  .inbox-bg-container .mode-segment-copy {
+    display: none;
+  }
+  .inbox-bg-container .header-avatar {
+    display: none;
+  }
+  .inbox-bg-container .person-name {
+    font-size: var(--chat-fs-section-title);
+  }
+  .inbox-bg-container .person-meta {
+    margin-top: 2px;
+    font-size: var(--chat-fs-meta);
+  }
+  .inbox-bg-container .mode-menu-trigger {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 999px;
+  }
+  .inbox-bg-container .mode-menu-trigger span,
+  .inbox-bg-container .mode-menu-chevron {
+    display: none;
+  }
+  .inbox-bg-container .profile-info-btn {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 999px;
+  }
+  .inbox-bg-container .profile-info-btn span {
+    display: none;
+  }
+  .inbox-bg-container .chat-mode-chip {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .inbox-bg-container .chat-mode-chip span {
+    display: none;
+  }
+  .inbox-bg-container .profile-header {
+    min-height: 64px;
+    height: auto;
+    padding: 10px 16px;
+    gap: 10px;
+  }
+  .inbox-bg-container .profile-title {
+    min-width: 0;
+    gap: 8px;
+    font-size: var(--chat-fs-section-title);
+  }
+  .inbox-bg-container .context-header-actions {
+    gap: 6px;
+  }
+  .inbox-bg-container .context-open-profile {
+    min-height: 36px;
+    padding: 0 10px;
+  }
+  .inbox-bg-container .context-close {
+    width: 36px;
+    height: 36px;
+  }
+  .inbox-bg-container .context-tabs {
+    gap: 4px;
+    padding: 8px 12px;
+  }
+  .inbox-bg-container .context-tab {
+    min-height: 32px;
+  }
+  .inbox-bg-container .profile-scroll {
+    padding: 0;
+  }
+  .inbox-bg-container .context-overview {
+    gap: 8px;
+    padding: 14px 16px;
+  }
+  .inbox-bg-container .context-overview-copy h2 {
+    font-size: var(--chat-fs-section-title);
+    line-height: var(--chat-lh-title);
+  }
+  .inbox-bg-container .context-overview-copy p {
+    margin-top: 4px;
+    font-size: var(--chat-fs-meta);
+    line-height: var(--chat-lh-body);
+  }
+  .inbox-bg-container .context-signal-grid {
+    gap: 7px;
+  }
+  .inbox-bg-container .context-signal-grid span {
+    min-height: 34px;
+  }
+  .inbox-bg-container .context-card {
+    padding: 16px;
+    border-radius: 0;
+  }
+  .inbox-bg-container .context-card + .context-card {
+    margin-top: 0;
+  }
+  .inbox-bg-container .context-action {
+    min-height: 38px;
+  }
+  .inbox-bg-container .takeover-btn {
+    min-width: 48px;
+    width: 48px;
+    padding: 0;
+    justify-content: center;
+  }
+  .inbox-bg-container .takeover-btn--header {
+    min-width: 78px;
+    width: auto;
+    padding: 0 12px;
+  }
+  .inbox-bg-container .takeover-btn span {
+    display: none;
+  }
+  :is(.inbox-bg-container, .chat-surface) .chat-scroller {
+    padding: 0;
+  }
+  :is(.inbox-bg-container, .chat-surface) .new-message-jump {
+    bottom: 10px;
+    min-height: 34px;
+    max-width: calc(100% - 24px);
+    padding: 0 10px 0 12px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list {
+    padding: 20px 12px !important;
+  }
+  :is(.inbox-bg-container, .chat-surface) .chat-history-bottom-spacer {
+    height: var(--chat-composer-reserve, 92px);
+  }
+  :is(.inbox-bg-container, .chat-surface) .system-event {
+    max-width: calc(100% - 16px);
+    padding: 7px 10px;
+    border-radius: var(--rad-md);
+    font-size: var(--chat-fs-caption);
+    line-height: var(--chat-lh-body);
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-row {
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-row.grouped {
+    margin-top: 0;
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-avatar {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .message-avatar-placeholder {
+    flex: 0 0 26px;
+    width: 26px !important;
+  }
+  :is(.inbox-bg-container, .chat-surface) .bubble {
+    max-width: min(78%, calc(100% - 38px));
+    font-size: var(--chat-fs-message);
+    line-height: var(--chat-lh-message);
+  }
+  :is(.inbox-bg-container, .chat-surface) .composer-wrap {
+    padding: 10px 12px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .composer {
+    gap: 6px;
+  }
+  :is(.inbox-bg-container, .chat-surface) .composer-action {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ---- Widescreen (>= 1536px): cap message line length for readability ----
+   Gated above the laptop band (1024-1440) so laptop rendering is unchanged. */
+@media (min-width: 1536px) {
+  :is(.inbox-bg-container, .chat-surface) .bubble {
+    max-width: min(58%, 560px);
+  }
+  :is(.inbox-bg-container, .chat-surface) .chat-scroller .chat-item-list,
+  :is(.inbox-bg-container, .chat-surface) .composer-wrap {
+    padding-left: max(32px, calc((100% - 768px) / 2));
+    padding-right: max(32px, calc((100% - 768px) / 2));
+  }
+}
+
+/* Icon Sizing Adjustments */
+.inbox-bg-container .bubble-meta .icon {
+  width: 14px;
+  height: 14px;
+}
+.inbox-bg-container .detail-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+:is(.inbox-bg-container, .chat-surface) .system-event .icon {
+  width: 14px;
+  height: 14px;
+}
+:is(.inbox-bg-container, .chat-surface) .handoff-note .icon {
+  width: 16px;
+  height: 16px;
+}
+.inbox-bg-container .profile-title .icon {
+  width: 20px;
+  height: 20px;
+}
+

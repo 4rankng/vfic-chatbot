@@ -151,13 +151,19 @@ surrounding code.
 - `cn()` helper = `clsx` + `tailwind-merge` (`lib/utils.ts`).
 - Shadcn UI + Radix primitives.
 - `components.json` + `registry.json` drive the vendored Shadcn registry.
-- **`conversations/inbox.css` is a barrel** that `@import`s 10 section files
+- **`conversations/inbox.css` is a barrel** that `@import`s 11 section files
   under `conversations/inbox/`: `tokens.css` (design tokens), `base.css`,
   `chatops.css`, `features.css`, `personas.css` (largest), `workspace-rail.css`,
-  `conversation-list.css`, `chat.css`, `context-drawer.css`, `mobile.css`.
+  `conversation-list.css`, `chat.css`, `context-drawer.css`, `mobile.css`,
+  `typography.css`.
   Design tokens (colors, spacing, radii) live in `tokens.css` — extend there
-  rather than scattering literals. The barrel is byte-identical to the old
-  monolith; do not reintroduce the monolith.
+  rather than scattering literals. Do not reintroduce the old monolithic CSS
+  file.
+- Typography is centralized: define font families, sizes, weights, and line
+  heights in `tokens.css`; shared role selectors live in `typography.css`
+  (imported last). Do not add one-off page title/card/control font sizes unless
+  a component has a real exception, and prefer the `--crm-fs-*`,
+  `--crm-fw-*`, and `--crm-lh-*` roles.
 - Themes via `<CRM>` props (light/dark logos + themes). Dark mode supported.
 
 ### i18n — Vietnamese only

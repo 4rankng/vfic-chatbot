@@ -1,0 +1,275 @@
+/* Central typography contract.
+   This file is imported last so shared roles stay consistent across dashboard,
+   settings, profile, knowledge, projects, personas, and chat surfaces. */
+
+:where(
+    .inbox-bg-container,
+    .chat-surface,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  ) {
+  color: var(--ink);
+  font-family: var(--crm-font-family);
+  font-size: var(--crm-fs-body);
+  font-weight: var(--crm-fw-regular);
+  line-height: var(--crm-lh-body);
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:is(
+    .inbox-bg-container,
+    .chat-surface,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(button, input, textarea, select) {
+  font-family: inherit;
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    .settings-command-header h1,
+    .profile-command-header h1,
+    .project-command-header h1,
+    .dashboard-command-header h1,
+    .recruiting-hero h1
+  ) {
+  color: var(--ink);
+  font-size: var(--crm-fs-page-title);
+  font-weight: var(--crm-fw-bold);
+  line-height: var(--crm-lh-heading);
+  letter-spacing: 0;
+}
+
+.inbox-bg-container .workspace-heading {
+  font-size: var(--chat-fs-page-title);
+  font-weight: var(--crm-fw-bold);
+  line-height: var(--crm-lh-heading);
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    .ops-kicker,
+    .recruiting-eyebrow,
+    .profile-field-label,
+    .settings-field label,
+    .project-selected-eyebrow,
+    .project-section-heading span,
+    .persona-panel-eyebrow
+  ) {
+  font-size: var(--crm-fs-caption);
+  font-weight: var(--crm-fw-semibold);
+  line-height: var(--crm-lh-tight);
+  letter-spacing: 0.06em;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    .settings-card-header [data-slot="card-title"],
+    .profile-card-header h2,
+    .profile-session-content h2,
+    .recruiting-panel-header h2,
+    .project-selected-summary h2,
+    .project-section-heading strong,
+    .persona-create-heading h1
+  ) {
+  color: var(--ink);
+  font-size: var(--crm-fs-card-title);
+  font-weight: var(--crm-fw-bold);
+  line-height: var(--crm-lh-title);
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    .dashboard-candidate-main strong,
+    .settings-shortcut-card strong,
+    .project-directory-name,
+    .persona-directory-row strong,
+    .project-rail-item strong
+  ) {
+  color: var(--ink);
+  font-size: var(--crm-fs-row-title);
+  font-weight: var(--crm-fw-bold);
+  line-height: var(--crm-lh-title);
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    .settings-command-header p:not(.ops-kicker),
+    .profile-command-header p:not(.ops-kicker),
+    .project-command-header p:not(.ops-kicker),
+    .profile-card-header p,
+    .profile-session-content p,
+    .settings-shortcut-card p,
+    .dashboard-empty-list,
+    .project-directory-meta,
+    .project-health-row,
+    .persona-create-heading p
+  ) {
+  color: var(--ink-muted);
+  font-size: var(--crm-fs-meta);
+  font-weight: var(--crm-fw-medium);
+  line-height: var(--crm-lh-body);
+  letter-spacing: 0;
+}
+
+:is(.inbox-bg-container, .chat-surface) .bubble {
+  font-size: var(--crm-fs-message);
+  font-weight: var(--crm-fw-regular);
+  line-height: var(--crm-lh-message);
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    [data-slot="button"],
+    .recruiting-action,
+    .profile-action-button,
+    .project-feature-detail-toggle
+  ) {
+  font-size: var(--crm-fs-control);
+  font-weight: var(--crm-fw-semibold);
+  line-height: var(--crm-lh-title);
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .profile-mobile-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    input,
+    textarea,
+    .settings-input,
+    .profile-input,
+    .profile-select-trigger
+  ) {
+  font-size: var(--crm-fs-input);
+  font-weight: var(--crm-fw-regular);
+  line-height: var(--crm-lh-body);
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(
+    .settings-status-badge,
+    .dashboard-candidate-meta,
+    .dashboard-candidate-meta small,
+    .project-feature-group-count,
+    .project-feature-chip > span:first-child
+  ) {
+  font-size: var(--crm-fs-badge);
+  font-weight: var(--crm-fw-semibold);
+  line-height: var(--crm-lh-tight);
+  letter-spacing: 0;
+}
+
+:is(
+    .inbox-bg-container,
+    .mobile-dashboard-shell,
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .profile-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  :is(.dashboard-panel-count, .queue-command-row b) {
+  font-size: var(--crm-fs-body);
+  font-weight: var(--crm-fw-bold);
+  line-height: var(--crm-lh-title);
+  font-variant-numeric: tabular-nums;
+}

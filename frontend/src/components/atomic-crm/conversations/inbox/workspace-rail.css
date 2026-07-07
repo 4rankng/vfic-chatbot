@@ -118,8 +118,8 @@
   display: grid;
   gap: 0;
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
 }
 
 .inbox-bg-container .workspace-title-row {
@@ -136,9 +136,10 @@
 .inbox-bg-container .workspace-heading {
   margin: 0;
   color: var(--ink);
-  font-size: 22px;
-  font-weight: 820;
-  line-height: 1.05;
+  font-size: var(--chat-fs-page-title);
+  font-weight: var(--chat-fw-bold);
+  line-height: 1.08;
+  letter-spacing: 0;
 }
 
 @media (min-width: 768px) {
@@ -152,8 +153,8 @@
   .inbox-bg-container .workspace-title {
     padding: 0 4px;
     color: var(--workspace-ink);
-    font-size: 12px;
-    line-height: 1.25;
+    font-size: var(--chat-fs-caption);
+    line-height: var(--chat-lh-title);
   }
 
   .inbox-bg-container .workspace-title-row {
@@ -163,7 +164,7 @@
 
   .inbox-bg-container .workspace-heading {
     color: var(--workspace-ink);
-    font-size: 17px;
+    font-size: var(--chat-fs-section-title);
   }
 }
 
@@ -194,7 +195,7 @@
   border-radius: var(--rad-md);
   background: var(--surface-hover);
   transition: var(--transition);
-  font-size: 14px;
+  font-size: var(--chat-fs-body);
 }
 .inbox-bg-container .search input::placeholder {
   color: var(--ink-faint);
@@ -223,7 +224,7 @@
     color: var(--workspace-ink);
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.08);
-    font-size: 13px;
+    font-size: var(--chat-fs-list-preview);
   }
 
   .inbox-bg-container .search input::placeholder {
@@ -240,4 +241,3 @@
     color: var(--workspace-ink);
   }
 }
-

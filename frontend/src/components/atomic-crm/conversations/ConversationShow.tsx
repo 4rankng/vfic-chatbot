@@ -18,8 +18,8 @@ import {
 import {
   Bot,
   Check,
+  FileText,
   Handshake,
-  Sparkles,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
@@ -239,7 +239,7 @@ export const ConversationShowContent = ({
                 aria-label="Mở ngữ cảnh hội thoại"
                 title="Mở ngữ cảnh hội thoại"
               >
-                <Sparkles className="icon" />
+                <FileText className="icon" />
               </button>
             )}
             {activeMode === "closed" && (

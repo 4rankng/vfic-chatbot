@@ -45,7 +45,6 @@ export const MobileNavigation = () => {
     ) {
       return "/account";
     }
-    if (path === "/leads" || path.startsWith("/leads/")) return "/";
     return false;
   }, [location.pathname]);
 

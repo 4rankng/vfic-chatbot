@@ -37,6 +37,74 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --transition: 0.3s var(--ease);
 
+  /* Typography hierarchy.
+     Keep sizes semantic and centralized. Message/body text is the anchor;
+     page titles, card titles, rows, controls, labels, and metadata step from it. */
+  --crm-font-family:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+    "Helvetica Neue", Arial, sans-serif;
+  --crm-fs-display: 30px;
+  --crm-fs-page-title: 24px;
+  --crm-fs-section-title: 18px;
+  --crm-fs-card-title: 14px;
+  --crm-fs-row-title: 13px;
+  --crm-fs-message: 15px;
+  --crm-fs-body: 14px;
+  --crm-fs-body-sm: 13px;
+  --crm-fs-meta: 12px;
+  --crm-fs-caption: 11.5px;
+  --crm-fs-badge: 11.5px;
+  --crm-fs-control: 14px;
+  --crm-fs-input: 14px;
+  --crm-control-height-sm: 32px;
+  --crm-control-height-md: 36px;
+  --crm-control-height-touch: 44px;
+  --crm-control-radius: 8px;
+  --crm-control-icon: 16px;
+  --crm-control-pad-x: 12px;
+  --crm-fs-value-xl: 30px;
+  --crm-fs-value-lg: 22px;
+  --crm-fs-value-md: 20px;
+  --crm-lh-heading: 1.12;
+  --crm-lh-title: 1.25;
+  --crm-lh-body: 1.42;
+  --crm-lh-message: 1.46;
+  --crm-lh-tight: 1.2;
+  --crm-fw-regular: 450;
+  --crm-fw-medium: 550;
+  --crm-fw-semibold: 650;
+  --crm-fw-bold: 720;
+
+  /* Backward-compatible chat aliases for the existing inbox modules. */
+  --chat-font-family: var(--crm-font-family);
+  --chat-fs-page-title: var(--crm-fs-page-title);
+  --chat-fs-section-title: var(--crm-fs-section-title);
+  --chat-fs-list-title: var(--crm-fs-card-title);
+  --chat-fs-list-preview: var(--crm-fs-body-sm);
+  --chat-fs-message: var(--crm-fs-message);
+  --chat-fs-body: var(--crm-fs-body);
+  --chat-fs-meta: var(--crm-fs-meta);
+  --chat-fs-caption: var(--crm-fs-caption);
+  --chat-fs-chip: var(--crm-fs-badge);
+  --chat-lh-tight: var(--crm-lh-tight);
+  --chat-lh-title: var(--crm-lh-title);
+  --chat-lh-body: var(--crm-lh-body);
+  --chat-lh-message: var(--crm-lh-message);
+  --chat-fw-regular: var(--crm-fw-regular);
+  --chat-fw-medium: var(--crm-fw-medium);
+  --chat-fw-semibold: var(--crm-fw-semibold);
+  --chat-fw-bold: var(--crm-fw-bold);
+
+  /* Backward-compatible CRM aliases used by older workspace CSS. */
+  --crm-fs-title-xl: var(--crm-fs-display);
+  --crm-fs-title-lg: var(--crm-fs-page-title);
+  --crm-fs-title-md: var(--crm-fs-section-title);
+  --crm-fs-title-sm: var(--crm-fs-card-title);
+  --crm-fs-action: var(--crm-fs-control);
+  --crm-fs-label: var(--crm-fs-meta);
+  --crm-fs-eyebrow: var(--crm-fs-caption);
+  --crm-fs-hint: var(--crm-fs-meta);
+
   --chat-bg: var(--background);
   --chat-bubble-in: #ffffff;
   --chat-bubble-out: #f4edf7;
@@ -61,6 +129,22 @@
   --workspace-switcher-bg-deep: #3f0e40;
   --workspace-switcher-active: rgba(255, 255, 255, 0.16);
   --workspace-switcher-hover: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 767px) {
+  :root {
+    --chat-fs-page-title: 30px;
+    --crm-fs-display: 32px;
+    --crm-fs-page-title: 26px;
+    --crm-fs-section-title: 18px;
+    --crm-fs-card-title: 16px;
+    --crm-fs-row-title: 14px;
+    --crm-fs-input: 16px;
+    --crm-control-height-md: var(--crm-control-height-touch);
+    --crm-fs-value-xl: 30px;
+    --crm-fs-value-lg: 22px;
+    --crm-fs-value-md: 20px;
+  }
 }
 
 .dark {
@@ -98,4 +182,3 @@
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
 }
-

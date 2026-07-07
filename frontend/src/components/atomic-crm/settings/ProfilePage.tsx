@@ -1,5 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
-import { CircleX, LogOut, Pencil, Save } from "lucide-react";
+import {
+  CircleX,
+  Globe2,
+  LogOut,
+  Pencil,
+  Save,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import {
   Form,
   useGetIdentity,
@@ -8,11 +16,11 @@ import {
   useLocales,
   useLogout,
   useNotify,
+  useRecordContext,
   useTranslate,
 } from "ra-core";
 import { useState } from "react";
 import { useFormState } from "react-hook-form";
-import { RecordField } from "@/components/admin/record-field";
 import { TextInput } from "@/components/admin/text-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,8 +31,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { InboxIcons } from "../conversations/InboxIcons";
+import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
 import { apiJson, ApiError } from "../providers/rest/api";
 import type { Profile } from "../types";
+import "../conversations/inbox.css";
+
+type ProfileFieldSource = "full_name" | "email";
 
 // Self-profile edit. The signed-in user edits their own row in `profiles`
 // (exposed as the "users" resource, which the dataProvider aliases to the
@@ -39,6 +53,7 @@ export const ProfilePage = () => {
   });
   const translate = useTranslate();
   const notify = useNotify();
+  const isMobile = useIsMobile();
 
   const { mutate } = useMutation({
     mutationKey: ["profile-update"],
@@ -81,19 +96,48 @@ export const ProfilePage = () => {
     mutate(values);
   };
 
-  return (
-    <div className="max-w-lg mx-auto mt-6">
-      <div className="mb-6 flex flex-col items-start border-b border-border pb-4">
-        <h2 className="font-display text-4xl font-extrabold tracking-wide uppercase text-foreground">
-          {translate("crm.profile.title")}
-        </h2>
-        <p className="text-muted-foreground text-xs font-medium mt-1">
-          Quản lý thông tin và tùy chọn tài khoản của bạn
-        </p>
+  const displayName = data?.full_name?.trim() || translate("crm.profile.title");
+  const displayEmail = data?.email?.trim() || "";
+
+  const content = (
+    <div className="profile-workspace-content text-foreground">
+      <div className="ops-page-shell profile-page-shell">
+        <header className="ops-command-header profile-command-header">
+          <div className="ops-command-title">
+            <div className="ops-command-mark profile-command-mark">
+              <UserRound className="size-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="ops-kicker">Account</p>
+              <h1>{displayName}</h1>
+              <p>
+                {displayEmail ||
+                  "Quản lý thông tin và tùy chọn tài khoản của bạn"}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <Form onSubmit={handleOnSubmit} record={data}>
+          <ProfileForm isEditMode={isEditMode} setEditMode={setEditMode} />
+        </Form>
       </div>
-      <Form onSubmit={handleOnSubmit} record={data}>
-        <ProfileForm isEditMode={isEditMode} setEditMode={setEditMode} />
-      </Form>
+    </div>
+  );
+
+  if (isMobile) {
+    return <div className="profile-mobile-shell">{content}</div>;
+  }
+
+  return (
+    <div className="inbox-bg-container profile-workspace">
+      <InboxIcons />
+      <main className="app profile-app" id="app">
+        <WorkspaceIconRail />
+        <section className="panel center-panel profile-center-panel">
+          {content}
+        </section>
+      </main>
     </div>
   );
 };
@@ -113,28 +157,31 @@ const ProfileForm = ({
   if (!identity) return null;
 
   return (
-    <div className="space-y-4">
-      <Card className="border border-border bg-card shadow-xs hover:shadow-sm transition-all duration-300">
-        <CardContent className="pt-6">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="w-1.5 h-4.5 bg-primary rounded-full" />
-            <span className="font-display text-lg font-bold tracking-wider uppercase text-foreground">
-              Thông tin tài khoản
+    <div className="profile-grid">
+      <Card className="profile-card profile-account-card">
+        <CardContent className="profile-card-content">
+          <div className="profile-card-header">
+            <span className="profile-card-icon">
+              <ShieldCheck className="size-4" aria-hidden="true" />
             </span>
+            <div className="min-w-0">
+              <h2>Thông tin tài khoản</h2>
+              <p>Cập nhật tên hiển thị, email và ngôn ngữ giao diện.</p>
+            </div>
           </div>
 
-          <div className="space-y-4 mb-4">
+          <div className="profile-field-grid">
             <TextRender source="full_name" isEditMode={isEditMode} />
             <TextRender source="email" isEditMode={isEditMode} />
             <LanguageSelector />
           </div>
 
-          <div className="flex flex-row justify-end gap-2">
+          <div className="profile-actions">
             <Button
               type="button"
               variant={isEditMode ? "ghost" : "outline"}
               onClick={() => setEditMode(!isEditMode)}
-              className="flex items-center"
+              className="profile-action-button"
             >
               {isEditMode ? <CircleX /> : <Pencil />}
               {isEditMode
@@ -143,7 +190,12 @@ const ProfileForm = ({
             </Button>
 
             {isEditMode && (
-              <Button type="submit" disabled={!isDirty} variant="outline">
+              <Button
+                type="submit"
+                disabled={!isDirty}
+                variant="outline"
+                className="profile-action-button"
+              >
                 <Save />
                 {translate("ra.action.save")}
               </Button>
@@ -152,21 +204,17 @@ const ProfileForm = ({
         </CardContent>
       </Card>
 
-      <Card className="border border-border bg-card shadow-xs">
-        <CardContent className="flex items-center justify-between gap-4 pt-6">
+      <Card className="profile-card profile-session-card">
+        <CardContent className="profile-session-content">
           <div className="min-w-0">
-            <div className="font-display text-lg font-bold tracking-wider uppercase text-foreground">
-              Đăng xuất
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Thoát khỏi phiên làm việc trên thiết bị này.
-            </p>
+            <h2>Đăng xuất</h2>
+            <p>Thoát khỏi phiên làm việc trên thiết bị này.</p>
           </div>
           <Button
             type="button"
             variant="outline"
             onClick={() => logout()}
-            className="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="profile-action-button profile-logout-button"
           >
             <LogOut className="size-4" />
             {translate("ra.auth.logout")}
@@ -187,12 +235,15 @@ const LanguageSelector = () => {
   }
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">
-        {translate("crm.language")}
-      </p>
+    <div className="profile-field">
+      <div className="profile-field-label-row">
+        <Globe2 className="size-3.5" aria-hidden="true" />
+        <span className="profile-field-label">
+          {translate("crm.language")}
+        </span>
+      </div>
       <Select value={locale} onValueChange={setLocale}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="profile-select-trigger">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -212,10 +263,12 @@ const TextRender = ({
   isEditMode,
   className,
 }: {
-  source: string;
+  source: ProfileFieldSource;
   isEditMode: boolean;
   className?: string;
 }) => {
+  const translate = useTranslate();
+  const record = useRecordContext<Profile>();
   const label = `resources.users.fields.${source}`;
   if (isEditMode) {
     return (
@@ -223,13 +276,19 @@ const TextRender = ({
         source={source}
         label={label}
         helperText={false}
-        className={className}
+        className={`profile-field profile-field-editing ${className ?? ""}`}
+        inputClassName="profile-input"
       />
     );
   }
   return (
-    <div className={className}>
-      <RecordField source={source} label={label} />
+    <div className={`profile-field ${className ?? ""}`}>
+      <span className="profile-field-label">
+        {translate(label, { _: source })}
+      </span>
+      <span className="profile-field-value">
+        {record?.[source]?.trim() || "Chưa cập nhật"}
+      </span>
     </div>
   );
 };

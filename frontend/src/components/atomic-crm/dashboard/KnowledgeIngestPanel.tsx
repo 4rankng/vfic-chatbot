@@ -686,7 +686,7 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
   const v = V[variant];
 
   if (permissions === "recruiter") {
-    return <Navigate to="/leads" replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (isPending) {

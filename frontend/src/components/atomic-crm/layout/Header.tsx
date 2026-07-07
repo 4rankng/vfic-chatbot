@@ -1,4 +1,4 @@
-import { FileText, User, Users } from "lucide-react";
+import { Bell, FileText, User, Users } from "lucide-react";
 import { useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { useMemo } from "react";
@@ -7,9 +7,47 @@ import { UserMenu } from "@/components/admin/user-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
-import { ChangelogPage } from "../misc/ChangelogPage";
-import { NavPill } from "./topbar/NavPills";
-import { NotificationsBell } from "./topbar/NotificationsBell";
+import { useNotifications } from "./topbar/useNotifications";
+
+type NavPillProps = {
+  label: string;
+  to: string;
+  isActive: boolean;
+};
+
+const NavPill = ({ label, to, isActive }: NavPillProps) => (
+  <Link
+    to={to}
+    className={`rounded-full px-3 py-2 text-sm font-medium transition ${
+      isActive
+        ? "bg-primary text-primary-foreground"
+        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    }`}
+  >
+    {label}
+  </Link>
+);
+
+const NotificationsBell = () => {
+  const { count } = useNotifications();
+
+  return (
+    <Link
+      to="/conversations"
+      className="relative grid size-10 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+      aria-label={
+        count > 0 ? `${count} conversations need attention` : "Notifications"
+      }
+    >
+      <Bell className="size-5" />
+      {count > 0 ? (
+        <span className="absolute -right-0.5 -top-0.5 min-w-5 rounded-full bg-destructive px-1 text-center text-[11px] font-semibold leading-5 text-destructive-foreground">
+          {count > 99 ? "99+" : count}
+        </span>
+      ) : null}
+    </Link>
+  );
+};
 
 const Header = () => {
   const { title } = useConfigurationContext();
@@ -18,7 +56,6 @@ const Header = () => {
 
   const currentPath = useMemo<string | false>(() => {
     if (matchPath("/", location.pathname)) return "/";
-    if (matchPath("/leads/*", location.pathname)) return "/leads";
     if (matchPath("/conversations/*", location.pathname))
       return "/conversations";
     if (matchPath("/projects/*", location.pathname)) return "/projects";
@@ -57,11 +94,6 @@ const Header = () => {
               label={translate("ra.page.dashboard")}
               to="/"
               isActive={currentPath === "/"}
-            />
-            <NavPill
-              label={translate("resources.leads.name", { smart_count: 2 })}
-              to="/leads"
-              isActive={currentPath === "/leads"}
             />
             <NavPill
               label={translate("resources.conversations.name", {
@@ -136,7 +168,7 @@ export const ChangelogMenuItem = () => {
   }
   return (
     <DropdownMenuItem asChild onClick={userMenuContext.onClose}>
-      <Link to={ChangelogPage.path} className="flex items-center gap-2">
+      <Link to="/changelog" className="flex items-center gap-2">
         <FileText />
         {translate("crm.changelog.title")}
       </Link>

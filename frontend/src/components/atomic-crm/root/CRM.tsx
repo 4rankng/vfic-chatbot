@@ -19,7 +19,6 @@ import { Navigate, Route } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { Admin } from "@/components/admin/admin";
 
-import leads from "../leads";
 import users from "../users";
 import conversations from "../conversations";
 import automation from "../automation";
@@ -341,6 +340,7 @@ export const CRM = ({
       {...rest}
     >
       <CustomRoutes>
+        <Route path="/leads/*" element={<Navigate to="/" replace />} />
         <Route
           path={PROFILE_PATH}
           element={
@@ -368,7 +368,6 @@ export const CRM = ({
           }
         />
       </CustomRoutes>
-      <Resource name="leads" {...leads} />
       <Resource name="conversations" {...conversations} />
       <Resource name="bot_runs" {...automation} />
       <Resource name="knowledge_sources" {...knowledge} />

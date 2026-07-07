@@ -1,0 +1,383 @@
+@media (max-width: 1320px) {
+  .persona-studio-layout {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .persona-studio-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1180px) {
+  .inbox-bg-container .app.dashboard-app {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .app.knowledge-app {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .settings-app {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .app.profile-app {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .app.persona-app {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .app.project-app {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .persona-studio-layout {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .persona-studio-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1020px) {
+  .persona-slack-layout,
+  .persona-empty-workspace,
+  .project-ops-panel,
+  .settings-shortcut-grid,
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-selector-column {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .persona-directory-list {
+    max-height: 42dvh;
+  }
+
+  .project-directory-list {
+    max-height: none;
+  }
+
+  .persona-workspace-content .persona-directory-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .persona-empty-guide {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .settings-card-wide {
+    grid-column: auto;
+  }
+
+  .persona-studio-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .persona-studio-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .persona-followup-grid,
+  .persona-studio-checklist {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .knowledge-workspace-content,
+  .settings-workspace-content,
+  .profile-workspace-content,
+  .dashboard-workspace-content,
+  .project-workspace-content {
+    padding: 14px;
+  }
+
+  .persona-workspace-content {
+    max-height: calc(100dvh - 68px);
+    overflow-y: auto;
+    padding-bottom: 84px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .persona-page-shell {
+    border-inline: 0;
+  }
+
+  .persona-studio-topbar {
+    min-height: auto;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+
+  .persona-studio-crumbs {
+    flex-basis: 100%;
+  }
+
+  .persona-studio-command {
+    order: 3;
+    width: 100%;
+  }
+
+  .persona-studio-body {
+    padding: 12px;
+  }
+
+  .persona-studio-profile-head {
+    flex-wrap: wrap;
+  }
+
+  .persona-studio-profile-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .persona-readiness-bar-card,
+  .persona-scope-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .persona-channel-header,
+  .ops-command-header,
+  .ops-command-title {
+    align-items: flex-start;
+  }
+
+  .ops-command-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .dashboard-command-header {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .dashboard-command-header .ops-command-title {
+    gap: 10px;
+  }
+
+  .dashboard-command-header .ops-command-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .dashboard-command-header h1 {
+    margin-top: 2px;
+    font-size: var(--crm-fs-title-lg);
+  }
+
+  .dashboard-command-header p:not(.ops-kicker) {
+    margin-top: 4px;
+    font-size: var(--crm-fs-hint);
+    line-height: var(--crm-lh-body);
+  }
+
+  .dashboard-command-header .dashboard-live-card {
+    display: none;
+  }
+
+  .persona-channel-header {
+    align-items: center;
+  }
+
+  .persona-channel-stats {
+    display: none;
+  }
+
+  .persona-channel-empty-pill {
+    display: none;
+  }
+
+  .persona-channel-header [data-slot="button"] {
+    width: fit-content;
+    margin-left: auto;
+    padding-inline: 12px;
+  }
+
+  .persona-channel-header .persona-create-action {
+    min-height: 40px;
+    height: 40px;
+    font-size: var(--crm-fs-action);
+  }
+
+  .ops-command-mark {
+    width: 42px;
+    height: 42px;
+  }
+
+  .ops-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-status-strip > div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .ops-status-strip > div:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .dashboard-status-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .dashboard-status-strip > div,
+  .inbox-bg-container .dashboard-status-strip > div {
+    min-width: 0;
+    min-height: 60px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-solid) 92%, transparent);
+    gap: 3px;
+    padding: 8px 10px;
+  }
+
+  .dashboard-status-strip > div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-status-strip > div + div,
+  .dashboard-status-strip > div:nth-child(odd),
+  .dashboard-status-strip > div:nth-child(n + 3) {
+    border-left: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+  }
+
+  .dashboard-status-strip .ops-status-label {
+    font-size: var(--crm-fs-badge);
+    letter-spacing: 0.06em;
+  }
+
+  .dashboard-status-strip strong {
+    font-size: var(--crm-fs-value-md);
+  }
+
+  .dashboard-status-strip small {
+    font-size: var(--crm-fs-badge);
+    line-height: var(--crm-lh-tight);
+  }
+
+  .project-directory-row {
+    align-items: flex-start;
+  }
+
+  .project-directory-title-line {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .project-selected-main {
+    flex-direction: column;
+  }
+
+  .project-selected-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .persona-directory-list {
+    max-height: none;
+  }
+
+  .persona-directory-badges {
+    justify-content: flex-start;
+  }
+
+  .persona-empty-workspace {
+    min-height: auto;
+  }
+
+  .persona-empty-primary {
+    place-items: start;
+    padding: 24px 16px;
+  }
+
+  .persona-empty-copy {
+    max-width: none;
+  }
+
+  .persona-empty-copy h2 {
+    font-size: var(--crm-fs-title-md);
+  }
+
+  .persona-empty-guide {
+    padding: 4px 16px 18px;
+  }
+
+  .persona-project-scope {
+    display: none;
+  }
+
+  .settings-card-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .knowledge-filter-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .knowledge-filter-actions,
+  .project-command-actions,
+  .settings-header-actions {
+    width: 100%;
+  }
+
+  .settings-command-header {
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .profile-page-shell {
+    width: 100%;
+  }
+
+  .profile-command-header {
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .profile-command-header h1,
+  .profile-command-header p:not(.ops-kicker) {
+    white-space: normal;
+  }
+
+  .profile-actions,
+  .profile-session-content {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-actions [data-slot="button"],
+  .profile-session-content [data-slot="button"] {
+    width: 100%;
+  }
+
+  .settings-card .settings-input,
+  .profile-input,
+  .profile-select-trigger {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .persona-pagination,
+  .ops-pagination {
+    justify-content: center;
+  }
+}

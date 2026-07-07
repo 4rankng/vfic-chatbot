@@ -157,9 +157,6 @@ export const processKnowledge = (id: string) =>
 export const archiveKnowledge = (id: string) =>
   apiJson<ApiRecord>(`${doc(id)}/archive`, { method: "POST" });
 
-export const archiveKnowledge = (id: string) =>
-  apiJson<ApiRecord>(`${doc(id)}/archive`, { method: "POST" });
-
 export const reindexKnowledge = (id: string) =>
   apiJson<ApiRecord>(`${doc(id)}/reindex`, { method: "POST" });
 
