@@ -1,0 +1,419 @@
+/* Global Container */
+.inbox-bg-container {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  color: var(--ink);
+  font-family:
+    "Inter",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: transparent;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  box-sizing: border-box;
+}
+
+/* Chat-element + base-reset rules are scoped to :is(.inbox-bg-container,
+   .chat-surface) so the shared <ChatThread> renders identically inside the
+   inbox shell (.inbox-bg-container) AND on the lead page (.chat-surface).
+   :is() preserves the original specificity (0,2,0), so the inbox cascade is
+   unchanged. Inbox-shell layout rules stay scoped to .inbox-bg-container. */
+:is(.inbox-bg-container, .chat-surface) * {
+  box-sizing: border-box;
+}
+:is(.inbox-bg-container, .chat-surface) button,
+:is(.inbox-bg-container, .chat-surface) input,
+:is(.inbox-bg-container, .chat-surface) textarea {
+  font: inherit;
+}
+:is(.inbox-bg-container, .chat-surface) button {
+  color: inherit;
+  cursor: pointer;
+}
+:is(.inbox-bg-container, .chat-surface) button:focus-visible,
+:is(.inbox-bg-container, .chat-surface) input:focus-visible,
+:is(.inbox-bg-container, .chat-surface) textarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+:is(.inbox-bg-container, .chat-surface) .icon {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+/* Main App Window */
+.inbox-bg-container .app {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px 320px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+  backdrop-filter: blur(40px) saturate(160%);
+  -webkit-backdrop-filter: blur(40px) saturate(160%);
+  isolation: isolate;
+}
+
+/* Panels */
+.inbox-bg-container .panel {
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+}
+
+.inbox-bg-container .left-panel {
+  border-right: 1px solid var(--border);
+  z-index: 3;
+  background: var(--surface-solid);
+}
+
+@media (min-width: 768px) {
+  .inbox-bg-container .left-panel {
+    border-right: 1px solid var(--workspace-border);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 26%),
+      var(--workspace-bg);
+    color: var(--workspace-ink);
+  }
+}
+
+.inbox-bg-container .right-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(396px, calc(100% - 80px));
+  max-width: 100%;
+  border-left: 1px solid var(--border);
+  z-index: 50;
+  background: var(--surface-solid);
+  overflow: hidden;
+  box-shadow: -24px 0 64px rgba(0, 0, 0, 0.18);
+  transform: translateX(105%);
+  visibility: hidden;
+  transition:
+    transform 0.26s var(--ease),
+    visibility 0.26s;
+}
+
+.inbox-bg-container .right-panel.context-open {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+.inbox-bg-container .center-panel {
+  container-type: inline-size;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.inbox-bg-container .app.dashboard-app {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.inbox-bg-container .app.knowledge-app {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.inbox-bg-container .settings-app {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.inbox-bg-container .app.persona-app {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.inbox-bg-container .app.project-app {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.inbox-bg-container .knowledge-center-panel {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    var(--surface);
+}
+
+.inbox-bg-container .settings-center-panel {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    var(--surface);
+}
+
+.inbox-bg-container .persona-center-panel {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    var(--surface);
+}
+
+.inbox-bg-container .project-center-panel {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    var(--surface);
+}
+
+.inbox-bg-container .dashboard-center-panel {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(97, 31, 105, 0.035), transparent 180px),
+    var(--surface);
+}
+
+.inbox-bg-container .dashboard-workspace-content {
+  min-height: 100%;
+  padding: 24px 24px 32px;
+}
+
+.inbox-bg-container .knowledge-workspace-content {
+  min-height: 100%;
+  padding: 20px 22px 28px;
+}
+
+.inbox-bg-container .settings-workspace-content {
+  min-height: 100%;
+  padding: 24px 24px 32px;
+}
+
+.inbox-bg-container .persona-workspace-content {
+  min-height: 100%;
+  padding: 24px 24px 32px;
+}
+
+.inbox-bg-container .project-workspace-content {
+  min-height: 100%;
+  padding: 24px 24px 32px;
+}
+
+.inbox-bg-container .knowledge-channel-inner {
+  max-width: 1120px;
+}
+
+.inbox-bg-container .knowledge-rail-status,
+.inbox-bg-container .settings-rail-status,
+.inbox-bg-container .persona-rail-status,
+.inbox-bg-container .project-rail-status {
+  cursor: default;
+}
+
+.inbox-bg-container .knowledge-rail-status:hover,
+.inbox-bg-container .settings-rail-status:hover,
+.inbox-bg-container .persona-rail-status:hover,
+.inbox-bg-container .project-rail-status:hover {
+  color: var(--workspace-muted);
+  background: transparent;
+}
+
+.inbox-bg-container
+  :is(
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  [data-slot="button"].text-primary-foreground {
+  color: var(--primary-foreground);
+}
+
+.inbox-bg-container
+  :is(
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  [data-slot="button"].text-secondary-foreground {
+  color: var(--secondary-foreground);
+}
+
+.inbox-bg-container
+  :is(
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  [data-slot="button"].text-white {
+  color: #ffffff;
+}
+
+.inbox-bg-container
+  :is(
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  [data-slot="button"].text-destructive {
+  color: var(--destructive);
+}
+
+.inbox-bg-container
+  :is(
+    .dashboard-workspace-content,
+    .knowledge-workspace-content,
+    .settings-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  [data-slot="button"].text-muted-foreground {
+  color: var(--muted-foreground);
+}
+
+.inbox-bg-container
+  :is(
+    .settings-workspace-content,
+    .persona-workspace-content,
+    .project-workspace-content
+  )
+  [data-slot="card"] {
+  border-radius: var(--rad-lg);
+  background: color-mix(in srgb, var(--surface-solid) 92%, transparent);
+  box-shadow: none;
+}
+
+.inbox-bg-container .persona-directory-panel {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--rad-lg);
+  background: color-mix(in srgb, var(--surface-solid) 92%, transparent);
+}
+
+.inbox-bg-container .persona-directory-row {
+  display: flex;
+  width: 100%;
+  cursor: pointer;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    background-color 0.16s var(--ease),
+    transform 0.16s var(--ease);
+}
+
+.inbox-bg-container .persona-directory-row:last-child {
+  border-bottom: 0;
+}
+
+.inbox-bg-container .persona-directory-row:hover {
+  background: var(--surface-hover);
+}
+
+.inbox-bg-container .persona-directory-row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.inbox-bg-container .persona-directory-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--brand) 20%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--brand-light) 70%, var(--surface-solid));
+  color: var(--brand);
+}
+
+.inbox-bg-container .persona-editor-header {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-solid) 92%, transparent);
+}
+
+.inbox-bg-container .persona-create-header {
+  display: grid;
+  gap: 7px;
+  padding: 0 0 2px;
+  border: 0;
+  background: transparent;
+}
+
+.inbox-bg-container .persona-create-back {
+  width: fit-content;
+  height: 30px;
+  gap: 6px;
+  margin-left: -8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.inbox-bg-container .persona-create-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.inbox-bg-container .persona-create-heading {
+  max-width: 560px;
+  display: grid;
+  gap: 3px;
+}
+
+.inbox-bg-container .persona-create-heading h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 820;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.inbox-bg-container .persona-create-heading p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+

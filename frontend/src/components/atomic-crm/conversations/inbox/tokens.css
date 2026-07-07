@@ -1,0 +1,101 @@
+/* inbox.css - Overhauled UI/UX */
+:root {
+  --surface: var(--background);
+  --surface-solid: var(--background);
+  --surface-hover: var(--secondary);
+
+  --ink: var(--foreground);
+  --ink-muted: var(--muted-foreground);
+  --ink-faint: var(--muted-foreground);
+
+  /* --border intentionally not redeclared here: inherit the global token from
+     index.css (single source of truth). Only inbox-specific hairlines below. */
+  --border-strong: #c7cdbc;
+  --border-glass: rgba(222, 226, 216, 0.4);
+
+  /* Private inbox accent. Renamed from --accent to
+     avoid colliding with the shadcn --accent hover-surface token, which is
+     defined globally in index.css and consumed by ~50 primitives app-wide. */
+  --inbox-accent: #611f69;
+  --inbox-accent-light: #f4edf7;
+  --brand: var(--inbox-accent);
+  --brand-hover: #4a154b;
+  --brand-light: var(--inbox-accent-light);
+
+  --success: var(--color-green, #2e9e63);
+  --success-light: rgba(46, 158, 99, 0.15);
+
+  --rad-sm: 8px;
+  --rad-md: 12px;
+  --rad-lg: var(--rad-md);
+  --rad-xl: var(--rad-md);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 12px 32px rgba(31, 38, 135, 0.04);
+  --shadow-lg: 0 24px 64px rgba(31, 38, 135, 0.06);
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition: 0.3s var(--ease);
+
+  --chat-bg: var(--background);
+  --chat-bubble-in: #ffffff;
+  --chat-bubble-out: #f4edf7;
+  --chat-bubble-user: var(--inbox-accent);
+  --chat-bubble-user-text: #ffffff;
+  --chat-bubble-bot: #ffffff;
+  --chat-bubble-agent: var(--inbox-accent-light);
+  --chat-bubble-agent-text: #3f0e40;
+  --chat-header-bg: var(--background);
+  --chat-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.08);
+
+  --workspace-bg: #3f0e40;
+  --workspace-bg-deep: #350d36;
+  --workspace-border: rgba(255, 255, 255, 0.12);
+  --workspace-ink: #f6f8f4;
+  --workspace-muted: rgba(246, 248, 244, 0.72);
+  --workspace-faint: rgba(246, 248, 244, 0.48);
+  --workspace-hover: rgba(255, 255, 255, 0.1);
+  --workspace-active: rgba(97, 31, 105, 0.74);
+  --workspace-active-border: rgba(236, 222, 236, 0.34);
+  --workspace-switcher-bg: #4a154b;
+  --workspace-switcher-bg-deep: #3f0e40;
+  --workspace-switcher-active: rgba(255, 255, 255, 0.16);
+  --workspace-switcher-hover: rgba(255, 255, 255, 0.1);
+}
+
+.dark {
+  --surface: #080c14;
+  --surface-solid: #0f1524;
+  --surface-hover: #161f30;
+
+  --ink: #f1f5f9;
+  --ink-muted: #8a99ad;
+  --ink-faint: rgba(148, 163, 184, 0.4);
+
+  /* --border not redeclared in dark either: inherit the global dark token. */
+  --border-strong: rgba(148, 163, 184, 0.12);
+  --border-glass: rgba(148, 163, 184, 0.05);
+
+  --brand: #c8a2c8;
+  --brand-hover: #d8bfd8;
+  --brand-light: rgba(200, 162, 200, 0.18);
+
+  --success: #22c55e;
+  --success-light: rgba(34, 197, 94, 0.18);
+
+  --chat-bg: #080c14;
+  --chat-bubble-in: #161f30;
+  --chat-bubble-out: #2f1234;
+  --chat-bubble-user: #611f69;
+  --chat-bubble-user-text: #f8fafc;
+  --chat-bubble-bot: #161f30;
+  --chat-bubble-agent: #2f1234;
+  --chat-bubble-agent-text: var(--ink);
+  --chat-header-bg: #0f1524;
+  --chat-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
+}
+

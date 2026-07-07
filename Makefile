@@ -1,10 +1,16 @@
 .PHONY: dev deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod
 
+# Port shared by backend (uvicorn) and frontend (Vite) in local dev — both
+# bind to the same number. Override on the CLI, e.g. `make dev PORT=9000`.
+# The backend's `kill-port` target frees $(PORT) before binding so a stale
+# process from a previous run can never block startup.
+PORT ?= 5173
+
 # Local dev: frontend (vite) + backend (uvicorn --reload) on host, Postgres +
 # Redis + Adminer in docker. Delegates to backend/ (payroll pattern).
 dev:
-	@echo "=== Starting VFIC dev environment ==="
-	$(MAKE) -C backend dev
+	@echo "=== Starting VFIC dev environment (port $(PORT)) ==="
+	$(MAKE) -C backend dev PORT=$(PORT)
 
 # Build & push BOTH DockerHub images, then deploy to bot.tingting.vip.
 deploy:

@@ -30,6 +30,9 @@ export const stageLabel = (
       return "Đang nhúng vector";
     case "INDEXING":
       return "Đang lập chỉ mục";
+    case "READY_FOR_REVIEW":
+      return "Sẵn sàng";
+    case "APPROVED":
     case "PUBLISHED":
       return "Đã xuất bản";
     case "FAILED":
