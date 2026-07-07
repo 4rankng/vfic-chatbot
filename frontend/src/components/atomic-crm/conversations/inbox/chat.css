@@ -1,21 +1,23 @@
 /* Center Panel Header */
 .inbox-bg-container .chat-header {
+  position: relative;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 16px;
+  gap: 10px;
+  padding: 0 14px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  min-height: 76px;
-  overflow: hidden;
+  min-height: 64px;
+  overflow: visible;
   border-bottom: 1px solid var(--border);
   background: var(--chat-header-bg);
 }
 
 .inbox-bg-container .chat-header .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
 }
 
 .inbox-bg-container .header-person {
@@ -24,12 +26,12 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .inbox-bg-container .header-avatar {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -62,48 +64,97 @@
 .inbox-bg-container .person-name {
   color: var(--ink);
   font-size: var(--chat-fs-section-title);
-  font-weight: var(--chat-fw-bold);
+  font-weight: var(--chat-fw-medium);
   line-height: var(--chat-lh-title);
   overflow-wrap: anywhere;
   white-space: normal;
 }
-.inbox-bg-container .online-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--success);
-}
-.inbox-bg-container .person-meta {
-  color: var(--ink-muted);
-  font-size: var(--chat-fs-meta);
+.inbox-bg-container .candidate-signal-strip {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 5px;
   min-width: 0;
+  margin-top: 5px;
+  overflow: visible;
 }
-.inbox-bg-container .person-meta span:last-child {
-  overflow-wrap: anywhere;
-  white-space: normal;
+
+.inbox-bg-container .candidate-signal-icon {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--brand) 24%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--brand-light) 74%, var(--surface-solid));
+  color: var(--brand);
+  cursor: pointer;
+  transition:
+    background-color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    color 0.18s var(--ease),
+    transform 0.18s var(--ease);
 }
-.inbox-bg-container .mode-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ink-faint);
-  flex: 0 0 auto;
-}
-.inbox-bg-container .mode-dot.human {
-  background: var(--inbox-accent);
-}
-.inbox-bg-container .mode-dot.semi_auto {
+
+.inbox-bg-container .candidate-signal-icon:hover,
+.inbox-bg-container .candidate-signal-icon.active {
+  border-color: var(--brand);
   background: var(--brand);
+  color: var(--primary-foreground);
+  transform: translateY(-1px);
 }
-.inbox-bg-container .mode-dot.bot {
-  background: var(--success);
+
+.inbox-bg-container .candidate-signal-icon .icon {
+  width: 14px;
+  height: 14px;
 }
-.inbox-bg-container .mode-dot.closed {
-  background: var(--ink-faint);
+
+.inbox-bg-container .candidate-signal-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 48px));
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+}
+
+.inbox-bg-container .candidate-signal-popover::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 10px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  border-left: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  background: var(--surface-solid);
+  transform: rotate(45deg);
+}
+
+.inbox-bg-container .candidate-signal-label {
+  color: var(--brand);
+  font-size: var(--chat-fs-caption);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--chat-lh-tight);
+}
+
+.inbox-bg-container .candidate-signal-value {
+  color: var(--ink);
+  font-size: var(--chat-fs-meta);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--chat-lh-body);
+  overflow-wrap: anywhere;
 }
 
 .inbox-bg-container .header-actions {
@@ -126,8 +177,8 @@
 }
 .inbox-bg-container .mode-segment {
   min-width: clamp(78px, 8vw, 108px);
-  min-height: 44px;
-  padding: 7px 10px;
+  min-height: 34px;
+  padding: 4px 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -219,7 +270,7 @@
   height: 15px;
 }
 .inbox-bg-container .mode-menu-trigger {
-  min-height: 44px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -229,7 +280,7 @@
   background: var(--surface-solid);
   color: var(--ink-muted);
   font-size: var(--chat-fs-meta);
-  font-weight: var(--chat-fw-bold);
+  font-weight: var(--chat-fw-medium);
   white-space: nowrap;
   transition: var(--transition);
 }
@@ -274,8 +325,8 @@
   grid-template-columns: 28px minmax(0, 1fr) 20px;
   align-items: center;
   gap: 9px;
-  min-height: 42px;
-  padding: 6px 8px;
+  min-height: 34px;
+  padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: 9px;
   color: var(--ink);
@@ -335,8 +386,8 @@
   color: var(--brand);
 }
 .inbox-bg-container .profile-info-btn {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 32px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -346,7 +397,7 @@
   background: var(--brand);
   color: var(--primary-foreground);
   font-size: var(--chat-fs-meta);
-  font-weight: var(--chat-fw-bold);
+  font-weight: var(--chat-fw-medium);
   white-space: nowrap;
   transition: var(--transition);
 }
@@ -383,9 +434,8 @@
     line-height: var(--chat-lh-title);
   }
 
-  .inbox-bg-container .person-meta {
-    margin-top: 3px;
-    font-size: var(--chat-fs-meta);
+  .inbox-bg-container .candidate-signal-strip {
+    margin-top: 4px;
   }
 
   .inbox-bg-container .header-actions {
@@ -426,8 +476,8 @@
   opacity: 0.72;
 }
 .inbox-bg-container .icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
@@ -443,8 +493,8 @@
   transform: translateY(-1px);
 }
 .inbox-bg-container .icon-btn.small {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
 }
 .inbox-bg-container .icon-btn.ghost {
   border-color: transparent;
@@ -452,8 +502,8 @@
 }
 
 .inbox-bg-container .takeover-btn {
-  height: 40px;
-  padding: 0 20px;
+  height: 32px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -478,8 +528,8 @@
   transform: none;
 }
 .inbox-bg-container .takeover-btn--header {
-  height: 36px;
-  padding: 0 16px;
+  height: 32px;
+  padding: 0 12px;
   font-size: var(--chat-fs-body);
 }
 
@@ -624,9 +674,9 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .message-avatar {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   display: grid;
   place-items: center;
   border-radius: var(--rad-sm);
@@ -646,9 +696,9 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble {
-  max-width: min(62%, 620px);
+  max-width: min(56%, 500px);
   min-width: 0;
-  padding: 8px 11px 7px;
+  padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   font-size: var(--chat-fs-message);
@@ -678,7 +728,7 @@
 :is(.inbox-bg-container, .chat-surface) .message-row.user .bubble {
   background: var(--chat-bubble-user);
   color: var(--chat-bubble-user-text);
-  border-color: transparent;
+  border-color: var(--border);
   border-top-left-radius: 3px;
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.user.grouped .bubble {
@@ -738,7 +788,7 @@
   color: var(--ink-muted);
 }
 :is(.inbox-bg-container, .chat-surface) .message-row.user .bubble-time-inline {
-  color: color-mix(in oklab, var(--chat-bubble-user-text) 72%, transparent);
+  color: var(--ink-faint);
 }
 
 /* Composer */
@@ -826,7 +876,8 @@
   overflow-y: hidden;
   background: transparent;
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--crm-fs-input);
+  font-weight: var(--chat-fw-regular);
   line-height: var(--chat-lh-body);
 }
 :is(.inbox-bg-container, .chat-surface) .composer textarea::placeholder {
@@ -846,8 +897,8 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .composer-action {
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: var(--rad-md);

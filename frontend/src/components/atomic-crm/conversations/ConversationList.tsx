@@ -22,7 +22,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
-import { getLeadStatusColor } from "./conversationDisplay";
+import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
 import { UserRound } from "lucide-react";
 import { WorkspaceIconRail } from "./WorkspaceShell";
 import "./inbox.css";
@@ -67,6 +67,11 @@ const conversationModeMeta = (mode: Conversation["mode"]) => {
   if (mode === "semi_auto") return { label: "Bán tự động", tone: "semi" };
   if (mode === "bot") return { label: "Chatbot", tone: "auto" };
   return { label: "Đã đóng", tone: "closed" };
+};
+
+const conversationChannelMeta = (channel?: Conversation["zalo_channel"]) => {
+  if (channel === "oa") return { label: "OA", tone: "oa" };
+  return { label: "Bot", tone: "bot" };
 };
 
 // Hoisted static style objects so list rows don't allocate brand-new objects on
@@ -163,6 +168,8 @@ const ConversationListItem = memo(
     const subtitle = conversation._snippet || lead?.phone || "";
 
     const modeMeta = conversationModeMeta(conversation.mode);
+    const channelMeta = conversationChannelMeta(conversation.zalo_channel);
+    const priorityChip = getLeadPriorityChip(lead);
     const needsAttention = needsVisibleAttention(conversation, readIds);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
@@ -209,11 +216,25 @@ const ConversationListItem = memo(
             {subtitle && <span className="conv-preview">{subtitle}</span>}
             <span className="conv-meta-row">
               <span
-                className={`conv-mode-label ${modeMeta.tone}`}
+                className={`mini-chip ${modeMeta.tone}`}
                 title={modeMeta.label}
               >
                 {modeMeta.label}
               </span>
+              <span
+                className={`mini-chip channel ${channelMeta.tone}`}
+                title={`Kênh Zalo ${channelMeta.label}`}
+              >
+                {channelMeta.label}
+              </span>
+              {priorityChip ? (
+                <span
+                  className={`mini-chip priority-${priorityChip.tone}`}
+                  title={priorityChip.label}
+                >
+                  {priorityChip.label}
+                </span>
+              ) : null}
             </span>
           </span>
         </span>
@@ -306,7 +327,7 @@ const ConversationListPanel = ({
     };
   }, [conversationIdsKey, conversations]);
 
-  const searchedRows: ConversationRow[] = useMemo(() => {
+  const rows: ConversationRow[] = useMemo(() => {
     if (!conversations) return [];
     return conversations
       .map((c) => {
@@ -352,8 +373,6 @@ const ConversationListPanel = ({
         );
       });
   }, [conversations, leads, snippets, deferredQuery, readIds]);
-
-  const rows = searchedRows;
 
   useEffect(() => {
     const root = scrollRootRef.current;

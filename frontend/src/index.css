@@ -72,29 +72,29 @@
     var(--background)
   );
   --color-muted-dim: oklch(0.7157 0.0171 239.2); /* #9aa5ad */
-  --color-green: oklch(0.6222 0.1338 155.6); /* #2e9e63 */
+  --color-green: oklch(0.5960 0.1274 163.2); /* #059669 — success green */
 }
 
 :root {
   --radius: 14px;
-  --background: oklch(0.971 0.0067 115.7); /* #f5f6f1 */
-  --foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --background: oklch(0.9842 0.0034 247.9); /* #F8FAFC — neutral slate page bg */
+  --foreground: oklch(0.2077 0.0398 265.8); /* #0F172A — slate-900 ink */
   --card: oklch(1 0 0); /* #ffffff */
-  --card-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
+  --card-foreground: oklch(0.2077 0.0398 265.8); /* #0F172A */
   --popover: oklch(1 0 0); /* #ffffff */
-  --popover-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --primary: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --popover-foreground: oklch(0.2077 0.0398 265.8); /* #0F172A */
+  --primary: oklch(0.5109 0.0861 186.4); /* #0F766E — teal-700 brand */
   --primary-foreground: oklch(1 0 0); /* #ffffff */
-  --secondary: oklch(0.9451 0.0121 116.8); /* #eceee5 */
-  --secondary-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --muted: oklch(0.9451 0.0121 116.8); /* #eceee5 */
-  --muted-foreground: oklch(0.5208 0.0235 243.7); /* #5e6b76 */
-  --accent: oklch(0.9451 0.0121 116.8); /* #eceee5 */
-  --accent-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --destructive: oklch(0.5785 0.1984 29); /* #d6362a */
-  --border: oklch(0.9069 0.0141 124.6); /* #dee2d8 */
-  --input: oklch(0.9069 0.0141 124.6); /* #dee2d8 */
-  --ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --secondary: oklch(0.9683 0.0069 247.9); /* #F1F5F9 — slate-100 */
+  --secondary-foreground: oklch(0.2077 0.0398 265.8); /* #0F172A */
+  --muted: oklch(0.9683 0.0069 247.9); /* #F1F5F9 */
+  --muted-foreground: oklch(0.4455 0.0374 257.3); /* #475569 — slate-600 */
+  --accent: oklch(0.9683 0.0069 247.9); /* #F1F5F9 — hover surface */
+  --accent-foreground: oklch(0.2077 0.0398 265.8); /* #0F172A */
+  --destructive: oklch(0.5771 0.2152 27.3); /* #DC2626 — red-600 */
+  --border: oklch(0.9288 0.0126 255.5); /* #E2E8F0 — slate-200 */
+  --input: oklch(0.9288 0.0126 255.5); /* #E2E8F0 */
+  --ring: oklch(0.5109 0.0861 186.4); /* #0F766E — teal focus */
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
@@ -117,20 +117,20 @@
     0.2372 0.0257 244.3 / 0.06
   ); /* rgba(20,32,42,0.06) */
 
-  --chart-1: oklch(0.4554 0.0537 245.4); /* #3d5a73 */
-  --chart-2: oklch(0.6652 0.1634 50.3); /* #e0701f */
-  --chart-3: oklch(0.5785 0.1984 29); /* #d6362a */
-  --chart-4: oklch(0.6222 0.1338 155.6); /* #2e9e63 */
-  --chart-5: oklch(0.5208 0.0235 243.7); /* #5e6b76 */
+  --chart-1: oklch(0.4554 0.0537 245.4); /* #3d5a73 — steel */
+  --chart-2: oklch(0.5109 0.0861 186.4); /* #0F766E — brand teal */
+  --chart-3: oklch(0.5785 0.1984 29); /* #d6362a — rust */
+  --chart-4: oklch(0.5960 0.1274 163.2); /* #059669 — success green */
+  --chart-5: oklch(0.5208 0.0235 243.7); /* #5e6b76 — slate */
 
-  --sidebar: oklch(0.971 0.0067 115.7); /* #f5f6f1 */
-  --sidebar-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --sidebar-primary: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --sidebar: oklch(1 0 0); /* #ffffff — white sidebar surface */
+  --sidebar-foreground: oklch(0.2077 0.0398 265.8); /* #0F172A */
+  --sidebar-primary: oklch(0.5109 0.0861 186.4); /* #0F766E — teal active */
   --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
-  --sidebar-accent: oklch(0.9451 0.0121 116.8); /* #eceee5 */
-  --sidebar-accent-foreground: oklch(0.2468 0.0163 240.7); /* #1a2228 */
-  --sidebar-border: oklch(0.2372 0.0257 244.3 / 0.09); /* rgba(20,32,42,0.09) */
-  --sidebar-ring: oklch(0.6652 0.1634 50.3); /* #e0701f */
+  --sidebar-accent: oklch(0.9656 0.0143 180.7); /* #EAF7F4 — teal-soft selected */
+  --sidebar-accent-foreground: oklch(0.2077 0.0398 265.8); /* #0F172A */
+  --sidebar-border: oklch(0.9288 0.0126 255.5); /* #E2E8F0 — slate-200 */
+  --sidebar-ring: oklch(0.5109 0.0861 186.4); /* #0F766E */
 
   /* Lead-priority avatar tones (inbox). bg tints use runtime var() so they
      adapt per-theme; only the fixed ember/steel inks need a dark lift. */
@@ -153,8 +153,8 @@
   --card-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
   --popover: oklch(0.1979 0.0317 266.9); /* #0f1524 */
   --popover-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --primary: oklch(0.71 0.1649 50.8); /* #f07e2f */
-  --primary-foreground: oklch(1 0 0); /* #ffffff */
+  --primary: oklch(0.7038 0.1230 182.5); /* #14B8A6 — lifted teal for dark */
+  --primary-foreground: oklch(0.13 0.02 181); /* deep teal ink on bright teal */
   --secondary: oklch(0.2394 0.0354 262.6); /* #161f30 */
   --secondary-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
   --muted: oklch(0.2101 0.0318 264.7); /* #111827 */
@@ -164,7 +164,7 @@
   --destructive: oklch(0.6117 0.1934 28); /* #e0453b */
   --border: oklch(0.33 0.02 263); /* dark hairline */
   --input: oklch(0.33 0.02 263); /* dark hairline */
-  --ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
+  --ring: oklch(0.7038 0.1230 182.5); /* #14B8A6 — teal focus */
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
@@ -188,14 +188,18 @@
   /* Sidebar styling for a seamless premium dark sidebar */
   --sidebar: oklch(0.1745 0.0263 266.4); /* #0b101c */
   --sidebar-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --sidebar-primary: oklch(0.71 0.1649 50.8); /* #f07e2f */
-  --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff */
-  --sidebar-accent: oklch(0.2394 0.0354 262.6); /* #161f30 */
+  --sidebar-primary: oklch(0.7038 0.1230 182.5); /* #14B8A6 — teal active */
+  --sidebar-primary-foreground: oklch(0.13 0.02 181); /* deep teal ink */
+  --sidebar-accent: color-mix(
+    in oklab,
+    var(--primary) 16%,
+    var(--background)
+  ); /* dark teal-soft selected */
   --sidebar-accent-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
   --sidebar-border: oklch(
     0.7107 0.0351 256.8 / 0.08
   ); /* rgba(148,163,184,0.08) */
-  --sidebar-ring: oklch(0.71 0.1649 50.8); /* #f07e2f */
+  --sidebar-ring: oklch(0.7038 0.1230 182.5); /* #14B8A6 */
 
   /* Lift fixed ember/steel lead inks so they read on dark tinted surfaces;
      --primary and the bg tints already adapt via runtime var(). */

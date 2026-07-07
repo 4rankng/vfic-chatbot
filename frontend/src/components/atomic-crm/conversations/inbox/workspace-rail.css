@@ -5,8 +5,8 @@
   min-height: 0;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 10px 7px 12px;
+  gap: 8px;
+  padding: 8px 6px 10px;
   border-right: 1px solid rgba(255, 255, 255, 0.09);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 25%),
@@ -21,13 +21,13 @@
 .inbox-bg-container .workspace-logo-tile,
 .inbox-bg-container .workspace-icon-action,
 .inbox-bg-container .workspace-rail-user {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   color: inherit;
   background: transparent;
   text-decoration: none;
@@ -43,9 +43,9 @@
 }
 
 .inbox-bg-container .workspace-logo-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 9px;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
   display: block;
   object-fit: cover;
 }
@@ -57,8 +57,8 @@
 
 .inbox-bg-container .workspace-icon-action .icon,
 .inbox-bg-container .workspace-rail-user .icon {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
 }
 
 .inbox-bg-container .workspace-icon-action:hover {
@@ -164,7 +164,7 @@
 
   .inbox-bg-container .workspace-heading {
     color: var(--workspace-ink);
-    font-size: var(--chat-fs-section-title);
+    font-size: var(--chat-fs-page-title);
   }
 }
 
@@ -188,14 +188,16 @@
 
 .inbox-bg-container .search input {
   width: 100%;
-  height: 40px;
-  padding: 0 16px 0 42px;
+  height: 38px;
+  padding: 0 14px 0 38px;
   color: var(--ink);
   border: 1px solid var(--border-strong);
   border-radius: var(--rad-md);
   background: var(--surface-hover);
   transition: var(--transition);
-  font-size: var(--chat-fs-body);
+  font-size: var(--crm-fs-input);
+  font-weight: var(--chat-fw-regular);
+  line-height: var(--chat-lh-body);
 }
 .inbox-bg-container .search input::placeholder {
   color: var(--ink-faint);
@@ -220,11 +222,11 @@
   }
 
   .inbox-bg-container .search input {
-    height: 38px;
+    height: 36px;
     color: var(--workspace-ink);
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.08);
-    font-size: var(--chat-fs-list-preview);
+    font-size: var(--crm-fs-input);
   }
 
   .inbox-bg-container .search input::placeholder {
@@ -234,7 +236,7 @@
   .inbox-bg-container .search input:focus {
     border-color: var(--workspace-active-border);
     background: rgba(255, 255, 255, 0.13);
-    box-shadow: 0 0 0 3px rgba(236, 222, 236, 0.16);
+    box-shadow: 0 0 0 3px rgba(219, 234, 254, 0.16);
   }
 
   .inbox-bg-container .search:focus-within .icon {

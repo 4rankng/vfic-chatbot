@@ -3,7 +3,6 @@ import { useRecordContext, useGetList, ShowBase } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import { getLeadStatusColor } from "./conversationDisplay";
-import { LeadProfilePanel } from "../leads/LeadProfilePanel";
 import { ChatThread } from "./ChatThread";
 import {
   type ConversationMode,
@@ -17,10 +16,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Bot,
+  BusFront,
+  CalendarDays,
   Check,
+  CircleDollarSign,
   FileText,
   Handshake,
+  Home,
+  MapPin,
+  NotepadText,
+  Phone,
   UserRound,
+  FileBadge,
   type LucideIcon,
 } from "lucide-react";
 import { ConversationContextPanel } from "./ConversationContextPanel";
@@ -53,16 +60,123 @@ const MODE_OPTIONS: Array<{
   },
 ];
 
-const MODE_STATUS: Record<ConversationMode, string> = {
-  human: "Tư vấn viên",
-  semi_auto: "Bán tự động",
-  bot: "Chatbot",
-  closed: "Closed",
+type CandidateSignal = {
+  key: string;
+  label: string;
+  value: string;
+  Icon: LucideIcon;
+};
+
+const displaySignalValue = (value: unknown) => {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+};
+
+const formatGender = (gender: string | null | undefined) => {
+  const normalized = displaySignalValue(gender).toLocaleLowerCase("vi-VN");
+  if (!normalized || normalized === "unknown") return "";
+  if (normalized === "male" || normalized === "nam") return "Nam";
+  if (normalized === "female" || normalized === "nữ" || normalized === "nu") {
+    return "Nữ";
+  }
+  return displaySignalValue(gender);
+};
+
+const notesInclude = (notes: string | null | undefined, terms: string[]) => {
+  const normalized = notes?.toLocaleLowerCase("vi-VN") ?? "";
+  return terms.some((term) => normalized.includes(term));
+};
+
+const getCandidateSignals = (lead?: Lead): CandidateSignal[] => {
+  if (!lead) return [];
+
+  const signals: CandidateSignal[] = [];
+  const addSignal = (
+    key: string,
+    label: string,
+    value: unknown,
+    Icon: LucideIcon,
+  ) => {
+    const text = displaySignalValue(value);
+    if (!text) return;
+    signals.push({ key, label, value: text, Icon });
+  };
+
+  addSignal("phone", "Số điện thoại", lead.phone, Phone);
+  addSignal(
+    "residence",
+    "Nơi cư trú",
+    [lead.region, lead.living_area, lead.address].filter(Boolean).join(" · "),
+    MapPin,
+  );
+  addSignal("gender", "Giới tính", formatGender(lead.gender), UserRound);
+  addSignal(
+    "birth",
+    "Ngày sinh",
+    lead.birth_year
+      ? String(lead.birth_year)
+      : lead.age
+        ? `${lead.age} tuổi`
+        : "",
+    CalendarDays,
+  );
+  addSignal("experience", "Kinh nghiệm", lead.years_experience, FileBadge);
+  addSignal("job", "Công việc mong muốn", lead.desired_job, Handshake);
+  addSignal(
+    "salary",
+    "Mức lương mong muốn",
+    lead.expected_salary,
+    CircleDollarSign,
+  );
+
+  if (
+    notesInclude(lead.notes, [
+      "chỗ ở",
+      "cho o",
+      "nhà trọ",
+      "nha tro",
+      "ký túc",
+      "ky tuc",
+      "ktx",
+    ])
+  ) {
+    signals.push({
+      key: "housing",
+      label: "Chỗ ở",
+      value: "Đã ghi trong ghi chú",
+      Icon: Home,
+    });
+  }
+
+  if (
+    notesInclude(lead.notes, [
+      "đưa đón",
+      "dua don",
+      "xe đưa",
+      "xe dua",
+      "xe đón",
+      "xe don",
+      "bus",
+      "tuyến xe",
+      "tuyen xe",
+    ])
+  ) {
+    signals.push({
+      key: "pickup",
+      label: "Xe đưa đón",
+      value: "Đã ghi trong ghi chú",
+      Icon: BusFront,
+    });
+  }
+
+  addSignal("notes", "Ghi chú", lead.notes, NotepadText);
+
+  return signals;
 };
 
 /**
- * Inbox center pane: the conversation header (mobile list-toggle + person →
- * profile drawer) wrapped around a shared <ChatThread>. The thread itself
+ * Inbox center pane: the conversation header (mobile list-toggle + candidate
+ * quick facts) wrapped around a shared <ChatThread>. The thread itself
  * (messages, composer, takeover, markAsRead) lives in ChatThread so the lead
  * detail page can render the exact same thread without the inbox-shell coupling
  * that previously broke it. Must be rendered inside .inbox-bg-container — the
@@ -76,8 +190,8 @@ export const ConversationShowContent = ({
   showWorkspacePanel?: boolean;
 }) => {
   const record = useRecordContext<Conversation>();
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isContextOpen, setIsContextOpen] = useState(false);
+  const [activeSignalKey, setActiveSignalKey] = useState<string | null>(null);
   const leadListParams = useMemo(
     () => ({
       filter: { zalo_id: record?.zalo_chat_id },
@@ -130,6 +244,9 @@ export const ConversationShowContent = ({
   const name =
     lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
+  const candidateSignals = useMemo(() => getCandidateSignals(lead), [lead]);
+  const activeSignal =
+    candidateSignals.find((signal) => signal.key === activeSignalKey) ?? null;
   const {
     effectiveMode,
     isBotMode,
@@ -145,7 +262,17 @@ export const ConversationShowContent = ({
 
   useEffect(() => {
     setIsContextOpen(false);
+    setActiveSignalKey(null);
   }, [record?.id]);
+
+  useEffect(() => {
+    if (
+      activeSignalKey &&
+      !candidateSignals.some((signal) => signal.key === activeSignalKey)
+    ) {
+      setActiveSignalKey(null);
+    }
+  }, [activeSignalKey, candidateSignals]);
 
   return (
     <>
@@ -160,10 +287,7 @@ export const ConversationShowContent = ({
               <use href="#i-menu" />
             </svg>
           </button>
-          <div
-            className="header-person cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={() => setIsProfileOpen(true)}
-          >
+          <div className="header-person">
             <div
               className="header-avatar"
               style={{
@@ -180,10 +304,50 @@ export const ConversationShowContent = ({
               <div className="person-name-row">
                 <span className="person-name">{name}</span>
               </div>
-              <div className="person-meta">
-                <span className={`mode-dot ${activeMode}`} />
-                <span>{MODE_STATUS[activeMode]}</span>
-              </div>
+              {candidateSignals.length > 0 && (
+                <div
+                  className="candidate-signal-strip"
+                  aria-label="Thông tin ứng viên đã thu thập"
+                  role="list"
+                >
+                  {candidateSignals.map(({ key, label, value, Icon }) => {
+                    const isActive = activeSignalKey === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`candidate-signal-icon ${isActive ? "active" : ""}`}
+                        title={`${label}: ${value}`}
+                        aria-label={`${label}: ${value}`}
+                        aria-expanded={isActive}
+                        aria-controls="candidate-signal-value"
+                        role="listitem"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setActiveSignalKey(isActive ? null : key);
+                        }}
+                      >
+                        <Icon className="icon" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                  {activeSignal ? (
+                    <div
+                      className="candidate-signal-popover"
+                      id="candidate-signal-value"
+                      role="status"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <span className="candidate-signal-label">
+                        {activeSignal.label}
+                      </span>
+                      <span className="candidate-signal-value">
+                        {activeSignal.value}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
           <div className="header-actions">
@@ -269,18 +433,12 @@ export const ConversationShowContent = ({
             onClick={() => setIsContextOpen(false)}
           />
         )}
-        <LeadProfilePanel
-          open={isProfileOpen}
-          onOpenChange={setIsProfileOpen}
-          lead={lead}
-        />
       </section>
       {showWorkspacePanel && (
         <ConversationContextPanel
           lead={lead}
           open={isContextOpen}
           onClose={() => setIsContextOpen(false)}
-          onOpenProfile={() => setIsProfileOpen(true)}
         />
       )}
     </>

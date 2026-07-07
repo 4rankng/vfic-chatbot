@@ -3,17 +3,17 @@
    settings, profile, knowledge, projects, personas, and chat surfaces. */
 
 :where(
-    .inbox-bg-container,
-    .chat-surface,
-    .mobile-dashboard-shell,
-    .profile-mobile-shell,
-    .dashboard-workspace-content,
-    .knowledge-workspace-content,
-    .settings-workspace-content,
-    .profile-workspace-content,
-    .persona-workspace-content,
-    .project-workspace-content
-  ) {
+  .inbox-bg-container,
+  .chat-surface,
+  .mobile-dashboard-shell,
+  .profile-mobile-shell,
+  .dashboard-workspace-content,
+  .knowledge-workspace-content,
+  .settings-workspace-content,
+  .profile-workspace-content,
+  .persona-workspace-content,
+  .project-workspace-content
+) {
   color: var(--ink);
   font-family: var(--crm-font-family);
   font-size: var(--crm-fs-body);
@@ -181,9 +181,9 @@
 }
 
 :is(.inbox-bg-container, .chat-surface) .bubble {
-  font-size: var(--crm-fs-message);
+  font-size: var(--chat-fs-message);
   font-weight: var(--crm-fw-regular);
-  line-height: var(--crm-lh-message);
+  line-height: var(--chat-lh-message);
   letter-spacing: 0;
 }
 

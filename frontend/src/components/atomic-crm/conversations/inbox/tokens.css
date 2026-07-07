@@ -10,16 +10,16 @@
 
   /* --border intentionally not redeclared here: inherit the global token from
      index.css (single source of truth). Only inbox-specific hairlines below. */
-  --border-strong: #c7cdbc;
-  --border-glass: rgba(222, 226, 216, 0.4);
+  --border-strong: #c8d3e2;
+  --border-glass: rgba(203, 213, 225, 0.42);
 
   /* Private inbox accent. Renamed from --accent to
      avoid colliding with the shadcn --accent hover-surface token, which is
      defined globally in index.css and consumed by ~50 primitives app-wide. */
-  --inbox-accent: #611f69;
-  --inbox-accent-light: #f4edf7;
+  --inbox-accent: #2563eb;
+  --inbox-accent-light: #eff6ff;
   --brand: var(--inbox-accent);
-  --brand-hover: #4a154b;
+  --brand-hover: #1d4ed8;
   --brand-light: var(--inbox-accent-light);
 
   --success: var(--color-green, #2e9e63);
@@ -41,20 +41,20 @@
      Keep sizes semantic and centralized. Message/body text is the anchor;
      page titles, card titles, rows, controls, labels, and metadata step from it. */
   --crm-font-family:
-    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
-    "Helvetica Neue", Arial, sans-serif;
-  --crm-fs-display: 30px;
-  --crm-fs-page-title: 24px;
-  --crm-fs-section-title: 18px;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
+    "Segoe UI", Inter, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --crm-fs-display: 28px;
+  --crm-fs-page-title: 20px;
+  --crm-fs-section-title: 15px;
   --crm-fs-card-title: 14px;
-  --crm-fs-row-title: 13px;
-  --crm-fs-message: 15px;
+  --crm-fs-row-title: 14px;
+  --crm-fs-message: 14px;
   --crm-fs-body: 14px;
   --crm-fs-body-sm: 13px;
   --crm-fs-meta: 12px;
   --crm-fs-caption: 11.5px;
   --crm-fs-badge: 11.5px;
-  --crm-fs-control: 14px;
+  --crm-fs-control: 13.5px;
   --crm-fs-input: 14px;
   --crm-control-height-sm: 32px;
   --crm-control-height-md: 36px;
@@ -67,20 +67,20 @@
   --crm-fs-value-md: 20px;
   --crm-lh-heading: 1.12;
   --crm-lh-title: 1.25;
-  --crm-lh-body: 1.42;
-  --crm-lh-message: 1.46;
+  --crm-lh-body: 1.5;
+  --crm-lh-message: 1.5;
   --crm-lh-tight: 1.2;
-  --crm-fw-regular: 450;
-  --crm-fw-medium: 550;
-  --crm-fw-semibold: 650;
-  --crm-fw-bold: 720;
+  --crm-fw-regular: 400;
+  --crm-fw-medium: 500;
+  --crm-fw-semibold: 600;
+  --crm-fw-bold: 700;
 
   /* Backward-compatible chat aliases for the existing inbox modules. */
   --chat-font-family: var(--crm-font-family);
   --chat-fs-page-title: var(--crm-fs-page-title);
   --chat-fs-section-title: var(--crm-fs-section-title);
-  --chat-fs-list-title: var(--crm-fs-card-title);
-  --chat-fs-list-preview: var(--crm-fs-body-sm);
+  --chat-fs-list-title: 14px;
+  --chat-fs-list-preview: 13px;
   --chat-fs-message: var(--crm-fs-message);
   --chat-fs-body: var(--crm-fs-body);
   --chat-fs-meta: var(--crm-fs-meta);
@@ -107,38 +107,45 @@
 
   --chat-bg: var(--background);
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #f4edf7;
-  --chat-bubble-user: var(--inbox-accent);
-  --chat-bubble-user-text: #ffffff;
-  --chat-bubble-bot: #ffffff;
-  --chat-bubble-agent: var(--inbox-accent-light);
-  --chat-bubble-agent-text: #3f0e40;
+  --chat-bubble-out: #dcfce7;
+  --chat-bubble-user: #ffffff;
+  --chat-bubble-user-text: var(--ink);
+  --chat-bubble-bot: #dcfce7;
+  --chat-bubble-agent: #e0f2fe;
+  --chat-bubble-agent-text: #0f172a;
   --chat-header-bg: var(--background);
   --chat-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.08);
 
-  --workspace-bg: #3f0e40;
-  --workspace-bg-deep: #350d36;
+  --workspace-bg: #5572aa;
+  --workspace-bg-deep: #496393;
   --workspace-border: rgba(255, 255, 255, 0.12);
   --workspace-ink: #f6f8f4;
   --workspace-muted: rgba(246, 248, 244, 0.72);
   --workspace-faint: rgba(246, 248, 244, 0.48);
   --workspace-hover: rgba(255, 255, 255, 0.1);
-  --workspace-active: rgba(97, 31, 105, 0.74);
-  --workspace-active-border: rgba(236, 222, 236, 0.34);
-  --workspace-switcher-bg: #4a154b;
-  --workspace-switcher-bg-deep: #3f0e40;
+  --workspace-active: rgba(30, 64, 175, 0.72);
+  --workspace-active-border: rgba(219, 234, 254, 0.38);
+  --workspace-switcher-bg: #4e6da8;
+  --workspace-switcher-bg-deep: #425e94;
   --workspace-switcher-active: rgba(255, 255, 255, 0.16);
   --workspace-switcher-hover: rgba(255, 255, 255, 0.1);
 }
 
 @media (max-width: 767px) {
   :root {
-    --chat-fs-page-title: 30px;
-    --crm-fs-display: 32px;
-    --crm-fs-page-title: 26px;
-    --crm-fs-section-title: 18px;
+    --chat-fs-page-title: 24px;
+    --crm-fs-display: 30px;
+    --crm-fs-page-title: 24px;
+    --crm-fs-section-title: 17px;
     --crm-fs-card-title: 16px;
-    --crm-fs-row-title: 14px;
+    --crm-fs-row-title: 15px;
+    --crm-fs-message: 16px;
+    --crm-fs-body: 16px;
+    --crm-fs-body-sm: 14px;
+    --crm-fs-meta: 13px;
+    --chat-fs-list-title: 16px;
+    --chat-fs-list-preview: 14px;
+    --chat-fs-message: 16px;
     --crm-fs-input: 16px;
     --crm-control-height-md: var(--crm-control-height-touch);
     --crm-fs-value-xl: 30px;
@@ -169,11 +176,11 @@
 
   --chat-bg: #080c14;
   --chat-bubble-in: #161f30;
-  --chat-bubble-out: #2f1234;
-  --chat-bubble-user: #611f69;
+  --chat-bubble-out: #123821;
+  --chat-bubble-user: #161f30;
   --chat-bubble-user-text: #f8fafc;
-  --chat-bubble-bot: #161f30;
-  --chat-bubble-agent: #2f1234;
+  --chat-bubble-bot: #123821;
+  --chat-bubble-agent: #10243d;
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: #0f1524;
   --chat-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);

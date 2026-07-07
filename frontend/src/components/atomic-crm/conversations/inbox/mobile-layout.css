@@ -149,7 +149,7 @@
       var(--surface-hover) 82%,
       var(--surface-solid)
     );
-    font-size: 16px;
+    font-size: var(--crm-fs-input);
     box-shadow: inset 0 0 0 1px
       color-mix(in srgb, var(--border) 42%, transparent);
   }
@@ -334,9 +334,14 @@
   .inbox-bg-container .person-name {
     font-size: var(--chat-fs-section-title);
   }
-  .inbox-bg-container .person-meta {
-    margin-top: 2px;
-    font-size: var(--chat-fs-meta);
+  .inbox-bg-container .candidate-signal-strip {
+    margin-top: 3px;
+    gap: 4px;
+  }
+  .inbox-bg-container .candidate-signal-icon {
+    width: 22px;
+    height: 22px;
+    flex-basis: 22px;
   }
   .inbox-bg-container .mode-menu-trigger {
     width: 44px;
@@ -380,10 +385,6 @@
   }
   .inbox-bg-container .context-header-actions {
     gap: 6px;
-  }
-  .inbox-bg-container .context-open-profile {
-    min-height: 36px;
-    padding: 0 10px;
   }
   .inbox-bg-container .context-close {
     width: 36px;
@@ -531,4 +532,3 @@
   width: 20px;
   height: 20px;
 }
-

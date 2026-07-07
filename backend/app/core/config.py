@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     zalo_oa_app_id: str = ""
     zalo_oa_secret_key: str = ""
     zalo_oa_access_token: str = ""
+    # Public HTTPS OAuth callback URL for scan-to-connect. Empty = derive from the
+    # callback request's X-Forwarded-* headers (works behind Caddy). Set explicitly
+    # when the proxy rewrites headers unpredictably.
+    zalo_oa_oauth_redirect_url: str = ""
 
     # LLM providers. MiniMax is the default primary provider; OpenRouter is also
     # OpenAI-compatible and can be selected via *_ENABLE.

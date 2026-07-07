@@ -6,9 +6,8 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 export type ConversationMode = Conversation["mode"];
 
 /**
- * Shared takeover/release logic for a conversation record. Used by both the
- * transcript header (ConversationShowContent) and the lead-profile drawer
- * (LeadProfilePanel) so the two action surfaces stay behaviourally identical.
+ * Shared takeover/release logic for a conversation record. Used by the
+ * transcript header so mode changes stay optimistic and refresh cleanly.
  *
  * Optimistic-then-refresh: after a successful RPC the local mode is updated for
  * snappy UX, and `useRefresh` re-fetches the record so the authoritative mode
