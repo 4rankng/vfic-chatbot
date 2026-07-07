@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import bump_cache_version
 from app.core.vector import vec_literal
 from app.models.company import Project
-from app.models.knowledge import KnowledgeChunk
+from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.models.persona import Persona
 from app.models.user import Role, User
 from app.schemas.projects import (
@@ -46,6 +46,12 @@ from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, ForbiddenError, NotFoundError, UpstreamError
 from app.services.knowledge import sync_project_highlights
 from app.services.knowledge.repository import JobFeatureValueRepo
+from app.services.knowledge.text_ingestion import (
+    estimate_token_count,
+    hash_text,
+    line_range_for_quote,
+    make_content_plain,
+)
 from app.services.project.mapping import _faq_answer_from_content, _feature_from_row
 from app.services.project.repository import ProjectRepository, require_project
 
@@ -338,6 +344,17 @@ class ProjectService:
         self.db.add(chunk)
         document.raw_text = self._append_raw_faq(document.raw_text, question, answer)
         await self.db.flush()
+        text_file = await self.repo.ensure_active_faq_file(project, document)
+        line_start, line_end = line_range_for_quote(document.raw_text or "", answer)
+        chunk.kb_version_id = text_file.kb_version_id
+        chunk.file_id = text_file.id
+        chunk.chunk_type = "faq"
+        chunk.section_path = [document.file_name, f"FAQ: {question}"]
+        chunk.line_start = line_start
+        chunk.line_end = line_end
+        chunk.content_plain = make_content_plain(question, answer)
+        chunk.token_count = estimate_token_count(chunk.content)
+        chunk.chunk_sha256 = hash_text(chunk.content)
         await self._embed_faq_chunk(chunk.id, question, answer)
         await record_audit(
             self.db,
@@ -383,6 +400,23 @@ class ProjectService:
             "source_anchor": f"FAQ: {question}",
         }
         chunk.search_text = f"{question}\n{answer}"
+        document = await self.db.get(KnowledgeDocument, chunk.document_id)
+        if document is not None:
+            document.raw_text = self._replace_raw_faq(
+                document.raw_text, current_question, current_answer, question, answer
+            )
+            project = await self._require_project(project_id)
+            text_file = await self.repo.ensure_active_faq_file(project, document)
+            line_start, line_end = line_range_for_quote(document.raw_text or "", answer)
+            chunk.kb_version_id = text_file.kb_version_id
+            chunk.file_id = text_file.id
+            chunk.line_start = line_start
+            chunk.line_end = line_end
+        chunk.section_path = [row["file_name"], f"FAQ: {question}"]
+        chunk.chunk_type = "faq"
+        chunk.content_plain = make_content_plain(question, answer)
+        chunk.token_count = estimate_token_count(chunk.content)
+        chunk.chunk_sha256 = hash_text(chunk.content)
         await self._embed_faq_chunk(chunk.id, question, answer)
         await record_audit(
             self.db,
@@ -443,6 +477,21 @@ class ProjectService:
     def _append_raw_faq(raw_text: str | None, question: str, answer: str) -> str:
         block = f"\n\n### FAQ: {question}\n\nQuestion: {question}\n\nAnswer: {answer}\n"
         return f"{(raw_text or '').rstrip()}{block}".strip()
+
+    @staticmethod
+    def _replace_raw_faq(
+        raw_text: str | None,
+        current_question: str,
+        current_answer: str,
+        question: str,
+        answer: str,
+    ) -> str:
+        old_block = f"### FAQ: {current_question}\n\nQuestion: {current_question}\n\nAnswer: {current_answer}"
+        new_block = f"### FAQ: {question}\n\nQuestion: {question}\n\nAnswer: {answer}"
+        raw = raw_text or ""
+        if old_block in raw:
+            return raw.replace(old_block, new_block, 1)
+        return ProjectService._append_raw_faq(raw, question, answer)
 
     @staticmethod
     def _faq_out(row: dict) -> ProjectFaqOut:

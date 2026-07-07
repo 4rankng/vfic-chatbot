@@ -15,14 +15,23 @@ sources by archiving/replacing them rather than approving a review queue.
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import bump_cache_version
 from app.core.vector import vec_literal
 from app.models.company import Project
-from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
+from app.models.knowledge import (
+    KBTextFile,
+    KBVersion,
+    KBVersionStatus,
+    KnowledgeDocument,
+    KnowledgeStatus,
+)
 from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
@@ -46,6 +55,7 @@ from app.services.knowledge.repository import (
     KnowledgeDocumentRepo,
     rebuild_bus_timetable,
 )
+from app.services.knowledge.text_ingestion import kb_text_stats
 from app.services.storage import persist_original_upload
 
 Embedder = Callable[[str], Awaitable[list[float]]]
@@ -57,6 +67,199 @@ class KnowledgeService:
 
     async def get(self, doc_id: uuid.UUID) -> KnowledgeDocument | None:
         return await self.db.get(KnowledgeDocument, doc_id)
+
+    async def get_version(self, version_id: uuid.UUID) -> KBVersion | None:
+        return await self.db.get(KBVersion, version_id)
+
+    async def create_version(self, project_id: uuid.UUID, *, actor: User) -> KBVersion:
+        if await self.db.get(Project, project_id) is None:
+            raise NotFoundError("project not found")
+        next_version = int(
+            await self.db.scalar(
+                select(func.coalesce(func.max(KBVersion.version_no), 0) + 1).where(
+                    KBVersion.project_id == project_id
+                )
+            )
+            or 1
+        )
+        version = KBVersion(
+            project_id=project_id,
+            version_no=next_version,
+            status=KBVersionStatus.DRAFT,
+            created_by=actor.id,
+        )
+        self.db.add(version)
+        await self.db.commit()
+        await self.db.refresh(version)
+        return version
+
+    async def list_versions(self, project_id: uuid.UUID) -> list[KBVersion]:
+        if await self.db.get(Project, project_id) is None:
+            raise NotFoundError("project not found")
+        return list(
+            (
+                await self.db.scalars(
+                    select(KBVersion)
+                    .where(KBVersion.project_id == project_id)
+                    .order_by(KBVersion.version_no.desc())
+                )
+            ).all()
+        )
+
+    async def list_version_files(self, version_id: uuid.UUID) -> list[KBTextFile]:
+        return list(
+            (
+                await self.db.scalars(
+                    select(KBTextFile)
+                    .where(KBTextFile.kb_version_id == version_id)
+                    .order_by(KBTextFile.created_at.asc())
+                )
+            ).all()
+        )
+
+    async def upload_text_file(
+        self,
+        *,
+        project_id: uuid.UUID,
+        version_id: uuid.UUID,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+        actor: User,
+    ) -> KBTextFile:
+        version = await self._require_version(project_id, version_id)
+        if version.status not in {KBVersionStatus.DRAFT, KBVersionStatus.FAILED}:
+            raise ValueError("Only DRAFT or FAILED KB versions accept uploads.")
+        upload_format = _detect_upload_text_format(file_name, content_type)
+        raw = data.decode("utf-8", errors="replace")
+        stats = kb_text_stats(raw)
+        if not stats.normalized_text:
+            raise ValueError("Uploaded knowledge file is empty.")
+        metadata: dict[str, Any] = {}
+        source_version: str | None = str(version.version_no)
+        if "schema_version:" in stats.normalized_text[:1000]:
+            repair = repair_canonical_markdown(stats.normalized_text)
+            canonical = parse_canonical_markdown(repair.text)
+            stats = kb_text_stats(repair.text)
+            metadata, source_version = self._build_canonical_metadata(
+                canonical, stats.normalized_text, raw, repair
+            )
+        metadata["kb_version_id"] = str(version.id)
+        metadata["content_sha256"] = stats.content_sha256
+        metadata["source_file"] = {"format": upload_format, "filename": file_name}
+        doc = KnowledgeDocument(
+            file_name=file_name,
+            source="kb_version",
+            version=source_version,
+            mime_type=_mime_type_for_format(upload_format, content_type),
+            raw_text=stats.normalized_text,
+            project_id=project_id,
+            status=KnowledgeStatus.UPLOADED,
+            stage="EXTRACTED",
+            metadata_=metadata,
+        )
+        self.db.add(doc)
+        await self.db.flush()
+        text_file = KBTextFile(
+            project_id=project_id,
+            kb_version_id=version.id,
+            document_id=doc.id,
+            filename=file_name,
+            mime_type=doc.mime_type or "text/plain",
+            raw_text=raw,
+            normalized_text=stats.normalized_text,
+            content_sha256=stats.content_sha256,
+            char_count=stats.char_count,
+            line_count=stats.line_count,
+            uploaded_by=actor.id,
+        )
+        self.db.add(text_file)
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise ValueError("This file content already exists in the KB version.") from exc
+        await self.db.refresh(text_file)
+        return text_file
+
+    async def ingest_version(
+        self,
+        embedder: Embedder,
+        version: KBVersion,
+        *,
+        llm_json: LLMJson,
+    ) -> KBVersion:
+        files = await self.list_version_files(version.id)
+        if not files:
+            raise ValueError("KB version has no uploaded text files.")
+        version.status = KBVersionStatus.INDEXING
+        version.error_message = None
+        await self.db.commit()
+        chunks = KnowledgeChunkRepo(self.db)
+        await chunks.clear_version(version.id)
+        try:
+            from app.services.knowledge import KnowledgePipeline
+
+            for text_file in files:
+                if text_file.document_id is None:
+                    raise ValueError(f"KB file {text_file.filename} is missing source document.")
+                doc = await self.db.get(KnowledgeDocument, text_file.document_id)
+                if doc is None:
+                    raise ValueError(f"Source document for {text_file.filename} was deleted.")
+                doc.raw_text = text_file.normalized_text
+                doc.project_id = version.project_id
+                doc.status = KnowledgeStatus.UPLOADED
+                doc.stage = "EXTRACTED"
+                doc.error = None
+                await self.db.commit()
+                await KnowledgePipeline(self.db, embedder, llm_json).run(doc)
+                await chunks.attach_doc_chunks_to_file(
+                    doc_id=doc.id,
+                    kb_version_id=version.id,
+                    file_id=text_file.id,
+                    project_id=version.project_id,
+                    source_text=text_file.normalized_text,
+                )
+                await self.db.commit()
+            version.status = KBVersionStatus.READY
+            version.error_message = None
+            await self.db.commit()
+        except Exception as exc:
+            version.status = KBVersionStatus.FAILED
+            version.error_message = f"{type(exc).__name__}: {exc}"[:1000]
+            await self.db.commit()
+            raise
+        await self.db.refresh(version)
+        return version
+
+    async def publish_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
+        version = await self._require_version(project_id, version_id)
+        if version.status not in {KBVersionStatus.READY, KBVersionStatus.ACTIVE}:
+            raise ValueError("Only READY KB versions can be published.")
+        await self.db.execute(
+            text(
+                "UPDATE kb_versions "
+                "SET status = 'ARCHIVED' "
+                "WHERE project_id = :pid AND status = 'ACTIVE' AND id <> :vid"
+            ),
+            {"pid": str(project_id), "vid": str(version_id)},
+        )
+        await self.db.execute(
+            text(
+                "UPDATE kb_versions "
+                "SET status = 'ACTIVE', published_at = now(), error_message = NULL "
+                "WHERE id = :vid"
+            ),
+            {"vid": str(version_id)},
+        )
+        await self.db.execute(
+            text("UPDATE projects SET active_kb_version_id = :vid, updated_at = now() WHERE id = :pid"),
+            {"pid": str(project_id), "vid": str(version_id)},
+        )
+        await self.db.commit()
+        await bump_cache_version("knowledge")
+        await self.db.refresh(version)
+        return version
 
     async def list_chunks(self, doc_id: uuid.UUID, *, limit: int = 50) -> list[dict]:
         return await KnowledgeChunkRepo(self.db).list_for_doc(doc_id, limit=limit)
@@ -371,3 +574,30 @@ class KnowledgeService:
     async def reconcile(self, current_drive_ids: list[str]) -> int:
         """Drop knowledge_documents whose drive_file_id is no longer in Drive (cascades chunks)."""
         return await KnowledgeDocumentRepo(self.db).delete_orphans_by_drive_ids(current_drive_ids)
+
+    async def _require_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
+        version = await self.db.get(KBVersion, version_id)
+        if version is None or version.project_id != project_id:
+            raise NotFoundError("KB version not found")
+        return version
+
+
+def _detect_upload_text_format(file_name: str, content_type: str) -> str:
+    suffix = Path(file_name or "").suffix.lower()
+    normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if suffix == ".md":
+        return "markdown"
+    if suffix == ".txt":
+        return "text"
+    if suffix == "" and normalized_type in {"text/plain", "text/markdown", "text/x-markdown"}:
+        return "markdown" if "markdown" in normalized_type else "text"
+    if normalized_type not in {"text/plain", "text/markdown", "text/x-markdown"}:
+        raise ValueError("Only .txt and .md knowledge files are supported.")
+    raise ValueError("Knowledge filenames must end in .txt or .md.")
+
+
+def _mime_type_for_format(file_format: str, content_type: str) -> str:
+    normalized = (content_type or "").split(";", 1)[0].strip().lower()
+    if normalized.startswith("text/"):
+        return normalized
+    return "text/markdown" if file_format == "markdown" else "text/plain"

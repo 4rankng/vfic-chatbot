@@ -2,13 +2,19 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNotify, usePermissions, useTranslate } from "ra-core";
 import {
   Bot,
+  Briefcase,
   Cpu,
+  Database,
   KeyRound,
+  MessageCircle,
   PlugZap,
   RefreshCw,
   Save,
   Settings,
+  Sparkles,
+  type LucideIcon,
 } from "lucide-react";
+import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -206,13 +212,11 @@ const ReadOnlySetting = ({
 
 const SettingsCard = ({
   title,
-  description,
   icon,
   children,
   className = "",
 }: {
   title: string;
-  description: string;
   icon: ReactNode;
   children: ReactNode;
   className?: string;
@@ -222,11 +226,52 @@ const SettingsCard = ({
       <div className="settings-card-icon">{icon}</div>
       <div className="min-w-0">
         <CardTitle>{title}</CardTitle>
-        <p>{description}</p>
       </div>
     </CardHeader>
     <CardContent className="settings-card-content">{children}</CardContent>
   </Card>
+);
+
+const CORE_SETTINGS_LINKS: Array<{
+  href: string;
+  title: string;
+  Icon: LucideIcon;
+}> = [
+  {
+    href: "/projects",
+    title: "Project",
+    Icon: Briefcase,
+  },
+  {
+    href: "/knowledge_sources",
+    title: "Data ingestion",
+    Icon: Database,
+  },
+  {
+    href: "/personas",
+    title: "Persona",
+    Icon: Sparkles,
+  },
+  {
+    href: "/settings",
+    title: "Kênh chat",
+    Icon: MessageCircle,
+  },
+];
+
+const SettingsShortcutGrid = () => (
+  <section className="settings-shortcut-grid" aria-label="Thiết lập chính">
+    {CORE_SETTINGS_LINKS.map(({ href, title, Icon }) => (
+      <Link key={title} to={href} className="settings-shortcut-card">
+        <span className="settings-card-icon">
+          <Icon className="size-4" />
+        </span>
+        <span>
+          <strong>{title}</strong>
+        </span>
+      </Link>
+    ))}
+  </section>
 );
 
 const SettingsMetric = ({
@@ -240,7 +285,9 @@ const SettingsMetric = ({
 }) => {
   const configured = Boolean(status?.configured);
   return (
-    <div className={`settings-metric ${configured ? "is-ready" : "is-missing"}`}>
+    <div
+      className={`settings-metric ${configured ? "is-ready" : "is-missing"}`}
+    >
       <span className="ops-status-label">{label}</span>
       <strong>
         <span aria-hidden="true" />
@@ -421,12 +468,7 @@ export const ZaloIntegrationPage = () => {
               <Settings className="size-5" />
             </div>
             <div className="min-w-0">
-              <p className="ops-kicker">Không gian vận hành</p>
               <h1>Cấu hình hệ thống</h1>
-              <p>
-                Quản lý kênh Zalo, token AI, model chatbot, kiểm tra an toàn
-                và quy trình huấn luyện dữ liệu.
-              </p>
             </div>
           </div>
           <div className="settings-header-actions">
@@ -449,6 +491,8 @@ export const ZaloIntegrationPage = () => {
             </Button>
           </div>
         </header>
+
+        <SettingsShortcutGrid />
 
         <section className="ops-status-strip settings-status-strip">
           <SettingsMetric
@@ -476,7 +520,6 @@ export const ZaloIntegrationPage = () => {
         <div className="settings-grid">
           <SettingsCard
             title="Nền tảng bot"
-            description="Thông tin kết nối bot-api.zaloplatforms.com để nhận webhook và gửi phản hồi qua kênh bot."
             icon={<PlugZap className="size-4" />}
           >
             <SecretInput
@@ -506,7 +549,6 @@ export const ZaloIntegrationPage = () => {
 
           <SettingsCard
             title="Tài khoản OA"
-            description="Thông tin OA dùng cho lớp gửi tin nhắn chính thức và kiểm tra quyền kết nối Zalo."
             icon={<KeyRound className="size-4" />}
           >
             <div className="settings-field">
@@ -545,11 +587,7 @@ export const ZaloIntegrationPage = () => {
             />
           </SettingsCard>
 
-          <SettingsCard
-            title="Minimax"
-            description="Nguồn AI chính cho chatbot khi Minimax đang bật trong cấu hình runtime."
-            icon={<Bot className="size-4" />}
-          >
+          <SettingsCard title="Minimax" icon={<Bot className="size-4" />}>
             <MinimaxSecretInput
               id="minimax_api_key"
               label="Token Minimax"
@@ -575,7 +613,6 @@ export const ZaloIntegrationPage = () => {
 
           <SettingsCard
             title="OpenRouter"
-            description="LLM dự phòng và embedding cho quy trình huấn luyện, dùng chung token OpenRouter."
             icon={<Cpu className="size-4" />}
             className="settings-card-wide"
           >
@@ -617,7 +654,6 @@ export const ZaloIntegrationPage = () => {
               label="Model kiểm tra an toàn"
               value={openRouterSettings?.openrouter_safety_model ?? ""}
             />
-
           </SettingsCard>
         </div>
       </div>

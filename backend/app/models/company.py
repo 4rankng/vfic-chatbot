@@ -26,6 +26,9 @@ class Project(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     summary: Mapped[str | None] = mapped_column(Text)
     index_card: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    active_kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="SET NULL")
+    )
     default_persona_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("personas.id", ondelete="SET NULL")
     )

@@ -5,7 +5,14 @@ Schema is owned by Alembic (raw-SQL baseline); these mirror the tables for queri
 from app.models.audit import AuditEvent
 from app.models.base import Base
 from app.models.company import Company, Project
-from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeStatus
+from app.models.knowledge import (
+    KBTextFile,
+    KBVersion,
+    KBVersionStatus,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeStatus,
+)
 from app.models.lead import FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage, FollowUpTask
 from app.models.job import Job, JobStatus
 from app.models.integration import IntegrationSetting
@@ -34,6 +41,9 @@ __all__ = [
     "KnowledgeChunk",
     "KnowledgeDocument",
     "KnowledgeStatus",
+    "KBVersion",
+    "KBVersionStatus",
+    "KBTextFile",
     "FollowupStatus",
     "Lead",
     "LeadEvent",

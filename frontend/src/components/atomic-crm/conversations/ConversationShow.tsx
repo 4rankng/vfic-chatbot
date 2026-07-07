@@ -1,16 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  useRecordContext,
-  useGetList,
-  ShowBase,
-  useNotify,
-  useRefresh,
-} from "ra-core";
-import type {
-  Conversation,
-  Lead,
-  LeadChatOpsActionResult,
-} from "../types";
+import { useRecordContext, useGetList, ShowBase } from "ra-core";
+import type { Conversation, Lead } from "../types";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import { getLeadStatusColor } from "./conversationDisplay";
 import { LeadProfilePanel } from "../leads/LeadProfilePanel";
@@ -34,7 +24,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ConversationContextPanel } from "./ConversationContextPanel";
-import { dispatchLeadTagsUpdated, runLeadChatOpsAction } from "./chatOpsWorkspace";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -154,71 +143,9 @@ export const ConversationShowContent = ({
   );
   const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
 
-  const notify = useNotify();
-  const refresh = useRefresh();
-  const [quickSaving, setQuickSaving] = useState<string | null>(null);
-
   useEffect(() => {
     setIsContextOpen(false);
   }, [record?.id]);
-
-  const refetchWorkspaceLead = async () => {
-    await refetchLead();
-    window.dispatchEvent(
-      new CustomEvent("vfic:lead-updated", {
-        detail: { lead_id: lead?.id, zalo_id: record?.zalo_chat_id },
-      }),
-    );
-  };
-
-  const runChatOpsAction = async (
-    action: string,
-    savingKey: string,
-    successMessage: string,
-  ): Promise<LeadChatOpsActionResult | null> => {
-    if (!lead) return null;
-    setQuickSaving(savingKey);
-    try {
-      const result = await runLeadChatOpsAction(lead.id, action);
-      notify(successMessage, { type: "success" });
-      dispatchLeadTagsUpdated(lead.id);
-      await refetchWorkspaceLead();
-      refresh();
-      return result;
-    } catch (e) {
-      notify((e as Error).message || "Không thể cập nhật ChatOps", {
-        type: "error",
-      });
-      return null;
-    } finally {
-      setQuickSaving(null);
-    }
-  };
-
-  const runPanelChatOpsAction = (action: string) => {
-    if (action === "mark_contacting") {
-      return runChatOpsAction(
-        action,
-        "contacting",
-        "Đã chuyển sang đang liên hệ.",
-      );
-    }
-    if (action === "schedule_followup") {
-      return runChatOpsAction(
-        action,
-        "followup",
-        "Đã đặt lịch follow-up ngày mai.",
-      );
-    }
-    if (action === "mark_registered") {
-      return runChatOpsAction(action, "registered", "Đã chuyển sang đăng ký.");
-    }
-    return runChatOpsAction(
-      action,
-      "not_interested",
-      "Đã gắn nhãn không quan tâm.",
-    );
-  };
 
   return (
     <>
@@ -351,13 +278,9 @@ export const ConversationShowContent = ({
       {showWorkspacePanel && (
         <ConversationContextPanel
           lead={lead}
-          conversation={record}
-          activeMode={activeMode}
-          saving={quickSaving}
           open={isContextOpen}
           onClose={() => setIsContextOpen(false)}
           onOpenProfile={() => setIsProfileOpen(true)}
-          onRunChatOpsAction={runPanelChatOpsAction}
         />
       )}
     </>

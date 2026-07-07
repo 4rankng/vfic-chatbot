@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.knowledge import KnowledgeStatus
+from app.models.knowledge import KBVersionStatus, KnowledgeStatus
 
 
 class KnowledgeDocumentOut(BaseModel):
@@ -34,6 +34,12 @@ class KnowledgeDocumentOut(BaseModel):
 class KnowledgeChunkOut(BaseModel):
     id: uuid.UUID
     chunk_index: int
+    kb_version_id: uuid.UUID | None = None
+    file_id: uuid.UUID | None = None
+    chunk_type: str | None = None
+    section_path: list[str] = []
+    line_start: int | None = None
+    line_end: int | None = None
     content: str
     source_quote: str | None = None
     summary: str | None = None
@@ -70,6 +76,51 @@ class UploadRequest(BaseModel):
     content: str
     drive_file_id: str | None = None
     project_id: uuid.UUID | None = None
+
+
+class KBVersionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    version_no: int
+    status: KBVersionStatus
+    created_by: uuid.UUID | None = None
+    created_at: datetime
+    published_at: datetime | None = None
+    error_message: str | None = None
+
+
+class KBVersionListResponse(BaseModel):
+    data: list[KBVersionOut]
+    total: int
+
+
+class KBTextFileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    kb_version_id: uuid.UUID
+    document_id: uuid.UUID | None = None
+    filename: str
+    mime_type: str
+    content_sha256: str
+    char_count: int
+    line_count: int
+    uploaded_by: uuid.UUID | None = None
+    created_at: datetime
+
+
+class KBTextFileListResponse(BaseModel):
+    data: list[KBTextFileOut]
+    total: int
+
+
+class KBIngestResponse(BaseModel):
+    job_id: str
+    status: str
+    kb_version_id: uuid.UUID
 
 
 class KnowledgeDocumentUpdate(BaseModel):

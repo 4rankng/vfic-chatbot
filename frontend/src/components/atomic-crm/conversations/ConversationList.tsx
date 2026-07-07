@@ -22,19 +22,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
-import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
-import {
-  Inbox,
-  MessageCircle,
-  Phone,
-  UserRound,
-  type LucideIcon,
-} from "lucide-react";
-import {
-  persistActiveWorkspaceFilter,
-  readActiveWorkspaceFilter,
-  type WorkspaceFilterKey,
-} from "./chatOpsWorkspace";
+import { getLeadStatusColor } from "./conversationDisplay";
+import { UserRound } from "lucide-react";
 import { WorkspaceIconRail } from "./WorkspaceShell";
 import "./inbox.css";
 
@@ -42,8 +31,6 @@ type ConversationRow = Conversation & {
   _lead?: Lead | null;
   _snippet?: string;
 };
-
-type WorkspaceFilter = WorkspaceFilterKey;
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 
@@ -60,27 +47,6 @@ const needsVisibleAttention = (
     new Date(conversation.last_inbound_at).getTime() >
     new Date(conversation.last_outbound_at).getTime()
   );
-};
-
-const hasLeadPhone = (lead?: Lead | null) => Boolean(lead?.phone?.trim());
-
-const hasFollowUp = (lead?: Lead | null) => Boolean(lead?.next_action_at);
-
-const isNotInterested = (lead?: Lead | null) =>
-  lead?.lead_score === "not_interested" || lead?.lead_stage === "SKIPPED";
-
-const matchesWorkspaceFilter = (
-  row: ConversationRow,
-  filter: WorkspaceFilter,
-  readIds: Set<string>,
-) => {
-  if (filter === "all") return true;
-  if (filter === "needs_attention") return needsVisibleAttention(row, readIds);
-  if (filter === "has_phone") return hasLeadPhone(row._lead);
-  if (filter === "missing_phone") return !hasLeadPhone(row._lead);
-  if (filter === "follow_up") return hasFollowUp(row._lead);
-  if (filter === "not_interested") return isNotInterested(row._lead);
-  return row.mode === filter;
 };
 
 const getConversationModePriority = (mode: Conversation["mode"]) => {
@@ -192,7 +158,6 @@ const ConversationListItem = memo(
     const name =
       lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
     const colors = getLeadStatusColor(lead);
-    const priority = getLeadPriorityChip(lead);
     // Preview = latest message snippet (batched via vfic_last_messages), falling
     // back to the contact's phone when no snippet is available yet.
     const subtitle = conversation._snippet || lead?.phone || "";
@@ -211,9 +176,7 @@ const ConversationListItem = memo(
           needsAttention ? "needs-attention" : ""
         }`}
         onClick={() => onSelect(conversation)}
-        aria-label={`Mở hội thoại với ${name}${
-          priority ? ` — ${priority.label}` : ""
-        }`}
+        aria-label={`Mở hội thoại với ${name}`}
       >
         <span
           className="avatar round"
@@ -245,11 +208,6 @@ const ConversationListItem = memo(
           <span className="conv-bottom">
             {subtitle && <span className="conv-preview">{subtitle}</span>}
             <span className="conv-meta-row">
-              {priority && (
-                <span className={`mini-chip priority-${priority.tone}`}>
-                  {priority.label}
-                </span>
-              )}
               <span
                 className={`conv-mode-label ${modeMeta.tone}`}
                 title={modeMeta.label}
@@ -281,14 +239,10 @@ const ConversationListPanel = ({
   selectedId,
   onSelect,
   readIds,
-  activeFilter,
-  onFilterChange,
 }: {
   selectedId: string | null;
   onSelect: (c: Conversation) => void;
   readIds: Set<string>;
-  activeFilter: WorkspaceFilter;
-  onFilterChange: (filter: WorkspaceFilter) => void;
 }) => {
   const { data: conversations, isPending } = useListContext<Conversation>();
   const { fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -399,32 +353,7 @@ const ConversationListPanel = ({
       });
   }, [conversations, leads, snippets, deferredQuery, readIds]);
 
-  const workspaceStats = useMemo<Record<WorkspaceFilter, number>>(
-    () => ({
-      all: searchedRows.length,
-      needs_attention: searchedRows.filter((row) =>
-        needsVisibleAttention(row, readIds),
-      ).length,
-      has_phone: searchedRows.filter((row) => hasLeadPhone(row._lead)).length,
-      missing_phone: searchedRows.filter((row) => !hasLeadPhone(row._lead))
-        .length,
-      follow_up: searchedRows.filter((row) => hasFollowUp(row._lead)).length,
-      not_interested: searchedRows.filter((row) => isNotInterested(row._lead))
-        .length,
-      human: searchedRows.filter((row) => row.mode === "human").length,
-      semi_auto: searchedRows.filter((row) => row.mode === "semi_auto").length,
-      bot: searchedRows.filter((row) => row.mode === "bot").length,
-    }),
-    [searchedRows, readIds],
-  );
-
-  const rows: ConversationRow[] = useMemo(
-    () =>
-      searchedRows.filter((row) =>
-        matchesWorkspaceFilter(row, activeFilter, readIds),
-      ),
-    [searchedRows, activeFilter, readIds],
-  );
+  const rows = searchedRows;
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -447,9 +376,6 @@ const ConversationListPanel = ({
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
       <WorkspaceRail
-        activeFilter={activeFilter}
-        stats={workspaceStats}
-        onFilterChange={onFilterChange}
         searchSlot={
           <label className="search">
             <svg className="icon">
@@ -503,50 +429,14 @@ const ConversationListPanel = ({
   );
 };
 
-const WORKSPACE_FILTERS: Array<{
-  key: WorkspaceFilter;
-  label: string;
-  Icon: LucideIcon;
-}> = [
-  { key: "all", label: "Tất cả", Icon: Inbox },
-  { key: "needs_attention", label: "Cần trả lời", Icon: MessageCircle },
-  { key: "has_phone", label: "Có SĐT", Icon: Phone },
-];
-
-const getInitialWorkspaceFilter = (): WorkspaceFilter => {
-  const stored = readActiveWorkspaceFilter();
-  return WORKSPACE_FILTERS.some((filter) => filter.key === stored)
-    ? stored
-    : "all";
-};
-
-const WorkspaceRail = ({
-  activeFilter,
-  stats,
-  onFilterChange,
-  searchSlot,
-}: {
-  activeFilter: WorkspaceFilter;
-  stats: Record<WorkspaceFilter, number>;
-  onFilterChange: (filter: WorkspaceFilter) => void;
-  searchSlot: ReactNode;
-}) => (
-  <div className="workspace-rail" aria-label="Không gian làm việc">
-    <div className="inbox-tools">{searchSlot}</div>
-    <div className="workspace-filter-list">
-      {WORKSPACE_FILTERS.map(({ key, label, Icon }) => (
-        <button
-          type="button"
-          key={key}
-          className={`workspace-filter ${activeFilter === key ? "active" : ""}`}
-          onClick={() => onFilterChange(key)}
-        >
-          <Icon className="icon" aria-hidden="true" />
-          <span>{label}</span>
-          <span className="workspace-count">{stats[key]}</span>
-        </button>
-      ))}
+const WorkspaceRail = ({ searchSlot }: { searchSlot: ReactNode }) => (
+  <div className="workspace-rail" aria-label="Tin nhắn">
+    <div className="workspace-title-row">
+      <div className="workspace-title-copy">
+        <h1 className="workspace-heading">Tin nhắn</h1>
+      </div>
     </div>
+    <div className="inbox-tools">{searchSlot}</div>
   </div>
 );
 
@@ -555,9 +445,6 @@ const ConversationListContent = () => {
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<WorkspaceFilter>(() =>
-    getInitialWorkspaceFilter(),
-  );
   const conversationIdsKey = useMemo(
     () => conversations?.map((c) => c.id).join("|") ?? "",
     [conversations],
@@ -570,11 +457,6 @@ const ConversationListContent = () => {
   useEffect(() => {
     setPendingReadIds((current) => (current.size === 0 ? current : new Set()));
   }, [conversationIdsKey]);
-
-  const changeWorkspaceFilter = useCallback((filter: WorkspaceFilter) => {
-    setActiveFilter(filter);
-    persistActiveWorkspaceFilter(filter);
-  }, []);
 
   const urlId = searchParams.get("id");
   // On mobile the detail pane is shown iff a conversation id is in the URL, so
@@ -679,8 +561,6 @@ const ConversationListContent = () => {
           selectedId={selected?.id ?? null}
           onSelect={openConversation}
           readIds={pendingReadIds}
-          activeFilter={activeFilter}
-          onFilterChange={changeWorkspaceFilter}
         />
 
         {selected ? (

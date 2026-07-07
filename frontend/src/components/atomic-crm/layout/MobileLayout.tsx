@@ -19,7 +19,9 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
   const isConversationRoute =
     location.pathname.startsWith("/conversations") ||
     hashPath.startsWith("/conversations");
-  const hideNavigation = isConversationRoute;
+  const isConversationDetail =
+    isConversationRoute && new URLSearchParams(location.search).has("id");
+  const hideNavigation = isConversationDetail;
 
   return (
     <>
@@ -27,14 +29,16 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
         <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
           <main
             id="main-content"
-            className={cn("min-h-dvh", hideNavigation ? "" : "pb-24")}
+            className={cn("min-h-dvh", hideNavigation ? "" : "pb-28")}
           >
             {children}
           </main>
         </Suspense>
       </ErrorBoundary>
       {!hideNavigation && <MobileNavigation />}
-      <Notification mobileOffset={{ bottom: hideNavigation ? "16px" : "72px" }} />
+      <Notification
+        mobileOffset={{ bottom: hideNavigation ? "16px" : "92px" }}
+      />
     </>
   );
 };

@@ -1,13 +1,7 @@
-import { lazy, Suspense } from "react";
 import { InboxIcons } from "../conversations/InboxIcons";
 import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
 import "../conversations/inbox.css";
-
-const KnowledgeIngestPanel = lazy(() =>
-  import("./KnowledgeIngestPanel").then((m) => ({
-    default: m.KnowledgeIngestPanel,
-  })),
-);
+import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
 
 export const Dashboard = () => (
   <div className="inbox-bg-container dashboard-workspace">
@@ -16,9 +10,7 @@ export const Dashboard = () => (
       <WorkspaceIconRail />
       <section className="panel center-panel dashboard-center-panel">
         <div className="dashboard-workspace-content">
-          <Suspense fallback={null}>
-            <KnowledgeIngestPanel variant="desktop" />
-          </Suspense>
+          <RecruitingCommandCenter />
         </div>
       </section>
     </main>

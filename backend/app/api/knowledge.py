@@ -23,6 +23,11 @@ from app.core.db import get_db
 from app.models.knowledge import KnowledgeStatus
 from app.models.user import User
 from app.schemas.knowledge import (
+    KBIngestResponse,
+    KBTextFileListResponse,
+    KBTextFileOut,
+    KBVersionListResponse,
+    KBVersionOut,
     KnowledgeChunkListResponse,
     KnowledgeChunkOut,
     KnowledgeDocumentUpdate,
@@ -38,7 +43,7 @@ from app.services.knowledge.canonical import (
     load_faq_template,
     load_template,
 )
-from app.workers.ingest_worker import enqueue_ingest
+from app.workers.ingest_worker import enqueue_ingest, enqueue_ingest_version
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -59,6 +64,125 @@ async def get_knowledge_format_template(
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="vfic-knowledge-v1-template.md"'},
     )
+
+
+@router.post(
+    "/projects/{project_id}/kb/versions",
+    response_model=KBVersionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_kb_version(
+    project_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KBVersionOut:
+    version = await KnowledgeService(db).create_version(project_id, actor=admin)
+    return KBVersionOut.model_validate(version)
+
+
+@router.get("/projects/{project_id}/kb/versions", response_model=KBVersionListResponse)
+async def list_kb_versions(
+    project_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KBVersionListResponse:
+    versions = await KnowledgeService(db).list_versions(project_id)
+    return KBVersionListResponse(
+        data=[KBVersionOut.model_validate(version) for version in versions],
+        total=len(versions),
+    )
+
+
+@router.get(
+    "/projects/{project_id}/kb/versions/{version_id}/files",
+    response_model=KBTextFileListResponse,
+)
+async def list_kb_version_files(
+    project_id: uuid.UUID,
+    version_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KBTextFileListResponse:
+    service = KnowledgeService(db)
+    await service._require_version(project_id, version_id)
+    files = await service.list_version_files(version_id)
+    return KBTextFileListResponse(
+        data=[KBTextFileOut.model_validate(file) for file in files],
+        total=len(files),
+    )
+
+
+@router.post(
+    "/projects/{project_id}/kb/versions/{version_id}/files",
+    response_model=KBTextFileOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_kb_version_file(
+    project_id: uuid.UUID,
+    version_id: uuid.UUID,
+    file: UploadFile = File(...),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KBTextFileOut:
+    data = await file.read()
+    try:
+        uploaded = await KnowledgeService(db).upload_text_file(
+            project_id=project_id,
+            version_id=version_id,
+            file_name=file.filename or "knowledge.md",
+            content_type=file.content_type or "",
+            data=data,
+            actor=admin,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return KBTextFileOut.model_validate(uploaded)
+
+
+@router.post(
+    "/projects/{project_id}/kb/versions/{version_id}/ingest",
+    response_model=KBIngestResponse,
+)
+async def ingest_kb_version(
+    project_id: uuid.UUID,
+    version_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KBIngestResponse:
+    await KnowledgeService(db)._require_version(project_id, version_id)
+    job_id = enqueue_ingest_version(version_id)
+    return KBIngestResponse(job_id=job_id, status="PENDING", kb_version_id=version_id)
+
+
+@router.post(
+    "/projects/{project_id}/kb/versions/{version_id}/publish",
+    response_model=KBVersionOut,
+)
+async def publish_kb_version(
+    project_id: uuid.UUID,
+    version_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> KBVersionOut:
+    try:
+        version = await KnowledgeService(db).publish_version(project_id, version_id)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return KBVersionOut.model_validate(version)
+
+
+@router.post("/projects/{project_id}/rag/test", response_model=list[SearchTestResult])
+async def project_rag_test(
+    project_id: uuid.UUID,
+    body: SearchTestRequest,
+    embedder=Depends(get_embedder),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[SearchTestResult]:
+    rows = await KnowledgeService(db).search_test(
+        embedder, body.query, body.top_k, project_id=project_id
+    )
+    return [SearchTestResult(**row) for row in rows]
 
 
 async def _load(doc_id: uuid.UUID, db: AsyncSession):

@@ -27,6 +27,71 @@ class KnowledgeStatus(str, enum.Enum):
     FAILED = "FAILED"
 
 
+class KBVersionStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    INDEXING = "INDEXING"
+    READY = "READY"
+    ACTIVE = "ACTIVE"
+    ARCHIVED = "ARCHIVED"
+    FAILED = "FAILED"
+
+
+class KBVersion(Base):
+    __tablename__ = "kb_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[KBVersionStatus] = mapped_column(
+        Enum(KBVersionStatus, name="kb_version_status", create_type=False),
+        nullable=False,
+        default=KBVersionStatus.DRAFT,
+        server_default="DRAFT",
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class KBTextFile(Base):
+    __tablename__ = "kb_text_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    kb_version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="SET NULL")
+    )
+    filename: Mapped[str] = mapped_column(String, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String, nullable=False, default="text/plain", server_default="text/plain")
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_text: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String, nullable=False)
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    line_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
 
@@ -65,8 +130,21 @@ class KnowledgeChunk(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=False)
+    kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")
+    )
+    file_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_text_files.id", ondelete="CASCADE")
+    )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chunk_type: Mapped[str] = mapped_column(String, nullable=False, default="text", server_default="text")
+    section_path: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
+    line_start: Mapped[int | None] = mapped_column(Integer)
+    line_end: Mapped[int | None] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_plain: Mapped[str | None] = mapped_column(Text)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    chunk_sha256: Mapped[str | None] = mapped_column(String)
     embedding: Mapped[object] = mapped_column("embedding", Text)  # vector(3072) at DB; only written via raw SQL
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

@@ -1,8 +1,5 @@
 import { Link, useLocation } from "react-router";
 import {
-  BotMessageSquare,
-  BookOpen,
-  Briefcase,
   Home,
   MessageCircle,
   Settings,
@@ -10,13 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type WorkspaceNavKey =
-  | "home"
-  | "conversations"
-  | "personas"
-  | "knowledge"
-  | "projects"
-  | "settings";
+type WorkspaceNavKey = "home" | "conversations" | "settings" | "account";
 
 type WorkspaceNavItem = {
   key: WorkspaceNavKey;
@@ -26,38 +17,27 @@ type WorkspaceNavItem = {
 };
 
 const WORKSPACE_NAV_ITEMS: WorkspaceNavItem[] = [
-  { key: "home", label: "Trang chính", Icon: Home, href: "/" },
   {
     key: "conversations",
-    label: "Tin nhắn",
+    label: "Chat",
     Icon: MessageCircle,
     href: "/conversations",
   },
   {
-    key: "personas",
-    label: "Agent",
-    Icon: BotMessageSquare,
-    href: "/personas",
-  },
-  {
-    key: "knowledge",
-    label: "Training",
-    Icon: BookOpen,
-    href: "/knowledge_sources",
-  },
-  { key: "projects", label: "Dự án", Icon: Briefcase, href: "/projects" },
-  {
     key: "settings",
-    label: "Cài đặt",
+    label: "Settings",
     Icon: Settings,
     href: "/settings",
   },
+  { key: "account", label: "Account", Icon: UserRound, href: "/profile" },
 ];
 
 const getActiveWorkspaceKey = (pathname: string): WorkspaceNavKey => {
-  if (pathname.startsWith("/knowledge_sources")) return "knowledge";
-  if (pathname.startsWith("/personas")) return "personas";
-  if (pathname.startsWith("/projects")) return "projects";
+  if (pathname.startsWith("/profile")) return "account";
+  if (pathname.startsWith("/users")) return "account";
+  if (pathname.startsWith("/knowledge_sources")) return "settings";
+  if (pathname.startsWith("/personas")) return "settings";
+  if (pathname.startsWith("/projects")) return "settings";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/zalo_integrations")) return "settings";
   if (pathname.startsWith("/conversations")) return "conversations";
@@ -72,16 +52,11 @@ export const WorkspaceIconRail = () => {
     <nav className="workspace-icon-rail" aria-label="Điều hướng workspace">
       <Link
         to="/"
-        className="workspace-logo-tile"
-        aria-label="Mở workspace Ting Ting Soft"
-        title="Ting Ting Soft"
+        className={`workspace-logo-tile ${activeKey === "home" ? "active" : ""}`}
+        aria-label="Dashboard"
+        title="Dashboard"
       >
-        <img
-          src="/ttsoft-logo.png"
-          alt=""
-          className="workspace-logo-mark"
-          aria-hidden="true"
-        />
+        <Home className="icon" aria-hidden="true" />
       </Link>
       <div className="workspace-icon-stack">
         {WORKSPACE_NAV_ITEMS.map(({ key, label, Icon, href }) => (
@@ -95,9 +70,6 @@ export const WorkspaceIconRail = () => {
             <Icon className="icon" aria-hidden="true" />
           </Link>
         ))}
-      </div>
-      <div className="workspace-rail-user" aria-label="Người dùng hiện tại">
-        <UserRound className="icon" aria-hidden="true" />
       </div>
     </nav>
   );

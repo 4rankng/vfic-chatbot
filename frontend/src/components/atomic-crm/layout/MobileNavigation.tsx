@@ -1,26 +1,10 @@
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import {
-  BotMessageSquare,
-  BookOpen,
-  Briefcase,
-  Home,
-  MessageCircle,
-  MoreHorizontal,
-  UserCog,
-  Users,
-} from "lucide-react";
+import { Home, MessageCircle, Settings, UserCog } from "lucide-react";
 import { useTranslate } from "ra-core";
-import { Link, matchPath, useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useMemo } from "react";
 import { useNotifications } from "./topbar/useNotifications";
-import { useRoleActions } from "../hooks/useRoleActions";
 
 // Static per-session: display-mode and UA do not change without a reload.
 const IS_PWA =
@@ -33,20 +17,35 @@ const IS_WEB_IOS =
 export const MobileNavigation = () => {
   const location = useLocation();
   const translate = useTranslate();
-  const { isAdmin } = useRoleActions();
   const { count: needsAttentionCount } = useNotifications();
 
   const currentPath = useMemo<string | boolean>(() => {
-    if (matchPath("/", location.pathname)) return "/";
-    if (matchPath("/leads/*", location.pathname)) return "/leads";
-    if (matchPath("/conversations/*", location.pathname))
+    const path = location.pathname;
+    if (path === "/") return "/";
+    if (path === "/conversations" || path.startsWith("/conversations/")) {
       return "/conversations";
-    if (matchPath("/projects/*", location.pathname)) return "/projects";
-    if (matchPath("/knowledge_sources/*", location.pathname))
-      return "/knowledge_sources";
-    if (matchPath("/users/*", location.pathname)) return "/users";
-    if (matchPath("/personas/*", location.pathname)) return "/personas";
-    if (matchPath("/profile", location.pathname)) return "/profile";
+    }
+    if (
+      path === "/settings" ||
+      path.startsWith("/settings/") ||
+      path.startsWith("/zalo_integrations/") ||
+      path === "/projects" ||
+      path.startsWith("/projects/") ||
+      path === "/knowledge_sources" ||
+      path.startsWith("/knowledge_sources/") ||
+      path === "/personas" ||
+      path.startsWith("/personas/")
+    ) {
+      return "/settings";
+    }
+    if (
+      path === "/profile" ||
+      path === "/users" ||
+      path.startsWith("/users/")
+    ) {
+      return "/account";
+    }
+    if (path === "/leads" || path.startsWith("/leads/")) return "/";
     return false;
   }, [location.pathname]);
 
@@ -58,110 +57,49 @@ export const MobileNavigation = () => {
     badge?: number;
   };
 
-  const overflowItems = useMemo(
-    () =>
-      [
-        isAdmin
-          ? {
-              href: "/projects",
-              Icon: Briefcase,
-              label: "Dự án",
-              isActive: currentPath === "/projects",
-            }
-          : null,
-        isAdmin
-          ? {
-              href: "/knowledge_sources",
-              Icon: BookOpen,
-              label: "Kiến thức",
-              isActive: currentPath === "/knowledge_sources",
-            }
-          : null,
-        isAdmin
-          ? {
-              href: "/users",
-              Icon: UserCog,
-              label: "Tài khoản",
-              isActive: currentPath === "/users",
-            }
-          : null,
-        isAdmin
-          ? {
-              href: "/personas",
-              Icon: BotMessageSquare,
-              label: "Agent",
-              isActive: currentPath === "/personas",
-            }
-          : null,
-      ].filter(Boolean) as NavigationItem[],
-    [currentPath, isAdmin],
-  );
-
-  const overflowActive = overflowItems.some((item) => item.isActive);
-  const visibleItems: NavigationItem[] = isAdmin
-    ? [
-        {
-          href: "/",
-          Icon: Home,
-          label: "Tổng quan",
-          isActive: currentPath === "/",
-        },
-        {
-          href: "/leads",
-          Icon: Users,
-          label: "Ứng viên",
-          isActive: currentPath === "/leads",
-        },
-        {
-          href: "/conversations",
-          Icon: MessageCircle,
-          label: "Chat",
-          isActive: currentPath === "/conversations",
-          badge: needsAttentionCount,
-        },
-      ]
-    : [
-        {
-          href: "/leads",
-          Icon: Users,
-          label: "Ứng viên",
-          isActive: currentPath === "/leads",
-        },
-        {
-          href: "/conversations",
-          Icon: MessageCircle,
-          label: "Chat",
-          isActive: currentPath === "/conversations",
-          badge: needsAttentionCount,
-        },
-        {
-          href: "/projects",
-          Icon: Briefcase,
-          label: "Dự án",
-          isActive: currentPath === "/projects",
-        },
-        {
-          href: "/profile",
-          Icon: UserCog,
-          label: "Tài khoản",
-          isActive: currentPath === "/profile",
-        },
-      ];
+  const visibleItems: NavigationItem[] = [
+    {
+      href: "/",
+      Icon: Home,
+      label: "Dashboard",
+      isActive: currentPath === "/",
+    },
+    {
+      href: "/conversations",
+      Icon: MessageCircle,
+      label: "Chat",
+      isActive: currentPath === "/conversations",
+      badge: needsAttentionCount,
+    },
+    {
+      href: "/settings",
+      Icon: Settings,
+      label: "Settings",
+      isActive: currentPath === "/settings",
+    },
+    {
+      href: "/profile",
+      Icon: UserCog,
+      label: "Account",
+      isActive: currentPath === "/account",
+    },
+  ];
 
   return (
     <nav
       aria-label={translate("crm.navigation.label")}
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/70 bg-background/94 px-3 pb-1 pt-1 shadow-[0_-8px_24px_rgba(26,34,40,0.08)] backdrop-blur-xl dark:bg-card/92"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3"
       style={{
-        paddingBottom: IS_PWA && IS_WEB_IOS ? 15 : undefined,
+        paddingBottom:
+          IS_PWA && IS_WEB_IOS
+            ? "calc(0.95rem + env(safe-area-inset-bottom))"
+            : undefined,
       }}
     >
       <div
         className={cn(
-          "mx-auto grid min-h-11 w-full max-w-md items-center gap-1",
-          visibleItems.length + (overflowItems.length > 0 ? 1 : 0) === 4
-            ? "grid-cols-4"
-            : "grid-cols-3",
+          "pointer-events-auto mx-auto grid min-h-16 w-full max-w-lg items-center gap-1 rounded-[2rem] border border-border/75 bg-background/95 p-1.5 shadow-[0_16px_44px_rgba(26,34,40,0.16)] backdrop-blur-2xl",
+          "grid-cols-4",
         )}
       >
         {visibleItems.map(({ href, Icon, label, isActive, badge }) => (
@@ -174,52 +112,6 @@ export const MobileNavigation = () => {
             badge={badge}
           />
         ))}
-        {overflowItems.length > 0 ? (
-          <div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  aria-label="Mở thêm chức năng"
-                  className={cn(
-                    "relative h-11 w-full min-w-0 flex-col gap-0.5 rounded-none border-t-2 border-transparent bg-transparent px-1 py-0.5 transition-colors",
-                    overflowActive
-                      ? "border-primary text-primary hover:bg-transparent hover:text-primary"
-                      : "text-muted-foreground hover:bg-transparent hover:text-foreground",
-                  )}
-                >
-                  <MoreHorizontal className="size-4 shrink-0" />
-                  <span className="max-w-full text-center text-[0.6875rem] font-semibold leading-tight break-words">
-                    Thêm
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                side="top"
-                sideOffset={12}
-                className="mb-1 w-56 rounded-xl p-2 shadow-[0_16px_45px_rgba(15,23,42,0.18)]"
-              >
-                {overflowItems.map(({ href, Icon, label, isActive }) => (
-                  <DropdownMenuItem
-                    key={href}
-                    asChild
-                    className={cn(
-                      "rounded-lg px-3 py-2.5 text-sm",
-                      isActive && "bg-accent text-accent-foreground",
-                    )}
-                  >
-                    <Link to={href} className="flex items-center gap-3">
-                      <Icon className="size-4" />
-                      <span className="font-medium">{label}</span>
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : null}
       </div>
     </nav>
   );
@@ -242,17 +134,22 @@ const NavigationButton = ({
     asChild
     variant="ghost"
     className={cn(
-      "relative h-11 w-full min-w-0 flex-col gap-0.5 rounded-none border-t-2 border-transparent bg-transparent px-1 py-0.5 transition-colors",
+      "relative h-14 w-full min-w-0 flex-col gap-0.5 rounded-[1.55rem] border border-transparent bg-transparent px-1 py-1 transition-all active:scale-[0.98]",
       isActive
-        ? "border-primary text-primary hover:bg-transparent hover:text-primary"
-        : "text-muted-foreground hover:bg-transparent hover:text-foreground",
+        ? "bg-[#def3e7] text-[#117b5f] shadow-[inset_0_0_0_1px_rgba(17,123,95,0.22)] hover:bg-[#d4efdf] hover:text-[#117b5f]"
+        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
     )}
   >
     <Link to={href}>
-      <span className="relative">
+      <span
+        className={cn(
+          "relative grid size-8 place-items-center rounded-full transition-colors",
+          isActive ? "bg-[#117b5f] text-white shadow-sm" : "bg-transparent",
+        )}
+      >
         <Icon className="size-4 shrink-0" />
         {badge > 0 ? (
-          <span className="absolute -right-3 -top-2 min-w-4 rounded-full border border-background bg-destructive px-1 py-0.5 text-[0.625rem] font-bold leading-none text-white shadow-sm">
+          <span className="absolute -right-2 -top-1 min-w-4 rounded-full border border-background bg-destructive px-1 py-0.5 text-[0.625rem] font-bold leading-none text-white shadow-sm">
             {badge > 99 ? "99+" : badge}
           </span>
         ) : null}

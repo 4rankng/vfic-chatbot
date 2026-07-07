@@ -3,11 +3,10 @@ import {
   useAuthProvider,
   useGetIdentity,
   useLogout,
-  usePermissions,
   useTranslate,
   UserMenuContext,
 } from "ra-core";
-import { LogOut, User, Users } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { Link } from "react-router";
 import {
   DropdownMenu,
@@ -28,12 +27,10 @@ export type UserMenuProps = {};
 export function UserMenu() {
   const authProvider = useAuthProvider();
   const { data: identity } = useGetIdentity();
-  const { permissions } = usePermissions();
   const logout = useLogout();
   const translate = useTranslate();
 
   const [open, setOpen] = useState(false);
-  const isAdmin = permissions === "admin";
 
   const handleToggleOpen = useCallback(() => {
     setOpen((prevOpen) => !prevOpen);
@@ -77,18 +74,6 @@ export function UserMenu() {
               {translate("crm.profile.title")}
             </Link>
           </DropdownMenuItem>
-          {isAdmin && (
-            <DropdownMenuItem asChild>
-              <Link
-                to="/users"
-                onClick={handleClose}
-                className="flex items-center gap-2"
-              >
-                <Users className="h-4 w-4" />
-                {translate("resources.users.name", { smart_count: 2 })}
-              </Link>
-            </DropdownMenuItem>
-          )}
           <DropdownMenuItem onClick={() => logout()} className="cursor-pointer">
             <LogOut className="mr-2 h-4 w-4" />
             {translate("ra.auth.logout")}

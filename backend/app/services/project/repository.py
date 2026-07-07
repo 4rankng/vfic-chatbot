@@ -7,13 +7,22 @@ The service layer delegates to :class:`ProjectRepository` for anything that touc
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company, Project
-from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeStatus
+from app.models.knowledge import (
+    KBTextFile,
+    KBVersion,
+    KBVersionStatus,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeStatus,
+)
 from app.services.errors import NotFoundError
+from app.services.knowledge.text_ingestion import kb_text_stats
 
 
 class ProjectRepository:
@@ -27,15 +36,17 @@ class ProjectRepository:
             return {}
         rows = (
             await self.db.execute(
-                select(KnowledgeDocument.project_id, func.count(KnowledgeDocument.id))
-                .where(
-                    KnowledgeDocument.project_id.in_(project_ids),
-                    KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
-                )
-                .group_by(KnowledgeDocument.project_id)
+                text(
+                    "SELECT p.id AS project_id, count(ktf.id) AS file_count "
+                    "FROM projects p "
+                    "LEFT JOIN kb_text_files ktf ON ktf.kb_version_id = p.active_kb_version_id "
+                    "WHERE p.id = ANY(CAST(:ids AS uuid[])) "
+                    "GROUP BY p.id"
+                ),
+                {"ids": [str(pid) for pid in project_ids]},
             )
         ).all()
-        return {row[0]: int(row[1]) for row in rows if row[0] is not None}
+        return {row.project_id: int(row.file_count) for row in rows if row.project_id is not None}
 
     async def count_bus_routes(self, project_id: uuid.UUID) -> int:
         return int(
@@ -97,11 +108,15 @@ class ProjectRepository:
                 await self.db.execute(
                     text(
                         "SELECT kc.id, kc.content, kc.questions, "
-                        "       kc.metadata ->> 'source_anchor' AS source_anchor, kd.file_name "
+                        "       kc.metadata ->> 'source_anchor' AS source_anchor, "
+                        "       COALESCE(ktf.filename, kd.file_name) AS file_name "
                         "FROM knowledge_chunks kc "
                         "JOIN knowledge_documents kd ON kd.id = kc.document_id "
+                        "JOIN projects p ON p.id = kd.project_id "
+                        "LEFT JOIN kb_text_files ktf ON ktf.id = kc.file_id "
                         "WHERE kd.project_id = :pid "
                         "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
+                        "  AND kc.kb_version_id = p.active_kb_version_id "
                         "  AND kc.category = 'faq' "
                         "ORDER BY kc.created_at DESC, kc.chunk_index ASC "
                         "LIMIT :limit"
@@ -120,12 +135,16 @@ class ProjectRepository:
                 await self.db.execute(
                     text(
                         "SELECT kc.id, kc.document_id, kc.content, kc.questions, "
-                        "       kc.metadata ->> 'source_anchor' AS source_anchor, kd.file_name "
+                        "       kc.metadata ->> 'source_anchor' AS source_anchor, "
+                        "       COALESCE(ktf.filename, kd.file_name) AS file_name "
                         "FROM knowledge_chunks kc "
                         "JOIN knowledge_documents kd ON kd.id = kc.document_id "
+                        "JOIN projects p ON p.id = kd.project_id "
+                        "LEFT JOIN kb_text_files ktf ON ktf.id = kc.file_id "
                         "WHERE kd.project_id = :pid "
                         "  AND kc.id = :cid "
                         "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
+                        "  AND kc.kb_version_id = p.active_kb_version_id "
                         "  AND kc.category = 'faq' "
                         "LIMIT 1"
                     ),
@@ -204,6 +223,79 @@ class ProjectRepository:
         await self.db.flush()
         return doc
 
+    async def ensure_active_faq_file(self, project: Project, document: KnowledgeDocument) -> KBTextFile:
+        version = None
+        if project.active_kb_version_id is not None:
+            version = await self.db.get(KBVersion, project.active_kb_version_id)
+        if version is None:
+            version = (
+                await self.db.scalars(
+                    select(KBVersion)
+                    .where(
+                        KBVersion.project_id == project.id,
+                        KBVersion.status == KBVersionStatus.ACTIVE,
+                    )
+                    .order_by(KBVersion.version_no.desc())
+                    .limit(1)
+                )
+            ).first()
+            if version is not None:
+                project.active_kb_version_id = version.id
+        if version is None:
+            next_version = int(
+                await self.db.scalar(
+                    select(func.coalesce(func.max(KBVersion.version_no), 0) + 1).where(
+                        KBVersion.project_id == project.id
+                    )
+                )
+                or 1
+            )
+            version = KBVersion(
+                project_id=project.id,
+                version_no=next_version,
+                status=KBVersionStatus.ACTIVE,
+                published_at=datetime.now(UTC),
+            )
+            self.db.add(version)
+            await self.db.flush()
+            project.active_kb_version_id = version.id
+        raw_text = document.raw_text or ""
+        stats = kb_text_stats(raw_text)
+        text_file = (
+            await self.db.scalars(
+                select(KBTextFile)
+                .where(KBTextFile.document_id == document.id)
+                .order_by(KBTextFile.created_at.asc())
+                .limit(1)
+            )
+        ).first()
+        if text_file is None:
+            text_file = KBTextFile(
+                project_id=project.id,
+                kb_version_id=version.id,
+                document_id=document.id,
+                filename=document.file_name,
+                mime_type=document.mime_type or "text/markdown",
+                raw_text=raw_text,
+                normalized_text=stats.normalized_text,
+                content_sha256=stats.content_sha256,
+                char_count=stats.char_count,
+                line_count=stats.line_count,
+            )
+            self.db.add(text_file)
+        else:
+            text_file.project_id = project.id
+            text_file.kb_version_id = version.id
+            text_file.filename = document.file_name
+            text_file.mime_type = document.mime_type or "text/markdown"
+            text_file.raw_text = raw_text
+            text_file.normalized_text = stats.normalized_text
+            text_file.content_sha256 = stats.content_sha256
+            text_file.char_count = stats.char_count
+            text_file.line_count = stats.line_count
+        await self.db.flush()
+        return text_file
+
     async def delete_faq_chunk(self, chunk_id: uuid.UUID) -> None:
         chunk = await self.db.get(KnowledgeChunk, chunk_id)
         if chunk:
@@ -235,9 +327,12 @@ class ProjectRepository:
         return (
             await self.db.scalars(
                 select(KnowledgeDocument)
+                .join(KBTextFile, KBTextFile.document_id == KnowledgeDocument.id)
+                .join(Project, Project.active_kb_version_id == KBTextFile.kb_version_id)
                 .where(
                     KnowledgeDocument.project_id == project_id,
                     KnowledgeDocument.raw_text.is_not(None),
+                    Project.id == project_id,
                 )
                 .order_by(KnowledgeDocument.created_at.desc())
                 .limit(1)

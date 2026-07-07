@@ -1,58 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNotify } from "ra-core";
-import { Link } from "react-router";
-import type {
-  Conversation,
-  Lead,
-  LeadChatOpsActionResult,
-  LeadTag,
-} from "../types";
+import { useMemo } from "react";
+import type { Lead } from "../types";
 import {
-  BookOpen,
-  BotMessageSquare,
-  Briefcase,
   BusFront,
   CalendarDays,
   Check,
-  CheckCircle2,
   CircleDollarSign,
-  Copy,
   FileBadge,
   Handshake,
   Home,
   MapPin,
   NotepadText,
   Phone,
-  Plus,
-  Sparkles,
   UserRound,
-  WandSparkles,
-  Workflow,
   type LucideIcon,
 } from "lucide-react";
-import { type ConversationMode } from "./useConversationActions";
-import {
-  deriveSystemTags,
-  dispatchLeadTagsUpdated,
-  fetchLeadAssist,
-  fetchLeadTags,
-  getAiAssistInsights,
-  getAutomationRecipes,
-  getTagMeta,
-  type ManualLeadTagInput,
-  OPERATIONAL_TAGS,
-  readRecentLeadTags,
-  rememberRecentLeadTags,
-  saveLeadTags,
-} from "./chatOpsWorkspace";
 
 const display = (value: unknown, fallback = "Chưa có dữ liệu") => {
   if (value === undefined || value === null) return fallback;
   const text = String(value).trim();
   return text || fallback;
 };
-
-type ContextTab = "candidate" | "assist" | "agent";
 
 type CandidateInfoItem = {
   key: string;
@@ -72,38 +39,15 @@ const notesInclude = (notes: string | null | undefined, terms: string[]) => {
 
 export const ConversationContextPanel = ({
   lead,
-  conversation,
-  activeMode,
-  saving,
   open,
   onClose,
   onOpenProfile,
-  onRunChatOpsAction,
 }: {
   lead?: Lead;
-  conversation?: Conversation;
-  activeMode: ConversationMode;
-  saving: string | null;
   open: boolean;
   onClose: () => void;
   onOpenProfile: () => void;
-  onRunChatOpsAction: (
-    action: string,
-  ) => Promise<LeadChatOpsActionResult | null>;
 }) => {
-  const disabled = !lead || saving !== null;
-  const notify = useNotify();
-  const [activeTab, setActiveTab] = useState<ContextTab>("candidate");
-  const [serverTags, setServerTags] = useState<LeadTag[]>([]);
-  const [serverAssist, setServerAssist] = useState<
-    LeadChatOpsActionResult["assist"] | null
-  >(null);
-  const [tagSaving, setTagSaving] = useState<string | null>(null);
-  const [tagPickerOpen, setTagPickerOpen] = useState(false);
-  const [customTagInput, setCustomTagInput] = useState("");
-  const [recentTags, setRecentTags] = useState<ManualLeadTagInput[]>(() =>
-    readRecentLeadTags(),
-  );
   const candidateInfoItems = useMemo<CandidateInfoItem[]>(() => {
     const notes = lead?.notes;
     const dateOfBirth = lead?.birth_year
@@ -133,6 +77,7 @@ export const ConversationContextPanel = ({
       "tuyến xe",
       "tuyen xe",
     ]);
+
     return [
       {
         key: "name",
@@ -167,7 +112,7 @@ export const ConversationContextPanel = ({
         label: "Kinh nghiệm",
         value: display(lead?.years_experience),
         complete: hasMeaningfulValue(lead?.years_experience),
-        Icon: Briefcase,
+        Icon: FileBadge,
       },
       {
         key: "expectation",
@@ -185,7 +130,7 @@ export const ConversationContextPanel = ({
       },
       {
         key: "housing",
-        label: "Yêu cầu chỗ ở",
+        label: "Chỗ ở",
         value: hasHousing ? "Đã ghi trong ghi chú" : "Cần hỏi thêm",
         complete: hasHousing,
         Icon: Home,
@@ -213,218 +158,26 @@ export const ConversationContextPanel = ({
       },
       {
         key: "notes",
-        label: "Ghi chú tuyển dụng",
+        label: "Ghi chú",
         value: display(lead?.notes),
         complete: hasMeaningfulValue(lead?.notes),
         Icon: NotepadText,
       },
     ];
   }, [lead]);
-  const completedCandidateInfoCount = candidateInfoItems.filter(
-    (item) => item.complete,
-  ).length;
-  const fallbackTags = useMemo<LeadTag[]>(
-    () =>
-      deriveSystemTags(lead, conversation).map((key) => {
-        const meta = getTagMeta(key);
-        return { key, label: meta.label, tone: meta.tone, system: true };
-      }),
-    [lead, conversation],
-  );
-  const activeTags = serverTags.length > 0 ? serverTags : fallbackTags;
-  const activeTagSet = useMemo(
-    () => new Set(activeTags.map((tag) => tag.key)),
-    [activeTags],
-  );
-  const manualTags = useMemo<ManualLeadTagInput[]>(
-    () =>
-      activeTags
-        .filter((tag) => !tag.system)
-        .map((tag) => ({ key: tag.key, label: tag.label, tone: tag.tone })),
-    [activeTags],
-  );
-  const activeTagLabels = useMemo(
-    () => new Set(activeTags.map((tag) => tag.label.trim().toLowerCase())),
-    [activeTags],
-  );
-  const suggestedTags = useMemo<ManualLeadTagInput[]>(() => {
-    const candidates: ManualLeadTagInput[] = [];
-    if (!lead?.phone?.trim()) {
-      candidates.push({
-        key: "can_xin_sdt",
-        label: "Cần xin SĐT",
-        tone: "warn",
-      });
-    }
-    if (!lead?.desired_job?.trim()) {
-      candidates.push({
-        key: "chua_ro_cong_viec",
-        label: "Chưa rõ công việc",
-        tone: "info",
-      });
-    }
-    if (!lead?.region?.trim() && !lead?.living_area?.trim()) {
-      candidates.push({
-        key: "chua_ro_khu_vuc",
-        label: "Chưa rõ khu vực",
-        tone: "info",
-      });
-    }
-    if (!lead?.next_action_at) {
-      candidates.push({
-        key: "can_hen_follow_up",
-        label: "Cần hẹn follow-up",
-        tone: "info",
-      });
-    }
-    return candidates
-      .filter((tag) => !activeTagLabels.has(tag.label.toLowerCase()))
-      .slice(0, 2);
-  }, [activeTagLabels, lead]);
-  const availableRecentTags = useMemo(
-    () =>
-      recentTags
-        .filter((tag) => !activeTagSet.has(tag.key))
-        .filter((tag) => !activeTagLabels.has(tag.label.trim().toLowerCase()))
-        .slice(0, 4),
-    [activeTagLabels, activeTagSet, recentTags],
-  );
-  const fallbackAssist = useMemo(
-    () => getAiAssistInsights(lead, conversation),
-    [lead, conversation],
-  );
-  const fallbackRecipes = useMemo(
-    () => getAutomationRecipes(lead, conversation),
-    [lead, conversation],
-  );
-  const assist = {
-    summary: serverAssist?.summary ?? fallbackAssist.summary,
-    missing: serverAssist?.missing ?? fallbackAssist.missing,
-    reply: serverAssist?.reply ?? fallbackAssist.reply,
-    nextAction: serverAssist?.next_action ?? fallbackAssist.nextAction,
-    modeLabel: serverAssist?.mode_label ?? fallbackAssist.modeLabel,
-  };
-  const recipes = serverAssist?.signals ?? fallbackRecipes;
-
-  useEffect(() => {
-    if (!lead?.id) {
-      setServerTags([]);
-      setServerAssist(null);
-      setTagPickerOpen(false);
-      setCustomTagInput("");
-      return;
-    }
-    if (!open) return;
-    setTagPickerOpen(false);
-    setCustomTagInput("");
-    let cancelled = false;
-    (async () => {
-      try {
-        const [tags, assistPayload] = await Promise.all([
-          fetchLeadTags(lead.id),
-          fetchLeadAssist(lead.id),
-        ]);
-        if (cancelled) return;
-        setServerTags(tags);
-        setServerAssist(assistPayload);
-      } catch {
-        if (cancelled) return;
-        setServerTags([]);
-        setServerAssist(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [lead?.id, conversation?.id, open]);
-
-  const saveManualTags = async (nextTags: ManualLeadTagInput[]) => {
-    if (!lead) return;
-    try {
-      const tags = await saveLeadTags(lead.id, nextTags);
-      setServerTags(tags);
-      const nextRecent = tags
-        .filter((tag) => !tag.system)
-        .map((tag) => ({ key: tag.key, label: tag.label, tone: tag.tone }));
-      rememberRecentLeadTags(nextRecent);
-      setRecentTags(readRecentLeadTags());
-      dispatchLeadTagsUpdated(lead.id);
-      notify("Đã cập nhật thẻ ứng viên.", { type: "success" });
-    } catch (e) {
-      notify((e as Error).message || "Không thể cập nhật thẻ", {
-        type: "error",
-      });
-      throw e;
-    }
-  };
-
-  const handleToggleTag = async (tag: ManualLeadTagInput) => {
-    if (!lead) return;
-    const current = new Map(manualTags.map((item) => [item.key, item]));
-    if (current.has(tag.key)) current.delete(tag.key);
-    else {
-      current.set(tag.key, {
-        key: tag.key,
-        label: tag.label.trim(),
-        tone: tag.tone ?? "info",
-      });
-    }
-    setTagSaving(tag.key);
-    try {
-      await saveManualTags(Array.from(current.values()));
-    } finally {
-      setTagSaving(null);
-    }
-  };
-
-  const handleAddCustomTag = async () => {
-    const label = customTagInput.trim();
-    if (!label || !lead) return;
-    if (activeTagLabels.has(label.toLowerCase())) {
-      setCustomTagInput("");
-      return;
-    }
-    setTagSaving(label);
-    try {
-      await saveManualTags([
-        ...manualTags,
-        { key: label, label, tone: "info" },
-      ]);
-      setCustomTagInput("");
-    } finally {
-      setTagSaving(null);
-    }
-  };
-
-  const handleRunAction = async (action?: string | null) => {
-    if (!action) return;
-    const result = await onRunChatOpsAction(action);
-    if (!result) return;
-    setServerTags(result.tags);
-    setServerAssist(result.assist);
-  };
-
-  const copySuggestedReply = async () => {
-    try {
-      await navigator.clipboard.writeText(assist.reply);
-      notify("Đã sao chép gợi ý trả lời.", { type: "success" });
-    } catch {
-      notify("Không thể sao chép gợi ý.", { type: "warning" });
-    }
-  };
 
   return (
     <aside
       className={`panel right-panel ${open ? "context-open" : ""}`}
-      aria-label="Bảng ngữ cảnh hội thoại"
+      aria-label="Thông tin ứng viên"
       aria-hidden={!open}
     >
       <header className="profile-header">
         <div className="profile-title">
-          <Sparkles className="icon" aria-hidden="true" />
+          <UserRound className="icon" aria-hidden="true" />
           <span className="profile-title-copy">
-            <span>Việc cần làm</span>
-            <small>Ngữ cảnh hội thoại</small>
+            <span>{display(lead?.name, "Ứng viên")}</span>
+            <small>{display(lead?.phone, "Chưa có số điện thoại")}</small>
           </span>
         </div>
         <div className="context-header-actions">
@@ -439,358 +192,28 @@ export const ConversationContextPanel = ({
             type="button"
             className="context-close"
             onClick={onClose}
-            aria-label="Đóng ngữ cảnh"
+            aria-label="Đóng thông tin ứng viên"
           >
             ×
           </button>
         </div>
       </header>
-      <div className="context-tabs" role="tablist" aria-label="Nhóm ngữ cảnh">
-        <ContextTabButton
-          active={activeTab === "candidate"}
-          label="Tóm tắt"
-          onClick={() => setActiveTab("candidate")}
-        />
-        <ContextTabButton
-          active={activeTab === "assist"}
-          label="AI gợi ý"
-          onClick={() => setActiveTab("assist")}
-        />
-        <ContextTabButton
-          active={activeTab === "agent"}
-          label="Agent"
-          onClick={() => setActiveTab("agent")}
-        />
-      </div>
+
       <div className="profile-scroll">
-        <section className="context-overview">
-          <div className="context-overview-copy">
-            <span className="context-overview-kicker">Thẻ ứng viên</span>
-            <h2>Phân loại hội thoại</h2>
-            <p>
-              Gắn thẻ để lọc lại ứng viên và nhắc đội tư vấn xử lý đúng việc.
-            </p>
+        <section className="context-card">
+          <div className="section-head">
+            <h3>Thông tin ứng viên</h3>
           </div>
-          <div className="context-subject">
-            <span className="context-subject-name">
-              {display(lead?.name, "Ứng viên chưa liên kết")}
-            </span>
-            <span className="context-subject-role">
-              {display(lead?.desired_job, "Chưa có vị trí mong muốn")}
-            </span>
-          </div>
-          <div className="context-tags">
-            {activeTags.map((tag) => (
-              <span
-                key={tag.key}
-                className={`tag operational-tag ${tag.tone}`}
-                title={tag.system ? "Thẻ hệ thống tự cập nhật" : "Thẻ thủ công"}
-              >
-                {tag.label}
-              </span>
+          <div className="candidate-info-grid">
+            {candidateInfoItems.map((item) => (
+              <CandidateInfoRow key={item.key} item={item} />
             ))}
-            <button
-              type="button"
-              className="tag-add-button tag-add-button--labeled"
-              disabled={!lead}
-              aria-label="Thêm hoặc sửa thẻ ứng viên"
-              aria-expanded={tagPickerOpen}
-              onClick={() => setTagPickerOpen((open) => !open)}
-              title="Thêm hoặc sửa thẻ"
-            >
-              <Plus className="icon" aria-hidden="true" />
-              <span>Thẻ</span>
-            </button>
           </div>
         </section>
-
-        {activeTab === "candidate" && (
-          <>
-            {tagPickerOpen && (
-              <section className="context-card">
-                <div className="section-head">
-                  <h3>Gắn thẻ</h3>
-                </div>
-                <div className="tag-custom-row">
-                  <input
-                    value={customTagInput}
-                    onChange={(event) => setCustomTagInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void handleAddCustomTag();
-                      }
-                    }}
-                    placeholder="Nhập thẻ riêng..."
-                    disabled={!lead || tagSaving !== null}
-                    aria-label="Thẻ tùy chỉnh"
-                  />
-                  <button
-                    type="button"
-                    disabled={
-                      !lead || !customTagInput.trim() || tagSaving !== null
-                    }
-                    onClick={() => {
-                      void handleAddCustomTag();
-                    }}
-                  >
-                    Thêm
-                  </button>
-                </div>
-                {suggestedTags.length > 0 && (
-                  <TagPickerGroup
-                    title="Gợi ý"
-                    tags={suggestedTags}
-                    activeTagSet={activeTagSet}
-                    tagSaving={tagSaving}
-                    disabled={!lead}
-                    onToggle={handleToggleTag}
-                  />
-                )}
-                {availableRecentTags.length > 0 && (
-                  <TagPickerGroup
-                    title="Gần đây"
-                    tags={availableRecentTags}
-                    activeTagSet={activeTagSet}
-                    tagSaving={tagSaving}
-                    disabled={!lead}
-                    onToggle={handleToggleTag}
-                  />
-                )}
-                <div className="tag-picker-label">Có sẵn</div>
-                <div className="tag-picker" aria-label="Gắn thẻ ứng viên">
-                  {OPERATIONAL_TAGS.map((tag) => {
-                    const selected = activeTagSet.has(tag.key);
-                    const activeTag = activeTags.find(
-                      (item) => item.key === tag.key,
-                    );
-                    const isSystemTag = Boolean(
-                      tag.system || activeTag?.system,
-                    );
-                    return (
-                      <button
-                        key={tag.key}
-                        type="button"
-                        className={`tag-picker-chip ${tag.tone} ${
-                          selected ? "active" : ""
-                        }`}
-                        disabled={!lead || isSystemTag || tagSaving === tag.key}
-                        onClick={() => {
-                          void handleToggleTag({
-                            key: tag.key,
-                            label: tag.label,
-                            tone: tag.tone,
-                          });
-                        }}
-                        title={
-                          isSystemTag ? "Thẻ hệ thống tự cập nhật" : tag.label
-                        }
-                      >
-                        {tagSaving === tag.key ? "Đang lưu..." : tag.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            <section className="context-card">
-              <div className="section-head">
-                <h3>Thông tin cần dùng</h3>
-                <span className="completion-pill">
-                  {completedCandidateInfoCount}/{candidateInfoItems.length}
-                </span>
-              </div>
-              <div className="candidate-info-grid">
-                {candidateInfoItems.map((item) => (
-                  <CandidateInfoRow key={item.key} item={item} />
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-
-        {activeTab === "assist" && (
-          <>
-            <section className="context-card">
-              <div className="section-head">
-                <h3>Gợi ý nhanh</h3>
-              </div>
-              <div className="assist-stack">
-                <div className="assist-block">
-                  <span className="assist-label">Tóm tắt</span>
-                  <p>{assist.summary}</p>
-                </div>
-                <div className="assist-block">
-                  <span className="assist-label">Thiếu thông tin</span>
-                  <p>
-                    {assist.missing.length > 0
-                      ? assist.missing.join(", ")
-                      : "Đủ trường chính"}
-                  </p>
-                </div>
-                <div className="assist-block suggested-reply">
-                  <span className="assist-label">Gợi ý trả lời</span>
-                  <p>{assist.reply}</p>
-                  <button
-                    type="button"
-                    className="inline-tool-btn"
-                    onClick={copySuggestedReply}
-                  >
-                    <Copy className="icon" aria-hidden="true" />
-                    <span>Sao chép</span>
-                  </button>
-                </div>
-                <div className="assist-block">
-                  <span className="assist-label">Bước tiếp theo</span>
-                  <p>{assist.nextAction}</p>
-                </div>
-              </div>
-            </section>
-
-            <section className="context-card">
-              <div className="section-head">
-                <h3>Tín hiệu</h3>
-              </div>
-              <div className="recipe-list">
-                {recipes.map((recipe) => (
-                  <div
-                    key={recipe.key}
-                    className={`recipe-row ${recipe.active ? "active" : ""}`}
-                  >
-                    <Workflow className="icon" aria-hidden="true" />
-                    <span>
-                      <span className="recipe-name">{recipe.name}</span>
-                      <span className="recipe-status">{recipe.status}</span>
-                    </span>
-                    {recipe.action && (
-                      <button
-                        type="button"
-                        className="inline-tool-btn recipe-action"
-                        disabled={disabled}
-                        onClick={() => {
-                          void handleRunAction(recipe.action);
-                        }}
-                      >
-                        <span>Áp dụng</span>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-
-        {activeTab === "agent" && (
-          <section className="context-card">
-            <div className="section-head">
-              <h3>Sức khỏe agent</h3>
-            </div>
-            <div className="health-list">
-              <ContextStatus
-                Icon={WandSparkles}
-                label="Chế độ"
-                value={assist.modeLabel}
-                healthy={activeMode !== "closed"}
-              />
-              <ContextStatus
-                Icon={CheckCircle2}
-                label="Thông tin ứng viên"
-                value={
-                  assist.missing.length === 0
-                    ? "Đủ dữ liệu chính"
-                    : `Thiếu ${assist.missing.length} trường`
-                }
-                healthy={assist.missing.length === 0}
-              />
-              <ContextStatus
-                Icon={BookOpen}
-                label="Training"
-                value="Mở knowledge để kiểm tra nguồn"
-                healthy
-              />
-            </div>
-            <div className="context-link-list">
-              <Link to="/knowledge_sources" className="context-link">
-                <BookOpen className="icon" aria-hidden="true" />
-                <span>Training knowledge</span>
-              </Link>
-              <Link to="/personas" className="context-link">
-                <BotMessageSquare className="icon" aria-hidden="true" />
-                <span>Manage agent</span>
-              </Link>
-              <Link to="/projects" className="context-link">
-                <Briefcase className="icon" aria-hidden="true" />
-                <span>Project catalog</span>
-              </Link>
-            </div>
-          </section>
-        )}
       </div>
     </aside>
   );
 };
-
-const ContextTabButton = ({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) => (
-  <button
-    type="button"
-    role="tab"
-    aria-selected={active}
-    className={`context-tab ${active ? "active" : ""}`}
-    onClick={onClick}
-  >
-    {label}
-  </button>
-);
-
-const TagPickerGroup = ({
-  title,
-  tags,
-  activeTagSet,
-  tagSaving,
-  disabled,
-  onToggle,
-}: {
-  title: string;
-  tags: ManualLeadTagInput[];
-  activeTagSet: Set<string>;
-  tagSaving: string | null;
-  disabled: boolean;
-  onToggle: (tag: ManualLeadTagInput) => Promise<void>;
-}) => (
-  <div className="tag-picker-group">
-    <div className="tag-picker-label">{title}</div>
-    <div className="tag-picker" aria-label={title}>
-      {tags.map((tag) => {
-        const selected = activeTagSet.has(tag.key);
-        return (
-          <button
-            key={`${title}-${tag.key}`}
-            type="button"
-            className={`tag-picker-chip ${tag.tone ?? "info"} ${
-              selected ? "active" : ""
-            }`}
-            disabled={disabled || tagSaving === tag.key}
-            onClick={() => {
-              void onToggle(tag);
-            }}
-          >
-            {tagSaving === tag.key ? "Đang lưu..." : tag.label}
-          </button>
-        );
-      })}
-    </div>
-  </div>
-);
 
 const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
   const Icon = item.Icon;
@@ -809,25 +232,3 @@ const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
     </div>
   );
 };
-
-const ContextStatus = ({
-  Icon,
-  label,
-  value,
-  healthy,
-}: {
-  Icon: LucideIcon;
-  label: string;
-  value: string;
-  healthy: boolean;
-}) => (
-  <div className={`context-status ${healthy ? "healthy" : "warning"}`}>
-    <span className="detail-icon">
-      <Icon className="icon" aria-hidden="true" />
-    </span>
-    <span>
-      <span className="detail-label">{label}</span>
-      <span className="detail-value">{value}</span>
-    </span>
-  </div>
-);

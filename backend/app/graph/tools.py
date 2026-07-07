@@ -84,6 +84,9 @@ def _format_knowledge_row(r) -> str:
     chunk_meta = metadata.get("chunk_metadata") or {}
     source = citation.get("label") or document_meta.get("title") or "Nguồn kiến thức"
     anchor = citation.get("source_anchor") or metadata.get("source_anchor")
+    source_file = getattr(r, "source_file", None)
+    line_start = getattr(r, "line_start", None)
+    line_end = getattr(r, "line_end", None)
     effective = document_meta.get("effective_from")
     if document_meta.get("effective_to"):
         effective = (
@@ -93,6 +96,12 @@ def _format_knowledge_row(r) -> str:
         )
     route = chunk_meta.get("route_id")
     suffix = f" Nguồn: {source}"
+    if source_file:
+        suffix += f"; file: {source_file}"
+    if line_start:
+        suffix += f"; dòng: {line_start}"
+        if line_end and line_end != line_start:
+            suffix += f"-{line_end}"
     if anchor:
         suffix += f" ({anchor})"
     if effective:

@@ -1,11 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
-import { CircleX, Pencil, Save } from "lucide-react";
+import { CircleX, LogOut, Pencil, Save } from "lucide-react";
 import {
   Form,
   useGetIdentity,
   useGetOne,
   useLocaleState,
   useLocales,
+  useLogout,
   useNotify,
   useTranslate,
 } from "ra-core";
@@ -106,6 +107,7 @@ const ProfileForm = ({
 }) => {
   const translate = useTranslate();
   const { identity } = useGetIdentity();
+  const logout = useLogout();
   const { isDirty } = useFormState();
 
   if (!identity) return null;
@@ -147,6 +149,28 @@ const ProfileForm = ({
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border bg-card shadow-xs">
+        <CardContent className="flex items-center justify-between gap-4 pt-6">
+          <div className="min-w-0">
+            <div className="font-display text-lg font-bold tracking-wider uppercase text-foreground">
+              Đăng xuất
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Thoát khỏi phiên làm việc trên thiết bị này.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => logout()}
+            className="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="size-4" />
+            {translate("ra.auth.logout")}
+          </Button>
         </CardContent>
       </Card>
     </div>
