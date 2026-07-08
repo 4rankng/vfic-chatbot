@@ -50,6 +50,35 @@ def test_zalo_oa_signature_verifier_accepts_documented_digest():
     )
 
 
+def test_zalo_oa_signature_uses_timestamp_header_not_body():
+    """Zalo signs with the X-ZEvent-Timestamp HEADER value, not the body field.
+
+    Regression: the verifier used to read the body timestamp and permanently
+    returned 401 because the header and body timestamps need not be equal.
+    """
+    from app.api.webhooks import _verify_oa_signature
+
+    payload = {
+        "app_id": "app-1",
+        "event_name": "user_send_text",
+        "sender": {"id": "u1"},
+        "message": {"text": "hi", "msg_id": "m1"},
+        "timestamp": "body-ts-not-used",
+    }
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    header_ts = "1700000000000"
+    digest = hashlib.sha256(b"app-1" + raw + header_ts.encode() + b"secret").hexdigest()
+
+    assert _verify_oa_signature(
+        signature=f"mac={digest}",
+        raw=raw,
+        payload=payload,
+        app_id="app-1",
+        secret_key="secret",
+        timestamp_header=header_ts,
+    )
+
+
 def test_zalo_oa_normalizer_maps_text_message_to_scoped_chat_id():
     from app.services.webhook import ZaloWebhookService
 
