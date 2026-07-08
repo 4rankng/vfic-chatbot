@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
 from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage
-from app.models.user import Role, User
+from app.models.user import User
 from app.services.viewer_scope import viewer_scope_condition, viewer_scope_filter
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError
@@ -85,12 +85,7 @@ class LeadService:
         q: str | None = None,
         sort_by: str | None = None,
         order: str | None = "desc",
-        materialize: bool = True,
     ) -> tuple[list[Lead], int]:
-        if materialize:
-            await self.repo.materialize_conversation_leads(
-                viewer.id if viewer.role != Role.admin else None
-            )
         base = viewer_scope_filter(select(Lead), Lead.assigned_recruiter_id, viewer)
         if stage is not None:
             base = base.where(Lead.lead_stage == stage)
@@ -151,9 +146,6 @@ class LeadService:
         sort_by: str | None = None,
         order: str | None = "desc",
     ) -> tuple[list[dict], int]:
-        await self.repo.materialize_conversation_leads(
-            viewer.id if viewer.role != Role.admin else None
-        )
         sections: list[dict] = []
         configs: list[dict] = [
             {
@@ -185,7 +177,6 @@ class LeadService:
                 q=q,
                 sort_by=sort_by,
                 order=order,
-                materialize=False,
                 **config["kwargs"],
             )
             total += section_total

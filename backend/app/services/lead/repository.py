@@ -59,57 +59,6 @@ _UPSQL = text(
     """
 )
 
-_MATERIALIZE_SQL_ADMIN = text("""
-    INSERT INTO public.leads (
-      zalo_id,
-      lead_stage,
-      assigned_recruiter_id,
-      created_at,
-      updated_at
-    )
-    SELECT
-      c.zalo_chat_id,
-      'NEW'::lead_stage,
-      c.assigned_recruiter_id,
-      now(),
-      c.updated_at
-    FROM public.conversations c
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM public.leads l
-      WHERE l.zalo_id = c.zalo_chat_id
-    )
-    ON CONFLICT (zalo_id) DO NOTHING
-    """)
-
-_MATERIALIZE_SQL_SCOPED = text("""
-    INSERT INTO public.leads (
-      zalo_id,
-      lead_stage,
-      assigned_recruiter_id,
-      created_at,
-      updated_at
-    )
-    SELECT
-      c.zalo_chat_id,
-      'NEW'::lead_stage,
-      c.assigned_recruiter_id,
-      now(),
-      c.updated_at
-    FROM public.conversations c
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM public.leads l
-      WHERE l.zalo_id = c.zalo_chat_id
-    )
-    AND (
-      c.assigned_recruiter_id = :viewer_id
-      OR c.assigned_recruiter_id IS NULL
-    )
-    ON CONFLICT (zalo_id) DO NOTHING
-    """)
-
-
 # ── Repository ─────────────────────────────────────────────────────
 
 
@@ -229,22 +178,6 @@ class LeadRepository:
             current.tone = payload["tone"]
         await self.db.flush()
         return await self.list_manual_tags(lead_id)
-
-    async def materialize_conversation_leads(self, viewer_id: object | None = None) -> None:
-        """Ensure every visible chat has a lead card.
-
-        Conversations are the source of "current chats"; lead extraction can run
-        later or fail to produce profile fields. The CRM board still needs a
-        stable card for that chat, defaulting to the Mới stage.
-        """
-        sql = _MATERIALIZE_SQL_SCOPED if viewer_id is not None else _MATERIALIZE_SQL_ADMIN
-        params = {"viewer_id": viewer_id} if viewer_id is not None else {}
-
-        await self.db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext('materialize_conversation_leads'))")
-        )
-        await self.db.execute(sql, params)
-        await self.db.commit()
 
 
 __all__ = ["LeadRepository"]
