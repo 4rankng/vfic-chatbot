@@ -13,7 +13,13 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, ZALO_BOT_API_BASE, ZALO_OA_API_BASE, get_settings
+from app.core.config import (
+    EMBEDDING_DIM,
+    Settings,
+    ZALO_BOT_API_BASE,
+    ZALO_OA_API_BASE,
+    get_settings,
+)
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
 
@@ -74,7 +80,7 @@ class OpenRouterRuntimeConfig:
     safety_model: str = ""
     digest_model: str = ""
     embedding_model: str = ""
-    embedding_dim: int = 3072
+    embedding_dim: int = EMBEDDING_DIM
 
 
 class IntegrationSettingsCipher:

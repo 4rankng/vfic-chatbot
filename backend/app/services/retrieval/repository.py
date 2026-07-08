@@ -18,10 +18,14 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.config import EMBEDDING_DIM, get_settings
 from app.core.text import normalize_vietnamese_text
 
 logger = logging.getLogger(__name__)
+
+# One-shot guard: a persistent embedding-dimension mismatch is logged once per
+# process instead of on every retrieval query.
+_ann_dim_mismatch_warned = False
 
 
 class RetrievalRepository:
@@ -69,8 +73,27 @@ class RetrievalRepository:
 
     @staticmethod
     def _ann_enabled() -> bool:
+        global _ann_dim_mismatch_warned
         s = get_settings()
-        return bool(s.rag_ann_enabled and s.embedding_dim == 3072)
+        if not s.rag_ann_enabled:
+            return False
+        if s.embedding_dim != EMBEDDING_DIM:
+            # The pgvector index is a fixed halfvec(EMBEDDING_DIM) HNSW; querying
+            # it with a different-width vector would fail or return garbage. Warn
+            # once and fall back to exact search instead of failing the turn.
+            if not _ann_dim_mismatch_warned:
+                logger.warning(
+                    "ANN retrieval disabled: configured embedding_dim=%d does not "
+                    "match the pgvector vector(%d)/halfvec(%d) index; falling back to "
+                    "exact search. Re-index with matching-dimension embeddings to "
+                    "re-enable ANN.",
+                    s.embedding_dim,
+                    EMBEDDING_DIM,
+                    EMBEDDING_DIM,
+                )
+                _ann_dim_mismatch_warned = True
+            return False
+        return True
 
     @staticmethod
     def _chunk_visibility(project_clause: str) -> str:

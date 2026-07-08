@@ -45,6 +45,17 @@ DIGEST_MAX_SECTIONS: int = 20
 INGEST_JOB_TIMEOUT_SECONDS: int = 3600
 
 
+# ---------------------------------------------------------------------------
+# Embedding vector dimension (schema-pinned, not freely configurable)
+# ---------------------------------------------------------------------------
+# pgvector stores embeddings as vector(3072) (migration 0001) and the ANN
+# candidate index is halfvec(3072) HNSW (migrations 0014/0016). The embedding
+# model's output dimension must equal this value: a mismatch breaks both writes
+# (wrong-width vector column) and ANN retrieval, so the retrieval layer gates ANN
+# on it and warns on drift instead of silently degrading to exact search.
+EMBEDDING_DIM: int = 3072
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -130,7 +141,7 @@ class Settings(BaseSettings):
     openrouter_embedding_timeout: int = 60
     gemini_api_key: str = ""
     gemini_embedding_model: str = "gemini-embedding-2"
-    embedding_dim: int = 3072
+    embedding_dim: int = EMBEDDING_DIM
 
     # Retrieval scaling. ``rag_ann_enabled`` uses pgvector halfvec HNSW for
     # candidate generation, then exact vector re-ranking preserves result quality.
