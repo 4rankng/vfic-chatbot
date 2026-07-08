@@ -1,6 +1,6 @@
 @media (max-width: 1320px) {
   .persona-studio-layout {
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .persona-studio-body {
@@ -34,7 +34,7 @@
   }
 
   .persona-studio-layout {
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .persona-studio-body {
@@ -56,7 +56,7 @@
   }
 
   .persona-directory-list {
-    max-height: 42dvh;
+    max-height: none;
   }
 
   .project-directory-list {
@@ -80,6 +80,10 @@
   .persona-studio-sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .persona-agent-picker {
+    padding: 14px 14px 0;
   }
 
   .persona-followup-grid,
@@ -130,6 +134,14 @@
 
   .persona-studio-body {
     padding: 12px;
+  }
+
+  .persona-agent-bubbles {
+    gap: 8px;
+  }
+
+  .inbox-bg-container .persona-workspace-content .persona-directory-row {
+    max-width: 100%;
   }
 
   .persona-studio-profile-head {

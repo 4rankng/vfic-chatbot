@@ -35,10 +35,18 @@ class ZaloIntegrationSettingsUpdate(BaseModel):
     zalo_oa_refresh_token: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
-class ZaloIntegrationTestOut(BaseModel):
-    bot_configured: bool
-    oa_configured: bool
+class ZaloChannelTestOut(BaseModel):
+    """Result of probing ONE Zalo channel (Bot Platform or OA).
+
+    The two channels are independent products with separate credentials, so each
+    card's "Test Connection" button probes only its own channel rather than the
+    old combined envelope that conflated both.
+    """
+
+    configured: bool
+    connected: bool = False
     missing: list[str]
+    errors: list[str] = Field(default_factory=list)
 
 
 class MinimaxIntegrationSettingsOut(BaseModel):

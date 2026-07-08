@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router";
 import {
+  Briefcase,
   Home,
   MessageCircle,
   Settings,
@@ -7,7 +8,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type WorkspaceNavKey = "home" | "conversations" | "settings" | "account";
+type WorkspaceNavKey =
+  | "home"
+  | "conversations"
+  | "projects"
+  | "settings"
+  | "account";
 
 type WorkspaceNavItem = {
   key: WorkspaceNavKey;
@@ -24,6 +30,12 @@ const WORKSPACE_NAV_ITEMS: WorkspaceNavItem[] = [
     href: "/conversations",
   },
   {
+    key: "projects",
+    label: "Dự án",
+    Icon: Briefcase,
+    href: "/projects",
+  },
+  {
     key: "settings",
     label: "Settings",
     Icon: Settings,
@@ -35,9 +47,9 @@ const WORKSPACE_NAV_ITEMS: WorkspaceNavItem[] = [
 const getActiveWorkspaceKey = (pathname: string): WorkspaceNavKey => {
   if (pathname.startsWith("/profile")) return "account";
   if (pathname.startsWith("/users")) return "account";
+  if (pathname.startsWith("/projects")) return "projects";
   if (pathname.startsWith("/knowledge_sources")) return "settings";
   if (pathname.startsWith("/personas")) return "settings";
-  if (pathname.startsWith("/projects")) return "settings";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/zalo_integrations")) return "settings";
   if (pathname.startsWith("/conversations")) return "conversations";

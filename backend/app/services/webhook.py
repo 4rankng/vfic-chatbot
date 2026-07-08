@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.conversation import ConversationService
 from app.services.dedup import MessageDedupService
+from app.services.zalo_oa_events import parse_oa_webhook_event
 
 logger = logging.getLogger(__name__)
 
@@ -70,32 +71,18 @@ class ZaloWebhookService:
     @staticmethod
     def normalize_oa(payload: dict) -> NormalizedMessage | None:
         """Extract a text message from a Zalo Official Account webhook event."""
-        if not isinstance(payload, dict):
-            return None
-        event_name = str(payload.get("event_name") or payload.get("event") or "")
-        if event_name and event_name not in {"user_send_text", "user_send_text_message"}:
+        event = parse_oa_webhook_event(payload)
+        if event is None or not event.can_start_bot_turn:
             return None
 
-        sender = payload.get("sender") or payload.get("from") or {}
-        message = payload.get("message") or {}
-        text_body = message.get("text") or payload.get("text")
-        user_id = sender.get("id") or sender.get("user_id") or payload.get("user_id")
-        if not text_body or not user_id:
-            return None
-        scoped_chat_id = f"oa:{user_id}"
-        msg_id = str(
-            message.get("msg_id")
-            or message.get("message_id")
-            or message.get("id")
-            or f"{scoped_chat_id}:{str(text_body)[:40]}"
-        )
         return NormalizedMessage(
-            zalo_chat_id=scoped_chat_id,
+            zalo_chat_id=event.scoped_chat_id,
             zalo_channel="oa",
-            user_text=str(text_body),
-            user_name=str(sender.get("name") or sender.get("display_name") or ""),
-            msg_id=msg_id,
-            msg_hash=hashlib.sha256(f"oa:{msg_id}".encode("utf-8")).hexdigest()[:32],
+            user_text=event.text,
+            user_name=_oa_sender_name(event.raw),
+            msg_id=event.message_id
+            or f"{event.scoped_chat_id}:{event.text[:40]}",
+            msg_hash=event.dedup_hash,
         )
 
     @staticmethod
@@ -192,3 +179,10 @@ async def _fire_typing(chat_id: str) -> None:
             )
     except Exception:  # noqa: BLE001 — typing is best-effort
         logger.debug("failed to send typing indicator for %s", chat_id, exc_info=True)
+
+
+def _oa_sender_name(payload: dict) -> str:
+    sender = payload.get("sender") or payload.get("from") or {}
+    if not isinstance(sender, dict):
+        return ""
+    return str(sender.get("name") or sender.get("display_name") or "")

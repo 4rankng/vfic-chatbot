@@ -49,6 +49,10 @@ type PersonaDerivedStats = {
   sectionCount: number;
 };
 
+type PersonaListProps = {
+  embedded?: boolean;
+};
+
 const numberFormatter = new Intl.NumberFormat("vi-VN");
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
@@ -84,7 +88,7 @@ type PersonaRowProps = {
   onSelect: (persona: Persona) => void;
 };
 
-const PersonaRow = memo(
+const PersonaBubble = memo(
   ({ persona, isSelected, onSelect }: PersonaRowProps) => {
     const stats = getPersonaDerivedStats(persona);
 
@@ -113,6 +117,15 @@ const PersonaRow = memo(
                 </span>
               </span>
               <span className="persona-directory-badges">
+                {isSelected ? (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-primary/20 bg-primary/5 text-[10px] text-primary"
+                  >
+                    <CheckCircle2 className="size-3" />
+                    Đang xem
+                  </Badge>
+                ) : null}
                 {persona.is_active ? (
                   <Badge
                     variant="outline"
@@ -143,14 +156,14 @@ const PersonaRow = memo(
                 <Clock3 className="size-3" />
                 {formatDate(persona.updated_at)}
               </span>
-              </span>
             </span>
+          </span>
         </button>
       </article>
     );
   },
 );
-PersonaRow.displayName = "PersonaRow";
+PersonaBubble.displayName = "PersonaBubble";
 
 const PersonaStudioOverview = ({
   persona,
@@ -528,7 +541,7 @@ const PersonaEmptyWorkspace = ({ onCreate }: { onCreate: () => void }) => (
   </section>
 );
 
-const PersonaListContent = () => {
+const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
   const { data, isPending, total } = useListContext<Persona>();
   const redirect = useRedirect();
   const notify = useNotify();
@@ -578,118 +591,129 @@ const PersonaListContent = () => {
     }
   };
 
-  return (
-    <PersonaWorkspaceShell>
-      <div className="persona-workspace-content">
-        <div className="persona-page-shell">
-          <header className="persona-studio-topbar">
-            <div className="persona-studio-crumbs">
-              <span>Hồ sơ Agent</span>
-              <ChevronRight className="size-4" aria-hidden="true" />
-              <strong>{selectedPersona?.name ?? "Agent"}</strong>
-            </div>
-            <label className="persona-studio-command">
-              <Search className="size-4" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Tìm Agent, slug hoặc dự án"
-                aria-label="Tìm Agent"
-              />
-            </label>
-            <Button
-              type="button"
-              className="persona-create-action"
-              onClick={() => redirect("create", "personas")}
-            >
-              <Plus className="size-4" />
-              Tạo Agent
-            </Button>
-          </header>
-
-          {isEmpty ? (
-            <PersonaEmptyWorkspace
-              onCreate={() => redirect("create", "personas")}
+  const content = (
+    <div className="persona-workspace-content">
+      <div className="persona-page-shell">
+        <header className="persona-studio-topbar">
+          <div className="persona-studio-crumbs">
+            <span>Hồ sơ Agent</span>
+            <ChevronRight className="size-4" aria-hidden="true" />
+            <strong>{selectedPersona?.name ?? "Agent"}</strong>
+          </div>
+          <label className="persona-studio-command">
+            <Search className="size-4" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Tìm Agent, slug hoặc dự án"
+              aria-label="Tìm Agent"
             />
-          ) : (
-            <>
-              <div className="persona-studio-layout">
-                <aside className="persona-studio-sidebar">
-                  <div className="persona-panel-header">
-                    <div>
-                      <p className="persona-panel-eyebrow">Danh sách</p>
-                      <h2>Danh sách Agent</h2>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="border-border bg-background/70"
-                    >
-                      {numberFormatter.format(totalCount)} hồ sơ
-                    </Badge>
-                  </div>
+          </label>
+          <Button
+            type="button"
+            className="persona-create-action"
+            onClick={() => redirect("create", "personas")}
+          >
+            <Plus className="size-4" />
+            Tạo Agent
+          </Button>
+        </header>
 
-                  {isPending ? (
-                    <div className="persona-directory-loading">
-                      {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="persona-directory-skeleton">
-                          <Skeleton className="size-10 rounded-[10px]" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-1/3" />
-                            <Skeleton className="h-3 w-1/2" />
-                            <Skeleton className="h-3 w-2/3" />
-                          </div>
+        {isEmpty ? (
+          <PersonaEmptyWorkspace
+            onCreate={() => redirect("create", "personas")}
+          />
+        ) : (
+          <>
+            <div className="persona-studio-layout persona-agent-stack">
+              <section
+                className="persona-agent-picker"
+                aria-label="Danh sách Agent"
+              >
+                <div className="persona-panel-header">
+                  <div>
+                    <p className="persona-panel-eyebrow">Danh sách</p>
+                    <h2>Danh sách Agent</h2>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="border-border bg-background/70"
+                  >
+                    {numberFormatter.format(totalCount)} hồ sơ
+                  </Badge>
+                </div>
+
+                {isPending ? (
+                  <div className="persona-directory-loading">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="persona-directory-skeleton">
+                        <Skeleton className="size-10 rounded-[10px]" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-1/3" />
+                          <Skeleton className="h-3 w-1/2" />
+                          <Skeleton className="h-3 w-2/3" />
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="persona-directory-list">
-                      {filteredPersonas.length > 0 ? (
-                        filteredPersonas.map((p) => (
-                          <PersonaRow
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="persona-directory-list persona-agent-bubbles">
+                    {filteredPersonas.length > 0 ? (
+                      filteredPersonas.map((p) => (
+                        <PersonaBubble
                           key={p.id}
                           persona={p}
                           isSelected={selectedPersona?.id === p.id}
                           onSelect={(persona) =>
                             setSelectedPersonaId(persona.id)
                           }
-                          />
-                        ))
-                      ) : (
-                        <p className="persona-empty-results">
-                          Không tìm thấy Agent phù hợp.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </aside>
+                        />
+                      ))
+                    ) : (
+                      <p className="persona-empty-results">
+                        Không tìm thấy Agent phù hợp.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
 
-                <div className="persona-studio-body">
-                  <PersonaStudioOverview
-                    persona={selectedPersona}
-                    stats={selectedPersonaStats}
-                    onActivate={onActivatePersona}
-                    onEdit={(persona) => redirect("edit", "personas", persona.id)}
-                  />
-                </div>
-              </div>
-
-              {totalCount > 25 ? (
-                <ListPagination
-                  rowsPerPageOptions={[10, 25, 50, 100]}
-                  className="persona-pagination"
+              <div className="persona-studio-body">
+                <PersonaStudioOverview
+                  persona={selectedPersona}
+                  stats={selectedPersonaStats}
+                  onActivate={onActivatePersona}
+                  onEdit={(persona) =>
+                    redirect("edit", "personas", persona.id)
+                  }
                 />
-              ) : null}
-            </>
-          )}
-        </div>
+              </div>
+            </div>
+
+            {totalCount > 25 ? (
+              <ListPagination
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                className="persona-pagination"
+              />
+            ) : null}
+          </>
+        )}
       </div>
-    </PersonaWorkspaceShell>
+    </div>
   );
+
+  if (embedded) return content;
+
+  return <PersonaWorkspaceShell>{content}</PersonaWorkspaceShell>;
 };
 
-export const PersonaList = () => (
-  <ListBase perPage={25} sort={{ field: "name", order: "ASC" }}>
-    <PersonaListContent />
+export const PersonaList = ({ embedded = false }: PersonaListProps) => (
+  <ListBase
+    resource="personas"
+    perPage={25}
+    sort={{ field: "name", order: "ASC" }}
+  >
+    <PersonaListContent embedded={embedded} />
   </ListBase>
 );

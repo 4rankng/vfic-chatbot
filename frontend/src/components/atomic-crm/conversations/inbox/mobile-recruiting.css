@@ -149,7 +149,12 @@
   padding: 18px 16px 112px;
   background:
     linear-gradient(180deg, rgba(40, 120, 111, 0.08), transparent 210px),
-    var(--surface);
+    var(--chat-bg);
+  background-size:
+    auto,
+    28px 28px,
+    28px 28px,
+    auto;
 }
 
 .dashboard-workspace-content {

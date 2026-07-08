@@ -152,64 +152,27 @@
   grid-template-columns: 58px minmax(0, 1fr);
 }
 
-.inbox-bg-container .knowledge-center-panel {
+.inbox-bg-container
+  :is(
+    .dashboard-center-panel,
+    .knowledge-center-panel,
+    .settings-center-panel,
+    .profile-center-panel,
+    .persona-center-panel,
+    .project-center-panel
+  ) {
   display: block;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   background:
     linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
-    var(--surface);
-}
-
-.inbox-bg-container .settings-center-panel {
-  display: block;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  background:
-    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
-    var(--surface);
-}
-
-.inbox-bg-container .profile-center-panel {
-  display: block;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  background:
-    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
-    var(--surface);
-}
-
-.inbox-bg-container .persona-center-panel {
-  display: block;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  background:
-    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
-    var(--surface);
-}
-
-.inbox-bg-container .project-center-panel {
-  display: block;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  background:
-    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
-    var(--surface);
-}
-
-.inbox-bg-container .dashboard-center-panel {
-  display: block;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  background:
-    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
-    var(--surface);
+    var(--chat-bg);
+  background-size:
+    auto,
+    28px 28px,
+    28px 28px,
+    auto;
 }
 
 .inbox-bg-container .dashboard-workspace-content {

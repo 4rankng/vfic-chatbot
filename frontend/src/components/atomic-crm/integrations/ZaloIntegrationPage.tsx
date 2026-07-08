@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNotify, usePermissions, useTranslate } from "ra-core";
 import {
   Bot,
-  Briefcase,
-  CheckCircle2,
   Cpu,
   MessageCircle,
   PlugZap,
@@ -14,7 +12,6 @@ import {
   Workflow,
   type LucideIcon,
 } from "lucide-react";
-import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +20,8 @@ import { apiJson } from "../providers/rest/api";
 import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
 import { InboxIcons } from "../conversations/InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { PersonaList } from "../personas/PersonaList";
+import { UserList } from "../users/UserList";
 import "../conversations/inbox.css";
 
 type SecretStatus = { configured: boolean; preview?: string | null };
@@ -75,10 +74,29 @@ const emptyForm: FormState = {
   zalo_oa_refresh_token: "",
 };
 
-type ZaloIntegrationTestResult = {
-  bot_configured: boolean;
-  oa_configured: boolean;
+type ZaloChannelTestResult = {
+  configured: boolean;
+  connected: boolean;
   missing: string[];
+  errors: string[];
+};
+
+type IntegrationConfigTestResult = {
+  configured: boolean;
+  missing: string[];
+};
+
+const ZALO_TEST_FIELD_LABELS: Record<string, string> = {
+  zalo_bot_token: "Bot Token",
+  zalo_oa_app_id: "OA App ID",
+  zalo_oa_secret_key: "OA Secret",
+  zalo_oa_access_token: "OA Access Token",
+  zalo_oa_refresh_token: "OA Refresh Token",
+};
+
+const INTEGRATION_TEST_FIELD_LABELS: Record<string, string> = {
+  minimax_api_key: "Access Token",
+  openrouter_api_key: "Access Token",
 };
 
 const emptyMinimaxForm: MinimaxFormState = {
@@ -89,61 +107,91 @@ const emptyOpenRouterForm: OpenRouterFormState = {
   openrouter_api_key: "",
 };
 
+type SettingsItemId =
+  | "settings-zalo-channel"
+  | "settings-minimax"
+  | "settings-openrouter"
+  | "settings-agents"
+  | "settings-users";
+
+type SettingsNavMode = "integrations" | "embedded";
+
 type SettingsSectionNavItem = {
-  sectionId: string;
+  itemId: SettingsItemId;
   label: string;
   description: string;
   Icon: LucideIcon;
+  mode: SettingsNavMode;
 };
 
-type SettingsWorkspaceLink = {
-  href: string;
-  label: string;
-  description: string;
-  Icon: LucideIcon;
-};
-
-const SETTINGS_SECTION_ITEMS: SettingsSectionNavItem[] = [
+const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
   {
-    sectionId: "settings-zalo-channel",
-    label: "Kênh Zalo",
+    itemId: "settings-zalo-channel",
+    label: "Zalo",
     description: "Bot Platform và OA",
     Icon: MessageCircle,
+    mode: "integrations",
   },
   {
-    sectionId: "settings-ai-models",
-    label: "Model AI",
-    description: "Minimax, OpenRouter",
+    itemId: "settings-minimax",
+    label: "Minimax",
+    description: "Model chính",
+    Icon: Bot,
+    mode: "integrations",
+  },
+  {
+    itemId: "settings-openrouter",
+    label: "OpenRouter",
+    description: "Fallback và embeddings",
     Icon: Cpu,
-  },
-];
-
-const SETTINGS_WORKSPACE_LINKS: SettingsWorkspaceLink[] = [
-  {
-    href: "/projects",
-    label: "Dự án",
-    description: "Knowledge base và FAQ",
-    Icon: Briefcase,
+    mode: "integrations",
   },
   {
-    href: "/personas",
-    label: "Agent tư vấn",
+    itemId: "settings-agents",
+    label: "Agents",
     description: "Giọng trả lời theo dự án",
     Icon: Workflow,
+    mode: "embedded",
   },
   {
-    href: "/users",
-    label: "Người dùng",
+    itemId: "settings-users",
+    label: "Users",
     description: "Tài khoản quản trị",
     Icon: UsersRound,
+    mode: "embedded",
   },
 ];
 
-const REQUIRED_SETTING_COUNT = 8;
-
-const countConfigured = (
-  statuses: Array<SecretStatus | PlainStatus | undefined>,
-) => statuses.filter((status) => status?.configured).length;
+const SETTINGS_VIEW_COPY: Record<
+  SettingsItemId,
+  { kicker: string; title: string; description: string }
+> = {
+  "settings-zalo-channel": {
+    kicker: "Kênh liên lạc",
+    title: "Zalo",
+    description: "Cấu hình Bot Platform và Official Account dùng để nhắn tin.",
+  },
+  "settings-minimax": {
+    kicker: "Model chính",
+    title: "Minimax",
+    description: "Cấu hình khóa API cho model chính của Agent.",
+  },
+  "settings-openrouter": {
+    kicker: "Model dự phòng",
+    title: "OpenRouter",
+    description: "Cấu hình fallback và embeddings khi cần chuyển tuyến model.",
+  },
+  "settings-agents": {
+    kicker: "Không gian cài đặt",
+    title: "Agents",
+    description: "Quản lý giọng trả lời, prompt và phân công Agent theo dự án.",
+  },
+  "settings-users": {
+    kicker: "Không gian cài đặt",
+    title: "Users",
+    description: "Quản lý tài khoản nội bộ và quyền truy cập quản trị.",
+  },
+};
 
 const SecretInput = ({
   id,
@@ -239,6 +287,7 @@ const OpenRouterSecretInput = ({
 );
 
 const SettingsCard = ({
+  id,
   title,
   description,
   icon,
@@ -246,6 +295,7 @@ const SettingsCard = ({
   children,
   className = "",
 }: {
+  id?: string;
   title: string;
   description?: string;
   icon: ReactNode;
@@ -253,7 +303,7 @@ const SettingsCard = ({
   children: ReactNode;
   className?: string;
 }) => (
-  <section className={`settings-card ${className}`}>
+  <section className={`settings-card ${className}`} id={id}>
     <div className="settings-card-header">
       <div className="settings-card-title-group">
         <div className="settings-card-icon">{icon}</div>
@@ -317,37 +367,25 @@ const scrollToSettingsSection = (sectionId: string) => {
 };
 
 const SettingsSideNav = ({
-  activeSectionId,
-  configuredCount,
-  isLoading,
-  onSectionSelect,
+  activeItemId,
+  onItemSelect,
 }: {
-  activeSectionId: string;
-  configuredCount: number;
-  isLoading: boolean;
-  onSectionSelect: (sectionId: string) => void;
+  activeItemId: SettingsItemId;
+  onItemSelect: (itemId: SettingsItemId) => void;
 }) => (
   <aside className="settings-side-nav" aria-label="Nhóm cài đặt">
-    <div className="settings-side-nav-header">
-      <span>Cài đặt</span>
-      <strong>
-        {isLoading
-          ? "Đang tải"
-          : `${configuredCount}/${REQUIRED_SETTING_COUNT}`}
-      </strong>
-    </div>
     <div className="settings-side-nav-group">
-      <span className="settings-side-nav-group-label">Trong trang</span>
+      <span className="settings-side-nav-group-label">Mục cài đặt</span>
       <nav className="settings-side-nav-list">
-        {SETTINGS_SECTION_ITEMS.map((item) => {
-          const active = item.sectionId === activeSectionId;
+        {SETTINGS_NAV_ITEMS.map((item) => {
+          const active = item.itemId === activeItemId;
 
           return (
             <button
               key={item.label}
               type="button"
               className={`settings-side-nav-link${active ? " is-active" : ""}`}
-              onClick={() => onSectionSelect(item.sectionId)}
+              onClick={() => onItemSelect(item.itemId)}
             >
               <SettingsNavLinkContent
                 label={item.label}
@@ -358,28 +396,6 @@ const SettingsSideNav = ({
           );
         })}
       </nav>
-    </div>
-    <div className="settings-side-nav-group">
-      <span className="settings-side-nav-group-label">Liên kết</span>
-      <nav className="settings-side-nav-list">
-        {SETTINGS_WORKSPACE_LINKS.map((item) => (
-          <Link
-            key={item.label}
-            to={item.href}
-            className="settings-side-nav-link"
-          >
-            <SettingsNavLinkContent
-              label={item.label}
-              description={item.description}
-              Icon={item.Icon}
-            />
-          </Link>
-        ))}
-      </nav>
-    </div>
-    <div className="settings-side-nav-footer">
-      <CheckCircle2 className="size-4" />
-      <span>Khóa bí mật được lưu mã hóa ở backend.</span>
     </div>
   </aside>
 );
@@ -399,10 +415,14 @@ export const ZaloIntegrationPage = () => {
     useState<MinimaxFormState>(emptyMinimaxForm);
   const [openRouterForm, setOpenRouterForm] =
     useState<OpenRouterFormState>(emptyOpenRouterForm);
-  const [activeSectionId, setActiveSectionId] = useState(
+  const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
     "settings-zalo-channel",
   );
   const [saving, setSaving] = useState(false);
+  const [testingBot, setTestingBot] = useState(false);
+  const [testingOa, setTestingOa] = useState(false);
+  const [testingMinimax, setTestingMinimax] = useState(false);
+  const [testingOpenRouter, setTestingOpenRouter] = useState(false);
 
   const load = async () => {
     const [data, minimaxData, openRouterData] = await Promise.all([
@@ -468,31 +488,63 @@ export const ZaloIntegrationPage = () => {
     setOpenRouterForm((current) => ({ ...current, [key]: value }));
   };
 
+  const saveZaloChanges = async () => {
+    if (Object.keys(changedPayload).length === 0) return settings;
+
+    const nextZalo = await apiJson<ZaloSettings>(
+      "/api/v1/admin/integrations/zalo",
+      {
+        method: "PUT",
+        body: changedPayload,
+      },
+    );
+    setSettings(nextZalo);
+    setForm({
+      ...emptyForm,
+      zalo_oa_app_id: nextZalo.zalo_oa_app_id.value ?? "",
+    });
+    return nextZalo;
+  };
+
+  const saveMinimaxChanges = async () => {
+    if (Object.keys(changedMinimaxPayload).length === 0)
+      return minimaxSettings;
+
+    const nextMinimax = await apiJson<MinimaxSettings>(
+      "/api/v1/admin/integrations/minimax",
+      {
+        method: "PUT",
+        body: changedMinimaxPayload,
+      },
+    );
+    setMinimaxSettings(nextMinimax);
+    setMinimaxForm(emptyMinimaxForm);
+    return nextMinimax;
+  };
+
+  const saveOpenRouterChanges = async () => {
+    if (Object.keys(changedOpenRouterPayload).length === 0)
+      return openRouterSettings;
+
+    const nextOpenRouter = await apiJson<OpenRouterSettings>(
+      "/api/v1/admin/integrations/openrouter",
+      {
+        method: "PUT",
+        body: changedOpenRouterPayload,
+      },
+    );
+    setOpenRouterSettings(nextOpenRouter);
+    setOpenRouterForm(emptyOpenRouterForm);
+    return nextOpenRouter;
+  };
+
   const save = async () => {
     setSaving(true);
     try {
       const [nextZalo, nextMinimax, nextOpenRouter] = await Promise.all([
-        Object.keys(changedPayload).length > 0
-          ? apiJson<ZaloSettings>("/api/v1/admin/integrations/zalo", {
-              method: "PUT",
-              body: changedPayload,
-            })
-          : Promise.resolve(settings),
-        Object.keys(changedMinimaxPayload).length > 0
-          ? apiJson<MinimaxSettings>("/api/v1/admin/integrations/minimax", {
-              method: "PUT",
-              body: changedMinimaxPayload,
-            })
-          : Promise.resolve(minimaxSettings),
-        Object.keys(changedOpenRouterPayload).length > 0
-          ? apiJson<OpenRouterSettings>(
-              "/api/v1/admin/integrations/openrouter",
-              {
-                method: "PUT",
-                body: changedOpenRouterPayload,
-              },
-            )
-          : Promise.resolve(openRouterSettings),
+        saveZaloChanges(),
+        saveMinimaxChanges(),
+        saveOpenRouterChanges(),
       ]);
       if (nextZalo) setSettings(nextZalo);
       if (nextMinimax) setMinimaxSettings(nextMinimax);
@@ -501,35 +553,119 @@ export const ZaloIntegrationPage = () => {
         ...emptyForm,
         zalo_oa_app_id: nextZalo?.zalo_oa_app_id.value ?? "",
       });
-      setMinimaxForm(emptyMinimaxForm);
-      setOpenRouterForm(emptyOpenRouterForm);
       notify("Đã lưu cấu hình", { type: "success" });
     } finally {
       setSaving(false);
     }
   };
 
+  const testChannel = async (
+    path: string,
+    label: string,
+    busySetter: (busy: boolean) => void,
+  ) => {
+    busySetter(true);
+    try {
+      await saveZaloChanges();
+      const result = await apiJson<ZaloChannelTestResult>(path, {
+        method: "POST",
+      });
+      if (result.connected) {
+        notify(`Kết nối ${label} thành công`, { type: "success" });
+        return;
+      }
+      if (result.missing.length > 0) {
+        const missing = result.missing
+          .map((key) => ZALO_TEST_FIELD_LABELS[key] ?? key)
+          .join(", ");
+        notify(`Thiếu cấu hình: ${missing}`, { type: "warning" });
+        return;
+      }
+      notify(result.errors.join("; ") || `Không kết nối được ${label}`, {
+        type: "warning",
+      });
+    } finally {
+      busySetter(false);
+    }
+  };
+
+  const testBotConnection = () =>
+    testChannel(
+      "/api/v1/admin/integrations/zalo/bot/test",
+      "Zalo Chatbot",
+      setTestingBot,
+    );
+
+  const testOaConnection = () =>
+    testChannel(
+      "/api/v1/admin/integrations/zalo/oa/test",
+      "Zalo OA",
+      setTestingOa,
+    );
+
+  const testConfiguredIntegration = async (
+    path: string,
+    label: string,
+    busySetter: (busy: boolean) => void,
+    saveChanges: () => Promise<MinimaxSettings | OpenRouterSettings | null>,
+  ) => {
+    busySetter(true);
+    try {
+      await saveChanges();
+      const result = await apiJson<IntegrationConfigTestResult>(path, {
+        method: "POST",
+      });
+      if (result.configured) {
+        notify(`Cấu hình ${label} đã sẵn sàng`, { type: "success" });
+        return;
+      }
+      const missing = result.missing
+        .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
+        .join(", ");
+      notify(`Thiếu cấu hình ${label}: ${missing}`, { type: "warning" });
+    } finally {
+      busySetter(false);
+    }
+  };
+
+  const testMinimaxConnection = () =>
+    testConfiguredIntegration(
+      "/api/v1/admin/integrations/minimax/test",
+      "Minimax",
+      setTestingMinimax,
+      saveMinimaxChanges,
+    );
+
+  const testOpenRouterConnection = () =>
+    testConfiguredIntegration(
+      "/api/v1/admin/integrations/openrouter/test",
+      "OpenRouter",
+      setTestingOpenRouter,
+      saveOpenRouterChanges,
+    );
+
   const hasChanges =
     Object.keys(changedPayload).length > 0 ||
     Object.keys(changedMinimaxPayload).length > 0 ||
     Object.keys(changedOpenRouterPayload).length > 0;
 
-  const selectSettingsSection = (sectionId: string) => {
-    setActiveSectionId(sectionId);
-    scrollToSettingsSection(sectionId);
+  const activeItem =
+    SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
+    SETTINGS_NAV_ITEMS[0];
+  const showingIntegrations = activeItem.mode === "integrations";
+  const headerCopy = SETTINGS_VIEW_COPY[activeItem.itemId];
+
+  const selectSettingsItem = (itemId: SettingsItemId) => {
+    setActiveItemId(itemId);
   };
 
-  const configuredCount = useMemo(() => {
-    return countConfigured([
-      settings?.zalo_bot_token,
-      settings?.zalo_bot_webhook_secret,
-      settings?.zalo_oa_app_id,
-      settings?.zalo_oa_secret_key,
-      settings?.zalo_oa_access_token,
-      minimaxSettings?.minimax_api_key,
-      openRouterSettings?.openrouter_api_key,
-    ]);
-  }, [minimaxSettings, openRouterSettings, settings]);
+  useEffect(() => {
+    if (!showingIntegrations) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      scrollToSettingsSection(activeItem.itemId);
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeItem.itemId, showingIntegrations]);
 
   const renderInWorkspace = (content: ReactNode) => {
     if (isMobile) return content;
@@ -544,6 +680,195 @@ export const ZaloIntegrationPage = () => {
           </section>
         </main>
       </div>
+    );
+  };
+
+  const renderSettingsBody = () => {
+    if (activeItemId === "settings-agents") {
+      return (
+        <section className="settings-embedded-resource">
+          <PersonaList embedded />
+        </section>
+      );
+    }
+
+    if (activeItemId === "settings-users") {
+      return (
+        <section className="settings-embedded-resource settings-embedded-users">
+          <UserList embedded />
+        </section>
+      );
+    }
+
+    if (activeItemId === "settings-zalo-channel") {
+      return (
+        <SettingsSectionPanel id="settings-zalo-channel">
+          <div className="settings-grid settings-grid-zalo">
+            <SettingsCard
+              title="Zalo Chatbot"
+              icon={<PlugZap className="size-4" />}
+            >
+              <SecretInput
+                id="zalo_bot_token"
+                label="Bot Token"
+                status={settings?.zalo_bot_token ?? { configured: false }}
+                value={form.zalo_bot_token}
+                onChange={setValue}
+              />
+              <SecretInput
+                id="zalo_bot_webhook_secret"
+                label="Webhook Secret"
+                status={
+                  settings?.zalo_bot_webhook_secret ?? {
+                    configured: false,
+                  }
+                }
+                value={form.zalo_bot_webhook_secret}
+                onChange={setValue}
+              />
+              <div className="settings-oa-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="settings-test-button"
+                  onClick={testBotConnection}
+                  disabled={saving || testingBot || !settings}
+                >
+                  <Wifi className="size-4" />
+                  {testingBot ? "Đang kiểm tra" : "Test Connection"}
+                </Button>
+              </div>
+            </SettingsCard>
+
+            <SettingsCard
+              title="Zalo OA"
+              icon={<MessageCircle className="size-4" />}
+            >
+              <div className="settings-oa-fields">
+                <div className="settings-field">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="zalo_oa_app_id">OA App ID</Label>
+                  </div>
+                  <Input
+                    id="zalo_oa_app_id"
+                    value={form.zalo_oa_app_id}
+                    className="settings-input"
+                    onChange={(event) =>
+                      setValue("zalo_oa_app_id", event.target.value)
+                    }
+                  />
+                </div>
+
+                <SecretInput
+                  id="zalo_oa_secret_key"
+                  label="OA Secret"
+                  status={settings?.zalo_oa_secret_key ?? { configured: false }}
+                  value={form.zalo_oa_secret_key}
+                  onChange={setValue}
+                />
+                <SecretInput
+                  id="zalo_oa_access_token"
+                  label="OA Access Token"
+                  status={
+                    settings?.zalo_oa_access_token ?? {
+                      configured: false,
+                    }
+                  }
+                  value={form.zalo_oa_access_token}
+                  onChange={setValue}
+                />
+                <SecretInput
+                  id="zalo_oa_refresh_token"
+                  label="OA Refresh Token"
+                  status={
+                    settings?.zalo_oa_refresh_token ?? {
+                      configured: false,
+                    }
+                  }
+                  value={form.zalo_oa_refresh_token}
+                  onChange={setValue}
+                />
+                <div className="settings-oa-actions">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="settings-test-button"
+                    onClick={testOaConnection}
+                    disabled={saving || testingOa || !settings}
+                  >
+                    <Wifi className="size-4" />
+                    {testingOa ? "Đang kiểm tra" : "Test Connection"}
+                  </Button>
+                </div>
+              </div>
+            </SettingsCard>
+          </div>
+        </SettingsSectionPanel>
+      );
+    }
+
+    if (activeItemId === "settings-minimax") {
+      return (
+        <SettingsSectionPanel id="settings-minimax">
+          <div className="settings-grid settings-grid-models">
+            <SettingsCard title="Minimax" icon={<Bot className="size-4" />}>
+              <MinimaxSecretInput
+                id="minimax_api_key"
+                label="Access Token"
+                status={
+                  minimaxSettings?.minimax_api_key ?? { configured: false }
+                }
+                value={minimaxForm.minimax_api_key}
+                onChange={setMinimaxValue}
+              />
+              <div className="settings-oa-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="settings-test-button"
+                  onClick={testMinimaxConnection}
+                  disabled={saving || testingMinimax || !minimaxSettings}
+                >
+                  <Wifi className="size-4" />
+                  {testingMinimax ? "Đang kiểm tra" : "Test Connection"}
+                </Button>
+              </div>
+            </SettingsCard>
+          </div>
+        </SettingsSectionPanel>
+      );
+    }
+
+    return (
+      <SettingsSectionPanel id="settings-openrouter">
+        <div className="settings-grid settings-grid-models">
+          <SettingsCard title="OpenRouter" icon={<Cpu className="size-4" />}>
+            <OpenRouterSecretInput
+              id="openrouter_api_key"
+              label="Access Token"
+              status={
+                openRouterSettings?.openrouter_api_key ?? {
+                  configured: false,
+                }
+              }
+              value={openRouterForm.openrouter_api_key}
+              onChange={setOpenRouterValue}
+            />
+            <div className="settings-oa-actions">
+              <Button
+                type="button"
+                variant="outline"
+                className="settings-test-button"
+                onClick={testOpenRouterConnection}
+                disabled={saving || testingOpenRouter || !openRouterSettings}
+              >
+                <Wifi className="size-4" />
+                {testingOpenRouter ? "Đang kiểm tra" : "Test Connection"}
+              </Button>
+            </div>
+          </SettingsCard>
+        </div>
+      </SettingsSectionPanel>
     );
   };
 
@@ -564,10 +889,8 @@ export const ZaloIntegrationPage = () => {
       <div className="ops-page-shell settings-page-shell">
         <div className="settings-console">
           <SettingsSideNav
-            activeSectionId={activeSectionId}
-            configuredCount={configuredCount}
-            isLoading={permissionsPending || !settings}
-            onSectionSelect={selectSettingsSection}
+            activeItemId={activeItemId}
+            onItemSelect={selectSettingsItem}
           />
 
           <div className="settings-main">
@@ -577,131 +900,26 @@ export const ZaloIntegrationPage = () => {
                   <Settings className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="ops-kicker">Trung tâm cấu hình</p>
-                  <h1>Cài đặt hệ thống</h1>
-                  <p>
-                    Gom các khóa tích hợp, kết nối Zalo và model AI theo đúng
-                    thứ tự vận hành.
-                  </p>
+                  <p className="ops-kicker">{headerCopy.kicker}</p>
+                  <h1>{headerCopy.title}</h1>
+                  <p>{headerCopy.description}</p>
                 </div>
               </div>
-              <div className="settings-header-actions">
-                <Button
-                  className="settings-save-button"
-                  onClick={save}
-                  disabled={saving || !hasChanges}
-                >
-                  <Save className="size-4" />
-                  Lưu cấu hình
-                </Button>
-              </div>
+              {showingIntegrations ? (
+                <div className="settings-header-actions">
+                  <Button
+                    className="settings-save-button"
+                    onClick={save}
+                    disabled={saving || !hasChanges}
+                  >
+                    <Save className="size-4" />
+                    Lưu cấu hình
+                  </Button>
+                </div>
+              ) : null}
             </header>
 
-            <SettingsSectionPanel id="settings-zalo-channel">
-              <div className="settings-grid settings-grid-zalo">
-                <SettingsCard
-                  title="Zalo Chatbot"
-                  icon={<PlugZap className="size-4" />}
-                >
-                  <SecretInput
-                    id="zalo_bot_token"
-                    label="Bot Token"
-                    status={settings?.zalo_bot_token ?? { configured: false }}
-                    value={form.zalo_bot_token}
-                    onChange={setValue}
-                  />
-                  <SecretInput
-                    id="zalo_bot_webhook_secret"
-                    label="Webhook Secret"
-                    status={
-                      settings?.zalo_bot_webhook_secret ?? {
-                        configured: false,
-                      }
-                    }
-                    value={form.zalo_bot_webhook_secret}
-                    onChange={setValue}
-                  />
-                </SettingsCard>
-
-                <SettingsCard
-                  title="Zalo OA"
-                  icon={<MessageCircle className="size-4" />}
-                >
-                  <div className="settings-oa-fields">
-                    <div className="settings-field">
-                      <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="zalo_oa_app_id">OA App ID</Label>
-                      </div>
-                      <Input
-                        id="zalo_oa_app_id"
-                        value={form.zalo_oa_app_id}
-                        className="settings-input"
-                        onChange={(event) =>
-                          setValue("zalo_oa_app_id", event.target.value)
-                        }
-                      />
-                    </div>
-
-                    <SecretInput
-                      id="zalo_oa_secret_key"
-                      label="OA Secret"
-                      status={
-                        settings?.zalo_oa_secret_key ?? { configured: false }
-                      }
-                      value={form.zalo_oa_secret_key}
-                      onChange={setValue}
-                    />
-                    <SecretInput
-                      id="zalo_oa_access_token"
-                      label="OA Access Token"
-                      status={
-                        settings?.zalo_oa_access_token ?? {
-                          configured: false,
-                        }
-                      }
-                      value={form.zalo_oa_access_token}
-                      onChange={setValue}
-                    />
-                  </div>
-                </SettingsCard>
-              </div>
-            </SettingsSectionPanel>
-
-            <SettingsSectionPanel id="settings-ai-models">
-              <div className="settings-grid settings-grid-models">
-                <SettingsCard
-                  title="Minimax"
-                  icon={<Bot className="size-4" />}
-                >
-                  <MinimaxSecretInput
-                    id="minimax_api_key"
-                    label="Access Token"
-                    status={
-                      minimaxSettings?.minimax_api_key ?? { configured: false }
-                    }
-                    value={minimaxForm.minimax_api_key}
-                    onChange={setMinimaxValue}
-                  />
-                </SettingsCard>
-
-                <SettingsCard
-                  title="OpenRouter"
-                  icon={<Cpu className="size-4" />}
-                >
-                  <OpenRouterSecretInput
-                    id="openrouter_api_key"
-                    label="Access Token"
-                    status={
-                      openRouterSettings?.openrouter_api_key ?? {
-                        configured: false,
-                      }
-                    }
-                    value={openRouterForm.openrouter_api_key}
-                    onChange={setOpenRouterValue}
-                  />
-                </SettingsCard>
-              </div>
-            </SettingsSectionPanel>
+            {renderSettingsBody()}
           </div>
         </div>
       </div>

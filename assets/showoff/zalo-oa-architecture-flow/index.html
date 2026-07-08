@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ting Ting · Zalo OA Architecture Flow</title>
+<meta name="description" content="Recruiter → Frontend → Backend → Zalo OA → Zalo users. The end-to-end architecture of Ting Ting, VFIC's AI recruiting concierge on Zalo Official Account." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   THEME TOKENS
+   ============================================================ */
+:root{
+  --font-sans: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Sora", "Be Vietnam Pro", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* layer journey hues (shared across themes) */
+  --c-recruiter:#f59e0b;
+  --c-frontend:#6366f1;
+  --c-backend:#14b8a6;
+  --c-oa:#0ea5e9;
+  --c-user:#22d3ee;
+
+  --grad-journey: linear-gradient(90deg,#f59e0b 0%,#6366f1 28%,#14b8a6 54%,#0ea5e9 78%,#22d3ee 100%);
+
+  --r-sm:10px; --r-md:16px; --r-lg:24px; --r-xl:32px;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+/* dark (default) */
+html[data-theme="dark"]{
+  --bg:#070b14;
+  --bg-2:#0b1220;
+  --panel:rgba(255,255,255,.035);
+  --panel-2:rgba(255,255,255,.05);
+  --stroke:rgba(255,255,255,.10);
+  --stroke-2:rgba(255,255,255,.16);
+  --ink:#eef3fb;
+  --ink-soft:#aab6cc;
+  --ink-faint:#6b7794;
+  --grid:rgba(120,160,220,.06);
+  --glow:rgba(20,184,166,.35);
+  --shadow:0 30px 80px -30px rgba(0,0,0,.8);
+  color-scheme:dark;
+}
+/* light */
+html[data-theme="light"]{
+  --bg:#eef2f8;
+  --bg-2:#e6ecf5;
+  --panel:rgba(255,255,255,.78);
+  --panel-2:#ffffff;
+  --stroke:rgba(15,30,55,.12);
+  --stroke-2:rgba(15,30,55,.20);
+  --ink:#0c1a2c;
+  --ink-soft:#3c4a61;
+  --ink-faint:#6a7890;
+  --grid:rgba(30,60,110,.06);
+  --glow:rgba(13,118,110,.22);
+  --shadow:0 30px 70px -34px rgba(20,40,80,.45);
+  color-scheme:light;
+}
+/* system: follow OS unless explicitly overridden */
+html[data-theme="system"]{ color-scheme:dark; }
+@media (prefers-color-scheme: light){
+  html[data-theme="system"]{
+    --bg:#eef2f8; --bg-2:#e6ecf5;
+    --panel:rgba(255,255,255,.78); --panel-2:#ffffff;
+    --stroke:rgba(15,30,55,.12); --stroke-2:rgba(15,30,55,.20);
+    --ink:#0c1a2c; --ink-soft:#3c4a61; --ink-faint:#6a7890;
+    --grid:rgba(30,60,110,.06); --glow:rgba(13,118,110,.22);
+    --shadow:0 30px 70px -34px rgba(20,40,80,.45);
+    color-scheme:light;
+  }
+}
+
+/* ============================================================
+   RESET / BASE
+   ============================================================ */
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font-sans);
+  background:var(--bg);
+  color:var(--ink);
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+  transition:background .5s var(--ease), color .4s var(--ease);
+}
+body::before{ /* signal grid + aurora */
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(60vw 60vw at 78% -8%, rgba(14,165,233,.14), transparent 60%),
+    radial-gradient(50vw 50vw at 10% 12%, rgba(99,102,241,.12), transparent 60%),
+    radial-gradient(46vw 46vw at 50% 108%, rgba(20,184,166,.13), transparent 60%),
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0/46px 46px,
+    linear-gradient(90deg,var(--grid) 1px, transparent 1px) 0 0/46px 46px;
+}
+body.lang-vi .en{display:none}
+body.lang-en .vi{display:none}
+a{color:inherit}
+
+/* ============================================================
+   CONTROLS (theme + language)
+   ============================================================ */
+.ctrls{
+  position:fixed; top:18px; right:18px; z-index:60;
+  display:flex; gap:8px; align-items:center;
+  padding:6px; border-radius:999px;
+  background:var(--panel); border:1px solid var(--stroke);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  box-shadow:var(--shadow);
+}
+.ctrls button{
+  font-family:var(--font-mono); font-size:12px; font-weight:600;
+  letter-spacing:.04em; color:var(--ink-soft);
+  background:transparent; border:1px solid transparent;
+  padding:7px 12px; border-radius:999px; cursor:pointer;
+  transition:.25s var(--ease); display:flex; align-items:center; gap:6px;
+}
+.ctrls button:hover{color:var(--ink); background:var(--panel-2)}
+.ctrls button[aria-pressed="true"]{
+  color:#04121a; background:var(--grad-journey); border-color:transparent;
+  box-shadow:0 6px 18px -8px var(--glow);
+}
+.ctrls .sep{width:1px;height:18px;background:var(--stroke);margin:0 2px}
+.ctrls .dot{width:8px;height:8px;border-radius:50%}
+
+/* ============================================================
+   FLOW RAIL (left progress)
+   ============================================================ */
+.rail{
+  position:fixed; left:22px; top:50%; transform:translateY(-50%);
+  z-index:55; display:flex; flex-direction:column; gap:18px;
+}
+.rail a{
+  position:relative; width:11px; height:11px; border-radius:50%;
+  border:2px solid var(--stroke-2); background:transparent;
+  transition:.35s var(--ease); cursor:pointer; text-decoration:none;
+}
+.rail a::after{
+  content:attr(data-label); position:absolute; left:22px; top:50%;
+  transform:translateY(-50%) translateX(-6px);
+  font:600 11px/1 var(--font-mono); letter-spacing:.05em;
+  color:var(--ink-faint); white-space:nowrap; opacity:0;
+  transition:.35s var(--ease); pointer-events:none;
+}
+.rail a:hover::after,.rail a.active::after{opacity:1;transform:translateY(-50%) translateX(0)}
+.rail a.active{border-color:transparent; transform:scale(1.35)}
+.rail a .rdot{position:absolute;inset:2px;border-radius:50%;opacity:0;transition:.35s var(--ease)}
+.rail a.active .rdot{opacity:1}
+@media (max-width:760px){.rail{display:none}}
+
+/* ============================================================
+   SECTION SHELL
+   ============================================================ */
+section{
+  position:relative; z-index:1;
+  min-height:100vh; width:100%;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(46px,6vh,92px) clamp(20px,5vw,76px);
+}
+.wrap{width:100%; max-width:1240px; margin:0 auto}
+.eyebrow{
+  display:inline-flex; align-items:center; gap:10px;
+  font:600 12px/1 var(--font-mono); letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-soft); margin:0 0 18px;
+}
+.eyebrow .pip{width:26px;height:2px;border-radius:2px;background:var(--grad-journey)}
+.layer-tag{
+  display:inline-flex; align-items:center; gap:9px;
+  font:700 12px/1 var(--font-mono); letter-spacing:.12em; text-transform:uppercase;
+  padding:7px 13px; border-radius:999px;
+  background:var(--panel); border:1px solid var(--stroke);
+}
+.layer-tag i{width:9px;height:9px;border-radius:50%}
+
+h1{
+  font-family:var(--font-display); font-weight:800;
+  font-size:clamp(2.4rem,5.4vw,4.7rem); line-height:1.02; letter-spacing:-.02em;
+  margin:0 0 22px;
+}
+h1 .grad,h2 .grad{background:var(--grad-journey);-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{
+  font-family:var(--font-display); font-weight:700;
+  font-size:clamp(1.7rem,3.5vw,2.9rem); line-height:1.08; letter-spacing:-.015em;
+  margin:0 0 16px;
+}
+.lead{font-size:clamp(1rem,1.4vw,1.22rem); color:var(--ink-soft); max-width:62ch; margin:0 0 8px}
+.lead strong{color:var(--ink); font-weight:600}
+p{margin:0 0 12px}
+
+/* reveal */
+.reveal{opacity:0; transform:translateY(26px); transition:opacity .8s var(--ease), transform .8s var(--ease)}
+.reveal.in{opacity:1; transform:none}
+.reveal.d1{transition-delay:.08s}.reveal.d2{transition-delay:.16s}.reveal.d3{transition-delay:.24s}.reveal.d4{transition-delay:.32s}
+
+/* generic cards */
+.grid{display:grid; gap:18px}
+.cols-2{grid-template-columns:repeat(2,1fr)}
+.cols-3{grid-template-columns:repeat(3,1fr)}
+@media (max-width:900px){.cols-2,.cols-3{grid-template-columns:1fr}}
+
+.card{
+  background:var(--panel); border:1px solid var(--stroke); border-radius:var(--r-lg);
+  padding:22px 22px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  position:relative; overflow:hidden;
+}
+.card .ico{
+  width:38px;height:38px;border-radius:11px; display:grid;place-items:center;
+  background:var(--panel-2); border:1px solid var(--stroke); margin-bottom:14px;
+}
+.card h3{font-family:var(--font-display);font-size:1.08rem;margin:0 0 6px;font-weight:700}
+.card p{font-size:.92rem;color:var(--ink-soft);margin:0}
+.card .k{font-family:var(--font-mono);font-size:.78rem;color:var(--ink-faint);letter-spacing:.04em}
+
+/* metric chips */
+.metrics{display:flex; flex-wrap:wrap; gap:12px; margin-top:28px}
+.metric{
+  display:flex; flex-direction:column; gap:2px; min-width:128px;
+  padding:14px 16px; border-radius:var(--r-md);
+  background:var(--panel); border:1px solid var(--stroke);
+}
+.metric b{font-family:var(--font-display);font-size:1.5rem;font-weight:800;line-height:1}
+.metric span{font-size:.78rem;color:var(--ink-faint);font-family:var(--font-mono);letter-spacing:.03em}
+
+code,kbd,.mono{font-family:var(--font-mono)}
+.snippet{
+  font-family:var(--font-mono); font-size:.82rem; line-height:1.7;
+  background:var(--bg-2); border:1px solid var(--stroke); border-radius:var(--r-md);
+  padding:16px 18px; color:var(--ink-soft); overflow:auto; white-space:pre;
+}
+.snippet .k{color:var(--c-backend)}
+.snippet .s{color:var(--c-user)}
+.snippet .c{color:var(--ink-faint)}
+
+/* ============================================================
+   HERO FLOW DIAGRAM
+   ============================================================ */
+.hero{flex-direction:column; gap:clamp(28px,5vh,56px)}
+.hero h1{max-width:16ch}
+.hero .lead{max-width:68ch}
+.flowtube{
+  position:relative; width:100%; max-width:1180px; margin-top:8px;
+  border:1px solid var(--stroke); border-radius:var(--r-xl);
+  background:linear-gradient(180deg,var(--panel),transparent);
+  padding:clamp(22px,3vw,38px) clamp(16px,3vw,34px);
+  box-shadow:var(--shadow);
+}
+.flow{display:grid; grid-template-columns:repeat(5,1fr); gap:8px; position:relative; z-index:2}
+@media (max-width:820px){.flow{grid-template-columns:1fr; gap:6px}}
+.node{
+  position:relative; display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:10px; padding:14px 8px;
+}
+.node .orb{
+  width:clamp(58px,7vw,84px); height:clamp(58px,7vw,84px); border-radius:24px;
+  display:grid; place-items:center; position:relative;
+  background:var(--bg-2); border:1px solid var(--stroke-2);
+  box-shadow:0 0 0 6px rgba(255,255,255,.02), inset 0 0 24px rgba(255,255,255,.03);
+}
+.node .orb::after{content:"";position:absolute;inset:-2px;border-radius:26px;opacity:.55;filter:blur(10px);z-index:-1}
+.node.n1 .orb{border-color:rgba(245,158,11,.6)} .node.n1 .orb::after{background:var(--c-recruiter)}
+.node.n2 .orb{border-color:rgba(99,102,241,.6)} .node.n2 .orb::after{background:var(--c-frontend)}
+.node.n3 .orb{border-color:rgba(20,184,166,.65)} .node.n3 .orb::after{background:var(--c-backend)}
+.node.n4 .orb{border-color:rgba(14,165,233,.6)} .node.n4 .orb::after{background:var(--c-oa)}
+.node.n5 .orb{border-color:rgba(34,211,238,.6)} .node.n5 .orb::after{background:var(--c-user)}
+.node .orb svg{width:46%;height:46%}
+.node .lbl{font-family:var(--font-display);font-weight:700;font-size:.98rem;line-height:1.1}
+.node .sub{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.05em;color:var(--ink-faint);text-transform:uppercase}
+.wire{position:absolute; top:clamp(29px,3.5vw,42px); left:0; right:0; height:2px; z-index:1; pointer-events:none}
+.wire .track{position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--stroke-2),transparent)}
+.wire .pkt{position:absolute;top:-3px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 12px 3px currentColor}
+.wire .p1{color:var(--c-frontend);animation:ride 4.2s linear infinite}
+.wire .p2{color:var(--c-backend);animation:ride 4.2s linear 1.4s infinite}
+.wire .p3{color:var(--c-oa);animation:ride 4.2s linear 2.8s infinite}
+.wire .back{color:var(--c-user);animation:rideR 5.4s linear .7s infinite}
+@keyframes ride{0%{left:0%;opacity:0}8%{opacity:1}92%{opacity:1}100%{left:100%;opacity:0}}
+@keyframes rideR{0%{left:100%;opacity:0}8%{opacity:1}92%{opacity:1}100%{left:0%;opacity:0}}
+@media (max-width:820px){.wire{display:none}}
+
+/* ============================================================
+   COCKPIT MOCKUP (recruiter frontend)
+   ============================================================ */
+.cockpit{
+  display:grid; grid-template-columns:1.05fr .95fr; gap:26px; align-items:stretch;
+}
+@media (max-width:980px){.cockpit{grid-template-columns:1fr}}
+.mock{
+  border:1px solid var(--stroke-2); border-radius:var(--r-lg); overflow:hidden;
+  background:var(--bg-2); box-shadow:var(--shadow); min-height:340px;
+  display:flex;
+}
+.mock .col-list{flex:0 0 38%; border-right:1px solid var(--stroke); display:flex; flex-direction:column}
+.mock .col-list .hd{padding:13px 15px; border-bottom:1px solid var(--stroke); font:700 .82rem var(--font-display); display:flex;justify-content:space-between;align-items:center}
+.mock .col-list .hd .badge{font:700 .66rem var(--font-mono);background:var(--c-recruiter);color:#1a1206;padding:2px 7px;border-radius:999px}
+.mock .row{padding:11px 15px; border-bottom:1px solid var(--stroke); display:flex; flex-direction:column; gap:2px}
+.mock .row.on{background:var(--panel-2); border-left:3px solid var(--c-backend)}
+.mock .row .nm{font-size:.8rem;font-weight:600}
+.mock .row .pv{font:.68rem var(--font-mono);color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mock .col-thread{flex:1; display:flex; flex-direction:column}
+.mock .col-thread .hd{padding:13px 15px;border-bottom:1px solid var(--stroke);display:flex;justify-content:space-between;align-items:center}
+.mock .col-thread .hd .who{font:700 .85rem var(--font-display)}
+.mock .col-thread .hd .take{font:700 .66rem var(--font-mono);color:var(--c-recruiter)}
+.mock .thread{flex:1; padding:14px 15px; display:flex; flex-direction:column; gap:10px; justify-content:flex-end}
+.bubble{max-width:78%; padding:9px 13px; border-radius:14px; font-size:.82rem; line-height:1.4}
+.bubble.in{align-self:flex-start; background:var(--panel-2); border:1px solid var(--stroke); border-bottom-left-radius:4px}
+.bubble.out{align-self:flex-end; color:#04121a; border-bottom-right-radius:4px}
+.bubble.out.bot{background:linear-gradient(135deg,var(--c-backend),#0ea5e9)}
+.bubble.out.human{background:linear-gradient(135deg,var(--c-recruiter),#fbbf24)}
+.bubble .t{font:.62rem var(--font-mono);opacity:.7;margin-top:3px;display:block}
+.mock .composer{border-top:1px solid var(--stroke); padding:10px 12px; display:flex; gap:8px; align-items:center}
+.mock .composer .field{flex:1; height:32px; border-radius:9px; background:var(--panel); border:1px solid var(--stroke)}
+.mock .composer .send{width:32px;height:32px;border-radius:9px;background:var(--grad-journey);display:grid;place-items:center}
+
+.socket-note{display:flex;gap:12px;align-items:flex-start;margin-top:18px;font-size:.86rem;color:var(--ink-soft)}
+.socket-note .pulse{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:var(--c-backend);margin-top:5px;box-shadow:0 0 0 0 var(--c-backend);animation:pulse 2.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(20,184,166,.5)}70%{box-shadow:0 0 0 12px rgba(20,184,166,0)}100%{box-shadow:0 0 0 0 rgba(20,184,166,0)}}
+
+/* ============================================================
+   PIPELINE (backend brain)
+   ============================================================ */
+.pipeline{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.pipe-step{
+  display:grid; grid-template-columns:auto 1fr auto; gap:16px; align-items:center;
+  padding:14px 18px; border:1px solid var(--stroke); border-radius:var(--r-md);
+  background:var(--panel); position:relative;
+}
+.pipe-step .idx{font:800 .9rem var(--font-mono);color:var(--ink-faint);width:30px}
+.pipe-step .ttl{font-weight:600;font-size:.98rem}
+.pipe-step .ttl code{font-size:.82rem;color:var(--c-backend)}
+.pipe-step .tag{font:600 .64rem var(--font-mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--panel-2);border:1px solid var(--stroke);color:var(--ink-soft);white-space:nowrap}
+.pipe-step.hot{border-color:rgba(20,184,166,.4)}
+.pipe-step.hot .tag{color:var(--c-backend);border-color:rgba(20,184,166,.4)}
+.pipe-step.guard{border-color:rgba(245,158,11,.4)}
+.pipe-step.guard .tag{color:var(--c-recruiter);border-color:rgba(245,158,11,.4)}
+@media (max-width:640px){.pipe-step{grid-template-columns:auto 1fr}.pipe-step .tag{grid-column:2}}
+
+/* ============================================================
+   BRIDGE (Zalo OA sender)
+   ============================================================ */
+.bridge{display:grid;grid-template-columns:1fr .9fr;gap:26px;align-items:center}
+@media (max-width:980px){.bridge{grid-template-columns:1fr}}
+.dispatch{
+  border:1px solid var(--stroke); border-radius:var(--r-lg); background:var(--panel);
+  padding:22px; display:flex; flex-direction:column; gap:16px;
+}
+.dispatch .hub{
+  align-self:center; padding:12px 16px; border-radius:14px; font:700 .9rem var(--font-mono);
+  border:1px dashed var(--stroke-2); background:var(--bg-2);
+}
+.dispatch .branches{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.branch{border:1px solid var(--stroke);border-radius:var(--r-md);padding:14px;background:var(--bg-2)}
+.branch h4{margin:0 0 4px;font:700 .85rem var(--font-display);display:flex;align-items:center;gap:8px}
+.branch h4 i{width:8px;height:8px;border-radius:50%}
+.branch .ep{font:.7rem var(--font-mono);color:var(--ink-faint);margin-top:8px;word-break:break-all}
+
+/* ============================================================
+   GUARD CHAIN (webhooks)
+   ============================================================ */
+.endpoints{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
+@media (max-width:760px){.endpoints{grid-template-columns:1fr}}
+.ep-card{border:1px solid var(--stroke);border-radius:var(--r-lg);padding:18px;background:var(--panel)}
+.ep-card .path{font:600 .82rem var(--font-mono);color:var(--ink);margin-bottom:10px;word-break:break-all}
+.ep-card .sig{font:.72rem var(--font-mono);color:var(--ink-soft);background:var(--bg-2);border:1px solid var(--stroke);border-radius:8px;padding:9px 11px;word-break:break-all}
+.chain{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin-top:6px}
+.chain .step{
+  flex:1; min-width:120px; padding:14px 12px; position:relative;
+  border:1px solid var(--stroke); border-right:none; background:var(--panel);
+  font-size:.82rem; text-align:center;
+}
+.chain .step:first-child{border-radius:var(--r-md) 0 0 var(--r-md)}
+.chain .step:last-child{border-right:1px solid var(--stroke);border-radius:0 var(--r-md) var(--r-md) 0}
+.chain .step b{display:block;font:700 .8rem var(--font-mono);color:var(--c-backend);margin-bottom:3px}
+.chain .step::after{
+  content:"›"; position:absolute; right:-8px; top:50%; transform:translateY(-50%);
+  font-size:1.2rem; color:var(--ink-faint); z-index:3; background:var(--bg); padding:0 2px;
+}
+.chain .step:last-child::after{display:none}
+@media (max-width:900px){.chain{flex-direction:column}.chain .step{border-right:1px solid var(--stroke);border-bottom:none;border-radius:0}.chain .step::after{content:"⌄";right:50%;top:auto;bottom:-12px;transform:translateX(50%)}.chain .step:first-child{border-radius:var(--r-md) var(--r-md) 0 0}.chain .step:last-child{border-radius:0 0 var(--r-md) var(--r-md)}}
+
+/* ============================================================
+   E2E / INVARIANTS
+   ============================================================ */
+.lifecycle{
+  border:1px solid var(--stroke); border-radius:var(--r-xl); background:var(--panel);
+  padding:clamp(18px,2.4vw,30px); box-shadow:var(--shadow); margin-top:8px;
+}
+.bidir{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:820px){.bidir{grid-template-columns:1fr}}
+.lane{border:1px solid var(--stroke);border-radius:var(--r-md);padding:18px;background:var(--bg-2)}
+.lane h4{margin:0 0 12px;font:700 .92rem var(--font-display);display:flex;align-items:center;gap:9px}
+.lane h4 .arr{font-family:var(--font-mono)}
+.lane ol{margin:0;padding-left:18px}
+.lane li{font-size:.84rem;color:var(--ink-soft);margin-bottom:7px;line-height:1.5}
+.lane li b{color:var(--ink);font-weight:600;font-family:var(--font-mono);font-size:.8rem}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer{
+  position:relative; z-index:1; padding:60px clamp(20px,6vw,80px) 80px;
+  border-top:1px solid var(--stroke);
+}
+footer .wrap{max-width:1240px}
+footer h4{font:700 .82rem var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 16px}
+footer .refs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px 22px;list-style:none;padding:0;margin:0}
+footer .refs li{font-size:.82rem;color:var(--ink-soft)}
+footer .refs a{color:var(--c-backend);text-decoration:none;border-bottom:1px dotted var(--stroke-2)}
+footer .refs a:hover{color:var(--c-user)}
+footer .sig{margin-top:34px;font:600 .78rem var(--font-mono);color:var(--ink-faint);letter-spacing:.04em}
+footer .sig b{font-family:var(--font-display);color:var(--ink)}
+
+/* accessibility / motion */
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important}
+  .reveal{opacity:1;transform:none}
+}
+</style>
+</head>
+<body class="lang-vi">
+
+<!-- CONTROLS -->
+<div class="ctrls" role="toolbar" aria-label="Display preferences">
+  <button id="lang-vi" aria-pressed="true">VI</button>
+  <button id="lang-en" aria-pressed="false">EN</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button id="theme-cycle" title="Theme">
+    <span class="dot" style="background:var(--c-backend)"></span>
+    <span id="theme-label">DARK</span>
+  </button>
+</div>
+
+<!-- FLOW RAIL -->
+<nav class="rail" aria-label="Section navigation">
+  <a href="#hero" data-label="01 · OVERVIEW"><span class="rdot" style="background:var(--c-recruiter)"></span></a>
+  <a href="#recruiter-frontend" data-label="02 · RECRUITER"><span class="rdot" style="background:var(--c-frontend)"></span></a>
+  <a href="#backend-brain" data-label="03 · BACKEND"><span class="rdot" style="background:var(--c-backend)"></span></a>
+  <a href="#zalo-oa-bridge" data-label="04 · ZALO OA"><span class="rdot" style="background:var(--c-oa)"></span></a>
+  <a href="#webhook-conduit" data-label="05 · WEBHOOK"><span class="rdot" style="background:var(--c-user)"></span></a>
+  <a href="#e2e-flow" data-label="06 · LIFECYCLE"><span class="rdot" style="background:var(--grad-journey)"></span></a>
+</nav>
+
+<!-- ============================================================
+     SECTION 1 — HERO
+     ============================================================ -->
+<section id="hero" class="hero">
+  <div class="wrap" style="text-align:center;display:flex;flex-direction:column;align-items:center">
+    <div class="eyebrow reveal"><span class="pip"></span><span class="vi">KIẾN TRÚC HỆ THỐNG · TING TING</span><span class="en">SYSTEM ARCHITECTURE · TING TING</span></div>
+    <h1 class="reveal d1">
+      <span class="vi">Từ một tin nhắn Zalo<br>đến một <span class="grad">ứng viên</span> — trong tích tắc.</span>
+      <span class="en">From a single Zalo message<br>to a <span class="grad">potential hire</span> — in a heartbeat.</span>
+    </h1>
+    <p class="lead reveal d2" style="margin-left:auto;margin-right:auto">
+      <span class="vi">Năm lớp — <strong>Nhà tuyển dụng · Giao diện · Backend · Zalo OA · Người dùng</strong> — hoạt động như một dây chuyền tin nhắn hai chiều, tức thì và an toàn.</span>
+      <span class="en">Five layers — <strong>Recruiter · Frontend · Backend · Zalo OA · Zalo users</strong> — operate as one bidirectional, real-time, secure messaging pipeline.</span>
+    </p>
+
+    <div class="flowtube reveal d3">
+      <div class="flow">
+        <div class="node n1">
+          <div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM6 21v-1a6 6 0 0 1 12 0v1"/></svg></div>
+          <div class="lbl vi">Nhà tuyển dụng</div><div class="lbl en">Recruiter</div>
+          <div class="sub">01</div>
+        </div>
+        <div class="node n2">
+          <div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.8"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+          <div class="lbl vi">Giao diện</div><div class="lbl en">Frontend</div>
+          <div class="sub">02</div>
+        </div>
+        <div class="node n3">
+          <div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="1.8"><path d="M9 3h6l4 4v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M9 12h6M9 16h4"/></svg></div>
+          <div class="lbl vi">Backend</div><div class="lbl en">Backend</div>
+          <div class="sub">03</div>
+        </div>
+        <div class="node n4">
+          <div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M7 14a5 5 0 0 1 10 0"/><circle cx="12" cy="16" r="1.4" fill="#0ea5e9"/></svg></div>
+          <div class="lbl vi">Zalo OA</div><div class="lbl en">Zalo OA</div>
+          <div class="sub">04</div>
+        </div>
+        <div class="node n5">
+          <div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/></svg></div>
+          <div class="lbl vi">Người dùng Zalo</div><div class="lbl en">Zalo user</div>
+          <div class="sub">05</div>
+        </div>
+      </div>
+      <div class="wire" aria-hidden="true">
+        <div class="track"></div>
+        <div class="pkt p1"></div><div class="pkt p2"></div><div class="pkt p3"></div>
+        <div class="pkt back"></div>
+      </div>
+    </div>
+
+    <div class="metrics reveal d4">
+      <div class="metric"><b>&lt; 1s</b><span class="vi">WEBHOOK ACK</span><span class="en">WEBHOOK ACK</span></div>
+      <div class="metric"><b>2</b><span class="vi">KÊNH (BOT + OA)</span><span class="en">CHANNELS (BOT + OA)</span></div>
+      <div class="metric"><b>M2.7</b><span class="vi">BỘ NÃO MINIMAX</span><span class="en">MINIMAX BRAIN</span></div>
+      <div class="metric"><b>Socket.IO</b><span class="vi">REALTIME</span><span class="en">REALTIME</span></div>
+      <div class="metric"><b>5</b><span class="vi">CHẾ ĐỘ HỘI THOẠI</span><span class="en">CONVERSATION MODES</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 2 — RECRUITER FRONTEND
+     ============================================================ -->
+<section id="recruiter-frontend">
+  <div class="wrap">
+    <div class="eyebrow reveal"><span class="pip"></span><span class="vi">LỚP 02 · GIAO DIỆN</span><span class="en">LAYER 02 · FRONTEND</span></div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px" class="reveal">
+      <span class="layer-tag"><i style="background:var(--c-frontend)"></i>React 19 · react-admin</span>
+      <span class="layer-tag"><i style="background:var(--c-frontend)"></i>Tailwind v4 · Shadcn</span>
+    </div>
+    <h2 class="reveal d1">
+      <span class="vi">Buồng lái của <span class="grad">nhà tuyển dụng</span></span>
+      <span class="en">The <span class="grad">recruiter's</span> cockpit</span>
+    </h2>
+    <p class="lead reveal d2">
+      <span class="vi">Một SPA tiếng Việt hoàn toàn: hộp thư <code>ConversationList</code>, luồng tin <code>ChatThread</code>, và bảng ngữ cảnh ứng viên — trong một cửa sổ duy nhất, cập nhật tức thì qua Socket.IO.</span>
+      <span class="en">A Vietnamese-only SPA: the <code>ConversationList</code> inbox, the live <code>ChatThread</code>, and the candidate context panel — in one window, updated live over Socket.IO.</span>
+    </p>
+
+    <div class="cockpit reveal d3" style="margin-top:28px">
+      <div class="mock" aria-hidden="true">
+        <div class="col-list">
+          <div class="hd"><span class="vi">Hộp thư</span><span class="en">Inbox</span><span class="badge vi">3 mới</span><span class="badge en">3 new</span></div>
+          <div class="row on"><span class="nm">Nguyễn Văn A</span><span class="pv vi">Em muốn hỏi lương...</span><span class="pv en">Asking about salary...</span></div>
+          <div class="row"><span class="nm">Trần Thị B</span><span class="pv vi">Cảm ơn anh/chị</span><span class="pv en">Thank you</span></div>
+          <div class="row"><span class="nm">Lê Minh C</span><span class="pv vi">Địa chỉ xưởng?</span><span class="pv en">Factory address?</span></div>
+          <div class="row"><span class="nm">Phạm Hoài D</span><span class="pv vi">Đã gửi CV</span><span class="pv en">Sent CV</span></div>
+        </div>
+        <div class="col-thread">
+          <div class="hd"><span class="who">Nguyễn Văn A</span><span class="take vi">⇲ TIẾP NHẬN</span><span class="take en">⇲ TAKEN OVER</span></div>
+          <div class="thread">
+            <div class="bubble in">Việc làm lái xe còn không ạ?<span class="t vi">09:41</span><span class="t en">09:41</span></div>
+            <div class="bubble out bot">Dạ còn anh nhé — anh đã có GPLX B2 chưa?<span class="t vi">09:41 · bot</span><span class="t en">09:41 · bot</span></div>
+            <div class="bubble in">Em có B2 ạ, 5 năm kinh nghiệm.<span class="t vi">09:42</span><span class="t en">09:42</span></div>
+            <div class="bubble out human">Anh gửi số điện thoại, em giao nhân sự tư vấn nhé.<span class="t vi">09:42 · bạn</span><span class="t en">09:42 · you</span></div>
+          </div>
+          <div class="composer"><div class="field"></div><div class="send"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#04121a" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;justify-content:center">
+        <div class="card reveal">
+          <div class="ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-frontend)" stroke-width="1.8"><path d="M4 4h16v12H8l-4 4Z"/></svg></div>
+          <h3 class="vi">Realtime Socket.IO</h3><h3 class="en">Socket.IO realtime</h3>
+          <p class="vi">Mỗi trình duyệt giữ một socket JWT, gom vào room <code>conv:{id}</code> / <code>user:{id}</code>. <code>useConversationRealtime</code> → <code>messageStore</code> → vẽ lại tức thì. Không polling.</p>
+          <p class="en">Each browser holds a JWT socket, roomed into <code>conv:{id}</code> / <code>user:{id}</code>. <code>useConversationRealtime</code> → <code>messageStore</code> → instant re-render. No polling.</p>
+        </div>
+        <div class="card reveal d1">
+          <div class="ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-recruiter)" stroke-width="1.8"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg></div>
+          <h3 class="vi">Tiếp nhận bởi người</h3><h3 class="en">Human takeover</h3>
+          <p class="vi"><code>take-over</code> → HUMAN · <code>release</code> → đẩy lại hàng đợi · <code>semi-auto</code> → bot + người cùng can thiệp · badge <code>needs-attention</code> đếm tin chưa trả lời.</p>
+          <p class="en"><code>take-over</code> → HUMAN · <code>release</code> → re-queue unanswered · <code>semi-auto</code> → bot + human interject · <code>needs-attention</code> badge counts unanswered.</p>
+        </div>
+      </div>
+    </div>
+    <div class="socket-note reveal d2">
+      <span class="pulse"></span>
+      <span class="vi">Worker RQ ghi kết quả lượt bot → phát qua bus Redis chung → process web tản ra cho các socket trình duyệt đang giữ room cuộc hội thoại đó.</span>
+      <span class="en">The RQ worker records the bot turn outcome → emits over the shared Redis bus → the web process fans out to browser sockets holding that conversation's room.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 3 — BACKEND BRAIN
+     ============================================================ -->
+<section id="backend-brain">
+  <div class="wrap">
+    <div class="eyebrow reveal"><span class="pip"></span><span class="vi">LỚP 03 · BACKEND</span><span class="en">LAYER 03 · BACKEND</span></div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px" class="reveal">
+      <span class="layer-tag"><i style="background:var(--c-backend)"></i>FastAPI</span>
+      <span class="layer-tag"><i style="background:var(--c-backend)"></i>LangGraph-style pipeline</span>
+      <span class="layer-tag"><i style="background:var(--c-backend)"></i>RQ workers</span>
+    </div>
+    <h2 class="reveal d1">
+      <span class="vi">Bộ não <span class="grad">suy nghĩ, kiểm duyệt,</span> rồi mới gửi</span>
+      <span class="en">A brain that <span class="grad">thinks, vets,</span> then sends</span>
+    </h2>
+    <p class="lead reveal d2">
+      <span class="vi">Mỗi lượt bot chạy qua <code>run_turn</code> — một đường ống các node so khớp 1:1 với topo LangGraph. Suy luận, lọc an toàn, rồi kiểm tra quyền sở hữu trước khi phát ra Zalo.</span>
+      <span class="en">Every bot turn runs through <code>run_turn</code> — a node pipeline mirroring the LangGraph topology 1:1. Reason, safety-filter, then ownership-check before emitting to Zalo.</span>
+    </p>
+
+    <div class="pipeline reveal d3" style="margin-top:26px">
+      <div class="pipe-step"><div class="idx">01</div><div class="ttl vi">Nạp trạng thái hội thoại + 16 tin gần nhất</div><div class="ttl en">Load conversation state + 16 recent messages</div><div class="tag vi">load</div><div class="tag en">load</div></div>
+      <div class="pipe-step"><div class="idx">02</div><div class="ttl vi">Nhịp typing 4s giữ trạng thái "đang gõ" trên Zalo</div><div class="ttl en">4s typing heartbeat keeps Zalo "typing" alive</div><div class="tag">typing</div></div>
+      <div class="pipe-step hot"><div class="idx">03</div><div class="ttl vi">Agent <code>MiniMax M2.7</code> tool-calling · RAG kiến thức (embeddings Gemini) · thu thập lead</div><div class="ttl en">Agent <code>MiniMax M2.7</code> tool-calling · knowledge RAG (Gemini embeddings) · lead collection</div><div class="tag">agent</div></div>
+      <div class="pipe-step hot"><div class="idx">04</div><div class="ttl vi">Lọc an toàn nhanh → nếu dấu hiệu rủi ro → kiểm duyệt LLM (viết lại 1 lần)</div><div class="ttl en">Fast safety filter → if flagged → LLM safety check (rewrite once)</div><div class="tag">safety</div></div>
+      <div class="pipe-step guard"><div class="idx">05</div><div class="ttl vi"><b>Pre-send guard:</b> kiểm tra quyền sở hữu lại — recruiter tiếp nhận giữa chừng → SUPPRESSED</div><div class="ttl en"><b>Pre-send guard:</b> re-check ownership — recruiter took over mid-turn → SUPPRESSED</div><div class="tag vi">ownership ×2</div><div class="tag en">ownership ×2</div></div>
+      <div class="pipe-step"><div class="idx">06</div><div class="ttl vi">Gửi tin → ghi kết quả → trích xuất lead/bộ nhớ (chỉ khi đã gửi thật)</div><div class="ttl en">Send message → log outcome → lead/memory extraction (only on real send)</div><div class="tag">send</div></div>
+    </div>
+
+    <div class="grid cols-2 reveal d4" style="margin-top:20px">
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-recruiter)" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3 class="vi">Bất biến cốt lõi</h3><h3 class="en">Core invariant</h3>
+        <p class="vi">Quyền sở hữu được kiểm tra <strong>hai lần</strong> — trước và sau khi LLM sinh câu trả lời — để bot không bao giờ "nói thay" khi recruiter đã tiếp quản.</p>
+        <p class="en">Ownership is checked <strong>twice</strong> — before and after the LLM generates the reply — so the bot never speaks over a recruiter who just took over.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-backend)" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3"/></svg></div>
+        <h3 class="vi">Phụ thuộc tiêm được</h3><h3 class="en">Injectable deps</h3>
+        <p class="vi"><code>GraphDeps</code> tiêm LLM / embedder / Zalo / DB → toàn bộ nhánh safety/ownership/suppress chạy unit-test được bằng fake, không cần API key.</p>
+        <p class="en"><code>GraphDeps</code> injects LLM / embedder / Zalo / DB → every safety/ownership/suppress branch is unit-testable with fakes, no API keys needed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 4 — ZALO OA BRIDGE
+     ============================================================ -->
+<section id="zalo-oa-bridge">
+  <div class="wrap">
+    <div class="eyebrow reveal"><span class="pip"></span><span class="vi">LỚP 04 · ZALO OA</span><span class="en">LAYER 04 · ZALO OA</span></div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px" class="reveal">
+      <span class="layer-tag"><i style="background:var(--c-oa)"></i>OA OpenAPI v3</span>
+      <span class="layer-tag"><i style="background:var(--c-oa)"></i>Channel-aware facade</span>
+    </div>
+    <h2 class="reveal d1">
+      <span class="vi">Cầu nối <span class="grad">Zalo OA</span> — một facade, tự chọn kênh</span>
+      <span class="en">The <span class="grad">Zalo OA</span> bridge — one facade, picks the channel</span>
+    </h2>
+    <p class="lead reveal d2">
+      <span class="vi"><code>ZaloChannelSender</code> nhìn <code>conv.zalo_channel</code>: <code>"oa"</code> → <code>ZaloOASender</code>, ngược lại → <code>ZaloBotSender</code>. Toàn bộ đồ thị agent vẫn channel-agnostic.</span>
+      <span class="en"><code>ZaloChannelSender</code> inspects <code>conv.zalo_channel</code>: <code>"oa"</code> → <code>ZaloOASender</code>, otherwise → <code>ZaloBotSender</code>. The whole agent graph stays channel-agnostic.</span>
+    </p>
+
+    <div class="bridge reveal d3" style="margin-top:26px">
+      <div class="dispatch">
+        <div class="hub vi">ZaloChannelSender.for_conversation(conv)</div>
+        <div class="hub en">ZaloChannelSender.for_conversation(conv)</div>
+        <div class="branches">
+          <div class="branch">
+            <h4><i style="background:var(--c-oa)"></i><span class="vi">Kênh OA</span><span class="en">OA channel</span></h4>
+            <div class="vi" style="font-size:.82rem;color:var(--ink-soft)"><code>ZaloOASender</code> → <code>/v3.0/oa/message/cs</code>, header <code>access_token</code>, recipient <code>user_id</code>.</div>
+            <div class="en" style="font-size:.82rem;color:var(--ink-soft)"><code>ZaloOASender</code> → <code>/v3.0/oa/message/cs</code>, header <code>access_token</code>, recipient <code>user_id</code>.</div>
+            <div class="ep">POST {OA_BASE}/v3.0/oa/message/cs</div>
+          </div>
+          <div class="branch">
+            <h4><i style="background:var(--c-frontend)"></i><span class="vi">Kênh Bot</span><span class="en">Bot channel</span></h4>
+            <div class="vi" style="font-size:.82rem;color:var(--ink-soft)"><code>ZaloBotSender</code> → Bot Platform API, secret token chia sẻ.</div>
+            <div class="en" style="font-size:.82rem;color:var(--ink-soft)"><code>ZaloBotSender</code> → Bot Platform API, shared secret token.</div>
+            <div class="ep">POST {BOT_BASE}/bot{token}/sendMessage</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="snippet"><span class="c"># OA outbound — ZaloOASender.send_message</span>
+{
+  <span class="k">"recipient"</span>: { <span class="k">"user_id"</span>: <span class="s">"oa:849xxxxxxxx"</span> },
+  <span class="k">"message"</span>:  { <span class="k">"text"</span>: <span class="s">"Anh gửi SĐT, em giao nhân sự nhé."</span> }
+}
+<span class="c"># header: access_token: &lt;OA access token&gt;
+# long text auto-chunked (1–2000 chars/segment)</span></div>
+      </div>
+    </div>
+
+    <div class="grid cols-3 reveal d4" style="margin-top:20px">
+      <div class="card">
+        <h3 class="vi">Quản lý token</h3><h3 class="en">Token management</h3>
+        <p class="vi">Access + refresh token nhập thủ công bởi admin, <strong>mã hóa khi lưu</strong>, che <code>•••••</code> với mọi vai trò.</p>
+        <p class="en">Access + refresh tokens entered manually by admin, <strong>encrypted at rest</strong>, masked <code>•••••</code> for all roles.</p>
+      </div>
+      <div class="card">
+        <h3 class="vi">Audit trail</h3><h3 class="en">Audit trail</h3>
+        <p class="vi">Mỗi lần đổi tên khóa / xoay token đều được ghi — truy vết đầy đủ.</p>
+        <p class="en">Every key rename / token rotation is audited — full traceability.</p>
+      </div>
+      <div class="card">
+        <h3 class="vi">Đồng bộ per-turn</h3><h3 class="en">Per-turn refresh</h3>
+        <p class="vi">Cấu hình được giải lại mỗi lượt gửi → token luôn tươi, sender rebuild trước mỗi phát.</p>
+        <p class="en">Config is resolved per outbound turn → always-fresh token, sender rebuilt before each send.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 5 — WEBHOOK CONDUIT
+     ============================================================ -->
+<section id="webhook-conduit">
+  <div class="wrap">
+    <div class="eyebrow reveal"><span class="pip"></span><span class="vi">LỚP 05 · WEBHOOK</span><span class="en">LAYER 05 · WEBHOOK</span></div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px" class="reveal">
+      <span class="layer-tag"><i style="background:var(--c-user)"></i>Dual endpoints</span>
+      <span class="layer-tag"><i style="background:var(--c-user)"></i>Signature-verified</span>
+      <span class="layer-tag"><i style="background:var(--c-user)"></i>Sub-second guard chain</span>
+    </div>
+    <h2 class="reveal d1">
+      <span class="vi">Đường ống <span class="grad">hai đầu vào,</span> một chuỗi bảo vệ &lt; 1s</span>
+      <span class="en">A <span class="grad">dual-endpoint</span> conduit with a sub-second guard chain</span>
+    </h2>
+
+    <div class="endpoints reveal d2" style="margin-top:26px">
+      <div class="ep-card">
+        <div class="path">POST /webhooks/zalo/chatbot</div>
+        <div class="vi" style="font-size:.86rem;color:var(--ink-soft);margin-bottom:10px"><strong>Bot Platform</strong> — secret chung <code>X-Bot-Api-Secret-Token</code> (echo do Zalo gửi lại).</div>
+        <div class="en" style="font-size:.86rem;color:var(--ink-soft);margin-bottom:10px"><strong>Bot Platform</strong> — shared secret <code>X-Bot-Api-Secret-Token</code> (echoed by Zalo).</div>
+        <div class="sig">hmac.compare_digest(token, bot_webhook_secret)</div>
+      </div>
+      <div class="ep-card">
+        <div class="path">POST /webhooks/zalo/oa</div>
+        <div class="vi" style="font-size:.86rem;color:var(--ink-soft);margin-bottom:10px"><strong>Official Account</strong> — xác minh chữ ký <code>X-ZEvent-Signature</code>.</div>
+        <div class="en" style="font-size:.86rem;color:var(--ink-soft);margin-bottom:10px"><strong>Official Account</strong> — verifies <code>X-ZEvent-Signature</code>.</div>
+        <div class="sig">sha256(appId + data + timeStamp + OAsecretKey)</div>
+      </div>
+    </div>
+
+    <div class="reveal d3">
+      <div class="vi" style="font:600 .72rem var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px">Chuỗi bảo vệ đồng bộ · chạy trong process web trước khi enqueue</div>
+      <div class="en" style="font:600 .72rem var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px">Synchronous guard chain · runs in the web process before enqueuing</div>
+      <div class="chain">
+        <div class="step"><b>normalize</b><span class="vi">trích chat_id + text</span><span class="en">extract chat_id + text</span></div>
+        <div class="step"><b>dedup</b><span class="vi">msg_hash</span><span class="en">msg_hash</span></div>
+        <div class="step"><b>ensure</b><span class="vi">tạo hội thoại</span><span class="en">create conv</span></div>
+        <div class="step"><b>record_inbound</b><span class="vi">lưu tin đến</span><span class="en">persist inbound</span></div>
+        <div class="step"><b>run_start_guard</b><span class="vi">HUMAN → starve</span><span class="en">HUMAN → starve</span></div>
+        <div class="step"><b>acquire_lock</b><span class="vi">mutex mỗi chat</span><span class="en">per-chat mutex</span></div>
+        <div class="step"><b>typing</b><span class="vi">phản hồi tức thì</span><span class="en">instant feedback</span></div>
+        <div class="step"><b>enqueue</b><span class="vi">→ RQ worker</span><span class="en">→ RQ worker</span></div>
+      </div>
+    </div>
+
+    <div class="grid cols-2 reveal d4" style="margin-top:20px">
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-user)" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6Z"/></svg></div>
+        <h3 class="vi">Từ chối mù — không bao giờ chấp nhận inbound chưa xác thực</h3><h3 class="en">Refuse blind — never accept unverified inbound</h3>
+        <p class="vi">Môi trường không phải dev mà chưa cấu hình secret → trả <strong>503</strong>. Zalo sẽ thử lại khi nhận 503.</p>
+        <p class="en">Non-dev with no secret configured → returns <strong>503</strong>. Zalo retries on 503.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-backend)" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3 class="vi">Đáp nhanh, xử lý nặng sau</h3><h3 class="en">Ack fast, process later</h3>
+        <p class="vi">Webhook chỉ chạy guard chain rồi trả <strong>200 queued</strong> (hoặc 503 enqueue_failed). Việc LLM chạy trong RQ worker riêng.</p>
+        <p class="en">The webhook runs only the guard chain then returns <strong>200 queued</strong> (or 503 enqueue_failed). LLM work runs in a separate RQ worker.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 6 — E2E LIFECYCLE
+     ============================================================ -->
+<section id="e2e-flow">
+  <div class="wrap">
+    <div class="eyebrow reveal"><span class="pip"></span><span class="vi">LỚP 06 · VÒNG ĐỜI</span><span class="en">LAYER 06 · LIFECYCLE</span></div>
+    <h2 class="reveal d1">
+      <span class="vi">Cùng một đường ống — <span class="grad">chảy hai chiều</span></span>
+      <span class="en">One pipeline — <span class="grad">flowing both ways</span></span>
+    </h2>
+    <p class="lead reveal d2">
+      <span class="vi">Hệ thống xử lý hai hướng trên cùng một đồ thị: ứng viên tới recruiter (bot trả lời), và recruiter tới ứng viên (người trả lời). Năm bất biến giữ cho đường ống không bao giờ rò rỉ.</span>
+      <span class="en">The system handles both directions on one graph: candidate → recruiter (bot replies), and recruiter → candidate (human replies). Five invariants keep the pipe leak-free.</span>
+    </p>
+
+    <div class="lifecycle reveal d3">
+      <div class="bidir">
+        <div class="lane">
+          <h4><span class="arr" style="color:var(--c-user)">→</span><span class="vi">Ứng viên → Recruiter (Inbound)</span><span class="en">Candidate → Recruiter (Inbound)</span></h4>
+          <ol>
+            <li class="vi"><b>Zalo user</b> gõ tin → Zalo đẩy vào <b>/webhooks/zalo/oa</b></li>
+            <li class="en"><b>Zalo user</b> types → Zalo posts to <b>/webhooks/zalo/oa</b></li>
+            <li class="vi">Xác minh chữ ký → guard chain → <b>record_inbound</b></li>
+            <li class="en">Verify signature → guard chain → <b>record_inbound</b></li>
+            <li class="vi">Enqueue RQ → <b>run_turn</b> (agent → safety → ownership)</li>
+            <li class="en">Enqueue RQ → <b>run_turn</b> (agent → safety → ownership)</li>
+            <li class="vi"><b>ZaloOASender</b> trả lời → Socket.IO báo recruiter</li>
+            <li class="en"><b>ZaloOASender</b> replies → Socket.IO notifies recruiter</li>
+          </ol>
+        </div>
+        <div class="lane">
+          <h4><span class="arr" style="color:var(--c-recruiter)">←</span><span class="vi">Recruiter → Ứng viên (Outbound)</span><span class="en">Recruiter → Candidate (Outbound)</span></h4>
+          <ol>
+            <li class="vi">Recruiter <b>take-over</b> → chế độ HUMAN</li>
+            <li class="en">Recruiter <b>take-over</b> → HUMAN mode</li>
+            <li class="vi">Gõ trả lời → <b>POST /conversations/{id}/messages</b></li>
+            <li class="en">Types reply → <b>POST /conversations/{id}/messages</b></li>
+            <li class="vi">Kiểm tra JWT + ownership + chế độ</li>
+            <li class="en">JWT + ownership + mode check</li>
+            <li class="vi"><b>ZaloChannelSender</b> chọn OA → <b>oa/message/cs</b></li>
+            <li class="en"><b>ZaloChannelSender</b> picks OA → <b>oa/message/cs</b></li>
+            <li class="vi">Tin tới máy ứng viên (lưu cả khi fail = audit)</li>
+            <li class="en">Message lands on user's device (failed = audit row)</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid cols-3 reveal d4" style="margin-top:20px">
+      <div class="card"><div class="k">01</div><h3 class="vi">Sub-second ack</h3><h3 class="en">Sub-second ack</h3><p class="vi">Webhook đáp &lt; 1s, việc nặng sang RQ.</p><p class="en">Webhook acks &lt; 1s, heavy work to RQ.</p></div>
+      <div class="card"><div class="k">02</div><h3 class="vi">Signature-verified</h3><h3 class="en">Signature-verified</h3><p class="vi">Mọi inbound xác thực, hoặc 503.</p><p class="en">Every inbound verified, else 503.</p></div>
+      <div class="card"><div class="k">03</div><h3 class="vi">Ownership-safe</h3><h3 class="en">Ownership-safe</h3><p class="vi">Kiểm tra quyền ×2; SUPPRESSED khi tiếp nhận.</p><p class="en">Ownership ×2; SUPPRESSED on takeover.</p></div>
+      <div class="card"><div class="k">04</div><h3 class="vi">Idempotent</h3><h3 class="en">Idempotent</h3><p class="vi">Dedup theo <code>msg_hash</code>; trùng lặp bị bỏ qua.</p><p class="en">Dedup by <code>msg_hash</code>; duplicates dropped.</p></div>
+      <div class="card"><div class="k">05</div><h3 class="vi">Channel-aware</h3><h3 class="en">Channel-aware</h3><p class="vi">Bot hay OA — cùng một đồ thị agent.</p><p class="en">Bot or OA — one agent graph.</p></div>
+      <div class="card"><div class="ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--c-backend)" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div><h3 class="vi">Reconcile worker</h3><h3 class="en">Reconcile worker</h3><p class="vi">Quét hội thoại chưa trả lời, thử giao lại — không tin rơi.</p><p class="en">Scans unanswered conversations, retries delivery — no dropped messages.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     FOOTER / REFERENCES
+     ============================================================ -->
+<footer>
+  <div class="wrap">
+    <h4><span class="vi">Tài liệu tham khảo</span><span class="en">References</span></h4>
+    <ul class="refs">
+      <li>Zalo Official Account OpenAPI — <a href="https://developers.zalo.me/docs/api/official-account-api-230" target="_blank" rel="noopener">developers.zalo.me</a></li>
+      <li>OA webhook: user sends message — <a href="https://developers.zalo.me/docs/api/official-account-api/webhook/su-kien-nguoi-dung-gui-tin-nhan-post-3720" target="_blank" rel="noopener">su-kien-nguoi-dung-gui-tin-nhan</a></li>
+      <li>X-ZEvent-Signature verification — <a href="https://developers.zalo.me/community/detail/f62243c57f8096decf91" target="_blank" rel="noopener">sha256(appId+data+timeStamp+OAsecretKey)</a></li>
+      <li>FastAPI — <a href="https://fastapi.tiangolo.com/" target="_blank" rel="noopener">fastapi.tiangolo.com</a></li>
+      <li>LangGraph — <a href="https://langchain-ai.github.io/langgraph/" target="_blank" rel="noopener">langchain-ai.github.io/langgraph</a></li>
+      <li>MiniMax M-series — <a href="https://www.minimaxi.com/" target="_blank" rel="noopener">minimaxi.com</a></li>
+      <li>Socket.IO — <a href="https://socket.io/docs/v4/" target="_blank" rel="noopener">socket.io/docs/v4</a></li>
+      <li>react-admin — <a href="https://marmelab.com/react-admin/" target="_blank" rel="noopener">marmelab.com/react-admin</a></li>
+    </ul>
+    <div class="sig">
+      <span class="vi">VFIC · Ting Ting — trợ lý tuyển dụng AI trên Zalo Official Account. &nbsp;Bản vẽ kiến trúc đọc trực tiếp từ mã nguồn ChatBot.</span>
+      <span class="en">VFIC · Ting Ting — an AI recruiting assistant on Zalo Official Account. &nbsp;Architecture traced directly from the ChatBot source code.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var root=document.documentElement, body=document.body;
+
+  /* ---------- THEME ---------- */
+  var THEMES=["dark","light","system"], LABELS={dark:"DARK",light:"LIGHT",system:"AUTO"};
+  var ti=0;
+  try{ var saved=localStorage.getItem("tt-theme"); if(saved){ ti=Math.max(0,THEMES.indexOf(saved)); } }catch(e){}
+  function applyTheme(){
+    root.setAttribute("data-theme", THEMES[ti]);
+    var lbl=document.getElementById("theme-label"); if(lbl) lbl.textContent=LABELS[THEMES[ti]];
+    try{ localStorage.setItem("tt-theme", THEMES[ti]); }catch(e){}
+  }
+  applyTheme();
+  var tbtn=document.getElementById("theme-cycle");
+  if(tbtn) tbtn.addEventListener("click", function(){ ti=(ti+1)%THEMES.length; applyTheme(); });
+
+  /* ---------- LANGUAGE ---------- */
+  function setLang(l){
+    body.classList.toggle("lang-vi", l==="vi");
+    body.classList.toggle("lang-en", l==="en");
+    root.setAttribute("lang", l);
+    var a=document.getElementById("lang-vi"), b=document.getElementById("lang-en");
+    if(a) a.setAttribute("aria-pressed", l==="vi");
+    if(b) b.setAttribute("aria-pressed", l==="en");
+    try{ localStorage.setItem("tt-lang", l); }catch(e){}
+  }
+  var initLang="vi";
+  try{ var sl=localStorage.getItem("tt-lang"); if(sl==="en"||sl==="vi") initLang=sl; }catch(e){}
+  setLang(initLang);
+  var lv=document.getElementById("lang-vi"), le=document.getElementById("lang-en");
+  if(lv) lv.addEventListener("click", function(){setLang("vi");});
+  if(le) le.addEventListener("click", function(){setLang("en");});
+
+  /* ---------- REVEAL + RAIL ---------- */
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){ e.target.classList.add("in"); }
+    });
+  },{threshold:0.12});
+  document.querySelectorAll(".reveal").forEach(function(el){ io.observe(el); });
+  // Safety net: guarantee nothing stays hidden if captured beyond the viewport
+  // (element screenshots render the full section, where IO may not have fired).
+  window.addEventListener("load", function(){
+    setTimeout(function(){
+      document.querySelectorAll(".reveal:not(.in)").forEach(function(el){ el.classList.add("in"); });
+    }, 700);
+  });
+
+  var railLinks=Array.prototype.slice.call(document.querySelectorAll(".rail a"));
+  var secs=railLinks.map(function(a){ return document.querySelector(a.getAttribute("href")); });
+  var rio=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        var idx=secs.indexOf(e.target);
+        railLinks.forEach(function(l,i){ l.classList.toggle("active", i===idx); });
+      }
+    });
+  },{threshold:0.4});
+  secs.forEach(function(s){ if(s) rio.observe(s); });
+})();
+</script>
+</body>
+</html>

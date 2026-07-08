@@ -51,6 +51,25 @@ class ZaloOASender:
             return data
         return {"error": -1, "message": f"non-JSON response: {data!r}"}
 
+    async def _get(self, path: str) -> dict[str, Any]:
+        token = self._token
+        if not token:
+            return {"error": -1, "message": "zalo_oa_access_token not configured"}
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._settings.zalo_bot_request_timeout
+            ) as client:
+                resp = await client.get(
+                    f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
+                    headers={"access_token": token},
+                )
+            data = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            return {"error": -1, "message": f"transport error: {exc}"}
+        if isinstance(data, dict):
+            return data
+        return {"error": -1, "message": f"non-JSON response: {data!r}"}
+
     @staticmethod
     def _send_result(envelope: dict[str, Any]) -> SendResult:
         error = envelope.get("error", 0)
@@ -95,6 +114,59 @@ class ZaloOASender:
             raw={"chunks": envelopes, "message_ids": message_ids},
         )
 
+    async def send_media(
+        self,
+        chat_id: str,
+        *,
+        text: str,
+        media_url: str,
+        media_type: str = "image",
+    ) -> SendResult:
+        """Send an OA consultation message with one media attachment.
+
+        Zalo's CS media template supports a single media element. The current
+        chatbot primarily sends text, but this helper gives recruiter/admin
+        workflows a documented OA-native shape for image/GIF responses.
+        """
+        text = text.strip()
+        media_url = media_url.strip()
+        media_type = media_type.strip()
+        if not text:
+            return SendResult(ok=False, error="text length must be 1..2000")
+        if len(text) > 2000:
+            return SendResult(ok=False, error="text length must be 1..2000")
+        if not media_url:
+            return SendResult(ok=False, error="media_url is required")
+        if media_type not in {"image", "gif"}:
+            return SendResult(ok=False, error="media_type must be image or gif")
+
+        body = {
+            "recipient": {"user_id": chat_id},
+            "message": {
+                "text": text,
+                "attachment": {
+                    "type": "template",
+                    "payload": {
+                        "template_type": "media",
+                        "elements": [
+                            {
+                                "media_type": media_type,
+                                "url": media_url,
+                            }
+                        ],
+                    },
+                },
+            },
+        }
+        return self._send_result(await self._post("/v3.0/oa/message/cs", body))
+
+    async def send_raw_message(self, chat_id: str, message: dict[str, Any]) -> SendResult:
+        """Send a caller-built OA message payload through the CS endpoint."""
+        if not message:
+            return SendResult(ok=False, error="message body is required")
+        body = {"recipient": {"user_id": chat_id}, "message": message}
+        return self._send_result(await self._post("/v3.0/oa/message/cs", body))
+
     async def send_chat_action(self, chat_id: str, action: str) -> SendResult:
         # OA OpenAPI has no Bot-Platform-compatible typing endpoint in this app's
         # current contract. Treat it as best-effort success so graph UX logic can
@@ -103,3 +175,7 @@ class ZaloOASender:
             ok=True,
             raw={"skipped": True, "chat_id": chat_id, "action": action},
         )
+
+    async def get_oa_info(self) -> SendResult:
+        envelope = await self._get("/v2.0/oa/getoa")
+        return self._send_result(envelope)

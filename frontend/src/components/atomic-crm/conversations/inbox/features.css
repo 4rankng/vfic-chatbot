@@ -61,7 +61,13 @@
       transparent 34%
     ),
     linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 260px),
-    var(--workspace-bg-deep);
+    var(--chat-bg);
+  background-size:
+    auto,
+    auto,
+    28px 28px,
+    28px 28px,
+    auto;
 }
 
 .settings-header-actions {
@@ -89,6 +95,33 @@
   display: grid;
   gap: 16px;
   scroll-margin-top: 18px;
+}
+
+.settings-embedded-resource {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-solid) 82%, transparent);
+}
+
+.settings-embedded-resource .persona-workspace-content {
+  min-height: min(720px, calc(100dvh - 192px));
+  padding: 0;
+}
+
+.settings-embedded-resource .persona-page-shell {
+  min-height: min(720px, calc(100dvh - 192px));
+  border-inline: 0;
+  background: transparent;
+}
+
+.settings-embedded-users {
+  padding: 16px;
+}
+
+.settings-embedded-users-list {
+  min-width: 0;
 }
 
 .settings-side-nav {
@@ -563,7 +596,8 @@
 
 .profile-mobile-shell {
   min-height: 100dvh;
-  background: var(--surface);
+  background: var(--chat-bg);
+  background-size: 28px 28px;
   color: var(--ink);
   font-family: var(--chat-font-family);
   font-size: var(--chat-fs-body);
@@ -771,6 +805,29 @@
   display: grid;
   align-content: start;
   gap: 14px;
+}
+
+.settings-oa-actions {
+  display: flex;
+  justify-content: flex-end;
+  grid-column: 1 / -1;
+  padding-top: 2px;
+}
+
+.settings-card .settings-test-button {
+  min-height: 40px;
+  height: 40px;
+  border-color: color-mix(in srgb, var(--settings-accent) 30%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--settings-accent-soft) 48%, transparent);
+  color: var(--settings-accent);
+  font-size: var(--crm-fs-action);
+  font-weight: var(--chat-fw-semibold);
+}
+
+.settings-card .settings-test-button:hover {
+  background: color-mix(in srgb, var(--settings-accent-soft) 72%, transparent);
+  color: var(--settings-accent);
 }
 
 .settings-advanced {

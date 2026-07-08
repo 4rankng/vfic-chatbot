@@ -66,3 +66,38 @@ def test_zalo_oa_normalizer_maps_text_message_to_scoped_chat_id():
     assert norm.zalo_chat_id == "oa:user-123"
     assert norm.user_text == "Xin chào"
     assert norm.user_name == "An"
+
+
+def test_zalo_oa_event_parser_classifies_non_chat_events_without_bot_turn():
+    from app.services.zalo_oa_events import parse_oa_webhook_event
+
+    event = parse_oa_webhook_event(
+        {
+            "event_name": "user_seen_message",
+            "sender": {"id": "user-123"},
+            "recipient": {"id": "oa-1"},
+            "message": {"msg_id": "oa-msg-1"},
+        }
+    )
+
+    assert event is not None
+    assert event.kind == "user_seen"
+    assert event.sender_id == "user-123"
+    assert event.message_id == "oa-msg-1"
+    assert event.can_start_bot_turn is False
+
+
+def test_zalo_oa_normalizer_ignores_delivery_and_status_events():
+    from app.services.webhook import ZaloWebhookService
+
+    assert (
+        ZaloWebhookService.normalize_oa(
+            {
+                "event_name": "oa_send_text",
+                "sender": {"id": "oa-1"},
+                "recipient": {"id": "user-123"},
+                "message": {"text": "Đã gửi", "msg_id": "oa-msg-1"},
+            }
+        )
+        is None
+    )

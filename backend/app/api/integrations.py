@@ -12,13 +12,25 @@ from app.schemas.integrations import (
     OpenRouterIntegrationSettingsOut,
     OpenRouterIntegrationSettingsUpdate,
     OpenRouterIntegrationTestOut,
+    ZaloChannelTestOut,
     ZaloIntegrationSettingsOut,
     ZaloIntegrationSettingsUpdate,
-    ZaloIntegrationTestOut,
 )
 from app.services.integration_settings import IntegrationSettingsService
+from app.services.zalo_bot_service import ZaloBotAdminClient, SendResult
+from app.services.zalo_oa_service import ZaloOASender
 
 router = APIRouter(prefix="/admin/integrations", tags=["integrations"])
+
+
+def _safe_probe_error(prefix: str, result: SendResult, secrets: list[str]) -> str:
+    message = result.error or "unknown error"
+    for secret in secrets:
+        if secret:
+            message = message.replace(secret, "[redacted]")
+    if len(message) > 240:
+        message = f"{message[:237]}..."
+    return f"{prefix}: {message}"
 
 
 @router.get("/zalo", response_model=ZaloIntegrationSettingsOut)
@@ -46,32 +58,81 @@ async def update_zalo_integration_settings(
     )
 
 
-@router.post("/zalo/test", response_model=ZaloIntegrationTestOut)
-async def test_zalo_integration_settings(
+@router.post("/zalo/bot/test", response_model=ZaloChannelTestOut)
+async def test_zalo_bot(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-) -> ZaloIntegrationTestOut:
-    cfg = await IntegrationSettingsService(db).resolve_zalo()
-    missing = []
-    if not cfg.bot_token:
-        missing.append("zalo_bot_token")
-    if not cfg.oa_app_id:
-        missing.append("zalo_oa_app_id")
-    if not cfg.oa_secret_key:
-        missing.append("zalo_oa_secret_key")
-    if not cfg.oa_access_token:
-        missing.append("zalo_oa_access_token")
-    if not cfg.oa_refresh_token:
-        missing.append("zalo_oa_refresh_token")
-    return ZaloIntegrationTestOut(
-        bot_configured=bool(cfg.bot_token),
-        oa_configured=bool(
-            cfg.oa_app_id
-            and cfg.oa_secret_key
-            and cfg.oa_access_token
-            and cfg.oa_refresh_token
-        ),
+) -> ZaloChannelTestOut:
+    """Probe ONLY the Zalo Bot Platform channel (bot-api.zaloplatforms.com).
+
+    Hits ``getMe`` with the configured bot token. Independent of the OA channel.
+    """
+    settings_service = IntegrationSettingsService(db)
+    cfg = await settings_service.resolve_zalo()
+    missing = [] if cfg.bot_token else ["zalo_bot_token"]
+    configured = bool(cfg.bot_token)
+    connected = False
+    errors: list[str] = []
+    if configured:
+        bot_settings = settings_service.settings.model_copy(
+            update={"zalo_bot_token": cfg.bot_token}
+        )
+        result = await ZaloBotAdminClient(settings=bot_settings).get_me()
+        connected = result.ok
+        if not result.ok:
+            errors.append(_safe_probe_error("zalo_bot", result, [cfg.bot_token]))
+    return ZaloChannelTestOut(
+        configured=configured,
+        connected=connected,
         missing=missing,
+        errors=errors,
+    )
+
+
+@router.post("/zalo/oa/test", response_model=ZaloChannelTestOut)
+async def test_zalo_oa(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ZaloChannelTestOut:
+    """Probe ONLY the Zalo Official Account channel (openapi.zalo.me).
+
+    Hits ``getoa`` with the configured OA access token. Independent of the Bot
+    Platform channel.
+    """
+    settings_service = IntegrationSettingsService(db)
+    cfg = await settings_service.resolve_zalo()
+    missing = [
+        key
+        for key, value in (
+            ("zalo_oa_app_id", cfg.oa_app_id),
+            ("zalo_oa_secret_key", cfg.oa_secret_key),
+            ("zalo_oa_access_token", cfg.oa_access_token),
+            ("zalo_oa_refresh_token", cfg.oa_refresh_token),
+        )
+        if not value
+    ]
+    configured = not missing
+    connected = False
+    errors: list[str] = []
+    if configured:
+        result = await ZaloOASender(
+            settings=settings_service.settings,
+            access_token=cfg.oa_access_token,
+        ).get_oa_info()
+        connected = result.ok
+        if not result.ok:
+            errors.append(
+                _safe_probe_error(
+                    "zalo_oa",
+                    result,
+                    [cfg.oa_access_token, cfg.oa_refresh_token, cfg.oa_secret_key],
+                )
+            )
+    return ZaloChannelTestOut(
+        configured=configured,
+        connected=connected,
+        missing=missing,
+        errors=errors,
     )
 
 

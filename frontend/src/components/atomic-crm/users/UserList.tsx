@@ -19,6 +19,10 @@ import { UserActions } from "./UserActions";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
 import type { UserAccount } from "../types";
 
+type UserListProps = {
+  embedded?: boolean;
+};
+
 const AccessDenied = () => {
   const translate = useTranslate();
   return (
@@ -38,7 +42,7 @@ const AccessDenied = () => {
   );
 };
 
-export const UserList = () => {
+export const UserList = ({ embedded = false }: UserListProps) => {
   const translate = useTranslate();
   const { permissions, isPending } = usePermissions();
 
@@ -46,16 +50,33 @@ export const UserList = () => {
   if (permissions !== "admin") return <AccessDenied />;
 
   return (
-    <ListBase perPage={25} sort={{ field: "created_at", order: "DESC" }}>
+    <ListBase
+      resource="users"
+      perPage={25}
+      sort={{ field: "created_at", order: "DESC" }}
+    >
       <UserListContent
         title={translate("resources.users.name", { smart_count: 2 })}
+        embedded={embedded}
       />
     </ListBase>
   );
 };
 
-const UserListContent = ({ title }: { title: string }) => (
-  <div className="px-4 py-5 pb-24 md:px-0 md:py-0 md:pb-0">
+const UserListContent = ({
+  title,
+  embedded,
+}: {
+  title: string;
+  embedded: boolean;
+}) => (
+  <div
+    className={
+      embedded
+        ? "settings-embedded-users-list"
+        : "px-4 py-5 pb-24 md:px-0 md:py-0 md:pb-0"
+    }
+  >
     <TopToolbar className="flex-nowrap items-start gap-3">
       <div className="min-w-0 flex-1">
         <h2 className="truncate text-2xl font-bold tracking-tight md:text-xl md:font-semibold">
