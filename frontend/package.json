@@ -89,9 +89,9 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
-    "@vitest/browser-playwright": "^4.0.18",
-    "@vitest/browser-preview": "^4.0.18",
-    "@vitest/coverage-v8": "^4.1.0",
+    "@vitest/browser-playwright": "^4.1.10",
+    "@vitest/browser-preview": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.22.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
@@ -108,10 +108,13 @@
     "tldts": "^7.0.26",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
-    "vite": "^7.3.2",
+    "vite": "^7.3.6",
     "vite-plugin-pwa": "^1.2.0",
     "vite-plugin-simple-html": "^1.0.1",
-    "vitest": "^4.1.0",
+    "vitest": "^4.1.10",
     "vitest-browser-react": "^2.0.5"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
   }
 }
