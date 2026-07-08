@@ -150,12 +150,16 @@ async def _post(
 def _send_result(envelope: dict[str, Any]) -> SendResult:
     """Project a ``{ok, result/error_code/description}`` envelope into ``SendResult``.
 
-    Sender methods all return ``{message_id, date}`` on success; we pluck
-    ``message_id`` and surface the rest via ``raw``.
+    Message-bearing methods return ``{message_id, date}`` inside ``result``; we
+    pluck ``message_id`` and surface the rest via ``raw``. Methods whose
+    ``result`` is missing or not a dict (admin list payloads, ``{ok: true}``
+    chat-action acks) yield ``msg_id=None`` — the same projection every per-method
+    tail used before they delegated here.
     """
     if envelope.get("ok"):
-        result = envelope.get("result") or {}
-        msg_id = result.get("message_id")
+        result = envelope.get("result")
+        result_dict = result if isinstance(result, dict) else {}
+        msg_id = result_dict.get("message_id")
         return SendResult(ok=True, msg_id=str(msg_id) if msg_id is not None else None, raw=envelope)
     desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
     return SendResult(ok=False, error=str(desc), raw=envelope)
@@ -345,13 +349,9 @@ class ZaloBotSender:
             {"chat_id": chat_id, "action": action},
             token=self._bot_token,
         )
-        # Custom projection: sendChatAction returns no ``result``, so the
-        # generic ``_send_result`` (which looks for ``message_id``) would
-        # always report ``msg_id=None``. That's fine — explicit for clarity.
-        if envelope.get("ok"):
-            return SendResult(ok=True, raw=envelope)
-        desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
-        return SendResult(ok=False, error=str(desc), raw=envelope)
+        # sendChatAction replies ``{ok: true}`` with no ``result``; ``_send_result``
+        # reports ``msg_id=None`` for that shape, which is exactly what we want.
+        return _send_result(envelope)
 
     async def send_buttons(
         self,
@@ -431,8 +431,7 @@ class ZaloBotAdminClient:
                 raw=envelope,
             )
             return SendResult(ok=True, msg_id=info.id, raw={**envelope, "_parsed": info.__dict__})
-        desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
-        return SendResult(ok=False, error=str(desc), raw=envelope)
+        return _send_result(envelope)
 
     async def get_updates(self, timeout: int | None = None) -> SendResult:
         """Long-poll for new updates. Default timeout 30s per Zalo docs.
@@ -445,10 +444,7 @@ class ZaloBotAdminClient:
         if timeout is not None:
             body["timeout"] = str(timeout)
         envelope = await _post(self._settings, "getUpdates", body)
-        if envelope.get("ok"):
-            return SendResult(ok=True, raw=envelope)
-        desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
-        return SendResult(ok=False, error=str(desc), raw=envelope)
+        return _send_result(envelope)
 
     async def set_webhook(self, url: str, secret_token: str) -> SendResult:
         """Register a webhook URL + 8-256 char secret.
@@ -465,23 +461,14 @@ class ZaloBotAdminClient:
             "setWebhook",
             {"url": url, "secret_token": secret_token},
         )
-        if envelope.get("ok"):
-            return SendResult(ok=True, raw=envelope)
-        desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
-        return SendResult(ok=False, error=str(desc), raw=envelope)
+        return _send_result(envelope)
 
     async def delete_webhook(self) -> SendResult:
         """Unregister the webhook. After this, ``getUpdates`` becomes available."""
         envelope = await _post(self._settings, "deleteWebhook", None)
-        if envelope.get("ok"):
-            return SendResult(ok=True, raw=envelope)
-        desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
-        return SendResult(ok=False, error=str(desc), raw=envelope)
+        return _send_result(envelope)
 
     async def get_webhook_info(self) -> SendResult:
         """Return current webhook status. ``raw["result"]`` is the ``WebhookInfo`` payload."""
         envelope = await _post(self._settings, "getWebhookInfo", None)
-        if envelope.get("ok"):
-            return SendResult(ok=True, raw=envelope)
-        desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
-        return SendResult(ok=False, error=str(desc), raw=envelope)
+        return _send_result(envelope)

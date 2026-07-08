@@ -407,6 +407,35 @@ async def test_get_webhook_info_happy_path(monkeypatch: pytest.MonkeyPatch, sett
 
 
 # ---------------------------------------------------------------------------
+# Envelope projection — _send_result
+# ---------------------------------------------------------------------------
+
+
+async def test_send_result_handles_non_dict_result() -> None:
+    """Admin/chat-action envelopes carry a non-dict ``result`` (or none at all);
+    ``_send_result`` must not crash and must yield ``msg_id=None`` + ``ok=True``.
+
+    This is the path the admin methods and ``send_chat_action`` now rely on
+    instead of inlining their own ok/error tail.
+    """
+    list_result = svc._send_result({"ok": True, "result": [{"update_id": 1}]})
+    assert list_result.ok is True and list_result.msg_id is None
+
+    missing_result = svc._send_result({"ok": True})
+    assert missing_result.ok is True and missing_result.msg_id is None
+
+    scalar_result = svc._send_result({"ok": True, "result": "unexpected"})
+    assert scalar_result.ok is True and scalar_result.msg_id is None
+
+
+async def test_send_result_failure_uses_description_or_error_code() -> None:
+    """The failure branch is shared by every sender + admin method now."""
+    assert svc._send_result({"ok": False, "description": "boom"}).error == "boom"
+    assert svc._send_result({"ok": False, "error_code": 429}).error == "429"
+    assert svc._send_result({"ok": False}).error == "unknown error"
+
+
+# ---------------------------------------------------------------------------
 # Transport-level error handling
 # ---------------------------------------------------------------------------
 
