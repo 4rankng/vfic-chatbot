@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 from dataclasses import dataclass
 from typing import Iterable
@@ -15,6 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, ZALO_BOT_API_BASE, ZALO_OA_API_BASE, get_settings
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
+
+logger = logging.getLogger(__name__)
+
+# OA OAuth token endpoint (grant_type=authorization_code | refresh_token).
+# Tokens are opaque and short-lived (~1h); refresh on demand rather than by clock.
+ZALO_OA_TOKEN_URL = "https://oauth.zaloapp.com/v4/access_token"
+
 
 ZALO_BOT_TOKEN = "zalo_bot_token"
 ZALO_BOT_WEBHOOK_SECRET = "zalo_bot_webhook_secret"
@@ -230,29 +238,40 @@ class IntegrationSettingsService:
             "openrouter_embedding_dim": cfg.embedding_dim,
         }
 
+    async def _write_secret(self, key: str, value: str | None, *, actor_id=None) -> bool:
+        """Encrypt + upsert one Zalo integration row. Returns True if stored.
+
+        Only stages the write; the caller commits (and records audit) so multi-key
+        updates and token refresh can batch their persistence.
+        """
+        if key not in ZALO_SETTING_KEYS or value is None:
+            return False
+        cleaned = value.strip()
+        if not cleaned:
+            return False
+        encrypted = self.cipher.encrypt(cleaned)
+        row = await self.db.get(IntegrationSetting, key)
+        if row is None:
+            row = IntegrationSetting(
+                key=key,
+                encrypted_value=encrypted,
+                is_secret=key != ZALO_OA_APP_ID,
+                updated_by=actor_id,
+            )
+            self.db.add(row)
+        else:
+            row.encrypted_value = encrypted
+            row.is_secret = key != ZALO_OA_APP_ID
+            row.updated_by = actor_id
+        return True
+
     async def update_zalo(self, values: dict[str, str | None], *, actor_id) -> list[str]:
         changed: list[str] = []
         for key, value in values.items():
-            if key not in ZALO_SETTING_KEYS or value is None:
+            if value is None:
                 continue
-            cleaned = value.strip()
-            if not cleaned:
-                continue
-            row = await self.db.get(IntegrationSetting, key)
-            encrypted = self.cipher.encrypt(cleaned)
-            if row is None:
-                row = IntegrationSetting(
-                    key=key,
-                    encrypted_value=encrypted,
-                    is_secret=key != ZALO_OA_APP_ID,
-                    updated_by=actor_id,
-                )
-                self.db.add(row)
-            else:
-                row.encrypted_value = encrypted
-                row.is_secret = key != ZALO_OA_APP_ID
-                row.updated_by = actor_id
-            changed.append(key)
+            if await self._write_secret(key, value, actor_id=actor_id):
+                changed.append(key)
 
         if changed:
             await record_audit(
@@ -265,6 +284,67 @@ class IntegrationSettingsService:
             )
             await self.db.commit()
         return changed
+
+    async def refresh_oa_access_token(self) -> str | None:
+        """Refresh the OA access_token from the stored refresh_token.
+
+        Called lazily by ``ZaloOASender`` when a send reports the token invalid.
+        A Redis ``SET NX EX`` lock prevents RQ workers from refreshing in
+        parallel; losers re-read whatever token the winner just stored. Returns
+        the new access_token, or ``None`` on any failure — the caller then
+        surfaces the original send error.
+        """
+        import httpx
+
+        from app.core.redis import get_redis
+
+        cfg = await self.resolve_zalo()
+        if not cfg.oa_refresh_token:
+            return None
+
+        redis = get_redis()
+        lock_key = "zalo:oa:token:refresh"
+        acquired = await redis.set(lock_key, "1", nx=True, ex=30)
+        if not acquired:
+            # Another worker is refreshing; hand back whatever is stored now.
+            return cfg.oa_access_token or None
+
+        try:
+            headers = {"secret_key": cfg.oa_secret_key} if cfg.oa_secret_key else {}
+            body = {
+                "grant_type": "refresh_token",
+                "refresh_token": cfg.oa_refresh_token,
+                "app_id": cfg.oa_app_id,
+            }
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self.settings.zalo_bot_request_timeout
+                ) as client:
+                    resp = await client.post(ZALO_OA_TOKEN_URL, json=body, headers=headers)
+                data = resp.json()
+            except Exception:  # noqa: BLE001
+                logger.warning("zalo OA token refresh transport error", exc_info=True)
+                return None
+            if not isinstance(data, dict) or not data.get("access_token"):
+                return None
+
+            new_access = str(data["access_token"])
+            await self._write_secret(ZALO_OA_ACCESS_TOKEN, new_access)
+            if data.get("refresh_token"):
+                await self._write_secret(ZALO_OA_REFRESH_TOKEN, str(data["refresh_token"]))
+            await record_audit(
+                self.db,
+                action="refresh_zalo_oa_token",
+                actor_id=None,
+                target_type="integration_settings",
+                target_id="zalo",
+                payload={"rotated_refresh_token": bool(data.get("refresh_token"))},
+            )
+            await self.db.commit()
+            return new_access
+        finally:
+            await redis.delete(lock_key)
+
 
     async def update_minimax(self, values: dict[str, str | None], *, actor_id) -> list[str]:
         changed: list[str] = []

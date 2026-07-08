@@ -353,6 +353,40 @@ class ZaloBotSender:
         desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
         return SendResult(ok=False, error=str(desc), raw=envelope)
 
+    async def send_buttons(
+        self,
+        chat_id: str,
+        *,
+        text: str,
+        buttons: list[dict[str, Any]],
+    ) -> SendResult:
+        """Interactive buttons are an OA-template concept, not a Bot Platform method.
+
+        Returning a clean not-supported result lets ``ZaloChannelSender`` forward
+        ``send_buttons`` uniformly across channels without ``hasattr`` checks.
+        """
+        return SendResult(
+            ok=False,
+            error="interactive buttons not supported on bot channel",
+            raw={"chat_id": chat_id, "text": text, "buttons": buttons},
+        )
+
+    async def send_media(
+        self,
+        chat_id: str,
+        *,
+        text: str,
+        media_url: str,
+        media_type: str = "image",
+    ) -> SendResult:
+        """Channel-uniform media send; Bot Platform only supports image via sendPhoto."""
+        if media_type != "image":
+            return SendResult(
+                ok=False,
+                error=f"media_type {media_type!r} not supported on bot channel",
+            )
+        return await self.send_photo(chat_id, media_url, caption=text or None)
+
 
 # ---------------------------------------------------------------------------
 # Admin: getMe / getUpdates / setWebhook / deleteWebhook / getWebhookInfo

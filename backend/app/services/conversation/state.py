@@ -12,7 +12,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, text, update
+from sqlalchemy import or_, select, text, update
 
 from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
 from app.models.conversation import (
@@ -33,6 +33,17 @@ _settings = get_settings()
 _SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
 
 logger = logging.getLogger(__name__)
+
+# Forward-only delivery progression for receipt handling (READ > DELIVERED > SENT).
+# PENDING/FAILED/SUPPRESSED sit at 0 so a receipt never revives a non-sent row.
+_DELIVERY_RANK = {
+    DeliveryStatus.PENDING: 0,
+    DeliveryStatus.FAILED: 0,
+    DeliveryStatus.SUPPRESSED: 0,
+    DeliveryStatus.SENT: 1,
+    DeliveryStatus.DELIVERED: 2,
+    DeliveryStatus.READ: 3,
+}
 
 
 class ConversationConflict(Exception):
@@ -577,3 +588,89 @@ class ConversationState:
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
         return msg
+
+    # --- OA webhook side events (receipts / lifecycle / interaction signals) ---
+
+    async def apply_delivery_receipt(
+        self,
+        conv: Conversation,
+        *,
+        zalo_message_id: str | None,
+        delivered: bool = False,
+        seen: bool = False,
+    ) -> bool:
+        """Advance an outbound message's delivery_status from a Zalo receipt.
+
+        Forward-only (READ > DELIVERED > SENT); never regresses and never touches
+        ``version`` or ``unread_count`` — a receipt must not invalidate an
+        in-flight bot turn's optimistic-lock recheck. Returns whether a row moved.
+        """
+        if not zalo_message_id:
+            return False
+        if seen:
+            target = DeliveryStatus.READ
+        elif delivered:
+            target = DeliveryStatus.DELIVERED
+        else:
+            return False
+        msg = await self.db.scalar(
+            select(Message).where(
+                Message.conversation_id == conv.id,
+                Message.zalo_message_id == zalo_message_id,
+                Message.sender.in_([MessageSender.BOT, MessageSender.RECRUITER]),
+            )
+        )
+        if msg is None:
+            return False
+        if _DELIVERY_RANK.get(msg.delivery_status, 0) >= _DELIVERY_RANK[target]:
+            return False
+        msg.delivery_status = target
+        await self.db.commit()
+        await self.events.conversation_updated(conv)
+        return True
+
+    async def record_system_note(self, conv: Conversation, *, body: str) -> Message:
+        """Persist an informational SYSTEM message (button click, follow/unfollow).
+
+        Does not bump ``unread_count`` or stamp ``last_inbound_at`` — it is CRM
+        chrome, not an inbound worker message, and must not start a bot turn.
+        """
+        msg = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.SYSTEM,
+            body=body,
+        )
+        self.db.add(msg)
+        await self.db.commit()
+        await self.db.refresh(msg)
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
+        return msg
+
+    async def apply_follow(self, conv: Conversation) -> Conversation:
+        """A user followed/returned to the OA: reopen if closed, clear needs_human.
+
+        No ``version`` bump — follow is a CRM-visible refresh, not a takeover, and
+        must not suppress an in-flight bot turn.
+        """
+        if conv.status == ConversationStatus.CLOSED:
+            conv.status = ConversationStatus.OPEN
+        conv.needs_human = False
+        await self.db.commit()
+        await self.db.refresh(conv)
+        await self.events.conversation_updated(conv)
+        return conv
+
+    async def apply_unfollow(self, conv: Conversation) -> Conversation:
+        """A user unfollowed the OA: stop proactive follow-up and flag a recruiter.
+
+        Sets ``followup_opted_out`` (the reconcile/proactive worker stops pestering
+        a departed user) and ``needs_human``. No mode/status change — closing is a
+        recruiter decision, not an automatic one.
+        """
+        conv.followup_opted_out = True
+        conv.needs_human = True
+        await self.db.commit()
+        await self.db.refresh(conv)
+        await self.events.conversation_updated(conv)
+        return conv

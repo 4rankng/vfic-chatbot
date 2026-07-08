@@ -46,6 +46,8 @@ class DeliveryStatus(str, enum.Enum):
     SENT = "SENT"
     FAILED = "FAILED"
     SUPPRESSED = "SUPPRESSED"
+    DELIVERED = "DELIVERED"
+    READ = "READ"
 
 
 class BotRunOutcome(str, enum.Enum):

@@ -21,6 +21,8 @@ OAEventKind = Literal[
     "oa_sent_anonymous",
     "user_received",
     "user_seen",
+    "follow",
+    "unfollow",
     "unknown",
 ]
 
@@ -43,6 +45,8 @@ CLICK_TO_MESSAGE_EVENTS = {
 REACTION_EVENTS = {"user_reacted_message", "user_react_message"}
 USER_RECEIVED_EVENTS = {"user_received_message", "user_receive_message"}
 USER_SEEN_EVENTS = {"user_seen_message", "user_viewed_message"}
+FOLLOW_EVENTS = {"follow", "user_follow_oa", "user_follow"}
+UNFOLLOW_EVENTS = {"unfollow", "user_unfollow_oa", "user_unfollow"}
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,14 @@ class ZaloOAWebhookEvent:
     @property
     def can_start_bot_turn(self) -> bool:
         return self.kind == "incoming_text" and bool(self.sender_id and self.text)
+
+    @property
+    def can_trigger_receipt(self) -> bool:
+        return self.kind in ("user_seen", "user_received")
+
+    @property
+    def is_lifecycle(self) -> bool:
+        return self.kind in ("follow", "unfollow")
 
     @property
     def dedup_hash(self) -> str:
@@ -126,6 +138,10 @@ def _classify_event(event_name: str) -> OAEventKind:
         return "user_received"
     if event_name in USER_SEEN_EVENTS:
         return "user_seen"
+    if event_name in FOLLOW_EVENTS:
+        return "follow"
+    if event_name in UNFOLLOW_EVENTS:
+        return "unfollow"
     if event_name.startswith("oa_send_") and "anonymous" in event_name:
         return "oa_sent_anonymous"
     if event_name.startswith("oa_send_"):

@@ -74,16 +74,7 @@ class ZaloWebhookService:
         event = parse_oa_webhook_event(payload)
         if event is None or not event.can_start_bot_turn:
             return None
-
-        return NormalizedMessage(
-            zalo_chat_id=event.scoped_chat_id,
-            zalo_channel="oa",
-            user_text=event.text,
-            user_name=_oa_sender_name(event.raw),
-            msg_id=event.message_id
-            or f"{event.scoped_chat_id}:{event.text[:40]}",
-            msg_hash=event.dedup_hash,
-        )
+        return _normalized_from_oa_event(event)
 
     @staticmethod
     def normalize(payload: dict) -> NormalizedMessage | None:
@@ -99,18 +90,24 @@ class ZaloWebhookService:
     ) -> dict:
         """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
-        The *enqueue* callback returns ``False`` when the job cannot be
-        enqueued (Redis down / queue depth exceeded).  The caller translates
-        this to HTTP 503 so the upstream (Zalo) retries.
+        For the OA channel, only text messages enter the bot-turn queue; receipts,
+        follow/unfollow, button clicks, and media/reaction events are routed to
+        ``handle_oa_side_event`` instead. The *enqueue* callback returns ``False``
+        when the job cannot be enqueued (Redis down / queue depth exceeded); the
+        caller translates that to HTTP 503 so Zalo retries.
         """
-        normalizer = (
-            ZaloWebhookService.normalize_oa
-            if channel == "oa"
-            else ZaloWebhookService.normalize_bot
-        )
-        norm = normalizer(payload)
-        if norm is None:
-            return {"status": "ignored"}
+        if channel == "oa":
+            event = parse_oa_webhook_event(payload)
+            if event is None:
+                return {"status": "ignored"}
+            if event.can_start_bot_turn:
+                norm = _normalized_from_oa_event(event)
+            else:
+                return await handle_oa_side_event(db, event)
+        else:
+            norm = ZaloWebhookService.normalize_bot(payload)
+            if norm is None:
+                return {"status": "ignored"}
 
         if not await MessageDedupService.claim(db, norm.zalo_chat_id, norm.msg_hash):
             return {"status": "duplicate"}
@@ -154,6 +151,84 @@ class ZaloWebhookService:
             await svc.release_lock(conv)  # no worker will clear it
             return {"status": "enqueue_failed", "conversation_id": str(conv.id)}
         return {"status": "queued", "conversation_id": str(conv.id)}
+
+
+def _normalized_from_oa_event(event) -> NormalizedMessage:
+    """Build a NormalizedMessage from a bot-turn-eligible OA event."""
+    return NormalizedMessage(
+        zalo_chat_id=event.scoped_chat_id,
+        zalo_channel="oa",
+        user_text=event.text,
+        user_name=_oa_sender_name(event.raw),
+        msg_id=event.message_id or f"{event.scoped_chat_id}:{event.text[:40]}",
+        msg_hash=event.dedup_hash,
+    )
+
+
+async def handle_oa_side_event(db: AsyncSession, event) -> dict:
+    """Dispatch non-text OA events: receipts, follow/unfollow, clicks, media.
+
+    None of these start a bot turn, acquire the per-chat lock, or fire typing.
+    Receipts advance outbound ``Message.delivery_status``; follow/unfollow adjust
+    lifecycle flags; button clicks record a SYSTEM note; media/reactions are
+    logged and dropped (deliberately low-noise).
+    """
+    kind = event.kind
+    svc = ConversationService(db)
+
+    if kind in ("user_seen", "user_received"):
+        if not event.message_id or not event.sender_id:
+            return {"status": "ignored"}
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        await svc.apply_delivery_receipt(
+            conv,
+            zalo_message_id=event.message_id,
+            delivered=(kind == "user_received"),
+            seen=(kind == "user_seen"),
+        )
+        return {"status": "receipt"}
+
+    if kind == "follow":
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        await svc.apply_follow(conv)
+        return {"status": "follow"}
+
+    if kind == "unfollow":
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        await svc.apply_unfollow(conv)
+        await svc.record_system_note(
+            conv, body="Người dùng đã bỏ quan tâm (unfollow) OA."
+        )
+        return {"status": "unfollow"}
+
+    if kind == "click_to_message":
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        title = _event_button_title(event.raw)
+        body = (
+            f"👤 Người dùng đã nhấn nút: {title}" if title else "👤 Người dùng đã nhấn nút."
+        )
+        await svc.record_system_note(conv, body=body)
+        return {"status": "button_click"}
+
+    # incoming_media / reaction / oa_sent / oa_sent_anonymous / unknown
+    logger.info("oa side event ignored: kind=%s sender=%s", kind, event.sender_id)
+    return {"status": "ignored"}
+
+
+def _event_button_title(raw: dict) -> str:
+    """Best-effort extraction of a clicked button's label from the raw payload."""
+    msg = raw.get("message")
+    if isinstance(msg, dict):
+        title = msg.get("title") or msg.get("button_title") or msg.get("label")
+        if title:
+            return str(title)
+    for key in ("event", "recipient"):
+        nested = raw.get(key)
+        if isinstance(nested, dict):
+            title = nested.get("title") or nested.get("button_title")
+            if title:
+                return str(title)
+    return ""
 
 
 async def _fire_typing(chat_id: str) -> None:

@@ -1,7 +1,7 @@
 """Zalo Official Account outbound client."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import httpx
 
@@ -21,9 +21,11 @@ class ZaloOASender:
         settings: Settings | None = None,
         *,
         access_token: str | None = None,
+        refresh: Callable[[], Awaitable[str | None]] | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._access_token = access_token
+        self._refresh = refresh
 
     @property
     def _token(self) -> str:
@@ -84,6 +86,35 @@ class ZaloOASender:
         message = envelope.get("message") or envelope.get("error_message") or error
         return SendResult(ok=False, error=str(message), raw=envelope)
 
+    @staticmethod
+    def _is_token_invalid(envelope: dict[str, Any]) -> bool:
+        """True when the OA envelope indicates the access_token is bad/expired."""
+        error = envelope.get("error")
+        if error in (0, "0", None):
+            return False
+        message = str(envelope.get("message") or envelope.get("error_message") or "").lower()
+        if "access token" in message:
+            return True
+        if "token" in message and "invalid" in message:
+            return True
+        # Known Zalo OA token-related error codes.
+        return str(error) in {"-216", "-213"}
+
+    async def _post_with_refresh(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        """POST, lazily refreshing the access_token once on a token-invalid reply.
+
+        On a token-invalid envelope (and when a refresh callback is wired in) we
+        refresh, swap the token, and retry exactly once. The new token sticks on
+        ``self._access_token`` so a chunked send refreshes at most once per call.
+        """
+        envelope = await self._post(path, body)
+        if self._is_token_invalid(envelope) and self._refresh is not None:
+            new_token = await self._refresh()
+            if new_token:
+                self._access_token = new_token
+                envelope = await self._post(path, body)
+        return envelope
+
     async def send_message(self, chat_id: str, text: str, **_: Any) -> SendResult:
         text = text.strip()
         if not text:
@@ -97,7 +128,9 @@ class ZaloOASender:
                 "recipient": {"user_id": chat_id},
                 "message": {"text": chunk},
             }
-            result = self._send_result(await self._post("/v3.0/oa/message/cs", body))
+            result = self._send_result(
+                await self._post_with_refresh("/v3.0/oa/message/cs", body)
+            )
             envelopes.append(result.raw or {})
             if result.msg_id:
                 message_ids.append(result.msg_id)
@@ -158,14 +191,62 @@ class ZaloOASender:
                 },
             },
         }
-        return self._send_result(await self._post("/v3.0/oa/message/cs", body))
+        return self._send_result(await self._post_with_refresh("/v3.0/oa/message/cs", body))
 
     async def send_raw_message(self, chat_id: str, message: dict[str, Any]) -> SendResult:
         """Send a caller-built OA message payload through the CS endpoint."""
         if not message:
             return SendResult(ok=False, error="message body is required")
         body = {"recipient": {"user_id": chat_id}, "message": message}
-        return self._send_result(await self._post("/v3.0/oa/message/cs", body))
+        return self._send_result(await self._post_with_refresh("/v3.0/oa/message/cs", body))
+
+    async def send_buttons(
+        self,
+        chat_id: str,
+        *,
+        text: str,
+        buttons: list[dict[str, Any]],
+    ) -> SendResult:
+        """Send an OA button template (Quick Reply-style interactive message).
+
+        Each button is ``{title, type, payload}`` with type one of
+        ``oa.query.chat`` / ``oa.open.url`` / ``oa.query.show_product`` per the
+        OA template docs. Routes through ``send_raw_message`` so it inherits the
+        refresh-aware transport.
+        """
+        text = (text or "").strip()
+        buttons = list(buttons or [])
+        if not text:
+            return SendResult(ok=False, error="text length must be 1..2000")
+        if not buttons:
+            return SendResult(ok=False, error="buttons list is required")
+        message = {
+            "text": text,
+            "attachment": {
+                "type": "template",
+                "payload": {
+                    "template_type": "button",
+                    "text": text,
+                    "buttons": buttons,
+                },
+            },
+        }
+        return await self.send_raw_message(chat_id, message)
+
+    async def send_anonymous_message(self, *, phone: str, text: str) -> SendResult:
+        """Send a CS message addressed by phone number (no prior OA interaction).
+
+        Recipient shape ``{"phone": phone}`` targets a user by phone instead of
+        ``user_id``. Reuses the refresh-aware transport and standard result parsing.
+        """
+        text = (text or "").strip()
+        phone = (phone or "").strip()
+        if not text:
+            return SendResult(ok=False, error="text length must be 1..2000")
+        if not phone:
+            return SendResult(ok=False, error="phone is required")
+        body = {"recipient": {"phone": phone}, "message": {"text": text}}
+        return self._send_result(await self._post_with_refresh("/v3.0/oa/message/cs", body))
 
     async def send_chat_action(self, chat_id: str, action: str) -> SendResult:
         # OA OpenAPI has no Bot-Platform-compatible typing endpoint in this app's

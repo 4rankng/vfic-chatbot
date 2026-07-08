@@ -101,3 +101,225 @@ def test_zalo_oa_normalizer_ignores_delivery_and_status_events():
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_oa_user_seen_message_advances_delivery_to_read(monkeypatch):
+    import uuid
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(id=uuid.uuid4())
+    svc = MagicMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.apply_delivery_receipt = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+
+    payload = {
+        "event_name": "user_seen_message",
+        "sender": {"id": "user-123"},
+        "message": {"msg_id": "oa-msg-1"},
+    }
+    result = await ZaloWebhookService.handle(
+        MagicMock(), payload, enqueue=lambda _j: True, channel="oa"
+    )
+
+    assert result == {"status": "receipt"}
+    svc.ensure.assert_awaited_once_with("oa:user-123", zalo_channel="oa")
+    svc.apply_delivery_receipt.assert_awaited_once()
+    kwargs = svc.apply_delivery_receipt.call_args.kwargs
+    assert kwargs["zalo_message_id"] == "oa-msg-1"
+    assert kwargs["seen"] is True
+    assert kwargs["delivered"] is False
+
+
+@pytest.mark.asyncio
+async def test_oa_user_received_message_advances_to_delivered(monkeypatch):
+    import uuid
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(id=uuid.uuid4())
+    svc = MagicMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.apply_delivery_receipt = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+
+    payload = {
+        "event_name": "user_received_message",
+        "sender": {"id": "user-123"},
+        "message": {"msg_id": "oa-msg-1"},
+    }
+    result = await ZaloWebhookService.handle(
+        MagicMock(), payload, enqueue=lambda _j: True, channel="oa"
+    )
+
+    assert result == {"status": "receipt"}
+    kwargs = svc.apply_delivery_receipt.call_args.kwargs
+    assert kwargs["delivered"] is True
+    assert kwargs["seen"] is False
+
+
+@pytest.mark.asyncio
+async def test_oa_follow_ensures_and_applies_follow(monkeypatch):
+    import uuid
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(id=uuid.uuid4())
+    svc = MagicMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.apply_follow = AsyncMock(return_value=conv)
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+
+    result = await ZaloWebhookService.handle(
+        MagicMock(),
+        {"event_name": "follow", "sender": {"id": "user-123"}},
+        enqueue=lambda _j: True,
+        channel="oa",
+    )
+
+    assert result == {"status": "follow"}
+    svc.ensure.assert_awaited_once_with("oa:user-123", zalo_channel="oa")
+    svc.apply_follow.assert_awaited_once_with(conv)
+    svc.apply_unfollow.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_oa_unfollow_opted_out_and_records_system_note(monkeypatch):
+    import uuid
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(id=uuid.uuid4())
+    svc = MagicMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.apply_unfollow = AsyncMock(return_value=conv)
+    svc.record_system_note = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+
+    result = await ZaloWebhookService.handle(
+        MagicMock(),
+        {"event_name": "unfollow", "sender": {"id": "user-123"}},
+        enqueue=lambda _j: True,
+        channel="oa",
+    )
+
+    assert result == {"status": "unfollow"}
+    svc.apply_unfollow.assert_awaited_once_with(conv)
+    svc.record_system_note.assert_awaited_once()
+    assert "unfollow" in svc.record_system_note.call_args.kwargs["body"].lower()
+
+
+@pytest.mark.asyncio
+async def test_oa_button_click_records_system_note(monkeypatch):
+    import uuid
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(id=uuid.uuid4())
+    svc = MagicMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.record_system_note = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+
+    result = await ZaloWebhookService.handle(
+        MagicMock(),
+        {
+            "event_name": "user_click_button",
+            "sender": {"id": "user-123"},
+            "message": {"title": "Xem chi tiết"},
+        },
+        enqueue=lambda _j: True,
+        channel="oa",
+    )
+
+    assert result == {"status": "button_click"}
+    body = svc.record_system_note.call_args.kwargs["body"]
+    assert "Xem chi tiết" in body
+
+
+@pytest.mark.asyncio
+async def test_oa_media_event_returns_ignored_without_db_write(monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    svc = MagicMock()
+    svc.ensure = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+
+    result = await ZaloWebhookService.handle(
+        MagicMock(),
+        {
+            "event_name": "user_send_image",
+            "sender": {"id": "user-123"},
+            "message": {"msg_id": "oa-msg-1"},
+        },
+        enqueue=lambda _j: True,
+        channel="oa",
+    )
+
+    assert result == {"status": "ignored"}
+    svc.ensure.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_oa_text_message_still_queues_bot_turn(monkeypatch):
+    import uuid
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="oa:user-123",
+        zalo_channel="oa",
+        version=1,
+        mode="BOT",
+    )
+    svc = MagicMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.record_inbound = AsyncMock()
+    svc.get = AsyncMock(return_value=conv)
+    svc.run_start_guard = MagicMock(return_value=True)
+    svc.acquire_lock = AsyncMock(return_value=True)
+    svc.release_lock = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
+    )
+
+    db = MagicMock()
+    db.refresh = AsyncMock()
+    enqueued: list[dict] = []
+
+    async def enqueue(job):
+        enqueued.append(job)
+        return True
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {
+            "event_name": "user_send_text",
+            "sender": {"id": "user-123", "name": "An"},
+            "message": {"text": "Xin chào", "msg_id": "oa-msg-1"},
+        },
+        enqueue=enqueue,
+        channel="oa",
+    )
+
+    assert result["status"] == "queued"
+    assert len(enqueued) == 1
+    assert enqueued[0]["user_text"] == "Xin chào"

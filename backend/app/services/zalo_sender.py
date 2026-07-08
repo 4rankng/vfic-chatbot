@@ -1,6 +1,8 @@
 """Channel-aware Zalo sender facade."""
 from __future__ import annotations
 
+from typing import Any, Awaitable, Callable
+
 from app.models.conversation import Conversation
 from app.services.integration_settings import ZaloRuntimeConfig
 from app.services.zalo_bot_service import SendResult, ZaloBotSender
@@ -19,9 +21,14 @@ def external_chat_id(conv: Conversation) -> str:
 class ZaloChannelSender:
     """Dispatches outbound messages to Bot Platform or OA by conversation channel."""
 
-    def __init__(self, config: ZaloRuntimeConfig) -> None:
+    def __init__(
+        self,
+        config: ZaloRuntimeConfig,
+        *,
+        refresh: Callable[[], Awaitable[str | None]] | None = None,
+    ) -> None:
         self._bot = ZaloBotSender(bot_token=config.bot_token)
-        self._oa = ZaloOASender(access_token=config.oa_access_token)
+        self._oa = ZaloOASender(access_token=config.oa_access_token, refresh=refresh)
 
     def for_conversation(self, conv: Conversation):
         if (getattr(conv, "zalo_channel", None) or "bot") == "oa":
@@ -39,3 +46,23 @@ class _BoundSender:
 
     async def send_chat_action(self, _chat_id: str, action: str) -> SendResult:
         return await self._sender.send_chat_action(self._chat_id, action)
+
+    async def send_buttons(
+        self, _chat_id: str, *, text: str, buttons: list[dict[str, Any]]
+    ) -> SendResult:
+        return await self._sender.send_buttons(self._chat_id, text=text, buttons=buttons)
+
+    async def send_media(
+        self,
+        _chat_id: str,
+        *,
+        text: str,
+        media_url: str,
+        media_type: str = "image",
+    ) -> SendResult:
+        return await self._sender.send_media(
+            self._chat_id,
+            text=text,
+            media_url=media_url,
+            media_type=media_type,
+        )

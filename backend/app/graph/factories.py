@@ -90,5 +90,8 @@ async def build_deps(db):
         agent=MiniMaxAgent(agent_llm, embedder),
         safety=MiniMaxSafety(safety_llm),
         embedder=embedder,
-        zalo=ZaloChannelSender(zalo_config),
+        zalo=ZaloChannelSender(
+            zalo_config,
+            refresh=lambda: integration_settings.refresh_oa_access_token(),
+        ),
     )
