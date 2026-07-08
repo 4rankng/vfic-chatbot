@@ -6,19 +6,20 @@ Business logic only — all raw SQL lives in ``repository.py``.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime
 
 from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
-from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage
+from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadStage
 from app.models.user import User
 from app.services.viewer_scope import viewer_scope_condition, viewer_scope_filter
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError
 from app.services.lead import tags as _tag_lib
 from app.services.lead import viewmodels as _vm_lib
+from app.services.lead.chatops import ChatopsService
 from app.services.lead.events import LeadEventBus
 from app.services.lead.repository import LeadRepository
 
@@ -40,19 +41,13 @@ _LEAD_STAGE_TITLES = {
     "SKIPPED": "Bỏ qua",
 }
 
-_CHATOPS_ACTIONS = {
-    "mark_contacting",
-    "schedule_followup",
-    "mark_not_interested",
-    "mark_registered",
-}
-
 
 class LeadService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.repo = LeadRepository(db)
         self.events = LeadEventBus()
+        self.chatops = ChatopsService(self)
 
     async def get(self, lead_id: int) -> Lead | None:
         return await self.db.get(Lead, lead_id)
@@ -326,91 +321,10 @@ class LeadService:
         return await self.list_operational_tags(lead)
 
     async def build_chatops_assist(self, lead: Lead) -> dict:
-        conversation = await self._conversation_for_lead(lead)
-        recent_messages = await self._recent_messages(conversation)
-        latest_worker = next(
-            (msg for msg in reversed(recent_messages) if msg.sender == MessageSender.WORKER),
-            None,
-        )
-        missing = self._missing_fields(lead)
-        mode_label = self._mode_label(conversation)
-        summary = self._assist_summary(lead, latest_worker)
-        reply = self._suggested_reply(lead, missing)
-        next_action = self._next_action(lead)
-        return {
-            "summary": summary,
-            "missing": missing,
-            "reply": reply,
-            "next_action": next_action,
-            "mode_label": mode_label,
-            "signals": self._signals(lead, conversation),
-            "recent_messages": [
-                {
-                    "sender": self._message_sender_label(message.sender),
-                    "body": message.body,
-                    "created_at": message.created_at,
-                }
-                for message in recent_messages[-6:]
-            ],
-        }
+        return await self.chatops.build_assist(lead)
 
     async def apply_chatops_action(self, lead: Lead, action: str, *, actor: User) -> Lead:
-        if action not in _CHATOPS_ACTIONS:
-            raise ValueError("unsupported ChatOps action")
-
-        if action == "mark_contacting":
-            if lead.lead_stage != LeadStage.CONTACTING:
-                lead = await self.set_stage(lead, LeadStage.CONTACTING, actor=actor)
-        elif action == "mark_registered":
-            if lead.lead_stage != LeadStage.REGISTERED:
-                lead = await self.set_stage(lead, LeadStage.REGISTERED, actor=actor)
-        elif action == "mark_not_interested":
-            lead = await self.update(
-                lead,
-                {
-                    "lead_score": LeadScore.not_interested,
-                    "lead_stage": LeadStage.SKIPPED,
-                    "notes": lead.notes or "Ứng viên không quan tâm.",
-                },
-            )
-            conversation = await self._conversation_for_lead(lead)
-            if conversation is not None:
-                conversation.followup_opted_out = True
-        elif action == "schedule_followup":
-            due_at = datetime.combine(
-                datetime.now(timezone.utc).date() + timedelta(days=1),
-                time(hour=9, tzinfo=timezone.utc),
-            )
-            await self.repo.create_followup(
-                lead.id,
-                due_at,
-                "Theo dõi lại từ màn hình chat.",
-                created_by=actor.id,
-            )
-            lead.next_action_at = due_at
-            lead.updated_at = datetime.now(timezone.utc)
-            lead.version += 1
-
-        self.db.add(
-            LeadEvent(
-                lead_id=lead.id,
-                event_type="chatops_action",
-                payload={"action": action},
-                actor_id=actor.id,
-            )
-        )
-        await record_audit(
-            self.db,
-            action=f"lead_chatops_{action}",
-            actor_id=actor.id,
-            target_type="lead",
-            target_id=str(lead.id),
-            payload={"action": action},
-        )
-        await self.db.commit()
-        await self.db.refresh(lead)
-        await self.events.lead_updated(lead, actor_name=actor.full_name)
-        return lead
+        return await self.chatops.apply_action(lead, action, actor=actor)
 
     async def list_events(self, lead_id: int) -> list[LeadEvent]:
         return await self.repo.list_events(lead_id)
