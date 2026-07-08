@@ -42,8 +42,8 @@ from app.services.knowledge.canonical import (
     SCHEMA_VERSION,
     checksum_text,
     parse_canonical_markdown,
-    repair_canonical_markdown,
 )
+from app.services.knowledge.bus_timetable.repair import repair_canonical_markdown
 from app.services.knowledge.file_extraction import (
     DOCX_MIME_TYPE,
     KnowledgeFileExtractionError,

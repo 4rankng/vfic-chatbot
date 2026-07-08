@@ -18,8 +18,8 @@ from app.services.knowledge.canonical import (
     checksum_text,
     load_template,
     parse_canonical_markdown,
-    repair_canonical_markdown,
 )
+from app.services.knowledge.bus_timetable.repair import repair_canonical_markdown
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
