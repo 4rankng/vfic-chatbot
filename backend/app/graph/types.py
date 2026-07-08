@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
+from app.graph.ports import ConversationPort
 
 # TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
 # annotation is stringified by ``from __future__ import annotations`` anyway,
@@ -48,6 +49,7 @@ class GraphDeps:
     safety: SafetyModel
     embedder: Embedder
     zalo: Any
+    conversation: ConversationPort
     # Fire-and-forget candidate extraction after a SENT reply.
     # None in tests -> persistence is skipped.
     persist: Callable[[dict], None] | None = None

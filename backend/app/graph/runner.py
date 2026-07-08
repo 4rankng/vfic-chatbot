@@ -34,7 +34,6 @@ from app.graph.safety import (
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.models.conversation import Message
-from app.services.conversation import ConversationService
 from app.services.lead.probing import (
     ensure_lead_collection_question,
     lead_collection_instruction as build_lead_collection_instruction,
@@ -114,7 +113,7 @@ async def _typing_heartbeat(zalo, chat_id: str) -> None:
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome."""
-    svc = ConversationService(deps.db)
+    svc = deps.conversation
     conv = await svc.get(uuid.UUID(state.conversation_id))
     if conv is None:
         return {"outcome": "error", "reason": "conversation_not_found"}
@@ -141,7 +140,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
             logger.warning("agent error: %s", exc)
             # refresh to read committed version/mode — see recheck_ownership docstring
-            await svc.db.refresh(conv)
+            await deps.db.refresh(conv)
             owned = await svc.recheck_ownership(conv, state.version_at_start)
             send_result = None
             if owned:
@@ -188,7 +187,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # svc.get() would return the identity-map instance (expire_on_commit=False) and
         # hide a concurrent takeover; refresh() forces a fresh SELECT so the version/mode
         # check below reads committed DB state, not the in-memory snapshot from turn start.
-        await svc.db.refresh(conv)
+        await deps.db.refresh(conv)
         owned = await svc.recheck_ownership(conv, state.version_at_start)
         if owned:
             send_result = await zalo.send_message(conv.zalo_chat_id, candidate)

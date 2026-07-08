@@ -64,6 +64,7 @@ def make_minimax_llm_json(
 
 async def build_deps(db):
     """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo)."""
+    from app.services.conversation import ConversationService
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.zalo_sender import ZaloChannelSender
 
@@ -94,4 +95,5 @@ async def build_deps(db):
             zalo_config,
             refresh=lambda: integration_settings.refresh_oa_access_token(),
         ),
+        conversation=ConversationService(db),
     )

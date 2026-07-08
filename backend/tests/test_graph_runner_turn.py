@@ -8,8 +8,8 @@ We isolate the control flow by faking the two coupling points:
 
 * ``_agent_turn`` (which otherwise calls the DB-hitting ``build_system_prompt``
   and ``LeadRepository``) is replaced with a canned reply / exception, and
-* ``ConversationService`` is replaced with a stub exposing only the handful of
-  methods the pipeline calls.
+* the injected ``ConversationPort`` (``deps.conversation``) is a stub exposing
+  only the handful of methods the pipeline calls.
 
 No DB / Redis / LLM. These pin *current* behavior; one assertion documents a
 surprising-but-intentional-to-pin outcome mapping in the agent-error branch.
@@ -77,14 +77,11 @@ class _FakeSafety:
         return self._raw
 
 
-def _stub_svc(monkeypatch, *, conv=None, owned: bool = True) -> list:
-    """Replace ConversationService in the runner; return the recorded outcomes."""
+def _stub_svc(*, conv=None, owned: bool = True):
+    """Build a stub ConversationPort; return ``(svc, recorded_outcomes)``."""
     recorded: list[dict] = []
 
     class _Svc:
-        def __init__(self, db) -> None:
-            self.db = db
-
         async def get(self, _id):
             return conv
 
@@ -100,8 +97,7 @@ def _stub_svc(monkeypatch, *, conv=None, owned: bool = True) -> list:
         async def record_bot_outcome(self, c, **kw):
             recorded.append(kw)
 
-    monkeypatch.setattr(runner, "ConversationService", _Svc)
-    return recorded
+    return _Svc(), recorded
 
 
 def _stub_agent(monkeypatch, *replies) -> None:
@@ -117,10 +113,10 @@ def _stub_agent(monkeypatch, *replies) -> None:
     monkeypatch.setattr(runner, "_agent_turn", _fake)
 
 
-def _deps(zalo, *, safety=object(), persist=None) -> GraphDeps:
+def _deps(zalo, *, conversation, safety=object(), persist=None) -> GraphDeps:
     return GraphDeps(
         db=_FakeDB(), agent=object(), safety=safety,
-        embedder=object(), zalo=zalo, persist=persist,
+        embedder=object(), zalo=zalo, conversation=conversation, persist=persist,
     )
 
 
@@ -137,10 +133,10 @@ def _state() -> BotRunState:
 
 @pytest.mark.asyncio
 async def test_missing_conversation_returns_error_without_sending(monkeypatch):
-    _stub_svc(monkeypatch, conv=None)
+    svc, _ = _stub_svc(conv=None)
     zalo = _FakeZalo()
 
-    res = await run_turn(_state(), _deps(zalo))
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
 
     assert res == {"outcome": "error", "reason": "conversation_not_found"}
     assert zalo.sent == []  # never touched a missing conversation
@@ -149,12 +145,12 @@ async def test_missing_conversation_returns_error_without_sending(monkeypatch):
 @pytest.mark.asyncio
 async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
     conv = _FakeConv()
-    _stub_svc(monkeypatch, conv=conv, owned=True)
+    svc, _ = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, "Chào bạn!")
     persisted: list[dict] = []
     zalo = _FakeZalo()
 
-    res = await run_turn(_state(), _deps(zalo, persist=persisted.append))
+    res = await run_turn(_state(), _deps(zalo, conversation=svc, persist=persisted.append))
 
     assert res["outcome"] == "sent"
     assert res["reply"] == "Chào bạn!"
@@ -167,12 +163,12 @@ async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
 @pytest.mark.asyncio
 async def test_ownership_lost_during_generation_suppresses_send(monkeypatch):
     conv = _FakeConv()
-    _stub_svc(monkeypatch, conv=conv, owned=False)
+    svc, _ = _stub_svc(conv=conv, owned=False)
     _stub_agent(monkeypatch, "Chào bạn!")
     persisted: list[dict] = []
     zalo = _FakeZalo()
 
-    res = await run_turn(_state(), _deps(zalo, persist=persisted.append))
+    res = await run_turn(_state(), _deps(zalo, conversation=svc, persist=persisted.append))
 
     assert res["outcome"] == "suppressed"
     assert zalo.sent == []          # takeover during generation -> do not send
@@ -182,11 +178,11 @@ async def test_ownership_lost_during_generation_suppresses_send(monkeypatch):
 @pytest.mark.asyncio
 async def test_zalo_send_failure_is_reported_as_send_failed(monkeypatch):
     conv = _FakeConv()
-    _stub_svc(monkeypatch, conv=conv, owned=True)
+    svc, _ = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, "Chào bạn!")
     zalo = _FakeZalo(results=[_SendResult(ok=False, error="zalo_rate_limited")])
 
-    res = await run_turn(_state(), _deps(zalo))
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
 
     assert res["outcome"] == "send_failed"
     assert res["reason"] == "zalo_rate_limited"
@@ -196,11 +192,11 @@ async def test_zalo_send_failure_is_reported_as_send_failed(monkeypatch):
 @pytest.mark.asyncio
 async def test_agent_exception_falls_back_to_error_reply(monkeypatch):
     conv = _FakeConv()
-    _stub_svc(monkeypatch, conv=conv, owned=True)
+    svc, _ = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, ValueError("agent blew up"))
     zalo = _FakeZalo()
 
-    res = await run_turn(_state(), _deps(zalo))
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
 
     # The graceful-fallback reply is always ERROR_REPLY...
     assert res["reply"] == ERROR_REPLY
@@ -214,17 +210,17 @@ async def test_agent_exception_falls_back_to_error_reply(monkeypatch):
 @pytest.mark.asyncio
 async def test_llm_throttle_propagates_uncaught(monkeypatch):
     conv = _FakeConv()
-    _stub_svc(monkeypatch, conv=conv, owned=True)
+    svc, _ = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, LLMThrottled())
 
     with pytest.raises(LLMThrottled):
-        await run_turn(_state(), _deps(_FakeZalo()))
+        await run_turn(_state(), _deps(_FakeZalo(), conversation=svc))
 
 
 @pytest.mark.asyncio
 async def test_safety_verdict_safe_overrides_with_final_answer(monkeypatch):
     conv = _FakeConv()
-    _stub_svc(monkeypatch, conv=conv, owned=True)
+    svc, _ = _stub_svc(conv=conv, owned=True)
     # reply contains code -> fast filter flags it for the LLM safety gate
     _stub_agent(monkeypatch, "viết code python ```print('x')```")
     verdict = (
@@ -234,7 +230,7 @@ async def test_safety_verdict_safe_overrides_with_final_answer(monkeypatch):
     zalo = _FakeZalo()
 
     res = await run_turn(
-        _state(), _deps(zalo, safety=_FakeSafety(verdict)),
+        _state(), _deps(zalo, conversation=svc, safety=_FakeSafety(verdict)),
     )
 
     assert res["outcome"] == "sent"
