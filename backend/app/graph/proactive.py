@@ -17,14 +17,13 @@ import re
 from datetime import datetime, timedelta
 from typing import TypedDict
 
+from app.graph.ports import SendOutcome
 from app.graph.safety import (
     fast_safety_filter,
     retry_exhausted_fallback,
 )
 from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
 from app.models.conversation import DeliveryStatus, Message, MessageSender
-from app.services.conversation import ConversationService
-from app.services.zalo_bot_service import SendResult
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +170,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     from app.services.lead.repository import LeadRepository
     from app.services.lead import lead_profile_text
 
-    svc = ConversationService(deps.db)
+    svc = deps.conversation
     now = _now()
     margin = timedelta(seconds=PROACTIVE_48H_WINDOW_SECONDS)
     cap = PROACTIVE_FOLLOWUP_CAP
@@ -266,7 +265,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
                 decision["reason"],
             )
             await svc.state.record_proactive_outcome(
-                conv, message="", result=SendResult(ok=False, error="agent_decided_not_to_send")
+                conv, message="", result=SendOutcome(ok=False, error="agent_decided_not_to_send")
             )
             return _outcome("suppressed", reason=decision["reason"])
 
@@ -274,7 +273,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         if not message:
             logger.info("proactive empty message: conversation=%s", conv.zalo_chat_id)
             await svc.state.record_proactive_outcome(
-                conv, message="", result=SendResult(ok=False, error="empty_message")
+                conv, message="", result=SendOutcome(ok=False, error="empty_message")
             )
             return _outcome("suppressed", reason="empty_message")
 
@@ -291,7 +290,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             else:
                 logger.info("proactive safety blocked: conversation=%s", conv.zalo_chat_id)
                 await svc.state.record_proactive_outcome(
-                    conv, message=candidate, result=SendResult(ok=False, error="safety_blocked")
+                    conv, message=candidate, result=SendOutcome(ok=False, error="safety_blocked")
                 )
                 return _outcome("suppressed", reason="safety_blocked")
         else:
@@ -325,7 +324,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
 
     except Exception as exc:
         logger.warning("proactive turn error: conversation=%s error=%s", conv.zalo_chat_id, exc)
-        result = SendResult(ok=False, error=str(exc))
+        result = SendOutcome(ok=False, error=str(exc))
         candidate = candidate or retry_exhausted_fallback("")
 
     # 11. Persist (always — clears lock, records SENT/FAILED message,
