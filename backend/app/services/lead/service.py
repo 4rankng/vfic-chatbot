@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, time, timedelta, timezone
-import re
-import unicodedata
 
 from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +17,8 @@ from app.models.user import User
 from app.services.viewer_scope import viewer_scope_condition, viewer_scope_filter
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError
+from app.services.lead import tags as _tag_lib
+from app.services.lead import viewmodels as _vm_lib
 from app.services.lead.events import LeadEventBus
 from app.services.lead.repository import LeadRepository
 
@@ -39,20 +39,6 @@ _LEAD_STAGE_TITLES = {
     "REGISTERED": "Đã đăng ký",
     "SKIPPED": "Bỏ qua",
 }
-
-_TAG_META: dict[str, dict[str, str | bool]] = {
-    "has_phone": {"label": "Có SĐT", "tone": "good", "system": True},
-    "missing_phone": {"label": "Thiếu SĐT", "tone": "warn", "system": True},
-    "needs_follow_up": {"label": "Cần follow-up", "tone": "info", "system": False},
-    "not_interested": {"label": "Không quan tâm", "tone": "danger", "system": False},
-    "registered": {"label": "Đã đăng ký", "tone": "good", "system": False},
-    "salary_missing": {"label": "Thiếu lương", "tone": "warn", "system": False},
-    "location_missing": {"label": "Thiếu khu vực", "tone": "warn", "system": False},
-    "needs_human": {"label": "Cần người xử lý", "tone": "danger", "system": False},
-}
-
-_MANUAL_TAG_KEYS = {key for key, meta in _TAG_META.items() if not bool(meta.get("system"))}
-_SYSTEM_TAG_KEYS = {key for key, meta in _TAG_META.items() if bool(meta.get("system"))}
 
 _CHATOPS_ACTIONS = {
     "mark_contacting",
@@ -460,205 +446,44 @@ class LeadService:
         return list(reversed(rows))
 
     def _tag_payload(self, key: str, *, system: bool) -> dict:
-        meta = _TAG_META[key]
-        return {
-            "key": key,
-            "label": meta["label"],
-            "tone": meta["tone"],
-            "system": system,
-        }
+        return _tag_lib.tag_payload(key, system=system)
 
     def _system_tag_keys(self, lead: Lead, conversation: Conversation | None) -> list[str]:
-        tags: list[str] = []
-        tags.append("has_phone" if lead.phone and lead.phone.strip() else "missing_phone")
-        if lead.next_action_at:
-            tags.append("needs_follow_up")
-        if lead.lead_score == LeadScore.not_interested or lead.lead_stage == LeadStage.SKIPPED:
-            tags.append("not_interested")
-        if lead.lead_stage == LeadStage.REGISTERED:
-            tags.append("registered")
-        if not (lead.expected_salary and lead.expected_salary.strip()):
-            tags.append("salary_missing")
-        if not (lead.region and lead.region.strip()) and not (
-            lead.living_area and lead.living_area.strip()
-        ):
-            tags.append("location_missing")
-        if conversation is not None and (
-            conversation.needs_human or conversation.mode == ConversationMode.HUMAN
-        ):
-            tags.append("needs_human")
-        return tags
+        return _tag_lib.system_tag_keys(lead, conversation)
 
     def _normalize_manual_tag_keys(self, keys: list[str]) -> list[str]:
-        return [payload["key"] for payload in self._normalize_manual_tag_payloads(keys, [])]
+        return _tag_lib.normalize_manual_tag_keys(keys)
 
     def _normalize_manual_tag_payloads(
         self,
         keys: list[str],
         tags: list[dict],
     ) -> list[dict[str, str]]:
-        normalized: list[str] = []
-        payloads: list[dict[str, str]] = []
-        seen: set[str] = set()
-
-        def add(raw_key: str, raw_label: str | None = None, tone: str = "info") -> None:
-            source = (raw_label or raw_key or "").strip()
-            if not source:
-                return
-            key = self._normalize_manual_tag_key(raw_key or source)
-            if not key or key in _SYSTEM_TAG_KEYS or key in seen:
-                return
-            if key in _MANUAL_TAG_KEYS:
-                meta = _TAG_META[key]
-                label = str(meta["label"])
-                tag_tone = str(meta["tone"])
-            else:
-                label = source[:64]
-                tag_tone = tone if tone in {"good", "warn", "danger", "info"} else "info"
-            normalized.append(key)
-            payloads.append({"key": key, "label": label, "tone": tag_tone})
-            seen.add(key)
-
-        for key in keys:
-            add(key)
-
-        for tag in tags:
-            key = str(tag.get("key") or tag.get("label") or "")
-            label = tag.get("label")
-            if label is not None:
-                label = str(label)
-            add(key, label, str(tag.get("tone") or "info"))
-
-        return payloads[:12]
+        return _tag_lib.normalize_manual_tag_payloads(keys, tags)
 
     def _normalize_manual_tag_key(self, value: str) -> str:
-        value = value.strip()
-        if not value:
-            return ""
-        if value in _TAG_META:
-            return value
-        if value.startswith("custom_") and re.fullmatch(r"custom_[a-z0-9_]{1,40}", value):
-            return value
-        vietnamese_safe = value.replace("đ", "d").replace("Đ", "D")
-        ascii_value = (
-            unicodedata.normalize("NFKD", vietnamese_safe)
-            .encode("ascii", "ignore")
-            .decode("ascii")
-            .lower()
-        )
-        key = re.sub(r"[^a-z0-9]+", "_", ascii_value).strip("_")
-        if not key:
-            key = re.sub(r"\s+", "_", value.lower()).strip("_")
-            key = re.sub(r"[^\w]+", "_", key).strip("_")
-        if not key:
-            return ""
-        custom_key = f"custom_{key[:40]}"
-        if custom_key in _SYSTEM_TAG_KEYS:
-            return ""
-        return custom_key
+        return _tag_lib.normalize_manual_tag_key(value)
 
     def _missing_fields(self, lead: Lead) -> list[str]:
-        missing: list[str] = []
-        if not (lead.name and lead.name.strip()):
-            missing.append("tên")
-        if not (lead.phone and lead.phone.strip()):
-            missing.append("số điện thoại")
-        if not (lead.desired_job and lead.desired_job.strip()):
-            missing.append("vị trí mong muốn")
-        if not (lead.region and lead.region.strip()) and not (
-            lead.living_area and lead.living_area.strip()
-        ):
-            missing.append("khu vực")
-        if not (lead.expected_salary and lead.expected_salary.strip()):
-            missing.append("mức lương mong muốn")
-        return missing
+        return _vm_lib.missing_fields(lead)
 
     def _assist_summary(self, lead: Lead, latest_worker: Message | None) -> str:
-        if lead.lead_score == LeadScore.not_interested or lead.lead_stage == LeadStage.SKIPPED:
-            return "Ứng viên đã thể hiện không quan tâm. Nên dừng nhắn chủ động trừ khi có tín hiệu mới."
-        if latest_worker is not None:
-            snippet = latest_worker.body.strip().replace("\n", " ")[:140]
-            return f"Tin nhắn gần nhất của ứng viên: {snippet}"
-        if lead.phone:
-            return "Ứng viên đã có số điện thoại. Ưu tiên xác nhận nhu cầu, khu vực và chuyển sang bước đăng ký."
-        return "Chưa có tin nhắn gần đây. Ưu tiên xin số điện thoại trước khi để bot tư vấn dài."
+        return _vm_lib.assist_summary(lead, latest_worker)
 
     def _suggested_reply(self, lead: Lead, missing: list[str]) -> str:
-        if lead.lead_score == LeadScore.not_interested or lead.lead_stage == LeadStage.SKIPPED:
-            return "Cảm ơn bạn đã phản hồi. Nếu sau này bạn muốn tìm việc lại, mình luôn sẵn sàng hỗ trợ."
-        if missing:
-            fields = " và ".join(missing[:2])
-            return f"Mình hỗ trợ bạn nhanh hơn nếu bạn cho mình {fields} nhé."
-        return "Mình đã có đủ thông tin chính. Bạn muốn tư vấn viên gọi xác nhận hồ sơ không?"
+        return _vm_lib.suggested_reply(lead, missing)
 
     def _next_action(self, lead: Lead) -> str:
-        if lead.next_action_at:
-            return "Đã có lịch follow-up. Kiểm tra lại trước khi gửi thêm tin."
-        if lead.lead_score == LeadScore.not_interested or lead.lead_stage == LeadStage.SKIPPED:
-            return "Dừng follow-up tự động và chỉ mở lại khi ứng viên chủ động phản hồi."
-        if lead.phone:
-            return "Đặt follow-up gần nhất và chuyển ứng viên sang Đang liên hệ."
-        return "Xin số điện thoại, sau đó tạo follow-up nếu ứng viên phản hồi."
+        return _vm_lib.next_action(lead)
 
     def _mode_label(self, conversation: Conversation | None) -> str:
-        if conversation is None:
-            return "Chưa có hội thoại"
-        if conversation.mode == ConversationMode.HUMAN:
-            return "Người xử lý"
-        if conversation.mode == ConversationMode.SEMI_AUTO:
-            return "Bán tự động"
-        if conversation.mode == ConversationMode.CLOSED:
-            return "Đã đóng"
-        return "Chatbot"
+        return _vm_lib.mode_label(conversation)
 
     def _message_sender_label(self, sender: MessageSender) -> str:
-        if sender == MessageSender.WORKER:
-            return "candidate"
-        if sender == MessageSender.RECRUITER:
-            return "recruiter"
-        if sender == MessageSender.BOT:
-            return "bot"
-        return "system"
+        return _vm_lib.message_sender_label(sender)
 
     def _signals(self, lead: Lead, conversation: Conversation | None) -> list[dict]:
-        not_interested = (
-            lead.lead_score == LeadScore.not_interested or lead.lead_stage == LeadStage.SKIPPED
-        )
-        has_phone = bool(lead.phone and lead.phone.strip())
-        needs_human = bool(
-            conversation is not None
-            and (conversation.needs_human or conversation.mode == ConversationMode.HUMAN)
-        )
-        return [
-            {
-                "key": "phone",
-                "name": "Số điện thoại",
-                "status": "Đã có thể liên hệ" if has_phone else "Chưa có dữ liệu",
-                "active": has_phone,
-                "action": "mark_contacting" if has_phone else None,
-            },
-            {
-                "key": "not_interested",
-                "name": "Không quan tâm",
-                "status": "Nên dừng follow-up" if not_interested else "Chưa có tín hiệu",
-                "active": not_interested,
-                "action": "mark_not_interested" if not not_interested else None,
-            },
-            {
-                "key": "followup",
-                "name": "Follow-up",
-                "status": "Đã có lịch" if lead.next_action_at else "Nên đặt lịch",
-                "active": bool(lead.next_action_at),
-                "action": None if lead.next_action_at else "schedule_followup",
-            },
-            {
-                "key": "human",
-                "name": "Cần người xử lý",
-                "status": "Đang ưu tiên" if needs_human else "Theo dõi",
-                "active": needs_human,
-                "action": None,
-            },
-        ]
+        return _vm_lib.signals(lead, conversation)
 
     def _unanswered_conversation_exists(self, viewer: User):
         conditions = [
