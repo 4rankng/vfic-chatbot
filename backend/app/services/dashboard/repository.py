@@ -22,64 +22,66 @@ class DashboardRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def count_open_conversations(self, recruiter_id: str | None = None) -> int | None:
+    async def _scoped_scalar(
+        self,
+        recruiter_id: str | None,
+        global_sql: str,
+        scoped_sql: str,
+    ) -> int | None:
+        """Run a single-value query, branching global vs viewer-scoped.
+
+        The two SQL strings differ because the scoped path joins the scope table
+        (e.g. leads/conversations) that the global path does not need, so each call
+        site passes both verbatim. Only the branch + ``{"uid": ...}`` plumbing is
+        shared, which is what had been copy-pasted across the count metrics.
+        """
         if recruiter_id is None:
-            return await self.db.scalar(text("SELECT count(*) FROM conversations WHERE status = 'OPEN'"))
-        return await self.db.scalar(
-            text(
-                "SELECT count(*) FROM conversations c "
-                "WHERE c.status = 'OPEN' "
-                "AND " + viewer_scope_sql("c.")
-            ),
-            {"uid": recruiter_id},
+            return await self.db.scalar(text(global_sql))
+        return await self.db.scalar(text(scoped_sql), {"uid": recruiter_id})
+
+    async def count_open_conversations(self, recruiter_id: str | None = None) -> int | None:
+        return await self._scoped_scalar(
+            recruiter_id,
+            "SELECT count(*) FROM conversations WHERE status = 'OPEN'",
+            "SELECT count(*) FROM conversations c "
+            "WHERE c.status = 'OPEN' "
+            "AND " + viewer_scope_sql("c."),
         )
 
     async def count_hot_leads(self, recruiter_id: str | None = None) -> int | None:
-        if recruiter_id is None:
-            return await self.db.scalar(text("SELECT count(*) FROM leads WHERE lead_score = 'hot'"))
-        return await self.db.scalar(
-            text(
-                "SELECT count(*) FROM leads l "
-                "WHERE l.lead_score = 'hot' "
-                "AND " + viewer_scope_sql("l.")
-            ),
-            {"uid": recruiter_id},
+        return await self._scoped_scalar(
+            recruiter_id,
+            "SELECT count(*) FROM leads WHERE lead_score = 'hot'",
+            "SELECT count(*) FROM leads l "
+            "WHERE l.lead_score = 'hot' "
+            "AND " + viewer_scope_sql("l."),
         )
 
     async def count_pending_followups(self, recruiter_id: str | None = None) -> int | None:
-        if recruiter_id is None:
-            return await self.db.scalar(text("SELECT count(*) FROM follow_up_tasks WHERE status = 'PENDING'"))
-        return await self.db.scalar(
-            text(
-                "SELECT count(*) FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
-                "WHERE f.status = 'PENDING' "
-                "AND " + viewer_scope_sql("l.")
-            ),
-            {"uid": recruiter_id},
+        return await self._scoped_scalar(
+            recruiter_id,
+            "SELECT count(*) FROM follow_up_tasks WHERE status = 'PENDING'",
+            "SELECT count(*) FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
+            "WHERE f.status = 'PENDING' "
+            "AND " + viewer_scope_sql("l."),
         )
 
     async def count_failed_sends(self, recruiter_id: str | None = None) -> int | None:
-        if recruiter_id is None:
-            return await self.db.scalar(text("SELECT count(*) FROM messages WHERE delivery_status = 'FAILED'"))
-        return await self.db.scalar(
-            text(
-                "SELECT count(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id "
-                "WHERE m.delivery_status = 'FAILED' "
-                "AND " + viewer_scope_sql("c.")
-            ),
-            {"uid": recruiter_id},
+        return await self._scoped_scalar(
+            recruiter_id,
+            "SELECT count(*) FROM messages WHERE delivery_status = 'FAILED'",
+            "SELECT count(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id "
+            "WHERE m.delivery_status = 'FAILED' "
+            "AND " + viewer_scope_sql("c."),
         )
 
     async def count_bot_errors(self, recruiter_id: str | None = None) -> int | None:
-        if recruiter_id is None:
-            return await self.db.scalar(text("SELECT count(*) FROM bot_runs WHERE outcome = 'ERROR'"))
-        return await self.db.scalar(
-            text(
-                "SELECT count(*) FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
-                "WHERE b.outcome = 'ERROR' "
-                "AND " + viewer_scope_sql("c.")
-            ),
-            {"uid": recruiter_id},
+        return await self._scoped_scalar(
+            recruiter_id,
+            "SELECT count(*) FROM bot_runs WHERE outcome = 'ERROR'",
+            "SELECT count(*) FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
+            "WHERE b.outcome = 'ERROR' "
+            "AND " + viewer_scope_sql("c."),
         )
 
     async def bot_run_summary(self, recruiter_id: str | None = None) -> dict[str, float | int]:
@@ -111,26 +113,15 @@ class DashboardRepository:
         }
 
     async def bot_suppression_rate(self, recruiter_id: str | None = None) -> float | None:
-        if recruiter_id is None:
-            return (
-                await self.db.execute(
-                    text(
-                        "SELECT count(*) FILTER (WHERE outcome='SUPPRESSED')::float / NULLIF(count(*),0) AS rate "
-                        "FROM bot_runs WHERE outcome IN ('SENT','SUPPRESSED')"
-                    )
-                )
-            ).scalar()
-        return (
-            await self.db.execute(
-                text(
-                    "SELECT count(*) FILTER (WHERE b.outcome='SUPPRESSED')::float / NULLIF(count(*),0) AS rate "
-                    "FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
-                    "WHERE b.outcome IN ('SENT','SUPPRESSED') "
-                    "AND " + viewer_scope_sql("c.")
-                ),
-                {"uid": recruiter_id},
-            )
-        ).scalar()
+        return await self._scoped_scalar(
+            recruiter_id,
+            "SELECT count(*) FILTER (WHERE outcome='SUPPRESSED')::float / NULLIF(count(*),0) AS rate "
+            "FROM bot_runs WHERE outcome IN ('SENT','SUPPRESSED')",
+            "SELECT count(*) FILTER (WHERE b.outcome='SUPPRESSED')::float / NULLIF(count(*),0) AS rate "
+            "FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
+            "WHERE b.outcome IN ('SENT','SUPPRESSED') "
+            "AND " + viewer_scope_sql("c."),
+        )
 
     async def leads_by_stage(self, recruiter_id: str | None = None) -> dict[str, int]:
         if recruiter_id is None:
@@ -151,14 +142,11 @@ class DashboardRepository:
         return {r[0]: int(r[1]) for r in rows}
 
     async def count_human_conversations(self, recruiter_id: str | None = None) -> int | None:
-        if recruiter_id is None:
-            return await self.db.scalar(text("SELECT count(*) FROM conversations WHERE mode = 'HUMAN'"))
-        return await self.db.scalar(
-            text(
-                "SELECT count(*) FROM conversations "
-                "WHERE mode = 'HUMAN' AND " + viewer_scope_sql("")
-            ),
-            {"uid": recruiter_id},
+        return await self._scoped_scalar(
+            recruiter_id,
+            "SELECT count(*) FROM conversations WHERE mode = 'HUMAN'",
+            "SELECT count(*) FROM conversations "
+            "WHERE mode = 'HUMAN' AND " + viewer_scope_sql(""),
         )
 
     async def knowledge_stage_counts(self) -> dict[str, int]:
