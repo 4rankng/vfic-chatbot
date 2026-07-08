@@ -94,11 +94,8 @@ def test_persona_followup_rule_rejects_unsafe_cadence():
 
 
 @pytest.mark.asyncio
-async def test_active_projects_index_includes_project_persona_overrides(monkeypatch):
+async def test_active_projects_index_includes_project_persona_overrides():
     class _Repo:
-        def __init__(self, _db):
-            pass
-
         async def active_projects_with_card(self):
             return [
                 SimpleNamespace(
@@ -111,9 +108,7 @@ async def test_active_projects_index_includes_project_persona_overrides(monkeypa
                 )
             ]
 
-    monkeypatch.setattr("app.graph.context.RetrievalRepository", _Repo)
-
-    prompt = await active_projects_index(SimpleNamespace())
+    prompt = await active_projects_index(_Repo())
 
     assert "=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ===" in prompt
     assert "lg-display (LG Display)" in prompt

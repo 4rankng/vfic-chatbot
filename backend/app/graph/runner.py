@@ -58,7 +58,7 @@ async def _agent_turn(
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
     from app.graph.context import build_system_prompt
 
-    system = await build_system_prompt(deps.db)
+    system = await build_system_prompt(deps.retrieval)
 
     # Fetch existing lead profile so the agent can see what info is already known
     # and subtly ask for the most important missing fields. Best-effort: DB error
@@ -83,7 +83,7 @@ async def _agent_turn(
         lead_collection_instruction=lead_collection_instruction,
     )
     reply = await deps.agent.agent(
-        contextual_user_text, system=system, db=deps.db, embedder=deps.embedder
+        contextual_user_text, system=system, retrieval=deps.retrieval, embedder=deps.embedder
     )
     return deps.lead.ensure(reply, lead_collection_question)
 

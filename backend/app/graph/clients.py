@@ -261,7 +261,7 @@ class MiniMaxAgent:
             s = get_settings()
             self.max_iters = s.max_llm_calls_per_turn
 
-    async def agent(self, user_text, *, system, db, embedder) -> str:
+    async def agent(self, user_text, *, system, retrieval, embedder) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
 
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -272,7 +272,7 @@ class MiniMaxAgent:
         if _should_prefetch_knowledge(user_text):
             try:
                 prefetched = await _dispatch_tool(
-                    db,
+                    retrieval,
                     embedder,
                     "search_knowledge",
                     {"query": user_text},
@@ -315,7 +315,7 @@ class MiniMaxAgent:
             # MiniMax occasionally omits tool_call.id; an empty tool_call_id breaks
             # the OpenAI tool protocol on the next turn. Synthesize a stable id.
             for idx, tc in enumerate(calls):
-                out = await _dispatch_tool(db, embedder, tc["name"], tc.get("args", {}))
+                out = await _dispatch_tool(retrieval, embedder, tc["name"], tc.get("args", {}))
                 messages.append(
                     ToolMessage(
                         content=str(out),

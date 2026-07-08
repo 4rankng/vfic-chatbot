@@ -15,7 +15,7 @@ Embedder = Callable[[str], Awaitable[list[float]]]
 class AgentModel(Protocol):
     """A tool-calling agent: system prompt + user turn -> reply text."""
 
-    async def agent(self, user_text: str, *, system: str, db, embedder) -> str: ...
+    async def agent(self, user_text: str, *, system: str, retrieval, embedder) -> str: ...
 
 
 class SafetyModel(Protocol):

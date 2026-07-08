@@ -110,6 +110,7 @@ async def build_deps(db):
     """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo)."""
     from app.services.conversation import ConversationService
     from app.services.integration_settings import IntegrationSettingsService
+    from app.services.retrieval import RetrievalRepository
     from app.services.zalo_sender import ZaloChannelSender
 
     s = get_settings()
@@ -140,6 +141,7 @@ async def build_deps(db):
             refresh=lambda: integration_settings.refresh_oa_access_token(),
         ),
         conversation=ConversationService(db),
+        retrieval=RetrievalRepository(db),
         lead=_LeadContextAdapter(db),
         followup_allowed=_make_followup_allowed(db),
     )

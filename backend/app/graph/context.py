@@ -13,10 +13,8 @@ persona/index hiccup can never break a chat turn. SQL lives in
 """
 from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.graph.ports import RetrievalPort
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
-from app.services.retrieval import RetrievalRepository
 
 _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ==="
 _PROJECT_PERSONA_HEADER = "\n\n=== PERSONA RIÊNG THEO DỰ ÁN ==="
@@ -51,10 +49,10 @@ def _strip_stale_refusal_rules(persona: str) -> str:
     return "\n".join(lines).strip()
 
 
-async def resolve_persona(db: AsyncSession) -> str:
+async def resolve_persona(retrieval: RetrievalPort) -> str:
     """Return the active global persona body (stripped of stale refusal rules), or persona.md if none is active."""
     try:
-        body = await RetrievalRepository(db).active_persona_body()
+        body = await retrieval.active_persona_body()
         if body and body.strip():
             return _strip_stale_refusal_rules(body.strip())
     except Exception:  # noqa: BLE001
@@ -62,10 +60,10 @@ async def resolve_persona(db: AsyncSession) -> str:
     return AGENT_SYSTEM_PROMPT
 
 
-async def active_projects_index(db: AsyncSession) -> str:
+async def active_projects_index(retrieval: RetrievalPort) -> str:
     """Compact catalog of active projects (the agent's master index). '' if none/err."""
     try:
-        rows = await RetrievalRepository(db).active_projects_with_card()
+        rows = await retrieval.active_projects_with_card()
     except Exception:  # noqa: BLE001
         return ""
     if not rows:
@@ -115,11 +113,11 @@ async def active_projects_index(db: AsyncSession) -> str:
     return prompt
 
 
-async def build_system_prompt(db: AsyncSession) -> str:
+async def build_system_prompt(retrieval: RetrievalPort) -> str:
     """Persona body + active-product index, with a hard fallback to persona.md."""
     try:
-        persona = _strip_stale_refusal_rules(await resolve_persona(db))
-        index = await active_projects_index(db)
+        persona = _strip_stale_refusal_rules(await resolve_persona(retrieval))
+        index = await active_projects_index(retrieval)
         return persona + index + "\n\n" + _RUNTIME_RETRIEVAL_RULES
     except Exception:  # noqa: BLE001
         return _strip_stale_refusal_rules(AGENT_SYSTEM_PROMPT) + "\n\n" + _RUNTIME_RETRIEVAL_RULES

@@ -83,7 +83,7 @@ class _FakeAgent:
     def __init__(self, raw: str) -> None:
         self._raw = raw
 
-    async def agent(self, text, *, system, db, embedder) -> str:
+    async def agent(self, text, *, system, retrieval, embedder) -> str:
         return self._raw
 
 
@@ -142,6 +142,7 @@ def _deps(agent, zalo, *, conversation) -> "object":
         embedder=object(),
         zalo=zalo,
         conversation=conversation,
+        retrieval=object(),
         lead=_NoLead(),
         followup_allowed=_always_allowed,
     )

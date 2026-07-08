@@ -101,7 +101,7 @@ TOOL_SCHEMAS = [
 ]
 
 
-async def _dispatch_tool(db, embedder, name: str, args: dict) -> str:
+async def _dispatch_tool(retrieval, embedder, name: str, args: dict) -> str:
     """Route a named tool call to its function.
 
     Errors are caught and returned as strings so the LLM sees the failure in the
@@ -115,15 +115,15 @@ async def _dispatch_tool(db, embedder, name: str, args: dict) -> str:
     try:
         t0 = time.monotonic()
         if name == "search_user_memory":
-            result = await search_user_memory(db, embedder, args.get("chat_id", ""), args.get("query", ""))
+            result = await search_user_memory(retrieval, embedder, args.get("chat_id", ""), args.get("query", ""))
         elif name == "search_knowledge":
-            result = await search_knowledge(db, embedder, args.get("query", ""), args.get("project_slug"))
+            result = await search_knowledge(retrieval, embedder, args.get("query", ""), args.get("project_slug"))
         elif name == "list_active_projects":
-            result = await list_active_projects(db)
+            result = await list_active_projects(retrieval)
         elif name == "search_bus_timetable":
-            result = await search_bus_timetable(db, args.get("company", ""), args.get("question", ""))
+            result = await search_bus_timetable(retrieval, args.get("company", ""), args.get("question", ""))
         elif name == "get_product_features":
-            result = await get_product_features(db, args.get("project_slug", ""))
+            result = await get_product_features(retrieval, args.get("project_slug", ""))
         else:
             logger.warning("unknown tool dispatched: %s (args=%s)", name, args)
             return "unknown tool"

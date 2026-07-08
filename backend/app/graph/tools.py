@@ -19,13 +19,11 @@ from collections import OrderedDict
 from hashlib import sha256
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
 from app.core.vector import vec_literal
 from app.graph.llm import Embedder
-from app.services.retrieval import RetrievalRepository
+from app.graph.ports import RetrievalPort
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +50,7 @@ async def _cached_embed(embedder: Embedder, query: str) -> list[float]:
 
 
 async def search_user_memory(
-    db: AsyncSession, embedder: Embedder, chat_id: str, query: str, top_k: int = 5
+    retrieval: RetrievalPort, embedder: Embedder, chat_id: str, query: str, top_k: int = 5
 ) -> str:
     s = get_settings()
     memory_version = await cache_version(f"memory:{chat_id}") if s.rag_cache_enabled else "0"
@@ -62,7 +60,7 @@ async def search_user_memory(
         if isinstance(cached, str):
             return cached
     emb = vec_literal(await _cached_embed(embedder, query))
-    rows = await RetrievalRepository(db).match_memories(
+    rows = await retrieval.match_memories(
         emb, top_k, json.dumps({"chat_id": chat_id})
     )
     if not rows:
@@ -122,7 +120,7 @@ def _format_knowledge_row(r) -> str:
 
 
 async def search_knowledge(
-    db: AsyncSession,
+    retrieval: RetrievalPort,
     embedder: Embedder,
     query: str,
     project_slug: str | None = None,
@@ -136,7 +134,7 @@ async def search_knowledge(
     FAQ-first pre-pass: canonical FAQ chunks (``category='faq'``) are retrieved with a
     higher similarity floor and prepended so the agent leads with curated answers.
     """
-    repo = RetrievalRepository(db)
+    repo = retrieval
     project_ids: list[str] | None = None
     if project_slug:
         pid = await repo.project_id_by_slug(project_slug, active_only=True)
@@ -186,9 +184,9 @@ async def search_knowledge(
     return result
 
 
-async def list_active_projects(db: AsyncSession) -> str:
+async def list_active_projects(retrieval: RetrievalPort) -> str:
     """Return the active-product catalog (name/slug/summary) for the agent."""
-    rows = await RetrievalRepository(db).list_active_projects()
+    rows = await retrieval.list_active_projects()
     if not rows:
         return "Hiện chưa có dự án/sản phẩm nào đang hoạt động."
     return "\n".join(
@@ -197,9 +195,9 @@ async def list_active_projects(db: AsyncSession) -> str:
 
 
 async def search_bus_timetable(
-    db: AsyncSession, company: str, question: str, limit: int = 50
+    retrieval: RetrievalPort, company: str, question: str, limit: int = 50
 ) -> str:
-    repo = RetrievalRepository(db)
+    repo = retrieval
     rows = await repo.search_bus_timetable(company, question, limit)
     if not rows and company.strip():
         rows = await repo.search_bus_timetable("", question, limit)
@@ -231,14 +229,14 @@ async def search_bus_timetable(
     return "\n".join(lines)
 
 
-async def get_product_features(db: AsyncSession, project_slug: str) -> str:
+async def get_product_features(retrieval: RetrievalPort, project_slug: str) -> str:
     """Return the project's active structured worker product features (catalog order).
 
     No embeddings — pure SQL over ``job_feature_values``. Precedent: ``search_bus_timetable``
     (structured, non-RAG data reaching the agent). The agent is told to advise ONLY from
     this and to answer "chưa ghi rõ" for missing features rather than invent.
     """
-    repo = RetrievalRepository(db)
+    repo = retrieval
     pid = await repo.project_id_by_slug(project_slug)
     if pid is None:
         return f"Không tìm thấy dự án/sản phẩm với slug '{project_slug}'."

@@ -44,22 +44,20 @@ class _FakeEmbedder:
         return self._vec
 
 
-def _install_repo(monkeypatch, **methods):
-    """Replace ``RetrievalRepository`` inside the tools module with a fake.
+def _make_repo(**methods):
+    """Build a fake RetrievalPort with the given async methods (each ``self, ...``).
 
-    Each kwarg is ``name -> async callable(self, ...)`` installed as a method.
-    Unconfigured methods default to returning an empty list / None.
+    Methods are set on the class so they bind as bound methods; the returned
+    instance is passed straight to a tool as its ``retrieval`` argument.
     """
 
     class _Repo:
-        def __init__(self, db) -> None:
-            self.db = db
+        pass
 
     for name, fn in methods.items():
         setattr(_Repo, name, fn)
 
-    monkeypatch.setattr(tools, "RetrievalRepository", _Repo)
-    return _Repo
+    return _Repo()
 
 
 @pytest.fixture
@@ -189,22 +187,19 @@ def test_format_row_marks_effective_window():
 
 
 @pytest.mark.asyncio
-async def test_search_user_memory_empty_returns_fixed_notice(no_cache_io, monkeypatch):
-    _install_repo(
-        monkeypatch,
-        match_memories=lambda self, emb, top_k, filt_json: _empty(),
-    )
-    out = await search_user_memory(db=object(), embedder=_FakeEmbedder(),
+async def test_search_user_memory_empty_returns_fixed_notice(no_cache_io):
+    repo = _make_repo(match_memories=lambda self, emb, top_k, filt_json: _empty())
+    out = await search_user_memory(retrieval=repo, embedder=_FakeEmbedder(),
                                    chat_id="c1", query="hi")
     assert out == "Không có thông tin ghi nhớ về người dùng này."
 
 
 @pytest.mark.asyncio
-async def test_search_user_memory_formats_rows_with_similarity(no_cache_io, monkeypatch):
+async def test_search_user_memory_formats_rows_with_similarity(no_cache_io):
     rows = [SimpleNamespace(content="đã làm lái xe 5 năm", similarity=0.91),
             SimpleNamespace(content="sống Bình Dương", similarity=0.82)]
-    _install_repo(monkeypatch, match_memories=lambda self, *a, **k: _const(rows))
-    out = await search_user_memory(db=object(), embedder=_FakeEmbedder(),
+    repo = _make_repo(match_memories=lambda self, *a, **k: _const(rows))
+    out = await search_user_memory(retrieval=repo, embedder=_FakeEmbedder(),
                                    chat_id="c1", query="kinh nghiệm")
     assert "đã làm lái xe 5 năm (sim=0.91)" in out
     assert "sống Bình Dương (sim=0.82)" in out
@@ -217,18 +212,18 @@ async def test_search_user_memory_formats_rows_with_similarity(no_cache_io, monk
 
 
 @pytest.mark.asyncio
-async def test_list_active_projects_empty(no_cache_io, monkeypatch):
-    _install_repo(monkeypatch, list_active_projects=lambda self: _empty())
-    out = await list_active_projects(db=object())
+async def test_list_active_projects_empty(no_cache_io):
+    repo = _make_repo(list_active_projects=lambda self: _empty())
+    out = await list_active_projects(retrieval=repo)
     assert out == "Hiện chưa có dự án/sản phẩm nào đang hoạt động."
 
 
 @pytest.mark.asyncio
-async def test_list_active_projects_formats_catalog(no_cache_io, monkeypatch):
+async def test_list_active_projects_formats_catalog(no_cache_io):
     rows = [SimpleNamespace(slug="tai-xe", name="Tài xế", summary="Tuyển tài xế"),
             SimpleNamespace(slug="khac", name="Khác", summary=None)]
-    _install_repo(monkeypatch, list_active_projects=lambda self: _const(rows))
-    out = await list_active_projects(db=object())
+    repo = _make_repo(list_active_projects=lambda self: _const(rows))
+    out = await list_active_projects(retrieval=repo)
     assert "- tai-xe (Tài xế): Tuyển tài xế" in out
     assert "- khac (Khác)" in out  # no summary → no trailing colon block
 
@@ -239,10 +234,10 @@ async def test_list_active_projects_formats_catalog(no_cache_io, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_search_knowledge_unknown_slug_returns_not_found(no_cache_io, monkeypatch):
-    _install_repo(monkeypatch, project_id_by_slug=lambda self, slug, **k: _none())
+async def test_search_knowledge_unknown_slug_returns_not_found(no_cache_io):
+    repo = _make_repo(project_id_by_slug=lambda self, slug, **k: _none())
     embedder = _FakeEmbedder()
-    out = await search_knowledge(db=object(), embedder=embedder,
+    out = await search_knowledge(retrieval=repo, embedder=embedder,
                                  query="lương", project_slug="khong-ton-tai")
     assert out == "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
     assert embedder.calls == []  # never embedded — slug miss is cheap
@@ -254,25 +249,24 @@ async def test_search_knowledge_unknown_slug_returns_not_found(no_cache_io, monk
 
 
 @pytest.mark.asyncio
-async def test_get_product_features_unknown_slug(no_cache_io, monkeypatch):
-    _install_repo(monkeypatch, project_id_by_slug=lambda self, slug, **k: _none())
-    out = await get_product_features(db=object(), project_slug="x")
+async def test_get_product_features_unknown_slug(no_cache_io):
+    repo = _make_repo(project_id_by_slug=lambda self, slug, **k: _none())
+    out = await get_product_features(retrieval=repo, project_slug="x")
     assert "Không tìm thấy dự án/sản phẩm với slug 'x'" in out
 
 
 @pytest.mark.asyncio
-async def test_get_product_features_empty_notice(no_cache_io, monkeypatch):
-    _install_repo(
-        monkeypatch,
+async def test_get_product_features_empty_notice(no_cache_io):
+    repo = _make_repo(
         project_id_by_slug=lambda self, slug, **k: _const(7),
         job_features_for_project=lambda self, pid: _empty(),
     )
-    out = await get_product_features(db=object(), project_slug="tai-xe")
+    out = await get_product_features(retrieval=repo, project_slug="tai-xe")
     assert "Chưa có đặc điểm sản phẩm" in out
 
 
 @pytest.mark.asyncio
-async def test_get_product_features_flags_missing_and_highlight(no_cache_io, monkeypatch):
+async def test_get_product_features_flags_missing_and_highlight(no_cache_io):
     rows = [
         SimpleNamespace(name_vi="Lương", value_text="15tr",
                         is_missing=True, needs_clarification=False, is_highlight=False),
@@ -281,12 +275,11 @@ async def test_get_product_features_flags_missing_and_highlight(no_cache_io, mon
         SimpleNamespace(name_vi="Thưởng", value_text="theo quý",
                         is_missing=False, needs_clarification=False, is_highlight=False),
     ]
-    _install_repo(
-        monkeypatch,
+    repo = _make_repo(
         project_id_by_slug=lambda self, slug, **k: _const(7),
         job_features_for_project=lambda self, pid: _const(rows),
     )
-    out = await get_product_features(db=object(), project_slug="tai-xe")
+    out = await get_product_features(retrieval=repo, project_slug="tai-xe")
     assert "Lương: 15tr [CHƯA RÕ" in out
     assert "Chế độ: BHXH [NỔI BẬT]" in out
     assert "Thưởng: theo quý" in out
@@ -317,11 +310,10 @@ async def test_search_bus_timetable_groups_stops_under_route(no_cache_io, monkey
             "stop_name": "Không giờ", "scheduled_time": "",
         }),
     ]
-    _install_repo(
-        monkeypatch,
+    repo = _make_repo(
         search_bus_timetable=lambda self, company, question, limit: _const(rows),
     )
-    out = await search_bus_timetable(db=object(), company="VFIC", question="giờ chạy")
+    out = await search_bus_timetable(retrieval=repo, company="VFIC", question="giờ chạy")
     # one route group collapses onto a single line; every stop is on that line
     assert "\n" not in out
     assert "Tuyến Bình Dương – Tây Ninh (Sáng/Chiều đi)" in out
@@ -331,13 +323,12 @@ async def test_search_bus_timetable_groups_stops_under_route(no_cache_io, monkey
 
 
 @pytest.mark.asyncio
-async def test_search_bus_timetable_no_rows_returns_notice(no_cache_io, monkeypatch):
+async def test_search_bus_timetable_no_rows_returns_notice(no_cache_io):
     # second call (empty-company fallback) also empty → notice
-    _install_repo(
-        monkeypatch,
+    repo = _make_repo(
         search_bus_timetable=lambda self, company, question, limit: _empty(),
     )
-    out = await search_bus_timetable(db=object(), company="VFIC", question="x")
+    out = await search_bus_timetable(retrieval=repo, company="VFIC", question="x")
     assert out == "Không tìm thấy lịch xe phù hợp."
 
 

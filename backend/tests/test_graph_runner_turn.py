@@ -116,7 +116,8 @@ def _stub_agent(monkeypatch, *replies) -> None:
 def _deps(zalo, *, conversation, safety=object(), persist=None) -> GraphDeps:
     return GraphDeps(
         db=_FakeDB(), agent=object(), safety=safety,
-        embedder=object(), zalo=zalo, conversation=conversation, persist=persist,
+        embedder=object(), zalo=zalo, conversation=conversation,
+        retrieval=object(), persist=persist,
     )
 
 

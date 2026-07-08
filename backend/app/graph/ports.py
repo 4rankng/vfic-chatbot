@@ -89,9 +89,44 @@ class LeadContextPort(Protocol):
     def ensure(self, reply: str, question: str) -> str: ...
 
 
+class RetrievalPort(Protocol):
+    """Retrieval repository surface the agent tools + prompt assembly depend on."""
+
+    async def active_persona_body(self) -> str | None: ...
+
+    async def active_projects_with_card(self) -> list[Any]: ...
+
+    async def match_memories(self, embedding: str, top_k: int, filters_json: str) -> list[Any]: ...
+
+    async def project_id_by_slug(
+        self, slug: str, *, active_only: bool = False
+    ) -> Any: ...
+
+    async def match_faq(
+        self, embedding: str, *, top_k: int = 3, project_ids: list[str] | None = None
+    ) -> list[Any]: ...
+
+    async def match_documents(
+        self,
+        embedding: str,
+        top_k: int,
+        filters_json: str,
+        *,
+        project_ids: list[str] | None = None,
+        query_text: str = "",
+    ) -> list[Any]: ...
+
+    async def list_active_projects(self) -> list[Any]: ...
+
+    async def search_bus_timetable(self, company: str, question: str, limit: int) -> list[Any]: ...
+
+    async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
+
+
 __all__ = [
     "SendOutcome",
     "ConversationPort",
     "ConversationStatePort",
     "LeadContextPort",
+    "RetrievalPort",
 ]
