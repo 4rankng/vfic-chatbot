@@ -13,6 +13,8 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.viewer_scope import viewer_scope_sql
+
 
 class DashboardRepository:
     """Read-only dashboard counts, funnel, and ingest-health queries."""
@@ -27,7 +29,7 @@ class DashboardRepository:
             text(
                 "SELECT count(*) FROM conversations c "
                 "WHERE c.status = 'OPEN' "
-                "AND (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+                "AND " + viewer_scope_sql("c.")
             ),
             {"uid": recruiter_id},
         )
@@ -39,7 +41,7 @@ class DashboardRepository:
             text(
                 "SELECT count(*) FROM leads l "
                 "WHERE l.lead_score = 'hot' "
-                "AND (l.assigned_recruiter_id = :uid OR l.assigned_recruiter_id IS NULL)"
+                "AND " + viewer_scope_sql("l.")
             ),
             {"uid": recruiter_id},
         )
@@ -51,7 +53,7 @@ class DashboardRepository:
             text(
                 "SELECT count(*) FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
                 "WHERE f.status = 'PENDING' "
-                "AND (l.assigned_recruiter_id = :uid OR l.assigned_recruiter_id IS NULL)"
+                "AND " + viewer_scope_sql("l.")
             ),
             {"uid": recruiter_id},
         )
@@ -63,7 +65,7 @@ class DashboardRepository:
             text(
                 "SELECT count(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id "
                 "WHERE m.delivery_status = 'FAILED' "
-                "AND (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+                "AND " + viewer_scope_sql("c.")
             ),
             {"uid": recruiter_id},
         )
@@ -75,7 +77,7 @@ class DashboardRepository:
             text(
                 "SELECT count(*) FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
                 "WHERE b.outcome = 'ERROR' "
-                "AND (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+                "AND " + viewer_scope_sql("c.")
             ),
             {"uid": recruiter_id},
         )
@@ -96,7 +98,7 @@ class DashboardRepository:
         if recruiter_id is not None:
             sql += (
                 " JOIN conversations c ON c.id = b.conversation_id "
-                "WHERE (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+                "WHERE " + viewer_scope_sql("c.")
             )
             params["uid"] = recruiter_id
         row = (await self.db.execute(text(sql), params)).mappings().one()
@@ -124,7 +126,7 @@ class DashboardRepository:
                     "SELECT count(*) FILTER (WHERE b.outcome='SUPPRESSED')::float / NULLIF(count(*),0) AS rate "
                     "FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
                     "WHERE b.outcome IN ('SENT','SUPPRESSED') "
-                    "AND (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+                    "AND " + viewer_scope_sql("c.")
                 ),
                 {"uid": recruiter_id},
             )
@@ -140,7 +142,7 @@ class DashboardRepository:
                 await self.db.execute(
                     text(
                         "SELECT lead_stage, count(*) FROM leads "
-                        "WHERE (assigned_recruiter_id = :uid OR assigned_recruiter_id IS NULL) "
+                        "WHERE " + viewer_scope_sql("") + " "
                         "GROUP BY lead_stage"
                     ),
                     {"uid": recruiter_id},
@@ -154,7 +156,7 @@ class DashboardRepository:
         return await self.db.scalar(
             text(
                 "SELECT count(*) FROM conversations "
-                "WHERE mode = 'HUMAN' AND (assigned_recruiter_id = :uid OR assigned_recruiter_id IS NULL)"
+                "WHERE mode = 'HUMAN' AND " + viewer_scope_sql("")
             ),
             {"uid": recruiter_id},
         )

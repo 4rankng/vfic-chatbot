@@ -22,6 +22,7 @@ from app.models.conversation import (
     MessageSender,
 )
 from app.models.user import Role, User
+from app.services.viewer_scope import viewer_scope_filter, viewer_scope_sql
 
 # Whitelist of sortable conversation columns. Unknown / absent sort keys fall
 # back to updated_at (the default inbox ordering).
@@ -51,14 +52,11 @@ class ConversationRepository:
         return await self.db.get(Conversation, conv_id)
 
     async def get_visible(self, conv_id: uuid.UUID, *, viewer: User) -> Conversation | None:
-        stmt = select(Conversation).where(Conversation.id == conv_id)
-        if viewer.role != Role.admin:
-            stmt = stmt.where(
-                or_(
-                    Conversation.assigned_recruiter_id == viewer.id,
-                    Conversation.assigned_recruiter_id.is_(None),
-                )
-            )
+        stmt = viewer_scope_filter(
+            select(Conversation).where(Conversation.id == conv_id),
+            Conversation.assigned_recruiter_id,
+            viewer,
+        )
         return (await self.db.scalars(stmt)).first()
 
     async def get_by_zalo(self, zalo_chat_id: str) -> Conversation | None:
@@ -93,7 +91,7 @@ class ConversationRepository:
         params: dict = {"ids": ids}
         scope = ""
         if viewer.role != Role.admin:
-            scope = "AND (c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL)"
+            scope = "AND " + viewer_scope_sql("c.")
             params["uid"] = str(viewer.id)
 
         rows = (
@@ -127,15 +125,7 @@ class ConversationRepository:
         sort_by: str | None = None,
         order: str | None = "desc",
     ) -> tuple[list[Conversation], int]:
-        base = select(Conversation)
-        if viewer.role != Role.admin:
-            # recruiters see their own + unassigned
-            base = base.where(
-                or_(
-                    Conversation.assigned_recruiter_id == viewer.id,
-                    Conversation.assigned_recruiter_id.is_(None),
-                )
-            )
+        base = viewer_scope_filter(select(Conversation), Conversation.assigned_recruiter_id, viewer)
         if mode is not None:
             base = base.where(Conversation.mode == mode)
         if status is not None:
@@ -181,13 +171,7 @@ class ConversationRepository:
             .select_from(Conversation)
             .where(_unanswered_inbound_condition())
         )
-        if viewer.role != Role.admin:
-            stmt = stmt.where(
-                or_(
-                    Conversation.assigned_recruiter_id == viewer.id,
-                    Conversation.assigned_recruiter_id.is_(None),
-                )
-            )
+        stmt = viewer_scope_filter(stmt, Conversation.assigned_recruiter_id, viewer)
         return int((await self.db.scalar(stmt)) or 0)
 
     async def last_messages(self, conv: Conversation, limit: int = 50) -> list[Message]:

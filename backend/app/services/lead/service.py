@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
 from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage
 from app.models.user import Role, User
+from app.services.viewer_scope import viewer_scope_condition, viewer_scope_filter
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError
 from app.services.lead.events import LeadEventBus
@@ -90,11 +91,7 @@ class LeadService:
             await self.repo.materialize_conversation_leads(
                 viewer.id if viewer.role != Role.admin else None
             )
-        base = select(Lead)
-        if viewer.role != Role.admin:
-            base = base.where(
-                or_(Lead.assigned_recruiter_id == viewer.id, Lead.assigned_recruiter_id.is_(None))
-            )
+        base = viewer_scope_filter(select(Lead), Lead.assigned_recruiter_id, viewer)
         if stage is not None:
             base = base.where(Lead.lead_stage == stage)
         if zalo_id:
@@ -683,13 +680,9 @@ class LeadService:
                 Conversation.last_inbound_at > Conversation.last_outbound_at,
             ),
         ]
-        if viewer.role != Role.admin:
-            conditions.append(
-                or_(
-                    Conversation.assigned_recruiter_id == viewer.id,
-                    Conversation.assigned_recruiter_id.is_(None),
-                )
-            )
+        scope = viewer_scope_condition(Conversation.assigned_recruiter_id, viewer)
+        if scope is not None:
+            conditions.append(scope)
         return select(Conversation.id).where(*conditions).exists()
 
     def _due_followup_exists(self):
