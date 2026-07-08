@@ -9,7 +9,7 @@ Skipped wholesale here.
 import pytest
 from sqlalchemy import text  # noqa: F401  (used by skipped integration tests)
 
-from app.services.knowledge_service import KnowledgeService  # noqa: F401  (used by skipped tests)
+from app.services.knowledge import KnowledgeService  # noqa: F401  (used by skipped tests)
 
 pytestmark = [
     pytest.mark.asyncio,

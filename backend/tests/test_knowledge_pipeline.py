@@ -21,7 +21,7 @@ from app.services.knowledge import (
     split_for_digest,
     validate_digest,
 )
-from app.services.knowledge_service import KnowledgeService  # noqa: F401  (used by skipped integration tests)
+from app.services.knowledge import KnowledgeService  # noqa: F401  (used by skipped integration tests)
 
 # Integration tests in this module need infrastructure that is deliberately
 # absent from the unit suite (live DB + seeded admin user + fixtures), and some

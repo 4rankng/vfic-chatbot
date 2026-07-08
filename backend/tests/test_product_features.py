@@ -16,7 +16,7 @@ from app.graph.tools import get_product_features
 from app.models.company import Project
 from app.models.knowledge import KnowledgeStatus
 from app.services.knowledge import KnowledgePipeline
-from app.services.knowledge_service import KnowledgeService
+from app.services.knowledge import KnowledgeService
 
 pytestmark = [
     pytest.mark.asyncio,
