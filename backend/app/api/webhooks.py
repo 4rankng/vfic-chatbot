@@ -126,6 +126,11 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             }
             _match = [k for k, v in _cands.items() if hmac.compare_digest(recv, v)]
             logger.warning(
+                "zalo oa webhook headers=%r raw_repr=%r",
+                {k: v for k, v in request.headers.items()},
+                raw,
+            )
+            logger.warning(
                 "zalo oa signature mismatch secret_len=%d ts=%r recv_sig=%r "
                 "candidates=%s matched=%s body=%r",
                 len(cfg.oa_secret_key),

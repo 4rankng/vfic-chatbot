@@ -1,9 +1,12 @@
 """Zalo Official Account outbound client."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Awaitable, Callable
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import Settings, ZALO_OA_API_BASE, get_settings
 from app.services.zalo_bot_service import (
@@ -240,8 +243,15 @@ class ZaloOASender:
 
     async def send_chat_action(self, chat_id: str, action: str) -> SendResult:
         # OA OpenAPI has no Bot-Platform-compatible typing endpoint in this app's
-        # current contract. Treat it as best-effort success so graph UX logic can
-        # stay channel-agnostic.
+        # current contract. Log at debug so the no-op is observable in monitoring
+        # (the reliable "bot is active" signal for OA is the slow-case ack message,
+        # not a typing indicator). Returns best-effort success so graph UX logic
+        # stays channel-agnostic.
+        logger.debug(
+            "oa send_chat_action skipped (no OA typing endpoint): chat=%s action=%s",
+            chat_id,
+            action,
+        )
         return SendResult(
             ok=True,
             raw={"skipped": True, "chat_id": chat_id, "action": action},

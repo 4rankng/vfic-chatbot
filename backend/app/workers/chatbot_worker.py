@@ -80,11 +80,17 @@ async def _run_job_async(job: dict) -> None:
     except Exception:  # noqa: BLE001
         pass  # non-fatal — don't break the turn for observability
 
+    from app.core.config import get_settings
+
+    received_at_epoch = float(job.get("received_at_epoch") or 0.0)
+    sla = get_settings().sla_seconds
     state = BotRunState(
         conversation_id=job["conversation_id"],
         version_at_start=int(job["version_at_start"]),
         user_text=job["user_text"],
         user_name=job.get("user_name", ""),
+        received_at_epoch=received_at_epoch,
+        deadline_at_epoch=(received_at_epoch + sla) if received_at_epoch else 0.0,
     )
     async with worker_session() as db:
         deps = await build_deps(db)

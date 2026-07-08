@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from contextlib import suppress
 
+from app.core.config import get_settings
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.prompts import ERROR_REPLY
+from app.graph.prompts import ERROR_REPLY, TIMEOUT_REPLY
 from app.graph.safety import (
     build_retry_prompt,
     fast_safety_filter,
@@ -38,6 +40,18 @@ from app.models.conversation import Message
 logger = logging.getLogger(__name__)
 ZALO_TYPING_HEARTBEAT_SECONDS = 4.0
 RECENT_HISTORY_LIMIT = 16
+
+
+def _remaining(state: BotRunState) -> float:
+    """Seconds left until the propagated turn deadline (``inf`` if unset).
+
+    Epoch-based (stamped by the webhook, carried in the job) so it survives the
+    FastAPI→RQ process boundary that ``time.monotonic()`` cannot cross. Tests that
+    don't set a deadline get unbounded behaviour (legacy).
+    """
+    if state.deadline_at_epoch <= 0:
+        return float("inf")
+    return state.deadline_at_epoch - time.time()
 
 
 def _zalo_for_conversation(deps: GraphDeps, conv):
@@ -98,6 +112,42 @@ async def _typing_heartbeat(zalo, chat_id: str) -> None:
         await asyncio.sleep(ZALO_TYPING_HEARTBEAT_SECONDS)
 
 
+async def _finish_terminal_reply(
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    zalo,
+    text: str,
+    started,
+    base_outcome: str,
+):
+    """Send a terminal fallback (timeout / error) then record the outcome.
+
+    Shared by the agent-deadline and agent-error paths: refresh to read committed
+    version/mode, re-check ownership (a concurrent takeover must not be clobbered),
+    send only if still owned, and record so the per-chat mutex clears. Returns the
+    TurnOutcome dict (``base_outcome`` unless the send itself failed → ``send_failed``).
+    """
+    await deps.db.refresh(conv)
+    owned = await svc.recheck_ownership(conv, state.version_at_start)
+    send_result = None
+    if owned:
+        send_result = await zalo.send_message(conv.zalo_chat_id, text)
+    await svc.record_bot_outcome(
+        conv,
+        version_at_start=state.version_at_start,
+        reply=text,
+        started_at=started,
+        sent=bool(send_result and send_result.ok),
+        pending_message_id=state.pending_message_id,
+        external_error=send_result.error if send_result and not send_result.ok else None,
+        zalo_message_id=send_result.msg_id if send_result else None,
+    )
+    outcome = base_outcome if (send_result is None or send_result.ok) else "send_failed"
+    return {"outcome": outcome, "reply": text}
+
+
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome."""
     svc = deps.conversation
@@ -113,36 +163,42 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     state.pending_message_id = pending_msg.id
 
     try:
-        # --- agent ---
+        # --- agent (bounded by the propagated ~10s deadline) ---
+        settings = get_settings()
+        agent_budget = max(
+            0.0,
+            min(settings.agent_max_seconds, _remaining(state) - settings.send_margin_seconds),
+        )
         try:
-            raw = await _agent_turn(
-                state,
-                deps,
-                state.user_text,
-                chat_id=conv.zalo_chat_id,
-                recent_messages=recent_messages,
+            if agent_budget <= 0:
+                # Already out of time before starting — don't burn an LLM call.
+                raise asyncio.TimeoutError()
+            raw = await asyncio.wait_for(
+                _agent_turn(
+                    state,
+                    deps,
+                    state.user_text,
+                    chat_id=conv.zalo_chat_id,
+                    recent_messages=recent_messages,
+                ),
+                timeout=agent_budget,
             )
         except LLMThrottled:
             raise  # let worker handle degradation msg (no LLM call)
+        except asyncio.TimeoutError:
+            logger.info(
+                "agent deadline hit (budget=%.2fs remaining=%.2fs)",
+                agent_budget,
+                _remaining(state),
+            )
+            return await _finish_terminal_reply(
+                state, deps, conv, svc, zalo, TIMEOUT_REPLY, started, "timeout"
+            )
         except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
             logger.warning("agent error: %s", exc)
-            # refresh to read committed version/mode — see recheck_ownership docstring
-            await deps.db.refresh(conv)
-            owned = await svc.recheck_ownership(conv, state.version_at_start)
-            send_result = None
-            if owned:
-                send_result = await zalo.send_message(conv.zalo_chat_id, ERROR_REPLY)
-            await svc.record_bot_outcome(
-                conv, version_at_start=state.version_at_start, reply=ERROR_REPLY,
-                started_at=started, sent=bool(send_result and send_result.ok),
-                pending_message_id=state.pending_message_id,
-                external_error=send_result.error if send_result and not send_result.ok else None,
-                zalo_message_id=send_result.msg_id if send_result else None,
+            return await _finish_terminal_reply(
+                state, deps, conv, svc, zalo, ERROR_REPLY, started, "error"
             )
-            return {
-                "outcome": "error" if send_result is None or send_result.ok else "send_failed",
-                "reply": ERROR_REPLY,
-            }
 
         state.reply = raw
 

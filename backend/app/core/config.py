@@ -172,9 +172,22 @@ class Settings(BaseSettings):
     # against a stale run sending after a takeover.
     bot_lock_ttl_seconds: int = 180
     # RQ job timeout for chat turns. Must be < bot_lock_ttl_seconds so RQ kills a
-    # stuck turn before its per-conversation lock auto-expires (avoids stale-run
-    # window where a new inbound re-acquires the lock while the old turn is dying).
-    chat_turn_job_timeout: int = 150
+    # stuck turn before its per-conversation lock auto-expires. Lowered 150→11: the
+    # propagated deadline below now bounds every healthy turn, so this is purely a
+    # safety net for a worker that has escaped the deadline logic.
+    chat_turn_job_timeout: int = 11
+
+    # ── ~10-second perceived-responsiveness budget ─────────────────────────────
+    # The webhook stamps received_at_epoch; the worker sets deadline_at_epoch =
+    # received_at_epoch + sla_seconds. Each graph stage checks _remaining()
+    # (epoch-based so it crosses the FastAPI→RQ process boundary). agent_max_seconds
+    # is the inner asyncio.wait_for ceiling on the agent turn; send_margin_seconds
+    # reserves time for the Zalo POST + DB commit; soft_fallback_remaining stops
+    # starting expensive work when little time is left.
+    sla_seconds: float = 10.0
+    agent_max_seconds: float = 8.5
+    send_margin_seconds: float = 1.0
+    soft_fallback_remaining: float = 2.0
 
     # Phase 2 scaling knobs (env-tunable). 0 = disabled (pass-through).
     # LLM/embed semaphores are ENABLED by default (see graph/llm_semaphore.py):

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # OA OAuth token endpoint (grant_type=authorization_code | refresh_token).
 # Tokens are opaque and short-lived (~1h); refresh on demand rather than by clock.
-ZALO_OA_TOKEN_URL = "https://oauth.zaloapp.com/v4/access_token"
+ZALO_OA_TOKEN_URL = "https://oauth.zaloapp.com/v4/oa/access_token"
 
 
 ZALO_BOT_TOKEN = "zalo_bot_token"
@@ -326,7 +326,7 @@ class IntegrationSettingsService:
                 async with httpx.AsyncClient(
                     timeout=self.settings.zalo_bot_request_timeout
                 ) as client:
-                    resp = await client.post(ZALO_OA_TOKEN_URL, json=body, headers=headers)
+                    resp = await client.post(ZALO_OA_TOKEN_URL, data=body, headers=headers)
                 data = resp.json()
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA token refresh transport error", exc_info=True)

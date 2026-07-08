@@ -147,19 +147,19 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 980px);
+  grid-template-columns: minmax(0, 100%);
   justify-content: center;
   overflow-x: clip;
   overflow-y: visible;
-  padding: 20px 24px 32px;
+  padding: 0 24px 32px;
 }
 
 .persona-studio-sheet {
   min-width: 0;
   max-width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-solid);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 

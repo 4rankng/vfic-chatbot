@@ -16,13 +16,15 @@ surprising-but-intentional-to-pin outcome mapping in the agent-error branch.
 """
 from __future__ import annotations
 
+import asyncio
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from app.graph import runner
 from app.graph.llm_semaphore import LLMThrottled
-from app.graph.prompts import ERROR_REPLY
+from app.graph.prompts import ERROR_REPLY, TIMEOUT_REPLY
 from app.graph.runner import run_turn
 from app.graph.types import BotRunState, GraphDeps
 
@@ -238,3 +240,58 @@ async def test_safety_verdict_safe_overrides_with_final_answer(monkeypatch):
     # the safety gate's final_answer replaces the raw agent output
     assert res["reply"] == "Tôi chỉ tư vấn việc làm, không viết code được."
     assert zalo.sent[0][1] == res["reply"]
+
+
+# ---------------------------------------------------------------------------
+# Propagated ~10s deadline (Slice A)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_expired_deadline_skips_agent_and_sends_timeout(monkeypatch):
+    """A turn whose deadline already expired must NOT burn an LLM call — it sends
+    TIMEOUT_REPLY immediately. This is the propagated-deadline guarantee: never
+    leave the user waiting silently past the budget."""
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages):
+        raise AssertionError("agent must not be called when the deadline has expired")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+
+    zalo = _FakeZalo()
+    state = _state()
+    state.received_at_epoch = time.time() - 10
+    state.deadline_at_epoch = time.time() - 1  # already expired → agent_budget <= 0
+
+    res = await run_turn(state, _deps(zalo, conversation=svc))
+
+    assert res["outcome"] == "timeout"
+    assert res["reply"] == TIMEOUT_REPLY
+    assert zalo.sent and zalo.sent[0][1] == TIMEOUT_REPLY
+
+
+@pytest.mark.asyncio
+async def test_agent_oversleep_hits_deadline_timeout(monkeypatch):
+    """An agent that exceeds agent_max_seconds is cancelled at the deadline and
+    replaced with TIMEOUT_REPLY (the wait_for backstop)."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "agent_max_seconds", 0.1)
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+
+    async def _slow_agent(state, deps, user_text, *, chat_id, recent_messages):
+        await asyncio.sleep(0.3)
+        return "should not be used"
+
+    monkeypatch.setattr(runner, "_agent_turn", _slow_agent)
+
+    zalo = _FakeZalo()
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
+
+    assert res["outcome"] == "timeout"
+    assert res["reply"] == TIMEOUT_REPLY
+    assert zalo.sent and zalo.sent[0][1] == TIMEOUT_REPLY

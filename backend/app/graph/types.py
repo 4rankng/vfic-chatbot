@@ -27,6 +27,13 @@ class BotRunState:
     attempt: int = 0
     reply: str = ""
     pending_message_id: int | None = None
+    # Propagated ~10s turn deadline, in epoch seconds. The webhook stamps
+    # ``received_at_epoch`` (time.time()) into the job so the budget survives the
+    # FastAPI→RQ process boundary that time.monotonic() cannot cross; the worker
+    # derives ``deadline_at_epoch = received_at_epoch + sla_seconds``. Stages check
+    # ``_remaining(state)`` against it. ``0.0`` = unset → unbounded (legacy, tests).
+    received_at_epoch: float = 0.0
+    deadline_at_epoch: float = 0.0
 
 
 class TurnOutcome(TypedDict):

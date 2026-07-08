@@ -34,3 +34,8 @@ Quy tắc:
 - Nếu câu trả lời cần viết lại đáng kể vì chứa nội dung kỹ thuật/code/lạc đề, trả safe_to_send=false."""
 
 ERROR_REPLY = """Xin lỗi bạn, tôi đang gặp chút sự cố kỹ thuật. Bạn vui lòng nhắn lại sau ít phút nhé 🙏"""
+
+# Sent when the propagated ~10s deadline expires before the agent finished (tôi/bạn
+# voice per persona.md). Distinct from DEGRADATION_REPLY (LLM throttled / high traffic):
+# this means "I need a little more time", not "the system is overloaded".
+TIMEOUT_REPLY = """Tôi cần thêm một chút thời gian để kiểm tra thông tin chính xác cho bạn. Bạn nhắn lại giúp tôi sau ít phút nhé 🙏"""

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
@@ -143,6 +144,9 @@ class ZaloWebhookService:
             "user_text": norm.user_text,
             "user_name": norm.user_name,
             "received_at": datetime.now(timezone.utc).isoformat(),
+            # Epoch anchor (not monotonic) so the RQ worker can compute remaining
+            # wall-clock budget across the process boundary. See BotRunState.
+            "received_at_epoch": time.time(),
         }
         result = enqueue(job)
         if asyncio.iscoroutine(result):
