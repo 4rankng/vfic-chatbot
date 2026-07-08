@@ -1,5 +1,5 @@
 import { CreateBase, useDataProvider, useNotify, useRedirect } from "ra-core";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PersonaForm, type PersonaValues } from "./PersonaForm";

@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import type { ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDataProvider } from "ra-core";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation } from "react-router";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { CrmDataProvider } from "../providers/types";
