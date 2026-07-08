@@ -19,6 +19,50 @@ from app.graph.types import GraphDeps
 logger = logging.getLogger(__name__)
 
 
+class _LeadContextAdapter:
+    """LeadContextPort backed by the concrete lead service pieces.
+
+    Defined here (the composition root) so the graph layer never imports the lead
+    service modules. Each method does one DB fetch, matching the prior single-fetch
+    behavior of the brain; the caller owns the best-effort try/except.
+    """
+
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def profile_text(self, chat_id: str) -> str:
+        from app.services.lead import lead_profile_text
+        from app.services.lead.repository import LeadRepository
+
+        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
+        return lead_profile_text(lead)
+
+    async def context(self, chat_id, current_user_text, recent_messages):
+        from app.services.lead import lead_profile_text
+        from app.services.lead.probing import lead_collection_question
+        from app.services.lead.repository import LeadRepository
+
+        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
+        return (
+            lead_profile_text(lead),
+            lead_collection_question(
+                lead=lead,
+                current_user_text=current_user_text,
+                recent_messages=recent_messages,
+            ),
+        )
+
+    def instruction(self, question: str) -> str:
+        from app.services.lead.probing import lead_collection_instruction
+
+        return lead_collection_instruction(question=question)
+
+    def ensure(self, reply: str, question: str) -> str:
+        from app.services.lead.probing import ensure_lead_collection_question
+
+        return ensure_lead_collection_question(reply, question)
+
+
 def build_minimax_extractor():
     """MiniMax extractor (safety model, temp 0) for candidate extraction."""
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -96,4 +140,15 @@ async def build_deps(db):
             refresh=lambda: integration_settings.refresh_oa_access_token(),
         ),
         conversation=ConversationService(db),
+        lead=_LeadContextAdapter(db),
+        followup_allowed=_make_followup_allowed(db),
     )
+
+
+def _make_followup_allowed(db):
+    from app.services.proactive.repository import conversation_allowed_by_followup_rules
+
+    async def _allowed(conv):
+        return await conversation_allowed_by_followup_rules(db, conv)
+
+    return _allowed

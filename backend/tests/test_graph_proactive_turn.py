@@ -116,17 +116,20 @@ def _stub_svc(*, acquired: bool = True, owned: bool = True):
 
 
 def _patch_lazy_helpers(monkeypatch) -> None:
-    """Neutralize the two lazy DB-hitting helpers inside the turn."""
+    """Neutralize the lazy DB-hitting system-prompt build inside the turn."""
     async def _system_prompt(db):
         return ""
 
-    async def _allowed(db, conv):
-        return True, ""
-
     monkeypatch.setattr("app.graph.context.build_system_prompt", _system_prompt)
-    monkeypatch.setattr(
-        "app.services.proactive.repository.conversation_allowed_by_followup_rules", _allowed
-    )
+
+
+class _NoLead:
+    async def profile_text(self, chat_id: str) -> str:
+        return ""
+
+
+async def _always_allowed(conv):
+    return True, ""
 
 
 def _deps(agent, zalo, *, conversation) -> "object":
@@ -139,6 +142,8 @@ def _deps(agent, zalo, *, conversation) -> "object":
         embedder=object(),
         zalo=zalo,
         conversation=conversation,
+        lead=_NoLead(),
+        followup_allowed=_always_allowed,
     )
 
 

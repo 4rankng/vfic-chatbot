@@ -69,4 +69,29 @@ class ConversationPort(Protocol):
     async def acquire_lock(self, conv_id: Any) -> bool: ...
 
 
-__all__ = ["SendOutcome", "ConversationPort", "ConversationStatePort"]
+class LeadContextPort(Protocol):
+    """Lead-profile context the brain injects into the agent prompt.
+
+    ``context`` does one DB fetch and returns both the profile text and the
+    next lead-collection question (``""`` each on miss); ``profile_text`` is the
+    single-fetch flavor used by the proactive turn. ``instruction`` / ``ensure``
+    are pure prompt-assembly post-processors.
+    """
+
+    async def profile_text(self, chat_id: str) -> str: ...
+
+    async def context(
+        self, chat_id: str, current_user_text: str, recent_messages: list[Any]
+    ) -> tuple[str, str]: ...
+
+    def instruction(self, question: str) -> str: ...
+
+    def ensure(self, reply: str, question: str) -> str: ...
+
+
+__all__ = [
+    "SendOutcome",
+    "ConversationPort",
+    "ConversationStatePort",
+    "LeadContextPort",
+]

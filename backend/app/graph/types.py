@@ -1,13 +1,13 @@
 """Shared graph types: the BotRunState payload + the GraphDeps injection container."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
-from app.graph.ports import ConversationPort
+from app.graph.ports import ConversationPort, LeadContextPort
 
 # TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
 # annotation is stringified by ``from __future__ import annotations`` anyway,
@@ -50,6 +50,10 @@ class GraphDeps:
     embedder: Embedder
     zalo: Any
     conversation: ConversationPort
+    # Lead-profile context for the agent prompt. None in tests that stub the turn.
+    lead: LeadContextPort | None = None
+    # Proactive follow-up guard: (allowed, reason). None in reactive-only tests.
+    followup_allowed: Callable[[Any], Awaitable[tuple[bool, str]]] | None = None
     # Fire-and-forget candidate extraction after a SENT reply.
     # None in tests -> persistence is skipped.
     persist: Callable[[dict], None] | None = None

@@ -166,9 +166,6 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         PROACTIVE_SILENCE_LIMIT,
     )
     from app.graph.context import build_system_prompt
-    from app.services.proactive.repository import conversation_allowed_by_followup_rules
-    from app.services.lead.repository import LeadRepository
-    from app.services.lead import lead_profile_text
 
     svc = deps.conversation
     now = _now()
@@ -191,7 +188,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     if not conv.last_inbound_at:
         return _outcome("suppressed", reason="no_inbound")
 
-    rule_allowed, rule_reason = await conversation_allowed_by_followup_rules(deps.db, conv)
+    rule_allowed, rule_reason = await deps.followup_allowed(conv)
     if not rule_allowed:
         return _outcome("suppressed", reason=rule_reason)
 
@@ -233,8 +230,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         lead_profile = ""
         recent_messages = await svc.last_messages(conv, limit=16)
         try:
-            lead = await LeadRepository(deps.db).by_zalo_id(conv.zalo_chat_id)
-            lead_profile = lead_profile_text(lead)
+            lead_profile = await deps.lead.profile_text(conv.zalo_chat_id)
         except Exception:  # noqa: BLE001
             logger.warning("lead fetch failed for %s, skipping", conv.zalo_chat_id, exc_info=True)
 
@@ -302,7 +298,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             await svc.state.release_lock(conv)
             await deps.db.commit()
             return _outcome("suppressed", reason="opted_out_during_generation")
-        rule_allowed, rule_reason = await conversation_allowed_by_followup_rules(deps.db, conv)
+        rule_allowed, rule_reason = await deps.followup_allowed(conv)
         if not rule_allowed:
             await svc.state.release_lock(conv)
             await deps.db.commit()

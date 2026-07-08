@@ -34,11 +34,6 @@ from app.graph.safety import (
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.models.conversation import Message
-from app.services.lead.probing import (
-    ensure_lead_collection_question,
-    lead_collection_instruction as build_lead_collection_instruction,
-    lead_collection_question as select_lead_collection_question,
-)
 
 logger = logging.getLogger(__name__)
 ZALO_TYPING_HEARTBEAT_SECONDS = 4.0
@@ -62,8 +57,6 @@ async def _agent_turn(
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
     from app.graph.context import build_system_prompt
-    from app.services.lead.repository import LeadRepository
-    from app.services.lead import lead_profile_text
 
     system = await build_system_prompt(deps.db)
 
@@ -74,17 +67,11 @@ async def _agent_turn(
     lead_collection_question = ""
     lead_collection_instruction = ""
     try:
-        lead = await LeadRepository(deps.db).by_zalo_id(chat_id)
-        lead_profile = lead_profile_text(lead)
-        lead_collection_question = select_lead_collection_question(
-            lead=lead,
-            current_user_text=user_text,
-            recent_messages=recent_messages,
+        lead_profile, lead_collection_question = await deps.lead.context(
+            chat_id, user_text, recent_messages
         )
         if lead_collection_question:
-            lead_collection_instruction = build_lead_collection_instruction(
-                question=lead_collection_question
-            )
+            lead_collection_instruction = deps.lead.instruction(lead_collection_question)
     except Exception:  # noqa: BLE001
         logger.warning("lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True)
 
@@ -98,7 +85,7 @@ async def _agent_turn(
     reply = await deps.agent.agent(
         contextual_user_text, system=system, db=deps.db, embedder=deps.embedder
     )
-    return ensure_lead_collection_question(reply, lead_collection_question)
+    return deps.lead.ensure(reply, lead_collection_question)
 
 
 async def _typing_heartbeat(zalo, chat_id: str) -> None:
