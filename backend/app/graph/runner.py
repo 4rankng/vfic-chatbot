@@ -32,7 +32,7 @@ from app.graph.safety import (
     parse_verdict,
     retry_exhausted_fallback,
 )
-from app.graph.types import BotRunState, GraphDeps, _now
+from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.models.conversation import Message
 from app.services.conversation import ConversationService
 from app.services.lead.probing import (
@@ -112,7 +112,7 @@ async def _typing_heartbeat(zalo, chat_id: str) -> None:
         await asyncio.sleep(ZALO_TYPING_HEARTBEAT_SECONDS)
 
 
-async def run_turn(state: BotRunState, deps: GraphDeps) -> dict:
+async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome."""
     svc = ConversationService(deps.db)
     conv = await svc.get(uuid.UUID(state.conversation_id))

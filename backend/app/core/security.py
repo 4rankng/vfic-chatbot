@@ -12,6 +12,7 @@ the ``_sync`` variants from an ``async def``.
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
+from typing import TypedDict
 
 from jose import jwt
 from jose.exceptions import JWTError
@@ -23,6 +24,19 @@ _pwd = CryptContext(schemes=["argon2"], deprecated="auto")
 _settings = get_settings()
 
 
+class TokenPayload(TypedDict):
+    """The JWT claims this app issues and reads back (see ``_encode``).
+
+    Only the claims the auth layer actually reads are declared — ``iat``/``exp``
+    travel in the token too but are not accessed, so they stay runtime-only to
+    avoid pinning jose's decoded timestamp type.
+    """
+
+    sub: str
+    type: str  # "access" | "refresh"
+    ver: int
+
+
 # --- sync primitives (scripts only; never call from an async def) ---
 def hash_password_sync(plain: str) -> str:
     return _pwd.hash(plain)
@@ -32,7 +46,7 @@ def verify_password_sync(plain: str, hashed: str) -> bool:
     return _pwd.verify(plain, hashed)
 
 
-def decode_token_sync(token: str) -> dict:
+def decode_token_sync(token: str) -> TokenPayload:
     """Decode + verify a JWT synchronously. Raises ValueError on any jose failure."""
     try:
         return jwt.decode(token, _settings.jwt_secret, algorithms=[_settings.jwt_algorithm])
@@ -76,7 +90,7 @@ async def create_refresh_token(subject: str, *, ver: int = 0) -> str:
     )
 
 
-async def decode_token(token: str) -> dict:
+async def decode_token(token: str) -> TokenPayload:
     """Decode + verify a JWT off the event loop.
 
     jose raises its own ``JWTError`` hierarchy (``ExpiredSignatureError``,

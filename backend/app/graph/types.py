@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
 
@@ -26,6 +26,19 @@ class BotRunState:
     attempt: int = 0
     reply: str = ""
     pending_message_id: int | None = None
+
+
+class TurnOutcome(TypedDict):
+    """Result of a reactive (``run_turn``) or proactive (``run_proactive_turn``) turn.
+
+    ``outcome`` is always present (sent / suppressed / error / send_failed, with the
+    proactive path prefixing ``proactive:``). ``reply`` and ``reason`` are optional
+    depending on the branch taken.
+    """
+
+    outcome: str
+    reply: NotRequired[str]
+    reason: NotRequired[str]
 
 
 @dataclass

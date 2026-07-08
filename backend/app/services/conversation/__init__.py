@@ -11,10 +11,26 @@ annotation evaluation.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.services.conversation.events import ConversationEventBus
 from app.services.conversation.repository import ConversationRepository
 from app.services.conversation.scheduler import enqueue_latest_unanswered_worker_message
 from app.services.conversation.state import ConversationConflict, ConversationState
+
+if TYPE_CHECKING:
+    import uuid
+    from collections.abc import Callable
+    from datetime import datetime
+
+    from app.models.conversation import (
+        Conversation,
+        ConversationMode,
+        ConversationStatus,
+        Message,
+    )
+    from app.models.user import User
+    from app.services.zalo_bot_service import SendResult
 
 __all__ = ["ConversationConflict", "ConversationService"]
 
@@ -37,95 +53,207 @@ class ConversationService:
         self.state = ConversationState(db, self.repo, self.events)
 
     # --- reads (delegate to repository) ---
-    async def get(self, *args, **kwargs):
-        return await self.repo.get(*args, **kwargs)
+    async def get(self, conv_id: uuid.UUID) -> Conversation | None:
+        return await self.repo.get(conv_id)
 
-    async def get_visible(self, *args, **kwargs):
-        return await self.repo.get_visible(*args, **kwargs)
+    async def get_visible(
+        self, conv_id: uuid.UUID, *, viewer: User
+    ) -> Conversation | None:
+        return await self.repo.get_visible(conv_id, viewer=viewer)
 
-    async def get_by_zalo(self, *args, **kwargs):
-        return await self.repo.get_by_zalo(*args, **kwargs)
+    async def get_by_zalo(self, zalo_chat_id: str) -> Conversation | None:
+        return await self.repo.get_by_zalo(zalo_chat_id)
 
-    async def last_messages_batch(self, *args, **kwargs):
-        return await self.repo.last_messages_batch(*args, **kwargs)
+    async def last_messages_batch(
+        self, *, viewer: User, ids_str: str
+    ) -> dict[str, str]:
+        return await self.repo.last_messages_batch(viewer=viewer, ids_str=ids_str)
 
-    async def list(self, *args, **kwargs):
-        return await self.repo.list(*args, **kwargs)
+    async def list(
+        self,
+        *,
+        viewer: User,
+        page: int = 1,
+        per_page: int = 25,
+        mode: ConversationMode | None = None,
+        status: ConversationStatus | None = None,
+        zalo_chat_id: str | None = None,
+        needs_attention: bool = False,
+        q: str | None = None,
+        sort_by: str | None = None,
+        order: str | None = "desc",
+    ) -> tuple[list[Conversation], int]:
+        return await self.repo.list(
+            viewer=viewer,
+            page=page,
+            per_page=per_page,
+            mode=mode,
+            status=status,
+            zalo_chat_id=zalo_chat_id,
+            needs_attention=needs_attention,
+            q=q,
+            sort_by=sort_by,
+            order=order,
+        )
 
-    async def needs_attention_count(self, *args, **kwargs):
-        return await self.repo.needs_attention_count(*args, **kwargs)
+    async def needs_attention_count(self, *, viewer: User) -> int:
+        return await self.repo.needs_attention_count(viewer=viewer)
 
-    async def last_messages(self, *args, **kwargs):
-        return await self.repo.last_messages(*args, **kwargs)
+    async def last_messages(
+        self, conv: Conversation, limit: int = 50
+    ) -> list[Message]:
+        return await self.repo.last_messages(conv, limit)
 
-    async def latest_message(self, *args, **kwargs):
-        return await self.repo.latest_message(*args, **kwargs)
+    async def latest_message(self, conv: Conversation) -> Message | None:
+        return await self.repo.latest_message(conv)
 
-    async def messages_page(self, *args, **kwargs):
-        return await self.repo.messages_page(*args, **kwargs)
+    async def messages_page(
+        self, conv: Conversation, limit: int = 50, before_id: int | None = None
+    ) -> list[Message]:
+        return await self.repo.messages_page(conv, limit, before_id)
 
-    async def messages_since(self, *args, **kwargs):
-        return await self.repo.messages_since(*args, **kwargs)
+    async def messages_since(
+        self, conv: Conversation, since_id: int | None = None, limit: int = 200
+    ) -> list[Message]:
+        return await self.repo.messages_since(conv, since_id, limit)
 
-    async def latest_unanswered_worker_message(self, *args, **kwargs):
-        return await self.repo.latest_unanswered_worker_message(*args, **kwargs)
+    async def latest_unanswered_worker_message(
+        self, conv: Conversation
+    ) -> Message | None:
+        return await self.repo.latest_unanswered_worker_message(conv)
 
     # --- mutations (delegate to state) ---
-    async def ensure(self, *args, **kwargs):
-        return await self.state.ensure(*args, **kwargs)
+    async def ensure(
+        self, zalo_chat_id: str, *, zalo_channel: str = "bot"
+    ) -> Conversation:
+        return await self.state.ensure(zalo_chat_id, zalo_channel=zalo_channel)
 
-    def run_start_guard(self, *args, **kwargs):
-        return self.state.run_start_guard(*args, **kwargs)
+    def run_start_guard(self, conv: Conversation) -> bool:
+        return self.state.run_start_guard(conv)
 
-    def semi_auto_inactive(self, *args, **kwargs):
-        return self.state.semi_auto_inactive(*args, **kwargs)
+    def semi_auto_inactive(self, conv: Conversation) -> bool:
+        return self.state.semi_auto_inactive(conv)
 
-    async def record_inbound(self, *args, **kwargs):
-        return await self.state.record_inbound(*args, **kwargs)
+    async def record_inbound(
+        self,
+        conv: Conversation,
+        *,
+        body: str,
+        zalo_message_id: str | None = None,
+    ) -> Message:
+        return await self.state.record_inbound(
+            conv, body=body, zalo_message_id=zalo_message_id
+        )
 
-    async def acquire_lock(self, *args, **kwargs):
-        return await self.state.acquire_lock(*args, **kwargs)
+    async def acquire_lock(
+        self, conv_id: uuid.UUID, ttl_seconds: int | None = None
+    ) -> bool:
+        return await self.state.acquire_lock(conv_id, ttl_seconds)
 
-    async def release_lock(self, *args, **kwargs):
-        return await self.state.release_lock(*args, **kwargs)
+    async def release_lock(self, conv: Conversation) -> None:
+        await self.state.release_lock(conv)
 
-    async def recheck_ownership(self, *args, **kwargs):
-        return await self.state.recheck_ownership(*args, **kwargs)
+    async def recheck_ownership(
+        self, conv: Conversation, version_at_start: int
+    ) -> bool:
+        return await self.state.recheck_ownership(conv, version_at_start)
 
-    async def record_bot_outcome(self, *args, **kwargs):
-        return await self.state.record_bot_outcome(*args, **kwargs)
+    async def record_bot_outcome(
+        self,
+        conv: Conversation,
+        *,
+        version_at_start: int,
+        reply: str,
+        started_at: datetime,
+        sent: bool,
+        pending_message_id: int | None = None,
+        external_error: str | None = None,
+        zalo_message_id: str | None = None,
+    ) -> Message:
+        return await self.state.record_bot_outcome(
+            conv,
+            version_at_start=version_at_start,
+            reply=reply,
+            started_at=started_at,
+            sent=sent,
+            pending_message_id=pending_message_id,
+            external_error=external_error,
+            zalo_message_id=zalo_message_id,
+        )
 
-    async def record_bot_pending(self, *args, **kwargs):
-        return await self.state.record_bot_pending(*args, **kwargs)
+    async def record_bot_pending(
+        self, conv: Conversation, *, body: str = "Đang soạn trả lời..."
+    ) -> Message:
+        return await self.state.record_bot_pending(conv, body=body)
 
-    async def take_over(self, *args, **kwargs):
-        return await self.state.take_over(*args, **kwargs)
+    async def take_over(
+        self, conv: Conversation, recruiter: User
+    ) -> Conversation:
+        return await self.state.take_over(conv, recruiter)
 
-    async def release(self, *args, **kwargs):
-        return await self.state.release(*args, **kwargs)
+    async def release(self, conv: Conversation, actor: User) -> Conversation:
+        return await self.state.release(conv, actor)
 
-    async def semi_auto(self, *args, **kwargs):
-        return await self.state.semi_auto(*args, **kwargs)
+    async def semi_auto(
+        self, conv: Conversation, recruiter: User
+    ) -> Conversation:
+        return await self.state.semi_auto(conv, recruiter)
 
-    async def close(self, *args, **kwargs):
-        return await self.state.close(*args, **kwargs)
+    async def close(self, conv: Conversation, actor: User) -> Conversation:
+        return await self.state.close(conv, actor)
 
-    async def reopen(self, *args, **kwargs):
-        return await self.state.reopen(*args, **kwargs)
+    async def reopen(self, conv: Conversation, actor: User) -> Conversation:
+        return await self.state.reopen(conv, actor)
 
-    async def clear_history(self, *args, **kwargs):
-        return await self.state.clear_history(*args, **kwargs)
+    async def clear_history(
+        self, conv: Conversation, actor: User
+    ) -> Conversation:
+        return await self.state.clear_history(conv, actor)
 
-    async def mark_read(self, *args, **kwargs):
-        return await self.state.mark_read(*args, **kwargs)
+    async def mark_read(self, conv: Conversation) -> Conversation:
+        return await self.state.mark_read(conv)
 
-    async def record_recruiter_message(self, *args, **kwargs):
-        return await self.state.record_recruiter_message(*args, **kwargs)
+    async def record_recruiter_message(
+        self, conv: Conversation, recruiter: User, body: str, result: SendResult
+    ) -> Message:
+        return await self.state.record_recruiter_message(conv, recruiter, body, result)
 
-    async def record_proactive_outcome(self, *args, **kwargs):
-        return await self.state.record_proactive_outcome(*args, **kwargs)
+    async def record_proactive_outcome(
+        self, conv: Conversation, *, message: str, result: SendResult
+    ) -> Message:
+        return await self.state.record_proactive_outcome(
+            conv, message=message, result=result
+        )
 
-    async def deliver_recruiter_message(self, conv, recruiter, body):
+    async def apply_delivery_receipt(
+        self,
+        conv: Conversation,
+        *,
+        zalo_message_id: str | None,
+        delivered: bool = False,
+        seen: bool = False,
+    ) -> bool:
+        return await self.state.apply_delivery_receipt(
+            conv,
+            zalo_message_id=zalo_message_id,
+            delivered=delivered,
+            seen=seen,
+        )
+
+    async def record_system_note(
+        self, conv: Conversation, *, body: str
+    ) -> Message:
+        return await self.state.record_system_note(conv, body=body)
+
+    async def apply_follow(self, conv: Conversation) -> Conversation:
+        return await self.state.apply_follow(conv)
+
+    async def apply_unfollow(self, conv: Conversation) -> Conversation:
+        return await self.state.apply_unfollow(conv)
+
+    async def deliver_recruiter_message(
+        self, conv: Conversation, recruiter: User, body: str
+    ) -> tuple[Message, bool]:
         """Send a recruiter reply via Zalo + record it. Returns ``(message, delivered_ok)``.
 
         Owns the ``ZaloBotSender`` instantiation so the router stays free of the external
@@ -136,13 +264,22 @@ class ConversationService:
         from app.services.integration_settings import IntegrationSettingsService
         from app.services.zalo_sender import ZaloChannelSender
 
-        cfg = await IntegrationSettingsService(self.db).resolve_zalo()
-        sender = ZaloChannelSender(cfg).for_conversation(conv)
+        integration_settings = IntegrationSettingsService(self.db)
+        cfg = await integration_settings.resolve_zalo()
+        sender = ZaloChannelSender(
+            cfg, refresh=lambda: integration_settings.refresh_oa_access_token()
+        ).for_conversation(conv)
         result = await sender.send_message(conv.zalo_chat_id, body)
         msg = await self.state.record_recruiter_message(conv, recruiter, body, result)
         return msg, result.ok
 
-    async def release_and_enqueue_unanswered(self, conv, actor, *, enqueue):
+    async def release_and_enqueue_unanswered(
+        self,
+        conv: Conversation,
+        actor: User,
+        *,
+        enqueue: Callable[..., object],
+    ) -> Conversation:
         """Release a conversation to BOT mode and schedule any pending worker reply."""
         released = await self.release(conv, actor)
         await enqueue_latest_unanswered_worker_message(self, released, enqueue=enqueue)

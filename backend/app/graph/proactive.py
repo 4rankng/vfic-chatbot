@@ -15,17 +15,26 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta
+from typing import TypedDict
 
 from app.graph.safety import (
     fast_safety_filter,
     retry_exhausted_fallback,
 )
-from app.graph.types import GraphDeps, _now, _speaker
+from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
 from app.models.conversation import DeliveryStatus, Message, MessageSender
 from app.services.conversation import ConversationService
 from app.services.zalo_bot_service import SendResult
 
 logger = logging.getLogger(__name__)
+
+
+class ProactiveDecision(TypedDict):
+    """Parsed LLM JSON decision for a proactive nudge (see parse_proactive_decision)."""
+
+    send: bool
+    message: str
+    reason: str
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +48,7 @@ def _outcome(kind: str, *, reason: str, reply: str = "") -> dict:
     return {"outcome": f"{_OUTCOME}:{kind}", "reason": reason, "reply": reply}
 
 
-def parse_proactive_decision(raw: str | dict) -> dict:
+def parse_proactive_decision(raw: str | dict) -> ProactiveDecision:
     """Parse the LLM's JSON decision for a proactive follow-up.
 
     Returns ``{"send": bool, "message": str, "reason": str}``. Lenient on
@@ -136,7 +145,7 @@ def _build_proactive_user_text(
 # ---------------------------------------------------------------------------
 
 
-async def run_proactive_turn(conv, deps: GraphDeps) -> dict:
+async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     """Execute one proactive follow-up nudge. Returns an outcome dict.
 
     Steps (per plan §E):

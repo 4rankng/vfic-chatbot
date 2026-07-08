@@ -3,6 +3,30 @@ from __future__ import annotations
 
 import json
 import re
+from typing import TypedDict
+
+# --- Fast Safety Filter -------------------------------------------------------
+
+
+class FastSafetyResult(TypedDict):
+    """Cleaned reply + flags emitted by :func:`fast_safety_filter`."""
+
+    output: str
+    final_answer: str
+    safe_to_send: bool
+    issue_found: bool
+    issue_type: str
+    needs_llm_safety: bool
+
+
+class SafetyVerdict(TypedDict):
+    """Parsed safety-model verdict emitted by :func:`parse_verdict`."""
+
+    safe_to_send: bool
+    issue_found: bool
+    issue_type: str
+    final_answer: str
+
 
 # --- Fast Safety Filter -------------------------------------------------------
 FALLBACK_REPLY = "Xin lỗi, hiện tôi chưa tạo được phản hồi. Bạn vui lòng nhắn lại giúp tôi nhé."
@@ -15,7 +39,7 @@ _RISK_RE = re.compile(
 )
 
 
-def fast_safety_filter(raw: str) -> dict:
+def fast_safety_filter(raw: str) -> FastSafetyResult:
     """Return whether an LLM safety check is needed plus a cleaned reply."""
     raw = (raw or "").strip()
     # MiniMax M2 reasoning models wrap deliberation in <think>…</think>; the
@@ -54,7 +78,7 @@ def _to_bool(value) -> bool:
     return False
 
 
-def parse_verdict(raw) -> dict:
+def parse_verdict(raw: str | dict) -> SafetyVerdict:
     """Parse the safety model verdict with lenient JSON extraction."""
     if isinstance(raw, dict):
         raw = json.dumps(raw)
