@@ -10,6 +10,7 @@ import {
   Save,
   Settings,
   UsersRound,
+  Wifi,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -34,8 +35,6 @@ type ZaloSettings = {
   zalo_oa_secret_key: SecretStatus;
   zalo_oa_access_token: SecretStatus;
   zalo_oa_refresh_token: SecretStatus;
-  zalo_oa_access_token_expires_at: string | null;
-  zalo_oa_connected: boolean;
   zalo_bot_api_base: string;
   zalo_oa_api_base: string;
 };
@@ -56,6 +55,7 @@ type FormState = {
   zalo_oa_app_id: string;
   zalo_oa_secret_key: string;
   zalo_oa_access_token: string;
+  zalo_oa_refresh_token: string;
 };
 
 type MinimaxFormState = {
@@ -72,6 +72,13 @@ const emptyForm: FormState = {
   zalo_oa_app_id: "",
   zalo_oa_secret_key: "",
   zalo_oa_access_token: "",
+  zalo_oa_refresh_token: "",
+};
+
+type ZaloIntegrationTestResult = {
+  bot_configured: boolean;
+  oa_configured: boolean;
+  missing: string[];
 };
 
 const emptyMinimaxForm: MinimaxFormState = {
@@ -132,7 +139,7 @@ const SETTINGS_WORKSPACE_LINKS: SettingsWorkspaceLink[] = [
   },
 ];
 
-const REQUIRED_SETTING_COUNT = 7;
+const REQUIRED_SETTING_COUNT = 8;
 
 const countConfigured = (
   statuses: Array<SecretStatus | PlainStatus | undefined>,
@@ -656,7 +663,6 @@ export const ZaloIntegrationPage = () => {
                       onChange={setValue}
                     />
                   </div>
-
                 </SettingsCard>
               </div>
             </SettingsSectionPanel>

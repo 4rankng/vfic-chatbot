@@ -55,7 +55,12 @@
   --settings-accent: var(--success);
   --settings-accent-soft: var(--success-light);
   background:
-    linear-gradient(180deg, rgba(80, 58, 30, 0.025), transparent 220px),
+    radial-gradient(
+      circle at 18% 0%,
+      color-mix(in srgb, var(--workspace-bg) 62%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 260px),
     var(--workspace-bg-deep);
 }
 
@@ -68,21 +73,21 @@
 }
 
 .settings-page-shell {
-  width: min(100%, 1240px);
+  width: min(100%, 1280px);
   gap: 0;
 }
 
 .settings-console {
   display: grid;
-  grid-template-columns: minmax(206px, 226px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(210px, 230px) minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 
 .settings-main {
   min-width: 0;
   display: grid;
-  gap: 14px;
+  gap: 16px;
   scroll-margin-top: 18px;
 }
 
@@ -257,7 +262,7 @@
 
 .settings-command-header {
   min-height: auto;
-  padding: 14px 2px 18px;
+  padding: 12px 2px 20px;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 76%, transparent);
   border-radius: 0;
@@ -568,21 +573,21 @@
 .settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 16px;
   align-items: start;
 }
 
 .settings-grid-zalo {
-  grid-template-columns: minmax(300px, 0.82fr) minmax(460px, 1.18fr);
+  grid-template-columns: minmax(300px, 0.9fr) minmax(480px, 1.1fr);
 }
 
 .settings-grid-models {
-  grid-template-columns: minmax(320px, 0.78fr) minmax(460px, 1.22fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .settings-section-panel {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   scroll-margin-top: 18px;
 }
 
@@ -596,9 +601,14 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--workspace-border) 86%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--workspace-bg) 94%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--workspace-bg) 96%, var(--surface-solid)),
+      color-mix(in srgb, var(--workspace-bg) 88%, var(--surface-solid))
+    );
   padding: 0;
-  box-shadow: none;
+  box-shadow: 0 12px 28px rgba(55, 42, 22, 0.035);
   transition:
     border-color 0.18s var(--ease),
     transform 0.18s var(--ease);
@@ -614,7 +624,7 @@
   justify-content: space-between;
   gap: 12px;
   min-height: auto;
-  padding: 14px 16px 12px;
+  padding: 16px 18px 14px;
   border-right: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 72%, transparent);
   background: transparent;
@@ -670,8 +680,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   align-content: start;
-  gap: 12px;
-  padding: 14px 16px 16px;
+  gap: 14px;
+  padding: 16px 18px 18px;
 }
 
 .settings-field {
@@ -697,7 +707,7 @@
 }
 
 .settings-card .settings-input {
-  min-height: 42px;
+  min-height: 44px;
   border-color: color-mix(in srgb, var(--workspace-border) 88%, transparent);
   border-radius: 8px;
   background: color-mix(
@@ -760,7 +770,7 @@
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 14px;
 }
 
 .settings-advanced {
@@ -792,28 +802,6 @@
   gap: 12px 14px;
   border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   padding: 14px;
-}
-
-.settings-status-badge {
-  flex: 0 0 auto;
-  min-height: 20px;
-  border-radius: 6px;
-  padding: 0 7px;
-  font-size: var(--crm-fs-badge);
-  font-weight: var(--chat-fw-semibold);
-  line-height: 1;
-}
-
-.settings-status-badge.is-ready {
-  border-color: color-mix(in srgb, var(--success) 26%, transparent);
-  background: color-mix(in srgb, var(--success-light) 62%, transparent);
-  color: var(--success);
-}
-
-.settings-status-badge.is-missing {
-  border-color: color-mix(in srgb, var(--border) 90%, transparent);
-  background: color-mix(in srgb, var(--surface-hover) 64%, transparent);
-  color: var(--ink-muted);
 }
 
 @container settings-card (max-width: 560px) {

@@ -241,7 +241,6 @@
     .project-workspace-content
   )
   :is(
-    .settings-status-badge,
     .dashboard-candidate-meta,
     .dashboard-candidate-meta small,
     .project-feature-group-count,

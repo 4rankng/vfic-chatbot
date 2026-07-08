@@ -19,9 +19,7 @@ class ZaloIntegrationSettingsOut(BaseModel):
     zalo_oa_app_id: PlainStatus
     zalo_oa_secret_key: SecretStatus
     zalo_oa_access_token: SecretStatus
-    zalo_oa_refresh_token: SecretStatus = SecretStatus(configured=False)
-    zalo_oa_access_token_expires_at: str | None = None
-    zalo_oa_connected: bool = False
+    zalo_oa_refresh_token: SecretStatus
     zalo_bot_api_base: str
     zalo_oa_api_base: str
 
@@ -34,22 +32,13 @@ class ZaloIntegrationSettingsUpdate(BaseModel):
     zalo_oa_app_id: str | None = Field(default=None, min_length=1, max_length=128)
     zalo_oa_secret_key: str | None = Field(default=None, min_length=1, max_length=2048)
     zalo_oa_access_token: str | None = Field(default=None, min_length=1, max_length=4096)
-    # NOTE: refresh_token / expires_at are intentionally NOT settable here — only
-    # the OAuth flow writes them (manual paste can't mint a refresh token).
+    zalo_oa_refresh_token: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
 class ZaloIntegrationTestOut(BaseModel):
     bot_configured: bool
     oa_configured: bool
     missing: list[str]
-
-
-class ZaloOAuthStartOut(BaseModel):
-    authorize_url: str
-
-
-class ZaloOAuthDisconnectOut(BaseModel):
-    disconnected: bool
 
 
 class MinimaxIntegrationSettingsOut(BaseModel):
