@@ -122,7 +122,7 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
                   >
                     <span className="truncate">
                       {selected === GLOBAL_DEFAULT_VALUE
-                        ? "Mặc định toàn hệ thống"
+                        ? "System Default"
                         : (selectedPersona?.name ?? "Chọn Agent")}
                     </span>
                     <ChevronsUpDown className="size-4 opacity-50" />
@@ -154,7 +154,7 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
                               selected !== GLOBAL_DEFAULT_VALUE && "opacity-0",
                             )}
                           />
-                          Mặc định toàn hệ thống
+                          System Default
                         </CommandItem>
                         {(personas ?? []).map((persona) => (
                           <CommandItem

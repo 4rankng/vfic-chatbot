@@ -95,7 +95,7 @@ const PersonaEditContent = () => {
                         className="persona-studio-badge is-good"
                       >
                         <CheckCircle2 className="size-3.5" />
-                        Đang dùng
+                        Active
                       </Badge>
                     )}
                   </div>
@@ -143,7 +143,7 @@ const PersonaEditContent = () => {
                     variant="outline"
                     className="border-primary/20 bg-primary/5 text-primary"
                   >
-                    Đang dùng
+                    Active
                   </Badge>
                 ) : (
                   <Button type="button" variant="outline" onClick={onActivate}>

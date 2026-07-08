@@ -16,6 +16,10 @@ PG_PASS=$(openssl rand -hex 18)
 REDIS_PASS=$(openssl rand -hex 18)
 JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_PASS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)
+# AES-256-GCM key for admin-managed integration secrets (Zalo OA tokens, etc.).
+# Required in production by Settings.model_post_init; any high-entropy string works
+# (IntegrationSettingsCipher derives the AES key via sha256). Generated, not operator-filled.
+INTEGRATION_SETTINGS_ENC_KEY=$(openssl rand -hex 32)
 
 umask 077
 cat > "$ENV_FILE" <<EOF
@@ -42,6 +46,9 @@ JWT_SECRET=$JWT_SECRET
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 REFRESH_TOKEN_EXPIRE_DAYS=14
+
+# ---- Integration secrets at-rest encryption (AES-256-GCM). Required in production. ----
+INTEGRATION_SETTINGS_ENCRYPTION_KEY=$INTEGRATION_SETTINGS_ENC_KEY
 
 # ---- Bootstrap admin (used once by \`make deploy\` -> scripts.create_admin) ----
 VFIC_BOOTSTRAP_ADMIN_EMAIL=admin@vfic.vn

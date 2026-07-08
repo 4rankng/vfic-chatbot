@@ -119,7 +119,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 className="gap-1 border-primary/20 bg-primary/5 text-primary"
               >
                 <Globe2 className="size-3.5" />
-                Mặc định toàn hệ thống
+                System Default
               </Badge>
             ) : (
               <Button

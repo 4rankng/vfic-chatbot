@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ListBase,
   useListContext,
@@ -8,6 +9,11 @@ import {
 } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin/list-pagination";
 import {
@@ -15,17 +21,20 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Eye,
   FileText,
   Hash,
   MessageSquareText,
   Pencil,
   Plus,
   Search,
+  Star,
   UsersRound,
   Zap,
 } from "lucide-react";
 import type { Persona } from "../types";
 import { activatePersona } from "@/lib/vfic/knowledgeService";
+import { toSlug } from "@/lib/toSlug";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 import {
   getCompletedPersonaSectionCount,
@@ -82,6 +91,111 @@ const formatDate = (value: string) => {
   return dateFormatter.format(date);
 };
 
+const splitPersonaRuleItems = (content: string) =>
+  content
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(/(?:^|(?<=[.:?])\s+)-\s+/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const PersonaFormattedContent = ({
+  content,
+  emptyText,
+}: {
+  content: string;
+  emptyText: string;
+}) => {
+  const items = splitPersonaRuleItems(content);
+  const hasListMarkers = /(?:^|\n)\s*-\s+/u.test(content);
+
+  if (items.length === 0) {
+    return <p>{emptyText}</p>;
+  }
+
+  if (items.length === 1 && !hasListMarkers) {
+    return <p>{items[0]}</p>;
+  }
+
+  return (
+    <ul className="persona-rule-list">
+      {items.map((item, index) => {
+        const separatorIndex = item.indexOf(":");
+        const hasLeadLabel = separatorIndex > 0 && separatorIndex <= 72;
+        const label = hasLeadLabel ? item.slice(0, separatorIndex + 1) : null;
+        const detail = hasLeadLabel ? item.slice(separatorIndex + 1).trim() : item;
+
+        return (
+          <li key={`${index}-${item}`}>
+            {label ? <strong>{label}</strong> : null}
+            {detail ? <span>{detail}</span> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+
+const PersonaStatusIcon = ({
+  icon,
+  label,
+  description,
+}: {
+  icon: ReactNode;
+  label: string;
+  description: string;
+}) => (
+  <Popover>
+    <PopoverTrigger asChild>
+      <button
+        type="button"
+        className="persona-directory-status-icon"
+        aria-label={label}
+      >
+        {icon}
+      </button>
+    </PopoverTrigger>
+    <PopoverContent
+      align="end"
+      className="persona-directory-status-popover"
+      sideOffset={6}
+    >
+      <strong>{label}</strong>
+      <p>{description}</p>
+    </PopoverContent>
+  </Popover>
+);
+
+const PersonaInfoIcon = ({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) => (
+  <Popover>
+    <PopoverTrigger asChild>
+      <button
+        type="button"
+        className="persona-directory-info-icon"
+        aria-label={`${label}: ${value}`}
+      >
+        {icon}
+      </button>
+    </PopoverTrigger>
+    <PopoverContent
+      align="center"
+      className="persona-directory-status-popover"
+      sideOffset={6}
+    >
+      <strong>{label}</strong>
+      <p>{value}</p>
+    </PopoverContent>
+  </Popover>
+);
+
 type PersonaRowProps = {
   persona: Persona;
   isSelected: boolean;
@@ -91,6 +205,9 @@ type PersonaRowProps = {
 const PersonaBubble = memo(
   ({ persona, isSelected, onSelect }: PersonaRowProps) => {
     const stats = getPersonaDerivedStats(persona);
+    const shouldShowSlug = persona.slug !== toSlug(persona.name);
+    const scopeLabel =
+      stats.assignedCount > 0 ? `${stats.assignedCount} dự án` : "Global";
 
     return (
       <article
@@ -111,54 +228,54 @@ const PersonaBubble = memo(
             <span className="persona-directory-title-line">
               <span className="min-w-0">
                 <span className="persona-directory-name">{persona.name}</span>
-                <span className="persona-directory-slug">
-                  <Hash className="size-3" />
-                  {persona.slug}
-                </span>
-              </span>
-              <span className="persona-directory-badges">
-                {isSelected ? (
-                  <Badge
-                    variant="outline"
-                    className="gap-1 border-primary/20 bg-primary/5 text-[10px] text-primary"
-                  >
-                    <CheckCircle2 className="size-3" />
-                    Đang xem
-                  </Badge>
+                {shouldShowSlug ? (
+                  <span className="persona-directory-slug">
+                    <Hash className="size-3" />
+                    {persona.slug}
+                  </span>
                 ) : null}
-                {persona.is_active ? (
-                  <Badge
-                    variant="outline"
-                    className="gap-1 border-primary/20 bg-primary/5 text-[10px] text-primary"
-                  >
-                    <CheckCircle2 className="size-3" />
-                    Mặc định
-                  </Badge>
-                ) : null}
-              </span>
-            </span>
-            <span className="persona-directory-meta">
-              <span>
-                <FileText className="size-3" />
-                {stats.sectionCount}/{PERSONA_SECTION_TOTAL}
-              </span>
-              <span>
-                <MessageSquareText className="size-3" />
-                {stats.followupEnabledCount}/{FOLLOWUP_TOTAL}
-              </span>
-              <span>
-                <UsersRound className="size-3" />
-                {stats.assignedCount > 0
-                  ? `${stats.assignedCount} dự án`
-                  : "Chung"}
-              </span>
-              <span>
-                <Clock3 className="size-3" />
-                {formatDate(persona.updated_at)}
               </span>
             </span>
           </span>
         </button>
+        <div className="persona-directory-status-actions">
+          {isSelected ? (
+            <PersonaStatusIcon
+              icon={<Eye className="size-3.5" />}
+              label="Đang xem"
+              description="Hồ sơ này đang mở trong bảng chi tiết bên dưới."
+            />
+          ) : null}
+          {persona.is_active ? (
+            <PersonaStatusIcon
+              icon={<Star className="size-3.5" />}
+              label="Default"
+              description="Agent mặc định dùng cho dự án chưa gắn hồ sơ riêng."
+            />
+          ) : null}
+        </div>
+        <div className="persona-directory-meta">
+          <PersonaInfoIcon
+            icon={<FileText className="size-3.5" />}
+            label="Nội dung"
+            value={`${stats.sectionCount}/${PERSONA_SECTION_TOTAL} phần đã viết`}
+          />
+          <PersonaInfoIcon
+            icon={<MessageSquareText className="size-3.5" />}
+            label="Follow-up"
+            value={`${stats.followupEnabledCount}/${FOLLOWUP_TOTAL} kịch bản đang bật`}
+          />
+          <PersonaInfoIcon
+            icon={<UsersRound className="size-3.5" />}
+            label="Phạm vi"
+            value={scopeLabel}
+          />
+          <PersonaInfoIcon
+            icon={<Clock3 className="size-3.5" />}
+            label="Cập nhật"
+            value={formatDate(persona.updated_at)}
+          />
+        </div>
       </article>
     );
   },
@@ -210,18 +327,18 @@ const PersonaStudioOverview = ({
                   }
                 >
                   <CheckCircle2 className="size-3" />
-                  {persona.is_active ? "Đang dùng" : "Đang xem"}
+                  {persona.is_active ? "Active" : "Đang xem"}
                 </Badge>
                 {persona.is_active ? (
                   <Badge
                     variant="outline"
                     className="persona-studio-badge is-brand"
                   >
-                    Mặc định
+                    Default
                   </Badge>
                 ) : null}
                 <Badge variant="outline" className="persona-studio-badge">
-                  {projects.length > 0 ? `${projects.length} dự án` : "Áp dụng chung"}
+                  {projects.length > 0 ? `${projects.length} dự án` : "Global"}
                 </Badge>
               </div>
             </div>
@@ -284,7 +401,7 @@ const PersonaStudioOverview = ({
               <span>
                 <strong>Phạm vi</strong>
                 <small>
-                  {projects.length > 0 ? `${projects.length} dự án` : "Áp dụng chung"}
+                  {projects.length > 0 ? `${projects.length} dự án` : "Global"}
                 </small>
               </span>
             </div>
@@ -325,7 +442,10 @@ const PersonaStudioOverview = ({
                     {section.content ? "Đã viết" : "Thiếu"}
                   </Badge>
                 </div>
-                <p>{section.content || "Chưa có nội dung cho phần này."}</p>
+                <PersonaFormattedContent
+                  content={section.content}
+                  emptyText="Chưa có nội dung cho phần này."
+                />
               </article>
             ))}
           </div>
@@ -354,7 +474,10 @@ const PersonaStudioOverview = ({
                   </Badge>
                   <strong>{section.title}</strong>
                 </div>
-                <p>{section.content || "Chưa có luật phản hồi cho phần này."}</p>
+                <PersonaFormattedContent
+                  content={section.content}
+                  emptyText="Chưa có luật phản hồi cho phần này."
+                />
               </article>
             ))}
           </div>
@@ -415,7 +538,7 @@ const PersonaStudioOverview = ({
               <div className="persona-scope-row">
                 <span>Loại agent</span>
                 <strong>
-                  {persona.is_active ? "Mặc định toàn hệ thống" : "Hồ sơ dự phòng"}
+                  {persona.is_active ? "System Default" : "Hồ sơ dự phòng"}
                 </strong>
                 <Badge variant="outline" className="persona-studio-badge is-brand">
                   {persona.is_active ? "Default" : "Draft"}

@@ -158,9 +158,9 @@
   min-width: 0;
   max-width: 100%;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface-solid);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+  box-shadow: none;
 }
 
 .persona-page-shell :is([data-slot="button"], button, input) {
@@ -274,16 +274,23 @@
 
 .persona-prompt-list {
   display: grid;
-  gap: 8px;
+  gap: 0;
 }
 
 .persona-prompt-card,
 .persona-followup-card {
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-hover) 28%, transparent);
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.persona-prompt-card:first-child,
+.persona-followup-card:first-child {
+  border-top: 0;
+  padding-top: 2px;
 }
 
 .persona-prompt-card > div,
@@ -376,11 +383,12 @@
   grid-template-columns: 140px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-hover) 35%, transparent);
+  margin-bottom: 10px;
+  padding: 0 0 12px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0;
+  background: transparent;
 }
 
 .persona-readiness-bar-card span {
@@ -415,7 +423,7 @@
 .persona-studio-checklist {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0 24px;
 }
 
 .persona-studio-checklist > div {
@@ -423,10 +431,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 10px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-solid);
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 0;
+  background: transparent;
 }
 
 .persona-studio-checklist > div > svg {
@@ -456,14 +465,20 @@
 }
 
 .persona-rule-card {
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-hover) 30%, transparent);
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0;
+  background: transparent;
 }
 
 .persona-rule-card + .persona-rule-card {
-  margin-top: 8px;
+  margin-top: 0;
+}
+
+.persona-rule-card:first-child {
+  border-top: 0;
+  padding-top: 2px;
 }
 
 .persona-rule-card > div {
@@ -484,6 +499,52 @@
   color: var(--ink-muted);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.persona-rule-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.persona-rule-list li {
+  position: relative;
+  min-width: 0;
+  padding: 2px 0 2px 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.55;
+}
+
+.persona-rule-list li::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
+.persona-rule-list strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 820;
+  line-height: 1.35;
+}
+
+.persona-rule-list span {
+  display: block;
+  overflow-wrap: anywhere;
 }
 
 .persona-empty-results {
@@ -730,7 +791,7 @@
 .persona-page-shell .persona-readiness-bar-card {
   grid-template-columns: 128px minmax(0, 1fr) auto;
   gap: 10px;
-  padding: 9px 11px;
+  padding: 0 0 12px;
 }
 
 .persona-page-shell .persona-readiness-bar-card span {
@@ -748,7 +809,7 @@
 .persona-page-shell .persona-studio-checklist > div {
   min-height: 42px;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 9px 0;
 }
 
 .persona-page-shell .persona-studio-checklist strong {
@@ -762,7 +823,7 @@
 }
 
 .persona-page-shell .persona-prompt-card {
-  padding: 11px 12px;
+  padding: 12px 0;
 }
 
 .persona-page-shell .persona-prompt-card strong {

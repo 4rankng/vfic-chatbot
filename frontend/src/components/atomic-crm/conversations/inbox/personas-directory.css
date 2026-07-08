@@ -169,15 +169,16 @@
 .persona-agent-bubbles {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   padding-bottom: 14px;
 }
 
 .inbox-bg-container .persona-workspace-content .persona-directory-row {
   position: relative;
   display: inline-flex;
-  width: auto;
-  max-width: min(100%, 340px);
+  width: min(100%, 210px);
+  min-height: 92px;
+  max-width: min(100%, 210px);
   padding: 0;
   border: 0;
   color: var(--ink);
@@ -197,7 +198,6 @@
   .persona-directory-main {
   border-color: color-mix(in srgb, var(--border) 92%, transparent);
   background: var(--surface-solid);
-  box-shadow: inset 0 0 0 1px transparent;
 }
 
 .inbox-bg-container .persona-workspace-content .persona-directory-row:hover {
@@ -212,30 +212,26 @@
 .persona-directory-main {
   min-width: 0;
   width: 100%;
-  min-height: 58px;
+  min-height: 92px;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  align-items: start;
+  gap: 9px;
+  padding: 12px 12px 40px;
   border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-  border-radius: 999px;
+  border-radius: 14px;
   background: var(--surface-solid);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 0 0 0 1px transparent;
   transition:
     border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    background-color 160ms ease;
 }
 
 .persona-directory-main:hover {
   border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
-  background: color-mix(in srgb, var(--brand-light) 30%, var(--surface-solid));
-  transform: translateY(-1px);
+  background: var(--surface-solid);
 }
 
 .persona-directory-main:focus-visible {
@@ -247,11 +243,8 @@
   .persona-workspace-content
   .persona-directory-row.is-selected
   .persona-directory-main {
-  border-color: color-mix(in srgb, var(--brand) 72%, var(--border));
-  background: color-mix(in srgb, var(--brand) 9%, var(--surface-solid));
-  box-shadow:
-    inset 0 0 0 2px color-mix(in srgb, var(--brand) 18%, transparent),
-    0 8px 18px color-mix(in srgb, var(--brand) 12%, transparent);
+  border-color: var(--brand);
+  background: var(--surface-solid);
 }
 
 .inbox-bg-container
@@ -259,17 +252,20 @@
   .persona-directory-main[aria-pressed="false"] {
   border-color: color-mix(in srgb, var(--border) 92%, transparent);
   background: var(--surface-solid);
-  box-shadow: inset 0 0 0 1px transparent;
 }
 
 .inbox-bg-container
   .persona-workspace-content
   .persona-directory-main[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--brand) 72%, var(--border));
-  background: color-mix(in srgb, var(--brand) 9%, var(--surface-solid));
-  box-shadow:
-    inset 0 0 0 2px color-mix(in srgb, var(--brand) 18%, transparent),
-    0 8px 18px color-mix(in srgb, var(--brand) 12%, transparent);
+  border-color: var(--brand);
+  background: var(--surface-solid);
+}
+
+.inbox-bg-container
+  .persona-workspace-content
+  .persona-directory-row:has(.persona-directory-status-actions)
+  .persona-directory-main {
+  padding-right: 52px;
 }
 
 .persona-workspace-content .persona-directory-avatar {
@@ -292,6 +288,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-top: 1px;
 }
 
 .persona-directory-name {
@@ -331,34 +328,87 @@
   flex: 0 0 auto;
 }
 
-.persona-directory-badges {
+.persona-directory-status-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
+}
+
+.persona-directory-status-icon,
+.persona-directory-info-icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.persona-directory-status-icon:hover,
+.persona-directory-info-icon:hover {
+  border-color: color-mix(in srgb, var(--brand) 38%, var(--border));
+  background: transparent;
+  color: var(--brand);
+}
+
+.persona-directory-status-icon:focus-visible,
+.persona-directory-info-icon:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.persona-directory-info-icon {
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+.persona-directory-status-icon {
+  color: var(--brand);
+}
+
+.persona-directory-status-popover {
+  width: 220px;
+  border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
+  background: var(--surface-solid);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.persona-directory-status-popover strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 780;
+  line-height: 1.25;
+}
+
+.persona-directory-status-popover p {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 560;
+  line-height: 1.45;
 }
 
 .persona-directory-meta {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 50px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 3px 6px;
-}
-
-.persona-directory-meta span {
-  min-height: 18px;
-  display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  padding: 0 2px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ink-muted);
-  font-size: 10.5px;
-  font-weight: 680;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 .persona-empty-state {
