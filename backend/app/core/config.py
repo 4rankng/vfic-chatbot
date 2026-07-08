@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://vfic:vfic@localhost:5432/vfic"
     database_url_sync: str = "postgresql+psycopg://vfic:vfic@localhost:5432/vfic"
+    # Async engine pool sizing. Connection budget: a deployment's peak DB
+    # connections ≈ (# DB-touching processes) × (db_pool_size + db_max_overflow).
+    # With 2 web + 6 chatbot replicas + followup/ingest/persistence/reconcile/
+    # scheduler workers (~13 processes) at 10+10, raise Postgres max_connections
+    # to ≥150, or lower these via env on a small box. pool_recycle proactively
+    # refreshes connections before server-side idle timeouts stale them; paired
+    # with pool_pre_ping it removes intermittent "connection already closed".
+    db_pool_size: int = 10
+    db_max_overflow: int = 10
+    db_pool_timeout: int = 30  # seconds to wait for a free connection before raising
+    db_pool_recycle: int = 1800  # recycle connections every 30 min
 
     # Redis (RQ broker + per-chat mutex + pub/sub)
     redis_url: str = "redis://localhost:6379/0"
@@ -154,12 +165,17 @@ class Settings(BaseSettings):
     # window where a new inbound re-acquires the lock while the old turn is dying).
     chat_turn_job_timeout: int = 150
 
-    # Phase 2 scaling knobs (env-tunable). 0 = disabled (no-op default).
-    llm_concurrency_limit: int = 0  # Redis-backed cross-process semaphore token count (0=disabled)
+    # Phase 2 scaling knobs (env-tunable). 0 = disabled (pass-through).
+    # LLM/embed semaphores are ENABLED by default (see graph/llm_semaphore.py):
+    # a Redis token list throttles concurrent provider calls across ALL worker
+    # processes so a burst doesn't trip MiniMax/Gemini 429s. A turn that can't
+    # acquire a token within 30s proceeds anyway (degraded) — no deadlock risk.
+    # Tune from 429/latency metrics; raise if normal-load latency suffers.
+    llm_concurrency_limit: int = 4  # max concurrent LLM calls, deployment-wide
     max_llm_calls_per_turn: int = (
         6  # agent tool-loop ceiling (replaces hardcoded DEFAULT_MAX_ITERS)
     )
-    embed_concurrency_limit: int = 0  # separate Gemini embed semaphore (0=disabled)
+    embed_concurrency_limit: int = 6  # max concurrent embed calls (ingest + retrieval), deployment-wide
     # Backpressure: reject enqueue when webhook_high depth reaches this.
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
     chat_queue_max_depth: int = 40
