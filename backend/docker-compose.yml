@@ -65,10 +65,12 @@ services:
           # 512M is a safe ceiling for 6 workers on a 4GB droplet.
           memory: 512M
     healthcheck:
-      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
+      # redis-py is present transitively via rq; python is on PATH in the image.
+      test: ["CMD-SHELL", "python -c \"import os,redis; redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=3, socket_timeout=3).ping()\""]
       interval: 30s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 5
       start_period: 15s
     restart: unless-stopped
 
@@ -82,10 +84,12 @@ services:
     volumes: [vfic_kb_uploads:/data/kb_uploads]
     command: ["rq", "worker", "ingest", "--url", "${REDIS_URL}"]
     healthcheck:
-      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
+      # redis-py is present transitively via rq; python is on PATH in the image.
+      test: ["CMD-SHELL", "python -c \"import os,redis; redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=3, socket_timeout=3).ping()\""]
       interval: 30s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 5
       start_period: 15s
     restart: unless-stopped
 
@@ -97,10 +101,12 @@ services:
       redis: { condition: service_healthy }
     command: ["rqscheduler", "--url", "${REDIS_URL}"]
     healthcheck:
-      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
+      # redis-py is present transitively via rq; python is on PATH in the image.
+      test: ["CMD-SHELL", "python -c \"import os,redis; redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=3, socket_timeout=3).ping()\""]
       interval: 30s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 5
       start_period: 15s
     restart: unless-stopped
 
@@ -114,10 +120,12 @@ services:
       redis: { condition: service_healthy }
     command: ["rq", "worker", "followup", "--url", "${REDIS_URL}"]
     healthcheck:
-      test: ["CMD-SHELL", "rq info --url $${REDIS_URL} >/dev/null 2>&1 || exit 1"]
+      # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
+      # redis-py is present transitively via rq; python is on PATH in the image.
+      test: ["CMD-SHELL", "python -c \"import os,redis; redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=3, socket_timeout=3).ping()\""]
       interval: 30s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 5
       start_period: 15s
     restart: unless-stopped
 
@@ -137,7 +145,11 @@ services:
   caddy:
     image: caddy:2
     depends_on:
-      web: { condition: service_healthy }
+      # service_started (not service_healthy): a full-stack recreate boots web + 6 workers
+      # at once, and the transient CPU spike can blip web's healthcheck. Gating Caddy on
+      # service_healthy made `make deploy` abort with "web is unhealthy" even though web
+      # recovers seconds later. Caddy is a reverse proxy — it tolerates the brief gap.
+      web: { condition: service_started }
       frontend: { condition: service_started }
     ports: ["80:80", "443:443"]
     volumes:
