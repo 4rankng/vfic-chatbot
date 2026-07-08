@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 import httpx
 
@@ -165,6 +165,40 @@ def _send_result(envelope: dict[str, Any]) -> SendResult:
     return SendResult(ok=False, error=str(desc), raw=envelope)
 
 
+async def _aggregate_chunked_send(
+    chunks: list[str],
+    send_chunk: Callable[[str], Awaitable[SendResult]],
+) -> SendResult:
+    """Send each chunk via ``send_chunk`` and fold the per-chunk results.
+
+    Aggregation is channel-agnostic: every raw envelope is preserved, the first
+    ``msg_id`` wins, the first failed chunk short-circuits with a
+    ``chunk N/M failed`` error, and a clean run returns the first ``msg_id``
+    with the full envelope trail in ``raw``. Channel differences — body shape,
+    transport, token refresh, per-chunk validation — live in the ``send_chunk``
+    callback, so the Bot and OA senders share this fold verbatim.
+    """
+    envelopes: list[dict[str, Any]] = []
+    message_ids: list[str] = []
+    for index, chunk in enumerate(chunks, start=1):
+        result = await send_chunk(chunk)
+        envelopes.append(result.raw or {})
+        if result.msg_id:
+            message_ids.append(result.msg_id)
+        if not result.ok:
+            return SendResult(
+                ok=False,
+                msg_id=message_ids[0] if message_ids else None,
+                error=f"chunk {index}/{len(chunks)} failed: {result.error}",
+                raw={"chunks": envelopes, "message_ids": message_ids},
+            )
+    return SendResult(
+        ok=True,
+        msg_id=message_ids[0] if message_ids else None,
+        raw={"chunks": envelopes, "message_ids": message_ids},
+    )
+
+
 def _split_long_plain_text(
     text: str,
     max_chars: int = ZALO_VISIBLE_BUBBLE_CHARS,
@@ -274,11 +308,14 @@ class ZaloBotSender:
             if parse_mode is not None or text_styles is not None
             else _split_long_plain_text(text)
         )
-        envelopes: list[dict[str, Any]] = []
-        message_ids: list[str] = []
-        for index, chunk in enumerate(chunks, start=1):
+        # The splitters above already cap each chunk well under the API limit,
+        # but guard defensively before sending — out-of-range text is rejected
+        # upstream with a less specific error.
+        for chunk in chunks:
             if not 1 <= len(chunk) <= ZALO_MAX_TEXT_CHARS:
                 return SendResult(ok=False, error="text length must be 1..2000")
+
+        async def send_chunk(chunk: str) -> SendResult:
             body: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
             # Rich-text offsets apply to the original string, so only attach them
             # to the single-message path where indices remain valid.
@@ -286,24 +323,11 @@ class ZaloBotSender:
                 body["parse_mode"] = parse_mode
             if text_styles is not None:
                 body["text_styles"] = text_styles
-            result = _send_result(
+            return _send_result(
                 await _post(self._settings, "sendMessage", body, token=self._bot_token)
             )
-            envelopes.append(result.raw or {})
-            if result.msg_id:
-                message_ids.append(result.msg_id)
-            if not result.ok:
-                return SendResult(
-                    ok=False,
-                    msg_id=message_ids[0] if message_ids else None,
-                    error=f"chunk {index}/{len(chunks)} failed: {result.error}",
-                    raw={"chunks": envelopes, "message_ids": message_ids},
-                )
-        return SendResult(
-            ok=True,
-            msg_id=message_ids[0] if message_ids else None,
-            raw={"chunks": envelopes, "message_ids": message_ids},
-        )
+
+        return await _aggregate_chunked_send(chunks, send_chunk)
 
     async def send_photo(self, chat_id: str, photo: str, caption: str | None = None) -> SendResult:
         """Send an image by URL/path. ``caption`` is 1-2000 chars if provided."""

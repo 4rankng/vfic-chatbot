@@ -6,7 +6,11 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from app.core.config import Settings, ZALO_OA_API_BASE, get_settings
-from app.services.zalo_bot_service import SendResult, _split_long_plain_text
+from app.services.zalo_bot_service import (
+    SendResult,
+    _aggregate_chunked_send,
+    _split_long_plain_text,
+)
 
 
 class ZaloOASender:
@@ -121,31 +125,17 @@ class ZaloOASender:
             return SendResult(ok=False, error="text length must be 1..2000")
 
         chunks = _split_long_plain_text(text)
-        envelopes: list[dict[str, Any]] = []
-        message_ids: list[str] = []
-        for index, chunk in enumerate(chunks, start=1):
+
+        async def send_chunk(chunk: str) -> SendResult:
             body = {
                 "recipient": {"user_id": chat_id},
                 "message": {"text": chunk},
             }
-            result = self._send_result(
+            return self._send_result(
                 await self._post_with_refresh("/v3.0/oa/message/cs", body)
             )
-            envelopes.append(result.raw or {})
-            if result.msg_id:
-                message_ids.append(result.msg_id)
-            if not result.ok:
-                return SendResult(
-                    ok=False,
-                    msg_id=message_ids[0] if message_ids else None,
-                    error=f"chunk {index}/{len(chunks)} failed: {result.error}",
-                    raw={"chunks": envelopes, "message_ids": message_ids},
-                )
-        return SendResult(
-            ok=True,
-            msg_id=message_ids[0] if message_ids else None,
-            raw={"chunks": envelopes, "message_ids": message_ids},
-        )
+
+        return await _aggregate_chunked_send(chunks, send_chunk)
 
     async def send_media(
         self,

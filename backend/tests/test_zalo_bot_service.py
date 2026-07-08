@@ -436,6 +436,59 @@ async def test_send_result_failure_uses_description_or_error_code() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Chunked-send aggregation — _aggregate_chunked_send
+# ---------------------------------------------------------------------------
+
+
+async def test_aggregate_chunked_send_collects_first_id_and_envelope_trail() -> None:
+    """A clean multi-chunk run returns the first msg_id and every raw envelope."""
+
+    async def send_chunk(chunk: str) -> svc.SendResult:
+        return svc.SendResult(ok=True, msg_id=f"id-{chunk}", raw={"text": chunk})
+
+    result = await svc._aggregate_chunked_send(["a", "b", "c"], send_chunk)
+    assert result.ok is True
+    assert result.msg_id == "id-a"  # first wins
+    assert result.raw == {
+        "chunks": [{"text": "a"}, {"text": "b"}, {"text": "c"}],
+        "message_ids": ["id-a", "id-b", "id-c"],
+    }
+
+
+async def test_aggregate_chunked_send_short_circuits_on_first_failure() -> None:
+    """A failed chunk stops the run with a chunk-indexed error and the partial trail."""
+    sent: list[str] = []
+
+    async def send_chunk(chunk: str) -> svc.SendResult:
+        sent.append(chunk)
+        if chunk == "b":
+            return svc.SendResult(ok=False, error="upstream rejected", raw={"text": "b"})
+        return svc.SendResult(ok=True, msg_id=f"id-{chunk}", raw={"text": chunk})
+
+    result = await svc._aggregate_chunked_send(["a", "b", "c"], send_chunk)
+    assert result.ok is False
+    assert result.error == "chunk 2/3 failed: upstream rejected"
+    assert result.msg_id == "id-a"  # collected before the failure
+    assert sent == ["a", "b"]  # 'c' never sent
+    assert result.raw == {
+        "chunks": [{"text": "a"}, {"text": "b"}],
+        "message_ids": ["id-a"],
+    }
+
+
+async def test_aggregate_chunked_send_handles_ok_without_msg_id() -> None:
+    """Successful chunks without a msg_id (ack-only envelopes) don't populate message_ids."""
+
+    async def send_chunk(chunk: str) -> svc.SendResult:
+        return svc.SendResult(ok=True, raw={"ack": chunk})
+
+    result = await svc._aggregate_chunked_send(["x"], send_chunk)
+    assert result.ok is True
+    assert result.msg_id is None
+    assert result.raw == {"chunks": [{"ack": "x"}], "message_ids": []}
+
+
+# ---------------------------------------------------------------------------
 # Transport-level error handling
 # ---------------------------------------------------------------------------
 
