@@ -52,6 +52,10 @@ export type ProjectFaq = {
   id: string;
   question: string;
   answer: string;
+  /** Extra phrasings + the deterministic FAQ-bypass rule terms (all optional). */
+  question_variants?: string[];
+  required_terms?: string[];
+  forbidden_terms?: string[];
   source_name?: string | null;
   source_anchor?: string | null;
 };
@@ -222,7 +226,14 @@ export const getProjectBusTimetable = (
 export const getProjectFaq = (id: string, limit = 12) =>
   apiJson<ProjectFaqList>(`${proj(id)}/faq?limit=${limit}`);
 
-export type ProjectFaqPayload = Pick<ProjectFaq, "question" | "answer">;
+export type ProjectFaqPayload = Pick<
+  ProjectFaq,
+  | "question"
+  | "answer"
+  | "question_variants"
+  | "required_terms"
+  | "forbidden_terms"
+>;
 
 export const createProjectFaq = (
   projectId: string,

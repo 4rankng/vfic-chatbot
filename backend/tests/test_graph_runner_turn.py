@@ -24,7 +24,7 @@ import pytest
 
 from app.graph import runner
 from app.graph.llm_semaphore import LLMThrottled
-from app.graph.prompts import ERROR_REPLY, TIMEOUT_REPLY
+from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY, TIMEOUT_REPLY
 from app.graph.runner import run_turn
 from app.graph.types import BotRunState, GraphDeps
 
@@ -115,17 +115,26 @@ def _stub_agent(monkeypatch, *replies) -> None:
     monkeypatch.setattr(runner, "_agent_turn", _fake)
 
 
-def _deps(zalo, *, conversation, safety=object(), persist=None) -> GraphDeps:
+def _deps(
+    zalo,
+    *,
+    conversation,
+    safety=object(),
+    persist=None,
+    faq_bypass=None,
+) -> GraphDeps:
     return GraphDeps(
         db=_FakeDB(), agent=object(), safety=safety,
         embedder=object(), zalo=zalo, conversation=conversation,
-        retrieval=object(), persist=persist,
+        retrieval=object(), persist=persist, faq_bypass=faq_bypass,
     )
 
 
 def _state() -> BotRunState:
+    # A factual job query — exercises the agent path (the fast lane only intercepts
+    # non-factual greetings/pleasantries).
     return BotRunState(
-        conversation_id=CONV_ID, version_at_start=1, user_text="hi"
+        conversation_id=CONV_ID, version_at_start=1, user_text="tôi muốn tìm việc lái xe"
     )
 
 
@@ -159,7 +168,7 @@ async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
     assert res["reply"] == "Chào bạn!"
     assert zalo.sent == [("z1", "Chào bạn!")]
     assert persisted == [
-        {"chat_id": "z1", "user_text": "hi", "bot_output": "Chào bạn!"}
+        {"chat_id": "z1", "user_text": "tôi muốn tìm việc lái xe", "bot_output": "Chào bạn!"}
     ]
 
 
@@ -295,3 +304,183 @@ async def test_agent_oversleep_hits_deadline_timeout(monkeypatch):
     assert res["outcome"] == "timeout"
     assert res["reply"] == TIMEOUT_REPLY
     assert zalo.sent and zalo.sent[0][1] == TIMEOUT_REPLY
+
+
+# ---------------------------------------------------------------------------
+# Active status signal: slow-case ack (Slice B)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_slow_turn_sends_one_slow_ack_then_real_answer(monkeypatch):
+    """A turn that takes longer than slow_ack_seconds fires exactly ONE ack, and it
+    lands BEFORE the real answer (the status task is cancelled before the real send).
+    This is the reliable "bot is active" signal on the OA channel."""
+    from app.core.config import get_settings
+
+    s = get_settings()
+    monkeypatch.setattr(s, "slow_ack_seconds", 0.05)
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+
+    async def _slow_agent(state, deps, user_text, *, chat_id, recent_messages):
+        # Long enough for the heartbeat's ~0.5s tick to fire the ack while the turn
+        # is still in flight, well inside the agent deadline.
+        await asyncio.sleep(0.8)
+        return "Câu trả lời thật của tôi."
+
+    monkeypatch.setattr(runner, "_agent_turn", _slow_agent)
+
+    zalo = _FakeZalo()
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
+
+    sent_texts = [text for _, text in zalo.sent]
+    assert res["outcome"] == "sent"
+    assert sent_texts.count(SLOW_ACK_REPLY) == 1          # exactly one ack
+    assert sent_texts[-1] == "Câu trả lời thật của tôi."  # real answer lands last
+
+
+@pytest.mark.asyncio
+async def test_fast_turn_sends_no_slow_ack(monkeypatch):
+    """A turn that answers within slow_ack_seconds must NOT send the ack — fast lanes
+    cancel the status task before the threshold fires."""
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")  # returns immediately, no yield
+    zalo = _FakeZalo()
+
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
+
+    sent_texts = [text for _, text in zalo.sent]
+    assert res["outcome"] == "sent"
+    assert SLOW_ACK_REPLY not in sent_texts
+    assert sent_texts == ["Chào bạn!"]
+
+
+# ---------------------------------------------------------------------------
+# FAQ / template fast lane (Slice D)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_greeting_hits_fast_lane_no_llm_no_ack_no_persist(monkeypatch):
+    """A pure greeting is answered by the fast lane: GREETING_REPLY, outcome=faq_cache,
+    the agent is never called, no slow-case ack fires (fast lanes finish inside
+    slow_ack_seconds), and no candidate extraction runs (canned reply carries no Q&A)."""
+    from app.graph.fast_lane import GREETING_REPLY
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages):
+        raise AssertionError("agent must not be called for a fast-lane greeting")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    persisted: list[dict] = []
+    zalo = _FakeZalo()
+
+    state = BotRunState(
+        conversation_id=CONV_ID, version_at_start=1, user_text="chào bạn"
+    )
+    res = await run_turn(state, _deps(zalo, conversation=svc, persist=persisted.append))
+
+    assert res["outcome"] == "faq_cache"
+    assert res["reply"] == GREETING_REPLY
+    assert zalo.sent == [("z1", GREETING_REPLY)]
+    assert SLOW_ACK_REPLY not in [text for _, text in zalo.sent]
+    assert persisted == []
+
+
+class _FakeFaqBypass:
+    """FaqBypassPort stub: returns a fixed result, or raises, so the runner's
+    bypass branch is pinned without any DB / embedder."""
+
+    def __init__(self, result=None, exc=None) -> None:
+        self._result = result
+        self._exc = exc
+
+    async def try_answer(self, user_text):
+        if self._exc is not None:
+            raise self._exc
+        return self._result
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_hit_sends_answer_without_agent_or_persist(monkeypatch):
+    """A confident FAQ-bypass hit is sent directly (outcome=faq_bypass): the agent
+    is never called, and no candidate extraction runs (the answer is canonical)."""
+    from app.graph.ports import FaqBypassResult
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages):
+        raise AssertionError("agent must not be called on a FAQ-bypass hit")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    persisted: list[dict] = []
+    zalo = _FakeZalo()
+    bypass = _FakeFaqBypass(
+        result=FaqBypassResult(
+            answer="Câu trả lời FAQ", faq_id="abc", tier="hybrid", score=0.9
+        )
+    )
+
+    res = await run_turn(
+        _state(),
+        _deps(zalo, conversation=svc, persist=persisted.append, faq_bypass=bypass),
+    )
+
+    assert res["outcome"] == "faq_bypass"
+    assert res["reply"] == "Câu trả lời FAQ"
+    assert zalo.sent == [("z1", "Câu trả lời FAQ")]
+    assert persisted == []
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_miss_falls_through_to_agent(monkeypatch):
+    """A bypass abstain (None) leaves the turn to the agent as usual."""
+    _stub_agent(monkeypatch, "trả lời từ agent")
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    bypass = _FakeFaqBypass(result=None)
+
+    res = await run_turn(
+        _state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass)
+    )
+
+    assert res["outcome"] == "sent"
+    assert res["reply"] == "trả lời từ agent"
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_exception_falls_through_to_agent(monkeypatch):
+    """An adapter exception must never break the turn — it abstains to the agent."""
+    _stub_agent(monkeypatch, "trả lời từ agent")
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    bypass = _FakeFaqBypass(exc=RuntimeError("adapter blew up"))
+
+    res = await run_turn(
+        _state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass)
+    )
+
+    assert res["outcome"] == "sent"
+    assert res["reply"] == "trả lời từ agent"
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_timeout_falls_through_to_agent(monkeypatch):
+    """A bypass that exceeds its time-box abstains and the agent handles the turn."""
+    _stub_agent(monkeypatch, "trả lời từ agent")
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    bypass = _FakeFaqBypass(exc=asyncio.TimeoutError())
+
+    res = await run_turn(
+        _state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass)
+    )
+
+    assert res["outcome"] == "sent"
+    assert res["reply"] == "trả lời từ agent"

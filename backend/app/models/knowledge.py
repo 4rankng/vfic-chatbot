@@ -153,6 +153,9 @@ class KnowledgeChunk(Base):
     source_quote: Mapped[str | None] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
     questions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
+    # --- 0026: deterministic FAQ-bypass rule terms (FAQ rows only) ---
+    required_terms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
+    forbidden_terms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
     category: Mapped[str | None] = mapped_column(String)
     entities: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
     confidence: Mapped[str | None] = mapped_column(String)

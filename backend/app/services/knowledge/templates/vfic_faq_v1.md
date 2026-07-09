@@ -19,11 +19,21 @@ tags:
 
 <!-- Mỗi câu hỏi là một block ### FAQ: <câu hỏi> bên dưới.
      Bắt buộc có trường Question và Answer.
-     Bot sẽ tự động tìm câu trả lời phù hợp khi người dùng hỏi câu tương tự. -->
+     Bot sẽ tự động tìm câu trả lời phù hợp khi người dùng hỏi câu tương tự.
+
+     Các trường tuỳ chọn (phân tách bởi dấu phẩy):
+     - Lặp lại dòng Question: để thêm biến thể câu hỏi (bot soi khớp chính xác + ngữ nghĩa).
+     - Required Terms: các từ PHẢI có mặt trong câu hỏi, nếu thiếu bot sẽ không trả lời nhanh (tránh trả lời sai).
+     - Forbidden Terms: các từ KHÔNG được xuất hiện, nếu có bot sẽ chuyển qua agent. -->
 
 ### FAQ: Lương của công nhân LG Display là bao nhiêu?
 
 Question: Lương của công nhân LG Display là bao nhiêu?
+Question: Lương cơ bản là bao nhiêu?
+Question: Đi làm 1 tháng được bao nhiêu tiền?
+
+Required Terms: lương, tiền, thu nhập
+Forbidden Terms: nghỉ việc, phạt, bảo hiểm
 
 Answer: Mức lương cơ bản của công nhân sản xuất tại LG Display Hải Phòng dao động từ 7–9 triệu VNĐ/tháng, tùy vào ca làm việc và kinh nghiệm. Ngoài ra còn có các khoản phụ cấp: làm thêm giờ, thưởng KPI, bảo hiểm đầy đủ theo luật lao động.
 

@@ -95,6 +95,9 @@ class ParsedKnowledgeChunk:
     content_type: str
     tags: list[str]
     route_id: str | None = None
+    # FAQ-bypass rule terms (migration 0026); empty for non-FAQ chunks.
+    required_terms: list[str] = field(default_factory=list)
+    forbidden_terms: list[str] = field(default_factory=list)
 
     def to_unit(self, document: "ParsedKnowledgeDocument") -> dict:
         metadata = {
@@ -130,6 +133,8 @@ class ParsedKnowledgeChunk:
             "questions": self.questions,
             "category": self.category,
             "entities": self.entities,
+            "required_terms": list(self.required_terms),
+            "forbidden_terms": list(self.forbidden_terms),
             "source_anchor": self.citation.source_anchor,
             "confidence": "high",
             "is_inference": False,
@@ -334,6 +339,8 @@ def _chunk(
     route_id: str | None = None,
     questions: list[str] | None = None,
     tags: list[str] | None = None,
+    required_terms: list[str] | None = None,
+    forbidden_terms: list[str] | None = None,
 ) -> ParsedKnowledgeChunk:
     title = metadata.get("title") or metadata.get("doc_id") or "Knowledge document"
     breadcrumb = f"{title} > {section_title}"
@@ -351,6 +358,8 @@ def _chunk(
         content_type=metadata.get("content_type") or "company_knowledge",
         tags=list(dict.fromkeys([*(metadata.get("tags") or []), *(tags or [])])),
         route_id=route_id,
+        required_terms=list(required_terms or []),
+        forbidden_terms=list(forbidden_terms or []),
     )
 
 
@@ -390,17 +399,22 @@ def _faq_chunks(metadata: dict[str, Any], section: str) -> list[ParsedKnowledgeC
     blocks = _subsections(section)
     chunks: list[ParsedKnowledgeChunk] = []
     for title, content in blocks:
-        question = _field_value(content, "Question") or title.removeprefix("FAQ:").strip()
+        questions = _field_values(content, "Question")
+        question = questions[0] if questions else title.removeprefix("FAQ:").strip()
         answer = _field_value(content, "Answer") or content.strip()
         if not answer:
             continue
+        required = _split_terms(_field_value(content, "Required Terms"))
+        forbidden = _split_terms(_field_value(content, "Forbidden Terms"))
         chunks.append(
             _chunk(
                 metadata,
                 f"FAQ: {question}",
                 answer,
                 "faq",
-                questions=[question] if question else None,
+                questions=questions or ([question] if question else None),
+                required_terms=required,
+                forbidden_terms=forbidden,
             )
         )
     if not chunks and section.strip():
@@ -420,3 +434,19 @@ def _questions_from_content(content: str) -> list[str]:
 def _field_value(content: str, field: str) -> str | None:
     match = re.search(rf"^{re.escape(field)}:\s*(.+)$", content, flags=re.MULTILINE)
     return match.group(1).strip() if match else None
+
+
+def _field_values(content: str, field: str) -> list[str]:
+    """All non-empty ``Field: value`` lines (supports repeated ``Question:`` variants)."""
+    return [
+        m.strip()
+        for m in re.findall(rf"^{re.escape(field)}:\s*(.+)$", content, flags=re.MULTILINE)
+        if m.strip()
+    ]
+
+
+def _split_terms(value: str | None) -> list[str]:
+    """Comma-separated rule-term list (Required/Forbidden Terms) → cleaned list."""
+    if not value:
+        return []
+    return [t.strip() for t in value.split(",") if t.strip()]

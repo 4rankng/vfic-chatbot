@@ -138,6 +138,9 @@ class ProjectFaqOut(BaseModel):
     id: uuid.UUID
     question: str
     answer: str
+    question_variants: list[str] = []
+    required_terms: list[str] = []
+    forbidden_terms: list[str] = []
     source_name: str | None = None
     source_anchor: str | None = None
 
@@ -150,8 +153,16 @@ class ProjectFaqResponse(BaseModel):
 class ProjectFaqCreate(BaseModel):
     question: str = Field(min_length=1, max_length=500)
     answer: str = Field(min_length=1, max_length=5000)
+    # Extra phrasings of the same question (stored after the canonical one in
+    # ``questions[]``) and the deterministic FAQ-bypass rule terms. All optional.
+    question_variants: list[str] = Field(default_factory=list, max_length=50)
+    required_terms: list[str] = Field(default_factory=list, max_length=50)
+    forbidden_terms: list[str] = Field(default_factory=list, max_length=50)
 
 
 class ProjectFaqUpdate(BaseModel):
     question: str | None = Field(default=None, min_length=1, max_length=500)
     answer: str | None = Field(default=None, min_length=1, max_length=5000)
+    question_variants: list[str] | None = Field(default=None, max_length=50)
+    required_terms: list[str] | None = Field(default=None, max_length=50)
+    forbidden_terms: list[str] | None = Field(default=None, max_length=50)

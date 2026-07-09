@@ -48,6 +48,9 @@ class ProjectFaqService:
                 id=row["id"],
                 question=(row["questions"] or ["FAQ"])[0],
                 answer=_faq_answer_from_content(row["content"], (row["questions"] or ["FAQ"])[0]),
+                question_variants=list(row["questions"] or [])[1:],
+                required_terms=list(row.get("required_terms") or []),
+                forbidden_terms=list(row.get("forbidden_terms") or []),
                 source_name=row["file_name"],
                 source_anchor=row["source_anchor"],
             )
@@ -62,6 +65,9 @@ class ProjectFaqService:
         project = await require_project(self.db, project_id)
         question = self._clean_faq_text(body.question)
         answer = self._clean_faq_text(body.answer)
+        variants = self._clean_variants(body.question_variants, question)
+        required = self._clean_terms(body.required_terms)
+        forbidden = self._clean_terms(body.forbidden_terms)
         document = await self.repo.managed_faq_document(project)
         chunk_index = await self.repo.next_faq_chunk_index(document.id)
         content = self._faq_content(question, answer)
@@ -76,11 +82,12 @@ class ProjectFaqService:
             project_id=project_id,
             source_quote=answer,
             summary=answer[:500],
-            questions=[question],
+            questions=[question, *variants],
+            required_terms=required,
+            forbidden_terms=forbidden,
             category="faq",
             entities={"project": project.slug},
             confidence="high",
-            search_text=f"{question}\n{answer}",
         )
         self.db.add(chunk)
         document.raw_text = self._append_raw_faq(document.raw_text, question, answer)
@@ -96,7 +103,13 @@ class ProjectFaqService:
         chunk.content_plain = make_content_plain(question, answer)
         chunk.token_count = estimate_token_count(chunk.content)
         chunk.chunk_sha256 = hash_text(chunk.content)
-        await self._embed_faq_chunk(chunk.id, question, answer)
+        await self._embed_faq_chunk(chunk.id, question, answer, variants)
+        # Override search_text directly so the trigram arm of the FAQ bypass sees
+        # the variants too (the search_text trigger would otherwise rebuild it
+        # from content alone — see ProjectRepository.set_chunk_search_text).
+        await self.repo.set_chunk_search_text(
+            chunk.id, "\n".join([question, *variants, answer])
+        )
         await record_audit(
             self.db,
             action="create_project_faq",
@@ -112,6 +125,8 @@ class ProjectFaqService:
                 "id": chunk.id,
                 "content": chunk.content,
                 "questions": chunk.questions,
+                "required_terms": chunk.required_terms,
+                "forbidden_terms": chunk.forbidden_terms,
                 "source_anchor": chunk.metadata_.get("source_anchor"),
                 "file_name": document.file_name,
             }
@@ -132,15 +147,30 @@ class ProjectFaqService:
         chunk = await self.db.get(KnowledgeChunk, chunk_id)
         if not chunk:
             raise NotFoundError("faq not found")
+        # PATCH semantics: a None list field means "leave unchanged"; an explicit
+        # list (incl. []) replaces. Existing variants live after the canonical
+        # question in ``questions``; rule terms are stored on the chunk directly.
+        existing_variants = list(chunk.questions or [question])[1:]
+        variants = self._clean_variants(
+            body.question_variants if body.question_variants is not None else existing_variants,
+            question,
+        )
+        required = self._clean_terms(
+            body.required_terms if body.required_terms is not None else (chunk.required_terms or [])
+        )
+        forbidden = self._clean_terms(
+            body.forbidden_terms if body.forbidden_terms is not None else (chunk.forbidden_terms or [])
+        )
         chunk.content = self._faq_content(question, answer)
-        chunk.questions = [question]
+        chunk.questions = [question, *variants]
+        chunk.required_terms = required
+        chunk.forbidden_terms = forbidden
         chunk.source_quote = answer
         chunk.summary = answer[:500]
         chunk.metadata_ = {
             **(chunk.metadata_ or {}),
             "source_anchor": f"FAQ: {question}",
         }
-        chunk.search_text = f"{question}\n{answer}"
         document = await self.db.get(KnowledgeDocument, chunk.document_id)
         if document is not None:
             document.raw_text = self._replace_raw_faq(
@@ -158,7 +188,17 @@ class ProjectFaqService:
         chunk.content_plain = make_content_plain(question, answer)
         chunk.token_count = estimate_token_count(chunk.content)
         chunk.chunk_sha256 = hash_text(chunk.content)
-        await self._embed_faq_chunk(chunk.id, question, answer)
+        await self._embed_faq_chunk(chunk.id, question, answer, variants)
+        # Flush the content/source_quote/summary mutation so the search_text
+        # trigger (migration 0014) fires NOW and rebuilds search_text from
+        # content alone — then override it with the variant-augmented text. The
+        # explicit flush makes this ordering-independent (it must not rely on a
+        # later autoflush): once content/source_quote/summary are clean here, no
+        # subsequent statement can re-fire the trigger and clobber the override.
+        await self.db.flush()
+        await self.repo.set_chunk_search_text(
+            chunk.id, "\n".join([question, *variants, answer])
+        )
         await record_audit(
             self.db,
             action="update_project_faq",
@@ -174,6 +214,8 @@ class ProjectFaqService:
                 "id": chunk.id,
                 "content": chunk.content,
                 "questions": chunk.questions,
+                "required_terms": chunk.required_terms,
+                "forbidden_terms": chunk.forbidden_terms,
                 "source_anchor": chunk.metadata_.get("source_anchor"),
                 "file_name": row["file_name"],
             }
@@ -196,19 +238,56 @@ class ProjectFaqService:
         await self.db.commit()
         await bump_cache_version("knowledge")
 
-    async def _embed_faq_chunk(self, chunk_id: uuid.UUID, question: str, answer: str) -> None:
+    async def _embed_faq_chunk(
+        self,
+        chunk_id: uuid.UUID,
+        question: str,
+        answer: str,
+        variants: list[str] | None = None,
+    ) -> None:
         from app.graph.clients import build_embedder
         from app.services.integration_settings import IntegrationSettingsService
 
         openrouter_config = await IntegrationSettingsService(self.db).resolve_openrouter()
-        vector = await build_embedder(openrouter_api_key=openrouter_config.api_key)(
-            f"{question}\n{answer}"
-        )
+        # Variants are folded into the embedded text so the vector arm of the FAQ
+        # bypass matches paraphrases, not just the canonical phrasing.
+        text = "\n".join([question, *(variants or []), answer])
+        vector = await build_embedder(openrouter_api_key=openrouter_config.api_key)(text)
         await self.repo.set_chunk_embedding(chunk_id, vec_literal(vector))
 
     @staticmethod
     def _clean_faq_text(value: str) -> str:
         return " ".join((value or "").strip().split()) if "\n" not in value else value.strip()
+
+    @staticmethod
+    def _clean_variants(variants: list[str] | None, canonical: str) -> list[str]:
+        """De-dup, drop empties, and drop a repeat of the canonical question."""
+        canonical_norm = " ".join(canonical.lower().split())
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in variants or []:
+            v = " ".join((raw or "").strip().split())
+            if not v:
+                continue
+            key = v.lower()
+            if key == canonical_norm or key in seen:
+                continue
+            seen.add(key)
+            out.append(v)
+        return out
+
+    @staticmethod
+    def _clean_terms(terms: list[str] | None) -> list[str]:
+        """Strip + de-dup rule terms (required / forbidden)."""
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in terms or []:
+            t = (raw or "").strip()
+            if not t or t.lower() in seen:
+                continue
+            seen.add(t.lower())
+            out.append(t)
+        return out
 
     @staticmethod
     def _faq_content(question: str, answer: str) -> str:
@@ -236,11 +315,15 @@ class ProjectFaqService:
 
     @staticmethod
     def _faq_out(row: dict) -> ProjectFaqOut:
-        question = (row["questions"] or ["FAQ"])[0]
+        questions = list(row.get("questions") or [])
+        question = questions[0] if questions else "FAQ"
         return ProjectFaqOut(
             id=row["id"],
             question=question,
             answer=_faq_answer_from_content(row["content"], question),
+            question_variants=questions[1:],
+            required_terms=list(row.get("required_terms") or []),
+            forbidden_terms=list(row.get("forbidden_terms") or []),
             source_name=row["file_name"],
             source_anchor=row["source_anchor"],
         )

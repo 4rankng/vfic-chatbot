@@ -32,6 +32,22 @@ class SendOutcome:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class FaqBypassResult:
+    """A high-confidence FAQ answer ready to send without an LLM turn.
+
+    The deterministic FAQ-bypass cascade returns this when it is confident;
+    ``None`` means "abstain — route to the agent". ``answer`` is the only field
+    the runner sends; the rest are carried for the decision log.
+    """
+
+    answer: str
+    faq_id: str | None = None
+    tier: str = ""  # exact / hybrid
+    score: float = 0.0
+    reason: str = ""
+
+
 class ConversationStatePort(Protocol):
     async def record_proactive_outcome(
         self, conv: Any, *, message: str, result: Any
@@ -123,8 +139,21 @@ class RetrievalPort(Protocol):
     async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
 
 
+class FaqBypassPort(Protocol):
+    """Deterministic, non-LLM FAQ short-circuit that runs before the agent node.
+
+    Returns a ready-to-send :class:`FaqBypassResult` on a high-confidence hit, or
+    ``None`` to abstain (the agent then handles the turn as usual). Backed by
+    :class:`app.graph.factories._FaqBypassAdapter`; ``None`` in graph unit tests.
+    """
+
+    async def try_answer(self, user_text: str) -> FaqBypassResult | None: ...
+
+
 __all__ = [
     "SendOutcome",
+    "FaqBypassResult",
+    "FaqBypassPort",
     "ConversationPort",
     "ConversationStatePort",
     "LeadContextPort",

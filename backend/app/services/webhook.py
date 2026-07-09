@@ -5,8 +5,9 @@ Flow:
   -> acquire_lock -> send typing indicator -> enqueue RQ job
 
 A Zalo typing indicator is fired from the webhook handler (fire-and-forget) so
-the user sees immediate feedback. The RQ worker's _typing_heartbeat keeps it
-alive during LLM generation.
+the user sees immediate feedback. The RQ worker's _status_heartbeat keeps it
+alive during LLM generation and (for the OA channel, which has no typing
+indicator) sends a one-shot slow-case ack as the reliable "bot is active" signal.
 """
 
 from __future__ import annotations
@@ -133,8 +134,9 @@ class ZaloWebhookService:
             return {"status": "locked", "conversation_id": str(conv.id)}
 
         # Fire-and-forget typing indicator so the user sees immediate feedback
-        # while the RQ worker picks up the job. The worker's _typing_heartbeat
-        # will keep the indicator alive during LLM generation.
+        # while the RQ worker picks up the job. The worker's _status_heartbeat
+        # keeps the indicator alive during LLM generation and (on the OA channel,
+        # which has no typing endpoint) sends a one-shot slow-case ack.
         if norm.zalo_channel == "bot":
             asyncio.create_task(_fire_typing(norm.zalo_chat_id))
 

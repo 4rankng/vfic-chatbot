@@ -45,9 +45,11 @@ class KnowledgeChunkRepo:
                 text(
                     "INSERT INTO knowledge_chunks "
                     "(document_id, chunk_index, content, embedding, metadata, project_id, "
-                    " source_quote, summary, questions, category, entities, confidence) "
+                    " source_quote, summary, questions, category, entities, confidence, "
+                    " required_terms, forbidden_terms) "
                     "VALUES (:did, :ci, :content, CAST(:emb AS vector), CAST(:meta AS jsonb), CAST(:pid AS uuid), "
-                    "        :sq, :sm, CAST(:q AS text[]), :cat, CAST(:ent AS jsonb), :conf)"
+                    "        :sq, :sm, CAST(:q AS text[]), :cat, CAST(:ent AS jsonb), :conf, "
+                    "        CAST(:req AS text[]), CAST(:forb AS text[]))"
                 ),
                 {
                     "did": str(doc.id),
@@ -62,6 +64,8 @@ class KnowledgeChunkRepo:
                     "cat": u["category"],
                     "ent": json.dumps(u["entities"], ensure_ascii=False),
                     "conf": u["confidence"],
+                    "req": u.get("required_terms") or [],
+                    "forb": u.get("forbidden_terms") or [],
                 },
             )
         await self.db.commit()

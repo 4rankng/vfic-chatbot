@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
-from app.graph.ports import ConversationPort, LeadContextPort, RetrievalPort
+from app.graph.ports import ConversationPort, FaqBypassPort, LeadContextPort, RetrievalPort
 
 # TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
 # annotation is stringified by ``from __future__ import annotations`` anyway,
@@ -60,6 +60,8 @@ class GraphDeps:
     retrieval: RetrievalPort
     # Lead-profile context for the agent prompt. None in tests that stub the turn.
     lead: LeadContextPort | None = None
+    # Deterministic FAQ short-circuit (runs before the agent node). None in tests.
+    faq_bypass: FaqBypassPort | None = None
     # Proactive follow-up guard: (allowed, reason). None in reactive-only tests.
     followup_allowed: Callable[[Any], Awaitable[tuple[bool, str]]] | None = None
     # Fire-and-forget candidate extraction after a SENT reply.

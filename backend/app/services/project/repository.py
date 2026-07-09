@@ -108,6 +108,7 @@ class ProjectRepository:
                 await self.db.execute(
                     text(
                         "SELECT kc.id, kc.content, kc.questions, "
+                        "       kc.required_terms, kc.forbidden_terms, "
                         "       kc.metadata ->> 'source_anchor' AS source_anchor, "
                         "       COALESCE(ktf.filename, kd.file_name) AS file_name "
                         "FROM knowledge_chunks kc "
@@ -135,6 +136,7 @@ class ProjectRepository:
                 await self.db.execute(
                     text(
                         "SELECT kc.id, kc.document_id, kc.content, kc.questions, "
+                        "       kc.required_terms, kc.forbidden_terms, "
                         "       kc.metadata ->> 'source_anchor' AS source_anchor, "
                         "       COALESCE(ktf.filename, kd.file_name) AS file_name "
                         "FROM knowledge_chunks kc "
@@ -309,6 +311,21 @@ class ProjectRepository:
                 "WHERE id = :cid"
             ),
             {"cid": str(chunk_id), "embedding": embedding},
+        )
+
+    async def set_chunk_search_text(self, chunk_id: uuid.UUID, search_text: str) -> None:
+        """Override a FAQ chunk's ``search_text`` directly.
+
+        The ``knowledge_chunks_search_text`` trigger (migration 0014) rewrites
+        ``search_text`` from ``content || source_quote || summary`` on any
+        INSERT/UPDATE that touches those columns — so an ORM assignment is
+        clobbered and FAQ question-variants never reach the trigram index. This
+        issues a column-scoped UPDATE (content/source_quote/summary untouched) so
+        the trigger does not fire and the variants-augmented text persists.
+        """
+        await self.db.execute(
+            text("UPDATE knowledge_chunks SET search_text = :t WHERE id = :cid"),
+            {"cid": str(chunk_id), "t": search_text},
         )
 
     async def find_by_name(self, name: str) -> Project | None:

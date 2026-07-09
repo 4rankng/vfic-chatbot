@@ -25,9 +25,10 @@ import uuid
 from contextlib import suppress
 
 from app.core.config import get_settings
+from app.graph import fast_lane
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.prompts import ERROR_REPLY, TIMEOUT_REPLY
+from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY, TIMEOUT_REPLY
 from app.graph.safety import (
     build_retry_prompt,
     fast_safety_filter,
@@ -38,7 +39,6 @@ from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.models.conversation import Message
 
 logger = logging.getLogger(__name__)
-ZALO_TYPING_HEARTBEAT_SECONDS = 4.0
 RECENT_HISTORY_LIMIT = 16
 
 
@@ -102,14 +102,47 @@ async def _agent_turn(
     return deps.lead.ensure(reply, lead_collection_question)
 
 
-async def _typing_heartbeat(zalo, chat_id: str) -> None:
-    """Keep Zalo's transient typing status visible while a turn is processing."""
+async def _status_heartbeat(zalo, chat_id: str, *, ack_text: str, settings) -> None:
+    """Keep the channel visibly active while a turn is processing.
+
+    Two layers (the OA channel has no functional typing indicator, so the ack
+    message is the reliable "bot is active" signal there):
+
+    1. Native typing (best-effort). Pulse ``send_chat_action("typing")`` immediately,
+       then every ``typing_heartbeat_seconds``. Real on the Bot channel; a logged
+       no-op on OA (``ZaloOASender.send_chat_action``).
+    2. Slow-case ack (the reliable OA signal). One-shot at ``slow_ack_seconds``: send
+       ``ack_text`` via ``send_message`` — works on both channels. The caller cancels
+       this task before dispatching the real answer, so the ack can never land after
+       it, and ``ack_fired`` guarantees at most one per turn.
+
+    All send failures are swallowed — status is best-effort and must never break a turn.
+    """
+    start = time.monotonic()
+    next_typing = 0.0
+    ack_fired = False
     while True:
-        try:
-            await zalo.send_chat_action(chat_id, "typing")
-        except Exception:  # noqa: BLE001
-            pass
-        await asyncio.sleep(ZALO_TYPING_HEARTBEAT_SECONDS)
+        elapsed = time.monotonic() - start
+        if elapsed >= next_typing:
+            try:
+                await zalo.send_chat_action(chat_id, "typing")
+            except Exception:  # noqa: BLE001
+                pass
+            next_typing = elapsed + settings.typing_heartbeat_seconds
+        if not ack_fired and elapsed >= settings.slow_ack_seconds:
+            ack_fired = True
+            try:
+                await zalo.send_message(chat_id, ack_text)
+            except Exception:  # noqa: BLE001
+                pass
+        await asyncio.sleep(0.5)
+
+
+async def _cancel_status_task(task) -> None:
+    """Cancel the status heartbeat and drain it so no ack lands after the real send."""
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
 
 
 async def _finish_terminal_reply(
@@ -121,6 +154,8 @@ async def _finish_terminal_reply(
     text: str,
     started,
     base_outcome: str,
+    *,
+    status_task=None,
 ):
     """Send a terminal fallback (timeout / error) then record the outcome.
 
@@ -128,7 +163,12 @@ async def _finish_terminal_reply(
     version/mode, re-check ownership (a concurrent takeover must not be clobbered),
     send only if still owned, and record so the per-chat mutex clears. Returns the
     TurnOutcome dict (``base_outcome`` unless the send itself failed → ``send_failed``).
+
+    The status heartbeat is cancelled first so the one-shot slow-ack can never land
+    after this terminal reply.
     """
+    if status_task is not None:
+        await _cancel_status_task(status_task)
     await deps.db.refresh(conv)
     owned = await svc.recheck_ownership(conv, state.version_at_start)
     send_result = None
@@ -157,74 +197,140 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     zalo = _zalo_for_conversation(deps, conv)
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
 
-    typing_task = asyncio.create_task(_typing_heartbeat(zalo, conv.zalo_chat_id))
+    # Active-status heartbeat: native typing pulses + a one-shot slow-case ack at
+    # slow_ack_seconds (the reliable "bot is active" signal on OA). Cancelled before
+    # every real send so the ack never lands after the answer.
+    settings = get_settings()
+    status_task = asyncio.create_task(
+        _status_heartbeat(
+            zalo, conv.zalo_chat_id, ack_text=SLOW_ACK_REPLY, settings=settings
+        )
+    )
     started = _now()
     pending_msg = await svc.record_bot_pending(conv)
     state.pending_message_id = pending_msg.id
 
     try:
-        # --- agent (bounded by the propagated ~10s deadline) ---
-        settings = get_settings()
-        agent_budget = max(
-            0.0,
-            min(settings.agent_max_seconds, _remaining(state) - settings.send_margin_seconds),
+        candidate = ""
+        outcome_label = "sent"
+
+        # --- FAQ / template fast lane (zero LLM calls) ---
+        # Greetings / thanks / goodbye / help return instant tôi/bạn templates, well
+        # inside slow_ack_seconds (so no ack ever fires for them). Factual questions
+        # are never templated — they fall through here, then through the FAQ-bypass
+        # cascade below, before reaching the RAG + agent path.
+        fast = (
+            fast_lane.match(state.user_text)
+            if settings.faq_fast_lane_enabled
+            else None
         )
-        try:
-            if agent_budget <= 0:
-                # Already out of time before starting — don't burn an LLM call.
-                raise asyncio.TimeoutError()
-            raw = await asyncio.wait_for(
-                _agent_turn(
-                    state,
-                    deps,
-                    state.user_text,
-                    chat_id=conv.zalo_chat_id,
-                    recent_messages=recent_messages,
-                ),
-                timeout=agent_budget,
-            )
-        except LLMThrottled:
-            raise  # let worker handle degradation msg (no LLM call)
-        except asyncio.TimeoutError:
-            logger.info(
-                "agent deadline hit (budget=%.2fs remaining=%.2fs)",
-                agent_budget,
-                _remaining(state),
-            )
-            return await _finish_terminal_reply(
-                state, deps, conv, svc, zalo, TIMEOUT_REPLY, started, "timeout"
-            )
-        except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
-            logger.warning("agent error: %s", exc)
-            return await _finish_terminal_reply(
-                state, deps, conv, svc, zalo, ERROR_REPLY, started, "error"
-            )
 
-        state.reply = raw
-
-        # --- fast safety filter ---
-        fs = fast_safety_filter(raw)
-        candidate = fs["output"]
-
-        # --- llm safety check (only when fast filter flagged) ---
-        if fs["needs_llm_safety"]:
-            verdict = parse_verdict(await deps.safety.safety(candidate))
-            if verdict["safe_to_send"]:
-                candidate = verdict["final_answer"] or candidate
-            elif state.attempt < 1:
-                state.attempt += 1
-                retry_prompt = build_retry_prompt(state.user_text, candidate, verdict["issue_type"])
-                raw2 = await _agent_turn(
-                    state,
-                    deps,
-                    retry_prompt,
-                    chat_id=conv.zalo_chat_id,
-                    recent_messages=recent_messages,
+        # --- deterministic FAQ-bypass cascade (zero LLM calls) ---
+        # Runs only for non-template traffic. On a high-confidence hit it answers
+        # directly from the knowledge base (0¢, sub-50ms on an embedding-cache hit);
+        # on any miss / ambiguity / timeout it abstains (None) and the turn falls
+        # through to the agent unchanged. Time-boxed so a cold embed can never burn
+        # the turn deadline. None in graph unit tests (no bypass wired).
+        bypass = None
+        if fast is None and deps.faq_bypass is not None:
+            try:
+                # Bound the bypass by both the soft cap and the propagated turn
+                # deadline (minus the send margin) so a cold-embed bypass can
+                # never consume the sliver the agent needs on a tight turn.
+                bypass_budget = min(
+                    settings.soft_fallback_remaining,
+                    max(0.0, _remaining(state) - settings.send_margin_seconds),
                 )
-                state.reply = raw2
-                candidate = fast_safety_filter(raw2)["output"]
-            else:
-                candidate = retry_exhausted_fallback(state.user_text)
+                bypass = await asyncio.wait_for(
+                    deps.faq_bypass.try_answer(state.user_text),
+                    timeout=bypass_budget,
+                )
+            except asyncio.TimeoutError:
+                logger.info(
+                    "faq_bypass timed out (%.1fs); falling through to agent",
+                    settings.soft_fallback_remaining,
+                )
+                bypass = None
+            except Exception:  # noqa: BLE001 — bypass must never break a turn
+                logger.warning("faq_bypass adapter raised; abstaining", exc_info=True)
+                bypass = None
+
+        if fast is not None:
+            candidate = fast.reply
+            outcome_label = "faq_cache"
+        elif bypass is not None:
+            # Admin-authored canonical FAQ text — sent verbatim, like the template
+            # lane above (fast_safety_filter is tuned for LLM output, not curated text).
+            candidate = bypass.answer
+            outcome_label = "faq_bypass"
+            logger.info(
+                "faq_bypass hit tier=%s score=%.3f reason=%s faq_id=%s",
+                bypass.tier, bypass.score, bypass.reason, bypass.faq_id,
+            )
+        else:
+            # --- agent (bounded by the propagated ~10s deadline) ---
+            agent_budget = max(
+                0.0,
+                min(settings.agent_max_seconds, _remaining(state) - settings.send_margin_seconds),
+            )
+            try:
+                if agent_budget <= 0:
+                    # Already out of time before starting — don't burn an LLM call.
+                    raise asyncio.TimeoutError()
+                raw = await asyncio.wait_for(
+                    _agent_turn(
+                        state,
+                        deps,
+                        state.user_text,
+                        chat_id=conv.zalo_chat_id,
+                        recent_messages=recent_messages,
+                    ),
+                    timeout=agent_budget,
+                )
+            except LLMThrottled:
+                raise  # let worker handle degradation msg (no LLM call)
+            except asyncio.TimeoutError:
+                logger.info(
+                    "agent deadline hit (budget=%.2fs remaining=%.2fs)",
+                    agent_budget,
+                    _remaining(state),
+                )
+                return await _finish_terminal_reply(
+                    state, deps, conv, svc, zalo, TIMEOUT_REPLY, started, "timeout",
+                    status_task=status_task,
+                )
+            except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
+                logger.warning("agent error: %s", exc)
+                return await _finish_terminal_reply(
+                    state, deps, conv, svc, zalo, ERROR_REPLY, started, "error",
+                    status_task=status_task,
+                )
+
+            state.reply = raw
+
+            # --- fast safety filter ---
+            fs = fast_safety_filter(raw)
+            candidate = fs["output"]
+
+            # --- llm safety check (only when fast filter flagged) ---
+            if fs["needs_llm_safety"]:
+                verdict = parse_verdict(await deps.safety.safety(candidate))
+                if verdict["safe_to_send"]:
+                    candidate = verdict["final_answer"] or candidate
+                elif state.attempt < 1:
+                    state.attempt += 1
+                    retry_prompt = build_retry_prompt(state.user_text, candidate, verdict["issue_type"])
+                    raw2 = await _agent_turn(
+                        state,
+                        deps,
+                        retry_prompt,
+                        chat_id=conv.zalo_chat_id,
+                        recent_messages=recent_messages,
+                    )
+                    state.reply = raw2
+                    candidate = fast_safety_filter(raw2)["output"]
+                else:
+                    candidate = retry_exhausted_fallback(state.user_text)
 
         # --- pre_send_guard: re-check ownership (catches takeover during generation) ---
         # svc.get() would return the identity-map instance (expire_on_commit=False) and
@@ -233,6 +339,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         await deps.db.refresh(conv)
         owned = await svc.recheck_ownership(conv, state.version_at_start)
         if owned:
+            await _cancel_status_task(status_task)
             send_result = await zalo.send_message(conv.zalo_chat_id, candidate)
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
@@ -247,9 +354,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     "reason": send_result.error,
                     "reply": candidate,
                 }
-            # Lead/memory extraction runs only after a real reply was sent (mirrors the
-            # legacy "Should Persist?" gate, which never extracted on greetings/suppressed).
-            if deps.persist is not None:
+            # Lead/memory extraction runs only after a real agent reply was sent (mirrors
+            # the legacy "Should Persist?" gate, which never extracted on greetings). A
+            # fast-lane template (faq_cache) or a deterministic FAQ-bypass answer
+            # (faq_bypass — canonical, already in the KB) carries no Q&A to extract.
+            if deps.persist is not None and outcome_label not in ("faq_cache", "faq_bypass"):
                 deps.persist(
                     {
                         "chat_id": conv.zalo_chat_id,
@@ -257,7 +366,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                         "bot_output": candidate,
                     }
                 )
-            return {"outcome": "sent", "reply": candidate}
+            return {"outcome": outcome_label, "reply": candidate}
 
         await svc.record_bot_outcome(
             conv, version_at_start=state.version_at_start, reply=candidate,
@@ -266,6 +375,4 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
         return {"outcome": "suppressed", "reply": candidate}
     finally:
-        typing_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await typing_task
+        await _cancel_status_task(status_task)

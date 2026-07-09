@@ -11,6 +11,7 @@ stays langchain-free.
 from __future__ import annotations
 
 import logging
+import time
 
 from app.core.config import get_settings
 from app.graph.clients import MiniMaxAgent, MiniMaxSafety, _chat_for_role, build_embedder
@@ -61,6 +62,76 @@ class _LeadContextAdapter:
         from app.services.lead.probing import ensure_lead_collection_question
 
         return ensure_lead_collection_question(reply, question)
+
+
+class _FaqBypassAdapter:
+    """FaqBypassPort backed by RetrievalRepository + the shared cached embedder.
+
+    Defined in the composition root so the graph layer imports no concrete
+    service module (all ``app.services`` imports are function-level, satisfying
+    the AST import-guard). Runs the deterministic cascade from
+    :mod:`app.services.retrieval.faq_bypass` and logs every decision so the
+    thresholds can be tuned from production logs. Never raises — any failure
+    abstains so the turn falls through to the agent unchanged.
+    """
+
+    def __init__(self, db, embedder) -> None:
+        self._db = db
+        self._embedder = embedder
+
+    async def try_answer(self, user_text: str):
+        from app.core.vector import vec_literal
+        from app.graph.ports import FaqBypassResult
+        from app.graph.tools import _cached_embed
+        from app.services.retrieval import RetrievalRepository
+        from app.services.retrieval import faq_bypass as fb
+
+        started = time.perf_counter()
+        repo = RetrievalRepository(self._db)
+        try:
+            emb = vec_literal(await _cached_embed(self._embedder, user_text))
+            # Both arms are intentionally unscoped (no project_ids): the VFIC
+            # deployment is single-tenant, mirroring search_bus_timetable's
+            # deliberate NULL-slug choice. Re-scope only if the bot goes
+            # multi-project (pass the conversation's project id into both calls).
+            vector_rows = await repo.match_faq(
+                emb, top_k=fb.TOP_K, floor=fb.CANDIDATE_VECTOR_FLOOR
+            )
+            lexical_rows = await repo.match_faq_lexical(
+                user_text, top_k=fb.TOP_K, threshold=fb.TRIGRAM_THRESHOLD
+            )
+        except Exception:  # noqa: BLE001 — bypass must never break a turn
+            logger.warning("faq_bypass retrieval failed; abstaining", exc_info=True)
+            return None
+
+        candidates = list(vector_rows) + list(lexical_rows)
+        exact_map = fb.build_exact_map(candidates)
+        scored = fb.rerank(list(vector_rows), list(lexical_rows))
+        decision = fb.decide(user_text, exact_map, scored)
+        latency_ms = (time.perf_counter() - started) * 1000.0
+        logger.info(
+            "faq_bypass decision=%s tier=%s score=%.3f top2=%.3f margin=%.3f "
+            "vec=%.3f tri=%.3f reason=%s latency_ms=%.1f faq_id=%s",
+            decision.decision, decision.tier, decision.top1_score,
+            decision.top2_score, decision.margin,
+            decision.scored.vec_sim if decision.scored else 0.0,
+            decision.scored.tri_sim if decision.scored else 0.0,
+            decision.reason, latency_ms,
+            decision.scored.faq_id if decision.scored else None,
+        )
+        if (
+            decision.decision == fb.DECISION_ACCEPT
+            and decision.scored
+            and decision.scored.answer
+        ):
+            return FaqBypassResult(
+                answer=decision.scored.answer,
+                faq_id=decision.scored.faq_id,
+                tier=decision.tier,
+                score=decision.top1_score,
+                reason=decision.reason,
+            )
+        return None
 
 
 def build_minimax_extractor():
@@ -143,6 +214,7 @@ async def build_deps(db):
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
         lead=_LeadContextAdapter(db),
+        faq_bypass=_FaqBypassAdapter(db, embedder),
         followup_allowed=_make_followup_allowed(db),
     )
 

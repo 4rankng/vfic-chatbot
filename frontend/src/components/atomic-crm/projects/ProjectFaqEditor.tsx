@@ -17,9 +17,153 @@ import {
 type FaqDraft = {
   question: string;
   answer: string;
+  question_variants: string[];
+  required_terms: string[];
+  forbidden_terms: string[];
 };
 
-const emptyDraft = (): FaqDraft => ({ question: "", answer: "" });
+const emptyDraft = (): FaqDraft => ({
+  question: "",
+  answer: "",
+  question_variants: [],
+  required_terms: [],
+  forbidden_terms: [],
+});
+
+const draftFromItem = (item: ProjectFaq): FaqDraft => ({
+  question: item.question,
+  answer: item.answer,
+  question_variants: [...(item.question_variants ?? [])],
+  required_terms: [...(item.required_terms ?? [])],
+  forbidden_terms: [...(item.forbidden_terms ?? [])],
+});
+
+/** Tag/chip input for a list of strings (comma- or Enter-separated). */
+const TermListInput = ({
+  label,
+  values,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+}) => {
+  const [text, setText] = useState("");
+  const commit = () => {
+    const parts = text
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const merged = [...values];
+    for (const part of parts) {
+      if (!merged.some((v) => v.toLowerCase() === part.toLowerCase())) {
+        merged.push(part);
+      }
+    }
+    onChange(merged);
+    setText("");
+  };
+  return (
+    <div className="grid gap-1">
+      <span className="text-[11px] font-medium text-muted-foreground">
+        {label}
+      </span>
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {values.map((value, idx) => (
+            <span
+              key={`${value}-${idx}`}
+              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px]"
+            >
+              {value}
+              <button
+                type="button"
+                aria-label={`Xóa ${value}`}
+                onClick={() => onChange(values.filter((_, i) => i !== idx))}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <Input
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === ",") {
+            event.preventDefault();
+            commit();
+          }
+        }}
+        onBlur={commit}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+};
+
+/** Shared question + answer + optional FAQ-bypass fields for the new/edit forms. */
+const FaqFields = ({
+  draft,
+  setDraft,
+}: {
+  draft: FaqDraft;
+  setDraft: (updater: (prev: FaqDraft) => FaqDraft) => void;
+}) => (
+  <>
+    <Input
+      value={draft.question}
+      onChange={(event) =>
+        setDraft((prev) => ({ ...prev, question: event.target.value }))
+      }
+      placeholder="Câu hỏi"
+    />
+    <Textarea
+      value={draft.answer}
+      onChange={(event) =>
+        setDraft((prev) => ({ ...prev, answer: event.target.value }))
+      }
+      rows={3}
+      placeholder="Câu trả lời"
+    />
+    <details className="rounded-md border bg-muted/10 p-2">
+      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+        Tùy chọn trả lời nhanh (FAQ bypass)
+      </summary>
+      <div className="mt-2 grid gap-2">
+        <TermListInput
+          label="Biến thể câu hỏi"
+          values={draft.question_variants}
+          onChange={(values) =>
+            setDraft((prev) => ({ ...prev, question_variants: values }))
+          }
+          placeholder="Thêm biến thể rồi Enter"
+        />
+        <TermListInput
+          label="Từ bắt buộc (Required Terms)"
+          values={draft.required_terms}
+          onChange={(values) =>
+            setDraft((prev) => ({ ...prev, required_terms: values }))
+          }
+          placeholder="Từ PHẢI có trong câu hỏi"
+        />
+        <TermListInput
+          label="Từ cấm (Forbidden Terms)"
+          values={draft.forbidden_terms}
+          onChange={(values) =>
+            setDraft((prev) => ({ ...prev, forbidden_terms: values }))
+          }
+          placeholder="Từ KHÔNG được xuất hiện"
+        />
+      </div>
+    </details>
+  </>
+);
 
 export const ProjectFaqEditor = ({
   projectId,
@@ -65,7 +209,13 @@ export const ProjectFaqEditor = ({
     }
     setSavingNew(true);
     try {
-      const created = await createProjectFaq(projectId, { question, answer });
+      const created = await createProjectFaq(projectId, {
+        question,
+        answer,
+        question_variants: newDraft.question_variants,
+        required_terms: newDraft.required_terms,
+        forbidden_terms: newDraft.forbidden_terms,
+      });
       setItems((prev) => [created, ...prev]);
       setNewDraft(emptyDraft());
       setAdding(false);
@@ -112,27 +262,7 @@ export const ProjectFaqEditor = ({
       {editable && adding && (
         <div className="rounded-md border border-dashed bg-muted/20 p-3">
           <div className="grid gap-2">
-            <Input
-              value={newDraft.question}
-              onChange={(event) =>
-                setNewDraft((draft) => ({
-                  ...draft,
-                  question: event.target.value,
-                }))
-              }
-              placeholder="Câu hỏi mới"
-            />
-            <Textarea
-              value={newDraft.answer}
-              onChange={(event) =>
-                setNewDraft((draft) => ({
-                  ...draft,
-                  answer: event.target.value,
-                }))
-              }
-              rows={3}
-              placeholder="Câu trả lời"
-            />
+            <FaqFields draft={newDraft} setDraft={setNewDraft} />
             <div className="flex justify-end gap-1">
               <Button
                 size="sm"
@@ -216,15 +346,12 @@ const FaqRow = ({
 }) => {
   const notify = useNotify();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<FaqDraft>({
-    question: item.question,
-    answer: item.answer,
-  });
+  const [draft, setDraft] = useState<FaqDraft>(() => draftFromItem(item));
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const cancel = () => {
-    setDraft({ question: item.question, answer: item.answer });
+    setDraft(draftFromItem(item));
     setEditing(false);
   };
 
@@ -240,6 +367,9 @@ const FaqRow = ({
       const updated = await updateProjectFaq(projectId, item.id, {
         question,
         answer,
+        question_variants: draft.question_variants,
+        required_terms: draft.required_terms,
+        forbidden_terms: draft.forbidden_terms,
       });
       onUpdate(updated);
       setEditing(false);
@@ -273,19 +403,7 @@ const FaqRow = ({
     <div className="rounded-md border bg-card p-3">
       {editing ? (
         <div className="grid gap-2">
-          <Input
-            value={draft.question}
-            onChange={(event) =>
-              setDraft((value) => ({ ...value, question: event.target.value }))
-            }
-          />
-          <Textarea
-            value={draft.answer}
-            onChange={(event) =>
-              setDraft((value) => ({ ...value, answer: event.target.value }))
-            }
-            rows={4}
-          />
+          <FaqFields draft={draft} setDraft={setDraft} />
           <div className="flex justify-end gap-1">
             <Button
               size="sm"
