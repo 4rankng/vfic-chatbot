@@ -1,10 +1,12 @@
 """Admin integration settings routes."""
+
 import json
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_admin
+from app.core.config import ZALO_BOT_WEBHOOK_URL
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.integrations import (
@@ -20,7 +22,11 @@ from app.schemas.integrations import (
     ZaloOaSignatureVerifyOut,
     ZaloOaSignatureVerifyRequest,
 )
-from app.services.integration_settings import IntegrationSettingsService
+from app.services.integration_settings import (
+    IntegrationSettingsService,
+    ZALO_BOT_TOKEN,
+    ZALO_BOT_WEBHOOK_SECRET,
+)
 from app.services.zalo_bot_service import ZaloBotAdminClient, SendResult
 from app.services.zalo_oa_service import ZaloOASender
 from app.services.zalo_oa_signature import verify_signature
@@ -36,6 +42,40 @@ def _safe_probe_error(prefix: str, result: SendResult, secrets: list[str]) -> st
     if len(message) > 240:
         message = f"{message[:237]}..."
     return f"{prefix}: {message}"
+
+
+def _bot_admin_client(settings_service, cfg) -> ZaloBotAdminClient:
+    """Build an admin client using the resolved (DB-precedence) bot token."""
+    bot_settings = settings_service.settings.model_copy(update={"zalo_bot_token": cfg.bot_token})
+    return ZaloBotAdminClient(settings=bot_settings)
+
+
+async def _sync_bot_webhook(
+    settings_service: IntegrationSettingsService, changed: list[str]
+) -> dict:
+    """Best-effort: push the saved Bot webhook secret to Zalo via setWebhook.
+
+    Saving the webhook secret in the CRM updates only the app side; Zalo keeps
+    sending the old secret_token until ``setWebhook`` re-registers it, and a
+    mismatch silently 401-drops every inbound. Re-running on every save would
+    be needless Zalo traffic, so this only fires when the bot token or webhook
+    secret was just changed. Non-blocking: a failure is surfaced as an error
+    status and never raises — the DB save has already committed.
+    """
+    if not (set(changed) & {ZALO_BOT_TOKEN, ZALO_BOT_WEBHOOK_SECRET}):
+        return {"synced": False, "skipped": "no bot token or webhook secret change"}
+    cfg = await settings_service.resolve_zalo()
+    if not cfg.bot_token or not cfg.bot_webhook_secret:
+        return {"synced": False, "skipped": "bot token or webhook secret not configured"}
+    url = ZALO_BOT_WEBHOOK_URL
+    result = await _bot_admin_client(settings_service, cfg).set_webhook(url, cfg.bot_webhook_secret)
+    if result.ok:
+        return {"synced": True, "url": url}
+    return {
+        "synced": False,
+        "url": url,
+        "error": _safe_probe_error("setWebhook", result, [cfg.bot_token]),
+    }
 
 
 @router.get("/zalo", response_model=ZaloIntegrationSettingsOut)
@@ -54,13 +94,17 @@ async def update_zalo_integration_settings(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ZaloIntegrationSettingsOut:
-    await IntegrationSettingsService(db).update_zalo(
+    settings_service = IntegrationSettingsService(db)
+    changed = await settings_service.update_zalo(
         body.model_dump(exclude_unset=True),
         actor_id=admin.id,
     )
-    return ZaloIntegrationSettingsOut.model_validate(
-        await IntegrationSettingsService(db).admin_view()
-    )
+    view = await settings_service.admin_view()
+    # Push the just-saved webhook secret to Zalo so both sides match. Saving
+    # alone updates only the app side; a mismatch silently 401-drops all
+    # inbound. Best-effort: the DB write is already committed.
+    view["zalo_bot_webhook_sync"] = await _sync_bot_webhook(settings_service, changed)
+    return ZaloIntegrationSettingsOut.model_validate(view)
 
 
 @router.post("/zalo/bot/test", response_model=ZaloChannelTestOut)
@@ -70,7 +114,10 @@ async def test_zalo_bot(
 ) -> ZaloChannelTestOut:
     """Probe ONLY the Zalo Bot Platform channel (bot-api.zaloplatforms.com).
 
-    Hits ``getMe`` with the configured bot token. Independent of the OA channel.
+    Hits ``getMe`` with the configured bot token, and — when that succeeds —
+    ``getWebhookInfo`` to confirm a webhook URL is registered. Independent of
+    the OA channel. Zalo never returns the registered secret_token, so a
+    registered URL does not prove the secret matches — only a real inbound does.
     """
     settings_service = IntegrationSettingsService(db)
     cfg = await settings_service.resolve_zalo()
@@ -78,19 +125,28 @@ async def test_zalo_bot(
     configured = bool(cfg.bot_token)
     connected = False
     errors: list[str] = []
+    webhook_registered: bool | None = None
+    webhook_url: str | None = None
     if configured:
-        bot_settings = settings_service.settings.model_copy(
-            update={"zalo_bot_token": cfg.bot_token}
-        )
-        result = await ZaloBotAdminClient(settings=bot_settings).get_me()
+        client = _bot_admin_client(settings_service, cfg)
+        result = await client.get_me()
         connected = result.ok
         if not result.ok:
             errors.append(_safe_probe_error("zalo_bot", result, [cfg.bot_token]))
+        else:
+            info = await client.get_webhook_info()
+            if info.ok and isinstance(info.raw, dict):
+                webhook_url = (info.raw.get("result") or {}).get("url") or None
+            else:
+                errors.append(_safe_probe_error("getWebhookInfo", info, [cfg.bot_token]))
+            webhook_registered = bool(webhook_url)
     return ZaloChannelTestOut(
         configured=configured,
         connected=connected,
         missing=missing,
         errors=errors,
+        webhook_registered=webhook_registered,
+        webhook_url=webhook_url,
     )
 
 

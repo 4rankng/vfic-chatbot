@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import types
+import uuid
+
 from app.api import integrations
-from app.core.config import Settings
+from app.core.config import ZALO_BOT_WEBHOOK_URL, Settings
+from app.schemas.integrations import ZaloIntegrationSettingsUpdate
 from app.services.integration_settings import ZaloRuntimeConfig
 from app.services.zalo_bot_service import SendResult
 
@@ -71,6 +75,9 @@ async def test_zalo_bot_reports_connected_after_successful_probe(monkeypatch):
         async def get_me(self) -> SendResult:
             return SendResult(ok=True)
 
+        async def get_webhook_info(self) -> SendResult:
+            return SendResult(ok=True, raw={"result": {"url": "https://x/webhooks/zalo/chatbot"}})
+
     monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
     monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
     _Service.config = ZaloRuntimeConfig(bot_token="bot-secret")
@@ -79,6 +86,8 @@ async def test_zalo_bot_reports_connected_after_successful_probe(monkeypatch):
 
     assert result.connected is True
     assert result.errors == []
+    assert result.webhook_registered is True
+    assert result.webhook_url == "https://x/webhooks/zalo/chatbot"
 
 
 # ---------------------------------------------------------------------------
@@ -160,3 +169,165 @@ async def test_zalo_oa_reports_connected_after_successful_probe(monkeypatch):
 
     assert result.connected is True
     assert result.errors == []
+
+
+# ---------------------------------------------------------------------------
+# Bot webhook registration reporting: POST /zalo/bot/test getWebhookInfo
+# ---------------------------------------------------------------------------
+
+
+async def test_zalo_bot_reports_webhook_not_registered(monkeypatch):
+    class _BotClient:
+        def __init__(self, *, settings) -> None:
+            pass
+
+        async def get_me(self) -> SendResult:
+            return SendResult(ok=True)
+
+        async def get_webhook_info(self) -> SendResult:
+            return SendResult(ok=True, raw={"result": {"url": ""}})
+
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    _Service.config = ZaloRuntimeConfig(bot_token="bot-secret")
+
+    result = await integrations.test_zalo_bot(_admin=object(), db=object())
+
+    assert result.connected is True
+    assert result.webhook_registered is False
+    assert result.webhook_url is None
+    assert result.errors == []
+
+
+async def test_zalo_bot_surfaces_getWebhookInfo_error(monkeypatch):
+    class _BotClient:
+        def __init__(self, *, settings) -> None:
+            pass
+
+        async def get_me(self) -> SendResult:
+            return SendResult(ok=True)
+
+        async def get_webhook_info(self) -> SendResult:
+            return SendResult(ok=False, error="bad bot-secret")
+
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    _Service.config = ZaloRuntimeConfig(bot_token="bot-secret")
+
+    result = await integrations.test_zalo_bot(_admin=object(), db=object())
+
+    assert result.connected is True
+    assert result.webhook_registered is False
+    assert result.errors == ["getWebhookInfo: bad [redacted]"]
+
+
+# ---------------------------------------------------------------------------
+# Save-triggered webhook sync: PUT /zalo + _sync_bot_webhook
+# ---------------------------------------------------------------------------
+
+
+def _admin_view_dict() -> dict:
+    return {
+        "zalo_bot_token": {"configured": True, "preview": "abcd...1234"},
+        "zalo_bot_webhook_secret": {"configured": True, "preview": "wxyz...9876"},
+        "zalo_oa_app_id": {"configured": False, "value": None},
+        "zalo_oa_secret_key": {"configured": False, "preview": None},
+        "zalo_oa_access_token": {"configured": False, "preview": None},
+        "zalo_oa_refresh_token": {"configured": False, "preview": None},
+        "zalo_bot_api_base": "https://bot-api.zaloplatforms.com",
+        "zalo_oa_api_base": "https://openapi.zalo.me",
+        "zalo_oa_webhook_signature": None,
+    }
+
+
+class _PutService:
+    settings = Settings(
+        app_env="development",
+        zalo_bot_request_timeout=5,
+    )
+    config = ZaloRuntimeConfig(bot_token="bot-secret", bot_webhook_secret="supersecret")
+    changed = ["zalo_bot_webhook_secret"]
+
+    def __init__(self, _db) -> None:
+        pass
+
+    async def update_zalo(self, _values, *, actor_id) -> list[str]:
+        return self.changed
+
+    async def admin_view(self) -> dict:
+        return _admin_view_dict()
+
+    async def resolve_zalo(self) -> ZaloRuntimeConfig:
+        return self.config
+
+
+async def test_update_zalo_pushes_webhook_secret_to_zalo(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    class _BotClient:
+        def __init__(self, *, settings) -> None:
+            pass
+
+        async def set_webhook(self, url: str, secret_token: str) -> SendResult:
+            calls.append((url, secret_token))
+            return SendResult(ok=True)
+
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _PutService)
+    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    _PutService.changed = ["zalo_bot_webhook_secret"]
+
+    body = ZaloIntegrationSettingsUpdate(zalo_bot_webhook_secret="supersecret")
+    admin = types.SimpleNamespace(id=uuid.uuid4())
+
+    result = await integrations.update_zalo_integration_settings(
+        body=body, admin=admin, db=object()
+    )
+
+    assert calls == [(ZALO_BOT_WEBHOOK_URL, "supersecret")]
+    assert result.zalo_bot_webhook_sync is not None
+    assert result.zalo_bot_webhook_sync.synced is True
+    assert result.zalo_bot_webhook_sync.url == ZALO_BOT_WEBHOOK_URL
+
+
+async def test_update_zalo_does_not_sync_when_only_oa_changed(monkeypatch):
+    constructed = False
+
+    class _BotClient:
+        def __init__(self, *_a, **_kw) -> None:
+            nonlocal constructed
+            constructed = True
+
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _PutService)
+    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    _PutService.changed = ["zalo_oa_access_token"]
+
+    body = ZaloIntegrationSettingsUpdate(zalo_oa_access_token="oa-token")
+    admin = types.SimpleNamespace(id=uuid.uuid4())
+
+    result = await integrations.update_zalo_integration_settings(
+        body=body, admin=admin, db=object()
+    )
+
+    assert constructed is False
+    assert result.zalo_bot_webhook_sync is not None
+    assert result.zalo_bot_webhook_sync.synced is False
+    assert result.zalo_bot_webhook_sync.skipped == "no bot token or webhook secret change"
+
+
+async def test_sync_bot_webhook_surfaces_failure_without_raising(monkeypatch):
+    class _BotClient:
+        def __init__(self, *, settings) -> None:
+            pass
+
+        async def set_webhook(self, url: str, secret_token: str) -> SendResult:
+            return SendResult(ok=False, error="rejected bot-secret")
+
+    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+
+    status = await integrations._sync_bot_webhook(
+        _PutService(object()), ["zalo_bot_webhook_secret"]
+    )
+
+    assert status["synced"] is False
+    assert status["url"] == ZALO_BOT_WEBHOOK_URL
+    assert status["error"] == "setWebhook: rejected [redacted]"

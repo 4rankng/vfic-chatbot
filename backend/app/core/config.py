@@ -14,6 +14,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ---------------------------------------------------------------------------
 ZALO_BOT_API_BASE: str = "https://bot-api.zaloplatforms.com"
 ZALO_OA_API_BASE: str = "https://openapi.zalo.me"
+# Public Bot Platform inbound endpoint registered with Zalo (POST /webhooks/zalo/chatbot).
+# A code constant, NOT env — an empty/missing URL is exactly how the app and Zalo
+# desync the webhook secret and silently 401-drop all inbound. Update only if the
+# public domain changes.
+ZALO_BOT_WEBHOOK_URL: str = "https://bot.tingting.vip/webhooks/zalo/chatbot"
 
 # ---------------------------------------------------------------------------
 # Proactive follow-up constants (not configurable via env — policy is in code)
@@ -103,8 +108,6 @@ class Settings(BaseSettings):
     # Per-call HTTP timeout (s). Zalo recommends 30s for getUpdates long-polling;
     # sender methods usually complete in <5s, but we leave headroom.
     zalo_bot_request_timeout: int = 30
-    # The webhook URL currently registered with Zalo (used for self-tests / status).
-    zalo_bot_webhook_url: str = ""
     # Zalo Official Account bootstrap/dev fallbacks. API base is a code constant:
     # app.core.config.ZALO_OA_API_BASE.
     zalo_oa_app_id: str = ""
@@ -218,7 +221,9 @@ class Settings(BaseSettings):
     max_llm_calls_per_turn: int = (
         6  # agent tool-loop ceiling (replaces hardcoded DEFAULT_MAX_ITERS)
     )
-    embed_concurrency_limit: int = 6  # max concurrent embed calls (ingest + retrieval), deployment-wide
+    embed_concurrency_limit: int = (
+        6  # max concurrent embed calls (ingest + retrieval), deployment-wide
+    )
     # Backpressure: reject enqueue when webhook_high depth reaches this.
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
     chat_queue_max_depth: int = 40

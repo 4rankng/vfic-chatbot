@@ -6,6 +6,7 @@ lock in the URL contract (``{base}/bot{TOKEN}/{method}`` with the token
 in the path, NOT a header) — that is the one piece callers cannot
 change silently.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -37,7 +38,6 @@ def settings() -> Settings:
         zalo_bot_token="test-token-xyz",
         zalo_bot_api_base="https://bot-api.zaloplatforms.com",
         zalo_bot_request_timeout=5,
-        zalo_bot_webhook_url="https://bot.tingting.vip/api/v1/webhooks/zalo-bot",
     )
 
 
@@ -78,7 +78,9 @@ def _patch_post(monkeypatch: pytest.MonkeyPatch, envelopes: list[dict[str, Any]]
 # ---------------------------------------------------------------------------
 
 
-async def test_url_contract_token_in_path_not_header(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+async def test_url_contract_token_in_path_not_header(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     """Lock in the URL shape: ``{base}/bot{TOKEN}/{method}``, token NEVER in a header."""
     captured: dict[str, Any] = {}
 
@@ -159,7 +161,9 @@ async def test_admin_missing_token_no_op(unconfigured_settings: Settings) -> Non
 
 
 async def test_send_message_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "m-42", "date": 1700000000}}])
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"message_id": "m-42", "date": 1700000000}}]
+    )
     sender = svc.ZaloBotSender(settings=settings)
 
     result = await sender.send_message("chat-1", "hello")
@@ -230,8 +234,12 @@ async def test_send_message_split_failure_reports_partial_delivery(
     assert len(cap.calls) == 2
 
 
-async def test_send_message_with_optional_fields(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "m-43", "date": 1700000001}}])
+async def test_send_message_with_optional_fields(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"message_id": "m-43", "date": 1700000001}}]
+    )
     sender = svc.ZaloBotSender(settings=settings)
 
     result = await sender.send_message(
@@ -248,7 +256,9 @@ async def test_send_message_with_optional_fields(monkeypatch: pytest.MonkeyPatch
     assert body["text_styles"] == [{"start": 0, "len": 5, "st": ["b"]}]
     # parse_mode and text_styles must NOT be sent when not provided (avoiding
     # an empty field that the API might interpret as a request to clear styles).
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "m-44", "date": 1700000002}}])
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"message_id": "m-44", "date": 1700000002}}]
+    )
     result = await sender.send_message("chat-1", "plain")
     body = cap.calls[0][1] or {}
     assert "parse_mode" not in body
@@ -263,14 +273,22 @@ async def test_send_message_length_validation(settings: Settings) -> None:
 
 
 async def test_send_photo_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "p-1", "date": 1700000000}}])
-    result = await svc.ZaloBotSender(settings=settings).send_photo("chat-1", "https://x/y.jpg", "look")
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"message_id": "p-1", "date": 1700000000}}]
+    )
+    result = await svc.ZaloBotSender(settings=settings).send_photo(
+        "chat-1", "https://x/y.jpg", "look"
+    )
     assert result.ok is True
-    assert cap.calls == [("sendPhoto", {"chat_id": "chat-1", "photo": "https://x/y.jpg", "caption": "look"})]
+    assert cap.calls == [
+        ("sendPhoto", {"chat_id": "chat-1", "photo": "https://x/y.jpg", "caption": "look"})
+    ]
 
 
 async def test_send_photo_no_caption(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "p-2", "date": 1700000000}}])
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"message_id": "p-2", "date": 1700000000}}]
+    )
     await svc.ZaloBotSender(settings=settings).send_photo("chat-1", "https://x/y.jpg")
     body = cap.calls[0][1] or {}
     assert "caption" not in body
@@ -283,20 +301,26 @@ async def test_send_photo_caption_length_validation(settings: Settings) -> None:
 
 
 async def test_send_sticker_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "s-1", "date": 1700000000}}])
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"message_id": "s-1", "date": 1700000000}}]
+    )
     result = await svc.ZaloBotSender(settings=settings).send_sticker("chat-1", "sticker-id-abc")
     assert result.ok is True
     assert cap.calls == [("sendSticker", {"chat_id": "chat-1", "sticker": "sticker-id-abc"})]
 
 
 async def test_send_voice_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "v-1", "date": 1700000000}}])
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"message_id": "v-1", "date": 1700000000}}]
+    )
     result = await svc.ZaloBotSender(settings=settings).send_voice("chat-1", "https://x/y.aac")
     assert result.ok is True
     assert cap.calls == [("sendVoice", {"chat_id": "chat-1", "voice_url": "https://x/y.aac"})]
 
 
-async def test_send_chat_action_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+async def test_send_chat_action_happy_path(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     """sendChatAction envelope is {ok:true} only — no result.message_id."""
     cap = _patch_post(monkeypatch, [{"ok": True}])
     result = await svc.ZaloBotSender(settings=settings).send_chat_action("chat-1", "typing")
@@ -305,7 +329,9 @@ async def test_send_chat_action_happy_path(monkeypatch: pytest.MonkeyPatch, sett
     assert cap.calls == [("sendChatAction", {"chat_id": "chat-1", "action": "typing"})]
 
 
-async def test_send_chat_action_upload_photo(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+async def test_send_chat_action_upload_photo(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     """``upload_photo`` is the second documented action; passes through verbatim."""
     cap = _patch_post(monkeypatch, [{"ok": True}])
     result = await svc.ZaloBotSender(settings=settings).send_chat_action("chat-1", "upload_photo")
@@ -313,7 +339,9 @@ async def test_send_chat_action_upload_photo(monkeypatch: pytest.MonkeyPatch, se
     assert cap.calls[0][1] == {"chat_id": "chat-1", "action": "upload_photo"}
 
 
-async def test_send_message_error_envelope(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+async def test_send_message_error_envelope(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     """ok=false: msg_id stays None, error reflects description."""
     _patch_post(monkeypatch, [{"ok": False, "error_code": 400, "description": "chat not found"}])
     result = await svc.ZaloBotSender(settings=settings).send_message("chat-bad", "hi")
@@ -331,15 +359,17 @@ async def test_get_me_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Sett
     """getMe success → msg_id carries the bot id (so a quick liveness check works)."""
     cap = _patch_post(
         monkeypatch,
-        [{
-            "ok": True,
-            "result": {
-                "id": "1459232241454765289",
-                "account_name": "bot.VDKyGxQvc",
-                "account_type": "BASIC",
-                "can_join_groups": False,
-            },
-        }],
+        [
+            {
+                "ok": True,
+                "result": {
+                    "id": "1459232241454765289",
+                    "account_name": "bot.VDKyGxQvc",
+                    "account_type": "BASIC",
+                    "can_join_groups": False,
+                },
+            }
+        ],
     )
     result = await svc.ZaloBotAdminClient(settings=settings).get_me()
     assert result.ok is True
@@ -347,7 +377,9 @@ async def test_get_me_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Sett
     assert cap.calls == [("getMe", None)]
 
 
-async def test_get_me_malformed_envelope(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+async def test_get_me_malformed_envelope(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     """Missing required field → returns ok=False rather than crashing the caller."""
     # No ``id`` → malformed envelope (other fields are optional fallbacks).
     _patch_post(monkeypatch, [{"ok": True, "result": {"account_name": "only-name"}}])
@@ -356,7 +388,9 @@ async def test_get_me_malformed_envelope(monkeypatch: pytest.MonkeyPatch, settin
     assert "malformed" in (result.error or "")
 
 
-async def test_get_updates_with_timeout(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+async def test_get_updates_with_timeout(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     cap = _patch_post(monkeypatch, [{"ok": True, "result": [{"update_id": 1}]}])
     result = await svc.ZaloBotAdminClient(settings=settings).get_updates(timeout=10)
     assert result.ok is True
@@ -390,18 +424,28 @@ async def test_set_webhook_happy_path(monkeypatch: pytest.MonkeyPatch, settings:
         "https://example.com/hook", "x" * 16
     )
     assert result.ok is True
-    assert cap.calls == [("setWebhook", {"url": "https://example.com/hook", "secret_token": "x" * 16})]
+    assert cap.calls == [
+        ("setWebhook", {"url": "https://example.com/hook", "secret_token": "x" * 16})
+    ]
 
 
-async def test_delete_webhook_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"url": "", "updated_at": 1700000000000}}])
+async def test_delete_webhook_happy_path(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    cap = _patch_post(
+        monkeypatch, [{"ok": True, "result": {"url": "", "updated_at": 1700000000000}}]
+    )
     result = await svc.ZaloBotAdminClient(settings=settings).delete_webhook()
     assert result.ok is True
     assert cap.calls == [("deleteWebhook", None)]
 
 
-async def test_get_webhook_info_happy_path(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
-    _patch_post(monkeypatch, [{"ok": True, "result": {"url": "https://example.com/hook", "updated_at": 1}}])
+async def test_get_webhook_info_happy_path(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    _patch_post(
+        monkeypatch, [{"ok": True, "result": {"url": "https://example.com/hook", "updated_at": 1}}]
+    )
     result = await svc.ZaloBotAdminClient(settings=settings).get_webhook_info()
     assert result.ok is True
 

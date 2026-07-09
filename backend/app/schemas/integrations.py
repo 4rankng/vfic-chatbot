@@ -27,6 +27,22 @@ class ZaloOaSignatureHealth(BaseModel):
     consec_failures: int | None = None
 
 
+class WebhookSyncStatus(BaseModel):
+    """Outcome of pushing the saved Bot webhook secret to Zalo via setWebhook.
+
+    Saving the webhook secret in the CRM updates only the app side; Zalo keeps
+    sending the old secret_token until ``setWebhook`` re-registers it, and a
+    mismatch silently 401-drops every inbound. This status makes that push
+    explicit so a save either confirms the two sides now match, or surfaces why
+    it could not (no URL configured, Zalo rejected it, etc.).
+    """
+
+    synced: bool
+    url: str | None = None
+    skipped: str | None = None
+    error: str | None = None
+
+
 class ZaloIntegrationSettingsOut(BaseModel):
     zalo_bot_token: SecretStatus
     zalo_bot_webhook_secret: SecretStatus
@@ -37,6 +53,9 @@ class ZaloIntegrationSettingsOut(BaseModel):
     zalo_bot_api_base: str
     zalo_oa_api_base: str
     zalo_oa_webhook_signature: ZaloOaSignatureHealth | None = None
+    # Only populated by PUT /zalo after a bot token/secret change; GET leaves it
+    # unset (read-only, no push).
+    zalo_bot_webhook_sync: WebhookSyncStatus | None = None
 
 
 class ZaloIntegrationSettingsUpdate(BaseModel):
@@ -56,12 +75,19 @@ class ZaloChannelTestOut(BaseModel):
     The two channels are independent products with separate credentials, so each
     card's "Test Connection" button probes only its own channel rather than the
     old combined envelope that conflated both.
+
+    ``webhook_registered``/``webhook_url`` apply only to the Bot channel (from
+    ``getWebhookInfo``); they are ``None`` for the OA probe. Zalo never returns
+    the registered secret_token, so a registered URL does not prove the secret
+    matches — only a real inbound does.
     """
 
     configured: bool
     connected: bool = False
     missing: list[str]
     errors: list[str] = Field(default_factory=list)
+    webhook_registered: bool | None = None
+    webhook_url: str | None = None
 
 
 class ZaloOaSignatureVerifyRequest(BaseModel):
