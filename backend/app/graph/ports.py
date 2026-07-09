@@ -50,10 +50,10 @@ class FaqBypassResult:
 
 class ConversationStatePort(Protocol):
     async def record_proactive_outcome(
-        self, conv: Any, *, message: str, result: Any
+        self, conv: Any, *, message: str, result: Any, lock_owner: Any = None
     ) -> Any: ...
 
-    async def release_lock(self, conv: Any) -> None: ...
+    async def release_lock(self, conv: Any, lock_owner: Any = None) -> None: ...
 
 
 class ConversationPort(Protocol):
@@ -78,11 +78,24 @@ class ConversationPort(Protocol):
         pending_message_id: int | None,
         external_error: str | None = None,
         zalo_message_id: str | None = None,
+        stage_timings: dict | None = None,
+        lock_owner: Any = None,
     ) -> None: ...
 
-    async def recheck_ownership(self, conv: Any, version_at_start: int) -> bool: ...
+    async def recheck_ownership(
+        self, conv: Any, version_at_start: int, lock_owner: Any = None
+    ) -> bool: ...
 
-    async def acquire_lock(self, conv_id: Any) -> bool: ...
+    async def claim_send(
+        self,
+        conv: Any,
+        *,
+        version_at_start: int,
+        lock_owner: Any,
+        pending_message_id: int | None,
+    ) -> bool: ...
+
+    async def acquire_lock(self, conv_id: Any) -> Any: ...
 
 
 class LeadContextPort(Protocol):

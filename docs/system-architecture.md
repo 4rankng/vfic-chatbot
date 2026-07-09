@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-09
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -38,11 +38,11 @@ Compose at `/opt/vfic`, Caddy edge.
 ┌────────────────────┐  ┌─────────────────────┐  ┌──────────────────────┐
 │  Redis 7           │  │  PostgreSQL 16      │  │  Recruiter console   │
 │  - RQ broker       │  │  + pgvector (HNSW)  │  │  (React Admin SPA)   │
-│  - per-chat locks  │  │  - users, convs,    │  │  Socket.IO client    │
-│  - pub/sub bridge  │  │    messages, leads, │  │  (websocket-first)   │
-│  - LLM semaphore   │  │    knowledge_chunks │  └──────────────────────┘
-│  - rate limit      │  │  - integration_secrets (encrypted)           │
-│    counters        │  └─────────────────────┘
+│  - pub/sub bridge  │  │  - users, convs,    │  │  Socket.IO client    │
+│  - LLM semaphore   │  │    messages, leads, │  │  (websocket-first)   │
+│  - rate limit      │  │    knowledge_chunks │  └──────────────────────┘
+│    counters        │  │  - integration_secrets (encrypted)           │
+│                    │  └─────────────────────┘
 └─────────┬──────────┘
           │ RQ jobs
           ▼
@@ -82,7 +82,7 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
   ┌──────────────────────────────────────────────────────────┐
   │ worker-chatbot picks up job (6 replicas, backpressure 40)│
   │  - Worker.clean_registries() on startup requeues stuck   │
-  │  - Acquire per-chat Redis lock (TTL 180s)                │
+  │  - Acquire per-chat DB lock + owner token (TTL 180s)     │
   │  - Record bot PENDING message                           │
   │  - Run bot-turn pipeline (see §3)                       │
   │  - On LLMThrottled → static Vietnamese degradation reply│
@@ -92,8 +92,8 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
   ┌──────────────────────────────────────────────────────────┐
   │ ZaloChannelSender.send → Bot Platform or OA              │
   │  - conv.zalo_channel decides bot vs oa                  │
-  │  - ownership re-checked at pre_send_guard (optimistic    │
-  │    token) so a turn started before a take-over is       │
+  │  - ownership + lock owner re-checked at pre_send_guard  │
+  │    so a turn started before a take-over/relock is       │
   │    SUPPRESSED, not sent                                 │
   │  - persist SENT / SUPPRESSED + reason                   │
   └──────────────────────────────────────────────────────────┘
@@ -176,7 +176,7 @@ load_conversation_state -> typing -> agent
 
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
-| `webhook_high` | `worker-chatbot` (×6) | 150s (`chat_turn_job_timeout`) | `chat_queue_max_depth`=40 (503 on overflow) | Chat turns (user-facing latency). |
+| `webhook_high` | `worker-chatbot` (×6) | 60s (`chat_turn_job_timeout`) | `chat_queue_max_depth`=40 (503 on overflow) | Chat turns (user-facing latency). |
 | `persistence_low` | `worker-chatbot` (same containers) | — | — | Lead / memory extraction after SENT replies. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up + reconcile sweep. |
@@ -202,7 +202,7 @@ mid-turn.
 - Re-enqueues a fresh chat turn via `enqueue_chat_run`.
 - **SETNX non-reentrancy guard** (`reconcile_tick_lock`, ex=300s) prevents
   overlapping sweeps.
-- **Per-chat lock** before touching PENDING rows.
+- **Per-chat DB lock owner** before touching PENDING rows.
 - Writes **7 Redis observability counters** read by `/metrics`.
 - Total recovery window ~3-4 min: 60s scan cadence + 120s grace
   (`reconcile_grace_seconds`) before a message is considered stuck.
@@ -229,12 +229,14 @@ job_feature_values.
 
 ### Redis roles (single instance, 7-alpine, AOF on, 256 MB allkeys-lru)
 1. RQ broker (4 queues) + scheduler.
-2. Per-chat mutex locks (`bot_lock_ttl_seconds` = 180s).
-3. Cross-process LLM concurrency semaphore (`llm_concurrency_limit`, 0=disabled).
-4. Pub/sub bridge for cross-process Socket.IO emits (worker → web → client).
-5. Rate-limit counters (login, forgot-password).
-6. Reconcile SETNX non-reentrancy guard + 7 observability counters.
-7. RAG result cache (`rag_cache_enabled`, TTL 300s) + embedding cache (TTL 86400s).
+2. Cross-process LLM concurrency semaphore (`llm_concurrency_limit`, 0=disabled).
+3. Pub/sub bridge for cross-process Socket.IO emits (worker → web → client).
+4. Rate-limit counters (login, forgot-password).
+5. Reconcile SETNX non-reentrancy guard + 7 observability counters.
+6. RAG result cache (`rag_cache_enabled`, TTL 300s) + embedding cache (TTL 86400s).
+
+Per-chat bot locks are durable conversation-row fields:
+`bot_locked_until`, `bot_lock_owner`, and `bot_lock_heartbeat_at`.
 
 > **Redis is not backed up by design** — it is an orphaned-job OOM source.
   Scheduler re-registers its ticks on boot; nothing durable lives here.

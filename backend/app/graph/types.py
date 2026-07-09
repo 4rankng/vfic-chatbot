@@ -24,6 +24,9 @@ class BotRunState:
     version_at_start: int
     user_text: str
     user_name: str = ""
+    # Owner token acquired by the webhook/reconcile scheduler before enqueue.
+    # Empty means legacy/no-owner jobs keep the previous version-only guard.
+    lock_owner: str = ""
     attempt: int = 0
     reply: str = ""
     pending_message_id: int | None = None

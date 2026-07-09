@@ -35,7 +35,7 @@ the bot reasons over.
 | Backend | FastAPI, Python 3.12, async SQLAlchemy 2.x (asyncpg), Pydantic v2, RQ workers, rq-scheduler |
 | Bot pipeline | Hand-rolled async "LangGraph-style" node chain in `app/graph/runner.py` |
 | LLM | MiniMax M2.7 primary (agent), M2.5 (safety); OpenRouter fallback; OpenRouter embeddings + Gemini fallback |
-| Data | PostgreSQL 16 + pgvector, Redis 7 (RQ broker + per-chat locks + pub/sub) |
+| Data | PostgreSQL 16 + pgvector, Redis 7 (RQ broker + pub/sub + LLM semaphore) |
 | Realtime | Socket.IO (ASGI-wrapped) — `conv:<id>` rooms |
 | Frontend | React 19.1, react-admin 5.14, Vite 7, TypeScript 5.8 strict, Tailwind v4 (CSS-first), Zustand, TanStack Query, `virtua`, Socket.IO client |
 | Edge | Caddy 2 (auto Let's Encrypt) on DigitalOcean |
@@ -46,13 +46,13 @@ the bot reasons over.
 A Zalo webhook hits `/webhooks/zalo/{chatbot,oa}`; the handler verifies the
 secret, acks in under a second, and enqueues a turn onto the `webhook_high` RQ
 queue. A pool of 6 `worker-chatbot` replicas picks it up, acquires a per-chat
-Redis lock, and runs the bot-turn pipeline (`load_conversation_state → typing →
-agent → fast_safety_filter → [llm_safety_check] → combine_for_presend →
-pre_send_guard → send_message`), grounding the agent in pgvector RAG and
-MiniMax M2.7. After the reply is SENT, a `persistence_low` job extracts lead
-data. A reconcile worker sweeps every 60s to recover any turn lost to a worker
-crash. The recruiter console subscribes over Socket.IO to see each SENT message
-land in real time.
+Postgres-backed lock with an owner token, and runs the bot-turn pipeline
+(`load_conversation_state → typing → agent → fast_safety_filter →
+[llm_safety_check] → combine_for_presend → pre_send_guard → send_message`),
+grounding the agent in pgvector RAG and MiniMax M2.7. After the reply is SENT,
+a `persistence_low` job extracts lead data. A reconcile worker sweeps every 60s
+to recover any turn lost to a worker crash. The recruiter console subscribes
+over Socket.IO to see each SENT message land in real time.
 
 See **[docs/system-architecture.md](./docs/system-architecture.md)** for the
 full component diagram, queue model, and message-lifecycle sequence.

@@ -9,6 +9,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { useRoleActions } from "../hooks/useRoleActions";
+
 type WorkspaceNavKey =
   | "home"
   | "conversations"
@@ -22,6 +24,9 @@ type WorkspaceNavItem = {
   label: string;
   Icon: LucideIcon;
   href: string;
+  // adminOnly items are hidden from non-admin roles (e.g. recruiter) so they
+  // never reach an admin-gated endpoint and hit a 403 error state.
+  adminOnly?: boolean;
 };
 
 const WORKSPACE_NAV_ITEMS: WorkspaceNavItem[] = [
@@ -48,6 +53,7 @@ const WORKSPACE_NAV_ITEMS: WorkspaceNavItem[] = [
     label: "Hiệu suất",
     Icon: Gauge,
     href: "/hieu-suat",
+    adminOnly: true,
   },
   { key: "account", label: "Account", Icon: UserRound, href: "/profile" },
 ];
@@ -67,7 +73,11 @@ const getActiveWorkspaceKey = (pathname: string): WorkspaceNavKey => {
 
 export const WorkspaceIconRail = () => {
   const location = useLocation();
+  const { isAdmin } = useRoleActions();
   const activeKey = getActiveWorkspaceKey(location.pathname);
+  const navItems = isAdmin
+    ? WORKSPACE_NAV_ITEMS
+    : WORKSPACE_NAV_ITEMS.filter((item) => !item.adminOnly);
 
   return (
     <nav className="workspace-icon-rail" aria-label="Điều hướng workspace">
@@ -80,7 +90,7 @@ export const WorkspaceIconRail = () => {
         <Home className="icon" aria-hidden="true" />
       </Link>
       <div className="workspace-icon-stack">
-        {WORKSPACE_NAV_ITEMS.map(({ key, label, Icon, href }) => (
+        {navItems.map(({ key, label, Icon, href }) => (
           <Link
             key={key}
             to={href}

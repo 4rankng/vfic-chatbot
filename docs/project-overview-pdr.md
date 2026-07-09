@@ -1,7 +1,7 @@
 # Project Overview & Product Development Requirements (PDR)
 
 **Product:** Ting Ting / VFIC miniCRM
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-09
 **Status:** Production at `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM)
 
 ---
@@ -35,7 +35,7 @@ a human.
 | **Proactive follow-up** | 6h / 24h / 46h cadence, cap 3, 48h-Zalo-rule-safe (47h margin), Vietnamese opt-out phrase matching. |
 | **Knowledge base (RAG)** | Per-project docs ingested into pgvector halfvec HNSW + exact re-rank; versioned, re-indexable. |
 | **Personas** | Per-project agent personas (system prompt, tone, assignment) — CRUD + activate + import. |
-| **Reliability** | Reconcile worker sweeps every 60s, recovers lost turns after worker crash (~3-4 min total recovery). Per-chat Redis lock + optimistic ownership guard prevent stale-run sends. |
+| **Reliability** | Reconcile worker sweeps every 60s, recovers lost turns after worker crash (~3-4 min total recovery). Per-chat DB lock owner + optimistic ownership guard prevent stale-run sends. |
 | **Audit** | `bot_runs` resource exposes every bot execution for review. |
 | **Admin integrations** | Zalo / MiniMax / OpenRouter credentials managed in admin UI, encrypted at rest. |
 
@@ -75,8 +75,8 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
   so Zalo retries the callback.
 
 ### FR-2 Bot turn
-- **FR-2.1** Per-conversation at-most-one in-flight turn (Redis lock,
-  TTL `bot_lock_ttl_seconds` = 180s).
+- **FR-2.1** Per-conversation at-most-one in-flight turn (conversation-row
+  lock with owner token, TTL `bot_lock_ttl_seconds` = 180s).
 - **FR-2.2** Pipeline topology fixed (see `app/graph/runner.py`); safety nodes
   run before any send; ownership re-checked at `pre_send_guard` so a turn
   started before a recruiter take-over is suppressed after it.
@@ -134,16 +134,16 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 
 | ID | Category | Requirement |
 |---|---|---|
-| NFR-1 | Latency | Webhook ack <1s; bot turn completes within `chat_turn_job_timeout` = 150s (RQ kills stuck turns before per-chat lock expires). |
+| NFR-1 | Latency | Webhook ack <1s; bot turn completes within `chat_turn_job_timeout` = 60s (RQ kills stuck turns before per-chat lock expires). |
 | NFR-2 | Throughput | 6 `worker-chatbot` replicas sustain ~36 turns/min at 10s/turn — enough for ~100 concurrent bursty conversations. Scale to 8-10 replicas if `webhook_high` depth stays >0. |
 | NFR-3 | Backpressure | Reject enqueue when `webhook_high` depth reaches `chat_queue_max_depth` = 40 (returns 503 so Zalo retries later). |
-| NFR-4 | Reliability | Reconcile sweep every 60s + 120s grace recovers any lost turn after worker crash (~3-4 min total). SETNX non-reentrancy + per-chat lock before touching PENDING rows. |
+| NFR-4 | Reliability | Reconcile sweep every 60s + 120s grace recovers any lost turn after worker crash (~3-4 min total). SETNX non-reentrancy + per-chat lock owner before touching PENDING rows. |
 | NFR-5 | Availability | Single small droplet; containers `restart: unless-stopped`. No external APM (no Sentry/Datadog). |
 | NFR-6 | Security — secrets | Boot-time safety checks refuse to start outside dev if `JWT_SECRET` is the committed default, if `INTEGRATION_SETTINGS_ENCRYPTION_KEY` is missing, or if CORS contains `*` (credentials enabled). Integration secrets encrypted at rest. |
 | NFR-7 | Security — auth | Argon2 password hashing; JWT crypto on worker thread (`asyncio.to_thread`) to avoid event-loop stalls under concurrent login. |
 | NFR-8 | Observability | Structured JSON logs to stdout with `request_id` correlation; `/health`, `/metrics` (RQ depths + reconcile counters), `/health/queue` (chat-path LLM latency / 429s / busy workers). |
 | NFR-9 | i18n | Frontend Vietnamese-only. |
-| NFR-10 | Data durability | PostgreSQL volume (`vfic_pgdata`) is the source of truth. Redis is **not** backed up by design (orphaned-job OOM source; ephemeral broker + lock store). |
+| NFR-10 | Data durability | PostgreSQL volume (`vfic_pgdata`) is the source of truth. Redis is **not** backed up by design (orphaned-job OOM source; ephemeral broker/cache/pub-sub store). |
 | NFR-11 | Cost | 2 vCPU / ~4 GB RAM droplet. Memory ceiling per chatbot worker = 512M. |
 
 ---
@@ -153,7 +153,7 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 | Metric | Target | Source |
 |---|---|---|
 | Webhook ack p99 | <1s | Caddy access logs / app logs |
-| Bot turn p95 | <30s (typical), hard cap 150s | `/health/queue` `_RKEY_INVOKE_MS` |
+| Bot turn p95 | <30s (typical), hard cap 60s | `/health/queue` `_RKEY_INVOKE_MS` |
 | LLM 429 rate | <2% of turns | `/health/queue` `_RKEY_429` |
 | Lost turns recovered | 100% within ~4 min | reconcile counters in `/metrics` |
 | Recruiter take-over → bot suppression | No stale send ever ships | `pre_send_guard` + ownership token |

@@ -181,7 +181,13 @@ async def _finish_terminal_reply(
     if status_task is not None:
         await _cancel_status_task(status_task)
     await deps.db.refresh(conv)
-    owned = await svc.recheck_ownership(conv, state.version_at_start)
+    lock_owner = state.lock_owner or None
+    owned = await svc.claim_send(
+        conv,
+        version_at_start=state.version_at_start,
+        lock_owner=lock_owner,
+        pending_message_id=state.pending_message_id,
+    )
     send_result = None
     if owned:
         send_result = await zalo.send_message(conv.zalo_chat_id, text)
@@ -195,6 +201,7 @@ async def _finish_terminal_reply(
         external_error=send_result.error if send_result and not send_result.ok else None,
         zalo_message_id=send_result.msg_id if send_result else None,
         stage_timings=stage_timings,
+        lock_owner=lock_owner,
     )
     outcome = base_outcome if (send_result is None or send_result.ok) else "send_failed"
     return {"outcome": outcome, "reply": text}
@@ -206,6 +213,13 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     conv = await svc.get(uuid.UUID(state.conversation_id))
     if conv is None:
         return {"outcome": "error", "reason": "conversation_not_found"}
+    lock_owner = state.lock_owner or None
+    if lock_owner:
+        await deps.db.refresh(conv)
+        if not await svc.recheck_ownership(
+            conv, state.version_at_start, lock_owner=lock_owner
+        ):
+            return {"outcome": "suppressed", "reason": "lock_owner_lost"}
     zalo = _zalo_for_conversation(deps, conv)
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
 
@@ -362,12 +376,19 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 else:
                     candidate = retry_exhausted_fallback(state.user_text)
 
-        # --- pre_send_guard: re-check ownership (catches takeover during generation) ---
-        # svc.get() would return the identity-map instance (expire_on_commit=False) and
-        # hide a concurrent takeover; refresh() forces a fresh SELECT so the version/mode
-        # check below reads committed DB state, not the in-memory snapshot from turn start.
+        # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
+        # server-side on version + lock_owner + lock liveness. Closes both the
+        # crash-window (a stale SENDING row left by a post-send crash is reconciled
+        # as sent-but-unconfirmed, at-most-once) and the recheck→send TOCTOU (a
+        # takeover or newer inbound bumping version before the claim yields rowcount
+        # 0 → suppress). refresh() keeps the bound conv on committed state. ---
         await deps.db.refresh(conv)
-        owned = await svc.recheck_ownership(conv, state.version_at_start)
+        owned = await svc.claim_send(
+            conv,
+            version_at_start=state.version_at_start,
+            lock_owner=lock_owner,
+            pending_message_id=state.pending_message_id,
+        )
         if owned:
             await _cancel_status_task(status_task)
             send_t0 = time.monotonic()
@@ -381,6 +402,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 external_error=None if send_result.ok else send_result.error,
                 zalo_message_id=send_result.msg_id,
                 stage_timings=timings,
+                lock_owner=lock_owner,
             )
             if not send_result.ok:
                 return {
@@ -408,6 +430,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             started_at=started, sent=False,
             pending_message_id=state.pending_message_id,
             stage_timings=timings,
+            lock_owner=lock_owner,
         )
         return {"outcome": "suppressed", "reply": candidate}
     finally:

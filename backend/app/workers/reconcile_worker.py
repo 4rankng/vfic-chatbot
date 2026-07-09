@@ -110,8 +110,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                 continue
 
             # ── Guard: acquire per-chat lock (atomic; False = already in-flight) ──
-            acquired = await svc.state.acquire_lock(conv_fresh.id)
-            if not acquired:
+            lock_owner = await svc.state.acquire_lock(conv_fresh.id)
+            if lock_owner is None:
                 skipped_locked += 1
                 continue
 
@@ -123,7 +123,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                 repo = ConversationRepository(db)
                 newest = await repo.latest_message(conv_fresh)
                 if newest is None:
-                    await svc.state.release_lock(conv_fresh)
+                    await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                     continue
 
                 # Get the inbound text to reply to.
@@ -151,12 +151,12 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     elif newest.delivery_status.name == "FAILED":
                         reason = "failed_send"
                     else:
-                        await svc.state.release_lock(conv_fresh)
+                        await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                         continue
 
                 if not user_text:
                     # No inbound text to reply to — release and skip.
-                    await svc.state.release_lock(conv_fresh)
+                    await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                     continue
 
                 # ── Enqueue recovery turn ──
@@ -169,13 +169,14 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     "version_at_start": conv_fresh.version,
                     "user_text": user_text,
                     "user_name": "",
+                    "lock_owner": str(lock_owner),
                     "received_at": datetime.now(timezone.utc).isoformat(),
                     "received_at_epoch": time.time(),
                 })
 
                 if not ok:
                     # Backpressure / Redis down — release lock, leave for next sweep.
-                    await svc.state.release_lock(conv_fresh)
+                    await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                     enqueue_failed += 1
                     continue
 
@@ -204,7 +205,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     conv_fresh.zalo_chat_id,
                 )
                 try:
-                    await svc.state.release_lock(conv_fresh)
+                    await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                 except Exception:
                     logger.exception("reconcile: failed to release lock")
                 continue

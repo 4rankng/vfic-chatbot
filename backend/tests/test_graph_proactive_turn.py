@@ -92,11 +92,11 @@ def _stub_svc(*, acquired: bool = True, owned: bool = True):
     recorded: list[dict] = []
 
     class _State:
-        async def record_proactive_outcome(self, conv, *, message, result):
+        async def record_proactive_outcome(self, conv, *, message, result, lock_owner=None):
             recorded.append({"message": message, "ok": result.ok})
             return object()
 
-        async def release_lock(self, conv) -> None:
+        async def release_lock(self, conv, lock_owner=None) -> None:
             return None
 
     class _Svc:
@@ -109,7 +109,7 @@ def _stub_svc(*, acquired: bool = True, owned: bool = True):
         async def last_messages(self, conv, *, limit):
             return []
 
-        async def recheck_ownership(self, conv, version_at_start):
+        async def recheck_ownership(self, conv, version_at_start, lock_owner=None):
             return owned
 
     return _Svc(), recorded

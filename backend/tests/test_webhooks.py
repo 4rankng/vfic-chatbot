@@ -323,7 +323,8 @@ async def test_oa_text_message_still_queues_bot_turn(monkeypatch):
     svc.record_inbound = AsyncMock()
     svc.get = AsyncMock(return_value=conv)
     svc.run_start_guard = MagicMock(return_value=True)
-    svc.acquire_lock = AsyncMock(return_value=True)
+    lock_owner = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
+    svc.acquire_lock = AsyncMock(return_value=lock_owner)
     svc.release_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
     monkeypatch.setattr(
@@ -352,3 +353,4 @@ async def test_oa_text_message_still_queues_bot_turn(monkeypatch):
     assert result["status"] == "queued"
     assert len(enqueued) == 1
     assert enqueued[0]["user_text"] == "Xin chào"
+    assert enqueued[0]["lock_owner"] == str(lock_owner)

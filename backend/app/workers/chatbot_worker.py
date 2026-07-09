@@ -111,6 +111,7 @@ async def _run_job_async(job: dict) -> None:
         version_at_start=int(job["version_at_start"]),
         user_text=job["user_text"],
         user_name=job.get("user_name", ""),
+        lock_owner=str(job.get("lock_owner") or ""),
         received_at_epoch=received_at_epoch,
         deadline_at_epoch=(received_at_epoch + sla) if received_at_epoch else 0.0,
         preamble_start_epoch=job_start_epoch,
@@ -138,7 +139,13 @@ async def _run_job_async(job: dict) -> None:
                     # never lands in a human-owned chat (mirrors run_turn's
                     # pre_send_guard). Not owned → record SUPPRESSED, no send.
                     await db.refresh(conv)
-                    owned = await svc.recheck_ownership(conv, state.version_at_start)
+                    lock_owner = state.lock_owner or None
+                    owned = await svc.claim_send(
+                        conv,
+                        version_at_start=state.version_at_start,
+                        lock_owner=lock_owner,
+                        pending_message_id=state.pending_message_id,
+                    )
                     sent = False
                     external_error: str | None = None
                     zalo_message_id: str | None = None
@@ -168,6 +175,7 @@ async def _run_job_async(job: dict) -> None:
                         external_error=external_error,
                         zalo_message_id=zalo_message_id,
                         stage_timings=throttle_timings,
+                        lock_owner=lock_owner,
                     )
             except Exception:  # noqa: BLE001
                 logger.error("failed to send degradation reply", exc_info=True)

@@ -35,9 +35,11 @@ _SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
 
 # Forward-only delivery progression for receipt handling (READ > DELIVERED > SENT).
-# PENDING/FAILED/SUPPRESSED sit at 0 so a receipt never revives a non-sent row.
+# PENDING/SENDING/FAILED/SUPPRESSED sit at 0 so a receipt never revives a non-sent row
+# (SENDING is a transient pre-send claim, not a delivered state).
 _DELIVERY_RANK = {
     DeliveryStatus.PENDING: 0,
+    DeliveryStatus.SENDING: 0,
     DeliveryStatus.FAILED: 0,
     DeliveryStatus.SUPPRESSED: 0,
     DeliveryStatus.SENT: 1,
@@ -56,6 +58,31 @@ class ConversationConflict(Exception):
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _normalize_lock_owner(lock_owner: uuid.UUID | str | None) -> uuid.UUID | None:
+    if lock_owner is None:
+        return None
+    if isinstance(lock_owner, uuid.UUID):
+        return lock_owner
+    return uuid.UUID(str(lock_owner))
+
+
+def _lock_owner_matches(current: uuid.UUID | str | None, expected: uuid.UUID | str | None) -> bool:
+    expected_owner = _normalize_lock_owner(expected)
+    if expected_owner is None:
+        return True
+    if current is None:
+        return False
+    return str(current) == str(expected_owner)
+
+
+def _lock_still_live(locked_until: datetime | None) -> bool:
+    if locked_until is None:
+        return False
+    if locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=timezone.utc)
+    return locked_until > utcnow()
 
 
 async def _fetch_owner_name(db, conv: Conversation) -> str | None:
@@ -154,16 +181,22 @@ class ConversationState:
         await self.events.conversation_updated(conv)
         return msg
 
-    async def acquire_lock(self, conv_id: uuid.UUID, ttl_seconds: int | None = None) -> bool:
+    async def acquire_lock(
+        self,
+        conv_id: uuid.UUID,
+        ttl_seconds: int | None = None,
+        lock_owner: uuid.UUID | str | None = None,
+    ) -> uuid.UUID | None:
         """Per-chat mutex via bot_locked_until. Atomic: only one run holds it at a time.
 
         TTL defaults to settings.bot_lock_ttl_seconds, which is sized to exceed the
         worst-case single turn (a worker crash mid-turn is recovered by TTL expiry;
-        the `version` optimistic token in recheck_ownership is the real guard
-        against a stale run sending after a takeover).
+        the owner token makes stale jobs unable to clear a newer job's lock).
         """
         ttl = ttl_seconds if ttl_seconds is not None else _settings.bot_lock_ttl_seconds
-        locked_until = utcnow() + timedelta(seconds=ttl)
+        now = utcnow()
+        locked_until = now + timedelta(seconds=ttl)
+        owner = _normalize_lock_owner(lock_owner) or uuid.uuid4()
         res = await self.db.execute(
             update(Conversation)
             .where(
@@ -173,17 +206,86 @@ class ConversationState:
                     Conversation.bot_locked_until < utcnow(),
                 ),
             )
-            .values(bot_locked_until=locked_until)
+            .values(
+                bot_locked_until=locked_until,
+                bot_lock_owner=owner,
+                bot_lock_heartbeat_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        return owner if res.rowcount == 1 else None
+
+    async def release_lock(
+        self, conv: Conversation, lock_owner: uuid.UUID | str | None = None
+    ) -> None:
+        owner = _normalize_lock_owner(lock_owner)
+        if owner is None:
+            conv.bot_locked_until = None
+            conv.bot_lock_owner = None
+            conv.bot_lock_heartbeat_at = None
+            await self.db.commit()
+            return
+
+        res = await self.db.execute(
+            update(Conversation)
+            .where(Conversation.id == conv.id, Conversation.bot_lock_owner == owner)
+            .values(
+                bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        if res.rowcount == 1:
+            conv.bot_locked_until = None
+            conv.bot_lock_owner = None
+            conv.bot_lock_heartbeat_at = None
+
+    async def break_stale_lock(
+        self, conv_id: uuid.UUID, *, stale_after_seconds: int
+    ) -> bool:
+        """Force-clear a per-chat mutex whose owner heartbeat is stale (older than
+        ``stale_after_seconds``), so a crashed/killed worker does not stall the
+        conversation until ``bot_lock_ttl`` expires.
+
+        Conditional on heartbeat age: a live, actively-processing turn has a
+        fresh heartbeat (set at ``acquire_lock``; a normal turn finishes well
+        inside ``chat_turn_job_timeout``) and is never stolen. Only a wedged job
+        whose heartbeat predates the RQ kill threshold qualifies. Safe to compose
+        with ``claim_send``: a not-yet-reaped old turn that reaches its send
+        after its lock was stolen fails the claim's ``lock_owner`` guard and
+        suppresses rather than double-sending. Returns True iff a stale lock was
+        cleared.
+        """
+        cutoff = utcnow() - timedelta(seconds=stale_after_seconds)
+        res = await self.db.execute(
+            update(Conversation)
+            .where(
+                Conversation.id == conv_id,
+                Conversation.bot_locked_until.is_not(None),
+                or_(
+                    Conversation.bot_lock_heartbeat_at.is_(None),
+                    Conversation.bot_lock_heartbeat_at < cutoff,
+                ),
+            )
+            .values(
+                bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
+            )
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
         return res.rowcount == 1
 
-    async def release_lock(self, conv: Conversation) -> None:
-        conv.bot_locked_until = None
-        await self.db.commit()
-
-    async def recheck_ownership(self, conv: Conversation, version_at_start: int) -> bool:
+    async def recheck_ownership(
+        self,
+        conv: Conversation,
+        version_at_start: int,
+        lock_owner: uuid.UUID | str | None = None,
+    ) -> bool:
         """Pre-send guard: bot may send only if eligible and version unchanged.
 
         IMPORTANT: the caller **must** run ``db.refresh(conv)`` immediately
@@ -191,7 +293,76 @@ class ConversationState:
         identity map hides concurrent takeovers).  Failing to refresh reads a
         stale in-memory ``version`` and may approve a send after a takeover.
         """
-        return self.run_start_guard(conv) and conv.version == version_at_start
+        if not self.run_start_guard(conv) or conv.version != version_at_start:
+            return False
+        if lock_owner is None:
+            return True
+        return _lock_owner_matches(conv.bot_lock_owner, lock_owner) and _lock_still_live(
+            conv.bot_locked_until
+        )
+
+    async def claim_send(
+        self,
+        conv: Conversation,
+        *,
+        version_at_start: int,
+        lock_owner: uuid.UUID | str | None,
+        pending_message_id: int | None,
+    ) -> bool:
+        """Atomically claim the outbound send: flip the pending BOT row
+        PENDING→SENDING only if the conversation is still bot-owned at
+        ``version_at_start`` with a live lock owned by ``lock_owner``.
+
+        This is the pre-send gate that closes both the crash-window and the
+        recheck→send TOCTOU in one conditional write: the claim commits only when
+        the conversation ``version`` + lock ownership + lock liveness all still
+        hold, so a recruiter takeover (clears ``bot_lock_owner``) or a newer
+        inbound/recruiter reply (bumps ``version``) landing before the claim
+        yields rowcount 0 and the caller suppresses instead of sending. The
+        authoritative guard is the ``WHERE EXISTS`` below, evaluated server-side
+        at commit time, so a stale identity-map snapshot cannot race it.
+
+        The residual window after a successful claim is [claim-commit → Zalo
+        POST], irreducible without a provider idempotency key (Zalo Bot Platform
+        has none); a crash there leaves a SENDING row the reconcile sweep treats
+        as sent-but-unconfirmed (at-most-once) rather than re-enqueuing a
+        duplicate. Returns True iff the row was claimed.
+        """
+        if pending_message_id is None or lock_owner is None:
+            # The atomic claim requires both a pending BOT row to flip and a lock
+            # owner to gate on. Real turns always hold both (the webhook/reconcile
+            # enqueue path acquires the lock and creates the pending row before the
+            # send); refuse to claim so the caller suppresses rather than sending
+            # without a durable ownership marker.
+            return False
+        owner = _normalize_lock_owner(lock_owner)
+        res = await self.db.execute(
+            text(
+                """
+                UPDATE messages SET delivery_status = 'SENDING'
+                 WHERE id = :pending_id
+                   AND conversation_id = :cid
+                   AND sender = 'BOT'
+                   AND delivery_status = 'PENDING'
+                   AND EXISTS (
+                       SELECT 1 FROM conversations c
+                        WHERE c.id = :cid
+                          AND c.version = :version_at_start
+                          AND c.bot_lock_owner = :owner
+                          AND c.bot_locked_until IS NOT NULL
+                          AND c.bot_locked_until > now()
+                   )
+                """
+            ),
+            {
+                "pending_id": pending_message_id,
+                "cid": conv.id,
+                "version_at_start": version_at_start,
+                "owner": owner,
+            },
+        )
+        await self.db.commit()
+        return res.rowcount == 1
 
     async def record_bot_outcome(
         self,
@@ -205,6 +376,7 @@ class ConversationState:
         external_error: str | None = None,
         zalo_message_id: str | None = None,
         stage_timings: dict | None = None,
+        lock_owner: uuid.UUID | str | None = None,
     ) -> Message:
         """Log a bot_run + BOT message; clears the lock.
 
@@ -245,7 +417,8 @@ class ConversationState:
                 pending_msg is not None
                 and pending_msg.conversation_id == conv.id
                 and pending_msg.sender == MessageSender.BOT
-                and pending_msg.delivery_status == DeliveryStatus.PENDING
+                and pending_msg.delivery_status
+                in (DeliveryStatus.PENDING, DeliveryStatus.SENDING)
             ):
                 pending_msg.body = reply
                 pending_msg.bot_run_id = run.id
@@ -264,7 +437,26 @@ class ConversationState:
                 zalo_message_id=zalo_message_id,
             )
             self.db.add(msg)
-        conv.bot_locked_until = None
+        owner = _normalize_lock_owner(lock_owner)
+        if owner is None:
+            conv.bot_locked_until = None
+            conv.bot_lock_owner = None
+            conv.bot_lock_heartbeat_at = None
+        else:
+            clear_res = await self.db.execute(
+                update(Conversation)
+                .where(Conversation.id == conv.id, Conversation.bot_lock_owner == owner)
+                .values(
+                    bot_locked_until=None,
+                    bot_lock_owner=None,
+                    bot_lock_heartbeat_at=None,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if clear_res.rowcount == 1:
+                conv.bot_locked_until = None
+                conv.bot_lock_owner = None
+                conv.bot_lock_heartbeat_at = None
         if delivery_status == DeliveryStatus.SENT:
             conv.last_outbound_at = utcnow()
         await self.db.commit()
@@ -314,6 +506,37 @@ class ConversationState:
         await self.db.commit()
         return res.rowcount
 
+    async def resolve_unconfirmed_sending(self, conv_id: uuid.UUID) -> int:
+        """Flip a stuck BOT/SENDING row → SENT for a conversation whose send is
+        unconfirmed (worker crashed after the Zalo POST, before recording SENT).
+
+        At-most-once: assume the attempted send was delivered rather than risk a
+        duplicate by re-sending. There is at most one in-flight SENDING row per
+        conversation (the per-chat lock serializes turns). Returns rows updated.
+        ``last_outbound_at`` is stamped so the conversation's attention state is
+        coherent with "treat this as a completed send"; the reconcile counter +
+        WARN log are the observability surface for these rare events.
+        """
+        res = await self.db.execute(
+            update(Message)
+            .where(
+                Message.conversation_id == conv_id,
+                Message.sender == MessageSender.BOT,
+                Message.delivery_status == DeliveryStatus.SENDING,
+            )
+            .values(delivery_status=DeliveryStatus.SENT)
+            .execution_options(synchronize_session=False)
+        )
+        if res.rowcount:
+            await self.db.execute(
+                update(Conversation)
+                .where(Conversation.id == conv_id)
+                .values(last_outbound_at=utcnow())
+                .execution_options(synchronize_session=False)
+            )
+        await self.db.commit()
+        return res.rowcount
+
     # --- proactive follow-up ---
 
     async def record_proactive_outcome(
@@ -322,6 +545,7 @@ class ConversationState:
         *,
         message: str,
         result: SendResult,
+        lock_owner: uuid.UUID | str | None = None,
     ) -> Message:
         """Persist a proactive BOT message (no BotRun). Handles success/failure + cadence.
 
@@ -339,7 +563,26 @@ class ConversationState:
             external_error=None if result.ok else result.error,
         )
         self.db.add(msg)
-        conv.bot_locked_until = None
+        owner = _normalize_lock_owner(lock_owner)
+        if owner is None:
+            conv.bot_locked_until = None
+            conv.bot_lock_owner = None
+            conv.bot_lock_heartbeat_at = None
+        else:
+            clear_res = await self.db.execute(
+                update(Conversation)
+                .where(Conversation.id == conv.id, Conversation.bot_lock_owner == owner)
+                .values(
+                    bot_locked_until=None,
+                    bot_lock_owner=None,
+                    bot_lock_heartbeat_at=None,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if clear_res.rowcount == 1:
+                conv.bot_locked_until = None
+                conv.bot_lock_owner = None
+                conv.bot_lock_heartbeat_at = None
         if result.ok:
             conv.last_outbound_at = utcnow()
             conv.last_followup_at = utcnow()
@@ -376,6 +619,8 @@ class ConversationState:
                 needs_human=False,
                 unread_count=0,
                 bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
                 version=Conversation.version + 1,
             )
             .execution_options(synchronize_session=False)
@@ -452,6 +697,8 @@ class ConversationState:
                 needs_human=False,
                 unread_count=0,
                 bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
                 version=Conversation.version + 1,
             )
             .execution_options(synchronize_session=False)
@@ -535,6 +782,8 @@ class ConversationState:
         conv.status = ConversationStatus.OPEN
         conv.needs_human = False
         conv.bot_locked_until = None
+        conv.bot_lock_owner = None
+        conv.bot_lock_heartbeat_at = None
         conv.taken_over_at = None
         conv.assigned_recruiter_id = None
         conv.unread_count = 0

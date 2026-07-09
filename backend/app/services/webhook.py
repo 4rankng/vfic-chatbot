@@ -131,7 +131,8 @@ class ZaloWebhookService:
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}
 
         version_at_start = conv.version
-        if not await svc.acquire_lock(conv.id):  # another run holds the per-chat mutex
+        lock_owner = await svc.acquire_lock(conv.id)
+        if lock_owner is None:  # another run holds the per-chat mutex
             return {"status": "locked", "conversation_id": str(conv.id)}
 
         # Fire-and-forget typing indicator so the user sees immediate feedback
@@ -147,6 +148,7 @@ class ZaloWebhookService:
             "version_at_start": version_at_start,
             "user_text": norm.user_text,
             "user_name": norm.user_name,
+            "lock_owner": str(lock_owner),
             "received_at": datetime.now(timezone.utc).isoformat(),
             # Epoch anchor (not monotonic) so the RQ worker can compute remaining
             # wall-clock budget across the process boundary. See BotRunState.
@@ -156,7 +158,7 @@ class ZaloWebhookService:
         if asyncio.iscoroutine(result):
             result = await result
         if result is False:
-            await svc.release_lock(conv)  # no worker will clear it
+            await svc.release_lock(conv, lock_owner=lock_owner)  # no worker will clear it
             return {"status": "enqueue_failed", "conversation_id": str(conv.id)}
         return {"status": "queued", "conversation_id": str(conv.id)}
 

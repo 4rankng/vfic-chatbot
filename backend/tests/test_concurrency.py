@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -268,6 +269,81 @@ async def test_record_bot_outcome_updates_pending_message_in_place():
     assert conv.last_outbound_at is not None
     events.message_created.assert_awaited_once()
     events.conversation_updated.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_recheck_ownership_requires_matching_live_lock_owner():
+    conv = _make_conv(version=3)
+    owner = uuid.uuid4()
+    conv.bot_lock_owner = owner
+    conv.bot_locked_until = utcnow() + timedelta(seconds=30)
+
+    state = ConversationState(AsyncMock(), MagicMock(), AsyncMock())
+
+    assert await state.recheck_ownership(conv, 3, lock_owner=owner)
+    assert not await state.recheck_ownership(conv, 3, lock_owner=uuid.uuid4())
+
+    conv.bot_locked_until = utcnow() - timedelta(seconds=1)
+    assert not await state.recheck_ownership(conv, 3, lock_owner=owner)
+
+
+@pytest.mark.asyncio
+async def test_release_lock_does_not_clear_mismatched_owner():
+    conv = _make_conv(version=3)
+    current_owner = uuid.uuid4()
+    conv.bot_lock_owner = current_owner
+    conv.bot_locked_until = utcnow() + timedelta(seconds=30)
+    conv.bot_lock_heartbeat_at = utcnow()
+
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=0))
+    db.commit = AsyncMock()
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    await state.release_lock(conv, lock_owner=uuid.uuid4())
+
+    assert conv.bot_lock_owner == current_owner
+    assert conv.bot_locked_until is not None
+    assert conv.bot_lock_heartbeat_at is not None
+
+
+@pytest.mark.asyncio
+async def test_record_bot_outcome_does_not_clear_mismatched_owner():
+    conv = _make_conv(version=3)
+    current_owner = uuid.uuid4()
+    conv.bot_lock_owner = current_owner
+    conv.bot_locked_until = utcnow() + timedelta(seconds=30)
+    conv.bot_lock_heartbeat_at = utcnow()
+
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    async def _flush():
+        for call in db.add.call_args_list:
+            obj = call.args[0]
+            if hasattr(obj, "proposed_reply"):
+                obj.id = 99
+
+    db.flush = AsyncMock(side_effect=_flush)
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=0))
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.get = AsyncMock(return_value=None)
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Câu trả lời cuối cùng",
+        started_at=utcnow(),
+        sent=True,
+        lock_owner=uuid.uuid4(),
+    )
+
+    assert conv.bot_lock_owner == current_owner
+    assert conv.bot_locked_until is not None
+    assert conv.bot_lock_heartbeat_at is not None
+    assert conv.last_outbound_at is not None
 
 
 # --- LeadService optimistic concurrency tests ---

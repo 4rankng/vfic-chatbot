@@ -43,6 +43,11 @@ class MessageSender(str, enum.Enum):
 
 class DeliveryStatus(str, enum.Enum):
     PENDING = "PENDING"
+    # SENDING: an atomic pre-send claim flipped the pending BOT row just before the
+    # Zalo POST. Transient during a normal turn; if a worker crashes between the
+    # send and the SENT write, reconcile treats a stale SENDING row as
+    # sent-but-unconfirmed (at-most-once) instead of re-enqueuing a duplicate.
+    SENDING = "SENDING"
     SENT = "SENT"
     FAILED = "FAILED"
     SUPPRESSED = "SUPPRESSED"
@@ -94,6 +99,8 @@ class Conversation(Base):
         Integer, nullable=False, default=0, server_default=text("0")
     )
     bot_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    bot_lock_owner: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    bot_lock_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_outbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

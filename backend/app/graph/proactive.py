@@ -220,6 +220,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     acquired = await svc.acquire_lock(conv.id)
     if not acquired:
         return _outcome("suppressed", reason="locked")
+    lock_owner = None if acquired is True else acquired
     version_at_start = conv.version
 
     try:
@@ -261,7 +262,10 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
                 decision["reason"],
             )
             await svc.state.record_proactive_outcome(
-                conv, message="", result=SendOutcome(ok=False, error="agent_decided_not_to_send")
+                conv,
+                message="",
+                result=SendOutcome(ok=False, error="agent_decided_not_to_send"),
+                lock_owner=lock_owner,
             )
             return _outcome("suppressed", reason=decision["reason"])
 
@@ -269,7 +273,10 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         if not message:
             logger.info("proactive empty message: conversation=%s", conv.zalo_chat_id)
             await svc.state.record_proactive_outcome(
-                conv, message="", result=SendOutcome(ok=False, error="empty_message")
+                conv,
+                message="",
+                result=SendOutcome(ok=False, error="empty_message"),
+                lock_owner=lock_owner,
             )
             return _outcome("suppressed", reason="empty_message")
 
@@ -286,7 +293,10 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             else:
                 logger.info("proactive safety blocked: conversation=%s", conv.zalo_chat_id)
                 await svc.state.record_proactive_outcome(
-                    conv, message=candidate, result=SendOutcome(ok=False, error="safety_blocked")
+                    conv,
+                    message=candidate,
+                    result=SendOutcome(ok=False, error="safety_blocked"),
+                    lock_owner=lock_owner,
                 )
                 return _outcome("suppressed", reason="safety_blocked")
         else:
@@ -295,22 +305,24 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         # 9. Last-chance guards (re-read from DB for takeovers/opt-outs)
         await deps.db.refresh(conv)
         if conv.followup_opted_out:
-            await svc.state.release_lock(conv)
+            await svc.state.release_lock(conv, lock_owner=lock_owner)
             await deps.db.commit()
             return _outcome("suppressed", reason="opted_out_during_generation")
         rule_allowed, rule_reason = await deps.followup_allowed(conv)
         if not rule_allowed:
-            await svc.state.release_lock(conv)
+            await svc.state.release_lock(conv, lock_owner=lock_owner)
             await deps.db.commit()
             return _outcome("suppressed", reason=f"rule_{rule_reason}")
-        owned = await svc.recheck_ownership(conv, version_at_start)
+        owned = await svc.recheck_ownership(
+            conv, version_at_start, lock_owner=lock_owner
+        )
         if not owned:
-            await svc.state.release_lock(conv)
+            await svc.state.release_lock(conv, lock_owner=lock_owner)
             await deps.db.commit()
             return _outcome("suppressed", reason="ownership_lost")
         # Re-check 48h one more time (covers slow LLM/safety generation)
         if _now() - conv.last_inbound_at > margin:
-            await svc.state.release_lock(conv)
+            await svc.state.release_lock(conv, lock_owner=lock_owner)
             await deps.db.commit()
             return _outcome("suppressed", reason="48h_window_post_generation")
 
@@ -325,5 +337,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
 
     # 11. Persist (always — clears lock, records SENT/FAILED message,
     #     handles cadence count)
-    await svc.state.record_proactive_outcome(conv, message=candidate, result=result)
+    await svc.state.record_proactive_outcome(
+        conv, message=candidate, result=result, lock_owner=lock_owner
+    )
     return {"outcome": "sent" if result.ok else "send_failed", "reply": candidate}

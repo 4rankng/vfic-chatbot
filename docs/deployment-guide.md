@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-09
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
 **Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/ChatBotN8N.git` (`main`)
 
@@ -20,9 +20,9 @@ remote recreate over ~9 sequential SSH calls (ControlMaster multiplexed).
 | Service | Image / base | Replicas | Role |
 |---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | 1 | Source of truth. `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
-| `redis` | `redis:7-alpine` | 1 | RQ broker + locks + pub/sub. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
+| `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
 | `web` | `franknguyenvd/vfic-backend:latest` | 1 | FastAPI (uvicorn, 1 worker, `web_concurrency`=2 default). Expose 8000. Volume `vfic_kb_uploads:/data/kb_uploads`. Healthcheck `python urllib /health`. |
-| `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **6** | RQ queues `webhook_high`, `persistence_low`. `stop_grace_period: 180s` (let ≤150s turns finish on SIGTERM). Mem limit 512M. |
+| `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **6** | RQ queues `webhook_high`, `persistence_low`. `stop_grace_period: 180s` (let ≤60s turns finish on SIGTERM). Mem limit 512M. |
 | `worker-ingest` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
 | `worker-followup` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
 | `scheduler` | `franknguyenvd/vfic-backend:latest` | 1 | `rqscheduler`. |

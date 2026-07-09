@@ -40,6 +40,8 @@ class _FakeConv:
     def __init__(self, zalo_chat_id: str = "z1", version: int = 1) -> None:
         self.zalo_chat_id = zalo_chat_id
         self.version = version
+        self.bot_lock_owner = None
+        self.bot_locked_until = None
 
 
 class _FakeDB:
@@ -93,7 +95,7 @@ def _stub_svc(*, conv=None, owned: bool = True):
         async def record_bot_pending(self, c):
             return SimpleNamespace(id=777)
 
-        async def recheck_ownership(self, c, version_at_start):
+        async def recheck_ownership(self, c, version_at_start, lock_owner=None):
             return owned
 
         async def record_bot_outcome(self, c, **kw):
@@ -185,6 +187,48 @@ async def test_ownership_lost_during_generation_suppresses_send(monkeypatch):
     assert res["outcome"] == "suppressed"
     assert zalo.sent == []          # takeover during generation -> do not send
     assert persisted == []          # extraction only runs after a real send
+
+
+@pytest.mark.asyncio
+async def test_lock_owner_lost_before_turn_suppresses_without_pending(monkeypatch):
+    """A stale job whose lock owner no longer matches must not create UI chrome,
+    call the agent, or send a status/answer message."""
+
+    class _Svc:
+        def __init__(self) -> None:
+            self.pending_calls = 0
+
+        async def get(self, _id):
+            return _FakeConv()
+
+        async def last_messages(self, c, limit):
+            raise AssertionError("history should not load after owner loss")
+
+        async def record_bot_pending(self, c):
+            self.pending_calls += 1
+            raise AssertionError("stale owner must not create PENDING")
+
+        async def recheck_ownership(self, c, version_at_start, lock_owner=None):
+            assert lock_owner == "00000000-0000-0000-0000-0000000000aa"
+            return False
+
+        async def record_bot_outcome(self, c, **kw):
+            raise AssertionError("stale owner must not record outcome")
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        raise AssertionError("agent must not run after owner loss")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    svc = _Svc()
+    zalo = _FakeZalo()
+    state = _state()
+    state.lock_owner = "00000000-0000-0000-0000-0000000000aa"
+
+    res = await run_turn(state, _deps(zalo, conversation=svc))
+
+    assert res == {"outcome": "suppressed", "reason": "lock_owner_lost"}
+    assert svc.pending_calls == 0
+    assert zalo.sent == []
 
 
 @pytest.mark.asyncio

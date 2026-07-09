@@ -146,17 +146,40 @@ class ConversationService:
         )
 
     async def acquire_lock(
-        self, conv_id: uuid.UUID, ttl_seconds: int | None = None
-    ) -> bool:
-        return await self.state.acquire_lock(conv_id, ttl_seconds)
+        self,
+        conv_id: uuid.UUID,
+        ttl_seconds: int | None = None,
+        lock_owner: uuid.UUID | str | None = None,
+    ) -> uuid.UUID | None:
+        return await self.state.acquire_lock(conv_id, ttl_seconds, lock_owner)
 
-    async def release_lock(self, conv: Conversation) -> None:
-        await self.state.release_lock(conv)
+    async def release_lock(
+        self, conv: Conversation, lock_owner: uuid.UUID | str | None = None
+    ) -> None:
+        await self.state.release_lock(conv, lock_owner)
 
     async def recheck_ownership(
-        self, conv: Conversation, version_at_start: int
+        self,
+        conv: Conversation,
+        version_at_start: int,
+        lock_owner: uuid.UUID | str | None = None,
     ) -> bool:
-        return await self.state.recheck_ownership(conv, version_at_start)
+        return await self.state.recheck_ownership(conv, version_at_start, lock_owner)
+
+    async def claim_send(
+        self,
+        conv: Conversation,
+        *,
+        version_at_start: int,
+        lock_owner: uuid.UUID | str | None,
+        pending_message_id: int | None,
+    ) -> bool:
+        return await self.state.claim_send(
+            conv,
+            version_at_start=version_at_start,
+            lock_owner=lock_owner,
+            pending_message_id=pending_message_id,
+        )
 
     async def record_bot_outcome(
         self,
@@ -169,6 +192,8 @@ class ConversationService:
         pending_message_id: int | None = None,
         external_error: str | None = None,
         zalo_message_id: str | None = None,
+        stage_timings: dict | None = None,
+        lock_owner: uuid.UUID | str | None = None,
     ) -> Message:
         return await self.state.record_bot_outcome(
             conv,
@@ -179,6 +204,8 @@ class ConversationService:
             pending_message_id=pending_message_id,
             external_error=external_error,
             zalo_message_id=zalo_message_id,
+            stage_timings=stage_timings,
+            lock_owner=lock_owner,
         )
 
     async def record_bot_pending(
@@ -219,10 +246,15 @@ class ConversationService:
         return await self.state.record_recruiter_message(conv, recruiter, body, result)
 
     async def record_proactive_outcome(
-        self, conv: Conversation, *, message: str, result: SendResult
+        self,
+        conv: Conversation,
+        *,
+        message: str,
+        result: SendResult,
+        lock_owner: uuid.UUID | str | None = None,
     ) -> Message:
         return await self.state.record_proactive_outcome(
-            conv, message=message, result=result
+            conv, message=message, result=result, lock_owner=lock_owner
         )
 
     async def apply_delivery_receipt(
