@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
 import time
 import unicodedata
 from typing import Literal
@@ -100,11 +99,12 @@ def _is_429(exc: Exception) -> bool:
 
 
 async def _llm_call_with_retry(bound, messages):
-    """Call bound.ainvoke with 1 retry on 429 (2s ± 0.5s jitter).
+    """Call bound.ainvoke with 1 retry on 429 (settings.llm_429_retry_sleep_seconds backoff).
 
     On second 429, raises LLMThrottled so the worker can send a static
     degradation message without making another LLM call.
     """
+    from app.core.config import get_settings
     from app.graph.llm_semaphore import LLMThrottled
 
     try:
@@ -113,7 +113,7 @@ async def _llm_call_with_retry(bound, messages):
         if _is_429(exc):
             _record_llm_429()
             logger.warning("llm_429_retry", exc_info=True)
-            await asyncio.sleep(2.0 + random.uniform(-0.5, 0.5))
+            await asyncio.sleep(get_settings().llm_429_retry_sleep_seconds)
             try:
                 return await bound.ainvoke(messages)
             except Exception as exc2:

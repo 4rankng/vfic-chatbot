@@ -30,6 +30,7 @@ from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY, TIMEOUT_REPLY
 from app.graph.safety import (
+    blocklist_hit,
     build_retry_prompt,
     fast_safety_filter,
     parse_verdict,
@@ -312,8 +313,13 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             fs = fast_safety_filter(raw)
             candidate = fs["output"]
 
-            # --- llm safety check (only when fast filter flagged) ---
-            if fs["needs_llm_safety"]:
+            # --- blocklist: hard redirect, no LLM safety judge ---
+            # A coarse deny-list hit on the raw output is resolved deterministically
+            # (redirect to a fallback) and skips the slower LLM judge entirely.
+            if blocklist_hit(raw):
+                candidate = retry_exhausted_fallback(state.user_text)
+            # --- llm safety check (only when fast filter flagged AND not blocklisted) ---
+            elif fs["needs_llm_safety"]:
                 verdict = parse_verdict(await deps.safety.safety(candidate))
                 if verdict["safe_to_send"]:
                     candidate = verdict["final_answer"] or candidate

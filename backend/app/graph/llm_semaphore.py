@@ -42,9 +42,16 @@ class LLMThrottled(Exception):
 class RedisLlmSemaphore:
     """Cross-process concurrency guard backed by a Redis token list."""
 
-    def __init__(self, limit: int = 0, *, key: str = "llm_sem_tokens") -> None:
+    def __init__(
+        self,
+        limit: int = 0,
+        *,
+        key: str = "llm_sem_tokens",
+        acquire_timeout: float = 1.5,
+    ) -> None:
         self._limit = limit  # 0 = disabled (pass-through)
         self._key = key
+        self._acquire_timeout = acquire_timeout  # BLPOP wait before fail-fast
         self._initialized = False
         self._acquired = False  # tracks whether __aenter__ got a token
 
@@ -77,19 +84,28 @@ class RedisLlmSemaphore:
             from app.core.redis import get_redis_sync
 
             r = get_redis_sync()
-            # BLPOP blocks up to timeout. Timeout is per-turn (not per-wait):
-            # if the turn can't get a slot, it still proceeds (degraded mode).
+            # BLPOP blocks up to the acquire timeout. On timeout we fail FAST
+            # (raise LLMThrottled) rather than proceeding degraded: the worker
+            # already sends DEGRADATION_REPLY + clears the per-chat mutex on
+            # LLMThrottled, and a degraded parallel call would only compound the
+            # overload that caused the timeout.
             result = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: r.blpop(self._key, timeout=30)
+                None, lambda: r.blpop(self._key, timeout=self._acquire_timeout)
             )
-            if result is None:
-                logger.warning(
-                    "llm_semaphore: acquire timed out — proceeding without token",
-                    extra={"key": self._key},
-                )
-            self._acquired = True
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — Redis unavailable: degrade, don't hard-fail
             self._acquired = False
+            logger.warning(
+                "llm_semaphore: acquire errored — proceeding without token", exc_info=True
+            )
+            return self
+        if result is None:
+            self._acquired = False
+            logger.warning(
+                "llm_semaphore: acquire timed out — raising LLMThrottled (fail fast)",
+                extra={"key": self._key, "timeout": self._acquire_timeout},
+            )
+            raise LLMThrottled("llm_semaphore: acquire timed out")
+        self._acquired = True
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
@@ -127,7 +143,11 @@ def get_llm_semaphore() -> RedisLlmSemaphore:
         from app.core.config import get_settings
 
         s = get_settings()
-        _sem = RedisLlmSemaphore(limit=s.llm_concurrency_limit, key="llm_sem_tokens")
+        _sem = RedisLlmSemaphore(
+            limit=s.llm_concurrency_limit,
+            key="llm_sem_tokens",
+            acquire_timeout=s.llm_acquire_timeout_seconds,
+        )
     return _sem
 
 
@@ -138,5 +158,9 @@ def get_embed_semaphore() -> RedisLlmSemaphore:
         from app.core.config import get_settings
 
         s = get_settings()
-        _embed_sem = RedisLlmSemaphore(limit=s.embed_concurrency_limit, key="llm_embed_sem_tokens")
+        _embed_sem = RedisLlmSemaphore(
+            limit=s.embed_concurrency_limit,
+            key="llm_embed_sem_tokens",
+            acquire_timeout=s.llm_acquire_timeout_seconds,
+        )
     return _embed_sem

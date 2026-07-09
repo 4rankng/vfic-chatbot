@@ -55,16 +55,106 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
 
     empty_after_clean = len(cleaned) == 0
     too_long_for_chat = len(cleaned) > 1800
+    # Deterministic resolution for an over-long reply: truncate at a word
+    # boundary so the output is bounded even if the LLM safety judge is later
+    # disabled (Slice E.4). The flag still routes to the judge when enabled.
+    output = truncate_for_chat(cleaned or FALLBACK_REPLY) if too_long_for_chat else (
+        cleaned or FALLBACK_REPLY
+    )
     needs_llm_safety = empty_after_clean or too_long_for_chat or bool(_RISK_RE.search(raw))
 
     return {
-        "output": cleaned or FALLBACK_REPLY,
-        "final_answer": cleaned or FALLBACK_REPLY,
+        "output": output,
+        "final_answer": output,
         "safe_to_send": not needs_llm_safety,
         "issue_found": needs_llm_safety,
         "issue_type": "needs_llm_safety_check" if needs_llm_safety else "none",
         "needs_llm_safety": needs_llm_safety,
     }
+
+
+def truncate_for_chat(text: str, limit: int = 1800) -> str:
+    """Truncate to ~``limit`` chars at the nearest preceding word boundary.
+
+    Falls back to a hard cut when there is no space within range. Appends an
+    ellipsis so the truncation is visible to the user.
+    """
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text.rfind(" ", 0, limit)
+    if cut <= 0:
+        cut = limit
+    return text[:cut].rstrip() + " …"
+
+
+# --- Lexical blocklist (fast, deterministic hard-redirect) --------------------
+# A coarse, high-PRECISION deny-list for content the bot must never emit, checked
+# on the LLM output BEFORE the (slower) LLM safety judge. A hit redirects to a
+# fallback and skips the judge entirely (Slice E.1). The list is deliberately
+# narrow — clear prompt-injection / instruction-override / system-leakage, plus
+# unmistakable vulgarity and self-harm/violence — so legitimate recruitment
+# replies are not bounced. Nuanced / off-topic content (politics, borderline
+# cases) is left to the LLM safety judge (Slice E.4). Tune by editing here.
+_BLOCKLIST_PATTERNS = (
+    # Prompt-injection / instruction-override / system-leakage (English).
+    re.compile(
+        r"ignore\s+(all\s+|the\s+|all\s+the\s+)?(previous|prior|above|earlier)\s+"
+        r"(instructions?|prompts?|rules?|directives?)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"disregard\s+(the\s+|all\s+|any\s+|previous\s+)?(instructions?|prompts?|rules?|guidance)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(you are now\b|act as if\b|act as a\b|act as an\b|pretend (you are|to be)|"
+        r"new (instructions?|role)|override (your|the|all) (instructions?|rules?))",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(system prompt|reveal (your|the) (instructions?|prompt|rules?|guidelines?)|"
+        r"jailbreak|\bDAN\b)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"</?(system|prompt|instructions?|minimax)\b", re.IGNORECASE),
+    # Vietnamese prompt-injection / leakage equivalents.
+    re.compile(
+        r"bỏ\s+qua\s+(các\s+|những\s+|mọi\s+)?(lệnh|hướng\s+dẫn|quy\s+tắc|yêu\s+cầu|chỉ\s+thị)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(lệnh\s+mới|hướng\s+dẫn\s+mới|quy\s+tắc\s+mới|bỏ\s+qua\s+hướng\s+dẫn|"
+        r"vượt\s+qua\s+(lệnh|hướng\s+dẫn|quy\s+tắc))",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(bạn (đang|sẽ|giờ) là|đóng\s+vai|giả\s+vờ|lời\s+nhắc\s+(của\s+)?(hệ\s+thống|bạn)|"
+        r"tiết\s+lộ\s+(lệnh|hướng\s+dẫn|prompt|quy\s+tắc))",
+        re.IGNORECASE,
+    ),
+    # Self-harm / violence.
+    re.compile(
+        r"(tự\s+sát|tự\s+tử|tự\s+làm\s+khổ|giết\s+(người|mình|cả\s+nhà))",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(kill\s+(myself|yourself|himself|herself|others|him|her|them)|"
+        r"harm\s+(myself|yourself|others)|suicide|self[\s-]?harm)\b",
+        re.IGNORECASE,
+    ),
+    # Unmistakable vulgarity / profanity (Vietnamese + English), narrow set.
+    re.compile(r"(địt|lồn|cặc|buồi|dâm)", re.IGNORECASE),
+    re.compile(
+        r"\b(fuck|shit|bitch|cunt|dick|asshole|motherfucker)\b", re.IGNORECASE
+    ),
+)
+
+
+def blocklist_hit(raw: str) -> bool:
+    """True if the LLM output matches a hard-redirect blocklist term."""
+    raw = raw or ""
+    return any(pattern.search(raw) for pattern in _BLOCKLIST_PATTERNS)
 
 
 # --- Verdict Parser -----------------------------------------------------------

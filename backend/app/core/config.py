@@ -208,9 +208,13 @@ class Settings(BaseSettings):
     # LLM/embed semaphores are ENABLED by default (see graph/llm_semaphore.py):
     # a Redis token list throttles concurrent provider calls across ALL worker
     # processes so a burst doesn't trip MiniMax/Gemini 429s. A turn that can't
-    # acquire a token within 30s proceeds anyway (degraded) — no deadlock risk.
-    # Tune from 429/latency metrics; raise if normal-load latency suffers.
-    llm_concurrency_limit: int = 4  # max concurrent LLM calls, deployment-wide
+    # acquire a token within llm_acquire_timeout_seconds fail-fasts (raises
+    # LLMThrottled → DEGRADATION_REPLY + mutex clear) rather than queueing
+    # silently — no ~30s stall, no deadlock risk.
+    # Tune from 429/latency metrics; raise concurrency if normal-load latency suffers.
+    llm_concurrency_limit: int = 8  # max concurrent LLM calls, deployment-wide
+    llm_acquire_timeout_seconds: float = 1.5  # BLPOP wait before LLMThrottled
+    llm_429_retry_sleep_seconds: float = 0.5  # backoff between the two 429 attempts
     max_llm_calls_per_turn: int = (
         6  # agent tool-loop ceiling (replaces hardcoded DEFAULT_MAX_ITERS)
     )

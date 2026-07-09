@@ -178,20 +178,18 @@ class TestSemaphoreDriftDetection:
 
 
 class TestSemaphoreTimeout:
-    """BLPOP timeout falls through (degraded mode)."""
+    """BLPOP timeout fail-fasts (raises LLMThrottled, no silent degraded stall)."""
 
     @pytest.mark.asyncio
-    async def test_timeout_allows_continuation(self, fake_redis):
-        """When BLPOP returns None (timeout), the turn still proceeds."""
-        sem = RedisLlmSemaphore(limit=1, key="test_timeout")
-        # Skip _ensure_tokens so no tokens are auto-added → BLPOP returns None
-        sem._initialized = True
+    async def test_timeout_raises_llm_throttled(self, fake_redis):
+        """When BLPOP returns None (timeout), __aenter__ raises LLMThrottled so the
+        worker sends DEGRADATION_REPLY and clears the per-chat mutex."""
+        sem = RedisLlmSemaphore(limit=1, key="test_timeout", acquire_timeout=0)
+        sem._initialized = True  # skip token population → BLPOP returns None
         with patch(_REDIS_PATCH, return_value=fake_redis):
-            with patch("app.graph.llm_semaphore.logger") as mock_logger:
+            with pytest.raises(LLMThrottled):
                 async with sem:
                     pass
-                # acquire timed out → warning logged
-                mock_logger.warning.assert_called()
 
 
 # ── LLMThrottled exception ─────────────────────────────────────────────────
@@ -286,8 +284,9 @@ class TestRetry429:
         assert bound.ainvoke.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_retry_jitter_between_1_5_and_2_5_seconds(self):
-        """Retry sleep should be 2.0 ± 0.5s."""
+    async def test_retry_sleep_uses_configured_setting(self):
+        """Retry sleep is settings.llm_429_retry_sleep_seconds (no hardcoded jitter)."""
+        from app.core.config import get_settings
         from app.graph.clients import _llm_call_with_retry
 
         bound = AsyncMock()
@@ -306,7 +305,7 @@ class TestRetry429:
             with patch("app.graph.clients.asyncio.sleep", side_effect=_capture_sleep):
                 await _llm_call_with_retry(bound, [])
         assert len(sleep_args) == 1
-        assert 1.5 <= sleep_args[0] <= 2.5
+        assert sleep_args[0] == get_settings().llm_429_retry_sleep_seconds
 
 
 class TestFallbackLLMObservability:
