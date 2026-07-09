@@ -16,7 +16,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -131,6 +131,12 @@ class BotRun(Base):
     outcome: Mapped[BotRunOutcome] = mapped_column(
         Enum(BotRunOutcome, name="bot_run_outcome", create_type=False), nullable=False
     )
+    # Per-stage wall-clock timing (ms) captured by run_turn for the performance
+    # dashboard: webhook_to_pickup_ms / preamble_ms / lane / lead_ms / llm_ms /
+    # safety_ms / send_ms / total_ms (+ queue_depth). Nullable — older runs and
+    # any path that skips a stage simply omit the key. Aggregated via
+    # percentile_cont over (stage_timings->>'<key>')::int.
+    stage_timings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class Message(Base):

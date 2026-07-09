@@ -17,6 +17,7 @@ from app.api import (
     jobs,
     knowledge,
     leads,
+    performance,
     personas,
     projects,
     realtime,
@@ -103,6 +104,7 @@ app.include_router(projects.router, prefix=API_V1_PREFIX)
 app.include_router(personas.router, prefix=API_V1_PREFIX)
 app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
+app.include_router(performance.router, prefix=API_V1_PREFIX)
 app.include_router(integrations.router, prefix=API_V1_PREFIX)
 app.include_router(realtime.router, prefix="/realtime")
 app.include_router(webhooks.router)
@@ -147,42 +149,13 @@ async def metrics() -> dict:
 async def health_queue() -> dict:
     """Chat-path observability: queue depth, LLM latency, 429 count, worker saturation.
 
-    Unauthenticated (internal ops endpoint, same trust level as /health).
+    Unauthenticated (internal ops endpoint, same trust level as /health). The
+    snapshot lives in app.core.ops_health so /admin/performance reuses the same
+    live tiles without duplicating the Redis/RQ reads.
     """
-    def _collect() -> dict:
-        from rq import Queue, Worker
+    from app.core.ops_health import collect_queue_health
 
-        from app.core.redis import get_redis_sync
-        from app.graph.clients import (
-            _RKEY_429,
-            _RKEY_FALLBACK_COUNT,
-            _RKEY_INVOKE_COUNT,
-            _RKEY_INVOKE_MS,
-        )
-
-        conn = get_redis_sync()
-        qd = Queue("webhook_high", connection=conn).count
-        total_w = Worker.count(connection=conn)
-        busy_w = sum(1 for w in (Worker.all(connection=conn) or []) if w.get_current_job() is not None)
-
-        # LLM metrics from Redis counters (best-effort, may be missing if no turns yet).
-        invoke_count = int(conn.get(_RKEY_INVOKE_COUNT) or 0)
-        invoke_total_ms = int(conn.get(_RKEY_INVOKE_MS) or 0)
-        avg_latency_ms = round(invoke_total_ms / invoke_count) if invoke_count else 0
-        minimax_429s_1m = int(conn.get(_RKEY_429) or 0)
-        llm_fallbacks_2m = int(conn.get(_RKEY_FALLBACK_COUNT) or 0)
-
-        return {
-            "queue_depth": qd,
-            "busy_workers": busy_w,
-            "total_workers": total_w,
-            "llm_avg_latency_ms": avg_latency_ms,
-            "llm_invokes_last_2m": invoke_count,
-            "minimax_429s_last_1m": minimax_429s_1m,
-            "llm_fallbacks_last_2m": llm_fallbacks_2m,
-        }
-
-    return await asyncio.to_thread(_collect)
+    return await asyncio.to_thread(collect_queue_health)
 
 
 @app.middleware("http")

@@ -106,7 +106,7 @@ def _stub_agent(monkeypatch, *replies) -> None:
     """Replace ``_agent_turn`` with a sequence of canned replies / exceptions."""
     seq = list(replies)
 
-    async def _fake(state, deps, user_text, *, chat_id, recent_messages):
+    async def _fake(state, deps, user_text, *, chat_id, recent_messages, timings=None):
         r = seq.pop(0) if seq else ""
         if isinstance(r, Exception):
             raise r
@@ -270,7 +270,7 @@ async def test_agent_runs_to_completion_past_deadline(monkeypatch):
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
 
-    async def _slow_agent(state, deps, user_text, *, chat_id, recent_messages):
+    async def _slow_agent(state, deps, user_text, *, chat_id, recent_messages, timings=None):
         await asyncio.sleep(0.3)  # well past the 0.1s former cap
         return "Câu trả lời thật của tôi."
 
@@ -308,7 +308,7 @@ async def test_slow_turn_sends_one_slow_ack_then_real_answer(monkeypatch):
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
 
-    async def _slow_agent(state, deps, user_text, *, chat_id, recent_messages):
+    async def _slow_agent(state, deps, user_text, *, chat_id, recent_messages, timings=None):
         # Long enough for the heartbeat's ~0.5s tick to fire the ack while the turn
         # is still in flight, well inside the agent deadline.
         await asyncio.sleep(0.8)
@@ -354,7 +354,7 @@ async def test_greeting_hits_fast_lane_no_llm_no_ack_no_persist(monkeypatch):
     slow_ack_seconds), and no candidate extraction runs (canned reply carries no Q&A)."""
     from app.graph.fast_lane import GREETING_REPLY
 
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages):
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
         raise AssertionError("agent must not be called for a fast-lane greeting")
 
     monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
@@ -396,7 +396,7 @@ async def test_faq_bypass_hit_sends_answer_without_agent_or_persist(monkeypatch)
     is never called, and no candidate extraction runs (the answer is canonical)."""
     from app.graph.ports import FaqBypassResult
 
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages):
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
         raise AssertionError("agent must not be called on a FAQ-bypass hit")
 
     monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
@@ -494,3 +494,117 @@ async def test_blocklisted_reply_redirects_without_llm_judge(monkeypatch):
     assert res["outcome"] == "sent"
     assert res["reply"] == GENERIC_FALLBACK
     assert zalo.sent == [("z1", GENERIC_FALLBACK)]
+
+
+# ---------------------------------------------------------------------------
+# Per-stage stage_timings capture (Option A metrics)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
+    """Agent path on an owned send threads stage_timings into record_bot_outcome
+    with lane='agent', the lead/llm stamps collected inside _agent_turn, plus
+    send_ms and total_ms."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+
+    async def _fake(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        # Emulate the real _agent_turn stamping into the shared timings dict.
+        if timings is not None:
+            timings["lead_ms"] = 111
+            timings["llm_ms"] = 999
+        return "Chào bạn!"
+
+    monkeypatch.setattr(runner, "_agent_turn", _fake)
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc))
+
+    assert res["outcome"] == "sent"
+    assert recorded, "record_bot_outcome must be called"
+    st = recorded[0]["stage_timings"]
+    assert st["lane"] == "agent"
+    assert st["lead_ms"] == 111          # threaded through from _agent_turn
+    assert st["llm_ms"] == 999
+    assert st["send_ms"] >= 0
+    assert st["total_ms"] >= st["send_ms"]
+
+
+@pytest.mark.asyncio
+async def test_stage_timings_records_fast_lane_without_lead_or_llm(monkeypatch):
+    """A fast-lane greeting tags lane='fast_lane' and skips the lead/llm stages."""
+    from app.graph.fast_lane import GREETING_REPLY
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        raise AssertionError("agent must not be called for a fast-lane greeting")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="chào bạn")
+    res = await run_turn(state, _deps(_FakeZalo(), conversation=svc))
+
+    assert res["outcome"] == "faq_cache"
+    assert res["reply"] == GREETING_REPLY
+    st = recorded[0]["stage_timings"]
+    assert st["lane"] == "fast_lane"
+    assert "lead_ms" not in st
+    assert "llm_ms" not in st
+    assert st["total_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_stage_timings_records_faq_bypass_lane(monkeypatch):
+    """A FAQ-bypass hit tags lane='faq_bypass'."""
+    from app.graph.ports import FaqBypassResult
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        raise AssertionError("agent must not be called on a FAQ-bypass hit")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    bypass = _FakeFaqBypass(
+        result=FaqBypassResult(answer="Câu trả lời FAQ", faq_id="x", tier="hybrid", score=0.9)
+    )
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
+
+    assert res["outcome"] == "faq_bypass"
+    assert recorded[0]["stage_timings"]["lane"] == "faq_bypass"
+
+
+@pytest.mark.asyncio
+async def test_stage_timings_suppressed_has_no_send_stage(monkeypatch):
+    """Ownership lost during generation -> suppressed: lane still 'agent', total_ms
+    recorded, but no send_ms (the send was never attempted)."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=False)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc))
+
+    assert res["outcome"] == "suppressed"
+    st = recorded[0]["stage_timings"]
+    assert st["lane"] == "agent"
+    assert "send_ms" not in st
+    assert st["total_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_stage_timings_captures_preamble_and_webhook_to_pickup(monkeypatch):
+    """When the worker stamps received_at_epoch + preamble_start_epoch + queue_depth,
+    the turn records the enqueue→pickup gap, the preamble, and the queue depth."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+
+    state = _state()
+    state.received_at_epoch = time.time() - 0.4
+    state.preamble_start_epoch = time.time() - 0.2  # 0.2s after webhook receipt
+    state.queue_depth = 3
+
+    res = await run_turn(state, _deps(_FakeZalo(), conversation=svc))
+
+    assert res["outcome"] == "sent"
+    st = recorded[0]["stage_timings"]
+    assert st["webhook_to_pickup_ms"] >= 150       # ~0.2s enqueue→pickup
+    assert st["preamble_ms"] >= 0
+    assert st["queue_depth"] == 3

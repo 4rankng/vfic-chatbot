@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, renderHook } from "vitest-browser-react";
 
 import type { Message } from "../types";
@@ -21,6 +21,7 @@ import {
   mergeRealtimePage,
   useConversationRealtime,
 } from "./useConversationRealtime";
+import { useMessageStore } from "./messageStore";
 
 const msg = (id: number, conversationId = "c1"): Message => ({
   id: String(id),
@@ -52,6 +53,13 @@ const deferred = <T,>(): Deferred<T> => {
 afterEach(async () => {
   await cleanup();
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  useMessageStore.setState({
+    conversations: new Map(),
+    pendingOptimistic: new Map(),
+  });
 });
 
 describe("mergeChronological", () => {
@@ -213,6 +221,55 @@ describe("useConversationRealtime", () => {
     expect(hook.result.current.messages.map((message) => message.content)).toEqual([
       "active-conversation message 3",
     ]);
+  });
+
+  it("removes a pending optimistic human reply when the server echo has a new id and timestamp", async () => {
+    const activePage = deferred<MessagesPage>();
+    let pushRealtime: ((messages: Message[]) => void) | undefined;
+
+    mockChatRepository.getConversationMessages.mockReturnValue(activePage.promise);
+    mockChatRepository.subscribeToMessages.mockImplementation(
+      (...args: unknown[]) => {
+        pushRealtime = args[1] as (messages: Message[]) => void;
+        return () => {
+          /* cleanup */
+        };
+      },
+    );
+
+    const hook = await renderHook(() =>
+      useConversationRealtime("active-conversation"),
+    );
+
+    await hook.act(async () => {
+      activePage.resolve({ messages: [], hasMore: false });
+      await activePage.promise;
+    });
+
+    await hook.act(async () => {
+      hook.result.current.insertOptimistic("chào bạn", "recruiter-1");
+    });
+    expect(hook.result.current.messages).toHaveLength(1);
+    expect(hook.result.current.messages[0].id).toMatch(/^optimistic-/);
+
+    await hook.act(async () => {
+      pushRealtime?.([
+        {
+          id: "server-100",
+          zalo_message_id: "zalo-100",
+          conversation_id: "active-conversation",
+          type: "outbound",
+          content: "chào bạn",
+          delivery_status: "sent",
+          data: { recruiter_id: "recruiter-1" },
+          created_at: new Date(Date.now() + 1000).toISOString(),
+        },
+      ]);
+    });
+
+    expect(hook.result.current.messages).toHaveLength(1);
+    expect(hook.result.current.messages[0].id).toBe("server-100");
+    expect(hook.result.current.messages[0].delivery_status).toBe("sent");
   });
 
   it("discards middle-mount late resolve in a 3-way rapid switch (A→B→C, resolve C→A→B)", async () => {

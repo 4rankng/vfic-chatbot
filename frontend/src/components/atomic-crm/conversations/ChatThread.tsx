@@ -256,6 +256,7 @@ export const ChatThread = ({
   const composerWrapRef = useRef<HTMLElement>(null);
   const isAtBottomRef = useRef(true);
   const isPrependingRef = useRef(false);
+  const isSendingRef = useRef(false);
   const initialJumpDoneRef = useRef(false);
   const lastLoadMoreAtRef = useRef(0);
   const newestMessageIdRef = useRef<string | null>(null);
@@ -435,7 +436,8 @@ export const ChatThread = ({
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = reply.trim();
-    if (!trimmed || !canHumanReply) return;
+    if (!trimmed || !canHumanReply || isSendingRef.current) return;
+    isSendingRef.current = true;
     const recruiterId = identity?.id != null ? String(identity.id) : "";
     const tempId = recruiterId ? insertOptimistic(trimmed, recruiterId) : "";
     const sentText = trimmed;
@@ -451,6 +453,7 @@ export const ChatThread = ({
       if (tempId) markOptimisticFailed(tempId);
       setReply(sentText);
     } finally {
+      isSendingRef.current = false;
       setIsSending(false);
     }
   };

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 
 from app.graph.llm_semaphore import LLMThrottled
@@ -50,6 +51,30 @@ def _enqueue_persist(persist_job: dict) -> None:
     enqueue_persist_candidate(persist_job)
 
 
+def _preamble_timings(state, started_at, *, lane: str, throttle: bool = False) -> dict:
+    """Build the partial ``stage_timings`` slice the worker can compute.
+
+    Covers only the enqueue/preamble/queue-depth slice (the normal full dict is
+    built by ``run_turn``). Used on the LLMThrottled degradation path, which
+    the worker owns end-to-end, so the dashboard can still attribute a degraded
+    turn to a stage and flag it via ``throttle: True``.
+    """
+    timings: dict = {"lane": lane}
+    if state.queue_depth is not None:
+        timings["queue_depth"] = state.queue_depth
+    if throttle:
+        timings["throttle"] = True
+    if state.received_at_epoch > 0 and state.preamble_start_epoch > 0:
+        timings["webhook_to_pickup_ms"] = max(
+            0, int(round((state.preamble_start_epoch - state.received_at_epoch) * 1000))
+        )
+    if started_at is not None and state.preamble_start_epoch > 0:
+        timings["preamble_ms"] = max(
+            0, int(round((started_at.timestamp() - state.preamble_start_epoch) * 1000))
+        )
+    return timings
+
+
 async def _run_job_async(job: dict) -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run.
@@ -57,28 +82,25 @@ async def _run_job_async(job: dict) -> None:
     from app.graph.factories import build_deps
     from app.graph.runner import BotRunState, run_turn
 
-    # ── Phase 0 observability: log queue depth + worker ratio at job start ──
+    # Wall-clock at job entry (epoch) so run_turn can split the enqueue→turn-start
+    # preamble (build_deps + Phase-0 scan) from the webhook→pickup gap. Both are
+    # measured inside this worker process, so time.time() (epoch) is fine.
+    job_start_epoch = time.time()
+
+    # ── Phase 0 observability: snapshot webhook_high depth at job start ──
+    # Carried into BotRunState.stage_timings (queue_depth) so the performance
+    # dashboard can correlate latency spikes with saturation. Best-effort —
+    # never breaks a turn. (busy/total worker counts are read live by
+    # /health/queue and /admin/performance, so they aren't stored per-turn.)
+    queue_depth: int | None = None
     try:
-        from rq import Queue, Worker
+        from rq import Queue
 
         from app.core.redis import get_redis_sync
 
-        conn = get_redis_sync()
-        qd = Queue("webhook_high", connection=conn).count
-        total_w = Worker.count(connection=conn)
-        # busy = workers where current_job is not None
-        busy_w = sum(1 for w in (Worker.all(connection=conn) or []) if w.get_current_job() is not None)
-        logger.info(
-            "chat_turn_start",
-            extra={
-                "conversation_id": job.get("conversation_id", "?"),
-                "queue_depth": qd,
-                "busy_workers": busy_w,
-                "total_workers": total_w,
-            },
-        )
+        queue_depth = Queue("webhook_high", connection=get_redis_sync()).count
     except Exception:  # noqa: BLE001
-        pass  # non-fatal — don't break the turn for observability
+        pass
 
     from app.core.config import get_settings
 
@@ -91,6 +113,8 @@ async def _run_job_async(job: dict) -> None:
         user_name=job.get("user_name", ""),
         received_at_epoch=received_at_epoch,
         deadline_at_epoch=(received_at_epoch + sla) if received_at_epoch else 0.0,
+        preamble_start_epoch=job_start_epoch,
+        queue_depth=queue_depth,
     )
     async with worker_session() as db:
         deps = await build_deps(db)
@@ -131,6 +155,9 @@ async def _run_job_async(job: dict) -> None:
                         sent = send_result.ok
                         external_error = None if send_result.ok else send_result.error
                         zalo_message_id = send_result.msg_id
+                    throttle_timings = _preamble_timings(
+                        state, started_at, lane="agent", throttle=True
+                    )
                     await svc.record_bot_outcome(
                         conv,
                         version_at_start=state.version_at_start,
@@ -140,6 +167,7 @@ async def _run_job_async(job: dict) -> None:
                         pending_message_id=state.pending_message_id,
                         external_error=external_error,
                         zalo_message_id=zalo_message_id,
+                        stage_timings=throttle_timings,
                     )
             except Exception:  # noqa: BLE001
                 logger.error("failed to send degradation reply", exc_info=True)

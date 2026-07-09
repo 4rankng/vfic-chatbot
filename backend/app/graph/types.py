@@ -34,6 +34,14 @@ class BotRunState:
     # ``_remaining(state)`` against it. ``0.0`` = unset → unbounded (legacy, tests).
     received_at_epoch: float = 0.0
     deadline_at_epoch: float = 0.0
+    # Epoch (time.time()) stamped at RQ job entry by the worker, so run_turn can
+    # split the enqueue→turn-start preamble (build_deps + Phase-0 scan) from the
+    # webhook→pickup gap. 0.0 = unset (tests / pre-instrumentation).
+    preamble_start_epoch: float = 0.0
+    # webhook_high depth snapshot at job entry (None when Redis was unreachable).
+    # Carried into stage_timings so the dashboard correlates latency with queue
+    # saturation without re-implementing the dead chat_turn_start log.
+    queue_depth: int | None = None
 
 
 class TurnOutcome(TypedDict):

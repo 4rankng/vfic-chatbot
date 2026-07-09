@@ -28,6 +28,7 @@ import personas from "../personas";
 import integrations from "../integrations";
 import { Dashboard } from "../dashboard/Dashboard";
 import { MobileDashboard } from "../dashboard/MobileDashboard";
+import { PerformancePage } from "../performance/PerformancePage";
 import { Layout } from "../layout/Layout";
 import { MobileLayout } from "../layout/MobileLayout";
 import {
@@ -340,6 +341,14 @@ export const CRM = ({
       {...rest}
     >
       <CustomRoutes>
+        <Route
+          path="/hieu-suat"
+          element={
+            <RouteBoundary>
+              <PerformancePage />
+            </RouteBoundary>
+          }
+        />
         <Route
           path={PROFILE_PATH}
           element={

@@ -30,11 +30,64 @@ export {
 } from "./messageOrdering";
 
 export const CHAT_MESSAGES_PAGE_SIZE = 20;
+const OPTIMISTIC_ID_PREFIX = "optimistic-";
+const OPTIMISTIC_CONFIRM_WINDOW_MS = 5 * 60 * 1000;
 
 const keepConversationMessages = (
   messages: Message[],
   conversationId: string,
 ) => messages.filter((message) => message.conversation_id === conversationId);
+
+const parseMessageTime = (message: Message) => {
+  const value = Date.parse(message.created_at);
+  return Number.isFinite(value) ? value : null;
+};
+
+const isConfirmedHumanReply = (message: Message) =>
+  message.type === "outbound" &&
+  Boolean(message.data?.recruiter_id) &&
+  !message.id.startsWith(OPTIMISTIC_ID_PREFIX);
+
+const findConfirmedOptimisticIds = (
+  conversationId: string,
+  confirmedMessages: Message[],
+) => {
+  const state = useMessageStore.getState();
+  const pending = state.pendingOptimistic.get(conversationId);
+  const conv = state.conversations.get(conversationId);
+  if (!pending || pending.size === 0 || !conv) return [];
+
+  const matchedTempIds = new Set<string>();
+  for (const confirmed of confirmedMessages.filter(isConfirmedHumanReply)) {
+    const confirmedAt = parseMessageTime(confirmed);
+    let bestMatch: { delta: number; id: string } | null = null;
+
+    for (const tempId of pending) {
+      if (matchedTempIds.has(tempId)) continue;
+      const temp = conv.byId.get(tempId);
+      if (!temp || temp.delivery_status === "failed") continue;
+      if (temp.content !== confirmed.content) continue;
+      if (temp.type !== confirmed.type) continue;
+      if (temp.data?.recruiter_id !== confirmed.data?.recruiter_id) continue;
+
+      const tempAt = parseMessageTime(temp);
+      const delta =
+        confirmedAt != null && tempAt != null
+          ? Math.abs(confirmedAt - tempAt)
+          : 0;
+      if (delta > OPTIMISTIC_CONFIRM_WINDOW_MS) continue;
+      if (!bestMatch || delta < bestMatch.delta) {
+        bestMatch = { delta, id: tempId };
+      }
+    }
+
+    if (bestMatch) {
+      matchedTempIds.add(bestMatch.id);
+    }
+  }
+
+  return Array.from(matchedTempIds);
+};
 
 export const useConversationRealtime = (conversationId?: string) => {
   // Drive the store from this hook. The store holds the actual state.
@@ -100,6 +153,12 @@ export const useConversationRealtime = (conversationId?: string) => {
           sortMessagesChronologically(mapped),
           activeConversationId,
         );
+        for (const tempId of findConfirmedOptimisticIds(
+          activeConversationId,
+          chronological,
+        )) {
+          removeMessage(activeConversationId, tempId);
+        }
         // setMessages replaces the conversation's set entirely (initial load).
         // Any realtime insert that landed during the await is unioned in by
         // merging against the current store snapshot first.
@@ -145,30 +204,14 @@ export const useConversationRealtime = (conversationId?: string) => {
           );
           if (currentLatest.length === 0) return;
 
-          // Sweep optimistic temps whose content+ts matches a real echo, then
-          // upsert the real page. Rocket.Chat reuses the client _id on confirm;
-          // our backend doesn't, so we sweep by content+timestamp.
-          const state = useMessageStore.getState();
-          const pending = state.pendingOptimistic.get(activeConversationId);
-          if (pending && pending.size > 0) {
-            const realContentSet = new Set(
-              currentLatest
-                .filter((m) => m.type === "outbound" && m.data?.recruiter_id)
-                .map((m) => `${m.content}|${m.created_at}`),
-            );
-            if (realContentSet.size > 0) {
-              for (const tempId of pending) {
-                const tempMsg = state.conversations
-                  .get(activeConversationId)
-                  ?.byId.get(tempId);
-                if (
-                  tempMsg &&
-                  realContentSet.has(`${tempMsg.content}|${tempMsg.created_at}`)
-                ) {
-                  removeMessage(activeConversationId, tempId);
-                }
-              }
-            }
+          // Sweep optimistic temps confirmed by real server echoes. The backend
+          // creates its own ids/timestamps, so pair by sender + content within a
+          // tight send window instead of requiring timestamp equality.
+          for (const tempId of findConfirmedOptimisticIds(
+            activeConversationId,
+            currentLatest,
+          )) {
+            removeMessage(activeConversationId, tempId);
           }
 
           // Merge only messages in the loaded window (drop older-than-earliest).
@@ -230,6 +273,9 @@ export const useConversationRealtime = (conversationId?: string) => {
           newestId,
         );
         if (missed.length === 0) return;
+        for (const tempId of findConfirmedOptimisticIds(conversationId, missed)) {
+          removeMessage(conversationId, tempId);
+        }
         upsertMessages(conversationId, missed);
       } catch {
         // Best-effort gap-fill.
@@ -245,7 +291,7 @@ export const useConversationRealtime = (conversationId?: string) => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
     };
-  }, [conversationId, upsertMessages]);
+  }, [conversationId, removeMessage, upsertMessages]);
 
   // Load-more (scroll up for older history). With virtua's `shift` prop handling
   // scroll anchoring, we no longer track firstItemIndex — just fetch + upsert.

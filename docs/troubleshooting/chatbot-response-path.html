@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChatBot Response Path — Troubleshooting Map</title>
+<style>
+  :root {
+    --teal: #0F766E;
+    --teal-d: #0b524c;
+    --slate-900: #0f172a;
+    --slate-700: #334155;
+    --slate-500: #64748b;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+    --slate-50: #f8fafc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--slate-900);
+    background: var(--slate-50);
+    line-height: 1.55;
+  }
+  header {
+    background: linear-gradient(135deg, var(--teal) 0%, var(--teal-d) 100%);
+    color: #fff;
+    padding: 28px 40px 22px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  header p { margin: 0; opacity: 0.92; font-size: 14px; }
+  header .meta { margin-top: 10px; font-size: 12px; opacity: 0.8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 40px 80px; }
+  section { margin-bottom: 38px; }
+  h2 {
+    font-size: 19px; color: var(--slate-900); margin: 0 0 4px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--teal); color: #fff; font-size: 14px; font-weight: 700;
+  }
+  .sub { color: var(--slate-500); font-size: 13px; margin: 0 0 16px 38px; }
+  .diagram {
+    background: #fff; border: 1px solid var(--slate-200); border-radius: 12px;
+    padding: 22px; overflow-x: auto; box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+  }
+  .diagram .mermaid { display: flex; justify-content: center; }
+
+  /* Legend */
+  .legend {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px; margin-bottom: 8px;
+  }
+  .chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 11px; border-radius: 8px; background: #fff;
+    border: 1px solid var(--slate-200); font-size: 12.5px; color: var(--slate-700);
+  }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid; flex-shrink: 0; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; background: #fff;
+    border: 1px solid var(--slate-200); border-radius: 12px; overflow: hidden; font-size: 13px; }
+  th, td { padding: 11px 13px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--slate-200); }
+  th { background: var(--slate-100); color: var(--slate-700); font-weight: 650; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr:last-child td { border-bottom: none; }
+  td.stage { font-weight: 650; color: var(--slate-900); white-space: nowrap; }
+  td .grep { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--teal-d); background: var(--slate-50); padding: 1px 5px; border-radius: 4px; }
+  tr.bad td.stage { color: #c0392b; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  pre.sql { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--slate-50);
+    border: 1px solid var(--slate-200); border-radius: 8px; padding: 12px 14px; overflow-x: auto; color: var(--slate-900); line-height: 1.5; margin: 8px 0; }
+  .qlabel { font-weight: 650; color: var(--slate-900); margin: 16px 0 4px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .qlabel .num { background: var(--slate-700); }
+
+  .callout {
+    background: #ecfdf5; border-left: 3px solid var(--teal);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 13px; color: var(--slate-700);
+    margin-top: 14px;
+  }
+  .callout strong { color: var(--teal-d); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  footer { color: var(--slate-500); font-size: 12px; margin-top: 30px; border-top: 1px solid var(--slate-200); padding-top: 16px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ChatBot Response Path — Troubleshooting Map</h1>
+  <p>The moving blocks of one bot turn: Zalo user message → webhook → RQ worker → graph brain → Zalo reply. Follow the pipe, find the broken block.</p>
+  <div class="meta">bot.tingting.vip · FastAPI + RQ + LangGraph · config verified 2026-07-09</div>
+</header>
+
+<div class="wrap">
+
+  <!-- LEGEND -->
+  <section>
+    <h2><span class="num">·</span>Legend — color = which layer owns the block</h2>
+    <p class="sub">Red blocks are where a turn dies silently. Trace the logs top-to-bottom; the last block that fired is your suspect.</p>
+    <div class="legend">
+      <div class="chip"><span class="swatch" style="background:#a5d8ff;border-color:#1971c2"></span>Webhook (sync &lt; 1s)</div>
+      <div class="chip"><span class="swatch" style="background:#fff3bf;border-color:#fab005"></span>RQ boundary</div>
+      <div class="chip"><span class="swatch" style="background:#d0bfff;border-color:#7048e8"></span>Graph brain</div>
+      <div class="chip"><span class="swatch" style="background:#b2f2bb;border-color:#2f9e44"></span>Outbound send</div>
+      <div class="chip"><span class="swatch" style="background:#ffd8a8;border-color:#e8590c"></span>Decision</div>
+      <div class="chip"><span class="swatch" style="background:#ffc9c9;border-color:#e03131"></span>Fails silently</div>
+      <div class="chip"><span class="swatch" style="background:#ffe8cc;border-color:#fd7e14"></span>Degraded / slow path</div>
+      <div class="chip"><span class="swatch" style="background:#e9ecef;border-color:#868e96"></span>Reconcile safety net</div>
+    </div>
+  </section>
+
+  <!-- DIAGRAM 1 -->
+  <section>
+    <h2><span class="num">1</span>The moving blocks — full response path</h2>
+    <p class="sub">Each box is one block the message passes through. Numbered 1 → 16. When the bot misbehaves, find the highest-numbered block that left a trace and the lowest-numbered one that didn't — the bug lives between them.</p>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    Start([Zalo user sends text]):::start
+
+    subgraph WH["WEBHOOK LAYER  -  must ack under 1s"]
+      direction LR
+      B1["1  Auth verify&lt;br/&gt;Bot HMAC shared-secret / OA x-zevent-signature"]:::wh
+      B2["2  Normalize&lt;br/&gt;only text enters turn queue&lt;br/&gt;receipts / follow / media to side event"]:::wh
+      B3["3  Dedup claim&lt;br/&gt;atomic insert, 8s msg_id window"]:::wh
+      B4["4  record_inbound&lt;br/&gt;persist msg, bump version, unread++"]:::wh
+      B5{"5  run_start_guard&lt;br/&gt;BOT ok / SEMI_AUTO 5min / HUMAN starve"}:::dec
+      B6["6  acquire_lock&lt;br/&gt;per-chat mutex, TTL 180s"]:::wh
+      B7["7  typing + enqueue&lt;br/&gt;queue webhook_high, depth under 40"]:::wh
+      B1 --> B2 --> B3 --> B4 --> B5
+      B5 -- ok --> B6
+      B6 -- won lock --> B7
+      B5 -- starve --> F1([silent: no turn]):::bad
+      B6 -- already locked --> F2([silent: locked]):::bad
+      B7 -- enqueue fail / depth over 40 --> F3([HTTP 503: Zalo retries]):::bad
+    end
+
+    Start --> B1
+    B7 --> Q1
+
+    subgraph RQ["RQ BOUNDARY  -  separate process, one event loop"]
+      direction LR
+      Q1["8  run_chat_turn_job&lt;br/&gt;deadline = recv_epoch + sla 10s  ADVISORY&lt;br/&gt;job_timeout 60s, lock_ttl 180s"]:::rq
+      Q2["9  load conv + last 16 msgs&lt;br/&gt;record_bot_pending  Dang soan tra loi...&lt;br/&gt;start typing heartbeat"]:::rq
+      Q1 --> Q2
+    end
+
+    Q2 --> G1
+
+    subgraph GR["GRAPH TURN  -  run_turn, the brain"]
+      direction LR
+      G1{"10  Fast lane?&lt;br/&gt;greeting / thanks / help"}:::dec
+      G2{"11  FAQ bypass?&lt;br/&gt;KB lookup, 2s budget"}:::dec
+      G3["12  Agent turn&lt;br/&gt;LLM RAG  MiniMax then OpenRouter&lt;br/&gt;NO hard cap now, 8.5s advisory"]:::gr
+      G4["13  Safety&lt;br/&gt;lexical then blocklist then LLM judge, 1 retry"]:::gr
+      G5{"14  pre_send_guard&lt;br/&gt;db.refresh + recheck version_at_start"}:::dec
+      G1 -- match --> S1
+      G1 -- no --> G2
+      G2 -- high-conf --> S1
+      G2 -- abstain --> G3
+      G3 --> G4 --> G5
+      G3 -. LLMThrottled .-> DG["degradation reply&lt;br/&gt;+ clear lock"]:::warn
+    end
+
+    G5 -- still owned --> S1
+    G5 -- taken over --> FS([SUPPRESSED: clear lock]):::bad
+
+    subgraph OB["OUTBOUND  -  ZaloChannelSender"]
+      direction LR
+      S1["15  send_message&lt;br/&gt;Bot token in path / OA access_token"]:::ok
+      S2["16  record_bot_outcome SENT&lt;br/&gt;clear lock, last_outbound_at"]:::ok
+      S1 --> S2
+    end
+
+    S2 --> Reply([Zalo reply bubble]):::start
+    DG --> Reply
+
+    REC["RECONCILE SWEEP&lt;br/&gt;followup queue, non-reentrant SETNX 300s&lt;br/&gt;grace 120s, re-enqueues lost or stuck turns every 3-4 min"]:::rec
+    REC -. recovers crashes / OOM / enqueue-fail / stuck-PENDING .-> Q1
+
+    classDef start fill:#0F766E,stroke:#0F766E,color:#fff,stroke-width:2px
+    classDef wh fill:#a5d8ff,stroke:#1971c2,color:#0b3d6b,stroke-width:2px
+    classDef rq fill:#fff3bf,stroke:#fab005,color:#5a4500,stroke-width:2px
+    classDef gr fill:#d0bfff,stroke:#7048e8,color:#3a1f8a,stroke-width:2px
+    classDef ok fill:#b2f2bb,stroke:#2f9e44,color:#15502a,stroke-width:2px
+    classDef dec fill:#ffd8a8,stroke:#e8590c,color:#5a2c08,stroke-width:2px
+    classDef bad fill:#ffc9c9,stroke:#e03131,color:#5c0d0d,stroke-width:2px
+    classDef warn fill:#ffe8cc,stroke:#fd7e14,color:#5a3308,stroke-width:2px
+    classDef rec fill:#e9ecef,stroke:#868e96,color:#2b2f33,stroke-width:2px,stroke-dasharray:5 4
+</pre>
+    </div>
+  </section>
+
+  <!-- DIAGRAM 2 -->
+  <section>
+    <h2><span class="num">2</span>Symptom → suspect block (start here when debugging)</h2>
+    <p class="sub">Pick the symptom, follow the branch to the most likely broken block and the exact thing to check.</p>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    Start([Bot misbehaving]):::start --> Q{"Which symptom?"}:::dec
+
+    Q -- No reply at all --> A0
+    Q -- Reply too slow, over 10s --> B0
+    Q -- Wrong / stale reply --> C0
+    Q -- Duplicate reply --> D0
+    Q -- Stuck then nothing, about 3 min --> E0
+
+    A0{"'zalo webhook inbound' log line exists?"}:::dec
+    A0 -- No --> A1["INGRESS / AUTH&lt;br/&gt;Webhook secret mismatch to silent 401 drop&lt;br/&gt;Only trace: 'zalo webhook inbound bytes=N'&lt;br/&gt;Fix: re-run setWebhook with DB secret in container"]:::bad
+    A0 -- Yes --> A2{"A bot_message row was created?"}:::dec
+    A2 -- No --> A3["GUARD / LOCK / ENQUEUE&lt;br/&gt;run_start_guard starved, conv.mode = HUMAN&lt;br/&gt;or bot_locked_until stale&lt;br/&gt;or webhook_high depth hit 40 then 503"]:::bad
+    A2 -- Yes --> A4{"A bot turn job ran?"}:::dec
+    A4 -- No --> A5["QUEUE / WORKER&lt;br/&gt;worker not consuming webhook_high&lt;br/&gt;RQ worker down or miswired to wrong Redis db"]:::bad
+    A4 -- Yes --> A6{"Latest BOT msg&lt;br/&gt;delivery_status?"}:::dec
+    A6 -- none --> A7["NEVER PRODUCED&lt;br/&gt;agent or safety died before send&lt;br/&gt;check bot_runs.outcome, worker traceback"]:::bad
+    A6 -- PENDING --> A8["STUCK PENDING&lt;br/&gt;worker crashed / OOM mid-turn&lt;br/&gt;reconcile recovers in 3-4 min"]:::bad
+    A6 -- FAILED --> A9["SEND FAILED&lt;br/&gt;Zalo POST error&lt;br/&gt;read messages.external_error, reconcile retries"]:::bad
+    A6 -- SUPPRESSED --> A10["SUPPRESSED&lt;br/&gt;human or recruiter took over mid-turn&lt;br/&gt;version changed under the turn"]:::bad
+
+    B0["TIMEOUT / LATENCY&lt;br/&gt;Read bot_runs.stage_timings: llm_ms, safety_ms, send_ms&lt;br/&gt;Usual culprit: llm_ms, no hard cap now&lt;br/&gt;Check: LLM semaphore, MiniMax latency, queue_depth, worker count"]:::warn
+    C0["VERSION / OWNERSHIP RACE&lt;br/&gt;recheck_ownership or db.refresh skipped / failed&lt;br/&gt;Stale reply sent after a recruiter takeover&lt;br/&gt;Check: should it have been SUPPRESSED? version bumps mid-turn?"]:::warn
+    D0["DEDUP / DOUBLE-ENQUEUE&lt;br/&gt;Same msg_id inside the 8s dedup window missed?&lt;br/&gt;or reconcile double-enqueued a live turn&lt;br/&gt;Check: dedup table, msg_hash, followup queue"]:::warn
+    E0["LOCK NOT CLEARED&lt;br/&gt;LLMThrottled without record_bot_outcome&lt;br/&gt;or worker died before clearing mutex&lt;br/&gt;Check: bot_locked_until, worker restarts, LLMThrottled logs&lt;br/&gt;Fix: lock auto-expires at TTL 180s plus reconcile sweep"]:::warn
+
+    classDef start fill:#0F766E,stroke:#0F766E,color:#fff,stroke-width:2px
+    classDef dec fill:#ffd8a8,stroke:#e8590c,color:#5a2c08,stroke-width:2px
+    classDef bad fill:#ffc9c9,stroke:#e03131,color:#5c0d0d,stroke-width:2px
+    classDef warn fill:#ffe8cc,stroke:#fd7e14,color:#5a3308,stroke-width:2px
+</pre>
+    </div>
+  </section>
+
+  <!-- BLOCK TABLE -->
+  <section>
+    <h2><span class="num">3</span>Per-block field manual</h2>
+    <p class="sub">For each block: what it does, how it fails, and the log/DB trace that proves the message reached it.</p>
+    <table>
+      <thead><tr><th>#</th><th>Block</th><th>What it does</th><th>How it fails (silent unless noted)</th><th>Proof it ran / what to grep</th></tr></thead>
+      <tbody>
+        <tr><td class="stage">1</td><td class="stage">Auth verify</td><td>Bot HMAC <span class="mono">compare_digest</span>; OA <span class="mono">x-zevent-signature</span>. Unconfigured → 503.</td><td class="bad">Secret mismatch with Zalo → silent 401 drop. NO row, NO turn. Only trace is bytes log.</td><td><span class="grep">zalo webhook inbound bytes=</span> in API logs. Absent = never hit endpoint.</td></tr>
+        <tr><td class="stage">2</td><td class="stage">Normalize</td><td>Parse event; only <span class="mono">can_start_bot_turn</span> text → turn. Receipts/follow/unfollow/button → side event.</td><td>Non-text event routed away — by design, no turn. Misclassified text → no turn.</td><td>Side events: <span class="grep">handle_oa_side_event</span></td></tr>
+        <tr><td class="stage">3</td><td class="stage">Dedup claim</td><td>Atomic <span class="mono">INSERT ON CONFLICT</span> on (chat_id, msg_hash), 8s window.</td><td>Zalo retry inside 8s → <span class="mono">duplicate</span>, intentionally dropped.</td><td><span class="grep">status: duplicate</span> / dedup table row</td></tr>
+        <tr><td class="stage">4</td><td class="stage">record_inbound</td><td>Persist WORKER message, bump <span class="mono">version</span>, <span class="mono">unread++</span>, opt-out scan, realtime event.</td><td>Receipts must NOT bump version (would suppress in-flight reply).</td><td><span class="mono">messages</span> row with role WORKER + bumped <span class="mono">conversations.version</span></td></tr>
+        <tr><td class="stage">5</td><td class="stage">run_start_guard</td><td>BOT → ok; SEMI_AUTO → ok after 5min human idle; HUMAN/CLOSED → starve.</td><td class="bad">Bot silent but msg recorded = starved. Check <span class="mono">conversations.bot_mode</span>.</td><td>No job enqueued; conv mode in DB</td></tr>
+        <tr><td class="stage">6</td><td class="stage">acquire_lock</td><td>Conditional <span class="mono">UPDATE bot_locked_until WHERE free</span>. rowcount=1 wins.</td><td class="bad">Already locked → <span class="mono">status: locked</span>. Stale lock after crash blocks new turns until TTL.</td><td><span class="grep">status: locked</span> / <span class="mono">bot_locked_until</span> column</td></tr>
+        <tr><td class="stage">7</td><td class="stage">typing + enqueue</td><td>Fire-and-forget typing (Bot only); enqueue to <span class="mono">webhook_high</span>.</td><td class="bad">Enqueue fail or depth &gt; 40 → release lock + <b>HTTP 503</b> (Zalo retries).</td><td><span class="grep">503</span> / queue depth metric</td></tr>
+        <tr><td class="stage">8</td><td class="stage">run_chat_turn_job</td><td>RQ entry. deadline = <span class="mono">received_at_epoch + sla_seconds</span> (epoch = wall-clock, crosses process boundary). job_timeout 60s.</td><td>Async runner can shield job from RQ timeout — a stuck agent can run past 60s.</td><td><span class="grep">run_chat_turn_job</span> in worker logs</td></tr>
+        <tr><td class="stage">9</td><td class="stage">record_bot_pending</td><td>Load conv + last 16 msgs; write PENDING bot row "Đang soạn trả lời…"; start typing heartbeat (no version bump).</td><td>Status heartbeat must be cancelled before every real send or ack lands after answer.</td><td><span class="mono">messages</span> PENDING row · <span class="grep">chat_turn_start</span> (observability — was broken in prod)</td></tr>
+        <tr><td class="stage">10</td><td class="stage">Fast lane</td><td>Greeting/thanks/goodbye/help → Vietnamese templates. Zero LLM.</td><td>Returns inside slow_ack window so no ack fires.</td><td>Reply with no LLM call in logs</td></tr>
+        <tr><td class="stage">11</td><td class="stage">FAQ bypass</td><td>Deterministic KB lookup, 2s budget. High-conf → canonical answer.</td><td>Miss/ambiguity/timeout → abstain → fall through to agent.</td><td><span class="grep">FaqBypassPort</span> / abstain log</td></tr>
+        <tr><td class="stage">12</td><td class="stage">Agent turn</td><td>Persona + product index system prompt, lead context, RAG tools, MiniMax→OpenRouter. <b>No hard cap</b> (8.5s advisory only).</td><td class="bad">LLMThrottled → degradation reply + clear lock. Latency = usual slow-reply culprit.</td><td><span class="grep">LLMThrottled</span> · LLM client timing</td></tr>
+        <tr><td class="stage">13</td><td class="stage">Safety</td><td>lexical fast filter → blocklist (hard redirect) → LLM judge, 1 retry rewrite.</td><td>Blocklist hit skips judge and redirects.</td><td><span class="grep">blocklist_hit</span> / safety judge log</td></tr>
+        <tr><td class="stage">14</td><td class="stage">pre_send_guard</td><td><span class="mono">db.refresh(conv)</span> (defeat identity map) + <span class="mono">recheck_ownership(version_at_start)</span>.</td><td class="bad">Version changed mid-turn → SUPPRESSED (recruiter/human took over). Forgetting db.refresh hides takeover.</td><td><span class="grep">SUPPRESSED</span> / outcome column</td></tr>
+        <tr><td class="stage">15</td><td class="stage">send_message</td><td><span class="mono">ZaloChannelSender</span>: Bot (token in path) or OA (access_token, lazy refresh).</td><td class="bad">Send error → reconcile retries. OA token-invalid triggers one Redis-locked refresh.</td><td><span class="grep">send_message</span> · delivery_status SENT/DELIVERED/READ</td></tr>
+        <tr><td class="stage">16</td><td class="stage">record_bot_outcome</td><td>SENT (clear lock, last_outbound_at, candidate extraction). Or SUPPRESSED.</td><td>If outcome never written, mutex stalls ~3min until TTL.</td><td><span class="mono">messages.outcome = SENT</span> + lock cleared</td></tr>
+        <tr><td class="stage">♻</td><td class="stage">Reconcile sweep</td><td>followup queue, SETNX non-reentrant 300s. Finds unanswered / stale-PENDING / failed-send (grace 120s). Re-checks guard, re-locks, refreshes version, re-enqueues.</td><td>Primary reliability guarantee: OOM, deploy force-recreate, enqueue-fail — all recovered within one ~3-4min cycle.</td><td><span class="grep">reconcile</span> · stale PENDING → FAILED transitions</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- KNOBS + GREP -->
+  <section>
+    <div class="grid2">
+      <div>
+        <h2><span class="num">4</span>Config knobs that move the blocks</h2>
+        <p class="sub">All in <span class="mono">backend/app/core/config.py</span>. Verified live values.</p>
+        <table>
+          <thead><tr><th>Knob</th><th>Value</th><th>Means</th></tr></thead>
+          <tbody>
+            <tr><td class="stage">sla_seconds</td><td>10.0</td><td>Turn deadline — <b>advisory</b> only now</td></tr>
+            <tr><td class="stage">agent_max_seconds</td><td>8.5</td><td>Agent budget — <b>advisory</b>, no hard wait_for</td></tr>
+            <tr><td class="stage">chat_turn_job_timeout</td><td>60</td><td>RQ job kill. Must be &lt; lock_ttl (180)</td></tr>
+            <tr><td class="stage">bot_lock_ttl_seconds</td><td>180</td><td>Per-chat mutex expiry</td></tr>
+            <tr><td class="stage">send_margin_seconds</td><td>1.0</td><td>Reserved for Zalo POST + commit</td></tr>
+            <tr><td class="stage">soft_fallback_remaining</td><td>2.0</td><td>FAQ-bypass budget cap</td></tr>
+            <tr><td class="stage">slow_ack_seconds</td><td>1.5</td><td>One-shot "still working" (OA's reliable signal)</td></tr>
+            <tr><td class="stage">chat_queue_max_depth</td><td>40</td><td>Backpressure → 503</td></tr>
+            <tr><td class="stage">reconcile_grace_seconds</td><td>120</td><td>Min age before a msg is "stuck"</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h2><span class="num">5</span>Log-grep cheatsheet (prod worker/api)</h2>
+        <p class="sub">Ordered by block number. Highest fired + lowest missing = bug location.</p>
+        <table>
+          <thead><tr><th>Grep</th><th>Block</th></tr></thead>
+          <tbody>
+            <tr><td><span class="grep">zalo webhook inbound bytes=</span></td><td>1 ingress</td></tr>
+            <tr><td><span class="grep">status: duplicate</span></td><td>3 dedup</td></tr>
+            <tr><td><span class="grep">status: locked</span></td><td>6 lock</td></tr>
+            <tr><td><span class="grep">503</span></td><td>7 enqueue backpressure</td></tr>
+            <tr><td><span class="grep">run_chat_turn_job</span></td><td>8 worker entry</td></tr>
+            <tr><td><span class="grep">chat_turn_start</span></td><td>9 (observability — verify it fires)</td></tr>
+            <tr><td><span class="grep">FaqBypassPort</span> / abstain</td><td>11 FAQ bypass</td></tr>
+            <tr><td><span class="grep">LLMThrottled</span></td><td>12 agent degrade</td></tr>
+            <tr><td><span class="grep">blocklist_hit</span></td><td>13 safety</td></tr>
+            <tr><td><span class="grep">SUPPRESSED</span></td><td>14 ownership race</td></tr>
+            <tr><td><span class="grep">send_message</span></td><td>15 outbound</td></tr>
+            <tr><td><span class="grep">reconcile</span></td><td>♻ safety net</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">
+          <strong>Golden rule:</strong> receipts never bump <code>version</code>, and the caller must <code>db.refresh(conv)</code> before <code>recheck_ownership</code>. Most "wrong reply" / "stuck lock" bugs trace to one of those two invariants being violated.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DIAGNOSTIC QUERIES -->
+  <section>
+    <h2><span class="num">6</span>Diagnostic queries — run against the chatbot DB</h2>
+    <p class="sub">Prod: <code>docker compose exec postgres psql -U &lt;user&gt; &lt;db&gt;</code> · Dev: host <code>:5432</code>. Replace <code>:chat_id</code> with <code>conversations.zalo_chat_id</code> (OA chats are <code>oa:&lt;external_id&gt;</code>). Keep two enums straight: <code>messages.delivery_status</code> = PENDING / SENT / FAILED / SUPPRESSED / DELIVERED / READ · <code>bot_runs.outcome</code> = SENT / SUPPRESSED / ERROR.</p>
+    <div class="grid2">
+      <div>
+        <p class="qlabel"><span class="num">a</span>Conversation state — blocks 5, 6, 14</p>
+<pre class="sql">SELECT zalo_chat_id, zalo_channel, mode, status, version,
+       bot_locked_until, taken_over_at, assigned_recruiter_id,
+       last_inbound_at, last_outbound_at, unread_count, now()
+FROM conversations
+WHERE zalo_chat_id = :chat_id;</pre>
+        <p class="sub" style="margin-left:0"><code>mode</code> HUMAN/CLOSED = starved by guard (5). <code>bot_locked_until</code> in the future = locked or stale lock (6). <code>taken_over_at</code> set = a recruiter owns it (14).</p>
+
+        <p class="qlabel"><span class="num">b</span>Recent messages — blocks 4, 9, 15, 16</p>
+<pre class="sql">SELECT id, sender, delivery_status, zalo_message_id,
+       external_error, created_at
+FROM messages
+WHERE conversation_id = (SELECT id FROM conversations
+                         WHERE zalo_chat_id = :chat_id)
+ORDER BY created_at DESC LIMIT 12;</pre>
+        <p class="sub" style="margin-left:0"><code>sender</code> WORKER = user inbound (4), BOT = bot reply. <code>delivery_status</code> PENDING = stuck (9), FAILED = send error + see <code>external_error</code> (15), SUPPRESSED = ownership race (14).</p>
+      </div>
+      <div>
+        <p class="qlabel"><span class="num">c</span>Bot runs + per-stage timing — blocks 8, 12, 13, 15</p>
+<pre class="sql">SELECT id, version_at_start, outcome, started_at, ended_at,
+       stage_timings-&gt;&gt;'llm_ms'      AS llm_ms,
+       stage_timings-&gt;&gt;'safety_ms'   AS safety_ms,
+       stage_timings-&gt;&gt;'send_ms'     AS send_ms,
+       stage_timings-&gt;&gt;'total_ms'    AS total_ms,
+       stage_timings-&gt;&gt;'queue_depth' AS queue_depth
+FROM bot_runs
+WHERE conversation_id = (SELECT id FROM conversations
+                         WHERE zalo_chat_id = :chat_id)
+ORDER BY started_at DESC LIMIT 5;</pre>
+        <p class="sub" style="margin-left:0"><code>outcome</code> SENT / SUPPRESSED / ERROR. <code>llm_ms</code> dominates slow turns (12). If <code>version_at_start</code> &lt; current <code>conversations.version</code> yet <code>outcome = SENT</code>, a stale reply may have slipped past the ownership guard (14).</p>
+
+        <p class="qlabel"><span class="num">d</span>Stuck-PENDING sweep + dedup — blocks 3, 9, ♻</p>
+<pre class="sql">-- stuck BOT replies older than 5 min (reconcile targets)
+SELECT c.zalo_chat_id, c.bot_locked_until,
+       m.id, m.delivery_status, m.created_at
+FROM messages m
+JOIN conversations c ON c.id = m.conversation_id
+WHERE m.sender = 'BOT' AND m.delivery_status = 'PENDING'
+  AND m.created_at &lt; now() - interval '5 minutes';
+
+-- dedup window for one chat
+SELECT chat_id, msg_hash, created_at
+FROM message_dedup
+WHERE chat_id = :chat_id
+ORDER BY created_at DESC LIMIT 10;</pre>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>Read order for a silent bot:</strong> run (a) for mode/lock/version → (b) to see whether a BOT reply exists and its status → (c) to see how the last run ended and where the milliseconds went. That trio localizes most incidents without opening worker logs.
+    </div>
+  </section>
+
+  <footer>
+    Source of truth: <code>backend/app/</code> — <code>api/webhooks.py</code>, <code>services/webhook.py</code>, <code>services/dedup.py</code>, <code>services/conversation/state.py</code>, <code>services/zalo_sender.py</code>, <code>workers/chatbot_worker.py</code>, <code>workers/reconcile_worker.py</code>, <code>graph/runner.py</code>. Wiki: <code>.omc/wiki/chatbot-turn-architecture-webhook-to-zalo-response.md</code>.
+  </footer>
+
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: 'loose',
+    theme: 'base',
+    flowchart: { curve: 'basis', nodeSpacing: 45, rankSpacing: 55, padding: 12, useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router";
 import {
   Briefcase,
+  Gauge,
   Home,
   MessageCircle,
   Settings,
@@ -13,6 +14,7 @@ type WorkspaceNavKey =
   | "conversations"
   | "projects"
   | "settings"
+  | "performance"
   | "account";
 
 type WorkspaceNavItem = {
@@ -41,10 +43,17 @@ const WORKSPACE_NAV_ITEMS: WorkspaceNavItem[] = [
     Icon: Settings,
     href: "/settings",
   },
+  {
+    key: "performance",
+    label: "Hiệu suất",
+    Icon: Gauge,
+    href: "/hieu-suat",
+  },
   { key: "account", label: "Account", Icon: UserRound, href: "/profile" },
 ];
 
 const getActiveWorkspaceKey = (pathname: string): WorkspaceNavKey => {
+  if (pathname.startsWith("/hieu-suat")) return "performance";
   if (pathname.startsWith("/profile")) return "account";
   if (pathname.startsWith("/users")) return "account";
   if (pathname.startsWith("/projects")) return "projects";

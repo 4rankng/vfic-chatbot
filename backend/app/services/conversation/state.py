@@ -204,12 +204,18 @@ class ConversationState:
         pending_message_id: int | None = None,
         external_error: str | None = None,
         zalo_message_id: str | None = None,
+        stage_timings: dict | None = None,
     ) -> Message:
         """Log a bot_run + BOT message; clears the lock.
 
         ``sent=False`` means either ownership suppression or delivery failure.
         ``external_error`` disambiguates real send failures so recovery can
         retry them instead of treating them as completed suppressed turns.
+
+        ``stage_timings`` is the per-stage wall-clock dict captured by run_turn
+        (webhook_to_pickup / preamble / lane / lead / llm / safety / send /
+        total). Persisted onto the BotRun for the performance dashboard; None
+        on paths that don't instrument (e.g. legacy callers).
         """
         outcome = (
             BotRunOutcome.ERROR
@@ -228,6 +234,7 @@ class ConversationState:
             outcome=outcome,
             started_at=started_at,
             ended_at=utcnow(),
+            stage_timings=stage_timings,
         )
         self.db.add(run)
         await self.db.flush()

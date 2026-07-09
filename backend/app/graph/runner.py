@@ -68,6 +68,7 @@ async def _agent_turn(
     *,
     chat_id: str,
     recent_messages: list[Message],
+    timings: dict | None = None,
 ) -> str:
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
@@ -78,6 +79,7 @@ async def _agent_turn(
     # Fetch existing lead profile so the agent can see what info is already known
     # and subtly ask for the most important missing fields. Best-effort: DB error
     # simply skips injection (a turn never breaks because of this).
+    lead_t0 = time.monotonic()
     lead_profile = ""
     lead_collection_question = ""
     lead_collection_instruction = ""
@@ -89,6 +91,10 @@ async def _agent_turn(
             lead_collection_instruction = deps.lead.instruction(lead_collection_question)
     except Exception:  # noqa: BLE001
         logger.warning("lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True)
+    if timings is not None:
+        # Accumulate so a safety-retry (a second _agent_turn call) adds to the
+        # first attempt rather than overwriting; total_ms still spans the turn.
+        timings["lead_ms"] = timings.get("lead_ms", 0) + int(round((time.monotonic() - lead_t0) * 1000))
 
     contextual_user_text = build_agent_user_text(
         chat_id=chat_id,
@@ -97,9 +103,12 @@ async def _agent_turn(
         lead_profile=lead_profile,
         lead_collection_instruction=lead_collection_instruction,
     )
+    llm_t0 = time.monotonic()
     reply = await deps.agent.agent(
         contextual_user_text, system=system, retrieval=deps.retrieval, embedder=deps.embedder
     )
+    if timings is not None:
+        timings["llm_ms"] = timings.get("llm_ms", 0) + int(round((time.monotonic() - llm_t0) * 1000))
     return deps.lead.ensure(reply, lead_collection_question)
 
 
@@ -157,6 +166,7 @@ async def _finish_terminal_reply(
     base_outcome: str,
     *,
     status_task=None,
+    stage_timings: dict | None = None,
 ):
     """Send a terminal fallback (timeout / error) then record the outcome.
 
@@ -184,6 +194,7 @@ async def _finish_terminal_reply(
         pending_message_id=state.pending_message_id,
         external_error=send_result.error if send_result and not send_result.ok else None,
         zalo_message_id=send_result.msg_id if send_result else None,
+        stage_timings=stage_timings,
     )
     outcome = base_outcome if (send_result is None or send_result.ok) else "send_failed"
     return {"outcome": outcome, "reply": text}
@@ -210,6 +221,24 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     started = _now()
     pending_msg = await svc.record_bot_pending(conv)
     state.pending_message_id = pending_msg.id
+
+    # Per-stage timing accumulator. The enqueue/preamble slice is derived from
+    # the worker's epoch stamps (state.preamble_start_epoch / received_at_epoch);
+    # intra-turn stages use time.monotonic() deltas against t0. Threaded into
+    # record_bot_outcome -> BotRun.stage_timings for the performance dashboard.
+    turn_start_epoch = time.time()
+    timings: dict = {}
+    if state.queue_depth is not None:
+        timings["queue_depth"] = state.queue_depth
+    if state.received_at_epoch > 0 and state.preamble_start_epoch > 0:
+        timings["webhook_to_pickup_ms"] = max(
+            0, int(round((state.preamble_start_epoch - state.received_at_epoch) * 1000))
+        )
+    if state.preamble_start_epoch > 0:
+        timings["preamble_ms"] = max(
+            0, int(round((turn_start_epoch - state.preamble_start_epoch) * 1000))
+        )
+    t0 = time.monotonic()
 
     try:
         candidate = ""
@@ -257,9 +286,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 bypass = None
 
         if fast is not None:
+            timings["lane"] = "fast_lane"
             candidate = fast.reply
             outcome_label = "faq_cache"
         elif bypass is not None:
+            timings["lane"] = "faq_bypass"
             # Admin-authored canonical FAQ text — sent verbatim, like the template
             # lane above (fast_safety_filter is tuned for LLM output, not curated text).
             candidate = bypass.answer
@@ -269,6 +300,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 bypass.tier, bypass.score, bypass.reason, bypass.faq_id,
             )
         else:
+            timings["lane"] = "agent"
             # --- agent (runs to completion; NO hard cap) ---
             # The propagated deadline is advisory only — it bounds the FAQ-bypass
             # lookup above, never the agent. Cancelling a live LLM call mid-generation
@@ -283,14 +315,17 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     state.user_text,
                     chat_id=conv.zalo_chat_id,
                     recent_messages=recent_messages,
+                    timings=timings,
                 )
             except LLMThrottled:
                 raise  # let worker handle degradation msg (no LLM call)
             except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
                 logger.warning("agent error: %s", exc)
+                timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
                 return await _finish_terminal_reply(
                     state, deps, conv, svc, zalo, ERROR_REPLY, started, "error",
                     status_task=status_task,
+                    stage_timings=timings,
                 )
 
             state.reply = raw
@@ -306,7 +341,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 candidate = retry_exhausted_fallback(state.user_text)
             # --- llm safety check (only when fast filter flagged AND not blocklisted) ---
             elif fs["needs_llm_safety"]:
+                safety_t0 = time.monotonic()
                 verdict = parse_verdict(await deps.safety.safety(candidate))
+                timings["safety_ms"] = int(round((time.monotonic() - safety_t0) * 1000))
                 if verdict["safe_to_send"]:
                     candidate = verdict["final_answer"] or candidate
                 elif state.attempt < 1:
@@ -318,6 +355,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                         retry_prompt,
                         chat_id=conv.zalo_chat_id,
                         recent_messages=recent_messages,
+                        timings=timings,
                     )
                     state.reply = raw2
                     candidate = fast_safety_filter(raw2)["output"]
@@ -332,13 +370,17 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         owned = await svc.recheck_ownership(conv, state.version_at_start)
         if owned:
             await _cancel_status_task(status_task)
+            send_t0 = time.monotonic()
             send_result = await zalo.send_message(conv.zalo_chat_id, candidate)
+            timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
+            timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
                 started_at=started, sent=send_result.ok,
                 pending_message_id=state.pending_message_id,
                 external_error=None if send_result.ok else send_result.error,
                 zalo_message_id=send_result.msg_id,
+                stage_timings=timings,
             )
             if not send_result.ok:
                 return {
@@ -360,10 +402,12 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 )
             return {"outcome": outcome_label, "reply": candidate}
 
+        timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
         await svc.record_bot_outcome(
             conv, version_at_start=state.version_at_start, reply=candidate,
             started_at=started, sent=False,
             pending_message_id=state.pending_message_id,
+            stage_timings=timings,
         )
         return {"outcome": "suppressed", "reply": candidate}
     finally:
