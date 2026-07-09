@@ -9,6 +9,7 @@ from app.graph.types import GraphDeps
 
 class _Settings:
     minimax_enable = True
+    llm_default_provider = "minimax"
     minimax_api_key = ""
     minimax_base_url = "https://api.minimax.io/v1"
     minimax_agent_model = "MiniMax-M2.7-highspeed"
@@ -121,11 +122,22 @@ async def test_fallback_llm_bind_tools_returns_fallback_wrapped():
 
 
 def test_active_provider_no_xor_when_both_enabled(monkeypatch):
-    """_active_llm_provider returns 'minimax' (primary) when both are enabled — no RuntimeError."""
+    """_active_llm_provider returns the configured default when both are enabled."""
     from app.graph.clients import _active_llm_provider
 
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _SettingsWithFallback())
     assert _active_llm_provider() == "minimax"
+
+
+def test_active_provider_openrouter_default_when_both_enabled(monkeypatch):
+    """_active_llm_provider can use OpenRouter as primary when both are enabled."""
+    from app.graph.clients import _active_llm_provider
+
+    class _OpenRouterDefault(_SettingsWithFallback):
+        llm_default_provider = "openrouter"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouterDefault())
+    assert _active_llm_provider() == "openrouter"
 
 
 def test_active_provider_openrouter_only(monkeypatch):

@@ -115,8 +115,9 @@ class Settings(BaseSettings):
     zalo_oa_access_token: str = ""
     zalo_oa_refresh_token: str = ""
 
-    # LLM providers. MiniMax is the default primary provider; OpenRouter is also
-    # OpenAI-compatible and can be selected via *_ENABLE.
+    # LLM providers. These are bootstrap/dev defaults; production can override
+    # enable/default/model choices from the admin-managed integration settings.
+    llm_default_provider: str = "minimax"
     minimax_enable: bool = True
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.io/v1"
@@ -175,19 +176,23 @@ class Settings(BaseSettings):
     # against a stale run sending after a takeover.
     bot_lock_ttl_seconds: int = 180
     # RQ job timeout for chat turns. Must be < bot_lock_ttl_seconds so RQ kills a
-    # stuck turn before its per-conversation lock auto-expires. Lowered 150→11: the
-    # propagated deadline below now bounds every healthy turn, so this is purely a
-    # safety net for a worker that has escaped the deadline logic.
-    chat_turn_job_timeout: int = 11
+    # stuck turn before its per-conversation lock auto-expires. This is a HANG-ONLY
+    # backstop: the agent turn is no longer hard-capped (see agent_max_seconds), so
+    # this must comfortably exceed any realistic LLM turn (~10-30s) — only a truly
+    # wedged provider call is reaped here, and the reconcile sweeper recovers it.
+    chat_turn_job_timeout: int = 60
 
-    # ── ~10-second perceived-responsiveness budget ─────────────────────────────
+    # ── perceived-responsiveness budget ────────────────────────────────────────
     # The webhook stamps received_at_epoch; the worker sets deadline_at_epoch =
-    # received_at_epoch + sla_seconds. Each graph stage checks _remaining()
-    # (epoch-based so it crosses the FastAPI→RQ process boundary). agent_max_seconds
-    # is the inner asyncio.wait_for ceiling on the agent turn; send_margin_seconds
+    # received_at_epoch + sla_seconds. The deadline is ADVISORY: it bounds the
+    # FAQ-bypass lookup budget only — it never cancels the agent (cancelling live
+    # LLM calls produced excessive TIMEOUT fallbacks in prod). send_margin_seconds
     # reserves time for the Zalo POST + DB commit; soft_fallback_remaining stops
-    # starting expensive work when little time is left.
+    # starting expensive bypass work when little time is left.
     sla_seconds: float = 10.0
+    # Retired as a hard cap — the agent is no longer wrapped in asyncio.wait_for
+    # and runs to completion. Kept as an advisory reference / for future use; it
+    # no longer enforces a timeout on the agent turn.
     agent_max_seconds: float = 8.5
     send_margin_seconds: float = 1.0
     soft_fallback_remaining: float = 2.0
@@ -240,11 +245,16 @@ class Settings(BaseSettings):
 
     @property
     def active_llm_provider(self) -> str:
-        """Primary LLM provider. MiniMax is always primary when enabled; OpenRouter acts as fallback."""
-        if self.openrouter_enable and not self.minimax_enable:
+        """Primary LLM provider from env/bootstrap settings."""
+        default_provider = (self.llm_default_provider or "minimax").strip().lower()
+        if default_provider == "openrouter" and self.openrouter_enable:
             return "OpenRouter"
+        if default_provider == "minimax" and self.minimax_enable:
+            return "MiniMax"
         if self.minimax_enable:
             return "MiniMax"
+        if self.openrouter_enable:
+            return "OpenRouter"
         raise RuntimeError(
             "No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true"
         )

@@ -28,7 +28,7 @@ from app.core.config import get_settings
 from app.graph import fast_lane
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY, TIMEOUT_REPLY
+from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY
 from app.graph.safety import (
     blocklist_hit,
     build_retry_prompt,
@@ -269,37 +269,23 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 bypass.tier, bypass.score, bypass.reason, bypass.faq_id,
             )
         else:
-            # --- agent (bounded by the propagated ~10s deadline) ---
-            agent_budget = max(
-                0.0,
-                min(settings.agent_max_seconds, _remaining(state) - settings.send_margin_seconds),
-            )
+            # --- agent (runs to completion; NO hard cap) ---
+            # The propagated deadline is advisory only — it bounds the FAQ-bypass
+            # lookup above, never the agent. Cancelling a live LLM call mid-generation
+            # produced excessive TIMEOUT fallbacks in prod, so the agent is allowed to
+            # finish and its real answer is sent. A genuinely hung provider call is
+            # reaped by the RQ job_timeout backstop (>> any realistic turn) and the
+            # turn is recovered by the reconcile sweep.
             try:
-                if agent_budget <= 0:
-                    # Already out of time before starting — don't burn an LLM call.
-                    raise asyncio.TimeoutError()
-                raw = await asyncio.wait_for(
-                    _agent_turn(
-                        state,
-                        deps,
-                        state.user_text,
-                        chat_id=conv.zalo_chat_id,
-                        recent_messages=recent_messages,
-                    ),
-                    timeout=agent_budget,
+                raw = await _agent_turn(
+                    state,
+                    deps,
+                    state.user_text,
+                    chat_id=conv.zalo_chat_id,
+                    recent_messages=recent_messages,
                 )
             except LLMThrottled:
                 raise  # let worker handle degradation msg (no LLM call)
-            except asyncio.TimeoutError:
-                logger.info(
-                    "agent deadline hit (budget=%.2fs remaining=%.2fs)",
-                    agent_budget,
-                    _remaining(state),
-                )
-                return await _finish_terminal_reply(
-                    state, deps, conv, svc, zalo, TIMEOUT_REPLY, started, "timeout",
-                    status_task=status_task,
-                )
             except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
                 logger.warning("agent error: %s", exc)
                 return await _finish_terminal_reply(

@@ -741,6 +741,7 @@
 }
 
 .settings-card .settings-input {
+  width: 100%;
   min-height: 44px;
   border-color: color-mix(in srgb, var(--workspace-border) 88%, transparent);
   border-radius: 8px;
@@ -753,6 +754,18 @@
   font-size: var(--crm-fs-body);
   font-weight: var(--chat-fw-regular);
   line-height: var(--crm-lh-body);
+}
+
+.settings-switch-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--workspace-border) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--workspace-bg) 62%, transparent);
+  padding: 10px 12px;
 }
 
 .settings-card .settings-input:focus-visible {

@@ -193,12 +193,24 @@ async def build_deps(db):
         temperature=0.3,
         minimax_api_key=minimax_config.api_key,
         openrouter_api_key=openrouter_config.api_key,
+        minimax_enabled=minimax_config.enabled,
+        openrouter_enabled=openrouter_config.enabled,
+        default_provider=minimax_config.default_provider,
+        openrouter_agent_model=openrouter_config.agent_model,
+        openrouter_safety_model=openrouter_config.safety_model,
+        openrouter_digest_model=openrouter_config.digest_model,
     )
     safety_llm = _chat_for_role(
         "safety",
         temperature=0.0,
         minimax_api_key=minimax_config.api_key,
         openrouter_api_key=openrouter_config.api_key,
+        minimax_enabled=minimax_config.enabled,
+        openrouter_enabled=openrouter_config.enabled,
+        default_provider=minimax_config.default_provider,
+        openrouter_agent_model=openrouter_config.agent_model,
+        openrouter_safety_model=openrouter_config.safety_model,
+        openrouter_digest_model=openrouter_config.digest_model,
     )
     embedder = build_embedder(s, openrouter_api_key=openrouter_config.api_key)
     zalo_config = await integration_settings.resolve_zalo()

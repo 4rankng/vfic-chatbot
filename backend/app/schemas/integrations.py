@@ -1,5 +1,7 @@
 """Schemas for admin-managed integrations."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -113,12 +115,16 @@ class MinimaxIntegrationSettingsOut(BaseModel):
     minimax_base_url: str
     minimax_agent_model: str
     minimax_safety_model: str
+    minimax_enable: bool
+    llm_default_provider: Literal["minimax", "openrouter"]
 
 
 class MinimaxIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     minimax_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    minimax_enable: bool | None = None
+    llm_default_provider: Literal["minimax", "openrouter"] | None = None
 
 
 class MinimaxIntegrationTestOut(BaseModel):
@@ -134,12 +140,19 @@ class OpenRouterIntegrationSettingsOut(BaseModel):
     openrouter_digest_model: str
     openrouter_embedding_model: str
     openrouter_embedding_dim: int
+    openrouter_enable: bool
+    llm_default_provider: Literal["minimax", "openrouter"]
 
 
 class OpenRouterIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     openrouter_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    openrouter_enable: bool | None = None
+    openrouter_agent_model: str | None = Field(default=None, min_length=1, max_length=256)
+    openrouter_safety_model: str | None = Field(default=None, min_length=1, max_length=256)
+    openrouter_digest_model: str | None = Field(default=None, min_length=1, max_length=256)
+    llm_default_provider: Literal["minimax", "openrouter"] | None = None
 
 
 class OpenRouterIntegrationTestOut(BaseModel):

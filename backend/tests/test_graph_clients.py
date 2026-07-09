@@ -19,6 +19,7 @@ class _Settings:
     embedding_provider = "openrouter"
     embedding_dim = 3072
     minimax_enable = True
+    llm_default_provider = "minimax"
     minimax_api_key = ""
     minimax_base_url = "https://api.minimax.io/v1"
     minimax_request_timeout = 60
@@ -89,12 +90,20 @@ def test_minimax_chat_missing_key_names_minimax(monkeypatch):
 
 
 def test_active_llm_provider_returns_minimax_when_both_enabled():
-    """When both providers are enabled, minimax is primary (no XOR error)."""
+    """When both providers are enabled, the configured default is primary."""
 
     class _Both(_Settings):
         openrouter_enable = True
 
     assert _active_llm_provider(_Both()) == "minimax"
+
+
+def test_active_llm_provider_can_select_openrouter_when_both_enabled():
+    class _Both(_Settings):
+        openrouter_enable = True
+        llm_default_provider = "openrouter"
+
+    assert _active_llm_provider(_Both()) == "openrouter"
 
 
 def test_openrouter_chat_missing_key_names_openrouter(monkeypatch):

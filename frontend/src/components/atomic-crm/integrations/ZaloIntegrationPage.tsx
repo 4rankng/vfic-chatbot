@@ -16,6 +16,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { apiJson } from "../providers/rest/api";
 import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
 import { InboxIcons } from "../conversations/InboxIcons";
@@ -57,12 +65,23 @@ type ZaloSettings = {
 type MinimaxSettings = {
   minimax_api_key: SecretStatus;
   minimax_base_url: string;
+  minimax_agent_model: string;
+  minimax_safety_model: string;
+  minimax_enable: boolean;
+  llm_default_provider: LlmProvider;
 };
 
 type OpenRouterSettings = {
   openrouter_api_key: SecretStatus;
   openrouter_base_url: string;
+  openrouter_agent_model: string;
+  openrouter_safety_model: string;
+  openrouter_digest_model: string;
+  openrouter_enable: boolean;
+  llm_default_provider: LlmProvider;
 };
+
+type LlmProvider = "minimax" | "openrouter";
 
 type FormState = {
   zalo_bot_token: string;
@@ -79,6 +98,21 @@ type MinimaxFormState = {
 
 type OpenRouterFormState = {
   openrouter_api_key: string;
+};
+
+type MinimaxUpdatePayload = {
+  minimax_api_key?: string;
+  minimax_enable?: boolean;
+  llm_default_provider?: LlmProvider;
+};
+
+type OpenRouterUpdatePayload = {
+  openrouter_api_key?: string;
+  openrouter_enable?: boolean;
+  openrouter_agent_model?: string;
+  openrouter_safety_model?: string;
+  openrouter_digest_model?: string;
+  llm_default_provider?: LlmProvider;
 };
 
 const emptyForm: FormState = {
@@ -122,6 +156,12 @@ const emptyMinimaxForm: MinimaxFormState = {
 const emptyOpenRouterForm: OpenRouterFormState = {
   openrouter_api_key: "",
 };
+
+const OPENROUTER_MODEL_OPTIONS = [
+  "deepseek/deepseek-v4-flash",
+  "deepseek/deepseek-chat",
+  "deepseek/deepseek-r1",
+];
 
 type SettingsItemId =
   | "settings-zalo-channel"
@@ -300,6 +340,54 @@ const OpenRouterSecretInput = ({
       onChange={(event) => onChange(id, event.target.value)}
     />
   </div>
+);
+
+const ProviderSwitchField = ({
+  id,
+  label,
+  checked,
+  onCheckedChange,
+  disabled = false,
+}: {
+  id: string;
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) => (
+  <div className="settings-switch-row">
+    <div className="min-w-0">
+      <Label htmlFor={id}>{label}</Label>
+    </div>
+    <Switch
+      id={id}
+      checked={checked}
+      disabled={disabled}
+      onCheckedChange={onCheckedChange}
+    />
+  </div>
+);
+
+const DefaultProviderSwitch = ({
+  provider,
+  enabled,
+  checked,
+  otherEnabled,
+  onCheckedChange,
+}: {
+  provider: LlmProvider;
+  enabled: boolean;
+  checked: boolean;
+  otherEnabled: boolean;
+  onCheckedChange: (provider: LlmProvider, checked: boolean) => void;
+}) => (
+  <ProviderSwitchField
+    id={`llm_default_provider_${provider}`}
+    label="Mặc định"
+    checked={checked}
+    disabled={!enabled || (checked && !otherEnabled)}
+    onCheckedChange={(next) => onCheckedChange(provider, next)}
+  />
 );
 
 const SettingsCard = ({
@@ -596,6 +684,13 @@ export const ZaloIntegrationPage = () => {
     useState<MinimaxFormState>(emptyMinimaxForm);
   const [openRouterForm, setOpenRouterForm] =
     useState<OpenRouterFormState>(emptyOpenRouterForm);
+  const [minimaxEnabled, setMinimaxEnabled] = useState(true);
+  const [openRouterEnabled, setOpenRouterEnabled] = useState(false);
+  const [llmDefaultProvider, setLlmDefaultProvider] =
+    useState<LlmProvider>("minimax");
+  const [openRouterModel, setOpenRouterModel] = useState(
+    "deepseek/deepseek-v4-flash",
+  );
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
     "settings-zalo-channel",
   );
@@ -618,6 +713,10 @@ export const ZaloIntegrationPage = () => {
       ...current,
       zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
     }));
+    setMinimaxEnabled(minimaxData.minimax_enable);
+    setOpenRouterEnabled(openRouterData.openrouter_enable);
+    setLlmDefaultProvider(openRouterData.llm_default_provider);
+    setOpenRouterModel(openRouterData.openrouter_agent_model);
     setMinimaxForm(emptyMinimaxForm);
     setOpenRouterForm(emptyOpenRouterForm);
   };
@@ -645,14 +744,66 @@ export const ZaloIntegrationPage = () => {
   }, [form, settings]);
 
   const changedMinimaxPayload = useMemo(() => {
+    const payload: MinimaxUpdatePayload = {};
     const value = minimaxForm.minimax_api_key.trim();
-    return value ? { minimax_api_key: value } : {};
-  }, [minimaxForm]);
+    if (value) payload.minimax_api_key = value;
+    if (
+      minimaxSettings &&
+      minimaxEnabled !== minimaxSettings.minimax_enable
+    ) {
+      payload.minimax_enable = minimaxEnabled;
+    }
+    if (
+      activeItemId === "settings-minimax" &&
+      minimaxSettings &&
+      llmDefaultProvider !== minimaxSettings.llm_default_provider
+    ) {
+      payload.llm_default_provider = llmDefaultProvider;
+    }
+    return payload;
+  }, [
+    activeItemId,
+    minimaxForm,
+    minimaxEnabled,
+    llmDefaultProvider,
+    minimaxSettings,
+  ]);
 
   const changedOpenRouterPayload = useMemo(() => {
+    const payload: OpenRouterUpdatePayload = {};
     const value = openRouterForm.openrouter_api_key.trim();
-    return value ? { openrouter_api_key: value } : {};
-  }, [openRouterForm]);
+    if (value) payload.openrouter_api_key = value;
+    if (
+      openRouterSettings &&
+      openRouterEnabled !== openRouterSettings.openrouter_enable
+    ) {
+      payload.openrouter_enable = openRouterEnabled;
+    }
+    if (
+      openRouterSettings &&
+      openRouterModel.trim() &&
+      openRouterModel.trim() !== openRouterSettings.openrouter_agent_model
+    ) {
+      payload.openrouter_agent_model = openRouterModel.trim();
+      payload.openrouter_safety_model = openRouterModel.trim();
+      payload.openrouter_digest_model = openRouterModel.trim();
+    }
+    if (
+      activeItemId === "settings-openrouter" &&
+      openRouterSettings &&
+      llmDefaultProvider !== openRouterSettings.llm_default_provider
+    ) {
+      payload.llm_default_provider = llmDefaultProvider;
+    }
+    return payload;
+  }, [
+    activeItemId,
+    openRouterForm,
+    openRouterEnabled,
+    openRouterModel,
+    llmDefaultProvider,
+    openRouterSettings,
+  ]);
 
   const setValue = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -667,6 +818,47 @@ export const ZaloIntegrationPage = () => {
     value: string,
   ) => {
     setOpenRouterForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const chooseDefaultProvider = (provider: LlmProvider) => {
+    if (provider === "minimax" && minimaxEnabled) {
+      setLlmDefaultProvider("minimax");
+      return;
+    }
+    if (provider === "openrouter" && openRouterEnabled) {
+      setLlmDefaultProvider("openrouter");
+    }
+  };
+
+  const toggleDefaultProvider = (
+    provider: LlmProvider,
+    checked: boolean,
+  ) => {
+    if (checked) {
+      chooseDefaultProvider(provider);
+      return;
+    }
+    chooseDefaultProvider(provider === "minimax" ? "openrouter" : "minimax");
+  };
+
+  const handleMinimaxEnabledChange = (checked: boolean) => {
+    setMinimaxEnabled(checked);
+    if (!checked && llmDefaultProvider === "minimax" && openRouterEnabled) {
+      setLlmDefaultProvider("openrouter");
+    }
+    if (checked && !openRouterEnabled) {
+      setLlmDefaultProvider("minimax");
+    }
+  };
+
+  const handleOpenRouterEnabledChange = (checked: boolean) => {
+    setOpenRouterEnabled(checked);
+    if (!checked && llmDefaultProvider === "openrouter" && minimaxEnabled) {
+      setLlmDefaultProvider("minimax");
+    }
+    if (checked && !minimaxEnabled) {
+      setLlmDefaultProvider("openrouter");
+    }
   };
 
   const saveZaloChanges = async () => {
@@ -699,6 +891,8 @@ export const ZaloIntegrationPage = () => {
     );
     setMinimaxSettings(nextMinimax);
     setMinimaxForm(emptyMinimaxForm);
+    setMinimaxEnabled(nextMinimax.minimax_enable);
+    setLlmDefaultProvider(nextMinimax.llm_default_provider);
     return nextMinimax;
   };
 
@@ -715,10 +909,17 @@ export const ZaloIntegrationPage = () => {
     );
     setOpenRouterSettings(nextOpenRouter);
     setOpenRouterForm(emptyOpenRouterForm);
+    setOpenRouterEnabled(nextOpenRouter.openrouter_enable);
+    setOpenRouterModel(nextOpenRouter.openrouter_agent_model);
+    setLlmDefaultProvider(nextOpenRouter.llm_default_provider);
     return nextOpenRouter;
   };
 
   const save = async () => {
+    if (!minimaxEnabled && !openRouterEnabled) {
+      notify("Cần bật ít nhất một model cho chatbot.", { type: "warning" });
+      return;
+    }
     setSaving(true);
     try {
       const [nextZalo, nextMinimax, nextOpenRouter] = await Promise.all([
@@ -1001,6 +1202,23 @@ export const ZaloIntegrationPage = () => {
         <SettingsSectionPanel id="settings-minimax">
           <div className="settings-grid settings-grid-models">
             <SettingsCard title="Minimax" icon={<Bot className="size-4" />}>
+              <ProviderSwitchField
+                id="minimax_enable"
+                label={minimaxEnabled ? "Bật" : "Tắt"}
+                checked={minimaxEnabled}
+                onCheckedChange={handleMinimaxEnabledChange}
+              />
+              <DefaultProviderSwitch
+                provider="minimax"
+                enabled={minimaxEnabled}
+                checked={llmDefaultProvider === "minimax"}
+                otherEnabled={openRouterEnabled}
+                onCheckedChange={toggleDefaultProvider}
+              />
+              <div className="settings-readonly-field">
+                <span className="settings-readonly-label">Model chat</span>
+                <strong>{minimaxSettings?.minimax_agent_model ?? "—"}</strong>
+              </div>
               <MinimaxSecretInput
                 id="minimax_api_key"
                 label="Access Token"
@@ -1032,6 +1250,40 @@ export const ZaloIntegrationPage = () => {
       <SettingsSectionPanel id="settings-openrouter">
         <div className="settings-grid settings-grid-models">
           <SettingsCard title="OpenRouter" icon={<Cpu className="size-4" />}>
+            <ProviderSwitchField
+              id="openrouter_enable"
+              label={openRouterEnabled ? "Bật" : "Tắt"}
+              checked={openRouterEnabled}
+              onCheckedChange={handleOpenRouterEnabledChange}
+            />
+            <DefaultProviderSwitch
+              provider="openrouter"
+              enabled={openRouterEnabled}
+              checked={llmDefaultProvider === "openrouter"}
+              otherEnabled={minimaxEnabled}
+              onCheckedChange={toggleDefaultProvider}
+            />
+            <div className="settings-field">
+              <Label htmlFor="openrouter_agent_model">Model chatbot</Label>
+              <Select
+                value={openRouterModel}
+                onValueChange={setOpenRouterModel}
+              >
+                <SelectTrigger
+                  id="openrouter_agent_model"
+                  className="settings-input"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OPENROUTER_MODEL_OPTIONS.map((model) => (
+                    <SelectItem key={model} value={model}>
+                      {model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <OpenRouterSecretInput
               id="openrouter_api_key"
               label="Access Token"

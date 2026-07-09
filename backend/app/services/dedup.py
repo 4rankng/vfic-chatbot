@@ -3,6 +3,14 @@
 Zalo retries delivery, so the same msg_id can arrive twice within seconds. We claim
 atomically: insert into message_dedup(chat_id, msg_hash); if it already exists (and
 is within the window), it's a duplicate and the run is skipped.
+
+Window sizing: ``DEDUP_WINDOW_SECONDS`` must exceed Zalo's webhook retry interval so
+a 503/timeout-triggered retry is absorbed here rather than spawning a second turn.
+If a retry ever lands AFTER the window, it is still caught by the second layer — the
+per-chat mutex ``Conversation.bot_locked_until`` (acquired in
+``ZaloWebhookService.handle`` via ``ConversationState.acquire_lock``), which
+serializes a late duplicate into a ``{"status": "locked"}`` no-op instead of a
+double-send. Raise the window only if prod logs show retry-driven ``locked`` spikes.
 """
 from __future__ import annotations
 

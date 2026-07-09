@@ -37,7 +37,13 @@ ZALO_OA_SECRET_KEY = "zalo_oa_secret_key"
 ZALO_OA_ACCESS_TOKEN = "zalo_oa_access_token"
 ZALO_OA_REFRESH_TOKEN = "zalo_oa_refresh_token"
 MINIMAX_API_KEY = "minimax_api_key"
+MINIMAX_ENABLE = "minimax_enable"
 OPENROUTER_API_KEY = "openrouter_api_key"
+OPENROUTER_ENABLE = "openrouter_enable"
+OPENROUTER_AGENT_MODEL = "openrouter_agent_model"
+OPENROUTER_SAFETY_MODEL = "openrouter_safety_model"
+OPENROUTER_DIGEST_MODEL = "openrouter_digest_model"
+LLM_DEFAULT_PROVIDER = "llm_default_provider"
 
 ZALO_SETTING_KEYS = (
     ZALO_BOT_TOKEN,
@@ -48,8 +54,15 @@ ZALO_SETTING_KEYS = (
     ZALO_OA_REFRESH_TOKEN,
 )
 
-MINIMAX_SETTING_KEYS = (MINIMAX_API_KEY,)
-OPENROUTER_SETTING_KEYS = (OPENROUTER_API_KEY,)
+MINIMAX_SETTING_KEYS = (MINIMAX_API_KEY, MINIMAX_ENABLE, LLM_DEFAULT_PROVIDER)
+OPENROUTER_SETTING_KEYS = (
+    OPENROUTER_API_KEY,
+    OPENROUTER_ENABLE,
+    OPENROUTER_AGENT_MODEL,
+    OPENROUTER_SAFETY_MODEL,
+    OPENROUTER_DIGEST_MODEL,
+    LLM_DEFAULT_PROVIDER,
+)
 
 
 @dataclass(frozen=True)
@@ -70,6 +83,8 @@ class MinimaxRuntimeConfig:
     base_url: str = ""
     agent_model: str = ""
     safety_model: str = ""
+    enabled: bool = True
+    default_provider: str = "minimax"
 
 
 @dataclass(frozen=True)
@@ -81,6 +96,8 @@ class OpenRouterRuntimeConfig:
     digest_model: str = ""
     embedding_model: str = ""
     embedding_dim: int = EMBEDDING_DIM
+    enabled: bool = False
+    default_provider: str = "minimax"
 
 
 class IntegrationSettingsCipher:
@@ -120,6 +137,17 @@ def _preview(value: str) -> str | None:
     if len(value) <= 8:
         return "*" * len(value)
     return f"{value[:4]}...{value[-4:]}"
+
+
+def _bool_value(value: str | None, fallback: bool) -> bool:
+    if value is None:
+        return fallback
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _provider_value(value: str | None, fallback: str) -> str:
+    candidate = (value or fallback or "minimax").strip().lower()
+    return candidate if candidate in {"minimax", "openrouter"} else "minimax"
 
 
 class IntegrationSettingsService:
@@ -208,6 +236,11 @@ class IntegrationSettingsService:
             base_url=self.settings.minimax_base_url,
             agent_model=self.settings.minimax_agent_model,
             safety_model=self.settings.minimax_safety_model,
+            enabled=_bool_value(stored.get(MINIMAX_ENABLE), self.settings.minimax_enable),
+            default_provider=_provider_value(
+                stored.get(LLM_DEFAULT_PROVIDER),
+                getattr(self.settings, "llm_default_provider", "minimax"),
+            ),
         )
 
     async def admin_minimax_view(self) -> dict:
@@ -220,6 +253,8 @@ class IntegrationSettingsService:
             "minimax_base_url": cfg.base_url,
             "minimax_agent_model": cfg.agent_model,
             "minimax_safety_model": cfg.safety_model,
+            "minimax_enable": cfg.enabled,
+            "llm_default_provider": cfg.default_provider,
         }
 
     async def resolve_openrouter(self) -> OpenRouterRuntimeConfig:
@@ -227,11 +262,20 @@ class IntegrationSettingsService:
         return OpenRouterRuntimeConfig(
             api_key=stored.get(OPENROUTER_API_KEY) or self.settings.openrouter_api_key,
             base_url=self.settings.openrouter_base_url,
-            agent_model=self.settings.openrouter_agent_model,
-            safety_model=self.settings.openrouter_safety_model,
-            digest_model=self.settings.openrouter_digest_model,
+            agent_model=stored.get(OPENROUTER_AGENT_MODEL) or self.settings.openrouter_agent_model,
+            safety_model=(
+                stored.get(OPENROUTER_SAFETY_MODEL) or self.settings.openrouter_safety_model
+            ),
+            digest_model=(
+                stored.get(OPENROUTER_DIGEST_MODEL) or self.settings.openrouter_digest_model
+            ),
             embedding_model=self.settings.openrouter_embedding_model,
             embedding_dim=self.settings.embedding_dim,
+            enabled=_bool_value(stored.get(OPENROUTER_ENABLE), self.settings.openrouter_enable),
+            default_provider=_provider_value(
+                stored.get(LLM_DEFAULT_PROVIDER),
+                getattr(self.settings, "llm_default_provider", "minimax"),
+            ),
         )
 
     async def admin_openrouter_view(self) -> dict:
@@ -247,7 +291,36 @@ class IntegrationSettingsService:
             "openrouter_digest_model": cfg.digest_model,
             "openrouter_embedding_model": cfg.embedding_model,
             "openrouter_embedding_dim": cfg.embedding_dim,
+            "openrouter_enable": cfg.enabled,
+            "llm_default_provider": cfg.default_provider,
         }
+
+    async def _write_setting(
+        self,
+        key: str,
+        value: str,
+        *,
+        actor_id=None,
+        is_secret: bool,
+    ) -> bool:
+        cleaned = value.strip()
+        if not cleaned:
+            return False
+        stored_value = self.cipher.encrypt(cleaned) if is_secret else cleaned
+        row = await self.db.get(IntegrationSetting, key)
+        if row is None:
+            row = IntegrationSetting(
+                key=key,
+                encrypted_value=stored_value,
+                is_secret=is_secret,
+                updated_by=actor_id,
+            )
+            self.db.add(row)
+        else:
+            row.encrypted_value = stored_value
+            row.is_secret = is_secret
+            row.updated_by = actor_id
+        return True
 
     async def _write_secret(self, key: str, value: str | None, *, actor_id=None) -> bool:
         """Encrypt + upsert one Zalo integration row. Returns True if stored.
@@ -357,29 +430,23 @@ class IntegrationSettingsService:
             await redis.delete(lock_key)
 
 
-    async def update_minimax(self, values: dict[str, str | None], *, actor_id) -> list[str]:
+    async def update_minimax(
+        self,
+        values: dict[str, str | bool | None],
+        *,
+        actor_id,
+    ) -> list[str]:
         changed: list[str] = []
         for key, value in values.items():
             if key not in MINIMAX_SETTING_KEYS or value is None:
                 continue
-            cleaned = value.strip()
-            if not cleaned:
-                continue
-            row = await self.db.get(IntegrationSetting, key)
-            encrypted = self.cipher.encrypt(cleaned)
-            if row is None:
-                row = IntegrationSetting(
-                    key=key,
-                    encrypted_value=encrypted,
-                    is_secret=True,
-                    updated_by=actor_id,
-                )
-                self.db.add(row)
-            else:
-                row.encrypted_value = encrypted
-                row.is_secret = True
-                row.updated_by = actor_id
-            changed.append(key)
+            if await self._write_setting(
+                key,
+                str(value),
+                actor_id=actor_id,
+                is_secret=key == MINIMAX_API_KEY,
+            ):
+                changed.append(key)
 
         if changed:
             await record_audit(
@@ -395,7 +462,7 @@ class IntegrationSettingsService:
 
     async def update_openrouter(
         self,
-        values: dict[str, str | None],
+        values: dict[str, str | bool | None],
         *,
         actor_id,
     ) -> list[str]:
@@ -403,24 +470,13 @@ class IntegrationSettingsService:
         for key, value in values.items():
             if key not in OPENROUTER_SETTING_KEYS or value is None:
                 continue
-            cleaned = value.strip()
-            if not cleaned:
-                continue
-            row = await self.db.get(IntegrationSetting, key)
-            encrypted = self.cipher.encrypt(cleaned)
-            if row is None:
-                row = IntegrationSetting(
-                    key=key,
-                    encrypted_value=encrypted,
-                    is_secret=True,
-                    updated_by=actor_id,
-                )
-                self.db.add(row)
-            else:
-                row.encrypted_value = encrypted
-                row.is_secret = True
-                row.updated_by = actor_id
-            changed.append(key)
+            if await self._write_setting(
+                key,
+                str(value),
+                actor_id=actor_id,
+                is_secret=key == OPENROUTER_API_KEY,
+            ):
+                changed.append(key)
 
         if changed:
             await record_audit(

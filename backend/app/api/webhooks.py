@@ -12,7 +12,6 @@ The raw body is logged at INFO so the Bot Platform payload shape is observable
 during bring-up.
 """
 import asyncio
-import hashlib
 import hmac
 import json
 import logging
@@ -66,7 +65,11 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
         )
     # else: dev/test with no secret -> accept unchanged (ergonomics).
 
-    result = await ZaloWebhookService.handle(db, payload, enqueue=enqueue_chat_run)
+    # Pass the DB-resolved bot token so the fire-and-forget typing indicator uses
+    # the live token (the env ZALO_BOT_TOKEN is stale; resolve_zalo wins).
+    result = await ZaloWebhookService.handle(
+        db, payload, enqueue=enqueue_chat_run, bot_token=cfg.bot_token
+    )
     code = 503 if result.get("status") == "enqueue_failed" else 200
     return JSONResponse(result, status_code=code)
 
@@ -104,45 +107,17 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             timestamp_header=ts_header,
         )
         if not oa_result.verified:
-            # Bring-up diagnostic: log received vs every plausible computed
-            # digest so we can tell a wrong secret from a different signing
-            # scheme. Remove once the OA webhook verifies.
-            recv = signature.strip()
-            for _p in ("sha256=", "mac="):
-                if recv.startswith(_p):
-                    recv = recv[len(_p):]
-            _body = raw.decode("utf-8", "replace")
-            _cands = {
-                "sha256(app+body+ts+secret)": hashlib.sha256(
-                    f"{cfg.oa_app_id}{_body}{body_ts}{cfg.oa_secret_key}".encode()
-                ).hexdigest(),
-                "hmac_sha256(secret,app+body+ts)": hmac.new(
-                    cfg.oa_secret_key.encode(),
-                    f"{cfg.oa_app_id}{_body}{body_ts}".encode(),
-                    hashlib.sha256,
-                ).hexdigest(),
-                "hmac_sha256(secret,body)": hmac.new(
-                    cfg.oa_secret_key.encode(), _body.encode(), hashlib.sha256
-                ).hexdigest(),
-                "sha256(body+secret)": hashlib.sha256(
-                    f"{_body}{cfg.oa_secret_key}".encode()
-                ).hexdigest(),
-            }
-            _match = [k for k, v in _cands.items() if hmac.compare_digest(recv, v)]
+            # The signing scheme is known (sha256(app_id+raw_body+header_ts+secret),
+            # verified by app.services.zalo_oa_signature). A mismatch now means a
+            # wrong/stale secret or a replay out of the timestamp window — log the
+            # identifying headers (never the body/secret) and let the health badge
+            # surface ongoing failures.
             logger.warning(
-                "zalo oa webhook headers=%r raw_repr=%r",
-                {k: v for k, v in request.headers.items()},
-                raw,
-            )
-            logger.warning(
-                "zalo oa signature mismatch secret_len=%d ts=%r recv_sig=%r "
-                "candidates=%s matched=%s body=%r",
-                len(cfg.oa_secret_key),
+                "zalo oa signature mismatch app_id=%r ts_header=%r body_ts=%r sig=%r",
+                cfg.oa_app_id,
+                ts_header,
                 body_ts,
-                recv,
-                _cands,
-                _match,
-                _body,
+                signature,
             )
             # Fire-and-forget: signature telemetry must never block the webhook
             # response or change the verdict (the recorder swallows its own errors).

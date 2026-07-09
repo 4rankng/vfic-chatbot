@@ -79,8 +79,9 @@ surrounding code.
 - `uvicorn.access` is muted to WARNING (the app logger owns access logs).
 
 ### LLM client rules
-- MiniMax is **always primary** when enabled. OpenRouter is sole only if
-  MiniMax is disabled. If neither is enabled, `active_llm_provider` raises.
+- The admin integration settings choose whether MiniMax and OpenRouter are
+  enabled and which enabled provider is primary. The other enabled provider is
+  used as fallback. If neither is enabled, `active_llm_provider` raises.
 - `_llm_call_with_retry` retries once with jitter on 429, then raises
   `LLMThrottled` → the worker sends a static Vietnamese degradation reply.
 - Tool-loop ceiling = `max_llm_calls_per_turn` (default 6).

@@ -373,6 +373,7 @@ class TestDegradationMessage:
 
         mock_svc = MagicMock()
         mock_svc.get = AsyncMock(return_value=mock_conv)
+        mock_svc.recheck_ownership = AsyncMock(return_value=True)
         mock_svc.record_bot_outcome = AsyncMock()
 
         # Patch lazy imports at their SOURCE modules
@@ -388,3 +389,50 @@ class TestDegradationMessage:
         mock_sender.send_message.assert_called_once()
         sent_msg = mock_sender.send_message.call_args[0][1]
         assert "Xin lỗi" in sent_msg
+
+    @pytest.mark.asyncio
+    async def test_worker_degradation_suppressed_when_not_owned(self):
+        """A throttled turn that outlasted a recruiter takeover must not send.
+
+        recheck_ownership False → no send_message, record_bot_outcome(sent=False)
+        so the outcome is SUPPRESSED (clears the mutex) and the recruiter-owned
+        chat is not polluted with a degradation bubble.
+        """
+        from app.workers.chatbot_worker import _run_job_async
+
+        job = {
+            "conversation_id": str(uuid.uuid4()),
+            "version_at_start": 1,
+            "user_text": "hello",
+            "user_name": "Test",
+        }
+
+        mock_db = AsyncMock()
+        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.__aexit__ = AsyncMock(return_value=False)
+
+        mock_conv = MagicMock()
+        mock_conv.zalo_chat_id = "test_zalo_id"
+
+        mock_sender = MagicMock()
+        mock_sender.send_message = AsyncMock()
+        mock_deps = MagicMock()
+        mock_deps.zalo = MagicMock()
+        mock_deps.zalo.for_conversation = MagicMock(return_value=mock_sender)
+
+        mock_svc = MagicMock()
+        mock_svc.get = AsyncMock(return_value=mock_conv)
+        mock_svc.recheck_ownership = AsyncMock(return_value=False)  # taken over
+        mock_svc.record_bot_outcome = AsyncMock()
+
+        with patch("app.workers._db.worker_session", return_value=mock_db):
+            with patch("app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps):
+                with patch("app.graph.runner.run_turn", new_callable=AsyncMock) as mock_run:
+                    mock_run.side_effect = LLMThrottled("rate limit")
+                    with patch("app.services.conversation.ConversationService") as MockSvc:
+                        MockSvc.return_value = mock_svc
+                        await _run_job_async(job)
+
+        mock_sender.send_message.assert_not_called()
+        mock_svc.record_bot_outcome.assert_awaited_once()
+        assert mock_svc.record_bot_outcome.call_args.kwargs["sent"] is False

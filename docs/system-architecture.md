@@ -57,8 +57,8 @@ Compose at `/opt/vfic`, Caddy edge.
           ▼                                            │
 ┌────────────────────────────────────────────────────────────────────┐
 │  LLM providers                                                     │
-│   MiniMax M2.7 (agent) / M2.5 (safety)  ── primary                 │
-│   OpenRouter (deepseek-v4-flash)        ── fallback (FallbackLLM)  │
+│   MiniMax M2.7 (agent) / M2.5 (safety)  ── admin-selectable        │
+│   OpenRouter (deepseek-v4-flash)        ── admin-selectable        │
 │   OpenRouter text-embedding-3-large     ── embeddings (3072-dim)   │
 │   Gemini embedding-2                    ── embedding fallback       │
 └────────────────────────────────────────────────────────────────────┘

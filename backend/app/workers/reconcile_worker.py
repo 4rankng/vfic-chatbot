@@ -17,6 +17,7 @@ taken *before* touching any PENDING row → overlapping ticks cannot double-enqu
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -159,12 +160,17 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     continue
 
                 # ── Enqueue recovery turn ──
+                # Stamp received_at_epoch so the recovered turn gets a FRESH ~10s
+                # SLA budget from recovery time (not the original inbound time,
+                # which would already be exhausted). Without it BotRunState's
+                # deadline defaults to 0.0 → unbounded agent budget on recoveries.
                 ok = enqueue_chat_run({
                     "conversation_id": str(conv_fresh.id),
                     "version_at_start": conv_fresh.version,
                     "user_text": user_text,
                     "user_name": "",
                     "received_at": datetime.now(timezone.utc).isoformat(),
+                    "received_at_epoch": time.time(),
                 })
 
                 if not ok:

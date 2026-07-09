@@ -109,24 +109,37 @@ async def _run_job_async(job: dict) -> None:
                 svc = ConversationService(db)
                 conv = await svc.get(uuid.UUID(state.conversation_id))
                 if conv is not None:
-                    sender = (
-                        deps.zalo.for_conversation(conv)
-                        if hasattr(deps.zalo, "for_conversation")
-                        else deps.zalo
-                    )
-                    send_result = await sender.send_message(
-                        conv.zalo_chat_id,
-                        DEGRADATION_REPLY,
-                    )
+                    # A throttled turn may have outlasted a recruiter takeover —
+                    # re-check ownership before sending so a degradation bubble
+                    # never lands in a human-owned chat (mirrors run_turn's
+                    # pre_send_guard). Not owned → record SUPPRESSED, no send.
+                    await db.refresh(conv)
+                    owned = await svc.recheck_ownership(conv, state.version_at_start)
+                    sent = False
+                    external_error: str | None = None
+                    zalo_message_id: str | None = None
+                    if owned:
+                        sender = (
+                            deps.zalo.for_conversation(conv)
+                            if hasattr(deps.zalo, "for_conversation")
+                            else deps.zalo
+                        )
+                        send_result = await sender.send_message(
+                            conv.zalo_chat_id,
+                            DEGRADATION_REPLY,
+                        )
+                        sent = send_result.ok
+                        external_error = None if send_result.ok else send_result.error
+                        zalo_message_id = send_result.msg_id
                     await svc.record_bot_outcome(
                         conv,
                         version_at_start=state.version_at_start,
                         reply=DEGRADATION_REPLY,
                         started_at=started_at,
-                        sent=send_result.ok,
+                        sent=sent,
                         pending_message_id=state.pending_message_id,
-                        external_error=None if send_result.ok else send_result.error,
-                        zalo_message_id=send_result.msg_id,
+                        external_error=external_error,
+                        zalo_message_id=zalo_message_id,
                     )
             except Exception:  # noqa: BLE001
                 logger.error("failed to send degradation reply", exc_info=True)

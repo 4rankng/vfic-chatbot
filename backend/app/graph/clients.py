@@ -367,7 +367,7 @@ class FallbackLLM:
             return await self.primary.ainvoke(messages, **kwargs)
         except Exception:
             _record_llm_fallback()
-            logger.warning("Primary LLM failed, falling back to OpenRouter", exc_info=True)
+            logger.warning("Primary LLM failed, falling back to secondary provider", exc_info=True)
             return await self.fallback.ainvoke(messages, **kwargs)
 
 
@@ -430,14 +430,19 @@ def _openrouter_chat(
 
 
 def _active_llm_provider(settings=None) -> Literal["minimax", "openrouter"]:
-    """Return the *primary* LLM provider name. MiniMax is always primary when enabled."""
+    """Return the configured primary LLM provider name."""
     s = settings or get_settings()
     minimax_enabled = getattr(s, "minimax_enable", True)
     openrouter_enabled = getattr(s, "openrouter_enable", False)
-    if minimax_enabled:
+    default_provider = getattr(s, "llm_default_provider", "minimax")
+    if default_provider == "openrouter" and openrouter_enabled:
+        return "openrouter"
+    if default_provider == "minimax" and minimax_enabled:
         return "minimax"
     if openrouter_enabled:
         return "openrouter"
+    if minimax_enabled:
+        return "minimax"
     raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
 
 
@@ -448,24 +453,34 @@ def _chat_for_role(
     json_mode: bool = False,
     minimax_api_key: str | None = None,
     openrouter_api_key: str | None = None,
+    minimax_enabled: bool | None = None,
+    openrouter_enabled: bool | None = None,
+    default_provider: Literal["minimax", "openrouter"] | None = None,
+    openrouter_agent_model: str | None = None,
+    openrouter_safety_model: str | None = None,
+    openrouter_digest_model: str | None = None,
 ):
     """Build the OpenAI-compatible chat client for an agent/safety/digest role.
 
-    When both MINIMAX_ENABLE and OPENROUTER_ENABLE are true, returns a ``FallbackLLM``
-    that tries MiniMax first and automatically retries with OpenRouter on failure.
+    When both providers are enabled, returns a ``FallbackLLM`` that tries the
+    configured default first and automatically retries with the other provider.
     """
     s = get_settings()
-    minimax_enabled = getattr(s, "minimax_enable", True)
-    openrouter_enabled = getattr(s, "openrouter_enable", False)
+    minimax_on = getattr(s, "minimax_enable", True) if minimax_enabled is None else minimax_enabled
+    openrouter_on = (
+        getattr(s, "openrouter_enable", False)
+        if openrouter_enabled is None
+        else openrouter_enabled
+    )
+    preferred = default_provider or getattr(s, "llm_default_provider", "minimax")
 
-    if not minimax_enabled and not openrouter_enabled:
+    if not minimax_on and not openrouter_on:
         raise RuntimeError(
             "No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true"
         )
 
-    # Build MiniMax client (primary when enabled)
-    primary = None
-    if minimax_enabled:
+    minimax_chat = None
+    if minimax_on:
         resolved_minimax_key = minimax_api_key or s.minimax_api_key
         if role == "digest":
             if not resolved_minimax_key:
@@ -475,7 +490,7 @@ def _chat_for_role(
             kwargs = (
                 {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
             )
-            primary = ChatOpenAI(
+            minimax_chat = ChatOpenAI(
                 model=s.minimax_digest_model or s.minimax_agent_model,
                 api_key=resolved_minimax_key,
                 base_url=s.minimax_base_url,
@@ -485,23 +500,27 @@ def _chat_for_role(
             )
         else:
             model = s.minimax_agent_model if role == "agent" else s.minimax_safety_model
-            primary = _minimax_chat(
+            minimax_chat = _minimax_chat(
                 model,
                 temperature=temperature,
                 api_key=resolved_minimax_key,
             )
 
-    # Build OpenRouter client (fallback when MiniMax is also enabled, or sole provider)
-    fallback = None
-    if openrouter_enabled:
+    openrouter_chat = None
+    if openrouter_on:
         resolved_openrouter_key = openrouter_api_key or s.openrouter_api_key
         model = {
-            "agent": s.openrouter_agent_model,
-            "safety": s.openrouter_safety_model,
-            "digest": s.openrouter_digest_model or s.openrouter_agent_model,
+            "agent": openrouter_agent_model or s.openrouter_agent_model,
+            "safety": openrouter_safety_model or s.openrouter_safety_model,
+            "digest": (
+                openrouter_digest_model
+                or s.openrouter_digest_model
+                or openrouter_agent_model
+                or s.openrouter_agent_model
+            ),
         }[role]
         timeout = s.openrouter_digest_timeout if role == "digest" else s.openrouter_request_timeout
-        fallback = _openrouter_chat(
+        openrouter_chat = _openrouter_chat(
             model,
             temperature=temperature,
             timeout=timeout,
@@ -509,8 +528,10 @@ def _chat_for_role(
             api_key=resolved_openrouter_key,
         )
 
-    if primary and fallback:
-        return FallbackLLM(primary, fallback)
-    if primary:
-        return primary
-    return fallback
+    if minimax_chat and openrouter_chat:
+        if preferred == "openrouter":
+            return FallbackLLM(openrouter_chat, minimax_chat)
+        return FallbackLLM(minimax_chat, openrouter_chat)
+    if minimax_chat:
+        return minimax_chat
+    return openrouter_chat

@@ -20,16 +20,19 @@ class _Settings:
     zalo_oa_access_token = ""
     zalo_oa_refresh_token = ""
     minimax_api_key = ""
+    minimax_enable = True
     minimax_base_url = "https://api.minimax.io/v1"
     minimax_agent_model = "MiniMax-M2.7-highspeed"
     minimax_safety_model = "MiniMax-M2.5-highspeed"
     openrouter_api_key = ""
+    openrouter_enable = False
     openrouter_base_url = "https://openrouter.ai/api/v1"
     openrouter_agent_model = "deepseek/deepseek-v4-flash"
     openrouter_safety_model = "deepseek/deepseek-v4-flash"
     openrouter_digest_model = "deepseek/deepseek-v4-flash"
     openrouter_embedding_model = "openai/text-embedding-3-large"
     embedding_dim = 3072
+    llm_default_provider = "minimax"
 
 
 class _Row:
@@ -143,6 +146,8 @@ async def test_minimax_admin_view_masks_stored_token():
     }
     assert view["minimax_base_url"] == "https://api.minimax.io/v1"
     assert view["minimax_agent_model"] == "MiniMax-M2.7-highspeed"
+    assert view["minimax_enable"] is True
+    assert view["llm_default_provider"] == "minimax"
 
 
 @pytest.mark.asyncio
@@ -184,6 +189,29 @@ async def test_update_minimax_encrypts_token_and_audits_key_names(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_update_minimax_stores_enable_as_non_secret(monkeypatch):
+    async def fake_record_audit(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.record_audit",
+        fake_record_audit,
+    )
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    changed = await service.update_minimax(
+        {"minimax_enable": False},
+        actor_id=uuid.uuid4(),
+    )
+
+    assert changed == ["minimax_enable"]
+    assert db.rows["minimax_enable"].encrypted_value == "False"
+    assert db.rows["minimax_enable"].is_secret is False
+
+
+@pytest.mark.asyncio
 async def test_openrouter_admin_view_masks_stored_token():
     seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
     encrypted = seed.cipher.encrypt("sk-or-v1-openrouter-secret-token")
@@ -202,6 +230,8 @@ async def test_openrouter_admin_view_masks_stored_token():
     assert view["openrouter_digest_model"] == "deepseek/deepseek-v4-flash"
     assert view["openrouter_embedding_model"] == "openai/text-embedding-3-large"
     assert view["openrouter_embedding_dim"] == 3072
+    assert view["openrouter_enable"] is False
+    assert view["llm_default_provider"] == "minimax"
 
 
 @pytest.mark.asyncio
@@ -240,3 +270,23 @@ async def test_update_openrouter_encrypts_token_and_audits_key_names(monkeypatch
             "payload": {"changed_keys": ["openrouter_api_key"]},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_openrouter_admin_view_uses_stored_routing_and_model():
+    service = IntegrationSettingsService(
+        _ReadDb(
+            [
+                _Row("openrouter_enable", "true"),
+                _Row("llm_default_provider", "openrouter"),
+                _Row("openrouter_agent_model", "deepseek/deepseek-v4-flash"),
+            ]
+        ),
+        settings=_Settings(),
+    )
+
+    view = await service.admin_openrouter_view()
+
+    assert view["openrouter_enable"] is True
+    assert view["llm_default_provider"] == "openrouter"
+    assert view["openrouter_agent_model"] == "deepseek/deepseek-v4-flash"

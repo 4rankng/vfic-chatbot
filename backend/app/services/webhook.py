@@ -89,6 +89,7 @@ class ZaloWebhookService:
         *,
         enqueue: Callable[[dict], bool | Awaitable[bool]],
         channel: str = "bot",
+        bot_token: str | None = None,
     ) -> dict:
         """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
@@ -136,9 +137,10 @@ class ZaloWebhookService:
         # Fire-and-forget typing indicator so the user sees immediate feedback
         # while the RQ worker picks up the job. The worker's _status_heartbeat
         # keeps the indicator alive during LLM generation and (on the OA channel,
-        # which has no typing endpoint) sends a one-shot slow-case ack.
+        # which has no typing endpoint) sends a one-shot slow-case ack. The token
+        # is the DB-resolved live value (env ZALO_BOT_TOKEN is stale).
         if norm.zalo_channel == "bot":
-            asyncio.create_task(_fire_typing(norm.zalo_chat_id))
+            asyncio.create_task(_fire_typing(norm.zalo_chat_id, bot_token))
 
         job = {
             "conversation_id": str(conv.id),
@@ -237,11 +239,13 @@ def _event_button_title(raw: dict) -> str:
     return ""
 
 
-async def _fire_typing(chat_id: str) -> None:
+async def _fire_typing(chat_id: str, bot_token: str | None = None) -> None:
     """Fire-and-forget Zalo typing indicator from the webhook process.
 
     Uses a one-shot httpx call to avoid importing the heavy ZaloBotSender class
-    into the webhook hot path. Errors are logged but never propagate.
+    into the webhook hot path. ``bot_token`` is the DB-resolved live token passed
+    in from the router; it falls back to ``settings.zalo_bot_token`` (stale in
+    prod) only when a caller omits it. Errors are logged but never propagate.
     """
     try:
         import httpx
@@ -249,7 +253,7 @@ async def _fire_typing(chat_id: str) -> None:
         from app.core.config import get_settings
 
         s = get_settings()
-        token = s.zalo_bot_token
+        token = bot_token or s.zalo_bot_token
         if not token:
             return
         base = s.zalo_bot_api_base.rstrip("/")
