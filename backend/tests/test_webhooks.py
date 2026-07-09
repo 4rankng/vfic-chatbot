@@ -29,7 +29,7 @@ async def test_zalo_webhook_returns_400_for_malformed_json():
 
 
 def test_zalo_oa_signature_verifier_accepts_documented_digest():
-    from app.api.webhooks import _verify_oa_signature
+    from app.services.zalo_oa_signature import verify_signature
 
     payload = {
         "app_id": "app-1",
@@ -41,13 +41,13 @@ def test_zalo_oa_signature_verifier_accepts_documented_digest():
     raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     digest = hashlib.sha256(b"app-1" + raw + b"1700000000" + b"secret").hexdigest()
 
-    assert _verify_oa_signature(
+    assert verify_signature(
         signature=f"sha256={digest}",
         raw=raw,
         payload=payload,
         app_id="app-1",
         secret_key="secret",
-    )
+    ).verified
 
 
 def test_zalo_oa_signature_uses_timestamp_header_not_body():
@@ -56,7 +56,7 @@ def test_zalo_oa_signature_uses_timestamp_header_not_body():
     Regression: the verifier used to read the body timestamp and permanently
     returned 401 because the header and body timestamps need not be equal.
     """
-    from app.api.webhooks import _verify_oa_signature
+    from app.services.zalo_oa_signature import verify_signature
 
     payload = {
         "app_id": "app-1",
@@ -69,14 +69,14 @@ def test_zalo_oa_signature_uses_timestamp_header_not_body():
     header_ts = "1700000000000"
     digest = hashlib.sha256(b"app-1" + raw + header_ts.encode() + b"secret").hexdigest()
 
-    assert _verify_oa_signature(
+    assert verify_signature(
         signature=f"mac={digest}",
         raw=raw,
         payload=payload,
         app_id="app-1",
         secret_key="secret",
         timestamp_header=header_ts,
-    )
+    ).verified
 
 
 def test_zalo_oa_normalizer_maps_text_message_to_scoped_chat_id():

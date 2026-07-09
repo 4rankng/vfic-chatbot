@@ -1,4 +1,6 @@
 """Admin integration settings routes."""
+import json
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,10 +17,13 @@ from app.schemas.integrations import (
     ZaloChannelTestOut,
     ZaloIntegrationSettingsOut,
     ZaloIntegrationSettingsUpdate,
+    ZaloOaSignatureVerifyOut,
+    ZaloOaSignatureVerifyRequest,
 )
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.zalo_bot_service import ZaloBotAdminClient, SendResult
 from app.services.zalo_oa_service import ZaloOASender
+from app.services.zalo_oa_signature import verify_signature
 
 router = APIRouter(prefix="/admin/integrations", tags=["integrations"])
 
@@ -133,6 +138,64 @@ async def test_zalo_oa(
         connected=connected,
         missing=missing,
         errors=errors,
+    )
+
+
+@router.post("/zalo/oa/verify-signature", response_model=ZaloOaSignatureVerifyOut)
+async def verify_zalo_oa_signature(
+    body: ZaloOaSignatureVerifyRequest,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ZaloOaSignatureVerifyOut:
+    """Verify a captured Zalo OA webhook event against the stored OA Secret Key.
+
+    Lets an admin confirm the configured OA Secret Key is the value Zalo actually
+    signs with, by pasting a real event's ``X-ZEvent-Signature`` + raw body +
+    ``X-ZEvent-Timestamp`` (from the Zalo console test or server logs). The live
+    Test Connection probe authenticates with the access_token and cannot detect a
+    wrong secret; this deterministic check can.
+    """
+    settings_service = IntegrationSettingsService(db)
+    cfg = await settings_service.resolve_zalo()
+    secret_configured = bool(cfg.oa_secret_key)
+    app_id_configured = bool(cfg.oa_app_id)
+    if not secret_configured or not app_id_configured:
+        return ZaloOaSignatureVerifyOut(
+            verified=False,
+            secret_configured=secret_configured,
+            app_id_configured=app_id_configured,
+            matched_label=None,
+            detail="OA Secret Key hoặc App ID chưa được cấu hình.",
+        )
+    try:
+        payload = json.loads(body.raw_body)
+    except json.JSONDecodeError:
+        return ZaloOaSignatureVerifyOut(
+            verified=False,
+            secret_configured=True,
+            app_id_configured=True,
+            matched_label=None,
+            detail="Body không phải JSON hợp lệ — dán nguyên văn (raw) body Zalo gửi.",
+        )
+    result = verify_signature(
+        signature=body.signature,
+        raw=body.raw_body.encode("utf-8"),
+        payload=payload,
+        app_id=cfg.oa_app_id,
+        secret_key=cfg.oa_secret_key,
+        timestamp_header=body.timestamp,
+    )
+    return ZaloOaSignatureVerifyOut(
+        verified=result.verified,
+        secret_configured=True,
+        app_id_configured=True,
+        matched_label=result.matched_label,
+        detail=(
+            "Chữ ký khớp — OA Secret Key đúng."
+            if result.verified
+            else "Chữ ký không khớp — OA Secret Key có thể sai (khác App Secret), "
+            "hoặc body/timestamp không khớp nguyên văn byte-for-byte."
+        ),
     )
 
 

@@ -11,8 +11,9 @@ accept-unsigned behavior for ergonomics.
 The raw body is logged at INFO so the Bot Platform payload shape is observable
 during bring-up.
 """
-import hmac
+import asyncio
 import hashlib
+import hmac
 import json
 import logging
 
@@ -24,6 +25,8 @@ from app.core.config import get_settings
 from app.core.db import get_db
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.webhook import ZaloWebhookService
+from app.services.zalo_oa_health import record_oa_signature
+from app.services.zalo_oa_signature import verify_signature
 from app.workers.chatbot_worker import enqueue_chat_run
 
 logger = logging.getLogger(__name__)
@@ -92,14 +95,15 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         body_ts = str(
             payload.get("timestamp") or payload.get("timeStamp") or payload.get("time_stamp") or ""
         )
-        if not _verify_oa_signature(
+        oa_result = verify_signature(
             signature=signature,
             raw=raw,
             payload=payload,
             app_id=cfg.oa_app_id,
             secret_key=cfg.oa_secret_key,
             timestamp_header=ts_header,
-        ):
+        )
+        if not oa_result.verified:
             # Bring-up diagnostic: log received vs every plausible computed
             # digest so we can tell a wrong secret from a different signing
             # scheme. Remove once the OA webhook verifies.
@@ -140,7 +144,11 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
                 _match,
                 _body,
             )
+            # Fire-and-forget: signature telemetry must never block the webhook
+            # response or change the verdict (the recorder swallows its own errors).
+            asyncio.create_task(record_oa_signature(ok=False))
             return JSONResponse({"detail": "invalid OA signature"}, status_code=401)
+        asyncio.create_task(record_oa_signature(ok=True))
     elif _settings.app_env != "development":
         return JSONResponse(
             {"detail": "OA webhook verification not configured"},
@@ -155,64 +163,3 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     )
     code = 503 if result.get("status") == "enqueue_failed" else 200
     return JSONResponse(result, status_code=code)
-
-
-def _verify_oa_signature(
-    *,
-    signature: str,
-    raw: bytes,
-    payload: dict,
-    app_id: str,
-    secret_key: str,
-    timestamp_header: str = "",
-) -> bool:
-    """Verify Zalo OA webhook signature.
-
-    Zalo signs sha256(appId + data + timeStamp + OAsecretKey): ``data`` is the
-    raw request body (or a nested ``data`` field serialized as JSON) and
-    ``timeStamp`` is the value of the X-ZEvent-Timestamp HEADER. Reading the
-    body field instead of the header is the classic cause of a permanent 401 —
-    the two need not be equal. The header may arrive bare or as
-    ``sha256=<hex>``/``mac=<hex>``.
-    """
-    if not signature or not app_id or not secret_key:
-        return False
-    normalized = signature.strip()
-    for prefix in ("sha256=", "mac="):
-        if normalized.startswith(prefix):
-            normalized = normalized[len(prefix):]
-    # Zalo signs sha256(appId + data + timeStamp + OAsecretKey). ``data`` is the
-    # raw request body (normal events) or a nested ``data`` field serialized as
-    # JSON (str() would emit Python repr with single quotes and never match).
-    # ``timeStamp`` is the X-ZEvent-Timestamp HEADER; keep the body field as a
-    # fallback for variants that put it only in the payload, then try every
-    # (data, ts) combination so a genuine signature matches regardless of form.
-    ts_candidates: list[str] = []
-    if timestamp_header:
-        ts_candidates.append(str(timestamp_header))
-    body_ts = payload.get("timestamp") or payload.get("timeStamp") or payload.get("time_stamp")
-    if body_ts:
-        ts_candidates.append(str(body_ts))
-    if not ts_candidates:
-        ts_candidates.append("")
-
-    data_candidates: list[str] = [raw.decode("utf-8", "replace")]
-    data = payload.get("data")
-    if data is not None:
-        data_candidates.append(_to_json(data))
-    data_candidates.append(_to_json(payload))
-
-    for ts in ts_candidates:
-        for data_text in data_candidates:
-            digest = hashlib.sha256(
-                f"{app_id}{data_text}{ts}{secret_key}".encode("utf-8")
-            ).hexdigest()
-            if hmac.compare_digest(normalized, digest):
-                return True
-    return False
-
-
-def _to_json(value: object) -> str:
-    """Serialize ``value`` as Zalo's JSON.stringify would: compact separators,
-    non-ASCII kept literal, insertion order preserved (Python dicts are ordered)."""
-    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)

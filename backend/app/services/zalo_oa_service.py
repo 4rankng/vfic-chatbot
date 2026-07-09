@@ -6,14 +6,14 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 
-logger = logging.getLogger(__name__)
-
 from app.core.config import Settings, ZALO_OA_API_BASE, get_settings
 from app.services.zalo_bot_service import (
     SendResult,
     _aggregate_chunked_send,
     _split_long_plain_text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ZaloOASender:

@@ -13,6 +13,20 @@ class PlainStatus(BaseModel):
     value: str | None = None
 
 
+class ZaloOaSignatureHealth(BaseModel):
+    """Passive result of the last real inbound OA webhook signature check.
+
+    Surfaced on the integration status so a wrong OA Secret Key is visible the
+    moment Zalo sends a real signed event, without clicking Test — the live Test
+    probe authenticates with the access_token and cannot detect a wrong secret.
+    """
+
+    last_status: str | None = None  # "verified" | "mismatched"
+    last_ts: float | None = None
+    last_mismatch_ts: float | None = None
+    consec_failures: int | None = None
+
+
 class ZaloIntegrationSettingsOut(BaseModel):
     zalo_bot_token: SecretStatus
     zalo_bot_webhook_secret: SecretStatus
@@ -22,6 +36,7 @@ class ZaloIntegrationSettingsOut(BaseModel):
     zalo_oa_refresh_token: SecretStatus
     zalo_bot_api_base: str
     zalo_oa_api_base: str
+    zalo_oa_webhook_signature: ZaloOaSignatureHealth | None = None
 
 
 class ZaloIntegrationSettingsUpdate(BaseModel):
@@ -47,6 +62,24 @@ class ZaloChannelTestOut(BaseModel):
     connected: bool = False
     missing: list[str]
     errors: list[str] = Field(default_factory=list)
+
+
+class ZaloOaSignatureVerifyRequest(BaseModel):
+    """A captured Zalo OA webhook event to verify against the stored OA Secret Key."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    signature: str = Field(..., min_length=1, max_length=256)
+    raw_body: str = Field(..., min_length=1, max_length=65536)
+    timestamp: str = Field(default="", max_length=64)
+
+
+class ZaloOaSignatureVerifyOut(BaseModel):
+    verified: bool
+    secret_configured: bool
+    app_id_configured: bool
+    matched_label: str | None = None
+    detail: str
 
 
 class MinimaxIntegrationSettingsOut(BaseModel):
