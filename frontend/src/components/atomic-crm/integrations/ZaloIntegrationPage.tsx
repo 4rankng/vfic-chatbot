@@ -27,6 +27,21 @@ import "../conversations/inbox.css";
 type SecretStatus = { configured: boolean; preview?: string | null };
 type PlainStatus = { configured: boolean; value?: string | null };
 
+type ZaloOaSignatureHealth = {
+  last_status: "verified" | "mismatched" | null;
+  last_ts: number | null;
+  last_mismatch_ts: number | null;
+  consec_failures: number | null;
+};
+
+type ZaloOaSignatureVerifyResult = {
+  verified: boolean;
+  secret_configured: boolean;
+  app_id_configured: boolean;
+  matched_label: string | null;
+  detail: string;
+};
+
 type ZaloSettings = {
   zalo_bot_token: SecretStatus;
   zalo_bot_webhook_secret: SecretStatus;
@@ -36,6 +51,7 @@ type ZaloSettings = {
   zalo_oa_refresh_token: SecretStatus;
   zalo_bot_api_base: string;
   zalo_oa_api_base: string;
+  zalo_oa_webhook_signature: ZaloOaSignatureHealth | null;
 };
 
 type MinimaxSettings = {
@@ -400,6 +416,171 @@ const SettingsSideNav = ({
   </aside>
 );
 
+const formatRelativeEpoch = (epoch: number | null): string => {
+  if (!epoch) return "";
+  const diffSeconds = Math.max(0, Math.round(Date.now() / 1000 - epoch));
+  if (diffSeconds < 60) return "vừa xong";
+  if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} phút trước`;
+  if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} giờ trước`;
+  return `${Math.floor(diffSeconds / 86400)} ngày trước`;
+};
+
+const ZaloOaSignatureHealthBadge = ({
+  health,
+}: {
+  health: ZaloOaSignatureHealth | null;
+}) => {
+  if (!health || !health.last_status) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Chưa có sự kiện webhook thực nào — trạng thái chữ ký sẽ cập nhật khi
+        Zalo gửi tin nhắn đầu tiên.
+      </p>
+    );
+  }
+  if (health.last_status === "verified") {
+    return (
+      <p className="text-sm font-medium text-emerald-600">
+        ✅ Chữ ký webhook hợp lệ — cập nhật{" "}
+        {formatRelativeEpoch(health.last_ts)}.
+      </p>
+    );
+  }
+  return (
+    <p className="text-sm font-medium text-red-600">
+      ❌ Chữ ký webhook bị từ chối — OA Secret Key có thể sai
+      {health.consec_failures ? ` (×${health.consec_failures})` : ""}. Cập nhật{" "}
+      {formatRelativeEpoch(health.last_mismatch_ts ?? health.last_ts)}.
+    </p>
+  );
+};
+
+const ZaloOaSignatureVerifyPanel = ({
+  secretConfigured,
+}: {
+  secretConfigured: boolean;
+}) => {
+  const notify = useNotify();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [signature, setSignature] = useState("");
+  const [rawBody, setRawBody] = useState("");
+  const [timestamp, setTimestamp] = useState("");
+  const [result, setResult] = useState<ZaloOaSignatureVerifyResult | null>(
+    null,
+  );
+
+  const run = async () => {
+    if (!signature.trim() || !rawBody) {
+      notify("Dán chữ ký (X-ZEvent-Signature) và raw body từ sự kiện Zalo.", {
+        type: "warning",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const out = await apiJson<ZaloOaSignatureVerifyResult>(
+        "/api/v1/admin/integrations/zalo/oa/verify-signature",
+        {
+          method: "POST",
+          body: {
+            signature: signature.trim(),
+            raw_body: rawBody,
+            timestamp: timestamp.trim(),
+          },
+        },
+      );
+      setResult(out);
+      notify(
+        out.verified
+          ? "Chữ ký khớp — OA Secret Key đúng."
+          : "Chữ ký không khớp.",
+        { type: out.verified ? "success" : "warning" },
+      );
+    } catch {
+      setResult(null);
+      notify("Không xác thực được chữ ký.", { type: "warning" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="settings-oa-verify">
+      <button
+        type="button"
+        className="text-sm font-medium text-foreground hover:underline"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? "▾" : "▸"} Xác thực chữ ký từ sự kiện mẫu
+      </button>
+      {open ? (
+        <div className="settings-oa-verify-body">
+          <p className="text-xs text-muted-foreground">
+            Dán một sự kiện thật từ Zalo (console test hoặc log máy chủ) để xác
+            nhận OA Secret Key đã đúng. Body phải là nguyên văn byte-for-byte
+            Zalo gửi.
+          </p>
+          <div className="settings-field">
+            <Label htmlFor="oa-sig-signature">X-ZEvent-Signature</Label>
+            <Input
+              id="oa-sig-signature"
+              className="settings-input"
+              placeholder="mac=…"
+              value={signature}
+              onChange={(event) => setSignature(event.target.value)}
+            />
+          </div>
+          <div className="settings-field">
+            <Label htmlFor="oa-sig-body">Raw body (nguyên văn)</Label>
+            <textarea
+              id="oa-sig-body"
+              className="settings-input font-mono text-xs"
+              rows={5}
+              placeholder='{"app_id":"…","event_name":"user_send_text",…}'
+              value={rawBody}
+              onChange={(event) => setRawBody(event.target.value)}
+            />
+          </div>
+          <div className="settings-field">
+            <Label htmlFor="oa-sig-ts">X-ZEvent-Timestamp</Label>
+            <Input
+              id="oa-sig-ts"
+              className="settings-input"
+              placeholder="1783527327967"
+              value={timestamp}
+              onChange={(event) => setTimestamp(event.target.value)}
+            />
+          </div>
+          <div className="settings-oa-actions">
+            <Button
+              type="button"
+              variant="outline"
+              className="settings-test-button"
+              onClick={run}
+              disabled={busy || !secretConfigured}
+            >
+              {busy ? "Đang xác thực" : "Xác thực"}
+            </Button>
+          </div>
+          {result ? (
+            <p
+              className={
+                result.verified
+                  ? "text-sm font-medium text-emerald-600"
+                  : "text-sm font-medium text-red-600"
+              }
+            >
+              {result.verified ? "✅" : "❌"} {result.detail}
+              {result.matched_label ? ` (${result.matched_label})` : ""}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 export const ZaloIntegrationPage = () => {
   const translate = useTranslate();
   const notify = useNotify();
@@ -507,8 +688,7 @@ export const ZaloIntegrationPage = () => {
   };
 
   const saveMinimaxChanges = async () => {
-    if (Object.keys(changedMinimaxPayload).length === 0)
-      return minimaxSettings;
+    if (Object.keys(changedMinimaxPayload).length === 0) return minimaxSettings;
 
     const nextMinimax = await apiJson<MinimaxSettings>(
       "/api/v1/admin/integrations/minimax",
@@ -800,6 +980,15 @@ export const ZaloIntegrationPage = () => {
                     {testingOa ? "Đang kiểm tra" : "Test Connection"}
                   </Button>
                 </div>
+                <ZaloOaSignatureHealthBadge
+                  health={settings?.zalo_oa_webhook_signature ?? null}
+                />
+                <ZaloOaSignatureVerifyPanel
+                  secretConfigured={
+                    (settings?.zalo_oa_secret_key ?? { configured: false })
+                      .configured
+                  }
+                />
               </div>
             </SettingsCard>
           </div>
