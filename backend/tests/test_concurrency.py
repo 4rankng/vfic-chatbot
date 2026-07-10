@@ -272,6 +272,57 @@ async def test_record_bot_outcome_updates_pending_message_in_place():
 
 
 @pytest.mark.asyncio
+async def test_record_bot_outcome_transitions_sending_row_in_place():
+    """A SENDING row (flipped by claim_send) is matched and transitioned to its
+    final state IN PLACE — not left dangling, and not duplicated as a second
+    message. This is the outcome-side half of the no-duplicate guarantee:
+    record_bot_outcome accepts SENDING (not only PENDING) in the pending-match."""
+    conv = _make_conv(version=3)
+    sending = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body="Trả lời thật",  # claim_send already stamped the real reply
+        delivery_status=DeliveryStatus.SENDING,
+    )
+    sending.id = 42
+
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    async def _flush():
+        for call in db.add.call_args_list:
+            obj = call.args[0]
+            if hasattr(obj, "proposed_reply"):
+                obj.id = 99
+
+    db.flush = AsyncMock(side_effect=_flush)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.get = AsyncMock(return_value=sending)
+    events = AsyncMock()
+    state = ConversationState(db, MagicMock(), events)
+
+    msg = await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Trả lời thật",
+        started_at=utcnow(),
+        sent=True,
+        pending_message_id=42,
+    )
+
+    # In-place transition: the SENDING row becomes the SENT row, not a duplicate.
+    assert msg is sending
+    assert sending.delivery_status == DeliveryStatus.SENT
+    assert sending.body == "Trả lời thật"
+    assert sending.bot_run_id is not None
+    assert conv.bot_locked_until is None
+    assert conv.last_outbound_at is not None
+    events.message_created.assert_awaited_once()
+    events.conversation_updated.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_recheck_ownership_requires_matching_live_lock_owner():
     conv = _make_conv(version=3)
     owner = uuid.uuid4()
@@ -285,6 +336,107 @@ async def test_recheck_ownership_requires_matching_live_lock_owner():
 
     conv.bot_locked_until = utcnow() - timedelta(seconds=1)
     assert not await state.recheck_ownership(conv, 3, lock_owner=owner)
+
+
+@pytest.mark.asyncio
+async def test_claim_send_requires_pending_row_and_lock_owner():
+    """claim_send refuses to claim without a pending BOT row or a lock owner — the
+    atomic claim's preconditions. A real turn always holds both; missing either
+    means the caller suppresses rather than sending without a durable marker."""
+    conv = _make_conv(version=3)
+    db = AsyncMock()
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    assert not await state.claim_send(
+        conv, version_at_start=3, lock_owner=uuid.uuid4(), pending_message_id=None,
+        reply="Trả lời thật",
+    )
+    assert not await state.claim_send(
+        conv, version_at_start=3, lock_owner=None, pending_message_id=42,
+        reply="Trả lời thật",
+    )
+    db.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_claim_send_gates_on_version_and_lock_owner_in_one_statement():
+    """The claim is one conditional UPDATE: rowcount==1 ⇒ still owned at
+    version_at_start with a live lock owned by lock_owner (send); 0 ⇒ a takeover
+    or newer inbound bumped version first (suppress). The WHERE EXISTS on the
+    conversation closes the recheck→send TOCTOU server-side, not read-then-act."""
+    conv = _make_conv(version=3)
+    owner = uuid.uuid4()
+    db = AsyncMock()
+    db.commit = AsyncMock()
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=1))
+    assert await state.claim_send(
+        conv, version_at_start=3, lock_owner=owner, pending_message_id=42,
+        reply="Trả lời thật",
+    )
+
+    sql = str(db.execute.call_args[0][0])
+    params = db.execute.call_args[0][1]
+    assert "UPDATE messages SET delivery_status = 'SENDING', body = :reply" in sql
+    assert "EXISTS" in sql
+    assert "c.version = :version_at_start" in sql
+    assert "c.bot_lock_owner = :owner" in sql
+    assert "c.bot_locked_until > now()" in sql
+    assert params == {
+        "pending_id": 42,
+        "cid": conv.id,
+        "version_at_start": 3,
+        "owner": owner,
+        "reply": "Trả lời thật",
+    }
+
+    # rowcount 0 ⇒ not claimed (suppress); a recruiter reply bumped version, etc.
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=0))
+    assert not await state.claim_send(
+        conv, version_at_start=3, lock_owner=owner, pending_message_id=42,
+        reply="Trả lời thật",
+    )
+
+
+@pytest.mark.asyncio
+async def test_break_stale_lock_reports_whether_a_stale_lock_broke():
+    """break_stale_lock force-clears a mutex whose owner heartbeat is stale; the
+    conditional WHERE means a live turn with a fresh heartbeat is never stolen.
+    rowcount reports whether a stale lock was actually broken."""
+    conv = _make_conv()
+    db = AsyncMock()
+    db.commit = AsyncMock()
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=1))
+    assert await state.break_stale_lock(conv.id, stale_after_seconds=60)
+    sql = str(db.execute.call_args[0][0])
+    assert "bot_lock_heartbeat_at" in sql
+
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=0))
+    assert not await state.break_stale_lock(conv.id, stale_after_seconds=60)
+
+
+@pytest.mark.asyncio
+async def test_resolve_unconfirmed_sending_flips_to_sent_and_stamps_outbound():
+    """A stuck SENDING row (crash after POST, before SENT) is flipped to SENT
+    (at-most-once: assume delivered). last_outbound_at is stamped only when a row
+    moved, keeping the conversation's attention state coherent."""
+    conv = _make_conv()
+    db = AsyncMock()
+    db.commit = AsyncMock()
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    # A SENDING row moved → message UPDATE + last_outbound_at stamp (2 executes).
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=1))
+    assert await state.resolve_unconfirmed_sending(conv.id) == 1
+    assert db.execute.await_count == 2
+
+    # No SENDING row → only the message UPDATE (no outbound stamp).
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=0))
+    assert await state.resolve_unconfirmed_sending(conv.id) == 0
+    assert db.execute.await_count == 1
 
 
 @pytest.mark.asyncio

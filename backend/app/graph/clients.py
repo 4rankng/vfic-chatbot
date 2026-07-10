@@ -14,7 +14,7 @@ import unicodedata
 from typing import Literal
 
 from app.core.config import get_settings
-from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
+from app.graph.schemas import _dispatch_tool
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,34 @@ def _should_prefetch_knowledge(user_text: str) -> bool:
 def _is_429(exc: Exception) -> bool:
     """Check if an exception represents an HTTP 429 (rate limit)."""
     return "429" in str(exc) or "rate" in str(exc).lower()
+
+
+def _ground_reply(reply: str, tool_results: list[str]) -> str:
+    """Post-generation grounding cross-check (Phase 3).
+
+    Strips any job_id the reply cites that was not present in the tool results
+    the LLM was shown. Best-effort and never raises — on any error the original
+    reply passes through unchanged (grounding is a guardrail, not a hard gate).
+    """
+    try:
+        from app.core.config import get_settings
+
+        if not getattr(get_settings(), "grounding_check_enabled", True):
+            return reply
+        from app.graph.grounding import extract_surfaced_job_ids, validate_grounding
+
+        surfaced = extract_surfaced_job_ids(tool_results)
+        result = validate_grounding(reply, surfaced)
+        if not result.is_grounded:
+            logger.warning(
+                "grounding_hallucination_stripped: %s cited ids not in retrieved set",
+                len(result.hallucinated_ids),
+            )
+            return result.sanitized_reply
+        return reply
+    except Exception:  # noqa: BLE001
+        logger.debug("grounding check skipped (non-fatal)", exc_info=True)
+        return reply
 
 
 async def _llm_call_with_retry(bound, messages):
@@ -261,14 +289,18 @@ class MiniMaxAgent:
             s = get_settings()
             self.max_iters = s.max_llm_calls_per_turn
 
-    async def agent(self, user_text, *, system, retrieval, embedder) -> str:
+    async def agent(self, user_text, *, system, retrieval, embedder, allowed_tools=None) -> str:
+        from app.graph.grounding import extract_surfaced_job_ids, validate_grounding
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
+        from app.graph.schemas import filter_tool_schemas
 
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-        bound = self.llm.bind_tools(TOOL_SCHEMAS) if hasattr(self.llm, "bind_tools") else self.llm
+        schemas = filter_tool_schemas(allowed_tools)
+        bound = self.llm.bind_tools(schemas) if hasattr(self.llm, "bind_tools") else self.llm
         sem = get_llm_semaphore()
         messages = [SystemMessage(content=system)]
+        tool_results: list[str] = []  # captured for post-generation grounding cross-check
         if _should_prefetch_knowledge(user_text):
             try:
                 prefetched = await _dispatch_tool(
@@ -280,6 +312,7 @@ class MiniMaxAgent:
             except Exception:  # noqa: BLE001
                 logger.warning("Contact knowledge prefetch failed", exc_info=True)
             else:
+                tool_results.append(str(prefetched))
                 messages.append(
                     SystemMessage(
                         content=(
@@ -311,18 +344,20 @@ class MiniMaxAgent:
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
             if not calls:
-                return ai.content
+                return _ground_reply(ai.content, tool_results)
             # MiniMax occasionally omits tool_call.id; an empty tool_call_id breaks
             # the OpenAI tool protocol on the next turn. Synthesize a stable id.
             for idx, tc in enumerate(calls):
                 out = await _dispatch_tool(retrieval, embedder, tc["name"], tc.get("args", {}))
+                tool_results.append(str(out))
                 messages.append(
                     ToolMessage(
                         content=str(out),
                         tool_call_id=tc.get("id") or f"call_{idx}_{tc.get('name', 'tool')}",
                     )
                 )
-        return messages[-1].content if hasattr(messages[-1], "content") else ""
+        final = messages[-1].content if hasattr(messages[-1], "content") else ""
+        return _ground_reply(final, tool_results)
 
 
 class MiniMaxSafety:

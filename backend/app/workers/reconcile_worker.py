@@ -29,6 +29,8 @@ _RECONCILE_UNANSWERED_INBOUND = "reconcile_unanswered_inbound_total"
 _RECONCILE_FAILED_SEND = "reconcile_failed_send_total"
 _RECONCILE_SKIPPED_LOCKED = "reconcile_skipped_locked_total"
 _RECONCILE_ENQUEUE_FAILED = "reconcile_enqueue_failed_total"
+_RECONCILE_UNKNOWN_SEND = "reconcile_unknown_send_outcome"
+_RECONCILE_STALE_LOCK_BROKEN = "reconcile_stale_lock_broken"
 _RECONCILE_UNANSWERED_GAUGE = "reconcile_unanswered_gauge"
 _RECONCILE_TICK_LOCK = "reconcile_tick_lock"  # SETNX non-reentrancy key
 
@@ -80,6 +82,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
             now=now,
             grace_seconds=settings.reconcile_grace_seconds,
             max_age_seconds=settings.reconcile_max_age_seconds,
+            stale_lock_seconds=settings.chat_turn_job_timeout,
             limit=settings.reconcile_batch_size,
         )
 
@@ -96,6 +99,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     failed_send = 0
     skipped_locked = 0
     enqueue_failed = 0
+    unknown_send_outcome = 0
+    stale_locks_broken = 0
 
     for conv in candidates:
         async with worker_session() as db:
@@ -109,15 +114,42 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
             if not svc.state.run_start_guard(conv_fresh):
                 continue
 
-            # ── Guard: acquire per-chat lock (atomic; False = already in-flight) ──
+            # ── Guard: acquire per-chat lock (atomic; None = already in-flight) ──
             lock_owner = await svc.state.acquire_lock(conv_fresh.id)
             if lock_owner is None:
-                skipped_locked += 1
-                continue
+                # Lock held. If the owner's heartbeat is stale (older than the RQ job
+                # timeout) the worker is presumed dead — break the stale lock and
+                # re-acquire instead of stalling the chat for the full bot_lock_ttl.
+                if await svc.state.break_stale_lock(
+                    conv_fresh.id, stale_after_seconds=settings.chat_turn_job_timeout
+                ):
+                    stale_locks_broken += 1
+                    lock_owner = await svc.state.acquire_lock(conv_fresh.id)
+                if lock_owner is None:
+                    skipped_locked += 1
+                    continue
 
             try:
                 # Refresh version AFTER acquiring lock to avoid stale optimistic-lock.
                 await db.refresh(conv_fresh)
+
+                # Mop up any stale SENDING rows for this conversation (newest or
+                # buried) — a worker crash after the pre-send claim left them. A
+                # conv only becomes a candidate once its newest message is older
+                # than reconcile_grace_seconds, so any SENDING row here is past the
+                # RQ job timeout and definitively stale. At-most-once: assume
+                # delivered and do NOT re-enqueue (would duplicate). Resolving
+                # BEFORE reading newest means a formerly-SENDING newest becomes SENT
+                # and naturally falls through to the release-and-continue path below.
+                resolved = await svc.state.resolve_unconfirmed_sending(conv_fresh.id)
+                if resolved:
+                    unknown_send_outcome += resolved
+                    logger.warning(
+                        "reconcile: resolved %d unconfirmed SENDING row(s) as sent "
+                        "(at-most-once) conversation=%s",
+                        resolved,
+                        conv_fresh.zalo_chat_id,
+                    )
 
                 # Determine reason from the actual newest message.
                 repo = ConversationRepository(db)
@@ -225,5 +257,9 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_SKIPPED_LOCKED, skipped_locked)
     if enqueue_failed:
         pipe.incrby(_RECONCILE_ENQUEUE_FAILED, enqueue_failed)
+    if unknown_send_outcome:
+        pipe.incrby(_RECONCILE_UNKNOWN_SEND, unknown_send_outcome)
+    if stale_locks_broken:
+        pipe.incrby(_RECONCILE_STALE_LOCK_BROKEN, stale_locks_broken)
     pipe.execute()
     logger.info("reconcile tick complete: %d candidates scanned, %d re-enqueued", len(candidates), re_enqueued)

@@ -29,6 +29,8 @@ from app.graph import fast_lane
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY
+from app.graph.router import route_turn, routing_instruction
+from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.safety import (
     blocklist_hit,
     build_retry_prompt,
@@ -83,6 +85,15 @@ async def _agent_turn(
     lead_profile = ""
     lead_collection_question = ""
     lead_collection_instruction = ""
+    route = route_turn(user_text)
+    if timings is not None:
+        timings.setdefault("intent", route.intent)
+        timings.setdefault("route_strategy", route.strategy)
+        timings.setdefault("route_confidence", round(route.confidence, 2))
+    # Hard tool-gate: a confident route constrains which tools the LLM may call.
+    # Low-confidence routes fall through to the full toolset (filter_tool_schemas
+    # returns the whole registry when allowed is empty/None).
+    allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
     try:
         lead_profile, lead_collection_question = await deps.lead.context(
             chat_id, user_text, recent_messages
@@ -102,10 +113,15 @@ async def _agent_turn(
         recent_messages=recent_messages,
         lead_profile=lead_profile,
         lead_collection_instruction=lead_collection_instruction,
+        route_hint=routing_instruction(route),
     )
     llm_t0 = time.monotonic()
     reply = await deps.agent.agent(
-        contextual_user_text, system=system, retrieval=deps.retrieval, embedder=deps.embedder
+        contextual_user_text,
+        system=system,
+        retrieval=deps.retrieval,
+        embedder=deps.embedder,
+        allowed_tools=allowed_tools,
     )
     if timings is not None:
         timings["llm_ms"] = timings.get("llm_ms", 0) + int(round((time.monotonic() - llm_t0) * 1000))
@@ -187,6 +203,7 @@ async def _finish_terminal_reply(
         version_at_start=state.version_at_start,
         lock_owner=lock_owner,
         pending_message_id=state.pending_message_id,
+        reply=text,
     )
     send_result = None
     if owned:
@@ -388,6 +405,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             version_at_start=state.version_at_start,
             lock_owner=lock_owner,
             pending_message_id=state.pending_message_id,
+            reply=candidate,
         )
         if owned:
             await _cancel_status_task(status_task)

@@ -11,6 +11,8 @@ import logging
 from app.graph.tools import (
     get_product_features,
     list_active_projects,
+    recommend_jobs,
+    recommend_projects,
     search_bus_timetable,
     search_knowledge,
     search_user_memory,
@@ -63,6 +65,58 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "recommend_projects",
+            "description": (
+                "Gợi ý các dự án/sản phẩm đang hoạt động phù hợp với nhu cầu ứng viên. "
+                "Dùng trước tiên khi ứng viên hỏi 'có việc nào phù hợp', 'gợi ý việc', "
+                "hoặc mô tả nhu cầu tìm việc nhưng chưa chọn dự án cụ thể."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Số dự án cần gợi ý, tối đa 5",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recommend_jobs",
+            "description": (
+                "Gợi ý việc làm ACTIVE phù hợp dựa trên hồ sơ ứng viên (lương mong muốn, "
+                "khu vực, vị trí mong muốn, kinh nghiệm). Dùng khi ứng viên đã cung cấp "
+                "đủ thông tin hồ sơ và hỏi 'có việc nào phù hợp'. Mỗi gợi ý kèm lý do cụ thể. "
+                "Ưu tiên dùng công cụ này trước recommend_projects khi đã có hồ sơ."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {
+                        "type": "string",
+                        "description": "chat_id (zalo_id) của ứng viên để tải hồ sơ",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Số việc cần gợi ý, mặc định 3, tối đa 10",
+                    },
+                    "province": {
+                        "type": "string",
+                        "description": "Lọc theo tỉnh/thành (tùy chọn); để trống để tìm toàn quốc",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_bus_timetable",
             "description": (
                 "Tra cứu lịch xe đưa đón công nhân theo công ty. Dùng trước tiên cho mọi câu hỏi về tuyến xe, "
@@ -101,6 +155,30 @@ TOOL_SCHEMAS = [
 ]
 
 
+# Tools the agent may always reach for, regardless of routing — a safety floor so
+# the model can still self-correct (e.g. a "recommend" turn that turns out to be a
+# contact question can still call search_knowledge without being artificially gated).
+_ALWAYS_AVAILABLE = frozenset({"search_knowledge", "search_user_memory"})
+
+# Confidence below which the router is treated as uncertain and the FULL toolset is
+# bound (current behavior). Keeps low-confidence turns unconstrained.
+ROUTE_CONFIDENCE_FLOOR = 0.5
+
+
+def filter_tool_schemas(allowed: tuple[str, ...] | None) -> list[dict]:
+    """Return the tool-schema subset the agent is permitted to bind this turn.
+
+    ``allowed`` is the routed tool set (``TurnRoute.tools``). The safety-floor tools
+    (``search_knowledge``, ``search_user_memory``) are always included so the agent can
+    still recover from a mis-route. ``None`` or empty → full registry (current behavior,
+    used for low-confidence / un-routed turns).
+    """
+    if not allowed:
+        return TOOL_SCHEMAS
+    wanted = set(allowed) | set(_ALWAYS_AVAILABLE)
+    return [s for s in TOOL_SCHEMAS if s["function"]["name"] in wanted]
+
+
 async def _dispatch_tool(retrieval, embedder, name: str, args: dict) -> str:
     """Route a named tool call to its function.
 
@@ -120,6 +198,17 @@ async def _dispatch_tool(retrieval, embedder, name: str, args: dict) -> str:
             result = await search_knowledge(retrieval, embedder, args.get("query", ""), args.get("project_slug"))
         elif name == "list_active_projects":
             result = await list_active_projects(retrieval)
+        elif name == "recommend_projects":
+            result = await recommend_projects(
+                retrieval, args.get("query", ""), args.get("top_k", 3)
+            )
+        elif name == "recommend_jobs":
+            result = await recommend_jobs(
+                retrieval,
+                args.get("chat_id", ""),
+                top_k=args.get("top_k", 3),
+                province=args.get("province"),
+            )
         elif name == "search_bus_timetable":
             result = await search_bus_timetable(retrieval, args.get("company", ""), args.get("question", ""))
         elif name == "get_product_features":

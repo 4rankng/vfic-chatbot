@@ -1,0 +1,86 @@
+"""Unit tests for deterministic chatbot turn routing."""
+from __future__ import annotations
+
+from app.graph.prompt_context import build_agent_user_text
+from app.graph.router import route_turn, routing_instruction
+from app.graph.safety import build_retry_prompt
+
+
+def test_route_recommendation_query_prefers_recommendation_tool_path():
+    route = route_turn("Tôi ở Bình Dương, gợi ý việc phù hợp có ký túc xá")
+
+    assert route.intent == "recommend"
+    assert route.strategy == "recommendation"
+    assert route.tools == ("recommend_jobs", "recommend_projects", "get_product_features")
+
+
+def test_route_timetable_beats_broader_job_detail():
+    route = route_turn("LG có xe đưa đón ca đêm mấy giờ?")
+
+    assert route.intent == "timetable"
+    assert route.strategy == "structured_lookup"
+    assert route.tools == ("search_bus_timetable",)
+
+
+def test_route_bare_shift_pay_question_stays_job_detail():
+    route = route_turn("LG ca đêm lương bao nhiêu?")
+
+    assert route.intent == "faq_detail"
+    assert route.tools == ("get_product_features", "search_knowledge")
+
+
+def test_route_contact_requires_knowledge_lookup():
+    route = route_turn("Đến công ty thì liên hệ admin nào?")
+
+    assert route.intent == "contact"
+    assert route.tools == ("search_knowledge",)
+
+
+def test_route_profile_update_detects_phone_without_llm():
+    route = route_turn("Số điện thoại của tôi là 0987 654 321")
+
+    assert route.intent == "profile_update"
+    assert route.strategy == "profile"
+
+
+def test_route_rich_first_contact_prefers_recommendation_over_profile_only():
+    route = route_turn("Em tên Lan, số 0987654321, muốn làm kho ở Bình Dương")
+
+    assert route.intent == "recommend"
+    assert route.strategy == "recommendation"
+
+
+def test_route_out_of_scope_beats_fast_lane_help_keyword():
+    route = route_turn("viết code giúp tôi")
+
+    assert route.intent == "out_of_scope"
+    assert route.strategy == "safe_redirect"
+
+
+def test_route_internal_safety_retry_prompt_is_not_out_of_scope():
+    retry_prompt = build_retry_prompt("tôi muốn tìm việc", "bad", "needs_llm_safety_check")
+    route = route_turn(retry_prompt)
+
+    assert route.intent == "general"
+    assert route.reason == "internal_retry_prompt"
+
+
+def test_route_small_talk_reuses_fast_lane_signal():
+    route = route_turn("chào bạn")
+
+    assert route.intent == "small_talk"
+    assert route.strategy == "template"
+
+
+def test_routing_instruction_is_injected_into_prompt_context():
+    route = route_turn("gợi ý việc phù hợp")
+    prompt = build_agent_user_text(
+        chat_id="z1",
+        current_user_text="gợi ý việc phù hợp",
+        recent_messages=[],
+        route_hint=routing_instruction(route),
+    )
+
+    assert "KẾ HOẠCH ĐIỀU PHỐI:" in prompt
+    assert "recommend_projects" in prompt
+    assert "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:" in prompt

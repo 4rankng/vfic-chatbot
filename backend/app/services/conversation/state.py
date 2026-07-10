@@ -308,10 +308,12 @@ class ConversationState:
         version_at_start: int,
         lock_owner: uuid.UUID | str | None,
         pending_message_id: int | None,
+        reply: str,
     ) -> bool:
         """Atomically claim the outbound send: flip the pending BOT row
-        PENDING→SENDING only if the conversation is still bot-owned at
-        ``version_at_start`` with a live lock owned by ``lock_owner``.
+        PENDING→SENDING (and stamp the real ``reply`` onto it) only if the
+        conversation is still bot-owned at ``version_at_start`` with a live lock
+        owned by ``lock_owner``.
 
         This is the pre-send gate that closes both the crash-window and the
         recheck→send TOCTOU in one conditional write: the claim commits only when
@@ -324,9 +326,11 @@ class ConversationState:
 
         The residual window after a successful claim is [claim-commit → Zalo
         POST], irreducible without a provider idempotency key (Zalo Bot Platform
-        has none); a crash there leaves a SENDING row the reconcile sweep treats
-        as sent-but-unconfirmed (at-most-once) rather than re-enqueuing a
-        duplicate. Returns True iff the row was claimed.
+        has none); a crash there leaves a SENDING row whose body is already the
+        real reply (stamped here), so the reconcile sweep can resolve it as
+        sent-but-unconfirmed (at-most-once) with correct content rather than
+        re-enqueuing a duplicate or persisting the placeholder. Returns True iff
+        the row was claimed.
         """
         if pending_message_id is None or lock_owner is None:
             # The atomic claim requires both a pending BOT row to flip and a lock
@@ -339,7 +343,7 @@ class ConversationState:
         res = await self.db.execute(
             text(
                 """
-                UPDATE messages SET delivery_status = 'SENDING'
+                UPDATE messages SET delivery_status = 'SENDING', body = :reply
                  WHERE id = :pending_id
                    AND conversation_id = :cid
                    AND sender = 'BOT'
@@ -359,6 +363,7 @@ class ConversationState:
                 "cid": conv.id,
                 "version_at_start": version_at_start,
                 "owner": owner,
+                "reply": reply,
             },
         )
         await self.db.commit()

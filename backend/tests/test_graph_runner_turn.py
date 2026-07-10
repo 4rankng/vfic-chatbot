@@ -98,6 +98,12 @@ def _stub_svc(*, conv=None, owned: bool = True):
         async def recheck_ownership(self, c, version_at_start, lock_owner=None):
             return owned
 
+        async def claim_send(self, c, *, version_at_start, lock_owner, pending_message_id, reply):
+            # The fake models the send gate, not the SENDING row: the claim succeeds
+            # iff ownership holds AND there is a pending row to flip (mirrors the real
+            # atomic claim's preconditions + ownership guard).
+            return owned and pending_message_id is not None
+
         async def record_bot_outcome(self, c, **kw):
             recorded.append(kw)
 

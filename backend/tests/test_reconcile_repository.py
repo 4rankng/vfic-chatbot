@@ -66,10 +66,14 @@ async def test_sql_contains_loop_free_predicate():
     call_args = db.scalars.call_args
     sql_text = str(call_args[0][0])  # the text(...) clause
 
-    # Loop-safety: must match WORKER or BOT+PENDING/FAILED (NOT SENT/SUPPRESSED)
+    # Loop-safety: must match WORKER or BOT+PENDING/SENDING/FAILED (NOT SENT/SUPPRESSED)
     assert "m.sender = 'WORKER'" in sql_text
     assert "m.sender = 'BOT'" in sql_text
-    assert "m.delivery_status IN ('PENDING', 'FAILED')" in sql_text
+    assert "m.delivery_status IN ('PENDING', 'SENDING', 'FAILED')" in sql_text
+    # Stale-lock recovery: a crashed worker's live lock with a stale heartbeat is
+    # included so reconcile can break it (instead of waiting the full bot_lock_ttl).
+    assert "bot_lock_heartbeat_at" in sql_text
+    assert ":stale_cutoff" in sql_text
 
     # Must NOT match SENT or SUPPRESSED
     assert "SENT" not in sql_text
@@ -111,3 +115,5 @@ async def test_sql_params_include_time_bounds():
     # max_age: now - 86400s = 24h ago
     assert params["now_minus_max_age"] == datetime(2026, 6, 29, 12, 0, 0, tzinfo=timezone.utc)
     assert params["limit"] == 50
+    # stale_lock_seconds default (60) → now - 60s, used by the stale-lock clause
+    assert params["stale_cutoff"] == datetime(2026, 6, 30, 11, 59, 0, tzinfo=timezone.utc)

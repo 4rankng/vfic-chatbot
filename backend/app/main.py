@@ -137,6 +137,8 @@ async def metrics() -> dict:
             "reconcile_unanswered_inbound_total",
             "reconcile_skipped_locked_total",
             "reconcile_enqueue_failed_total",
+            "reconcile_unknown_send_outcome",
+            "reconcile_stale_lock_broken",
             "reconcile_unanswered_gauge",
         ):
             queues[key] = int(conn.get(key) or 0)

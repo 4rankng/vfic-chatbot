@@ -21,11 +21,36 @@ from typing import Any
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
+from app.core.text import normalize_vietnamese_text
 from app.core.vector import vec_literal
 from app.graph.llm import Embedder
 from app.graph.ports import RetrievalPort
 
 logger = logging.getLogger(__name__)
+
+_RECOMMEND_STOPWORDS = {
+    "anh",
+    "ban",
+    "can",
+    "cho",
+    "co",
+    "con",
+    "cua",
+    "duoc",
+    "em",
+    "goi",
+    "hoi",
+    "la",
+    "lam",
+    "minh",
+    "mot",
+    "muon",
+    "nao",
+    "toi",
+    "ung",
+    "viec",
+    "voi",
+}
 
 
 def _cache_digest(*parts: object) -> str:
@@ -194,6 +219,94 @@ async def list_active_projects(retrieval: RetrievalPort) -> str:
     )
 
 
+def _recommend_terms(query: str) -> list[str]:
+    normalized = normalize_vietnamese_text(query or "")
+    terms = [
+        term
+        for term in normalized.split()
+        if len(term) >= 3 and term not in _RECOMMEND_STOPWORDS
+    ]
+    seen: set[str] = set()
+    return [term for term in terms if not (term in seen or seen.add(term))]
+
+
+def _project_haystack(row) -> tuple[str, list[str], str]:
+    card = getattr(row, "index_card", None) or {}
+    roles = [str(role) for role in (card.get("key_roles") or []) if role]
+    location = str(card.get("location") or "")
+    summary = str(getattr(row, "summary", "") or "")
+    parts = [
+        str(getattr(row, "slug", "") or ""),
+        str(getattr(row, "name", "") or ""),
+        summary,
+        location,
+        *roles,
+    ]
+    return normalize_vietnamese_text(" ".join(parts)), roles, location
+
+
+async def recommend_projects(
+    retrieval: RetrievalPort,
+    query: str,
+    top_k: int = 3,
+) -> str:
+    """Rank active projects for a candidate query using existing catalog metadata.
+
+    This is the first recommendation seam: deterministic, schema-free, and cheap.
+    It does not replace the LLM; it gives the agent a small, grounded shortlist
+    plus reasons before the agent calls project feature/detail tools.
+    """
+    try:
+        k = max(1, min(int(top_k), 5))
+    except (TypeError, ValueError):
+        k = 3
+    rows = await retrieval.active_projects_with_card()
+    if not rows:
+        return "Hiện chưa có dự án/sản phẩm nào đang hoạt động để gợi ý."
+
+    terms = _recommend_terms(query)
+    scored: list[tuple[float, list[str], object]] = []
+    for row in rows:
+        haystack, roles, location = _project_haystack(row)
+        matched = [term for term in terms if term in haystack]
+        score = len(matched) / max(len(terms), 1)
+        reasons: list[str] = []
+        if matched:
+            reasons.append("khớp nhu cầu: " + ", ".join(matched[:5]))
+        if location and any(term in normalize_vietnamese_text(location) for term in terms):
+            reasons.append(f"địa điểm: {location}")
+        role_hits = [
+            role for role in roles
+            if any(term in normalize_vietnamese_text(role) for term in terms)
+        ]
+        if role_hits:
+            reasons.append("vị trí: " + ", ".join(role_hits[:3]))
+        if not reasons:
+            reasons.append("dự án đang hoạt động trong danh mục VFIC")
+        scored.append((score, reasons, row))
+
+    scored.sort(key=lambda item: (-item[0], str(getattr(item[2], "name", ""))))
+    lines = [
+        "GỢI Ý DỰ ÁN PHÙ HỢP (dựa trên danh mục đang hoạt động):",
+    ]
+    for score, reasons, row in scored[:k]:
+        summary = str(getattr(row, "summary", "") or "").strip()
+        slug = str(getattr(row, "slug", "") or "")
+        name = str(getattr(row, "name", "") or slug)
+        line = f"- {slug} ({name})"
+        if summary:
+            line += f": {summary}"
+        line += f"; lý do: {'; '.join(reasons)}"
+        if score > 0:
+            line += f"; điểm khớp: {score:.2f}"
+        lines.append(line)
+    lines.append(
+        "Sau khi chọn dự án/slug phù hợp, gọi get_product_features(project_slug) "
+        "để kiểm tra lương, ca làm, KTX, xe đưa đón và hồ sơ trước khi tư vấn."
+    )
+    return "\n".join(lines)
+
+
 async def search_bus_timetable(
     retrieval: RetrievalPort, company: str, question: str, limit: int = 50
 ) -> str:
@@ -262,10 +375,58 @@ async def get_product_features(retrieval: RetrievalPort, project_slug: str) -> s
     return "\n".join(lines)
 
 
+async def recommend_jobs(
+    retrieval: RetrievalPort,
+    chat_id: str,
+    *,
+    top_k: int = 3,
+    province: str | None = None,
+) -> str:
+    """Structured Job↔Lead recommendation (Phase 2).
+
+    Two-stage ranker over the ``jobs`` table using the candidate's lead profile
+    (desired_job, salary band, location, experience). Each result carries
+    concrete matched reasons so the agent can ground its prose, then call
+    ``get_product_features`` for the chosen project's detail.
+    """
+    s = get_settings()
+    k = max(1, min(int(top_k or s.rec_top_k), 10))
+    try:
+        scored = await retrieval.match_jobs_for_lead(chat_id, top_k=k, province=province)
+    except Exception:
+        logger.warning("recommend_jobs failed for chat_id=%s", chat_id, exc_info=True)
+        scored = []
+    if not scored:
+        return (
+            "Chưa có thông tin hồ sơ (lương mong muốn, khu vực, vị trí) để gợi ý việc "
+            "phù hợp, hoặc chưa có việc làm ACTIVE khớp. Hãy hỏi ứng viên thêm về khu "
+            "vực / lương mong muốn, hoặc dùng recommend_projects để gợi ý theo dự án."
+        )
+    lines = ["GỢI Ý VIỆC LÀM PHÙ HỢP (dựa trên hồ sơ ứng viên):"]
+    for item in scored:
+        job = item.job
+        sal = ""
+        if job.salary_min and job.salary_max:
+            sal = f"; lương {job.salary_min // 1_000_000}-{job.salary_max // 1_000_000} triệu"
+        loc = f"; địa điểm: {job.province}" if job.province else ""
+        lines.append(
+            f"- {job.title} (id={job.id}){sal}{loc}; "
+            f"lý do: {', '.join(item.reasons)}; điểm phù hợp: {item.score:.2f}"
+        )
+    lines.append(
+        "QUY TẮC: chỉ tư vấn việc làm có trong danh sách trên. Với mỗi việc, "
+        "nếu cần chi tiết lương/ca/KTX thì gọi get_product_features(project_slug). "
+        "Tuyệt đối không bịa thông tin việc làm."
+    )
+    return "\n".join(lines)
+
+
 TOOLS_REGISTRY = {
     "search_user_memory": search_user_memory,
     "search_knowledge": search_knowledge,
     "list_active_projects": list_active_projects,
+    "recommend_projects": recommend_projects,
+    "recommend_jobs": recommend_jobs,
     "search_bus_timetable": search_bus_timetable,
     "get_product_features": get_product_features,
 }

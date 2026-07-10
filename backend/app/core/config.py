@@ -180,6 +180,10 @@ class Settings(BaseSettings):
     # backstop: the agent turn is no longer hard-capped (see agent_max_seconds), so
     # this must comfortably exceed any realistic LLM turn (~10-30s) — only a truly
     # wedged provider call is reaped here, and the reconcile sweeper recovers it.
+    # LOAD-BEARING INVARIANT: reconcile_grace_seconds MUST exceed this value. F6's
+    # break_stale_lock force-breaks a lock whose heartbeat is older than this
+    # threshold; the grace window guarantees a candidate only appears after RQ has
+    # already killed the job, so a live (slow-but-legitimate) turn is never stolen.
     chat_turn_job_timeout: int = 60
 
     # ── perceived-responsiveness budget ────────────────────────────────────────
@@ -233,8 +237,25 @@ class Settings(BaseSettings):
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
     chat_queue_max_depth: int = 40
 
+    # Structured Job↔Lead recommendation engine weights (Phase 2).
+    # MiniMax §7.2: "weights must be re-tuned against labeled hires after the
+    # first 1,000 production conversations; this is a starting point."
+    rec_weight_title: float = 0.35       # desired_job ↔ job.title overlap
+    rec_weight_salary: float = 0.25      # expected_salary band overlap
+    rec_weight_location: float = 0.20    # living_area/region ↔ province/district
+    rec_weight_support: float = 0.10     # accommodation/transport flag match
+    rec_weight_experience: float = 0.10  # years_experience fit / "no exp required" bonus
+    rec_top_k: int = 5                   # default shortlist size
+
+    # Grounding enforcement (Phase 3): strip job_ids the reply cites that were not
+    # in the tool results shown to the LLM. Best-effort; never blocks a turn.
+    grounding_check_enabled: bool = True
+
     # Reconcile sweep — recovers lost bot turns after worker crash / restart.
     reconcile_interval_seconds: int = 60  # sweep cadence
+    # MUST exceed chat_turn_job_timeout (F6 safety — see break_stale_lock): a
+    # candidate only surfaces after this grace, by which point RQ has killed the
+    # job, so a stale-heartbeat lock is always a dead worker, never a live turn.
     reconcile_grace_seconds: int = 120  # min age before a msg is considered stuck
     reconcile_max_age_seconds: int = 86400  # 24h cap
     reconcile_batch_size: int = 50  # per-tick candidate cap

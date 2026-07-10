@@ -21,6 +21,7 @@ from app.graph.tools import (
     _format_knowledge_row,
     get_product_features,
     list_active_projects,
+    recommend_projects,
     search_bus_timetable,
     search_knowledge,
     search_user_memory,
@@ -105,6 +106,8 @@ def test_tools_registry_exposes_expected_tools():
         "search_user_memory",
         "search_knowledge",
         "list_active_projects",
+        "recommend_projects",
+        "recommend_jobs",
         "search_bus_timetable",
         "get_product_features",
     }
@@ -229,6 +232,49 @@ async def test_list_active_projects_formats_catalog(no_cache_io):
 
 
 # ---------------------------------------------------------------------------
+# recommend_projects — deterministic recommendation seam
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_recommend_projects_empty_catalog(no_cache_io):
+    repo = _make_repo(active_projects_with_card=lambda self: _empty())
+    out = await recommend_projects(retrieval=repo, query="gợi ý việc")
+    assert out == "Hiện chưa có dự án/sản phẩm nào đang hoạt động để gợi ý."
+
+
+@pytest.mark.asyncio
+async def test_recommend_projects_ranks_by_catalog_terms(no_cache_io):
+    rows = [
+        SimpleNamespace(
+            slug="lg-display",
+            name="LG Display",
+            summary="Tuyển công nhân sản xuất tại Hải Phòng",
+            index_card={"key_roles": ["công nhân sản xuất"], "location": "Hải Phòng"},
+        ),
+        SimpleNamespace(
+            slug="kho-binh-duong",
+            name="Kho Bình Dương",
+            summary="Tuyển kho vận có ký túc xá",
+            index_card={"key_roles": ["nhân viên kho"], "location": "Bình Dương"},
+        ),
+    ]
+    repo = _make_repo(active_projects_with_card=lambda self: _const(rows))
+
+    out = await recommend_projects(
+        retrieval=repo,
+        query="Tôi muốn việc kho ở Bình Dương có ký túc xá",
+        top_k=2,
+    )
+
+    first_line = out.splitlines()[1]
+    assert first_line.startswith("- kho-binh-duong")
+    assert "lý do:" in first_line
+    assert "binh" in first_line or "duong" in first_line
+    assert "get_product_features(project_slug)" in out
+
+
+# ---------------------------------------------------------------------------
 # search_knowledge — unknown slug short-circuits before embeddings/cache
 # ---------------------------------------------------------------------------
 
@@ -330,6 +376,56 @@ async def test_search_bus_timetable_no_rows_returns_notice(no_cache_io):
     )
     out = await search_bus_timetable(retrieval=repo, company="VFIC", question="x")
     assert out == "Không tìm thấy lịch xe phù hợp."
+
+
+# ---------------------------------------------------------------------------
+# recommend_jobs — structured Job↔Lead recommendation (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_recommend_jobs_empty_returns_fallback_notice(no_cache_io):
+    """No lead profile or no matching jobs → guided fallback message."""
+    repo = _make_repo(match_jobs_for_lead=lambda self, chat_id, **k: _empty())
+    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
+    assert "Chưa có thông tin hồ sơ" in out
+    assert "recommend_projects" in out  # points the agent to the keyword fallback
+
+
+@pytest.mark.asyncio
+async def test_recommend_jobs_formats_scored_results_with_reasons(no_cache_io):
+    """Scored jobs render as a grounded shortlist with matched reasons."""
+    from app.services.recommendation.scoring import JobCandidate, ScoredJob
+
+    scored = [
+        ScoredJob(
+            job=JobCandidate(
+                id="job-1", title="Nhân viên kho", province="Bình Dương",
+                salary_min=10_000_000, salary_max=14_000_000,
+            ),
+            score=0.82,
+            reasons=["vị trí khớp mong muốn", "lương 10-14 triệu phù hợp"],
+        ),
+    ]
+    repo = _make_repo(match_jobs_for_lead=lambda self, chat_id, **k: _const(scored))
+    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
+    assert "GỢI Ý VIỆC LÀM PHÙ HỢP" in out
+    assert "Nhân viên kho" in out
+    assert "job-1" in out
+    assert "10-14 triệu" in out
+    assert "điểm phù hợp: 0.82" in out
+    assert "QUY TẮC:" in out  # grounding rule always appended
+
+
+@pytest.mark.asyncio
+async def test_recommend_jobs_exception_returns_fallback_not_crash(no_cache_io):
+    """A retrieval failure must not crash the tool — guided fallback instead."""
+    async def _boom(self, chat_id, **k):
+        raise RuntimeError("db down")
+
+    repo = _make_repo(match_jobs_for_lead=_boom)
+    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
+    assert "Chưa có thông tin hồ sơ" in out
 
 
 # ---------------------------------------------------------------------------

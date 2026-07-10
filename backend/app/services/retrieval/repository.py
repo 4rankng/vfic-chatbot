@@ -663,5 +663,30 @@ class RetrievalRepository:
             )
         ).all()
 
+    async def match_jobs_for_lead(
+        self, chat_id: str, *, top_k: int = 5, province: str | None = None
+    ) -> list:
+        """Structured Job↔Lead recommendation (Phase 2).
+
+        Loads the lead by ``chat_id`` (zalo_id), builds a :class:`LeadProfile`,
+        and runs the two-stage ranker (:class:`RecommendationRepository`).
+        Returns :class:`ScoredJob` objects (job + score + matched reasons).
+        Empty list on any failure (no lead, no jobs, query error) — never raises.
+        """
+        from app.services.lead.repository import LeadRepository
+        from app.services.recommendation import RecommendationRepository, LeadProfile
+
+        try:
+            lead = await LeadRepository(self.db).by_zalo_id(chat_id)
+            profile = LeadProfile.from_lead(lead)
+            if not profile.has_any_signal:
+                return []
+            return await RecommendationRepository(self.db).match_jobs(
+                profile, top_k=top_k, province=province
+            )
+        except Exception:
+            logger.warning("match_jobs_for_lead failed for chat_id=%s", chat_id, exc_info=True)
+            return []
+
 
 __all__ = ["RetrievalRepository"]

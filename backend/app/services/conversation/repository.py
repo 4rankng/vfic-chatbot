@@ -301,20 +301,28 @@ class ConversationRepository:
         grace_seconds: int,
         max_age_seconds: int,
         limit: int,
+        stale_lock_seconds: int = 60,
     ) -> list[Conversation]:
         """Conversations whose newest message is unanswered or recoverable BOT failure.
 
         Loop-free predicate: a completed turn (sent or suppressed) leaves a
         ``BOT/SENT`` or ``BOT/SUPPRESSED`` row as the newest message, so it is
         excluded.  Only ``WORKER`` (never processed), ``BOT/PENDING`` (turn
-        started but never completed), or ``BOT/FAILED`` (Zalo rejected delivery)
-        qualify.
+        started but never completed), ``BOT/SENDING`` (claimed but never confirmed
+        — a worker crash after the POST; reconciled as sent-but-unconfirmed), or
+        ``BOT/FAILED`` (Zalo rejected delivery) qualify.
+
+        A conversation whose per-chat lock is still live but whose owner heartbeat
+        is older than ``stale_lock_seconds`` (the RQ job-timeout horizon) is also
+        included, so a crashed worker's lock can be force-broken and the turn
+        recovered instead of waiting the full ``bot_lock_ttl``.
 
         SEMI_AUTO 5-min-inactivity is NOT in SQL — it is re-checked in Python
         inside the tick (depends on ``taken_over_at``/``updated_at``).
         """
         now_minus_grace = now - timedelta(seconds=grace_seconds)
         now_minus_max_age = now - timedelta(seconds=max_age_seconds)
+        now_minus_stale_lock = now - timedelta(seconds=stale_lock_seconds)
         # NOTE: use select(Conversation).from_statement(text(...)) instead of
         # db.scalars(text(...)) — the latter returns only the first column (c.id
         # as a raw asyncpg UUID) rather than a Conversation ORM instance, causing
@@ -327,7 +335,15 @@ class ConversationRepository:
                     SELECT c.*
                       FROM conversations c
                      WHERE c.mode IN ('BOT', 'SEMI_AUTO')
-                       AND (c.bot_locked_until IS NULL OR c.bot_locked_until < :now)
+                       AND (
+                           c.bot_locked_until IS NULL
+                           OR c.bot_locked_until < :now
+                           OR (
+                               c.bot_locked_until IS NOT NULL
+                               AND c.bot_lock_heartbeat_at IS NOT NULL
+                               AND c.bot_lock_heartbeat_at < :stale_cutoff
+                           )
+                       )
                        AND c.status = 'OPEN'
                        AND (c.followup_opted_out = FALSE OR c.followup_opted_out IS NULL)
                        AND EXISTS (
@@ -343,7 +359,7 @@ class ConversationRepository:
                                   m.sender = 'WORKER'
                                   OR (
                                       m.sender = 'BOT'
-                                      AND m.delivery_status IN ('PENDING', 'FAILED')
+                                      AND m.delivery_status IN ('PENDING', 'SENDING', 'FAILED')
                                   )
                               )
                               AND m.created_at < :now_minus_grace
@@ -359,6 +375,7 @@ class ConversationRepository:
             "now": now,
             "now_minus_grace": now_minus_grace,
             "now_minus_max_age": now_minus_max_age,
+            "stale_cutoff": now_minus_stale_lock,
             "limit": limit,
         })).all()
         return list(rows)

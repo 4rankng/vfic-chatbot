@@ -93,6 +93,7 @@ class ConversationPort(Protocol):
         version_at_start: int,
         lock_owner: Any,
         pending_message_id: int | None,
+        reply: str,
     ) -> bool: ...
 
     async def acquire_lock(self, conv_id: Any) -> Any: ...
@@ -150,6 +151,10 @@ class RetrievalPort(Protocol):
     async def search_bus_timetable(self, company: str, question: str, limit: int) -> list[Any]: ...
 
     async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
+
+    async def match_jobs_for_lead(
+        self, chat_id: str, *, top_k: int = 5, province: str | None = None
+    ) -> list[Any]: ...
 
 
 class FaqBypassPort(Protocol):

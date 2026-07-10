@@ -145,6 +145,7 @@ async def _run_job_async(job: dict) -> None:
                         version_at_start=state.version_at_start,
                         lock_owner=lock_owner,
                         pending_message_id=state.pending_message_id,
+                        reply=DEGRADATION_REPLY,
                     )
                     sent = False
                     external_error: str | None = None

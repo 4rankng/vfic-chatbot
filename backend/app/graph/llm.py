@@ -13,9 +13,21 @@ Embedder = Callable[[str], Awaitable[list[float]]]
 
 
 class AgentModel(Protocol):
-    """A tool-calling agent: system prompt + user turn -> reply text."""
+    """A tool-calling agent: system prompt + user turn -> reply text.
 
-    async def agent(self, user_text: str, *, system: str, retrieval, embedder) -> str: ...
+    ``allowed_tools`` (optional) restricts the tools bound for this turn — the router's
+    hard gate. ``None``/empty binds the full toolset (the pre-routing default).
+    """
+
+    async def agent(
+        self,
+        user_text: str,
+        *,
+        system: str,
+        retrieval,
+        embedder,
+        allowed_tools: tuple[str, ...] | None = None,
+    ) -> str: ...
 
 
 class SafetyModel(Protocol):

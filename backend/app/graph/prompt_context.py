@@ -12,6 +12,7 @@ def build_agent_user_text(
     recent_messages: list[Message],
     lead_profile: str = "",
     lead_collection_instruction: str = "",
+    route_hint: str = "",
 ) -> str:
     """Give the agent the actual chat state, not just the latest short reply."""
     history = [
@@ -38,6 +39,8 @@ def build_agent_user_text(
     ]
     if lead_profile:
         parts += ["", lead_profile]
+    if route_hint:
+        parts += ["", "KẾ HOẠCH ĐIỀU PHỐI:", route_hint]
     if lead_collection_instruction:
         parts += ["", lead_collection_instruction]
     parts += [

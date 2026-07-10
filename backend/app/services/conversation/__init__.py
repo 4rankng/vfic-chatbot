@@ -173,12 +173,14 @@ class ConversationService:
         version_at_start: int,
         lock_owner: uuid.UUID | str | None,
         pending_message_id: int | None,
+        reply: str,
     ) -> bool:
         return await self.state.claim_send(
             conv,
             version_at_start=version_at_start,
             lock_owner=lock_owner,
             pending_message_id=pending_message_id,
+            reply=reply,
         )
 
     async def record_bot_outcome(

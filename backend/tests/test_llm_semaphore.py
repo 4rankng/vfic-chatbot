@@ -373,7 +373,7 @@ class TestDegradationMessage:
 
         mock_svc = MagicMock()
         mock_svc.get = AsyncMock(return_value=mock_conv)
-        mock_svc.recheck_ownership = AsyncMock(return_value=True)
+        mock_svc.claim_send = AsyncMock(return_value=True)
         mock_svc.record_bot_outcome = AsyncMock()
 
         # Patch lazy imports at their SOURCE modules
@@ -394,7 +394,7 @@ class TestDegradationMessage:
     async def test_worker_degradation_suppressed_when_not_owned(self):
         """A throttled turn that outlasted a recruiter takeover must not send.
 
-        recheck_ownership False → no send_message, record_bot_outcome(sent=False)
+        claim_send False → no send_message, record_bot_outcome(sent=False)
         so the outcome is SUPPRESSED (clears the mutex) and the recruiter-owned
         chat is not polluted with a degradation bubble.
         """
@@ -422,7 +422,7 @@ class TestDegradationMessage:
 
         mock_svc = MagicMock()
         mock_svc.get = AsyncMock(return_value=mock_conv)
-        mock_svc.recheck_ownership = AsyncMock(return_value=False)  # taken over
+        mock_svc.claim_send = AsyncMock(return_value=False)  # taken over
         mock_svc.record_bot_outcome = AsyncMock()
 
         with patch("app.workers._db.worker_session", return_value=mock_db):
