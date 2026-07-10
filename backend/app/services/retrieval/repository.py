@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import EMBEDDING_DIM, get_settings
 from app.core.text import normalize_vietnamese_text
+from app.services.retrieval.fusion import reciprocal_rank_fuse
 
 logger = logging.getLogger(__name__)
 
@@ -316,31 +317,17 @@ class RetrievalRepository:
             terms=terms,
         )
 
-        # Lexical fills at most 2/3 of slots; vector always gets the remainder.
-        lexical_cap = max(top_k * 2 // 3, 1)
-        merged: list = []
-        seen_ids: set[str] = set()
-        lexical_count = 0
-        for row in lexical_rows:
-            rid = str(row.id)
-            if rid not in seen_ids:
-                seen_ids.add(rid)
-                merged.append(row)
-                lexical_count += 1
-            if lexical_count >= lexical_cap:
-                break
-        for row in vector_rows:
-            rid = str(row.id)
-            if rid not in seen_ids:
-                seen_ids.add(rid)
-                merged.append(row)
-            if len(merged) >= top_k:
-                break
-        logger.debug(
-            "match_documents merged: %d rows (%d lexical, %d vector, top_k=%d)",
-            len(merged), lexical_count, len(merged) - lexical_count, top_k,
+        merged = reciprocal_rank_fuse(
+            vector_rows,
+            lexical_rows,
+            top_k=top_k,
+            rank_constant=get_settings().rag_rrf_rank_constant,
         )
-        return merged[:top_k]
+        logger.debug(
+            "match_documents RRF fused: %d rows (%d lexical, %d vector, top_k=%d)",
+            len(merged), len(lexical_rows), len(vector_rows), top_k,
+        )
+        return merged
 
     async def match_faq(
         self,

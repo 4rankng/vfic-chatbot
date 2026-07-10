@@ -23,7 +23,7 @@ Compose at `/opt/vfic`, Caddy edge.
         │              │              │ (SSE unbuf)  │ (WS upgrade)    │
         ▼              ▼              ▼              ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    FastAPI web (uvicorn, 1 worker)                   │
+│                    FastAPI web (uvicorn, 2 workers)                   │
 │   app/main.py · Socket.IO ASGIApp wrap · request_id middleware ·     │
 │   domain exception handlers · CORS (credentials, no '*')             │
 │                                                                      │
@@ -49,8 +49,8 @@ Compose at `/opt/vfic`, Caddy edge.
 ┌────────────────────────────────────────────────────────────────────┐
 │  RQ workers (sync RQ → persistent async loop via async_runner.py)  │
 │                                                                    │
-│  worker-chatbot (×6) │ worker-ingest │ worker-followup │ scheduler  │
-│   webhook_high       │   ingest      │   followup      │ rqscheduler│
+│  worker-chatbot (×1) │ worker-ingest │ worker-followup │ scheduler  │
+│ recovery + persist   │   ingest      │   followup      │ rqscheduler│
 │   persistence_low    │               │                 │            │
 └────────────────────────────────────────────────────────────────────┘
           │                                            ▲
@@ -74,13 +74,13 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
                             ▼
   ┌──────────────────────────────────────────────────────────┐
   │ 1. Verify secret (hmac.compare_digest / OA signature)    │
-  │ 2. ACK 200 in <1s  (return 503 if enqueue fails → retry) │
-  │ 3. ZaloWebhookService.handle(..., enqueue=enqueue_chat_run)│
+  │ 2. ACK 200 in <1s  (return 503 if local start fails → retry) │
+  │ 3. ZaloWebhookService.handle(..., start direct async turn)│
   └──────────────────────────────────────────────────────────┘
-                            │ enqueue_chat_run → RQ webhook_high
+                            │ direct async turn (per-chat DB lease)
                             ▼
   ┌──────────────────────────────────────────────────────────┐
-  │ worker-chatbot picks up job (6 replicas, backpressure 40)│
+  │ web worker runs the turn; reconcile uses RQ only after failure │
   │  - Worker.clean_registries() on startup requeues stuck   │
   │  - Acquire per-chat DB lock + owner token (TTL 180s)     │
   │  - Record bot PENDING message                           │
@@ -176,7 +176,7 @@ load_conversation_state -> typing -> agent
 
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
-| `webhook_high` | `worker-chatbot` (×6) | 60s (`chat_turn_job_timeout`) | `chat_queue_max_depth`=40 (503 on overflow) | Chat turns (user-facing latency). |
+| `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | — | Recovered chat turns only; normal chat turns run directly in web workers. |
 | `persistence_low` | `worker-chatbot` (same containers) | — | — | Lead / memory extraction after SENT replies. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up + reconcile sweep. |

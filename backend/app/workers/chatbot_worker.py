@@ -1,6 +1,7 @@
-"""RQ worker: enqueue + run chatbot turns on the webhook_high queue."""
+"""Chat-turn execution plus the RQ recovery adapter."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -15,6 +16,73 @@ DEGRADATION_REPLY = (
     "Xin lỗi bạn, hiện tại hệ thống đang gặp nhiều truy cập đồng thời. "
     "Vui lòng gửi lại tin nhắn sau ít phút nhé. Cảm ơn bạn!"
 )
+
+
+def start_direct_chat_turn(job: dict) -> bool:
+    """Schedule an interactive turn on the current ASGI event loop.
+
+    The webhook has already committed the inbound message and acquired the
+    database lock. A process restart is therefore recoverable by the offline
+    reconciliation sweep; normal user turns never enter an RQ queue.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.exception("direct chat turn could not be scheduled")
+        return False
+    task = loop.create_task(_run_job_async(job, source="direct"))
+
+    def _log_completion(completed: asyncio.Task[None]) -> None:
+        try:
+            completed.result()
+        except asyncio.CancelledError:
+            logger.warning("direct chat turn cancelled conversation=%s", job.get("conversation_id"))
+        except Exception:
+            logger.exception("direct chat turn failed conversation=%s", job.get("conversation_id"))
+
+    task.add_done_callback(_log_completion)
+    return True
+
+
+async def _renew_direct_lock(job: dict) -> None:
+    """Keep a direct turn's durable lease fresh without sharing its DB session."""
+    conversation_id = job.get("conversation_id")
+    lock_owner = job.get("lock_owner")
+    if not conversation_id or not lock_owner:
+        return
+
+    import uuid
+
+    from app.core.config import get_settings
+    from app.core.db import async_session
+    from app.services.conversation import ConversationService
+
+    settings = get_settings()
+    try:
+        conv_id = uuid.UUID(str(conversation_id))
+    except ValueError:
+        logger.warning("direct chat turn has invalid conversation id=%r", conversation_id)
+        return
+
+    while True:
+        await asyncio.sleep(settings.direct_turn_heartbeat_seconds)
+        try:
+            async with async_session() as db:
+                renewed = await ConversationService(db).renew_lock(
+                    conv_id, lock_owner=str(lock_owner)
+                )
+        except Exception:  # noqa: BLE001
+            # A short database blip must not permanently disable lease renewal.
+            # Retrying on the regular cadence stays well inside stale-lock detection.
+            logger.warning(
+                "direct chat turn lease heartbeat failed conversation=%s",
+                conversation_id,
+                exc_info=True,
+            )
+            continue
+        if not renewed:
+            logger.info("direct chat turn lease no longer owned conversation=%s", conversation_id)
+            return
 
 
 def enqueue_chat_run(job: dict) -> bool:
@@ -38,10 +106,10 @@ def enqueue_chat_run(job: dict) -> bool:
 
 
 def run_chat_turn_job(job: dict) -> None:
-    """RQ job entrypoint (sync). Runs the async graph turn."""
+    """RQ recovery entrypoint (sync). Runs the async graph turn."""
     from app.workers.async_runner import run_async
 
-    run_async(_run_job_async(job))
+    run_async(_run_job_async(job, source="recovery"))
 
 
 def _enqueue_persist(persist_job: dict) -> None:
@@ -75,7 +143,7 @@ def _preamble_timings(state, started_at, *, lane: str, throttle: bool = False) -
     return timings
 
 
-async def _run_job_async(job: dict) -> None:
+async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run.
     from app.workers._db import worker_session
@@ -87,20 +155,18 @@ async def _run_job_async(job: dict) -> None:
     # measured inside this worker process, so time.time() (epoch) is fine.
     job_start_epoch = time.time()
 
-    # ── Phase 0 observability: snapshot webhook_high depth at job start ──
-    # Carried into BotRunState.stage_timings (queue_depth) so the performance
-    # dashboard can correlate latency spikes with saturation. Best-effort —
-    # never breaks a turn. (busy/total worker counts are read live by
-    # /health/queue and /admin/performance, so they aren't stored per-turn.)
+    # Recovery jobs retain a queue-depth snapshot. Direct turns do not touch
+    # the queue, so a missing value is meaningful telemetry.
     queue_depth: int | None = None
-    try:
-        from rq import Queue
+    if source == "recovery":
+        try:
+            from rq import Queue
 
-        from app.core.redis import get_redis_sync
+            from app.core.redis import get_redis_sync
 
-        queue_depth = Queue("webhook_high", connection=get_redis_sync()).count
-    except Exception:  # noqa: BLE001
-        pass
+            queue_depth = Queue("webhook_high", connection=get_redis_sync()).count
+        except Exception:  # noqa: BLE001
+            pass
 
     from app.core.config import get_settings
 
@@ -111,72 +177,87 @@ async def _run_job_async(job: dict) -> None:
         version_at_start=int(job["version_at_start"]),
         user_text=job["user_text"],
         user_name=job.get("user_name", ""),
+        reply_to_message_id=job.get("reply_to_message_id", ""),
         lock_owner=str(job.get("lock_owner") or ""),
         received_at_epoch=received_at_epoch,
         deadline_at_epoch=(received_at_epoch + sla) if received_at_epoch else 0.0,
         preamble_start_epoch=job_start_epoch,
         queue_depth=queue_depth,
+        execution_source=source,
     )
-    async with worker_session() as db:
-        deps = await build_deps(db)
-        deps.persist = _enqueue_persist  # wire candidate extraction on SENT
-        started_at = _now()
-        try:
-            await run_turn(state, deps)
-        except LLMThrottled:
-            # LLM is throttled — send static degradation msg (no LLM call).
-            # Must record_bot_outcome to clear the per-chat mutex (bot_locked_until),
-            # otherwise the conversation is stalled until TTL expiry (~3 min).
-            logger.warning("llm_throttled: sending degradation reply for %s", job.get("conversation_id", "?"))
+    heartbeat_task = (
+        asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
+    )
+    try:
+        async with worker_session() as db:
+            deps = await build_deps(db)
+            deps.persist = _enqueue_persist  # wire candidate extraction on SENT
+            started_at = _now()
             try:
-                from app.services.conversation import ConversationService
+                await run_turn(state, deps)
+            except LLMThrottled:
+                # LLM is throttled — send a static reply without another model call.
+                logger.warning("llm_throttled: sending degradation reply for %s", job.get("conversation_id", "?"))
+                try:
+                    from app.services.conversation import ConversationService
 
-                svc = ConversationService(db)
-                conv = await svc.get(uuid.UUID(state.conversation_id))
-                if conv is not None:
-                    # A throttled turn may have outlasted a recruiter takeover —
-                    # re-check ownership before sending so a degradation bubble
-                    # never lands in a human-owned chat (mirrors run_turn's
-                    # pre_send_guard). Not owned → record SUPPRESSED, no send.
-                    await db.refresh(conv)
-                    lock_owner = state.lock_owner or None
-                    owned = await svc.claim_send(
-                        conv,
-                        version_at_start=state.version_at_start,
-                        lock_owner=lock_owner,
-                        pending_message_id=state.pending_message_id,
-                        reply=DEGRADATION_REPLY,
-                    )
-                    sent = False
-                    external_error: str | None = None
-                    zalo_message_id: str | None = None
-                    if owned:
-                        sender = (
-                            deps.zalo.for_conversation(conv)
-                            if hasattr(deps.zalo, "for_conversation")
-                            else deps.zalo
+                    svc = ConversationService(db)
+                    conv = await svc.get(uuid.UUID(state.conversation_id))
+                    if conv is not None:
+                        await db.refresh(conv)
+                        lock_owner = state.lock_owner or None
+                        owned = await svc.claim_send(
+                            conv,
+                            version_at_start=state.version_at_start,
+                            lock_owner=lock_owner,
+                            pending_message_id=state.pending_message_id,
+                            reply=DEGRADATION_REPLY,
                         )
-                        send_result = await sender.send_message(
-                            conv.zalo_chat_id,
-                            DEGRADATION_REPLY,
+                        sent = False
+                        external_error: str | None = None
+                        zalo_message_id: str | None = None
+                        if owned:
+                            sender = (
+                                deps.zalo.for_conversation(conv)
+                                if hasattr(deps.zalo, "for_conversation")
+                                else deps.zalo
+                            )
+                            if state.reply_to_message_id:
+                                send_result = await sender.send_message(
+                                    conv.zalo_chat_id,
+                                    DEGRADATION_REPLY,
+                                    quote_message_id=state.reply_to_message_id,
+                                )
+                            else:
+                                send_result = await sender.send_message(
+                                    conv.zalo_chat_id, DEGRADATION_REPLY
+                                )
+                            sent = send_result.ok
+                            external_error = None if send_result.ok else send_result.error
+                            zalo_message_id = send_result.msg_id
+                        throttle_timings = _preamble_timings(
+                            state, started_at, lane="agent", throttle=True
                         )
-                        sent = send_result.ok
-                        external_error = None if send_result.ok else send_result.error
-                        zalo_message_id = send_result.msg_id
-                    throttle_timings = _preamble_timings(
-                        state, started_at, lane="agent", throttle=True
-                    )
-                    await svc.record_bot_outcome(
-                        conv,
-                        version_at_start=state.version_at_start,
-                        reply=DEGRADATION_REPLY,
-                        started_at=started_at,
-                        sent=sent,
-                        pending_message_id=state.pending_message_id,
-                        external_error=external_error,
-                        zalo_message_id=zalo_message_id,
-                        stage_timings=throttle_timings,
-                        lock_owner=lock_owner,
-                    )
+                        await svc.record_bot_outcome(
+                            conv,
+                            version_at_start=state.version_at_start,
+                            reply=DEGRADATION_REPLY,
+                            started_at=started_at,
+                            sent=sent,
+                            pending_message_id=state.pending_message_id,
+                            external_error=external_error,
+                            zalo_message_id=zalo_message_id,
+                            stage_timings=throttle_timings,
+                            lock_owner=lock_owner,
+                        )
+                except Exception:  # noqa: BLE001
+                    logger.error("failed to send degradation reply", exc_info=True)
+    finally:
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
             except Exception:  # noqa: BLE001
-                logger.error("failed to send degradation reply", exc_info=True)
+                logger.warning("direct chat turn lease heartbeat failed", exc_info=True)

@@ -46,9 +46,9 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # RQ worker: chatbot runs (user-facing latency) + lead/memory persistence.
-  # Replicas: 6 gives 6 parallel turns (~36 turns/min at 10s/turn), enough for 100
-  # concurrent bursty conversations. Scale to 8-10 if webhook_high depth stays > 0.
+  # RQ worker: recovery turns + lead/memory persistence. Interactive webhook
+  # turns run directly in the two web workers; this queue is no longer a normal
+  # latency boundary.
   worker-chatbot:
     image: franknguyenvd/vfic-backend:latest
     env_file: .env
@@ -58,11 +58,11 @@ services:
     command: ["python", "-m", "app.workers.run_worker", "webhook_high", "persistence_low"]
     stop_grace_period: 180s  # let rq finish the ≤150s turn on SIGTERM before SIGKILL
     deploy:
-      replicas: 6
+      replicas: 1
       resources:
         limits:
           # TODO: measure real RSS under load (expect ~100-150M per worker).
-          # 512M is a safe ceiling for 6 workers on a 4GB droplet.
+          # 512M leaves room for the two direct-turn web workers on a 4GB droplet.
           memory: 512M
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).

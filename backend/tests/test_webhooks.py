@@ -304,7 +304,7 @@ async def test_oa_media_event_returns_ignored_without_db_write(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oa_text_message_still_queues_bot_turn(monkeypatch):
+async def test_oa_text_message_starts_bot_turn(monkeypatch):
     import uuid
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, MagicMock
@@ -350,7 +350,7 @@ async def test_oa_text_message_still_queues_bot_turn(monkeypatch):
         channel="oa",
     )
 
-    assert result["status"] == "queued"
+    assert result["status"] == "processing"
     assert len(enqueued) == 1
     assert enqueued[0]["user_text"] == "Xin chào"
     assert enqueued[0]["lock_owner"] == str(lock_owner)

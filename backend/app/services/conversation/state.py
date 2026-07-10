@@ -243,6 +243,31 @@ class ConversationState:
             conv.bot_lock_owner = None
             conv.bot_lock_heartbeat_at = None
 
+    async def renew_lock(
+        self, conv_id: uuid.UUID, *, lock_owner: uuid.UUID | str, ttl_seconds: int | None = None
+    ) -> bool:
+        """Renew a live turn's lease only when it still owns the lock."""
+        owner = _normalize_lock_owner(lock_owner)
+        if owner is None:
+            return False
+        ttl = ttl_seconds if ttl_seconds is not None else _settings.bot_lock_ttl_seconds
+        now = utcnow()
+        res = await self.db.execute(
+            update(Conversation)
+            .where(
+                Conversation.id == conv_id,
+                Conversation.bot_lock_owner == owner,
+                Conversation.bot_locked_until > now,
+            )
+            .values(
+                bot_locked_until=now + timedelta(seconds=ttl),
+                bot_lock_heartbeat_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        return res.rowcount == 1
+
     async def break_stale_lock(
         self, conv_id: uuid.UUID, *, stale_after_seconds: int
     ) -> bool:

@@ -158,6 +158,13 @@ class ConversationService:
     ) -> None:
         await self.state.release_lock(conv, lock_owner)
 
+    async def renew_lock(
+        self, conv_id: uuid.UUID, *, lock_owner: uuid.UUID | str, ttl_seconds: int | None = None
+    ) -> bool:
+        return await self.state.renew_lock(
+            conv_id, lock_owner=lock_owner, ttl_seconds=ttl_seconds
+        )
+
     async def recheck_ownership(
         self,
         conv: Conversation,

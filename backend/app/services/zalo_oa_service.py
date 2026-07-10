@@ -122,17 +122,22 @@ class ZaloOASender:
                 envelope = await self._post(path, body)
         return envelope
 
-    async def send_message(self, chat_id: str, text: str, **_: Any) -> SendResult:
+    async def send_message(
+        self, chat_id: str, text: str, *, quote_message_id: str | None = None, **_: Any
+    ) -> SendResult:
         text = text.strip()
         if not text:
             return SendResult(ok=False, error="text length must be 1..2000")
+        quote_message_id = (quote_message_id or "").strip()
+        if not quote_message_id:
+            return SendResult(ok=False, error="quote_message_id is required for OA CS replies")
 
         chunks = _split_long_plain_text(text)
 
         async def send_chunk(chunk: str) -> SendResult:
             body = {
                 "recipient": {"user_id": chat_id},
-                "message": {"text": chunk},
+                "message": {"text": chunk, "quote_message_id": quote_message_id},
             }
             return self._send_result(
                 await self._post_with_refresh("/v3.0/oa/message/cs", body)

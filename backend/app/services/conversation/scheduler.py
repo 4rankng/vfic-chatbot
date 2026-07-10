@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,10 @@ async def enqueue_latest_unanswered_worker_message(
             "version_at_start": conv.version,
             "user_text": pending.body,
             "user_name": "",
+            "reply_to_message_id": pending.zalo_message_id or "",
             "lock_owner": str(lock_owner),
             "received_at": pending.created_at.isoformat(),
+            "received_at_epoch": time.time(),
         }
     )
     if not enqueued:

@@ -161,6 +161,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                 # Get the inbound text to reply to.
                 if newest.sender.name == "WORKER":
                     user_text = newest.body
+                    reply_to_message_id = newest.zalo_message_id or ""
                     reason = "unanswered_inbound"
                 else:
                     # Fallback: load the latest WORKER message body directly.
@@ -178,6 +179,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     )
                     msg = (await db.scalars(stmt)).first()
                     user_text = msg.body if msg else ""
+                    reply_to_message_id = msg.zalo_message_id if msg else ""
                     if newest.delivery_status.name == "PENDING":
                         reason = "stale_pending"
                     elif newest.delivery_status.name == "FAILED":
@@ -201,6 +203,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     "version_at_start": conv_fresh.version,
                     "user_text": user_text,
                     "user_name": "",
+                    "reply_to_message_id": reply_to_message_id,
                     "lock_owner": str(lock_owner),
                     "received_at": datetime.now(timezone.utc).isoformat(),
                     "received_at_epoch": time.time(),

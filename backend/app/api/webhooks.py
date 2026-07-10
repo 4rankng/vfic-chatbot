@@ -1,5 +1,5 @@
 """POST /webhooks/zalo/chatbot — Zalo Bot Platform inbound. Acks synchronously (<1s)
-after the guard chain; the bot run is enqueued to RQ.
+after the guard chain; the bot run starts directly on the ASGI event loop.
 
 Inbound authenticity is verified via the X-Bot-Api-Secret-Token shared secret
 echoed by Zalo on every POST (the value passed to setWebhook as ``secret_token``).
@@ -26,7 +26,7 @@ from app.services.integration_settings import IntegrationSettingsService
 from app.services.webhook import ZaloWebhookService
 from app.services.zalo_oa_health import record_oa_signature
 from app.services.zalo_oa_signature import verify_signature
-from app.workers.chatbot_worker import enqueue_chat_run
+from app.workers.chatbot_worker import start_direct_chat_turn
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -68,9 +68,9 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
     # Pass the DB-resolved bot token so the fire-and-forget typing indicator uses
     # the live token (the env ZALO_BOT_TOKEN is stale; resolve_zalo wins).
     result = await ZaloWebhookService.handle(
-        db, payload, enqueue=enqueue_chat_run, bot_token=cfg.bot_token
+        db, payload, enqueue=start_direct_chat_turn, bot_token=cfg.bot_token
     )
-    code = 503 if result.get("status") == "enqueue_failed" else 200
+    code = 503 if result.get("status") == "start_failed" else 200
     return JSONResponse(result, status_code=code)
 
 
@@ -133,8 +133,8 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     result = await ZaloWebhookService.handle(
         db,
         payload,
-        enqueue=enqueue_chat_run,
+        enqueue=start_direct_chat_turn,
         channel="oa",
     )
-    code = 503 if result.get("status") == "enqueue_failed" else 200
+    code = 503 if result.get("status") == "start_failed" else 200
     return JSONResponse(result, status_code=code)

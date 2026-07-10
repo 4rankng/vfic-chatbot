@@ -41,7 +41,7 @@ async def test_oa_sender_uses_openapi_message_endpoint(monkeypatch: pytest.Monke
         access_token="oa-token",
     )
 
-    result = await sender.send_message("user-1", "hello")
+    result = await sender.send_message("user-1", "hello", quote_message_id="inbound-1")
 
     assert result.ok is True
     assert result.msg_id == "oa-m1"
@@ -49,7 +49,7 @@ async def test_oa_sender_uses_openapi_message_endpoint(monkeypatch: pytest.Monke
     assert captured["headers"] == {"access_token": "oa-token"}
     assert captured["json"] == {
         "recipient": {"user_id": "user-1"},
-        "message": {"text": "hello"},
+        "message": {"text": "hello", "quote_message_id": "inbound-1"},
     }
 
 
@@ -248,7 +248,7 @@ async def test_oa_sender_send_retries_once_after_token_refresh(
         refresh=refresh,
     )
 
-    result = await sender.send_message("user-1", "hello")
+    result = await sender.send_message("user-1", "hello", quote_message_id="inbound-1")
 
     assert result.ok is True
     assert result.msg_id == "oa-refreshed"

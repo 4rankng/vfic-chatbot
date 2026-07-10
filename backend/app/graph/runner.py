@@ -128,7 +128,9 @@ async def _agent_turn(
     return deps.lead.ensure(reply, lead_collection_question)
 
 
-async def _status_heartbeat(zalo, chat_id: str, *, ack_text: str, settings) -> None:
+async def _status_heartbeat(
+    zalo, chat_id: str, *, ack_text: str, settings, quote_message_id: str = ""
+) -> None:
     """Keep the channel visibly active while a turn is processing.
 
     Two layers (the OA channel has no functional typing indicator, so the ack
@@ -158,7 +160,12 @@ async def _status_heartbeat(zalo, chat_id: str, *, ack_text: str, settings) -> N
         if not ack_fired and elapsed >= settings.slow_ack_seconds:
             ack_fired = True
             try:
-                await zalo.send_message(chat_id, ack_text)
+                if quote_message_id:
+                    await zalo.send_message(
+                        chat_id, ack_text, quote_message_id=quote_message_id
+                    )
+                else:
+                    await zalo.send_message(chat_id, ack_text)
             except Exception:  # noqa: BLE001
                 pass
         await asyncio.sleep(0.5)
@@ -207,7 +214,12 @@ async def _finish_terminal_reply(
     )
     send_result = None
     if owned:
-        send_result = await zalo.send_message(conv.zalo_chat_id, text)
+        if state.reply_to_message_id:
+            send_result = await zalo.send_message(
+                conv.zalo_chat_id, text, quote_message_id=state.reply_to_message_id
+            )
+        else:
+            send_result = await zalo.send_message(conv.zalo_chat_id, text)
     await svc.record_bot_outcome(
         conv,
         version_at_start=state.version_at_start,
@@ -246,7 +258,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     settings = get_settings()
     status_task = asyncio.create_task(
         _status_heartbeat(
-            zalo, conv.zalo_chat_id, ack_text=SLOW_ACK_REPLY, settings=settings
+            zalo,
+            conv.zalo_chat_id,
+            ack_text=SLOW_ACK_REPLY,
+            settings=settings,
+            quote_message_id=state.reply_to_message_id,
         )
     )
     started = _now()
@@ -258,7 +274,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     # intra-turn stages use time.monotonic() deltas against t0. Threaded into
     # record_bot_outcome -> BotRun.stage_timings for the performance dashboard.
     turn_start_epoch = time.time()
-    timings: dict = {}
+    timings: dict = {"execution_source": state.execution_source}
     if state.queue_depth is not None:
         timings["queue_depth"] = state.queue_depth
     if state.received_at_epoch > 0 and state.preamble_start_epoch > 0:
@@ -410,7 +426,12 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         if owned:
             await _cancel_status_task(status_task)
             send_t0 = time.monotonic()
-            send_result = await zalo.send_message(conv.zalo_chat_id, candidate)
+            if state.reply_to_message_id:
+                send_result = await zalo.send_message(
+                    conv.zalo_chat_id, candidate, quote_message_id=state.reply_to_message_id
+                )
+            else:
+                send_result = await zalo.send_message(conv.zalo_chat_id, candidate)
             timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
             timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
             await svc.record_bot_outcome(

@@ -24,6 +24,10 @@ class BotRunState:
     version_at_start: int
     user_text: str
     user_name: str = ""
+    # OA CS replies must quote the inbound message they answer. Bot Platform
+    # ignores this value; it is persisted with the inbound Message and carried
+    # through direct, manual-release and recovery turns.
+    reply_to_message_id: str = ""
     # Owner token acquired by the webhook/reconcile scheduler before enqueue.
     # Empty means legacy/no-owner jobs keep the previous version-only guard.
     lock_owner: str = ""
@@ -45,6 +49,9 @@ class BotRunState:
     # Carried into stage_timings so the dashboard correlates latency with queue
     # saturation without re-implementing the dead chat_turn_start log.
     queue_depth: int | None = None
+    # ``direct`` for normal webhooks; ``recovery`` for the offline reconcile
+    # adapter. Persisted in stage timings, not a public API field.
+    execution_source: str = "recovery"
 
 
 class TurnOutcome(TypedDict):

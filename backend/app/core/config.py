@@ -151,6 +151,7 @@ class Settings(BaseSettings):
     # candidate generation, then exact vector re-ranking preserves result quality.
     rag_ann_enabled: bool = True
     rag_ann_candidates: int = 200
+    rag_rrf_rank_constant: int = 60
     rag_cache_enabled: bool = True
     rag_result_cache_ttl_seconds: int = 300
     embedding_cache_ttl_seconds: int = 86400
@@ -185,6 +186,10 @@ class Settings(BaseSettings):
     # threshold; the grace window guarantees a candidate only appears after RQ has
     # already killed the job, so a live (slow-but-legitimate) turn is never stolen.
     chat_turn_job_timeout: int = 60
+    # Direct ASGI turns renew their owner-token lease on this cadence. Keep this
+    # comfortably below ``chat_turn_job_timeout`` because reconciliation uses
+    # that threshold to identify a dead turn.
+    direct_turn_heartbeat_seconds: float = 20.0
 
     # ── perceived-responsiveness budget ────────────────────────────────────────
     # The webhook stamps received_at_epoch; the worker sets deadline_at_epoch =

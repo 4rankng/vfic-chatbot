@@ -295,6 +295,7 @@ class ZaloBotSender:
         *,
         parse_mode: Literal["markdown", "html"] | None = None,
         text_styles: list[dict[str, Any]] | None = None,
+        quote_message_id: str | None = None,
     ) -> SendResult:
         """Send a text message, chunking long plain text into readable Zalo bubbles."""
         text = text.strip()

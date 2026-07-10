@@ -22,7 +22,7 @@ from app.schemas.conversation import (
     SendMessageRequest,
 )
 from app.services.conversation import ConversationConflict, ConversationService
-from app.workers.chatbot_worker import enqueue_chat_run
+from app.workers.chatbot_worker import start_direct_chat_turn
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -183,7 +183,7 @@ async def release(
     conv = await svc.release_and_enqueue_unanswered(
         await _load(conv_id, db, user),
         user,
-        enqueue=enqueue_chat_run,
+        enqueue=start_direct_chat_turn,
     )
     return ConversationOut.model_validate(conv)
 
