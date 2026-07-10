@@ -712,7 +712,7 @@
 }
 
 .inbox-bg-container .mode-menu-trigger.human {
-  color: var(--danger);
+  color: var(--brand);
 }
 
 .inbox-bg-container .mode-menu-trigger.semi_auto {
