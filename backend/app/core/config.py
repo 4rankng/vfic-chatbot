@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     minimax_agent_model: str = "MiniMax-M2.7-highspeed"
     minimax_safety_model: str = "MiniMax-M2.5-highspeed"
     minimax_request_timeout: int = 60
+    # Fast-tier model for low-complexity intents (Phase 5 model tiering). Empty = disabled
+    # (every intent uses the reasoning agent model, the pre-tiering default). When set,
+    # ``small_talk``/``contact``/simple ``faq_detail`` turns use this lighter model.
+    minimax_fast_model: str = ""
 
     OPENROUTER_DEFAULT_MODEL: ClassVar[str] = "deepseek/deepseek-v4-flash"
 
@@ -133,6 +137,8 @@ class Settings(BaseSettings):
     openrouter_agent_model: str = OPENROUTER_DEFAULT_MODEL
     openrouter_safety_model: str = OPENROUTER_DEFAULT_MODEL
     openrouter_digest_model: str = OPENROUTER_DEFAULT_MODEL
+    # OpenRouter fast-tier for low-complexity intents (Phase 5). Empty = use agent model.
+    openrouter_fast_model: str = ""
     openrouter_request_timeout: int = 60
     openrouter_digest_timeout: int = 180
 
@@ -155,6 +161,20 @@ class Settings(BaseSettings):
     rag_cache_enabled: bool = True
     rag_result_cache_ttl_seconds: int = 300
     embedding_cache_ttl_seconds: int = 86400
+
+    # Semantic cache (Phase 5): similarity-based dedup for non-personalized knowledge
+    # queries. Only ``search_knowledge`` (FAQ/contact/detail) is cached — never
+    # recommendation/profile/memory (personalized). Off by default; enable after
+    # confirming no false-positive cross-topic hits on the gold set.
+    semantic_cache_enabled: bool = False
+    semantic_cache_threshold: float = 0.95  # cosine similarity required for a hit
+    semantic_cache_capacity: int = 200       # max cached queries (LRU-evicted)
+    semantic_cache_ttl_seconds: int = 1800   # 30 min
+
+    # Token/cost accounting (Phase 6). Per-million-token USD rates for cost estimation.
+    # Default to MiniMax M2.7 documented rates; set to 0 to track tokens only (cost=0).
+    llm_cost_per_mtok_input: float = 1.0
+    llm_cost_per_mtok_output: float = 5.0
     dashboard_cache_enabled: bool = True
     dashboard_cache_ttl_seconds: int = 30
 
@@ -234,6 +254,11 @@ class Settings(BaseSettings):
     embed_concurrency_limit: int = (
         6  # max concurrent embed calls (ingest + retrieval), deployment-wide
     )
+    # Parallel tool dispatch: when the LLM returns multiple tool_calls in one
+    # response, run them concurrently (each on its own DB session) instead of
+    # sequentially. Caps simultaneous calls so a model returning many tool_calls
+    # can't exhaust the DB pool (pool_size + max_overflow per process).
+    parallel_tool_max_concurrency: int = 4
     # Backpressure: reject enqueue when webhook_high depth reaches this.
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
     chat_queue_max_depth: int = 40
@@ -251,6 +276,12 @@ class Settings(BaseSettings):
     # Grounding enforcement (Phase 3): strip job_ids the reply cites that were not
     # in the tool results shown to the LLM. Best-effort; never blocks a turn.
     grounding_check_enabled: bool = True
+
+    # Retrieval reranker (Phase 4). The knowledge path already fuses via RRF; this
+    # adds an optional score-blend rerank tail on the fused top-K. Off by default —
+    # enable after measuring a precision lift on the gold set. The interface
+    # (Reranker) is ready for a hosted cross-encoder backend later.
+    rag_rerank_enabled: bool = False
 
     # Reconcile sweep — recovers lost bot turns after worker crash / restart.
     reconcile_interval_seconds: int = 60  # sweep cadence

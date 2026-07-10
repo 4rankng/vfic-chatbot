@@ -176,7 +176,21 @@ async def search_knowledge(
         if isinstance(cached, str):
             return cached
 
-    emb = vec_literal(await _cached_embed(embedder, query))
+    raw_emb = await _cached_embed(embedder, query)
+    emb = vec_literal(raw_emb)
+
+    # Semantic cache (Phase 5): before hitting the DB, check if a *paraphrased*
+    # query was recently answered. Only for non-scoped knowledge lookups (no
+    # project_slug) to avoid cross-project false positives. Conservative threshold.
+    if getattr(s, "semantic_cache_enabled", False) and not project_slug:
+        from app.graph.semantic_cache import semantic_cache_get
+
+        sem_hit = await semantic_cache_get(raw_emb)
+        if sem_hit is not None:
+            logger.debug(
+                "search_knowledge semantic cache hit (sim=%.3f)", sem_hit.similarity
+            )
+            return sem_hit.result
 
     # FAQ-first pre-pass: prepend canonical FAQ answers when a strong match exists.
     faq_rows = await repo.match_faq(emb, top_k=3, project_ids=project_ids)
@@ -206,6 +220,11 @@ async def search_knowledge(
     result = "\n".join(lines)
     if s.rag_cache_enabled:
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
+    # Store in the semantic cache for future paraphrased hits (non-scoped only).
+    if getattr(s, "semantic_cache_enabled", False) and not project_slug:
+        from app.graph.semantic_cache import semantic_cache_put
+
+        await semantic_cache_put(raw_emb, result)
     return result
 
 

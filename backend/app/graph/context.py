@@ -13,6 +13,7 @@ persona/index hiccup can never break a chat turn. SQL lives in
 """
 from __future__ import annotations
 
+from app.core.preamble_cache import cached_system_prompt
 from app.graph.ports import RetrievalPort
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
 
@@ -114,10 +115,20 @@ async def active_projects_index(retrieval: RetrievalPort) -> str:
 
 
 async def build_system_prompt(retrieval: RetrievalPort) -> str:
-    """Persona body + active-product index, with a hard fallback to persona.md."""
-    try:
+    """Persona body + active-product index, with a hard fallback to persona.md.
+
+    Cached in Redis under the ``preamble`` version namespace — persona/project
+    writes bump that namespace so the next turn re-reads. Cache failures fall
+    through to the live assembly; any DB error still collapses to
+    ``AGENT_SYSTEM_PROMPT`` so a chat turn never breaks.
+    """
+
+    async def _assemble() -> str:
         persona = _strip_stale_refusal_rules(await resolve_persona(retrieval))
         index = await active_projects_index(retrieval)
         return persona + index + "\n\n" + _RUNTIME_RETRIEVAL_RULES
+
+    try:
+        return await cached_system_prompt(_assemble)
     except Exception:  # noqa: BLE001
         return _strip_stale_refusal_rules(AGENT_SYSTEM_PROMPT) + "\n\n" + _RUNTIME_RETRIEVAL_RULES

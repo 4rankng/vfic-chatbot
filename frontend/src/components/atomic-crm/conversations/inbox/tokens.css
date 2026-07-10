@@ -6,39 +6,39 @@
 
   --ink: var(--foreground);
   --ink-muted: var(--muted-foreground);
-  --ink-faint: #738394;
+  --ink-faint: #667085;
 
   /* --border intentionally not redeclared here: inherit the global token from
      index.css (single source of truth). Only inbox-specific hairlines below. */
-  --border-strong: #b9c6cf;
-  --border-glass: rgba(185, 198, 207, 0.72);
+  --border-strong: #d0d5dd;
+  --border-glass: rgba(208, 213, 221, 0.72);
 
   /* Private inbox accent. Renamed from --accent to
      avoid colliding with the shadcn --accent hover-surface token, which is
      defined globally in index.css and consumed by ~50 primitives app-wide.
      Tracks the global teal --primary so the inbox shares one brand color
      instead of carrying its own blue identity. */
-  --primary-soft: #e1f3eb;
-  --primary-soft-border: #a8d7c8;
+  --primary-soft: #e8f5f0;
+  --primary-soft-border: #b7e2d2;
   --inbox-accent: var(--primary);
   --inbox-accent-light: var(--primary-soft);
   --brand: var(--primary);
-  --brand-hover: #056044;
+  --brand-hover: #066047;
   --brand-light: var(--primary-soft);
 
-  --success: var(--color-green, #087f5b);
-  --success-light: #e1f3eb;
+  --success: var(--color-green, #087a5b);
+  --success-light: #e8f5f0;
 
   --rad-sm: 8px;
-  --rad-md: 12px;
+  --rad-md: 10px;
   --rad-lg: var(--rad-md);
   --rad-xl: var(--rad-md);
 
-  --shadow-sm: 0 1px 2px rgba(79, 59, 31, 0.08);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
   --shadow-md:
-    0 2px 0 rgba(79, 59, 31, 0.05), 0 18px 42px rgba(79, 59, 31, 0.12);
+    0 8px 24px rgba(16, 24, 40, 0.1), 0 2px 6px rgba(16, 24, 40, 0.06);
   --shadow-lg:
-    0 2px 0 rgba(79, 59, 31, 0.055), 0 10px 22px rgba(79, 59, 31, 0.1);
+    0 12px 28px rgba(16, 24, 40, 0.12), 0 3px 8px rgba(16, 24, 40, 0.06);
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --transition: 0.3s var(--ease);
@@ -47,11 +47,11 @@
      Keep sizes semantic and centralized. Message/body text is the anchor;
      page titles, card titles, rows, controls, labels, and metadata step from it. */
   --crm-font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
-    "Segoe UI", Inter, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+    Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   --crm-fs-display: 28px;
-  --crm-fs-page-title: 20px;
-  --crm-fs-section-title: 15px;
+  --crm-fs-page-title: 24px;
+  --crm-fs-section-title: 16px;
   --crm-fs-card-title: 14px;
   --crm-fs-row-title: 14px;
   --crm-fs-message: 14px;
@@ -63,7 +63,7 @@
   --crm-fs-control: 13.5px;
   --crm-fs-input: 14px;
   --crm-control-height-sm: 32px;
-  --crm-control-height-md: 36px;
+  --crm-control-height-md: 40px;
   --crm-control-height-touch: 44px;
   --crm-control-radius: 8px;
   --crm-control-icon: 16px;
@@ -111,15 +111,15 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: #f1f4f6;
+  --chat-bg: #f7f8fa;
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
      stays neutral white; bot + admin (outgoing) own the brand teal-soft. */
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #e8f5ee;
+  --chat-bubble-out: #e8f5f0;
   --chat-bubble-user: #ffffff;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #e8f5ee;
-  --chat-bubble-agent: #e8f5ee;
+  --chat-bubble-bot: #e8f5f0;
+  --chat-bubble-agent: #e8f5f0;
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: rgba(255, 255, 255, 0.96);
   --chat-shadow:
@@ -129,12 +129,12 @@
   /* Workspace sidebar/rail — paper surface + ink + teal active.
      Dark variants re-declared in .dark below. */
   --workspace-bg: #ffffff;
-  --workspace-bg-deep: #f1f4f6;
+  --workspace-bg-deep: #f7f8fa;
   --workspace-border: var(--border);
-  --workspace-ink: #17232e;
-  --workspace-muted: #526273;
-  --workspace-faint: #738394;
-  --workspace-hover: #e6ecf0;
+  --workspace-ink: #17212b;
+  --workspace-muted: #475467;
+  --workspace-faint: #667085;
+  --workspace-hover: #f2f4f7;
   --workspace-active: var(--primary);
   --workspace-active-border: var(--primary-soft-border);
   --workspace-switcher-bg: #f1f4f6;

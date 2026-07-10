@@ -9,6 +9,9 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import bump_cache_version
+from app.core.preamble_cache import NS_PREAMBLE
+
 
 class ProjectIndexRepo:
     """Read/write the project catalog card (``projects.summary`` / ``index_card``)."""
@@ -47,6 +50,7 @@ class ProjectIndexRepo:
             },
         )
         await self.db.commit()
+        await bump_cache_version(NS_PREAMBLE)
 
     async def sync_highlights(self, project_id: uuid.UUID) -> None:
         """Mirror the project's is_highlight feature values into ``index_card.highlights``.
@@ -78,6 +82,7 @@ class ProjectIndexRepo:
             },
         )
         await self.db.commit()
+        await bump_cache_version(NS_PREAMBLE)
 
 
 async def rebuild_bus_timetable(db: AsyncSession) -> tuple[int, int]:

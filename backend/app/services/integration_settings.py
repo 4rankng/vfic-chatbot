@@ -20,6 +20,13 @@ from app.core.config import (
     ZALO_OA_API_BASE,
     get_settings,
 )
+from app.core.cache import bump_cache_version
+from app.core.preamble_cache import (
+    NS_INTEGRATION_MINIMAX,
+    NS_INTEGRATION_OPENROUTER,
+    cached_minimax_config,
+    cached_openrouter_config,
+)
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
 
@@ -230,18 +237,22 @@ class IntegrationSettingsService:
         }
 
     async def resolve_minimax(self) -> MinimaxRuntimeConfig:
-        stored = await self._stored_values(MINIMAX_SETTING_KEYS)
-        return MinimaxRuntimeConfig(
-            api_key=stored.get(MINIMAX_API_KEY) or self.settings.minimax_api_key,
-            base_url=self.settings.minimax_base_url,
-            agent_model=self.settings.minimax_agent_model,
-            safety_model=self.settings.minimax_safety_model,
-            enabled=_bool_value(stored.get(MINIMAX_ENABLE), self.settings.minimax_enable),
-            default_provider=_provider_value(
-                stored.get(LLM_DEFAULT_PROVIDER),
-                getattr(self.settings, "llm_default_provider", "minimax"),
-            ),
-        )
+        async def _load() -> dict:
+            stored = await self._stored_values(MINIMAX_SETTING_KEYS)
+            return MinimaxRuntimeConfig(
+                api_key=stored.get(MINIMAX_API_KEY) or self.settings.minimax_api_key,
+                base_url=self.settings.minimax_base_url,
+                agent_model=self.settings.minimax_agent_model,
+                safety_model=self.settings.minimax_safety_model,
+                enabled=_bool_value(stored.get(MINIMAX_ENABLE), self.settings.minimax_enable),
+                default_provider=_provider_value(
+                    stored.get(LLM_DEFAULT_PROVIDER),
+                    getattr(self.settings, "llm_default_provider", "minimax"),
+                ),
+            ).__dict__
+
+        cached = await cached_minimax_config(_load)
+        return MinimaxRuntimeConfig(**cached)
 
     async def admin_minimax_view(self) -> dict:
         cfg = await self.resolve_minimax()
@@ -258,25 +269,29 @@ class IntegrationSettingsService:
         }
 
     async def resolve_openrouter(self) -> OpenRouterRuntimeConfig:
-        stored = await self._stored_values(OPENROUTER_SETTING_KEYS)
-        return OpenRouterRuntimeConfig(
-            api_key=stored.get(OPENROUTER_API_KEY) or self.settings.openrouter_api_key,
-            base_url=self.settings.openrouter_base_url,
-            agent_model=stored.get(OPENROUTER_AGENT_MODEL) or self.settings.openrouter_agent_model,
-            safety_model=(
-                stored.get(OPENROUTER_SAFETY_MODEL) or self.settings.openrouter_safety_model
-            ),
-            digest_model=(
-                stored.get(OPENROUTER_DIGEST_MODEL) or self.settings.openrouter_digest_model
-            ),
-            embedding_model=self.settings.openrouter_embedding_model,
-            embedding_dim=self.settings.embedding_dim,
-            enabled=_bool_value(stored.get(OPENROUTER_ENABLE), self.settings.openrouter_enable),
-            default_provider=_provider_value(
-                stored.get(LLM_DEFAULT_PROVIDER),
-                getattr(self.settings, "llm_default_provider", "minimax"),
-            ),
-        )
+        async def _load() -> dict:
+            stored = await self._stored_values(OPENROUTER_SETTING_KEYS)
+            return OpenRouterRuntimeConfig(
+                api_key=stored.get(OPENROUTER_API_KEY) or self.settings.openrouter_api_key,
+                base_url=self.settings.openrouter_base_url,
+                agent_model=stored.get(OPENROUTER_AGENT_MODEL) or self.settings.openrouter_agent_model,
+                safety_model=(
+                    stored.get(OPENROUTER_SAFETY_MODEL) or self.settings.openrouter_safety_model
+                ),
+                digest_model=(
+                    stored.get(OPENROUTER_DIGEST_MODEL) or self.settings.openrouter_digest_model
+                ),
+                embedding_model=self.settings.openrouter_embedding_model,
+                embedding_dim=self.settings.embedding_dim,
+                enabled=_bool_value(stored.get(OPENROUTER_ENABLE), self.settings.openrouter_enable),
+                default_provider=_provider_value(
+                    stored.get(LLM_DEFAULT_PROVIDER),
+                    getattr(self.settings, "llm_default_provider", "minimax"),
+                ),
+            ).__dict__
+
+        cached = await cached_openrouter_config(_load)
+        return OpenRouterRuntimeConfig(**cached)
 
     async def admin_openrouter_view(self) -> dict:
         cfg = await self.resolve_openrouter()
@@ -458,6 +473,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
+            await bump_cache_version(NS_INTEGRATION_MINIMAX)
         return changed
 
     async def update_openrouter(
@@ -488,4 +504,5 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
+            await bump_cache_version(NS_INTEGRATION_OPENROUTER)
         return changed

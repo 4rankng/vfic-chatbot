@@ -24,6 +24,7 @@ def collect_queue_health() -> dict:
         _RKEY_INVOKE_COUNT,
         _RKEY_INVOKE_MS,
     )
+    from app.graph.usage import collect_token_usage
 
     conn = get_redis_sync()
     qd = Queue("webhook_high", connection=conn).count
@@ -45,4 +46,6 @@ def collect_queue_health() -> dict:
         "llm_invokes_last_2m": invoke_count,
         "minimax_429s_last_1m": minimax_429s_1m,
         "llm_fallbacks_last_2m": llm_fallbacks_2m,
+        # Phase 6: today's token usage + estimated cost (best-effort, 0 if no turns yet).
+        "llm_token_usage": collect_token_usage(),
     }

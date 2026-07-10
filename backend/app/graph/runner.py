@@ -29,7 +29,7 @@ from app.graph import fast_lane
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.prompts import ERROR_REPLY
-from app.graph.router import route_turn, routing_instruction
+from app.graph.router import route_turn, routing_instruction, should_use_fast_model
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.safety import (
     blocklist_hit,
@@ -94,6 +94,10 @@ async def _agent_turn(
     # Low-confidence routes fall through to the full toolset (filter_tool_schemas
     # returns the whole registry when allowed is empty/None).
     allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
+    # Model tier (Phase 5): low-complexity strategies use the fast model when one
+    # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
+    # the switch when no fast model was injected (tests / un-configured deployments).
+    use_fast = should_use_fast_model(route)
     try:
         lead_profile, lead_collection_question = await deps.lead.context(
             chat_id, user_text, recent_messages
@@ -122,6 +126,7 @@ async def _agent_turn(
         retrieval=deps.retrieval,
         embedder=deps.embedder,
         allowed_tools=allowed_tools,
+        use_fast=use_fast,
     )
     if timings is not None:
         timings["llm_ms"] = timings.get("llm_ms", 0) + int(round((time.monotonic() - llm_t0) * 1000))

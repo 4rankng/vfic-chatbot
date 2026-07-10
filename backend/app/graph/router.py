@@ -34,6 +34,22 @@ TurnStrategy = Literal[
     "agent",
 ]
 
+# Strategies eligible for the fast-tier model (Phase 5 model tiering). These are
+# low-complexity paths where a non-reasoning model suffices: social chitchat
+# (template), contact-info lookups, and simple single-fact FAQ detail questions.
+# Recommendation / profile / general-agent paths always use the reasoning model.
+FAST_MODEL_STRATEGIES: frozenset[str] = frozenset({"template", "knowledge_lookup", "safe_redirect"})
+
+
+def should_use_fast_model(route: "TurnRoute") -> bool:
+    """Whether this route's strategy qualifies for the fast-tier model.
+
+    The caller still checks that a fast model is actually configured before
+    switching; this predicate only encodes *eligibility* so the policy lives
+    in one place (alongside the intent taxonomy).
+    """
+    return route.strategy in FAST_MODEL_STRATEGIES
+
 
 @dataclass(frozen=True)
 class TurnRoute:

@@ -80,11 +80,14 @@ def validate_grounding(reply: str, surfaced_ids: set[str]) -> GroundingResult:
             sanitized_reply=reply,
         )
 
-    # Strip hallucinated IDs from the reply text.
+    # Strip hallucinated IDs from the reply text. Case-insensitive: UUIDs are valid
+    # in either case, and a safety guardrail must survive an LLM uppercasing one.
     sanitized = reply
     for hid in hallucinated:
-        sanitized = sanitized.replace(f"id={hid}", "[việc không xác định]")
-        sanitized = sanitized.replace(hid, "")
+        sanitized = re.sub(
+            re.escape(f"id={hid}"), "[việc không xác định]", sanitized, flags=re.IGNORECASE
+        )
+        sanitized = re.sub(re.escape(hid), "", sanitized, flags=re.IGNORECASE)
 
     return GroundingResult(
         is_grounded=False,

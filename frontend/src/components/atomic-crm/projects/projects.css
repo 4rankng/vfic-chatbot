@@ -1,11 +1,44 @@
-/* Feature readiness is deliberately pinned to the light workspace semantic
-   palette. It must not inherit a dark OS preference through legacy aliases. */
-.project-features-card { border-color: var(--border); background: var(--card); color: var(--foreground); }
-.project-readiness-hero { padding: .875rem; border: 1px solid var(--border); border-radius: .625rem; background: color-mix(in srgb, var(--card) 90%, var(--muted)); }
-.project-readiness-count { color: var(--foreground); }
-.project-feature-group-title { color: var(--foreground); font-size: .875rem; font-weight: 700; }
-.project-feature-group-count { font-size: .75rem; }
-.project-feature-chip { color: var(--foreground); }
-.project-feature-chip-copy { color: var(--foreground); }
-.project-feature-chip .text-muted-foreground { color: var(--muted-foreground); }
-.project-feature-chip:has(.bg-feature-gap), .project-feature-group:has(.text-feature-gap) { border-color: var(--feature-gap-border); }
+/* Feature readiness uses text and icons as its primary signal; surface tint
+   supports it without turning ordinary facts into a wall of pills. */
+.project-features-card {
+  border-color: var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+.project-readiness-hero {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.project-readiness-count {
+  color: var(--foreground);
+}
+.project-feature-group-title {
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.project-feature-group-count {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+.project-feature-chip {
+  color: var(--foreground);
+  border-radius: 8px;
+}
+.project-feature-chip-copy {
+  color: var(--foreground);
+}
+.project-feature-chip .text-muted-foreground {
+  color: var(--muted-foreground);
+}
+.project-feature-chip:has(.bg-feature-gap),
+.project-feature-group:has(.text-feature-gap) {
+  border-color: var(--feature-gap-border);
+}
+.project-feature-detail-toggle {
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}

@@ -85,7 +85,6 @@ const ProjectListContent = () => {
                   </Button>
                   <Button
                     onClick={() => redirect("create", "projects")}
-                    variant={projects.length > 0 ? "outline" : "default"}
                     className="h-10 rounded-[8px]"
                   >
                     <Plus className="size-4" />

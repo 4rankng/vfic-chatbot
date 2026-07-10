@@ -27,6 +27,7 @@ class AgentModel(Protocol):
         retrieval,
         embedder,
         allowed_tools: tuple[str, ...] | None = None,
+        use_fast: bool = False,
     ) -> str: ...
 
 

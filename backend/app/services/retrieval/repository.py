@@ -327,7 +327,9 @@ class RetrievalRepository:
             "match_documents RRF fused: %d rows (%d lexical, %d vector, top_k=%d)",
             len(merged), len(lexical_rows), len(vector_rows), top_k,
         )
-        return merged
+        from app.services.retrieval.reranker import rerank_if_enabled
+
+        return rerank_if_enabled(merged, query_text=query_text or "")
 
     async def match_faq(
         self,

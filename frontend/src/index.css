@@ -49,10 +49,10 @@
   --color-feature-gap-soft: var(--feature-gap-soft);
   --color-feature-gap-border: var(--feature-gap-border);
 
-  /* VFIC custom colors — paper palette source values kept as hex for visual
-     fidelity to the recruitment chat reference. */
-  --color-steel: #4e6d7d;
-  --color-steel-soft: #eef4f7;
+  /* VFIC semantic accents. Workspace surfaces intentionally stay neutral so
+     teal can communicate selection and primary action rather than decoration. */
+  --color-steel: #475467;
+  --color-steel-soft: #f2f4f7;
   /* Tier B — perceptual tint. --primary and --background are real :root vars
      (not @theme inline), so this resolves per-theme at runtime. */
   --color-amber-soft: color-mix(
@@ -60,58 +60,57 @@
     var(--primary) 13%,
     var(--background)
   );
-  --color-ember: #b96727;
-  /* Tier B — perceptual tint for the paper priority tone. */
-  --color-ember-soft: color-mix(in oklab, #b96727 12%, var(--background));
-  --color-muted-dim: #9b9182;
-  --color-green: #28786f;
+  --color-ember: #b54708;
+  --color-ember-soft: color-mix(in oklab, #b54708 12%, var(--background));
+  --color-muted-dim: #667085;
+  --color-green: #087a5b;
 }
 
 :root {
-  /* Shared semantic roles. Feature CSS may keep legacy aliases until Phase 4,
-     but new workspace UI reads these roles directly. */
-  --workspace-canvas: #efe6d6;
-  --workspace-surface: #fffdf7;
-  --workspace-surface-muted: #fbf6ea;
-  --workspace-ink: #27231d;
-  --workspace-ink-muted: #5f594d;
-  --workspace-border: #ded2bd;
-  --workspace-focus: #28786f;
-  --workspace-action: #28786f;
-  --workspace-action-strong: #1f5f58;
-  --workspace-success: #28786f;
-  --workspace-warning: #8a5a14;
+  /* Shared workspace roles. These are deliberately cool-neutral: the canvas
+     recedes, while typography and the single green action carry hierarchy. */
+  --workspace-canvas: #f7f8fa;
+  --workspace-surface: #fcfcfd;
+  --workspace-surface-muted: #f2f4f7;
+  --workspace-ink: #17212b;
+  --workspace-ink-muted: #475467;
+  --workspace-border: #e4e7ec;
+  --workspace-focus: #087a5b;
+  --workspace-action: #087a5b;
+  --workspace-action-strong: #066047;
+  --workspace-success: #087a5b;
+  --workspace-warning: #b54708;
   --workspace-danger: #b23a2e;
   --workspace-space-1: 0.25rem;
   --workspace-space-2: 0.5rem;
   --workspace-space-3: 0.75rem;
   --workspace-space-4: 1rem;
   --workspace-space-6: 1.5rem;
-  --workspace-radius-control: 0.75rem;
-  --workspace-radius-panel: 1rem;
-  --workspace-shadow-panel: 0 18px 42px rgba(79, 59, 31, 0.12);
+  --workspace-radius-control: 0.5rem;
+  --workspace-radius-panel: 0.625rem;
+  --workspace-shadow-panel: 0 1px 2px rgba(16, 24, 40, 0.04);
   --workspace-motion-fast: 160ms;
   --workspace-motion-standard: 240ms;
-  --radius: 14px;
-  --background: #edf2f5;
-  --foreground: #17232e;
+  --radius: 10px;
+  --background: #f7f8fa;
+  --foreground: #17212b;
   --card: #ffffff;
-  --card-foreground: #17232e;
+  --card-foreground: #17212b;
   --popover: #ffffff;
-  --popover-foreground: #17232e;
-  --primary: #087f5b;
+  --popover-foreground: #17212b;
+  --primary: #087a5b;
   --primary-foreground: #ffffff;
-  --secondary: #e6ecf0;
-  --secondary-foreground: #17232e;
-  --muted: #f1f4f6;
-  --muted-foreground: #526273;
-  --accent: #e1f3eb;
-  --accent-foreground: #056044;
+  --secondary: #f2f4f7;
+  --secondary-foreground: #17212b;
+  --muted: #f2f4f7;
+  --muted-foreground: #667085;
+  --accent: #e8f5f0;
+  --accent-foreground: #0b6b4f;
   --destructive: #b23a2e;
-  --destructive-foreground: #fffdf7;
-  --border: #cbd5dc;
-  --input: #b9c6cf;
-  --ring: #087f5b;
+  --destructive-foreground: #ffffff;
+  --border: #e4e7ec;
+  --input: #d0d5dd;
+  --ring: #087a5b;
   --ember: #b45309;
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
@@ -130,36 +129,36 @@
     var(--muted-foreground) 26%,
     var(--background)
   );
-  --grid-color: rgba(80, 58, 30, 0.018);
-  --shimmer-highlight: rgba(80, 58, 30, 0.08);
+  --grid-color: transparent;
+  --shimmer-highlight: rgba(16, 24, 40, 0.06);
 
-  --chart-1: #4e6d7d;
-  --chart-2: #28786f;
-  --chart-3: #b96727;
-  --chart-4: #1f5f58;
-  --chart-5: #5f594d;
+  --chart-1: #475467;
+  --chart-2: #087a5b;
+  --chart-3: #b54708;
+  --chart-4: #066047;
+  --chart-5: #667085;
 
-  --sidebar: #fffdf7;
-  --sidebar-foreground: #27231d;
-  --sidebar-primary: #28786f;
-  --sidebar-primary-foreground: #fffdf7;
-  --sidebar-accent: #dcefeb;
-  --sidebar-accent-foreground: #1f5f58;
-  --sidebar-border: #ded2bd;
-  --sidebar-ring: #28786f;
+  --sidebar: #fcfcfd;
+  --sidebar-foreground: #17212b;
+  --sidebar-primary: #087a5b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8f5f0;
+  --sidebar-accent-foreground: #0b6b4f;
+  --sidebar-border: #e4e7ec;
+  --sidebar-ring: #087a5b;
 
   /* Lead-priority avatar tones (inbox). bg tints use runtime var() so they
      adapt per-theme; only the fixed ember/steel inks need a dark lift. */
-  --lead-hot-bg: #fff1dd;
-  --lead-hot-ink: #b96727;
-  --lead-warm-bg: #fff1dd;
-  --lead-warm-ink: #b96727;
+  --lead-hot-bg: #fff4ed;
+  --lead-hot-ink: #b54708;
+  --lead-warm-bg: #fff4ed;
+  --lead-warm-ink: #b54708;
   --lead-cold-bg: color-mix(
     in oklab,
     var(--color-muted-dim) 16%,
     var(--background)
   );
-  --lead-cold-ink: #4e6d7d;
+  --lead-cold-ink: #475467;
 }
 
 .dark {
@@ -254,12 +253,12 @@ input {
   --popover: var(--workspace-surface);
   --popover-foreground: var(--workspace-ink);
   --primary: var(--workspace-action);
-  --primary-foreground: #fffdf7;
+  --primary-foreground: #ffffff;
   --secondary: var(--workspace-surface-muted);
   --secondary-foreground: var(--workspace-ink);
   --muted: var(--workspace-surface-muted);
   --muted-foreground: var(--workspace-ink-muted);
-  --accent: #dcefeb;
+  --accent: #e8f5f0;
   --accent-foreground: var(--workspace-action-strong);
   --destructive: var(--workspace-danger);
   --border: var(--workspace-border);
@@ -285,7 +284,7 @@ input {
   transform: translateY(-180%);
   border-radius: var(--workspace-radius-control);
   background: var(--workspace-action);
-  color: #fffdf7;
+  color: #ffffff;
   padding: 0.7rem 0.9rem;
   font-weight: 700;
   transition: transform var(--workspace-motion-fast) ease;
@@ -293,7 +292,7 @@ input {
 
 .workspace-skip-link:focus-visible {
   transform: translateY(0);
-  outline: 3px solid #fffdf7;
+  outline: 3px solid #ffffff;
   outline-offset: 3px;
 }
 
@@ -351,7 +350,7 @@ input {
 }
 
 .workspace-navigation-link.is-active {
-  background: #dcefeb;
+  background: #e8f5f0;
   color: var(--workspace-action-strong);
 }
 
@@ -378,7 +377,7 @@ input {
   border: 1px solid var(--workspace-surface);
   border-radius: 999px;
   background: var(--workspace-danger);
-  color: #fffdf7;
+  color: #ffffff;
   padding: 0.1rem 0.25rem;
   font-size: 0.625rem;
   font-weight: 800;
@@ -680,10 +679,7 @@ input[type="time"] {
 body {
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   background-color: var(--background);
-  background-image:
-    linear-gradient(var(--grid-color) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background-image: none;
 }
 
 /* Hide scrollbars on mobile viewports */

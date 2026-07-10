@@ -15,6 +15,7 @@ from typing import Literal
 
 from app.core.config import get_settings
 from app.graph.schemas import _dispatch_tool
+from app.graph.usage import record_token_usage as _record_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -277,11 +278,17 @@ def build_embedder(
 
 
 class MiniMaxAgent:
-    """Tool-calling agent: loops on MiniMax tool_calls until a final text reply."""
+    """Tool-calling agent: loops on MiniMax tool_calls until a final text reply.
 
-    def __init__(self, llm, embedder, max_iters: int | None = None) -> None:
+    ``fast_llm`` (optional, Phase 5 model tiering): when provided and the caller
+    passes ``use_fast=True``, the lightweight model is used instead of the primary
+    reasoning model. The runner decides eligibility via ``should_use_fast_model``.
+    """
+
+    def __init__(self, llm, embedder, max_iters: int | None = None, fast_llm=None) -> None:
         self.llm = llm
         self.embedder = embedder
+        self.fast_llm = fast_llm
         # max_iters reads from settings unless explicitly overridden (tests, etc.).
         if max_iters is not None:
             self.max_iters = max_iters
@@ -289,15 +296,15 @@ class MiniMaxAgent:
             s = get_settings()
             self.max_iters = s.max_llm_calls_per_turn
 
-    async def agent(self, user_text, *, system, retrieval, embedder, allowed_tools=None) -> str:
-        from app.graph.grounding import extract_surfaced_job_ids, validate_grounding
+    async def agent(self, user_text, *, system, retrieval, embedder, allowed_tools=None, use_fast=False) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
         from app.graph.schemas import filter_tool_schemas
 
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
+        active_llm = self.fast_llm if (use_fast and self.fast_llm is not None) else self.llm
         schemas = filter_tool_schemas(allowed_tools)
-        bound = self.llm.bind_tools(schemas) if hasattr(self.llm, "bind_tools") else self.llm
+        bound = active_llm.bind_tools(schemas) if hasattr(active_llm, "bind_tools") else active_llm
         sem = get_llm_semaphore()
         messages = [SystemMessage(content=system)]
         tool_results: list[str] = []  # captured for post-generation grounding cross-check
@@ -340,6 +347,8 @@ class MiniMaxAgent:
                 raise
             elapsed_ms = int((time.monotonic() - t0) * 1000)
             _record_llm_latency(elapsed_ms)
+            # Phase 6: capture token usage + cost from the response.usage block.
+            _record_token_usage(getattr(ai, "usage_metadata", None) or getattr(ai, "response_metadata", {}).get("token_usage"))
             logger.info("llm_invoke", extra={"llm_latency_ms": elapsed_ms})
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)

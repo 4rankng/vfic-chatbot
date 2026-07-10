@@ -24,10 +24,7 @@ const ProjectShowContent = () => {
   return (
     <ProjectWorkspaceShell>
       <div className="project-workspace-content">
-        <div className="project-editor-header rounded-lg border p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            Đặc điểm dự án
-          </p>
+        <div className="project-editor-header">
           <h2 className="mt-1 text-xl font-semibold">{project.name}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Xem thẻ danh mục, đặc điểm sản phẩm và FAQ mà Agent dùng trong hội

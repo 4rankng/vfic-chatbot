@@ -198,28 +198,28 @@
   background: color-mix(in srgb, var(--brand) 12%, var(--surface-solid));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--brand) 40%, transparent),
-    0 1px 2px rgba(79, 59, 31, 0.08);
+    0 1px 2px rgba(16, 24, 40, 0.04);
 }
 .inbox-bg-container .mode-segment.active.human {
   color: var(--inbox-accent);
   background: color-mix(in srgb, var(--inbox-accent) 14%, var(--surface-solid));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--inbox-accent) 46%, transparent),
-    0 1px 2px rgba(79, 59, 31, 0.08);
+    0 1px 2px rgba(16, 24, 40, 0.04);
 }
 .inbox-bg-container .mode-segment.active.semi_auto {
   color: var(--brand);
   background: color-mix(in srgb, var(--brand) 14%, var(--surface-solid));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--brand) 46%, transparent),
-    0 1px 2px rgba(79, 59, 31, 0.08);
+    0 1px 2px rgba(16, 24, 40, 0.04);
 }
 .inbox-bg-container .mode-segment.active.bot {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 14%, var(--surface-solid));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--success) 46%, transparent),
-    0 1px 2px rgba(79, 59, 31, 0.08);
+    0 1px 2px rgba(16, 24, 40, 0.04);
 }
 .inbox-bg-container .mode-segment.active .mode-segment-hint {
   color: currentColor;
@@ -317,8 +317,8 @@
   background: color-mix(in srgb, var(--surface-solid) 98%, transparent);
   color: var(--ink);
   box-shadow:
-    0 14px 34px rgba(79, 59, 31, 0.14),
-    0 2px 8px rgba(79, 59, 31, 0.08);
+    0 8px 24px rgba(16, 24, 40, 0.1),
+    0 2px 6px rgba(16, 24, 40, 0.06);
 }
 .inbox-bg-container .mode-menu-item {
   display: grid;
@@ -916,9 +916,7 @@
   font-weight: 650;
   -webkit-text-fill-color: var(--ink-muted);
 }
-.inbox-bg-container
-  .composer.disabled
-  textarea::placeholder {
+.inbox-bg-container .composer.disabled textarea::placeholder {
   color: var(--ink-muted);
   opacity: 1;
 }
@@ -943,8 +941,7 @@
   color: var(--primary-foreground);
   box-shadow: none;
 }
-.inbox-bg-container
-  .composer-action.send:hover:not(:disabled) {
+.inbox-bg-container .composer-action.send:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: none;
 }

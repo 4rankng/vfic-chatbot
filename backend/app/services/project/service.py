@@ -20,6 +20,8 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import bump_cache_version
+from app.core.preamble_cache import NS_PREAMBLE
 from app.models.company import Project
 from app.models.persona import Persona
 from app.models.user import Role, User
@@ -163,6 +165,7 @@ class ProjectService:
         )
         await self.db.commit()
         await self.db.refresh(proj)
+        await bump_cache_version(NS_PREAMBLE)
         return proj
 
     async def update(self, project_id: uuid.UUID, body: ProjectUpdate, actor: User) -> Project:
@@ -188,6 +191,7 @@ class ProjectService:
         )
         await self.db.commit()
         await self.db.refresh(proj)
+        await bump_cache_version(NS_PREAMBLE)
         return proj
 
     async def delete(self, project_id: uuid.UUID, admin: User) -> None:
@@ -201,6 +205,7 @@ class ProjectService:
         )
         await self.db.delete(proj)
         await self.db.commit()
+        await bump_cache_version(NS_PREAMBLE)
 
     async def reindex(self, project_id: uuid.UUID) -> Project:
         """Rebuild this project's catalog card (the master-index entry) from usable units."""

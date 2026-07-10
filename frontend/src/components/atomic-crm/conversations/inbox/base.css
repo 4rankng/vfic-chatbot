@@ -68,8 +68,6 @@
   border-radius: 0;
   background: var(--surface);
   box-shadow: none;
-  backdrop-filter: blur(40px) saturate(160%);
-  -webkit-backdrop-filter: blur(40px) saturate(160%);
   isolation: isolate;
 }
 
@@ -184,14 +182,7 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  background:
-    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 180px),
-    var(--chat-bg);
-  background-size:
-    auto,
-    28px 28px,
-    28px 28px,
-    auto;
+  background: var(--chat-bg);
 }
 
 .inbox-bg-container .dashboard-workspace-content {

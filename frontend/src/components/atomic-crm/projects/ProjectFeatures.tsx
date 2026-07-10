@@ -242,7 +242,7 @@ export const ProjectFeatures = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="project-feature-detail-toggle h-10 w-full justify-center border border-dashed text-xs text-muted-foreground"
+                  className="project-feature-detail-toggle h-10 w-full justify-center text-xs text-muted-foreground"
                   onClick={() => setShowDetail((s) => !s)}
                   aria-expanded={showDetail}
                 >

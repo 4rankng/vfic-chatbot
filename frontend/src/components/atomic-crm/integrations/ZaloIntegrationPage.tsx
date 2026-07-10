@@ -1131,10 +1131,10 @@ export const ZaloIntegrationPage = () => {
                   variant="outline"
                   className="settings-test-button"
                   onClick={testBotConnection}
-                  disabled={saving || testingBot || !settings}
+                  disabled={savingSection !== null || testingBot || !settings}
                 >
                   <Wifi className="size-4" />
-                  {testingBot ? "Đang kiểm tra" : "Test Connection"}
+                  {testingBot ? "Đang kiểm tra" : "Kiểm tra kết nối"}
                 </Button>
               </div>
             </SettingsCard>
@@ -1193,10 +1193,10 @@ export const ZaloIntegrationPage = () => {
                     variant="outline"
                     className="settings-test-button"
                     onClick={testOaConnection}
-                    disabled={saving || testingOa || !settings}
+                    disabled={savingSection !== null || testingOa || !settings}
                   >
                     <Wifi className="size-4" />
-                    {testingOa ? "Đang kiểm tra" : "Test Connection"}
+                    {testingOa ? "Đang kiểm tra" : "Kiểm tra kết nối"}
                   </Button>
                 </div>
                 <ZaloOaSignatureHealthBadge
@@ -1252,10 +1252,10 @@ export const ZaloIntegrationPage = () => {
                   variant="outline"
                   className="settings-test-button"
                   onClick={testMinimaxConnection}
-                  disabled={saving || testingMinimax || !minimaxSettings}
+                  disabled={savingSection !== null || testingMinimax || !minimaxSettings}
                 >
                   <Wifi className="size-4" />
-                  {testingMinimax ? "Đang kiểm tra" : "Test Connection"}
+                  {testingMinimax ? "Đang kiểm tra" : "Kiểm tra kết nối"}
                 </Button>
               </div>
             </SettingsCard>
@@ -1319,10 +1319,10 @@ export const ZaloIntegrationPage = () => {
                 variant="outline"
                 className="settings-test-button"
                 onClick={testOpenRouterConnection}
-                disabled={saving || testingOpenRouter || !openRouterSettings}
+                disabled={savingSection !== null || testingOpenRouter || !openRouterSettings}
               >
                 <Wifi className="size-4" />
-                {testingOpenRouter ? "Đang kiểm tra" : "Test Connection"}
+                {testingOpenRouter ? "Đang kiểm tra" : "Kiểm tra kết nối"}
               </Button>
             </div>
           </SettingsCard>

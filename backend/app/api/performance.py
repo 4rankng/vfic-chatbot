@@ -7,6 +7,7 @@ Live tiles reuse the ``/health/queue`` snapshot via ``collect_queue_health``. Ad
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -19,12 +20,15 @@ from app.models.user import User
 
 router = APIRouter(prefix="/admin/performance", tags=["performance"])
 
-# Time windows accepted via ?window=. Maps to a Postgres interval literal so the
-# value never reaches SQL unparameterised.
+# Time windows accepted via ?window=. Values are timedeltas bound as parameters
+# and cast to interval in SQL via (:interval)::interval. Both halves matter:
+# the cast disambiguates `now() - $1` (otherwise Postgres guesses wrong and
+# fails with `timestamptz >= interval`), and a timedelta lets asyncpg encode
+# the parameter natively as an interval.
 _WINDOWS = {
-    "1h": "interval '1 hour'",
-    "24h": "interval '24 hours'",
-    "7d": "interval '7 days'",
+    "1h": timedelta(hours=1),
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
 }
 
 # Stages surfaced in the dashboard, in display order. Each maps to a
@@ -57,7 +61,7 @@ async def performance(
     }
 
 
-async def _percentiles(db: AsyncSession, interval: str) -> dict:
+async def _percentiles(db: AsyncSession, interval: timedelta) -> dict:
     # One round-trip: one percentile_cont per (stage, p). (stage_timings->>'<k>_ms')
     # is NULL when the stage was skipped (e.g. llm_ms on a fast-lane turn); the
     # ::int cast yields NULL and percentile_cont ignores NULLs per-stage, so each
@@ -71,7 +75,8 @@ async def _percentiles(db: AsyncSession, interval: str) -> dict:
             )
     sql = (
         "SELECT " + ", ".join(cols) + " "
-        "FROM bot_runs WHERE started_at >= now() - :interval AND stage_timings IS NOT NULL"
+        "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings IS NOT NULL"
     )
     row = (await db.execute(text(sql), {"interval": interval})).one_or_none()
     if row is None:
@@ -86,11 +91,11 @@ async def _percentiles(db: AsyncSession, interval: str) -> dict:
     }
 
 
-async def _lane_outcome_counts(db: AsyncSession, interval: str) -> tuple[dict, dict]:
+async def _lane_outcome_counts(db: AsyncSession, interval: timedelta) -> tuple[dict, dict]:
     sql = (
         "SELECT stage_timings->>'lane' AS lane, outcome, COUNT(*) AS n "
-        "FROM bot_runs WHERE started_at >= now() - :interval AND stage_timings IS NOT NULL "
-        "GROUP BY 1, 2"
+        "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings IS NOT NULL GROUP BY 1, 2"
     )
     rows = (await db.execute(text(sql), {"interval": interval})).all()
     by_lane: dict = {}
@@ -103,10 +108,11 @@ async def _lane_outcome_counts(db: AsyncSession, interval: str) -> tuple[dict, d
     return by_lane, by_outcome
 
 
-async def _slow_turns(db: AsyncSession, interval: str) -> list[dict]:
+async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
     sql = (
         "SELECT id, conversation_id, started_at, outcome, stage_timings "
-        "FROM bot_runs WHERE started_at >= now() - :interval AND stage_timings ? 'total_ms' "
+        "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings ? 'total_ms' "
         "ORDER BY (stage_timings->>'total_ms')::int DESC LIMIT 20"
     )
     rows = (await db.execute(text(sql), {"interval": interval})).all()

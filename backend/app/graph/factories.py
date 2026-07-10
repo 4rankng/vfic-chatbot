@@ -14,7 +14,14 @@ import logging
 import time
 
 from app.core.config import get_settings
-from app.graph.clients import MiniMaxAgent, MiniMaxSafety, _chat_for_role, build_embedder
+from app.graph.clients import (
+    MiniMaxAgent,
+    MiniMaxSafety,
+    _chat_for_role,
+    _minimax_chat,
+    _openrouter_chat,
+    build_embedder,
+)
 from app.graph.types import GraphDeps
 
 logger = logging.getLogger(__name__)
@@ -177,6 +184,53 @@ def make_minimax_llm_json(
     return _call
 
 
+def _build_fast_llm(*, minimax_config, openrouter_config):
+    """Build the optional fast-tier LLM for low-complexity intents (Phase 5).
+
+    Returns ``None`` when no fast model is configured on either provider —
+    ``MiniMaxAgent`` then no-ops the ``use_fast`` switch (every turn uses the
+    primary reasoning model, the pre-tiering default).
+
+    The fast model is built directly (not via ``_chat_for_role``) because the
+    role factory hard-codes the agent/safety model names. Here we explicitly use
+    ``minimax_fast_model`` / ``openrouter_fast_model`` so the tier is genuine.
+    """
+    s = get_settings()
+    mm_fast = (getattr(s, "minimax_fast_model", "") or "").strip()
+    or_fast = (getattr(s, "openrouter_fast_model", "") or "").strip()
+    if not mm_fast and not or_fast:
+        return None
+
+    try:
+        primary = None
+        fallback = None
+        if mm_fast and minimax_config.enabled and minimax_config.api_key:
+            primary = _minimax_chat(
+                mm_fast,
+                temperature=0.3,
+                api_key=minimax_config.api_key,
+            )
+        if or_fast and openrouter_config.enabled and openrouter_config.api_key:
+            or_llm = _openrouter_chat(
+                or_fast,
+                temperature=0.3,
+                timeout=s.openrouter_request_timeout,
+                api_key=openrouter_config.api_key,
+            )
+            if primary is not None:
+                from app.graph.clients import FallbackLLM
+
+                # Respect the configured default provider ordering.
+                if minimax_config.default_provider == "openrouter":
+                    return FallbackLLM(or_llm, primary)
+                return FallbackLLM(primary, or_llm)
+            return or_llm
+        return primary
+    except Exception:  # noqa: BLE001
+        logger.warning("fast-tier LLM build failed; falling back to primary only", exc_info=True)
+        return None
+
+
 async def build_deps(db):
     """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo)."""
     from app.services.conversation import ConversationService
@@ -214,9 +268,13 @@ async def build_deps(db):
     )
     embedder = build_embedder(s, openrouter_api_key=openrouter_config.api_key)
     zalo_config = await integration_settings.resolve_zalo()
+    fast_llm = _build_fast_llm(
+        minimax_config=minimax_config,
+        openrouter_config=openrouter_config,
+    )
     return GraphDeps(
         db=db,
-        agent=MiniMaxAgent(agent_llm, embedder),
+        agent=MiniMaxAgent(agent_llm, embedder, fast_llm=fast_llm),
         safety=MiniMaxSafety(safety_llm),
         embedder=embedder,
         zalo=ZaloChannelSender(

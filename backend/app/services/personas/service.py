@@ -19,6 +19,8 @@ from pathlib import Path
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import bump_cache_version
+from app.core.preamble_cache import NS_PREAMBLE
 from app.models.persona import Persona
 from app.models.user import User
 from app.schemas.personas import PersonaCreate, PersonaUpdate, _slugify
@@ -129,6 +131,7 @@ class PersonaService:
         await self.db.refresh(persona)
         if body.is_active:
             return await self._activate(persona)
+        await bump_cache_version(NS_PREAMBLE)
         return persona
 
     async def update(self, persona_id: uuid.UUID, body: PersonaUpdate, admin: User) -> Persona:
@@ -151,6 +154,7 @@ class PersonaService:
         )
         await self.db.commit()
         await self.db.refresh(persona)
+        await bump_cache_version(NS_PREAMBLE)
         return persona
 
     async def delete(self, persona_id: uuid.UUID) -> None:
@@ -159,6 +163,7 @@ class PersonaService:
         # resolve_persona falls back to persona.md until a new one is activated.
         await self.db.delete(persona)
         await self.db.commit()
+        await bump_cache_version(NS_PREAMBLE)
 
     async def activate(self, persona_id: uuid.UUID) -> Persona:
         persona = await self.repo.get_by_id(persona_id)
@@ -186,6 +191,7 @@ class PersonaService:
             payload={"project_count": changed},
         )
         await self.db.commit()
+        await bump_cache_version(NS_PREAMBLE)
         return changed
 
     async def _activate(self, persona: Persona) -> Persona:
@@ -201,6 +207,7 @@ class PersonaService:
         )
         await self.db.commit()
         await self.db.refresh(persona)
+        await bump_cache_version(NS_PREAMBLE)
         return persona
 
     async def import_persona(self, text: str, admin: User) -> Persona:
@@ -229,6 +236,7 @@ class PersonaService:
             )
             await self.db.commit()
             await self.db.refresh(existing)
+            await bump_cache_version(NS_PREAMBLE)
             return existing
 
         # New persona
