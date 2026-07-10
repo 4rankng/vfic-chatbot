@@ -34,13 +34,21 @@ class _ScriptedLLM:
 
     def __init__(self, replies: list) -> None:
         self._replies = list(replies)
+        self.bound_names: list[str] = []
+        self.bind_calls = 0
+        self.calls = 0
+        self.messages = []
 
-    def bind_tools(self, tools):  # noqa: ARG002
+    def bind_tools(self, tools):
+        self.bind_calls += 1
+        self.bound_names = [tool["function"]["name"] for tool in tools]
         return self
 
     async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
         from langchain_core.messages import AIMessage
 
+        self.calls += 1
+        self.messages = messages
         if not self._replies:
             return AIMessage(content="done")
         entry = self._replies.pop(0)
@@ -338,6 +346,68 @@ async def test_timetable_prefetch_miss_keeps_tool_available(monkeypatch):
     )
 
     assert "search_bus_timetable" in llm.bound_names
+    assert metrics["prefetch_hit"] is False
+
+
+async def test_faq_detail_prefetches_grounded_context_without_tool_round(monkeypatch):
+    """A grounded FAQ-detail hit should go directly to one tool-free generation."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    dispatched: list[tuple[str, dict]] = []
+
+    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+        dispatched.append((name, args))
+        return "Lương cơ bản 8 triệu. Nguồn: tin tuyển dụng LG Display."
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    llm = _ScriptedLLM(["Thu nhập cơ bản là 8 triệu theo tin tuyển dụng."])
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=3)
+    metrics: dict = {}
+
+    reply = await agent.agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("get_product_features", "search_knowledge"),
+        lookup_query="lương công nhân LG Display bao nhiêu?",
+        metrics=metrics,
+    )
+
+    assert reply == "Thu nhập cơ bản là 8 triệu theo tin tuyển dụng."
+    assert dispatched == [
+        ("search_knowledge", {"query": "lương công nhân LG Display bao nhiêu?"})
+    ]
+    assert llm.calls == 1
+    assert llm.bind_calls == 0
+    assert metrics["prefetch_hit"] is True
+
+
+async def test_faq_detail_prefetch_miss_preserves_scoped_tools(monkeypatch):
+    """A knowledge miss leaves both routed FAQ tools available to the model."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+        return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    llm = _ScriptedLLM(["Bạn cho mình xin tên dự án nhé."])
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=1)
+    metrics: dict = {}
+
+    await agent.agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("get_product_features", "search_knowledge"),
+        lookup_query="lương bao nhiêu?",
+        metrics=metrics,
+    )
+
+    assert {"get_product_features", "search_knowledge"} <= set(llm.bound_names)
     assert metrics["prefetch_hit"] is False
 
 

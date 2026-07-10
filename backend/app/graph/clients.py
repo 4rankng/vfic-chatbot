@@ -94,12 +94,39 @@ def _should_prefetch_knowledge(user_text: str) -> bool:
     return any(term in text for term in contact_terms)
 
 
-def _usable_timetable_prefetch(result: object) -> bool:
-    """Whether a deterministic timetable lookup is authoritative enough to inject."""
+def _usable_retrieval_prefetch(result: object) -> bool:
+    """Whether a routed retrieval result is authoritative enough to inject."""
     text = str(result or "").strip()
     if not text:
         return False
     return not text.startswith(("Không tìm thấy", "Lỗi khi gọi tool", "unknown tool"))
+
+
+async def _prefetch_tool(
+    retrieval,
+    embedder,
+    name: str,
+    args: dict,
+    metrics: dict | None,
+) -> tuple[object, bool]:
+    """Run one routed lookup with shared timing and fail-open semantics."""
+    started = time.monotonic()
+    if metrics is not None:
+        metrics["prefetch_calls"] = metrics.get("prefetch_calls", 0) + 1
+    try:
+        result = await _dispatch_tool(retrieval, embedder, name, args)
+    except Exception:  # noqa: BLE001 — caller retains the normal tool loop
+        logger.warning("%s prefetch failed", name, exc_info=True)
+        result = ""
+    finally:
+        if metrics is not None:
+            metrics["prefetch_ms"] = metrics.get("prefetch_ms", 0) + int(
+                (time.monotonic() - started) * 1000
+            )
+    hit = _usable_retrieval_prefetch(result)
+    if metrics is not None:
+        metrics["prefetch_hit"] = hit
+    return result, hit
 
 
 def _is_429(exc: Exception) -> bool:
@@ -340,7 +367,15 @@ class MiniMaxAgent:
                 metrics.setdefault(key, 0)
         effective_query = lookup_query or user_text
         timetable_route = allowed_tools == ("search_bus_timetable",)
-        if _should_prefetch_knowledge(effective_query) and not timetable_route:
+        faq_detail_route = allowed_tools == (
+            "get_product_features",
+            "search_knowledge",
+        )
+        if (
+            _should_prefetch_knowledge(effective_query)
+            and not timetable_route
+            and not faq_detail_route
+        ):
             try:
                 prefetched = await _dispatch_tool(
                     retrieval,
@@ -364,27 +399,13 @@ class MiniMaxAgent:
                     )
                 )
         if timetable_route:
-            prefetch_t0 = time.monotonic()
-            if metrics is not None:
-                metrics["prefetch_calls"] = metrics.get("prefetch_calls", 0) + 1
-            try:
-                prefetched = await _dispatch_tool(
-                    retrieval,
-                    embedder,
-                    "search_bus_timetable",
-                    {"company": "", "question": effective_query},
-                )
-            except Exception:  # noqa: BLE001 — retain the normal tool loop on failure
-                logger.warning("Timetable prefetch failed", exc_info=True)
-                prefetched = ""
-            finally:
-                if metrics is not None:
-                    metrics["prefetch_ms"] = metrics.get("prefetch_ms", 0) + int(
-                        (time.monotonic() - prefetch_t0) * 1000
-                    )
-            prefetch_hit = _usable_timetable_prefetch(prefetched)
-            if metrics is not None:
-                metrics["prefetch_hit"] = prefetch_hit
+            prefetched, prefetch_hit = await _prefetch_tool(
+                retrieval,
+                embedder,
+                "search_bus_timetable",
+                {"company": "", "question": effective_query},
+                metrics,
+            )
             if prefetch_hit:
                 tool_results.append(str(prefetched))
                 messages.append(
@@ -400,6 +421,27 @@ class MiniMaxAgent:
                 # The deterministic route and lookup are both complete. A
                 # tool-free generation guarantees this path cannot re-enter a
                 # model→tool→model loop for already-resolved timetable data.
+                schemas = []
+        elif faq_detail_route:
+            prefetched, prefetch_hit = await _prefetch_tool(
+                retrieval,
+                embedder,
+                "search_knowledge",
+                {"query": effective_query},
+                metrics,
+            )
+            if prefetch_hit:
+                tool_results.append(str(prefetched))
+                messages.append(
+                    SystemMessage(
+                        content=(
+                            "KẾT QUẢ TRA CỨU KB ĐÃ THỰC HIỆN CHO CÂU HỎI NÀY:\n"
+                            f"{prefetched}\n\n"
+                            "Hãy trả lời ngắn gọn, chỉ dựa trên dữ liệu trên. Nếu dữ liệu "
+                            "chưa nêu thông tin cần hỏi thì nói rõ 'tin tuyển dụng chưa ghi rõ'."
+                        )
+                    )
+                )
                 schemas = []
         bound = (
             active_llm.bind_tools(schemas)

@@ -240,12 +240,13 @@ Sourced from `backend/.env.example` (committed template) and
 | `GET /health` | none | `{"status":"ok","env":...}` |
 | `GET /metrics` | none (internal) | RQ queue depths (4 queues), worker count, 7 reconcile canary counters. |
 | `GET /health/queue` | none (internal) | Chat-path: queue depth, LLM latency (`_RKEY_INVOKE_MS`), 429 rate (`_RKEY_429`), fallback count, busy/total workers. |
+| `GET /api/v1/admin/performance` | admin | Stage percentiles, webhook-to-send SLO, intent and LLM/tool-call diagnostics, slow turns. |
 
 Verify after deploy:
 ```bash
 curl -s https://bot.tingting.vip/health
-curl -s https://bot.tingting.vip/metrics     # RQ depths + reconcile counters
-curl -s https://bot.tingting.vip/health/queue # chat-path LLM latency / 429s
+docker compose exec -T web python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/metrics').read().decode())"
+docker compose exec -T web python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health/queue').read().decode())"
 ```
 
 ---

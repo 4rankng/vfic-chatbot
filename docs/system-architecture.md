@@ -163,10 +163,11 @@ load_conversation_state -> typing -> agent
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
-  `_dispatch_tool` dispatch by name. Tools: `search_knowledge` (project-scoped
-  semantic retrieval), `search_user_memory`, `search_bus_timetable`.
-  `_should_prefetch_knowledge` (`clients.py:78`) proactively runs KB
-  retrieval.
+  `_dispatch_tool` dispatch by name. The deterministic router prefetches
+  `search_bus_timetable` for high-confidence timetable turns and
+  `search_knowledge` for high-confidence FAQ-detail turns. A successful prefetch
+  is injected into a tool-free generation, avoiding an unnecessary
+  model→tool→model loop; lookup miss/error retains the original scoped tools.
 - **Tool-loop ceiling:** `max_llm_calls_per_turn` (default 6).
 - **Typing heartbeat:** `_typing_heartbeat` sends `typing` to Zalo every 4s
   while a turn is processing (keeps the candidate's typing indicator alive).
@@ -183,7 +184,9 @@ load_conversation_state -> typing -> agent
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up + reconcile sweep. |
 
 - Container entrypoint: `app/workers/run_worker.py` → calls
-  `Worker.clean_registries()` on startup (requeues stuck jobs).
+  `Worker.clean_registries()` on startup (requeues stuck jobs). It preloads the
+  graph and lazy LangChain SDK modules in the parent so forked chat jobs inherit
+  them copy-on-write instead of paying the import cost per turn.
 - Async bridge: `workers/async_runner.py` — one persistent event loop per
   worker process.
 - rq-scheduler runs in its own container; the FastAPI lifespan also registers
@@ -385,6 +388,7 @@ Per-chat bot locks are durable conversation-row fields:
 | `GET /health` | none | `{"status":"ok","env":...}` |
 | `GET /metrics` | none (internal) | RQ queue depths (4 queues), worker count, 7 reconcile canary counters. |
 | `GET /health/queue` | none (internal) | Chat-path: queue depth, LLM latency (`_RKEY_INVOKE_MS`), 429s (`_RKEY_429`), fallback count, busy/total workers. |
+| `GET /api/v1/admin/performance` | admin | Per-stage p50/p95/p99, true webhook-to-send latency, route intent, model/tool-call counts, and slow turns. |
 
 No external APM (no Sentry/Datadog). Structured JSON logs to stdout with
 `request_id` correlation via ContextVar + `RequestIdMiddleware`.
