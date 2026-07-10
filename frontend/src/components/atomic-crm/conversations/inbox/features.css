@@ -52,8 +52,12 @@
 }
 
 .settings-workspace-content {
-  --settings-accent: var(--success);
-  --settings-accent-soft: var(--success-light);
+  --settings-accent: #0f8a68;
+  --settings-accent-soft: #dff3ec;
+  --settings-canvas: #eef2f6;
+  --settings-surface: #fafbfc;
+  --settings-elevated: #ffffff;
+  --settings-border: #d4dce6;
   background:
     radial-gradient(
       circle at 18% 0%,
@@ -61,7 +65,7 @@
       transparent 34%
     ),
     linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 260px),
-    var(--chat-bg);
+    var(--settings-canvas);
   background-size:
     auto,
     auto,
@@ -79,14 +83,14 @@
 }
 
 .settings-page-shell {
-  width: min(100%, 1280px);
+  width: min(100%, 1200px);
   gap: 0;
 }
 
 .settings-console {
   display: grid;
-  grid-template-columns: minmax(210px, 230px) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(208px, 216px) minmax(0, 1fr);
+  gap: 24px;
   align-items: start;
 }
 
@@ -131,9 +135,10 @@
   display: grid;
   gap: 12px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--workspace-border) 88%, transparent);
+  border: 1px solid #263247;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--workspace-bg) 92%, transparent);
+  background: #172033;
+  color: #dbe5f0;
   padding: 12px;
   box-shadow: none;
 }
@@ -198,6 +203,29 @@
     background-color 0.18s var(--ease),
     color 0.18s var(--ease),
     transform 0.18s var(--ease);
+}
+
+.settings-workspace-content .settings-side-nav-link {
+  color: #cbd5e1;
+}
+
+.settings-workspace-content .settings-side-nav-link:hover {
+  background: #243149;
+  color: #f8fafc;
+}
+
+.settings-workspace-content .settings-side-nav-link.is-active {
+  background: color-mix(in srgb, #0f8a68 28%, #243149);
+  color: #f0fdf8;
+}
+
+.settings-workspace-content .settings-side-nav-group-label,
+.settings-workspace-content .settings-side-nav-copy span {
+  color: #94a3b8;
+}
+
+.settings-workspace-content .settings-side-nav-copy strong {
+  color: inherit;
 }
 
 .settings-side-nav-link:hover {
@@ -613,7 +641,7 @@
 }
 
 .settings-grid-zalo {
-  grid-template-columns: minmax(300px, 0.9fr) minmax(480px, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .settings-grid-models {
@@ -643,16 +671,16 @@
   align-items: start;
   gap: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--workspace-border) 86%, transparent);
+  border: 1px solid var(--settings-border);
   border-radius: 10px;
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--workspace-bg) 96%, var(--surface-solid)),
-      color-mix(in srgb, var(--workspace-bg) 88%, var(--surface-solid))
-    );
+      var(--settings-surface),
+      var(--settings-surface)
+  );
   padding: 0;
-  box-shadow: 0 12px 28px rgba(55, 42, 22, 0.035);
+  box-shadow: none;
   transition:
     border-color 0.18s var(--ease),
     transform 0.18s var(--ease);
@@ -670,7 +698,7 @@
   min-height: auto;
   padding: 16px 18px 14px;
   border-right: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 72%, transparent);
+  border-bottom: 1px solid var(--settings-border);
   background: transparent;
 }
 
@@ -725,7 +753,7 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   align-content: start;
   gap: 14px;
-  padding: 16px 18px 18px;
+  padding: 20px;
 }
 
 .settings-field {
@@ -753,13 +781,9 @@
 .settings-card .settings-input {
   width: 100%;
   min-height: 44px;
-  border-color: color-mix(in srgb, var(--workspace-border) 88%, transparent);
+  border-color: var(--settings-border);
   border-radius: 8px;
-  background: color-mix(
-    in srgb,
-    var(--workspace-bg) 78%,
-    var(--surface-solid)
-  );
+  background: var(--settings-elevated);
   color: var(--ink);
   font-size: var(--crm-fs-body);
   font-weight: var(--chat-fw-regular);

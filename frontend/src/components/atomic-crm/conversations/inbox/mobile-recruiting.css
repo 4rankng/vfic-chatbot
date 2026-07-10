@@ -738,6 +738,6 @@
   }
 
   .inbox-bg-container .conversation {
-    border-radius: 18px;
+    border-radius: 0;
   }
 }

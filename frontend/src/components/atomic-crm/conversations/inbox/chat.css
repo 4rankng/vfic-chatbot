@@ -126,7 +126,7 @@
   border-radius: 8px;
   background: var(--surface-solid);
   color: var(--ink);
-  box-shadow: var(--shadow-lg);
+  box-shadow: none;
 }
 
 .inbox-bg-container .candidate-signal-popover::before {
@@ -140,6 +140,33 @@
   border-left: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
   background: var(--surface-solid);
   transform: rotate(45deg);
+}
+
+@media (max-width: 767px) {
+  .inbox-bg-container .candidate-signal-popover {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: auto;
+    left: 0;
+    width: max-content;
+    max-width: calc(100vw - 78px);
+    max-height: min(50dvh, 20rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-color: var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-solid);
+    padding: 14px 16px;
+  }
+
+  .inbox-bg-container .candidate-signal-popover::before {
+    display: none;
+  }
+
+  .inbox-bg-container .candidate-signal-value {
+    font-size: var(--chat-fs-body-sm);
+    line-height: var(--chat-lh-body);
+  }
 }
 
 .inbox-bg-container .candidate-signal-label {
@@ -552,6 +579,7 @@
   overflow-anchor: none;
   scroll-behavior: auto;
   touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   background: var(--chat-bg);
   background-size: 28px 28px;
@@ -732,8 +760,14 @@
   line-height: var(--chat-lh-message);
   overflow-wrap: anywhere;
   word-break: break-word;
-  box-shadow: var(--chat-shadow);
+  box-shadow: none;
   contain: layout style paint;
+}
+
+@container (max-width: 480px) {
+  .inbox-bg-container .bubble {
+    max-width: min(78%, calc(100% - 38px));
+  }
 }
 
 .inbox-bg-container .message-text {

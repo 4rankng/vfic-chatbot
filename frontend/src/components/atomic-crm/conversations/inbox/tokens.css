@@ -19,16 +19,16 @@
      --brand stays teal: it is the inbox's accent identity (used by ~120
      icon/border/highlight call-sites), distinct from the ink --primary that
      fills primary buttons. Teal = selection/active/healthy; ink = action. */
-  --primary-soft: #e3f0ea;
-  --primary-soft-border: #cce5df;
-  --inbox-accent: var(--color-teal, #1f6f54);
+  --primary-soft: #dff3ec;
+  --primary-soft-border: #bde7da;
+  --inbox-accent: #0f8a68;
   --inbox-accent-light: var(--primary-soft);
-  --brand: var(--color-teal, #1f6f54);
-  --brand-hover: #1a5f48;
+  --brand: #0f8a68;
+  --brand-hover: #0b7056;
   --brand-light: var(--primary-soft);
 
-  --success: var(--color-green, #1f6f54);
-  --success-light: #e3f0ea;
+  --success: #16835d;
+  --success-light: #dff3ec;
 
   --rad-sm: 8px;
   --rad-md: 10px;
@@ -112,20 +112,18 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: #f5f6f1;
+  --chat-bg: #f4f6f8;
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
      stays neutral white; bot + admin (outgoing) own the teal-soft on paper. */
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #e3f0ea;
+  --chat-bubble-out: #dff3ec;
   --chat-bubble-user: #ffffff;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #e3f0ea;
-  --chat-bubble-agent: #e3f0ea;
+  --chat-bubble-bot: #dff3ec;
+  --chat-bubble-agent: #dff3ec;
   --chat-bubble-agent-text: var(--ink);
-  --chat-header-bg: rgba(255, 255, 255, 0.96);
-  --chat-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 2px 0 rgba(79, 59, 31, 0.055),
-    0 10px 22px rgba(79, 59, 31, 0.1);
+  --chat-header-bg: rgba(250, 251, 252, 0.98);
+  --chat-shadow: none;
 
   /* Workspace sidebar/rail — paper surface + ink + teal active.
      Dark variants re-declared in .dark below. */

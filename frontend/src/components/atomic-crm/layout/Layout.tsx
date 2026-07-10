@@ -53,6 +53,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
           isFullHeightWorkspace
             ? "h-dvh max-w-none overflow-hidden p-0"
             : "max-w-[1440px] mx-auto px-6 py-6 md:px-8 md:py-8",
+          isConversationWorkspace && "workspace-frame-content--conversation",
         )}
       >
         <ErrorBoundary FallbackComponent={Error}>

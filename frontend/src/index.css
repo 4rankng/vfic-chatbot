@@ -80,22 +80,22 @@
   /* Shared workspace roles — warm-paper system. The beige canvas recedes; deep
      ink carries the primary action; teal communicates selection / active /
      healthy. Surfaces stay light by design (dark workspace is out of scope). */
-  --workspace-canvas: #f5f6f1;
-  --workspace-surface: #ffffff;
-  --workspace-surface-muted: #eceee5;
-  --workspace-ink: #15201c;
-  --workspace-ink-muted: #5c6760;
-  --workspace-border: #dee2d8;
-  --workspace-focus: #1f6f54;
-  --workspace-action: #15201c;
-  --workspace-action-strong: #0d1714;
-  --workspace-success: #1f6f54;
-  --workspace-warning: #8a5a14;
-  --workspace-danger: #b23a2e;
-  --workspace-teal: #1f6f54;
-  --workspace-teal-soft: #e3f0ea;
-  --workspace-paper: #f5f6f1;
-  --workspace-paper-deep: #eceee5;
+  --workspace-canvas: #eef2f6;
+  --workspace-surface: #fafbfc;
+  --workspace-surface-muted: #f4f6f8;
+  --workspace-ink: #111827;
+  --workspace-ink-muted: #475569;
+  --workspace-border: #d4dce6;
+  --workspace-focus: #0f8a68;
+  --workspace-action: #0f8a68;
+  --workspace-action-strong: #095b48;
+  --workspace-success: #16835d;
+  --workspace-warning: #b7791f;
+  --workspace-danger: #c2414b;
+  --workspace-teal: #0f8a68;
+  --workspace-teal-soft: #dff3ec;
+  --workspace-paper: #fafbfc;
+  --workspace-paper-deep: #f4f6f8;
   --workspace-space-1: 0.25rem;
   --workspace-space-2: 0.5rem;
   --workspace-space-3: 0.75rem;
@@ -325,8 +325,8 @@ input {
   display: flex;
   width: 13.5rem;
   flex: 0 0 13.5rem;
-  border-right: 1px solid var(--workspace-border);
-  background: var(--workspace-surface);
+  border-right: 1px solid #263247;
+  background: #0f172a;
   padding: var(--workspace-space-4) var(--workspace-space-3);
 }
 
@@ -353,7 +353,7 @@ input {
   align-items: center;
   gap: var(--workspace-space-3);
   border-radius: var(--workspace-radius-control);
-  color: var(--workspace-ink-muted);
+  color: #cbd5e1;
   padding: 0.5rem 0.65rem;
   font-size: 0.875rem;
   font-weight: 650;
@@ -364,8 +364,8 @@ input {
 }
 
 .workspace-navigation-link:hover {
-  background: var(--workspace-surface-muted);
-  color: var(--workspace-ink);
+  background: #172033;
+  color: #f8fafc;
 }
 
 .workspace-navigation-link:focus-visible {
@@ -374,8 +374,20 @@ input {
 }
 
 .workspace-navigation-link.is-active {
-  background: var(--workspace-teal-soft);
-  color: var(--workspace-teal);
+  background: color-mix(in srgb, #0f8a68 22%, #172033);
+  color: #f0fdf8;
+}
+
+.workspace-navigation-desktop .workspace-navigation-link.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 1.5rem;
+  border-radius: 0 999px 999px 0;
+  background: #34d399;
+  transform: translateY(-50%);
 }
 
 .workspace-navigation-icon {
@@ -398,9 +410,9 @@ input {
   top: -0.55rem;
   right: -0.8rem;
   min-width: 1.1rem;
-  border: 1px solid var(--workspace-surface);
+  border: 1px solid #0f172a;
   border-radius: 999px;
-  background: var(--workspace-danger);
+  background: #c2414b;
   color: #ffffff;
   padding: 0.1rem 0.25rem;
   font-size: 0.625rem;
@@ -476,6 +488,10 @@ input {
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
   }
 
+  .workspace-frame-content--conversation {
+    padding-bottom: 0;
+  }
+
   .workspace-navigation-desktop {
     display: none;
   }
@@ -498,10 +514,10 @@ input {
     margin: 0 auto;
     border: 1px solid var(--workspace-border);
     border-radius: 1.35rem;
-    background: color-mix(in srgb, var(--workspace-surface) 94%, transparent);
+    background: var(--workspace-surface);
     padding: 0.3rem;
-    box-shadow: var(--workspace-shadow-panel);
-    backdrop-filter: blur(18px);
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   .workspace-navigation-mobile .workspace-navigation-link {
@@ -513,6 +529,22 @@ input {
     font-size: 0.6875rem;
     line-height: 1.15;
     text-align: center;
+    color: var(--workspace-ink-muted);
+  }
+
+  .workspace-navigation-mobile .workspace-navigation-link:hover {
+    background: var(--workspace-surface-muted);
+    color: var(--workspace-ink);
+  }
+
+  .workspace-navigation-mobile .workspace-navigation-link.is-active {
+    background: var(--workspace-teal-soft);
+    color: var(--workspace-teal);
+    box-shadow: none;
+  }
+
+  .workspace-navigation-mobile .workspace-navigation-link.is-active::before {
+    display: none;
   }
 
   .workspace-navigation-mobile .workspace-navigation-icon {

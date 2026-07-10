@@ -57,12 +57,14 @@ const Metric = ({
   label,
   value,
   hint,
+  tone = "neutral",
 }: {
   label: string;
   value: string;
   hint?: string;
+  tone?: "neutral" | "success" | "warning";
 }) => (
-  <article className="performance-metric">
+  <article className={`performance-metric is-${tone}`}>
     <p>{label}</p>
     <strong>{value}</strong>
     {hint ? <small>{hint}</small> : null}
@@ -323,20 +325,24 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           label="Hàng đợi"
           value={String(data.live.queue_depth)}
           hint="webhook đang chờ"
+          tone="neutral"
         />
         <Metric
           label="Worker đang chạy"
           value={`${data.live.busy_workers}/${data.live.total_workers}`}
+          tone="success"
         />
         <Metric
           label="LLM 429"
           value={String(data.live.minimax_429s_last_1m)}
           hint="trong 1 phút"
+          tone="warning"
         />
         <Metric
           label="Fallback"
           value={String(data.live.llm_fallbacks_last_2m)}
           hint={`Độ trễ TB: ${fmtMs(data.live.llm_avg_latency_ms)}`}
+          tone="warning"
         />
       </section>
 
@@ -355,12 +361,13 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
 
           return (
             <div className="performance-stage" key={key}>
-              <div>
+              <div className="performance-stage-heading">
                 <strong>{STAGE_LABELS[key]}</strong>
-                <span>
-                  {fmtMs(stage.p50)} · <b>{fmtMs(stage.p95)}</b> ·{" "}
-                  {fmtMs(stage.p99)}
-                </span>
+                <div className="performance-stage-values">
+                  <span>p50 <b>{fmtMs(stage.p50)}</b></span>
+                  <span className="is-benchmark">p95 <b>{fmtMs(stage.p95)}</b></span>
+                  <span>p99 <b>{fmtMs(stage.p99)}</b></span>
+                </div>
               </div>
               <div className="performance-bar" aria-hidden="true">
                 <i

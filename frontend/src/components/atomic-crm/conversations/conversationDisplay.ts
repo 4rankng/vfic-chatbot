@@ -1,12 +1,19 @@
 import { type Lead } from "../types";
 
 export const getLeadStatusColor = (lead?: Lead | null) => {
-  if (!lead) return { bg: "var(--surface-solid)", ink: "var(--ink-faint)" };
+  if (!lead)
+    return {
+      bg: "var(--workspace-surface-muted)",
+      ink: "var(--workspace-ink-muted)",
+    };
   if (lead.lead_score === "hot")
     return { bg: "var(--lead-hot-bg)", ink: "var(--lead-hot-ink)" };
   if (lead.lead_score === "warm")
     return { bg: "var(--lead-warm-bg)", ink: "var(--lead-warm-ink)" };
-  return { bg: "var(--lead-cold-bg)", ink: "var(--lead-cold-ink)" };
+  return {
+    bg: "var(--workspace-surface-muted)",
+    ink: "var(--workspace-ink-muted)",
+  };
 };
 
 // Inbox rows show one recruiter-facing priority state. The backend still keeps

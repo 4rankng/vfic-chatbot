@@ -1,7 +1,11 @@
 /* Conversation List */
 .inbox-bg-container .conversations {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   padding: 0 16px 16px;
   scrollbar-width: none; /* Hide scrollbar */
 }
@@ -31,7 +35,7 @@
   .inbox-bg-container .conversation.active {
     border-color: transparent;
     background: var(--brand-light);
-    box-shadow: inset 3px 0 0 var(--workspace-active);
+    box-shadow: none;
   }
 
   .inbox-bg-container .conversation.needs-attention {
@@ -129,13 +133,13 @@
   content: "";
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
+  top: 50%;
+  bottom: auto;
   width: 3px;
-  height: auto;
+  height: 22px;
   background: var(--brand);
-  border-radius: 0;
-  transform: none;
+  border-radius: 3px;
+  transform: translateY(-50%);
 }
 
 .inbox-bg-container .avatar {
@@ -301,8 +305,9 @@
   background: var(--lead-warm-bg);
 }
 .inbox-bg-container .mini-chip.priority-cold {
-  color: var(--lead-cold-ink);
-  background: var(--lead-cold-bg);
+  border: 1px solid var(--workspace-border);
+  color: var(--workspace-ink-muted);
+  background: var(--workspace-surface-muted);
 }
 .inbox-bg-container .mini-chip .icon {
   width: 12px;
@@ -347,7 +352,7 @@
   .inbox-bg-container .conversation.active {
     border-color: transparent;
     background: var(--brand-light);
-    box-shadow: inset 3px 0 0 var(--workspace-active);
+    box-shadow: none;
   }
 
   .inbox-bg-container .conversation.needs-attention {
@@ -377,12 +382,12 @@
 
   .inbox-bg-container .conversation.active::before {
     left: 0;
-    top: 0;
-    bottom: 0;
-    height: auto;
+    top: 50%;
+    bottom: auto;
+    height: 22px;
     background: var(--workspace-active);
-    border-radius: 0;
-    transform: none;
+    border-radius: 3px;
+    transform: translateY(-50%);
   }
 
   .inbox-bg-container .conversation.needs-attention::after {

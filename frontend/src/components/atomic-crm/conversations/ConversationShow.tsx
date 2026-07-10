@@ -279,6 +279,11 @@ export const ConversationShowContent = ({
     }
   }, [activeSignalKey, candidateSignals]);
 
+  const openContextPanel = () => {
+    setActiveSignalKey(null);
+    setIsContextOpen(true);
+  };
+
   return (
     <>
       <section className="panel center-panel" aria-label="Nội dung trò chuyện">
@@ -307,7 +312,19 @@ export const ConversationShowContent = ({
             </div>
             <div className="person-copy">
               <div className="person-name-row">
-                <span className="person-name">{name}</span>
+                {showWorkspacePanel ? (
+                  <button
+                    type="button"
+                    className="person-name person-name-button"
+                    onClick={openContextPanel}
+                    aria-expanded={isContextOpen}
+                    aria-controls="conversation-context-panel"
+                  >
+                    {name}
+                  </button>
+                ) : (
+                  <span className="person-name">{name}</span>
+                )}
               </div>
               {candidateSignals.length > 0 && (
                 <div
@@ -377,14 +394,15 @@ export const ConversationShowContent = ({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className={`mode-menu-trigger ${activeMode}`}
-                  aria-label="Tùy chọn chế độ trả lời"
-                  title="Tùy chọn chế độ trả lời"
+                  className={`mode-menu-trigger mode-menu-trigger--primary ${activeMode}`}
+                  aria-label="Đổi chế độ trả lời"
+                  title="Đổi chế độ trả lời"
                   disabled={activeMode === "closed"}
                 >
                   <ActiveModeIcon className="icon" />
-                  <span className="sr-only">Tùy chọn</span>
-                  <MoreHorizontal className="icon" aria-hidden="true" />
+                  <span className="mode-menu-trigger-label">
+                    {activeModeOption?.label ?? "Chế độ trả lời"}
+                  </span>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -416,16 +434,35 @@ export const ConversationShowContent = ({
               </DropdownMenuContent>
             </DropdownMenu>
             {showWorkspacePanel && (
-              <button
-                type="button"
-                ref={contextTriggerRef}
-                className={`profile-info-btn context-info-btn ${isContextOpen ? "active" : ""}`}
-                onClick={() => setIsContextOpen(true)}
-                aria-label="Mở ngữ cảnh hội thoại"
-                title="Mở ngữ cảnh hội thoại"
-              >
-                <FileText className="icon" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    ref={contextTriggerRef}
+                    className="more-actions-trigger"
+                    aria-label="Thao tác khác"
+                    title="Thao tác khác"
+                  >
+                    <MoreHorizontal className="icon" aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={10}
+                  className="mode-menu-content"
+                >
+                  <DropdownMenuItem
+                    className="mode-menu-item"
+                    onSelect={openContextPanel}
+                  >
+                    <span className="mode-menu-icon">
+                      <FileText className="icon" aria-hidden="true" />
+                    </span>
+                    <span className="mode-menu-title">Thông tin ứng viên</span>
+                    <span className="mode-menu-check" aria-hidden="true" />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {activeMode === "closed" && (
               <span className="chat-mode-chip" title="Hội thoại đã đóng; không có thao tác tiếp nhận">

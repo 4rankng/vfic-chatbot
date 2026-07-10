@@ -208,6 +208,7 @@ export const ConversationContextPanel = ({
 
   return (
     <aside
+      id="conversation-context-panel"
       className={`panel right-panel ${open ? "context-open" : ""}`}
       aria-label="Thông tin ứng viên"
       aria-hidden={!open}
