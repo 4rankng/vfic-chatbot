@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 
 import pytest
 
@@ -181,12 +180,172 @@ async def test_sequential_fallback_when_no_factory():
     assert len(calls) == 2
 
 
+async def test_agent_records_model_and_tool_round_metrics():
+    """Per-turn metrics distinguish provider calls from tool dispatch time."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def handler(name, args):  # noqa: ARG001
+        return f"result-{name}"
+
+    llm = _ScriptedLLM([
+        [{"name": "list_active_projects", "args": {}, "id": "c1"}],
+        "done",
+    ])
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=5)
+    metrics: dict[str, int] = {}
+
+    reply = await agent.agent(
+        "test",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        metrics=metrics,
+    )
+
+    assert reply == "done"
+    assert metrics["llm_calls"] == 2
+    assert metrics["llm_invoke_ms"] >= 0
+    assert metrics["tool_calls"] == 1
+    assert metrics["tool_rounds"] == 1
+    assert metrics["tool_ms"] >= 0
+
+
+async def test_agent_records_failed_model_attempt():
+    """Provider failures still count as attempted calls with elapsed time."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    class _FailingLLM:
+        def bind_tools(self, tools):  # noqa: ARG002
+            return self
+
+        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+            raise RuntimeError("provider unavailable")
+
+    metrics: dict = {}
+    agent = MiniMaxAgent(_FailingLLM(), embedder=None, max_iters=1)
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        await agent.agent(
+            "test",
+            system="sys",
+            retrieval=object(),
+            embedder=None,
+            metrics=metrics,
+        )
+
+    assert metrics["llm_calls"] == 1
+    assert metrics["llm_invoke_ms"] >= 0
+    assert metrics["tool_calls"] == 0
+
+
+async def test_timetable_route_prefetches_and_removes_duplicate_tool(monkeypatch):
+    """A confident timetable route should need one model call, not tool selection."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    dispatched: list[tuple[str, dict]] = []
+
+    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+        dispatched.append((name, args))
+        return "- LG Display • Tuyến A: Hào Quang 05:30"
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+
+    class _OneShotLLM:
+        def __init__(self) -> None:
+            self.bound_names: list[str] = []
+            self.messages = []
+            self.calls = 0
+            self.bind_calls = 0
+
+        def bind_tools(self, tools):
+            self.bind_calls += 1
+            self.bound_names = [tool["function"]["name"] for tool in tools]
+            return self
+
+        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+            from langchain_core.messages import AIMessage
+
+            self.calls += 1
+            self.messages = messages
+            return AIMessage(content="Xe đón tại Hào Quang lúc 05:30.")
+
+    llm = _OneShotLLM()
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=5)
+    metrics: dict = {}
+
+    reply = await agent.agent(
+        "Lịch sử và hồ sơ đã được ghép vào prompt; câu hỏi hiện tại ở cuối.",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("search_bus_timetable",),
+        lookup_query="xe đưa đón Hào Quang mấy giờ?",
+        metrics=metrics,
+    )
+
+    assert reply == "Xe đón tại Hào Quang lúc 05:30."
+    assert dispatched == [
+        (
+            "search_bus_timetable",
+            {"company": "", "question": "xe đưa đón Hào Quang mấy giờ?"},
+        )
+    ]
+    assert llm.bind_calls == 0
+    assert any("Hào Quang 05:30" in str(message.content) for message in llm.messages)
+    assert llm.calls == 1
+    assert metrics["prefetch_calls"] == 1
+    assert metrics["prefetch_hit"] is True
+
+
+async def test_timetable_prefetch_miss_keeps_tool_available(monkeypatch):
+    """A broad prefetch miss must preserve the model's scoped retry path."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+        return "Không tìm thấy lịch xe phù hợp."
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+
+    class _RecordingLLM:
+        def __init__(self) -> None:
+            self.bound_names: list[str] = []
+
+        def bind_tools(self, tools):
+            self.bound_names = [tool["function"]["name"] for tool in tools]
+            return self
+
+        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+            from langchain_core.messages import AIMessage
+
+            return AIMessage(content="Bạn cho mình xin tên công ty nhé.")
+
+    llm = _RecordingLLM()
+    metrics: dict = {}
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=1)
+
+    await agent.agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("search_bus_timetable",),
+        lookup_query="xe đưa đón mấy giờ?",
+        metrics=metrics,
+    )
+
+    assert "search_bus_timetable" in llm.bound_names
+    assert metrics["prefetch_hit"] is False
+
+
 async def test_single_tool_call_uses_shared_retrieval():
     """A single tool call must NOT spin up an isolated session."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
-    shared_called = False
     factory_called = False
 
     async def handler(name, args):  # noqa: ARG001

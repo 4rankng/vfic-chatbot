@@ -27,7 +27,13 @@ export interface PerfSlowTurn {
   started_at: string | null;
   outcome: string;
   lane: string | null;
+  intent: string | null;
   llm_ms: number | null;
+  llm_calls: number | null;
+  tool_calls: number | null;
+  tool_ms: number | null;
+  prefetch_hit: boolean | null;
+  pipeline_ms: number | null;
   total_ms: number | null;
   queue_depth: number | null;
 }

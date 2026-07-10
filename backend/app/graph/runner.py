@@ -63,6 +63,15 @@ def _zalo_for_conversation(deps: GraphDeps, conv):
     return deps.zalo
 
 
+def _stamp_end_to_end(state: BotRunState, timings: dict | None) -> None:
+    """Record candidate-visible latency from webhook receipt through completion."""
+    if timings is None or state.received_at_epoch <= 0:
+        return
+    timings["end_to_end_ms"] = max(
+        0, int(round((time.time() - state.received_at_epoch) * 1000))
+    )
+
+
 async def _agent_turn(
     state: BotRunState,
     deps: GraphDeps,
@@ -128,6 +137,8 @@ async def _agent_turn(
         allowed_tools=allowed_tools,
         use_fast=use_fast,
         make_retrieval=deps.make_retrieval,
+        lookup_query=user_text,
+        metrics=timings,
     )
     if timings is not None:
         timings["llm_ms"] = timings.get("llm_ms", 0) + int(round((time.monotonic() - llm_t0) * 1000))
@@ -206,6 +217,7 @@ async def _finish_terminal_reply(
             )
         else:
             send_result = await zalo.send_message(conv.zalo_chat_id, text)
+    _stamp_end_to_end(state, stage_timings)
     await svc.record_bot_outcome(
         conv,
         version_at_start=state.version_at_start,
@@ -415,6 +427,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 send_result = await zalo.send_message(conv.zalo_chat_id, candidate)
             timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
             timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
+            _stamp_end_to_end(state, timings)
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
                 started_at=started, sent=send_result.ok,
@@ -445,6 +458,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             return {"outcome": outcome_label, "reply": candidate}
 
         timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
+        _stamp_end_to_end(state, timings)
         await svc.record_bot_outcome(
             conv, version_at_start=state.version_at_start, reply=candidate,
             started_at=started, sent=False,

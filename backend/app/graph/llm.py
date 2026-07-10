@@ -34,6 +34,8 @@ class AgentModel(Protocol):
         allowed_tools: tuple[str, ...] | None = None,
         use_fast: bool = False,
         make_retrieval: MakeRetrieval | None = None,
+        lookup_query: str | None = None,
+        metrics: dict | None = None,
     ) -> str: ...
 
 

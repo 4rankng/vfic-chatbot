@@ -652,3 +652,4 @@ async def test_stage_timings_captures_preamble_and_webhook_to_pickup(monkeypatch
     assert st["webhook_to_pickup_ms"] >= 150       # ~0.2s enqueue→pickup
     assert st["preamble_ms"] >= 0
     assert st["queue_depth"] == 3
+    assert st["end_to_end_ms"] >= 350               # measured from webhook receipt

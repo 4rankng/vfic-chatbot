@@ -14,7 +14,8 @@ const STAGE_LABELS: Record<string, string> = {
   llm: "LLM / RAG",
   safety: "Kiểm duyệt an toàn",
   send: "Gửi Zalo",
-  total: "Tổng cộng",
+  total: "Xử lý sau khởi tạo",
+  end_to_end: "Tổng từ webhook",
 };
 const LANE_LABELS: Record<string, string> = {
   agent: "Agent (LLM)",
@@ -30,6 +31,7 @@ const STAGE_ORDER = [
   "safety",
   "send",
   "total",
+  "end_to_end",
 ];
 const WINDOWS = [
   { key: "1h", label: "1 giờ" },
@@ -65,7 +67,7 @@ const PerformanceLoading = () => (
     className="performance-skeletons"
     aria-label="Đang tải số liệu hiệu suất"
   >
-    {Array.from({ length: 7 }, (_, index) => (
+    {Array.from({ length: 8 }, (_, index) => (
       <span key={index} className={index > 3 ? "is-panel" : undefined} />
     ))}
   </div>
@@ -129,8 +131,8 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
       <section className="performance-panel">
         <h2>Độ trễ theo giai đoạn</h2>
         <p className="performance-panel-intro">
-          p50 · p95 · p99. Thanh thể hiện p95; LLM thường là điểm nghẽn cần theo
-          dõi.
+          p50 · p95 · p99. “Tổng từ webhook” là độ trễ ứng viên thực sự chờ;
+          thanh thể hiện p95.
         </p>
         {STAGE_ORDER.map((key) => {
           const stage = percentiles[key] ?? { p50: null, p95: null, p99: null };
@@ -183,7 +185,10 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
                 <tr>
                   <th>Thời gian</th>
                   <th>Luồng</th>
+                  <th>Ý định</th>
                   <th>LLM</th>
+                  <th>Lượt LLM</th>
+                  <th>Lượt tool</th>
                   <th>Tổng</th>
                   <th>Hàng đợi</th>
                   <th>Kết quả</th>
@@ -200,7 +205,10 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
                     <td>
                       {LANE_LABELS[turn.lane ?? ""] ?? turn.lane ?? "Không rõ"}
                     </td>
+                    <td>{turn.intent ?? "Chưa có"}</td>
                     <td>{fmtMs(turn.llm_ms)}</td>
+                    <td>{turn.llm_calls ?? "Chưa có"}</td>
+                    <td>{turn.tool_calls ?? "Chưa có"}</td>
                     <td>
                       <strong>{fmtMs(turn.total_ms)}</strong>
                     </td>

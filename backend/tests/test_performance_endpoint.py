@@ -69,7 +69,18 @@ async def test_performance_bundle_shape(monkeypatch):
                 conversation_id=uuid.UUID(CONV_ID),
                 started_at=datetime(2026, 7, 9, 11, 42, 48, tzinfo=timezone.utc),
                 outcome="SENT",
-                stage_timings={"lane": "agent", "llm_ms": 4500, "total_ms": 5000, "queue_depth": 1},
+                stage_timings={
+                    "lane": "agent",
+                    "intent": "timetable",
+                    "llm_ms": 4500,
+                    "llm_calls": 1,
+                    "tool_calls": 0,
+                    "prefetch_hit": True,
+                    "total_ms": 5000,
+                    "preamble_ms": 1000,
+                    "webhook_to_pickup_ms": 100,
+                    "queue_depth": 1,
+                },
             ),
         ]),
     ])
@@ -86,11 +97,17 @@ async def test_performance_bundle_shape(monkeypatch):
     assert out["by_outcome"] == {"SENT": 8}
     # slow turn row mapped to the panel's columns
     slow = out["slow_turns"][0]
-    assert slow["total_ms"] == 5000
+    assert slow["total_ms"] == 6100
+    assert slow["pipeline_ms"] == 5000
     assert slow["llm_ms"] == 4500
+    assert slow["llm_calls"] == 1
+    assert slow["tool_calls"] == 0
+    assert slow["prefetch_hit"] is True
+    assert slow["intent"] == "timetable"
     assert slow["lane"] == "agent"
     assert slow["conversation_id"] == CONV_ID
     assert slow["started_at"].startswith("2026-07-09T11:42:48")
+    assert "end_to_end" in out["percentiles"]
     # three distinct SQL statements were issued (percentiles / counts / slow turns)
     assert len(db.queries) == 3
 

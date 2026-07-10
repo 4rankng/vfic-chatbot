@@ -152,8 +152,9 @@ def preload_imports() -> None:
     dominated the per-turn preamble (measured ``preamble_ms`` avg 6.1s).
 
     Importing these modules in the parent *before* ``w.work()`` lets the forked
-    child inherit them via copy-on-write, collapsing the preamble to <0.5s.
-    Call this once from ``run_worker.main`` before entering the RQ work loop.
+    child inherit them via copy-on-write. Client construction still happens per
+    child, but the multi-second SDK import is removed from every turn. Call this
+    once from ``run_worker.main`` before entering the RQ work loop.
     """
     import time as _time  # noqa: F401  — used for the startup log below
 
@@ -165,10 +166,15 @@ def preload_imports() -> None:
     # Heavy graph + LLM stack — these are the real import cost on a cold process.
     import app.graph.factories  # noqa: F401  — pulls build_deps + all graph deps
     import app.graph.runner  # noqa: F401
-    import app.graph.clients  # noqa: F401  — pulls langchain_openai, httpx
+    import app.graph.clients  # noqa: F401  — client wrappers; SDKs stay lazy
     import app.graph.tools  # noqa: F401
     import app.graph.context  # noqa: F401
-    # Touch the LLM client constructors so their langchain imports are realized.
+    # Client construction imports these lazily. Import them explicitly in the
+    # parent so every forked job does not pay the multi-second SDK import cost.
+    import langchain_core.messages  # noqa: F401
+    import langchain_openai  # noqa: F401
+
+    # Touch the wrappers used by the graph after the SDK modules are warm.
     from app.graph.clients import MiniMaxAgent, MiniMaxSafety  # noqa: F401
 
     elapsed = _time.monotonic() - t0

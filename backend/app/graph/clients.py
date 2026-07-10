@@ -94,6 +94,14 @@ def _should_prefetch_knowledge(user_text: str) -> bool:
     return any(term in text for term in contact_terms)
 
 
+def _usable_timetable_prefetch(result: object) -> bool:
+    """Whether a deterministic timetable lookup is authoritative enough to inject."""
+    text = str(result or "").strip()
+    if not text:
+        return False
+    return not text.startswith(("Không tìm thấy", "Lỗi khi gọi tool", "unknown tool"))
+
+
 def _is_429(exc: Exception) -> bool:
     """Check if an exception represents an HTTP 429 (rate limit)."""
     return "429" in str(exc) or "rate" in str(exc).lower()
@@ -296,7 +304,19 @@ class MiniMaxAgent:
             s = get_settings()
             self.max_iters = s.max_llm_calls_per_turn
 
-    async def agent(self, user_text, *, system, retrieval, embedder, allowed_tools=None, use_fast=False, make_retrieval=None) -> str:
+    async def agent(
+        self,
+        user_text,
+        *,
+        system,
+        retrieval,
+        embedder,
+        allowed_tools=None,
+        use_fast=False,
+        make_retrieval=None,
+        lookup_query: str | None = None,
+        metrics: dict | None = None,
+    ) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
         from app.graph.schemas import filter_tool_schemas
 
@@ -304,17 +324,29 @@ class MiniMaxAgent:
 
         active_llm = self.fast_llm if (use_fast and self.fast_llm is not None) else self.llm
         schemas = filter_tool_schemas(allowed_tools)
-        bound = active_llm.bind_tools(schemas) if hasattr(active_llm, "bind_tools") else active_llm
         sem = get_llm_semaphore()
         messages = [SystemMessage(content=system)]
         tool_results: list[str] = []  # captured for post-generation grounding cross-check
-        if _should_prefetch_knowledge(user_text):
+        if metrics is not None:
+            for key in (
+                "llm_calls",
+                "llm_invoke_ms",
+                "tool_calls",
+                "tool_rounds",
+                "tool_ms",
+                "prefetch_calls",
+                "prefetch_ms",
+            ):
+                metrics.setdefault(key, 0)
+        effective_query = lookup_query or user_text
+        timetable_route = allowed_tools == ("search_bus_timetable",)
+        if _should_prefetch_knowledge(effective_query) and not timetable_route:
             try:
                 prefetched = await _dispatch_tool(
                     retrieval,
                     embedder,
                     "search_knowledge",
-                    {"query": user_text},
+                    {"query": effective_query},
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("Contact knowledge prefetch failed", exc_info=True)
@@ -331,9 +363,54 @@ class MiniMaxAgent:
                         )
                     )
                 )
+        if timetable_route:
+            prefetch_t0 = time.monotonic()
+            if metrics is not None:
+                metrics["prefetch_calls"] = metrics.get("prefetch_calls", 0) + 1
+            try:
+                prefetched = await _dispatch_tool(
+                    retrieval,
+                    embedder,
+                    "search_bus_timetable",
+                    {"company": "", "question": effective_query},
+                )
+            except Exception:  # noqa: BLE001 — retain the normal tool loop on failure
+                logger.warning("Timetable prefetch failed", exc_info=True)
+                prefetched = ""
+            finally:
+                if metrics is not None:
+                    metrics["prefetch_ms"] = metrics.get("prefetch_ms", 0) + int(
+                        (time.monotonic() - prefetch_t0) * 1000
+                    )
+            prefetch_hit = _usable_timetable_prefetch(prefetched)
+            if metrics is not None:
+                metrics["prefetch_hit"] = prefetch_hit
+            if prefetch_hit:
+                tool_results.append(str(prefetched))
+                messages.append(
+                    SystemMessage(
+                        content=(
+                            "KẾT QUẢ TRA CỨU LỊCH XE ĐÃ THỰC HIỆN CHO TIN NHẮN NÀY:\n"
+                            f"{prefetched}\n\n"
+                            "Hãy trả lời trực tiếp, ngắn gọn từ dữ liệu trên. Không gọi lại "
+                            "search_bus_timetable; nếu dữ liệu chưa nêu giờ/điểm cần hỏi thì nói rõ."
+                        )
+                    )
+                )
+                # The deterministic route and lookup are both complete. A
+                # tool-free generation guarantees this path cannot re-enter a
+                # model→tool→model loop for already-resolved timetable data.
+                schemas = []
+        bound = (
+            active_llm.bind_tools(schemas)
+            if schemas and hasattr(active_llm, "bind_tools")
+            else active_llm
+        )
         messages.append(HumanMessage(content=user_text))
         for _ in range(self.max_iters):
             t0 = time.monotonic()
+            if metrics is not None:
+                metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
             try:
                 async with sem:
                     ai = await _llm_call_with_retry(bound, messages)
@@ -345,7 +422,12 @@ class MiniMaxAgent:
                     _record_llm_429()
                     logger.error("llm_429", exc_info=True)
                 raise
-            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            finally:
+                elapsed_ms = int((time.monotonic() - t0) * 1000)
+                if metrics is not None:
+                    metrics["llm_invoke_ms"] = (
+                        metrics.get("llm_invoke_ms", 0) + elapsed_ms
+                    )
             _record_llm_latency(elapsed_ms)
             # Phase 6: capture token usage + cost from the response.usage block.
             _record_token_usage(getattr(ai, "usage_metadata", None) or getattr(ai, "response_metadata", {}).get("token_usage"))
@@ -354,6 +436,10 @@ class MiniMaxAgent:
             calls = getattr(ai, "tool_calls", None)
             if not calls:
                 return _ground_reply(ai.content, tool_results)
+            if metrics is not None:
+                metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
+                metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
+            tool_t0 = time.monotonic()
             # --- Tool dispatch -------------------------------------------------
             # When the LLM returns multiple tool_calls in one response, run them
             # concurrently (each on its own DB session via ``make_retrieval``) so
@@ -380,6 +466,10 @@ class MiniMaxAgent:
                 outs = await asyncio.gather(*[_bounded(tc) for tc in calls])
             else:
                 outs = [await _dispatch_one(tc) for tc in calls]
+            if metrics is not None:
+                metrics["tool_ms"] = metrics.get("tool_ms", 0) + int(
+                    (time.monotonic() - tool_t0) * 1000
+                )
 
             # asyncio.gather preserves result order, so ToolMessage[i] matches
             # tool_calls[i] exactly — the LLM sees identical context ordering.
