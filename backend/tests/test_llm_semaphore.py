@@ -235,9 +235,10 @@ class TestRetry429:
         bound = AsyncMock()
         bound.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))
         with patch("app.graph.clients._record_llm_429"):
-            result = await _llm_call_with_retry(bound, [])
+            result, backoff_ms = await _llm_call_with_retry(bound, [])
         assert result.content == "ok"
         assert bound.ainvoke.call_count == 1
+        assert backoff_ms == 0  # no backoff on the happy path
 
     @pytest.mark.asyncio
     async def test_retries_on_429_then_succeeds(self):
@@ -252,10 +253,11 @@ class TestRetry429:
         )
         with patch("app.graph.clients._record_llm_429") as mock_429:
             with patch("app.graph.clients.asyncio.sleep", new_callable=AsyncMock):
-                result = await _llm_call_with_retry(bound, [])
+                result, backoff_ms = await _llm_call_with_retry(bound, [])
         assert result.content == "retried ok"
         assert bound.ainvoke.call_count == 2
         mock_429.assert_called_once()
+        assert backoff_ms >= 0  # backoff measured around the patched sleep
 
     @pytest.mark.asyncio
     async def test_raises_llm_throttled_on_double_429(self):

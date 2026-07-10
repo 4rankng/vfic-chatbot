@@ -165,6 +165,7 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
             "intent": st.get("intent"),
             "llm_queue_ms": st.get("llm_queue_ms"),
             "llm_model_ms": st.get("llm_model_ms"),
+            "llm_backoff_ms": st.get("llm_backoff_ms"),
             "llm_calls": st.get("llm_calls"),
             "llm_call_ms": st.get("llm_call_ms"),
             "tool_calls": st.get("tool_calls"),
@@ -196,7 +197,7 @@ async def _trend(db: AsyncSession, interval: timedelta) -> list[dict]:
         f"percentile_cont(0.95) WITHIN GROUP (ORDER BY {_END_TO_END_SQL}) AS p95_ms, "
         f"percentile_cont(0.50) WITHIN GROUP (ORDER BY {_END_TO_END_SQL}) AS p50_ms, "
         "COUNT(*) AS turns, "
-        "COUNT(*) FILTER (WHERE outcome != 'sent') AS errors "
+        "COUNT(*) FILTER (WHERE outcome != 'SENT') AS errors "
         "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
         "AND stage_timings IS NOT NULL "
         "GROUP BY 1 ORDER BY 1"

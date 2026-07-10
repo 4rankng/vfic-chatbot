@@ -30,6 +30,7 @@ export interface PerfSlowTurn {
   intent: string | null;
   llm_queue_ms: number | null;
   llm_model_ms: number | null;
+  llm_backoff_ms: number | null;
   llm_calls: number | null;
   llm_call_ms: number[] | null;
   tool_calls: number | null;

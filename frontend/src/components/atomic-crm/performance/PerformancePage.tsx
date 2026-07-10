@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 
@@ -197,6 +197,11 @@ const TurnDetail = ({ turn }: { turn: PerfSlowTurn }) => (
         Prompt: {turn.prompt_tokens ?? "—"} · Completion:{" "}
         {turn.completion_tokens ?? "—"} · Cached: {turn.cached_tokens ?? "—"}
       </p>
+      {turn.llm_backoff_ms ? (
+        <p>
+          Backoff 429: <code>{turn.llm_backoff_ms} ms</code>
+        </p>
+      ) : null}
     </div>
   </div>
 );
@@ -242,8 +247,8 @@ const SlowestTurnsTable = ({ slow_turns }: { slow_turns: PerfSlowTurn[] }) => {
                 const totalTokens =
                   (turn.prompt_tokens ?? 0) + (turn.completion_tokens ?? 0);
                 return (
-                  <>
-                    <tr key={turn.id}>
+                  <Fragment key={turn.id}>
+                    <tr>
                       <td>
                         <button
                           type="button"
@@ -287,13 +292,13 @@ const SlowestTurnsTable = ({ slow_turns }: { slow_turns: PerfSlowTurn[] }) => {
                       <td>{turn.outcome || "Không rõ"}</td>
                     </tr>
                     {isOpen ? (
-                      <tr key={`${turn.id}-detail`} className="performance-detail-row">
+                      <tr className="performance-detail-row">
                         <td colSpan={13}>
                           <TurnDetail turn={turn} />
                         </td>
                       </tr>
                     ) : null}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -91,6 +91,7 @@
 }
 
 .settings-main {
+  container: settings-main / inline-size;
   min-width: 0;
   display: grid;
   gap: 16px;
@@ -617,6 +618,15 @@
 
 .settings-grid-models {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* The settings side navigation and global workspace navigation reduce this
+   column independently of the viewport. Stack the Zalo cards before their
+   combined intrinsic minimum would overflow the available main column. */
+@container settings-main (max-width: 795px) {
+  .settings-grid-zalo {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .settings-section-panel {

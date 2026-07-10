@@ -274,6 +274,9 @@ async def test_retried_429_flag_set_on_rate_limit_retry(monkeypatch):
 
     assert reply == "recovered"
     assert metrics.get("retried_429") is True
+    # The backoff sleep must be tracked separately from model inference so the
+    # split stays clean (llm_model_ms excludes the sleep).
+    assert metrics.get("llm_backoff_ms", 0) >= 0
 
 
 async def test_used_fallback_flag_set_on_failover():

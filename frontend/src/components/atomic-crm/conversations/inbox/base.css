@@ -73,8 +73,10 @@
 
 /* The shared frame owns workspace navigation. Existing feature shells keep
    their internal panes, but no longer reserve a first grid column for a rail. */
-.workspace-frame-content .inbox-bg-container .app {
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+@media (min-width: 768px) {
+  .workspace-frame-content .inbox-bg-container .app {
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  }
 }
 
 .workspace-frame-content

@@ -548,16 +548,19 @@ async def test_blocklisted_reply_redirects_without_llm_judge(monkeypatch):
 @pytest.mark.asyncio
 async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     """Agent path on an owned send threads stage_timings into record_bot_outcome
-    with lane='agent', the lead/llm stamps collected inside _agent_turn, plus
-    send_ms and total_ms."""
+    with lane='agent', the lead stamp + the split llm_queue/llm_model stamps
+    collected inside _agent_turn, plus send_ms and total_ms."""
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, owned=True)
 
     async def _fake(state, deps, user_text, *, chat_id, recent_messages, timings=None):
         # Emulate the real _agent_turn stamping into the shared timings dict.
+        # The LLM stage is now the split llm_queue_ms + llm_model_ms pair
+        # (written by MiniMaxAgent.agent, not the monolithic llm_ms).
         if timings is not None:
             timings["lead_ms"] = 111
-            timings["llm_ms"] = 999
+            timings["llm_queue_ms"] = 200
+            timings["llm_model_ms"] = 799
         return "Chào bạn!"
 
     monkeypatch.setattr(runner, "_agent_turn", _fake)
@@ -568,7 +571,8 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     st = recorded[0]["stage_timings"]
     assert st["lane"] == "agent"
     assert st["lead_ms"] == 111          # threaded through from _agent_turn
-    assert st["llm_ms"] == 999
+    assert st["llm_queue_ms"] == 200     # split: semaphore wait
+    assert st["llm_model_ms"] == 799     # split: model inference
     assert st["send_ms"] >= 0
     assert st["total_ms"] >= st["send_ms"]
 
@@ -592,7 +596,8 @@ async def test_stage_timings_records_fast_lane_without_lead_or_llm(monkeypatch):
     st = recorded[0]["stage_timings"]
     assert st["lane"] == "fast_lane"
     assert "lead_ms" not in st
-    assert "llm_ms" not in st
+    assert "llm_queue_ms" not in st
+    assert "llm_model_ms" not in st
     assert st["total_ms"] >= 0
 
 

@@ -169,21 +169,28 @@ async def _llm_call_with_retry(bound, messages, *, metrics: dict | None = None):
     degradation message without making another LLM call. When ``metrics`` is
     provided, sets ``retried_429 = True`` on the retry path so the dashboard can
     flag turns that survived a rate-limit backoff.
+
+    Returns ``(result, backoff_ms)`` where ``backoff_ms`` is the wall-clock time
+    spent sleeping during a rate-limit backoff (0 on the happy path). The caller
+    uses this to exclude the sleep from ``llm_model_ms`` so the split stays
+    clean — model inference never includes the 429 backoff.
     """
     from app.core.config import get_settings
     from app.graph.llm_semaphore import LLMThrottled
 
     try:
-        return await bound.ainvoke(messages)
+        return await bound.ainvoke(messages), 0
     except Exception as exc:
         if _is_429(exc):
             _record_llm_429()
             logger.warning("llm_429_retry", exc_info=True)
+            backoff_t0 = time.monotonic()
             await asyncio.sleep(get_settings().llm_429_retry_sleep_seconds)
+            backoff_ms = int((time.monotonic() - backoff_t0) * 1000)
             if metrics is not None:
                 metrics["retried_429"] = True
             try:
-                return await bound.ainvoke(messages)
+                return await bound.ainvoke(messages), backoff_ms
             except Exception as exc2:
                 if _is_429(exc2):
                     _record_llm_429()
@@ -364,6 +371,7 @@ class MiniMaxAgent:
                 "llm_invoke_ms",
                 "llm_queue_ms",
                 "llm_model_ms",
+                "llm_backoff_ms",
                 "prompt_tokens",
                 "completion_tokens",
                 "cached_tokens",
@@ -470,7 +478,7 @@ class MiniMaxAgent:
                 async with sem:
                     sem_wait_ms = int((time.monotonic() - sem_t0) * 1000)
                     model_t0 = time.monotonic()
-                    ai = await _llm_call_with_retry(bound, messages, metrics=metrics)
+                    ai, backoff_ms = await _llm_call_with_retry(bound, messages, metrics=metrics)
                     model_ms = int((time.monotonic() - model_t0) * 1000)
             except LLMThrottled:
                 raise
@@ -484,8 +492,13 @@ class MiniMaxAgent:
             if metrics is not None:
                 metrics["llm_invoke_ms"] = metrics.get("llm_invoke_ms", 0) + iter_total_ms
                 metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + sem_wait_ms
-                metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + model_ms
-                metrics["llm_call_ms"].append(model_ms)
+                # Exclude the 429 backoff sleep from model inference so the split
+                # stays clean: llm_model_ms = actual ainvoke time only. The
+                # backoff is surfaced separately so the dashboard can attribute it.
+                metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
+                if backoff_ms > 0:
+                    metrics["llm_backoff_ms"] = metrics.get("llm_backoff_ms", 0) + backoff_ms
+                metrics["llm_call_ms"].append(model_ms - backoff_ms)
                 if getattr(bound, "_fallback_used", False):
                     metrics["used_fallback"] = True
             # Live Redis counter tracks the full LLM path (queue + model) — the
