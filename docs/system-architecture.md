@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-09
+**Last updated:** 2026-07-10
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -50,7 +50,7 @@ Compose at `/opt/vfic`, Caddy edge.
 │  RQ workers (sync RQ → persistent async loop via async_runner.py)  │
 │                                                                    │
 │  worker-chatbot (×1) │ worker-ingest │ worker-followup │ scheduler  │
-│ recovery + persist   │   ingest      │   followup      │ rqscheduler│
+│ chat turns + persist │   ingest      │   followup      │ rqscheduler│
 │   persistence_low    │               │                 │            │
 └────────────────────────────────────────────────────────────────────┘
           │                                            ▲
@@ -74,15 +74,16 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
                             ▼
   ┌──────────────────────────────────────────────────────────┐
   │ 1. Verify secret (hmac.compare_digest / OA signature)    │
-  │ 2. ACK 200 in <1s  (return 503 if local start fails → retry) │
-  │ 3. ZaloWebhookService.handle(..., start direct async turn)│
+  │ 2. Persist inbound + acquire owner-token DB lock         │
+  │ 3. Enqueue on webhook_high (503 if enqueue fails)        │
+  │ 4. ACK 200 in <1s                                       │
   └──────────────────────────────────────────────────────────┘
-                            │ direct async turn (per-chat DB lease)
+                            │ RQ job (per-chat DB lease)
                             ▼
   ┌──────────────────────────────────────────────────────────┐
-  │ web worker runs the turn; reconcile uses RQ only after failure │
+  │ worker-chatbot runs normal and reconciled turns          │
   │  - Worker.clean_registries() on startup requeues stuck   │
-  │  - Acquire per-chat DB lock + owner token (TTL 180s)     │
+  │  - Verify per-chat DB lock + owner token (TTL 180s)      │
   │  - Record bot PENDING message                           │
   │  - Run bot-turn pipeline (see §3)                       │
   │  - On LLMThrottled → static Vietnamese degradation reply│
@@ -176,7 +177,7 @@ load_conversation_state -> typing -> agent
 
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
-| `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | — | Recovered chat turns only; normal chat turns run directly in web workers. |
+| `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Interactive and recovered chat turns. |
 | `persistence_low` | `worker-chatbot` (same containers) | — | — | Lead / memory extraction after SENT replies. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up + reconcile sweep. |

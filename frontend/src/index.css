@@ -68,27 +68,51 @@
 }
 
 :root {
+  /* Shared semantic roles. Feature CSS may keep legacy aliases until Phase 4,
+     but new workspace UI reads these roles directly. */
+  --workspace-canvas: #efe6d6;
+  --workspace-surface: #fffdf7;
+  --workspace-surface-muted: #fbf6ea;
+  --workspace-ink: #27231d;
+  --workspace-ink-muted: #5f594d;
+  --workspace-border: #ded2bd;
+  --workspace-focus: #28786f;
+  --workspace-action: #28786f;
+  --workspace-action-strong: #1f5f58;
+  --workspace-success: #28786f;
+  --workspace-warning: #8a5a14;
+  --workspace-danger: #b23a2e;
+  --workspace-space-1: 0.25rem;
+  --workspace-space-2: 0.5rem;
+  --workspace-space-3: 0.75rem;
+  --workspace-space-4: 1rem;
+  --workspace-space-6: 1.5rem;
+  --workspace-radius-control: 0.75rem;
+  --workspace-radius-panel: 1rem;
+  --workspace-shadow-panel: 0 18px 42px rgba(79, 59, 31, 0.12);
+  --workspace-motion-fast: 160ms;
+  --workspace-motion-standard: 240ms;
   --radius: 14px;
-  --background: #efe6d6;
-  --foreground: #27231d;
-  --card: #fffdf7;
-  --card-foreground: #27231d;
-  --popover: #fffdf7;
-  --popover-foreground: #27231d;
-  --primary: #28786f;
-  --primary-foreground: #fffdf7;
-  --secondary: #fbf6ea;
-  --secondary-foreground: #27231d;
-  --muted: #fbf6ea;
-  --muted-foreground: #5f594d;
-  --accent: #dcefeb;
-  --accent-foreground: #1f5f58;
+  --background: #edf2f5;
+  --foreground: #17232e;
+  --card: #ffffff;
+  --card-foreground: #17232e;
+  --popover: #ffffff;
+  --popover-foreground: #17232e;
+  --primary: #087f5b;
+  --primary-foreground: #ffffff;
+  --secondary: #e6ecf0;
+  --secondary-foreground: #17232e;
+  --muted: #f1f4f6;
+  --muted-foreground: #526273;
+  --accent: #e1f3eb;
+  --accent-foreground: #056044;
   --destructive: #b23a2e;
   --destructive-foreground: #fffdf7;
-  --border: #ded2bd;
-  --input: #ded2bd;
-  --ring: #28786f;
-  --ember: #b96727;
+  --border: #cbd5dc;
+  --input: #b9c6cf;
+  --ring: #087f5b;
+  --ember: #b45309;
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
@@ -209,7 +233,7 @@ input {
 }
 
 /* Prevent mobile zoom on input focus by ensuring 16px minimum font size */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 767px) {
   html {
     font-size: 17px;
   }
@@ -217,6 +241,260 @@ input {
   textarea,
   select {
     font-size: 16px !important;
+  }
+}
+
+/* Logged-in workspaces intentionally retain their light, warm palette even
+   when the global provider applies `.dark` for authentication pages. */
+.workspace-frame {
+  --background: var(--workspace-canvas);
+  --foreground: var(--workspace-ink);
+  --card: var(--workspace-surface);
+  --card-foreground: var(--workspace-ink);
+  --popover: var(--workspace-surface);
+  --popover-foreground: var(--workspace-ink);
+  --primary: var(--workspace-action);
+  --primary-foreground: #fffdf7;
+  --secondary: var(--workspace-surface-muted);
+  --secondary-foreground: var(--workspace-ink);
+  --muted: var(--workspace-surface-muted);
+  --muted-foreground: var(--workspace-ink-muted);
+  --accent: #dcefeb;
+  --accent-foreground: var(--workspace-action-strong);
+  --destructive: var(--workspace-danger);
+  --border: var(--workspace-border);
+  --input: var(--workspace-border);
+  --ring: var(--workspace-focus);
+  min-height: 100dvh;
+  display: flex;
+  background: var(--workspace-canvas);
+  color: var(--workspace-ink);
+}
+
+.workspace-frame-content {
+  min-width: 0;
+  flex: 1 1 auto;
+  background: var(--workspace-canvas);
+}
+
+.workspace-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-180%);
+  border-radius: var(--workspace-radius-control);
+  background: var(--workspace-action);
+  color: #fffdf7;
+  padding: 0.7rem 0.9rem;
+  font-weight: 700;
+  transition: transform var(--workspace-motion-fast) ease;
+}
+
+.workspace-skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 3px solid #fffdf7;
+  outline-offset: 3px;
+}
+
+.workspace-navigation-desktop {
+  z-index: 20;
+  display: flex;
+  width: 13.5rem;
+  flex: 0 0 13.5rem;
+  border-right: 1px solid var(--workspace-border);
+  background: var(--workspace-surface);
+  padding: var(--workspace-space-4) var(--workspace-space-3);
+}
+
+.workspace-navigation-items {
+  display: grid;
+  gap: var(--workspace-space-1);
+}
+
+.workspace-navigation-desktop .workspace-navigation-items {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+}
+
+.workspace-navigation-link--account {
+  margin-top: auto;
+}
+
+.workspace-navigation-link {
+  position: relative;
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--workspace-space-3);
+  border-radius: var(--workspace-radius-control);
+  color: var(--workspace-ink-muted);
+  padding: 0.5rem 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition:
+    background-color var(--workspace-motion-fast) ease,
+    color var(--workspace-motion-fast) ease;
+}
+
+.workspace-navigation-link:hover {
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-ink);
+}
+
+.workspace-navigation-link:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--workspace-focus) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.workspace-navigation-link.is-active {
+  background: #dcefeb;
+  color: var(--workspace-action-strong);
+}
+
+.workspace-navigation-icon {
+  position: relative;
+  display: grid;
+  width: 1.3rem;
+  height: 1.3rem;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.workspace-navigation-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  stroke-width: 2;
+}
+
+.workspace-navigation-badge {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.8rem;
+  min-width: 1.1rem;
+  border: 1px solid var(--workspace-surface);
+  border-radius: 999px;
+  background: var(--workspace-danger);
+  color: #fffdf7;
+  padding: 0.1rem 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.workspace-navigation-tooltip {
+  display: none;
+}
+
+.workspace-navigation-mobile {
+  display: none;
+}
+
+@media (min-width: 768px) and (max-width: 1020px) {
+  .workspace-navigation-desktop {
+    width: 4.25rem;
+    flex-basis: 4.25rem;
+    padding-inline: 0.625rem;
+  }
+
+  .workspace-navigation-desktop .workspace-navigation-link {
+    justify-content: center;
+    padding-inline: 0.5rem;
+  }
+
+  .workspace-navigation-desktop .workspace-navigation-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .workspace-navigation-desktop .workspace-navigation-tooltip {
+    position: absolute;
+    left: calc(100% + 0.65rem);
+    z-index: 30;
+    display: block;
+    width: max-content;
+    max-width: 12rem;
+    pointer-events: none;
+    opacity: 0;
+    border-radius: 0.5rem;
+    background: var(--workspace-ink);
+    color: var(--workspace-surface);
+    padding: 0.4rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 650;
+    transition: opacity var(--workspace-motion-fast) ease;
+  }
+
+  .workspace-navigation-desktop
+    .workspace-navigation-link:hover
+    .workspace-navigation-tooltip,
+  .workspace-navigation-desktop
+    .workspace-navigation-link:focus-visible
+    .workspace-navigation-tooltip {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  .workspace-frame {
+    display: block;
+  }
+
+  .workspace-frame-content {
+    min-height: 100dvh;
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+
+  .workspace-navigation-desktop {
+    display: none;
+  }
+
+  .workspace-navigation-mobile {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    display: block;
+    padding: 0.65rem 0.75rem calc(0.65rem + env(safe-area-inset-bottom));
+    pointer-events: none;
+  }
+
+  .workspace-navigation-mobile .workspace-navigation-items {
+    pointer-events: auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-width: 34rem;
+    margin: 0 auto;
+    border: 1px solid var(--workspace-border);
+    border-radius: 1.35rem;
+    background: color-mix(in srgb, var(--workspace-surface) 94%, transparent);
+    padding: 0.3rem;
+    box-shadow: var(--workspace-shadow-panel);
+    backdrop-filter: blur(18px);
+  }
+
+  .workspace-navigation-mobile .workspace-navigation-link {
+    min-height: 3.35rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.15rem;
+    padding: 0.25rem;
+    font-size: 0.6875rem;
+    line-height: 1.15;
+    text-align: center;
+  }
+
+  .workspace-navigation-mobile .workspace-navigation-icon {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 }
 
@@ -409,7 +687,7 @@ body {
 }
 
 /* Hide scrollbars on mobile viewports */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 767px) {
   ::-webkit-scrollbar {
     display: none;
   }

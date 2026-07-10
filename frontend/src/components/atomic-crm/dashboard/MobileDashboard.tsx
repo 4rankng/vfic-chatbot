@@ -1,4 +1,4 @@
-import "../conversations/inbox.css";
+import "./dashboard.css";
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
 
 export const MobileDashboard = () => (

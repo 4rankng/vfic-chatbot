@@ -235,6 +235,19 @@
   gap: 5px;
   flex-wrap: wrap;
 }
+.inbox-bg-container .conv-state-label {
+  color: var(--ink-muted);
+  font-size: var(--chat-fs-chip);
+  font-weight: var(--chat-fw-semibold);
+  line-height: 1.25;
+}
+.inbox-bg-container .list-retry {
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font-weight: var(--chat-fw-bold);
+}
 
 .inbox-bg-container .mini-chip {
   display: inline-flex;

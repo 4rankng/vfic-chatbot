@@ -46,9 +46,7 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # RQ worker: recovery turns + lead/memory persistence. Interactive webhook
-  # turns run directly in the two web workers; this queue is no longer a normal
-  # latency boundary.
+  # RQ worker: interactive/recovery turns + lead/memory persistence.
   worker-chatbot:
     image: franknguyenvd/vfic-backend:latest
     env_file: .env
@@ -56,13 +54,13 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: ["python", "-m", "app.workers.run_worker", "webhook_high", "persistence_low"]
-    stop_grace_period: 180s  # let rq finish the ≤150s turn on SIGTERM before SIGKILL
+    stop_grace_period: 180s  # let rq finish the ≤60s turn on SIGTERM before SIGKILL
     deploy:
       replicas: 1
       resources:
         limits:
           # TODO: measure real RSS under load (expect ~100-150M per worker).
-          # 512M leaves room for the two direct-turn web workers on a 4GB droplet.
+          # 512M leaves room for the two web workers on a 4GB droplet.
           memory: 512M
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).

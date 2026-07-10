@@ -20,6 +20,7 @@ import {
 } from "@/lib/vfic/knowledgeService";
 import type { ProductFeature } from "../types";
 import { cn } from "@/lib/utils";
+import "./projects.css";
 
 const FEATURE_CATEGORY_LABELS: Record<string, string> = {
   application: "Hồ sơ ứng tuyển",

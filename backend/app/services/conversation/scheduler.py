@@ -30,6 +30,7 @@ async def enqueue_latest_unanswered_worker_message(
             "user_name": "",
             "reply_to_message_id": pending.zalo_message_id or "",
             "lock_owner": str(lock_owner),
+            "execution_source": "queued",
             "received_at": pending.created_at.isoformat(),
             "received_at_epoch": time.time(),
         }

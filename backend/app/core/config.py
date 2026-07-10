@@ -207,15 +207,11 @@ class Settings(BaseSettings):
     soft_fallback_remaining: float = 2.0
     # Active-status signal (Priority #1 — the psychological bridge). typing_heartbeat_seconds
     # pulses send_chat_action("typing") (real on the Bot channel; a logged no-op on OA).
-    # slow_ack_seconds fires a ONE-SHOT "still working" message via send_message — the
-    # reliable OA-visible "bot is active" signal, since OA has no typing indicator. The ack
-    # only fires when the real answer isn't ready by the threshold (fast lanes cancel first).
     typing_heartbeat_seconds: float = 3.5
-    slow_ack_seconds: float = 1.5
     # FAQ/template fast lane (Priority #3). When enabled, common non-factual traffic
     # (greetings / thanks / goodbye / help) is answered from deterministic tôi/bạn
-    # templates with ZERO LLM calls, inside slow_ack_seconds (so no ack fires). Factual
-    # questions are never templated here — they stay on the RAG + agent path.
+    # templates with ZERO LLM calls. Factual questions are never templated here — they
+    # stay on the RAG + agent path.
     faq_fast_lane_enabled: bool = True
     # Minimum time slice required to safely start an LLM call (TTFT + a meaningful token
     # span). If _remaining() < send_margin_seconds + min_llm_time_budget, skip the LLM and

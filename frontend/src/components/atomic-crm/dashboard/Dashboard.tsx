@@ -1,18 +1,12 @@
 import { InboxIcons } from "../conversations/InboxIcons";
-import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
-import "../conversations/inbox.css";
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
+import "./dashboard.css";
 
 export const Dashboard = () => (
-  <div className="inbox-bg-container dashboard-workspace">
+  <div className="dashboard-workspace">
     <InboxIcons />
-    <main className="app dashboard-app" id="app">
-      <WorkspaceIconRail />
-      <section className="panel center-panel dashboard-center-panel">
-        <div className="dashboard-workspace-content">
-          <RecruitingCommandCenter />
-        </div>
-      </section>
-    </main>
+    <section className="dashboard-workspace-content" aria-label="Tổng quan tuyển dụng">
+      <RecruitingCommandCenter />
+    </section>
   </div>
 );

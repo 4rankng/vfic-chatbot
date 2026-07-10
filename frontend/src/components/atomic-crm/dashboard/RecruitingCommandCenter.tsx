@@ -1,4 +1,4 @@
-import { MessageCircle, Phone, UserRound } from "lucide-react";
+import { MessageCircle, Phone, RefreshCw, UserRound } from "lucide-react";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
@@ -28,6 +28,8 @@ type AttentionCandidate = {
 type DashboardQueues = {
   attention: AttentionCandidate[];
   contacts: Lead[];
+  attentionError: boolean;
+  contactsError: boolean;
 };
 
 const DASHBOARD_LIST_LIMIT = 8;
@@ -47,8 +49,8 @@ const isWaitingForHuman = (conversation: Conversation): boolean => {
 
 const attentionReason = (conversation: Conversation): string => {
   if (conversation.needs_human) return "Bot cần người";
-  if (conversation.mode === "semi_auto") return "Semi-auto";
-  if (conversation.mode === "human") return "Human mode";
+  if (conversation.mode === "semi_auto") return "Chờ nhân viên";
+  if (conversation.mode === "human") return "Cần phản hồi";
   return "Cần phản hồi";
 };
 
@@ -100,7 +102,7 @@ const uniqueConversations = (rows: Conversation[]): Conversation[] => {
 };
 
 const fetchDashboardQueues = async (): Promise<DashboardQueues> => {
-  const [attentionBody, recentBody, contactsBody] = await Promise.all([
+  const [attentionResult, recentResult, contactsResult] = await Promise.allSettled([
     apiJson<ListEnvelope<Conversation>>(
       "/api/v1/conversations?needs_attention=true&per_page=12&sort=last_inbound_at&order=DESC",
     ),
@@ -111,20 +113,29 @@ const fetchDashboardQueues = async (): Promise<DashboardQueues> => {
       "/api/v1/leads?per_page=80&sort=updated_at&order=DESC",
     ),
   ]);
+  const attentionBody =
+    attentionResult.status === "fulfilled" ? attentionResult.value : null;
+  const recentBody =
+    recentResult.status === "fulfilled" ? recentResult.value : null;
+  const contactsBody =
+    contactsResult.status === "fulfilled" ? contactsResult.value : null;
 
   const waitingConversations = uniqueConversations([
-    ...(attentionBody.data ?? []),
-    ...(recentBody.data ?? []),
+    ...(attentionBody?.data ?? []),
+    ...(recentBody?.data ?? []),
   ])
     .filter(isWaitingForHuman)
     .slice(0, DASHBOARD_LIST_LIMIT);
 
-  const [leads, snippets] = await Promise.all([
+  const [leadsResult, snippetsResult] = await Promise.allSettled([
     chatRepository.getLeadsByZaloIds(
       waitingConversations.map((conversation) => conversation.zalo_chat_id),
     ),
     chatRepository.getLastMessages(waitingConversations),
   ]);
+  const leads = leadsResult.status === "fulfilled" ? leadsResult.value : [];
+  const snippets =
+    snippetsResult.status === "fulfilled" ? snippetsResult.value : {};
 
   const leadByZalo = new Map<string, Lead>();
   for (const lead of leads) {
@@ -133,7 +144,7 @@ const fetchDashboardQueues = async (): Promise<DashboardQueues> => {
     }
   }
 
-  const contacts = (contactsBody.data ?? [])
+  const contacts = (contactsBody?.data ?? [])
     .filter((lead) => normalizeText(lead.name) && normalizeText(lead.phone))
     .slice(0, DASHBOARD_LIST_LIMIT);
 
@@ -145,6 +156,9 @@ const fetchDashboardQueues = async (): Promise<DashboardQueues> => {
       reason: attentionReason(conversation),
     })),
     contacts,
+    attentionError:
+      attentionResult.status === "rejected" || recentResult.status === "rejected",
+    contactsError: contactsResult.status === "rejected",
   };
 };
 
@@ -152,7 +166,7 @@ export const RecruitingCommandCenter = ({
   variant = "desktop",
 }: RecruitingCommandCenterProps) => {
   const navigate = useNavigate();
-  const { data, isPending } = useQuery({
+  const { data, isPending, refetch, dataUpdatedAt } = useQuery({
     queryKey: ["dashboard-queues"],
     queryFn: fetchDashboardQueues,
     refetchInterval: 30_000,
@@ -177,10 +191,39 @@ export const RecruitingCommandCenter = ({
     <div className={shellClass}>
       <header className="recruiting-hero recruiting-hero-minimal">
         <div className="recruiting-hero-copy">
-          <span className="recruiting-eyebrow">Dashboard</span>
-          <h1>Tuyển dụng</h1>
+          <span className="recruiting-eyebrow">Theo dõi trực tiếp</span>
+          <h1>Tổng quan tuyển dụng</h1>
+          <p>
+            {dataUpdatedAt
+              ? `Cập nhật lúc ${formatTime(new Date(dataUpdatedAt).toISOString())}`
+              : "Đang tải các hàng đợi tuyển dụng"}
+          </p>
         </div>
+        <button
+          type="button"
+          className="dashboard-refresh"
+          onClick={() => void refetch()}
+          disabled={isPending}
+        >
+          <RefreshCw className="size-4" aria-hidden="true" />
+          Làm mới
+        </button>
       </header>
+
+      {data && (data.attentionError || data.contactsError) ? (
+        <div className="dashboard-inline-error" role="status">
+          <span>
+            {data.attentionError && data.contactsError
+              ? "Không thể cập nhật đầy đủ hàng đợi. Dữ liệu đã tải vẫn được giữ lại."
+              : data.attentionError
+                ? "Không thể cập nhật hàng đợi cần phản hồi. Danh sách liên hệ vẫn dùng được."
+                : "Không thể cập nhật danh sách liên hệ. Hàng đợi cần phản hồi vẫn dùng được."}
+          </span>
+          <button type="button" onClick={() => void refetch()}>
+            Thử lại
+          </button>
+        </div>
+      ) : null}
 
       <section className="recruiting-two-column">
         <article className="recruiting-panel">
@@ -195,17 +238,31 @@ export const RecruitingCommandCenter = ({
             {isPending ? (
               <DashboardListSkeleton />
             ) : attentionRows.length > 0 ? (
-              attentionRows.map((row) => (
-                <AttentionRow
-                  key={row.conversation.id}
-                  row={row}
-                  onClick={() =>
-                    navigate(`/conversations?id=${row.conversation.id}`)
-                  }
-                />
-              ))
+              <>
+                {attentionRows.map((row) => (
+                  <AttentionRow
+                    key={row.conversation.id}
+                    row={row}
+                    onClick={() =>
+                      navigate(`/conversations?id=${row.conversation.id}`)
+                    }
+                  />
+                ))}
+                {data?.attentionError ? (
+                  <DashboardQueueError
+                    label="Một phần hàng đợi cần phản hồi chưa tải được."
+                    onRetry={refetch}
+                  />
+                ) : null}
+              </>
+            ) : data?.attentionError ? (
+              <DashboardQueueError label="Không tải được hàng đợi cần phản hồi." onRetry={refetch} />
             ) : (
-              <EmptyDashboardList label="Không có ứng viên đang chờ." />
+              <EmptyDashboardList
+                label="Không có ứng viên đang chờ. Mọi cuộc trò chuyện đang được xử lý."
+                actionLabel="Mở hộp thư"
+                onAction={() => navigate("/conversations")}
+              />
             )}
           </div>
         </article>
@@ -221,6 +278,8 @@ export const RecruitingCommandCenter = ({
           <div className="dashboard-candidate-list">
             {isPending ? (
               <DashboardListSkeleton />
+            ) : data?.contactsError ? (
+              <DashboardQueueError label="Không tải được danh sách liên hệ." onRetry={refetch} />
             ) : contactRows.length > 0 ? (
               contactRows.map((lead) => (
                 <ContactRow key={lead.id} lead={lead} />
@@ -285,10 +344,38 @@ const ContactRow = ({ lead }: { lead: Lead }) => {
   );
 };
 
-const EmptyDashboardList = ({ label }: { label: string }) => (
+const EmptyDashboardList = ({
+  label,
+  actionLabel,
+  onAction,
+}: {
+  label: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) => (
   <div className="dashboard-empty-list">
     <UserRound className="size-4" />
     <span>{label}</span>
+    {actionLabel && onAction ? (
+      <button type="button" onClick={onAction}>
+        {actionLabel}
+      </button>
+    ) : null}
+  </div>
+);
+
+const DashboardQueueError = ({
+  label,
+  onRetry,
+}: {
+  label: string;
+  onRetry: () => void;
+}) => (
+  <div className="dashboard-empty-list" role="status">
+    <span>{label}</span>
+    <button type="button" onClick={() => void onRetry()}>
+      Thử lại
+    </button>
   </div>
 );
 

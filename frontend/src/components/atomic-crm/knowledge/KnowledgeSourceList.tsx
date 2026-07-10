@@ -28,7 +28,6 @@ import {
   useKnowledgeSourceFilters,
 } from "./useKnowledgeSourceFilters";
 import { ProjectPicker } from "./ProjectPicker";
-import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
 import { InboxIcons } from "../conversations/InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import "../conversations/inbox.css";
@@ -216,12 +215,11 @@ const KnowledgeSourceListContent = () => {
   return (
     <div className="inbox-bg-container knowledge-workspace">
       <InboxIcons />
-      <main className="app knowledge-app" id="app">
-        <WorkspaceIconRail />
+      <div className="app knowledge-app" id="app">
         <section className="panel center-panel knowledge-center-panel">
           {content}
         </section>
-      </main>
+      </div>
     </div>
   );
 };
@@ -234,8 +232,7 @@ const SourceSelector = ({
 }: {
   sources: ReturnType<typeof useKnowledgeSourceFilters>["sources"];
   selectedSource:
-    | ReturnType<typeof useKnowledgeSourceFilters>["sources"][number]
-    | null;
+    ReturnType<typeof useKnowledgeSourceFilters>["sources"][number] | null;
   total: number;
   onSelect: (id: string) => void;
 }) => {

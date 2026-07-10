@@ -44,10 +44,10 @@ the bot reasons over.
 ## Architecture in one paragraph
 
 A Zalo webhook hits `/webhooks/zalo/{chatbot,oa}`; the handler verifies the
-secret, persists and locks the inbound turn, acks in under a second, then runs
-the turn directly on a FastAPI event loop. The per-chat Postgres lock has an
-owner token and lease heartbeat; if a web process stops mid-turn, the reconcile
-worker recovers it through the `webhook_high` RQ queue. The bot-turn pipeline
+secret, persists and locks the inbound turn, enqueues it on the `webhook_high`
+RQ queue, then acks in under a second. The per-chat Postgres lock has an owner
+token; if a worker stops mid-turn, the reconcile worker re-enqueues it. The
+bot-turn pipeline
 (`load_conversation_state → typing → agent → fast_safety_filter →
 [llm_safety_check] → combine_for_presend → pre_send_guard → send_message`),
 grounding the agent in pgvector RAG and MiniMax M2.7. After the reply is SENT,

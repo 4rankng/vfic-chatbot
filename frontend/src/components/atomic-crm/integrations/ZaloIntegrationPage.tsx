@@ -25,12 +25,12 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { apiJson } from "../providers/rest/api";
-import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
 import { InboxIcons } from "../conversations/InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PersonaList } from "../personas/PersonaList";
 import { UserList } from "../users/UserList";
 import "../conversations/inbox.css";
+import "./settings.css";
 
 type SecretStatus = { configured: boolean; preview?: string | null };
 type PlainStatus = { configured: boolean; value?: string | null };
@@ -171,6 +171,11 @@ type SettingsItemId =
   | "settings-users";
 
 type SettingsNavMode = "integrations" | "embedded";
+type IntegrationSectionId =
+  | "settings-zalo-channel"
+  | "settings-minimax"
+  | "settings-openrouter";
+type SaveResult = "idle" | "success" | "error";
 
 type SettingsSectionNavItem = {
   itemId: SettingsItemId;
@@ -694,7 +699,15 @@ export const ZaloIntegrationPage = () => {
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
     "settings-zalo-channel",
   );
-  const [saving, setSaving] = useState(false);
+  const [savingSection, setSavingSection] =
+    useState<IntegrationSectionId | null>(null);
+  const [saveResults, setSaveResults] = useState<
+    Record<IntegrationSectionId, SaveResult>
+  >({
+    "settings-zalo-channel": "idle",
+    "settings-minimax": "idle",
+    "settings-openrouter": "idle",
+  });
   const [testingBot, setTestingBot] = useState(false);
   const [testingOa, setTestingOa] = useState(false);
   const [testingMinimax, setTestingMinimax] = useState(false);
@@ -747,10 +760,7 @@ export const ZaloIntegrationPage = () => {
     const payload: MinimaxUpdatePayload = {};
     const value = minimaxForm.minimax_api_key.trim();
     if (value) payload.minimax_api_key = value;
-    if (
-      minimaxSettings &&
-      minimaxEnabled !== minimaxSettings.minimax_enable
-    ) {
+    if (minimaxSettings && minimaxEnabled !== minimaxSettings.minimax_enable) {
       payload.minimax_enable = minimaxEnabled;
     }
     if (
@@ -830,10 +840,7 @@ export const ZaloIntegrationPage = () => {
     }
   };
 
-  const toggleDefaultProvider = (
-    provider: LlmProvider,
-    checked: boolean,
-  ) => {
+  const toggleDefaultProvider = (provider: LlmProvider, checked: boolean) => {
     if (checked) {
       chooseDefaultProvider(provider);
       return;
@@ -915,28 +922,30 @@ export const ZaloIntegrationPage = () => {
     return nextOpenRouter;
   };
 
-  const save = async () => {
+  const saveActiveSection = async () => {
     if (!minimaxEnabled && !openRouterEnabled) {
       notify("Cần bật ít nhất một model cho chatbot.", { type: "warning" });
       return;
     }
-    setSaving(true);
+    if (
+      activeItemId !== "settings-zalo-channel" &&
+      activeItemId !== "settings-minimax" &&
+      activeItemId !== "settings-openrouter"
+    ) return;
+    const section = activeItemId;
+    setSavingSection(section);
+    setSaveResults((current) => ({ ...current, [section]: "idle" }));
     try {
-      const [nextZalo, nextMinimax, nextOpenRouter] = await Promise.all([
-        saveZaloChanges(),
-        saveMinimaxChanges(),
-        saveOpenRouterChanges(),
-      ]);
-      if (nextZalo) setSettings(nextZalo);
-      if (nextMinimax) setMinimaxSettings(nextMinimax);
-      if (nextOpenRouter) setOpenRouterSettings(nextOpenRouter);
-      setForm({
-        ...emptyForm,
-        zalo_oa_app_id: nextZalo?.zalo_oa_app_id.value ?? "",
-      });
-      notify("Đã lưu cấu hình", { type: "success" });
+      if (section === "settings-zalo-channel") await saveZaloChanges();
+      if (section === "settings-minimax") await saveMinimaxChanges();
+      if (section === "settings-openrouter") await saveOpenRouterChanges();
+      setSaveResults((current) => ({ ...current, [section]: "success" }));
+      notify("Đã lưu cấu hình của mục này", { type: "success" });
+    } catch (error) {
+      setSaveResults((current) => ({ ...current, [section]: "error" }));
+      notify(`Không thể lưu cấu hình: ${(error as Error).message || "Vui lòng thử lại."}`, { type: "error" });
     } finally {
-      setSaving(false);
+      setSavingSection(null);
     }
   };
 
@@ -1025,10 +1034,20 @@ export const ZaloIntegrationPage = () => {
       saveOpenRouterChanges,
     );
 
-  const hasChanges =
-    Object.keys(changedPayload).length > 0 ||
-    Object.keys(changedMinimaxPayload).length > 0 ||
-    Object.keys(changedOpenRouterPayload).length > 0;
+  const changesForActiveSection =
+    activeItemId === "settings-zalo-channel"
+      ? Object.keys(changedPayload).length > 0
+      : activeItemId === "settings-minimax"
+        ? Object.keys(changedMinimaxPayload).length > 0
+        : activeItemId === "settings-openrouter"
+          ? Object.keys(changedOpenRouterPayload).length > 0
+          : false;
+  const activeSaveResult =
+    activeItemId === "settings-zalo-channel" ||
+    activeItemId === "settings-minimax" ||
+    activeItemId === "settings-openrouter"
+      ? saveResults[activeItemId]
+      : "idle";
 
   const activeItem =
     SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
@@ -1054,12 +1073,11 @@ export const ZaloIntegrationPage = () => {
     return (
       <div className="inbox-bg-container settings-workspace">
         <InboxIcons />
-        <main className="app settings-app" id="app">
-          <WorkspaceIconRail />
+        <div className="app settings-app" id="app">
           <section className="panel center-panel settings-center-panel">
             {content}
           </section>
-        </main>
+        </div>
       </div>
     );
   };
@@ -1350,12 +1368,25 @@ export const ZaloIntegrationPage = () => {
                 <div className="settings-header-actions">
                   <Button
                     className="settings-save-button"
-                    onClick={save}
-                    disabled={saving || !hasChanges}
+                    onClick={saveActiveSection}
+                    disabled={savingSection === activeItemId || !changesForActiveSection}
                   >
                     <Save className="size-4" />
-                    Lưu cấu hình
+                    {savingSection === activeItemId
+                      ? "Đang lưu"
+                      : activeSaveResult === "error"
+                        ? "Thử lưu lại"
+                        : "Lưu cấu hình"}
                   </Button>
+                  <p className="settings-save-status" aria-live="polite">
+                    {activeSaveResult === "success"
+                      ? "Đã lưu mục này. Các mục khác chưa thay đổi."
+                      : activeSaveResult === "error"
+                        ? "Lưu chưa thành công. Bạn có thể thử lại."
+                        : changesForActiveSection
+                          ? "Có thay đổi chưa lưu trong mục này."
+                          : "Mục này chưa có thay đổi cần lưu."}
+                  </p>
                 </div>
               ) : null}
             </header>

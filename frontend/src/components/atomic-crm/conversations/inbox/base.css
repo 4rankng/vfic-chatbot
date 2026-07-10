@@ -73,6 +73,25 @@
   isolation: isolate;
 }
 
+/* The shared frame owns workspace navigation. Existing feature shells keep
+   their internal panes, but no longer reserve a first grid column for a rail. */
+.workspace-frame-content .inbox-bg-container .app {
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+}
+
+.workspace-frame-content
+  .inbox-bg-container
+  .app:is(
+    .dashboard-app,
+    .knowledge-app,
+    .settings-app,
+    .profile-app,
+    .persona-app,
+    .project-app
+  ) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* Panels */
 .inbox-bg-container .panel {
   min-width: 0;

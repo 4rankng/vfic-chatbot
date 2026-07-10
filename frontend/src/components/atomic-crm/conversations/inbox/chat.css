@@ -575,6 +575,29 @@
   flex: 0 0 auto;
 }
 
+.inbox-bg-container .chat-history-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px auto;
+  padding: 8px 12px;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  border: 1px solid color-mix(in srgb, var(--destructive) 35%, var(--border));
+  border-radius: 10px;
+  background: var(--surface-solid);
+  color: var(--ink-muted);
+  font-size: var(--chat-fs-meta);
+}
+.inbox-bg-container .chat-history-error button,
+.inbox-bg-container .chat-load-error button {
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font-weight: var(--chat-fw-bold);
+}
+
 .inbox-bg-container .new-message-jump {
   position: absolute;
   left: 50%;

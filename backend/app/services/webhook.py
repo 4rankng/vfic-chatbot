@@ -2,12 +2,12 @@
 
 Flow:
   normalize -> dedup -> ensure conversation -> record_inbound -> run_start_guard
-  -> acquire_lock -> send typing indicator -> start direct async turn
+  -> acquire_lock -> send typing indicator -> enqueue RQ job
 
 A Zalo typing indicator is fired from the webhook handler (fire-and-forget) so
-the user sees immediate feedback. The direct turn's _status_heartbeat keeps it
-alive during LLM generation and (for the OA channel, which has no typing
-indicator) sends a one-shot slow-case ack as the reliable "bot is active" signal.
+the user sees immediate feedback. The turn's _status_heartbeat keeps pulsing it
+during LLM generation. (The OA channel has no typing endpoint, so on OA the
+indicator is a logged no-op — the answer itself landing is the only signal.)
 """
 
 from __future__ import annotations
@@ -91,12 +91,12 @@ class ZaloWebhookService:
         channel: str = "bot",
         bot_token: str | None = None,
     ) -> dict:
-        """Run the synchronous guard chain and (if allowed) start the bot turn.
+        """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
-        For the OA channel, only text messages start bot turns; receipts,
+        For the OA channel, only text messages enqueue bot turns; receipts,
         follow/unfollow, button clicks, and media/reaction events are routed to
         ``handle_oa_side_event`` instead. The *enqueue* callback returns ``False``
-        when the direct task cannot be scheduled; the
+        when the job cannot be enqueued (Redis down / queue depth exceeded); the
         caller translates that to HTTP 503 so Zalo retries.
         """
         if channel == "oa":
@@ -136,10 +136,10 @@ class ZaloWebhookService:
             return {"status": "locked", "conversation_id": str(conv.id)}
 
         # Fire-and-forget typing indicator so the user sees immediate feedback
-        # while the direct task starts. The turn's _status_heartbeat
-        # keeps the indicator alive during LLM generation and (on the OA channel,
-        # which has no typing endpoint) sends a one-shot slow-case ack. The token
-        # is the DB-resolved live value (env ZALO_BOT_TOKEN is stale).
+        # while the RQ worker picks up the job. The turn's _status_heartbeat
+        # keeps pulsing the indicator during LLM generation (a logged no-op on
+        # the OA channel, which has no typing endpoint). The token is the
+        # DB-resolved live value (env ZALO_BOT_TOKEN is stale).
         if norm.zalo_channel == "bot":
             asyncio.create_task(_fire_typing(norm.zalo_chat_id, bot_token))
 
@@ -150,6 +150,7 @@ class ZaloWebhookService:
             "user_name": norm.user_name,
             "reply_to_message_id": norm.msg_id,
             "lock_owner": str(lock_owner),
+            "execution_source": "queued",
             "received_at": datetime.now(timezone.utc).isoformat(),
             # Epoch anchor (not monotonic) so the RQ worker can compute remaining
             # wall-clock budget across the process boundary. See BotRunState.
@@ -159,7 +160,7 @@ class ZaloWebhookService:
         if asyncio.iscoroutine(result):
             result = await result
         if result is False:
-            await svc.release_lock(conv, lock_owner=lock_owner)  # no task will clear it
+            await svc.release_lock(conv, lock_owner=lock_owner)  # no worker will clear it
             return {"status": "start_failed", "conversation_id": str(conv.id)}
         return {"status": "processing", "conversation_id": str(conv.id)}
 

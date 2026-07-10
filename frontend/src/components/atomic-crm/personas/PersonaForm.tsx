@@ -338,7 +338,7 @@ const PersonaForm = ({
         </section>
 
         <div className="persona-edit-grid">
-          <main className="persona-edit-main">
+          <div className="persona-edit-main">
             <section className="persona-edit-section-heading">
               <div>
                 <span>Nội dung Agent</span>
@@ -410,7 +410,7 @@ const PersonaForm = ({
                 </section>
               )}
             </div>
-          </main>
+          </div>
 
           <aside className="persona-edit-rail">
             <section className="persona-edit-rail-card">

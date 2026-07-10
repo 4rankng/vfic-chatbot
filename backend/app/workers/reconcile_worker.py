@@ -205,6 +205,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     "user_name": "",
                     "reply_to_message_id": reply_to_message_id,
                     "lock_owner": str(lock_owner),
+                    "execution_source": "recovery",
                     "received_at": datetime.now(timezone.utc).isoformat(),
                     "received_at_epoch": time.time(),
                 })

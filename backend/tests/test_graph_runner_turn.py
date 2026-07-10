@@ -24,7 +24,7 @@ import pytest
 
 from app.graph import runner
 from app.graph.llm_semaphore import LLMThrottled
-from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY
+from app.graph.prompts import ERROR_REPLY
 from app.graph.runner import run_turn
 from app.graph.types import BotRunState, GraphDeps
 
@@ -61,12 +61,14 @@ class _FakeZalo:
     def __init__(self, results: list | None = None) -> None:
         self._results = results or [_SendResult()]
         self.sent: list[tuple[str, str]] = []
+        self.actions: list[str] = []
 
     async def send_message(self, chat_id: str, text: str) -> _SendResult:
         self.sent.append((chat_id, text))
         return self._results.pop(0) if self._results else _SendResult()
 
     async def send_chat_action(self, chat_id: str, action: str) -> None:
+        self.actions.append(action)
         return None
 
     def for_conversation(self, conv):
@@ -341,26 +343,21 @@ async def test_agent_runs_to_completion_past_deadline(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Active status signal: slow-case ack (Slice B)
+# Active-status signal: typing pulses only, NO filler/ack message
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_slow_turn_sends_one_slow_ack_then_real_answer(monkeypatch):
-    """A turn that takes longer than slow_ack_seconds fires exactly ONE ack, and it
-    lands BEFORE the real answer (the status task is cancelled before the real send).
-    This is the reliable "bot is active" signal on the OA channel."""
-    from app.core.config import get_settings
-
-    s = get_settings()
-    monkeypatch.setattr(s, "slow_ack_seconds", 0.05)
-
+async def test_slow_turn_pulses_typing_but_sends_no_filler(monkeypatch):
+    """A slow turn pulses the native typing indicator but never sends a filler /
+    "still working" message — the user sees only the real answer. (The ack was
+    removed: it was redundant with the typing indicator on the Bot channel.)"""
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
 
     async def _slow_agent(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        # Long enough for the heartbeat's ~0.5s tick to fire the ack while the turn
-        # is still in flight, well inside the agent deadline.
+        # Long enough for the heartbeat's ~0.5s tick to pulse typing several times
+        # while the turn is in flight, well before the real answer lands.
         await asyncio.sleep(0.8)
         return "Câu trả lời thật của tôi."
 
@@ -371,14 +368,13 @@ async def test_slow_turn_sends_one_slow_ack_then_real_answer(monkeypatch):
 
     sent_texts = [text for _, text in zalo.sent]
     assert res["outcome"] == "sent"
-    assert sent_texts.count(SLOW_ACK_REPLY) == 1          # exactly one ack
-    assert sent_texts[-1] == "Câu trả lời thật của tôi."  # real answer lands last
+    assert sent_texts == ["Câu trả lời thật của tôi."]  # only the real answer, no filler
+    assert zalo.actions.count("typing") >= 1            # typing indicator still pulses
 
 
 @pytest.mark.asyncio
-async def test_fast_turn_sends_no_slow_ack(monkeypatch):
-    """A turn that answers within slow_ack_seconds must NOT send the ack — fast lanes
-    cancel the status task before the threshold fires."""
+async def test_fast_turn_sends_no_filler(monkeypatch):
+    """A turn that answers quickly sends only its reply — no filler/ack message."""
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, "Chào bạn!")  # returns immediately, no yield
@@ -388,7 +384,6 @@ async def test_fast_turn_sends_no_slow_ack(monkeypatch):
 
     sent_texts = [text for _, text in zalo.sent]
     assert res["outcome"] == "sent"
-    assert SLOW_ACK_REPLY not in sent_texts
     assert sent_texts == ["Chào bạn!"]
 
 
@@ -398,10 +393,10 @@ async def test_fast_turn_sends_no_slow_ack(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_greeting_hits_fast_lane_no_llm_no_ack_no_persist(monkeypatch):
+async def test_greeting_hits_fast_lane_no_llm_no_persist(monkeypatch):
     """A pure greeting is answered by the fast lane: GREETING_REPLY, outcome=faq_cache,
-    the agent is never called, no slow-case ack fires (fast lanes finish inside
-    slow_ack_seconds), and no candidate extraction runs (canned reply carries no Q&A)."""
+    the agent is never called, and no candidate extraction runs (canned reply carries
+    no Q&A)."""
     from app.graph.fast_lane import GREETING_REPLY
 
     async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
@@ -422,7 +417,6 @@ async def test_greeting_hits_fast_lane_no_llm_no_ack_no_persist(monkeypatch):
     assert res["outcome"] == "faq_cache"
     assert res["reply"] == GREETING_REPLY
     assert zalo.sent == [("z1", GREETING_REPLY)]
-    assert SLOW_ACK_REPLY not in [text for _, text in zalo.sent]
     assert persisted == []
 
 

@@ -28,7 +28,7 @@ from app.core.config import get_settings
 from app.graph import fast_lane
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY
+from app.graph.prompts import ERROR_REPLY
 from app.graph.router import route_turn, routing_instruction
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.safety import (
@@ -128,27 +128,18 @@ async def _agent_turn(
     return deps.lead.ensure(reply, lead_collection_question)
 
 
-async def _status_heartbeat(
-    zalo, chat_id: str, *, ack_text: str, settings, quote_message_id: str = ""
-) -> None:
+async def _status_heartbeat(zalo, chat_id: str, *, settings) -> None:
     """Keep the channel visibly active while a turn is processing.
 
-    Two layers (the OA channel has no functional typing indicator, so the ack
-    message is the reliable "bot is active" signal there):
-
-    1. Native typing (best-effort). Pulse ``send_chat_action("typing")`` immediately,
-       then every ``typing_heartbeat_seconds``. Real on the Bot channel; a logged
-       no-op on OA (``ZaloOASender.send_chat_action``).
-    2. Slow-case ack (the reliable OA signal). One-shot at ``slow_ack_seconds``: send
-       ``ack_text`` via ``send_message`` — works on both channels. The caller cancels
-       this task before dispatching the real answer, so the ack can never land after
-       it, and ``ack_fired`` guarantees at most one per turn.
+    Pulses ``send_chat_action("typing")`` immediately, then every
+    ``typing_heartbeat_seconds`` — a real "typing…" indicator on the Bot channel and
+    a logged no-op on OA (``ZaloOASender.send_chat_action``). The caller cancels this
+    task before dispatching the real answer so the indicator stops on send.
 
     All send failures are swallowed — status is best-effort and must never break a turn.
     """
     start = time.monotonic()
     next_typing = 0.0
-    ack_fired = False
     while True:
         elapsed = time.monotonic() - start
         if elapsed >= next_typing:
@@ -157,17 +148,6 @@ async def _status_heartbeat(
             except Exception:  # noqa: BLE001
                 pass
             next_typing = elapsed + settings.typing_heartbeat_seconds
-        if not ack_fired and elapsed >= settings.slow_ack_seconds:
-            ack_fired = True
-            try:
-                if quote_message_id:
-                    await zalo.send_message(
-                        chat_id, ack_text, quote_message_id=quote_message_id
-                    )
-                else:
-                    await zalo.send_message(chat_id, ack_text)
-            except Exception:  # noqa: BLE001
-                pass
         await asyncio.sleep(0.5)
 
 
@@ -198,8 +178,8 @@ async def _finish_terminal_reply(
     send only if still owned, and record so the per-chat mutex clears. Returns the
     TurnOutcome dict (``base_outcome`` unless the send itself failed → ``send_failed``).
 
-    The status heartbeat is cancelled first so the one-shot slow-ack can never land
-    after this terminal reply.
+    The status heartbeat is cancelled first so its typing indicator stops before
+    this terminal reply lands.
     """
     if status_task is not None:
         await _cancel_status_task(status_task)
@@ -252,18 +232,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     zalo = _zalo_for_conversation(deps, conv)
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
 
-    # Active-status heartbeat: native typing pulses + a one-shot slow-case ack at
-    # slow_ack_seconds (the reliable "bot is active" signal on OA). Cancelled before
-    # every real send so the ack never lands after the answer.
+    # Active-status heartbeat: native typing pulses while the turn processes.
+    # Cancelled before every real send so the indicator stops on the answer.
     settings = get_settings()
     status_task = asyncio.create_task(
-        _status_heartbeat(
-            zalo,
-            conv.zalo_chat_id,
-            ack_text=SLOW_ACK_REPLY,
-            settings=settings,
-            quote_message_id=state.reply_to_message_id,
-        )
+        _status_heartbeat(zalo, conv.zalo_chat_id, settings=settings)
     )
     started = _now()
     pending_msg = await svc.record_bot_pending(conv)
@@ -292,10 +265,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         outcome_label = "sent"
 
         # --- FAQ / template fast lane (zero LLM calls) ---
-        # Greetings / thanks / goodbye / help return instant tôi/bạn templates, well
-        # inside slow_ack_seconds (so no ack ever fires for them). Factual questions
-        # are never templated — they fall through here, then through the FAQ-bypass
-        # cascade below, before reaching the RAG + agent path.
+        # Greetings / thanks / goodbye / help return instant tôi/bạn templates with
+        # no LLM call. Factual questions are never templated — they fall through
+        # here, then through the FAQ-bypass cascade below, before reaching the
+        # RAG + agent path.
         fast = (
             fast_lane.match(state.user_text)
             if settings.faq_fast_lane_enabled

@@ -128,6 +128,16 @@ as candidate work items; confirm with the owner before scheduling.
   routers still raise raw `HTTPException`. Convert when those modules are
   next touched; do not mix styles within one module.
 
+### K-10. Malformed character data in some conversation messages
+- **Symptom:** the recruiter inbox can render the replacement character (`�`)
+  in message text supplied by upstream data.
+- **Scope:** the frontend intentionally renders the received message content
+  unchanged so the source issue remains observable; it must not normalize or
+  hide the character during presentation.
+- **Owner action:** trace the affected records through the Zalo ingestion and
+  storage pipeline, capture the original payload encoding, and repair data at
+  the source with a separately scoped migration or remediation plan.
+
 ---
 
 ## 4. Deferred / out of scope

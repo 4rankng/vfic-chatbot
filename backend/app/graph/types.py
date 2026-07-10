@@ -49,8 +49,8 @@ class BotRunState:
     # Carried into stage_timings so the dashboard correlates latency with queue
     # saturation without re-implementing the dead chat_turn_start log.
     queue_depth: int | None = None
-    # ``direct`` for normal webhooks; ``recovery`` for the offline reconcile
-    # adapter. Persisted in stage timings, not a public API field.
+    # ``queued`` for normal RQ turns, ``recovery`` for offline reconciliation,
+    # and ``direct`` for the retained ASGI adapter. Stored only in stage timings.
     execution_source: str = "recovery"
 
 

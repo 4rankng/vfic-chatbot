@@ -24,7 +24,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
 import { UserRound } from "lucide-react";
-import { WorkspaceIconRail } from "./WorkspaceShell";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
@@ -60,6 +59,16 @@ const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+};
+
+const getAttentionLabel = (
+  conversation: Conversation,
+  needsAttention: boolean,
+): string => {
+  if (conversation.mode === "closed") return "Đã đóng";
+  if (conversation.needs_human) return "Bot cần người";
+  if (needsAttention) return "Chờ nhân viên";
+  return conversation.mode === "bot" ? "Chatbot đang xử lý" : "Đang theo dõi";
 };
 
 // Hoisted static style objects so list rows don't allocate brand-new objects on
@@ -157,6 +166,7 @@ const ConversationListItem = memo(
 
     const priorityChip = getLeadPriorityChip(lead);
     const needsAttention = needsVisibleAttention(conversation, readIds);
+    const attentionLabel = getAttentionLabel(conversation, needsAttention);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
     const unread = readIds.has(conversation.id)
@@ -170,6 +180,8 @@ const ConversationListItem = memo(
         }`}
         onClick={() => onSelect(conversation)}
         aria-label={`Mở hội thoại với ${name}`}
+        aria-current={isActive ? "page" : undefined}
+        aria-pressed={isActive}
       >
         <span
           className="avatar round"
@@ -200,16 +212,17 @@ const ConversationListItem = memo(
           </span>
           <span className="conv-bottom">
             {subtitle && <span className="conv-preview">{subtitle}</span>}
-            {priorityChip ? (
-              <span className="conv-meta-row">
+            <span className="conv-meta-row">
+              <span className="conv-state-label">{attentionLabel}</span>
+              {priorityChip ? (
                 <span
                   className={`mini-chip priority-${priorityChip.tone}`}
                   title={priorityChip.label}
                 >
                   {priorityChip.label}
                 </span>
-              </span>
-            ) : null}
+              ) : null}
+            </span>
           </span>
         </span>
       </button>
@@ -239,7 +252,7 @@ const ConversationListPanel = ({
   onSelect: (c: Conversation) => void;
   readIds: Set<string>;
 }) => {
-  const { data: conversations, isPending } = useListContext<Conversation>();
+  const { data: conversations, isPending, error, refetch } = useListContext<Conversation>();
   const { fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfinitePaginationContext();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
@@ -371,12 +384,14 @@ const ConversationListPanel = ({
       <WorkspaceRail
         searchSlot={
           <label className="search">
+            <span className="sr-only">Tìm ứng viên hoặc số điện thoại</span>
             <svg className="icon">
               <use href="#i-search" />
             </svg>
             <input
               type="search"
               placeholder="Tìm ứng viên hoặc số điện thoại"
+              aria-label="Tìm ứng viên hoặc số điện thoại"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -392,9 +407,16 @@ const ConversationListPanel = ({
           Array.from({ length: 6 }).map((_, i) => (
             <ConversationListItemSkeleton key={i} />
           ))
+        ) : error ? (
+          <div className="empty-state" role="status">
+            <span>Không tải được danh sách hội thoại.</span>
+            <button type="button" className="list-retry" onClick={() => void refetch()}>
+              Thử lại
+            </button>
+          </div>
         ) : rows.length === 0 ? (
           <div className="empty-state" role="status">
-            Không tìm thấy hội thoại phù hợp.
+            {query ? "Không tìm thấy hội thoại phù hợp." : "Chưa có hội thoại để hiển thị."}
           </div>
         ) : (
           rows.map((c) => (
@@ -548,8 +570,7 @@ const ConversationListContent = () => {
       }`}
     >
       <InboxIcons />
-      <main className={`app ${detailOpen ? "detail-open" : ""}`} id="app">
-        <WorkspaceIconRail />
+      <div className={`app ${detailOpen ? "detail-open" : ""}`} id="app">
         <ConversationListPanel
           selectedId={selected?.id ?? null}
           onSelect={openConversation}
@@ -572,7 +593,7 @@ const ConversationListContent = () => {
         )}
 
         <div className="backdrop" onClick={backToList}></div>
-      </main>
+      </div>
     </div>
   );
 };

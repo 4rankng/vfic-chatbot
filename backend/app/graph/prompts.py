@@ -39,10 +39,3 @@ ERROR_REPLY = """Xin lỗi bạn, tôi đang gặp chút sự cố kỹ thuật.
 # voice per persona.md). Distinct from DEGRADATION_REPLY (LLM throttled / high traffic):
 # this means "I need a little more time", not "the system is overloaded".
 TIMEOUT_REPLY = """Tôi cần thêm một chút thời gian để kiểm tra thông tin chính xác cho bạn. Bạn nhắn lại giúp tôi sau ít phút nhé 🙏"""
-
-# One-shot "still working" ack sent ~1.5s into a slow turn (tôi/bạn voice per persona.md).
-# This is the reliable OA-visible "bot is active" signal — OA has no typing indicator, so a
-# short ack message is how a user on the Official Account learns the bot heard them. Only
-# fires when the real answer isn't ready by slow_ack_seconds (fast lanes cancel the status
-# task first); never sent after the real answer, and never more than once per turn.
-SLOW_ACK_REPLY = """Tôi đang kiểm tra thông tin cho bạn, đợi tôi một chút nhé ⏳"""

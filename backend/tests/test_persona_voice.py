@@ -21,7 +21,7 @@ from app.graph.fast_lane import (
     HELP_REPLY,
     THANKS_REPLY,
 )
-from app.graph.prompts import ERROR_REPLY, SLOW_ACK_REPLY, TIMEOUT_REPLY
+from app.graph.prompts import ERROR_REPLY, TIMEOUT_REPLY
 from app.graph.safety import FALLBACK_REPLY, GENERIC_FALLBACK, TECHNICAL_FALLBACK
 from app.workers.chatbot_worker import DEGRADATION_REPLY
 
@@ -30,7 +30,6 @@ from app.workers.chatbot_worker import DEGRADATION_REPLY
 STATIC_REPLIES = {
     "ERROR_REPLY": ERROR_REPLY,
     "TIMEOUT_REPLY": TIMEOUT_REPLY,
-    "SLOW_ACK_REPLY": SLOW_ACK_REPLY,
     "FALLBACK_REPLY": FALLBACK_REPLY,
     "TECHNICAL_FALLBACK": TECHNICAL_FALLBACK,
     "GENERIC_FALLBACK": GENERIC_FALLBACK,

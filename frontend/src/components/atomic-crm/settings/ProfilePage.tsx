@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { InboxIcons } from "../conversations/InboxIcons";
-import { WorkspaceIconRail } from "../conversations/WorkspaceShell";
 import { apiJson, ApiError } from "../providers/rest/api";
 import type { Profile } from "../types";
 import "../conversations/inbox.css";
@@ -108,7 +107,7 @@ export const ProfilePage = () => {
               <UserRound className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
-              <p className="ops-kicker">Account</p>
+              <p className="ops-kicker">Tài khoản</p>
               <h1>{displayName}</h1>
               <p>
                 {displayEmail ||
@@ -132,12 +131,11 @@ export const ProfilePage = () => {
   return (
     <div className="inbox-bg-container profile-workspace">
       <InboxIcons />
-      <main className="app profile-app" id="app">
-        <WorkspaceIconRail />
+      <div className="app profile-app" id="app">
         <section className="panel center-panel profile-center-panel">
           {content}
         </section>
-      </main>
+      </div>
     </div>
   );
 };
@@ -238,9 +236,7 @@ const LanguageSelector = () => {
     <div className="profile-field">
       <div className="profile-field-label-row">
         <Globe2 className="size-3.5" aria-hidden="true" />
-        <span className="profile-field-label">
-          {translate("crm.language")}
-        </span>
+        <span className="profile-field-label">{translate("crm.language")}</span>
       </div>
       <Select value={locale} onValueChange={setLocale}>
         <SelectTrigger className="profile-select-trigger">

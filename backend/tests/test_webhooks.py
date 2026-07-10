@@ -1,9 +1,10 @@
 """Webhook edge-case tests."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import hashlib
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,44 @@ class FakeRequest:
 
 
 @pytest.mark.asyncio
+async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
+    from app.api import webhooks
+
+    cfg = SimpleNamespace(bot_webhook_secret="", bot_token="bot-token")
+    settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
+    handle = AsyncMock(return_value={"status": "start_failed"})
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+
+    response = await webhooks.zalo_webhook(
+        FakeRequest(json.dumps({"message": {"text": "Xin chào"}}).encode()),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 503
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+
+
+@pytest.mark.asyncio
+async def test_oa_webhook_dispatches_turn_through_rq(monkeypatch):
+    from app.api import webhooks
+
+    cfg = SimpleNamespace(oa_secret_key="")
+    settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
+    handle = AsyncMock(return_value={"status": "start_failed"})
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+
+    response = await webhooks.zalo_oa_webhook(
+        FakeRequest(json.dumps({"event_name": "user_send_text"}).encode()),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 503
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+
+
+@pytest.mark.asyncio
 async def test_zalo_webhook_returns_400_for_malformed_json():
     from app.api.webhooks import zalo_webhook
 
@@ -26,6 +65,51 @@ async def test_zalo_webhook_returns_400_for_malformed_json():
 
     assert response.status_code == 400
     handle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_failed_rq_enqueue_releases_webhook_lock(monkeypatch):
+    import uuid
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=1,
+        mode="BOT",
+    )
+    lock_owner = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
+    service = MagicMock()
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = AsyncMock()
+    service.get = AsyncMock(return_value=conv)
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(return_value=lock_owner)
+    service.release_lock = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim",
+        AsyncMock(return_value=True),
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {
+            "message": {
+                "message_id": "msg-1",
+                "chat": {"id": "bot-user-1"},
+                "text": "Xin chào",
+            }
+        },
+        enqueue=lambda _job: False,
+    )
+
+    assert result == {"status": "start_failed", "conversation_id": str(conv.id)}
+    service.release_lock.assert_awaited_once_with(conv, lock_owner=lock_owner)
 
 
 def test_zalo_oa_signature_verifier_accepts_documented_digest():
@@ -354,3 +438,4 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
     assert len(enqueued) == 1
     assert enqueued[0]["user_text"] == "Xin chào"
     assert enqueued[0]["lock_owner"] == str(lock_owner)
+    assert enqueued[0]["execution_source"] == "queued"

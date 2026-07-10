@@ -69,8 +69,8 @@ export const vietnameseCrmMessages = {
       },
     },
     settings: {
-      name: "Settings |||| Settings",
-      forcedCaseName: "Settings",
+      name: "Cài đặt |||| Cài đặt",
+      forcedCaseName: "Cài đặt",
     },
     companies: {
       name: "Công ty |||| Công ty",
@@ -106,6 +106,12 @@ export const vietnameseCrmMessages = {
   crm: {
     navigation: {
       label: "Điều hướng",
+      overview: "Tổng quan",
+      messages: "Tin nhắn",
+      projects: "Dự án",
+      settings: "Cài đặt",
+      performance: "Hiệu suất",
+      account: "Tài khoản",
     },
     dashboard: {
       title: "Tổng quan",

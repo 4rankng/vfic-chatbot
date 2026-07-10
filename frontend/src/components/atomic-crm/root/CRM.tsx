@@ -4,7 +4,12 @@ import type {
   DashboardComponent,
   LayoutComponent,
 } from "ra-core";
-import { CustomRoutes, localStorageStore, Resource } from "ra-core";
+import {
+  CustomRoutes,
+  localStorageStore,
+  Resource,
+  usePermissions,
+} from "ra-core";
 import {
   Component,
   lazy,
@@ -27,10 +32,8 @@ import projects from "../projects";
 import personas from "../personas";
 import integrations from "../integrations";
 import { Dashboard } from "../dashboard/Dashboard";
-import { MobileDashboard } from "../dashboard/MobileDashboard";
 import { PerformancePage } from "../performance/PerformancePage";
 import { Layout } from "../layout/Layout";
-import { MobileLayout } from "../layout/MobileLayout";
 import {
   getAuthProvider as defaultAuthProviderBuilder,
   getDataProvider as defaultDataProviderBuilder,
@@ -54,7 +57,6 @@ import {
 } from "./defaultConfiguration";
 import { i18nProvider as defaulti18nProvider } from "../providers/commons/i18nProvider";
 import { StartPage } from "../login/StartPage.tsx";
-import { useIsMobile } from "@/hooks/use-mobile.ts";
 import { getAccessToken } from "../providers/rest/api";
 
 const defaultStore = localStorageStore(undefined, "CRM");
@@ -160,6 +162,14 @@ const RouteBoundary = ({ children }: { children: ReactNode }) => (
     <Suspense fallback={<RouteFallback />}>{children}</Suspense>
   </RouteErrorBoundary>
 );
+
+const AdminPerformanceRoute = () => {
+  const { permissions, isPending } = usePermissions();
+
+  if (isPending) return null;
+
+  return permissions === "admin" ? <PerformancePage /> : <Navigate to="/" replace />;
+};
 
 export type CRMProps = {
   dataProvider?: CrmDataProvider;
@@ -267,8 +277,6 @@ export const CRM = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
-  const isMobile = useIsMobile();
-
   // on login, pre-fetch the configuration to avoid a flickering
   // when accessing the app for the first time. The prefetch runs in the
   // background so it never gates the auth round-trip — for VFIC the endpoint
@@ -314,15 +322,13 @@ export const CRM = ({
     };
   }, [authProvider, dataProvider, store]);
 
-  // P0 #1: a single <Admin> is rendered regardless of the viewport so that
-  // crossing the 768px breakpoint no longer swaps the component type and
-  // unmounts the entire app. The layout + dashboard are chosen by isMobile,
-  // and the CustomRoutes union is gated per breakpoint. The hoisted
+  // A single <Admin>, layout, and dashboard component are retained across
+  // viewport changes. Responsive behavior belongs inside the shared frame,
+  // avoiding a remount of route state while crossing the 768px boundary. The hoisted
   // QueryClient is passed into react-admin's CoreAdminContext, which owns the
   // single QueryClientProvider for the app.
-  const resolvedLayout = layout ?? (isMobile ? MobileLayout : Layout);
-  const resolvedDashboard =
-    dashboard ?? (isMobile ? MobileDashboard : Dashboard);
+  const resolvedLayout = layout ?? Layout;
+  const resolvedDashboard = dashboard ?? Dashboard;
 
   if (!authGateReady) return null;
 
@@ -345,7 +351,7 @@ export const CRM = ({
           path="/hieu-suat"
           element={
             <RouteBoundary>
-              <PerformancePage />
+              <AdminPerformanceRoute />
             </RouteBoundary>
           }
         />

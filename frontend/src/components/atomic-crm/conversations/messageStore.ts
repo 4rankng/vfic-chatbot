@@ -24,6 +24,9 @@ export type ConversationMessageState = {
   isLoading: boolean;
   /** Load-more (scroll-up) page is in flight. */
   isLoadingMore: boolean;
+  /** Initial/history failures remain distinct from an empty message set. */
+  initialError: string | null;
+  historyError: string | null;
 };
 
 const emptyConv = (): ConversationMessageState => ({
@@ -32,6 +35,8 @@ const emptyConv = (): ConversationMessageState => ({
   hasMore: false,
   isLoading: true,
   isLoadingMore: false,
+  initialError: null,
+  historyError: null,
 });
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -58,6 +63,8 @@ type MessageStore = {
   setHasMore: (convId: string, value: boolean) => void;
   setLoading: (convId: string, value: boolean) => void;
   setLoadingMore: (convId: string, value: boolean) => void;
+  setInitialError: (convId: string, value: string | null) => void;
+  setHistoryError: (convId: string, value: string | null) => void;
   /** Drop a conversation's state entirely (cleanup). */
   clear: (convId: string) => void;
 };
@@ -91,6 +98,8 @@ export const useMessageStore = create<MessageStore>((set) => ({
         hasMore,
         isLoading: false,
         isLoadingMore: false,
+        initialError: null,
+        historyError: null,
       });
       return { conversations };
     }),
@@ -192,6 +201,24 @@ export const useMessageStore = create<MessageStore>((set) => ({
       return { conversations };
     }),
 
+  setInitialError: (convId, value) =>
+    set((s) => {
+      const cur = s.conversations.get(convId);
+      if (!cur || cur.initialError === value) return s;
+      const conversations = new Map(s.conversations);
+      conversations.set(convId, { ...cur, initialError: value });
+      return { conversations };
+    }),
+
+  setHistoryError: (convId, value) =>
+    set((s) => {
+      const cur = s.conversations.get(convId);
+      if (!cur || cur.historyError === value) return s;
+      const conversations = new Map(s.conversations);
+      conversations.set(convId, { ...cur, historyError: value });
+      return { conversations };
+    }),
+
   clear: (convId) =>
     set((s) => {
       if (!s.conversations.has(convId)) return s;
@@ -229,10 +256,18 @@ export const useConversationFlags = (convId: string | undefined) => {
     if (!convId) return false;
     return s.conversations.get(convId)?.hasMore ?? false;
   });
+  const initialError = useMessageStore((s) => {
+    if (!convId) return null;
+    return s.conversations.get(convId)?.initialError ?? null;
+  });
+  const historyError = useMessageStore((s) => {
+    if (!convId) return null;
+    return s.conversations.get(convId)?.historyError ?? null;
+  });
 
   return useMemo(
-    () => ({ isLoading, isLoadingMore, hasMore }),
-    [hasMore, isLoading, isLoadingMore],
+    () => ({ isLoading, isLoadingMore, hasMore, initialError, historyError }),
+    [hasMore, historyError, initialError, isLoading, isLoadingMore],
   );
 };
 

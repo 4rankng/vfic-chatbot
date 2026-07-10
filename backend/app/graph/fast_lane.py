@@ -3,8 +3,7 @@
 Wired into ``run_turn`` *before* the agent. Routes greetings / thanks / goodbye /
 help-meta messages to short, warm Vietnamese templates (tôi/bạn voice per
 ``persona.md``). This is the latency win for the bulk of OA inbound: an instant,
-human-like reply with no remote LLM hop, and (because it returns well inside
-``slow_ack_seconds``) no slow-case ack ever fires for these turns.
+human-like reply with no remote LLM hop.
 
 SCOPE — deliberately narrow, deliberately safe:
 

@@ -106,10 +106,11 @@ def enqueue_chat_run(job: dict) -> bool:
 
 
 def run_chat_turn_job(job: dict) -> None:
-    """RQ recovery entrypoint (sync). Runs the async graph turn."""
+    """RQ chat-turn entrypoint (sync). Runs the async graph turn."""
     from app.workers.async_runner import run_async
 
-    run_async(_run_job_async(job, source="recovery"))
+    source = str(job.get("execution_source") or "queued")
+    run_async(_run_job_async(job, source=source))
 
 
 def _enqueue_persist(persist_job: dict) -> None:
@@ -155,10 +156,10 @@ async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     # measured inside this worker process, so time.time() (epoch) is fine.
     job_start_epoch = time.time()
 
-    # Recovery jobs retain a queue-depth snapshot. Direct turns do not touch
+    # RQ jobs retain a queue-depth snapshot. Direct turns do not touch
     # the queue, so a missing value is meaningful telemetry.
     queue_depth: int | None = None
-    if source == "recovery":
+    if source != "direct":
         try:
             from rq import Queue
 

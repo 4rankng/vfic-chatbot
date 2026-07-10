@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRecordContext, useGetList, ShowBase } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
@@ -24,6 +24,7 @@ import {
   Handshake,
   Home,
   MapPin,
+  MoreHorizontal,
   NotepadText,
   Phone,
   UserRound,
@@ -31,6 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ConversationContextPanel } from "./ConversationContextPanel";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -190,6 +192,8 @@ export const ConversationShowContent = ({
   showWorkspacePanel?: boolean;
 }) => {
   const record = useRecordContext<Conversation>();
+  const isMobile = useIsMobile();
+  const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [activeSignalKey, setActiveSignalKey] = useState<string | null>(null);
   const leadListParams = useMemo(
@@ -253,6 +257,7 @@ export const ConversationShowContent = ({
     canHumanReply,
     setConversationMode,
     handleTakeover,
+    handleRelease,
   } = useConversationActions(record);
   const activeMode = effectiveMode ?? record?.mode ?? "bot";
   const activeModeOption = MODE_OPTIONS.find(
@@ -351,20 +356,35 @@ export const ConversationShowContent = ({
             </div>
           </div>
           <div className="header-actions">
+            {activeMode === "bot" ? (
+              <button
+                type="button"
+                className="takeover-btn takeover-btn--header"
+                onClick={handleTakeover}
+              >
+                Tiếp nhận
+              </button>
+            ) : canHumanReply ? (
+              <button
+                type="button"
+                className="takeover-btn takeover-btn--header"
+                onClick={handleRelease}
+              >
+                Trả lại Chatbot
+              </button>
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   className={`mode-menu-trigger ${activeMode}`}
-                  aria-label="Chọn chế độ trả lời"
-                  title="Chọn chế độ trả lời"
+                  aria-label="Tùy chọn chế độ trả lời"
+                  title="Tùy chọn chế độ trả lời"
                   disabled={activeMode === "closed"}
                 >
                   <ActiveModeIcon className="icon" />
-                  <span>{activeModeOption?.label ?? "Closed"}</span>
-                  <svg className="icon mode-menu-chevron">
-                    <use href="#i-chevron" />
-                  </svg>
+                  <span className="sr-only">Tùy chọn</span>
+                  <MoreHorizontal className="icon" aria-hidden="true" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -398,6 +418,7 @@ export const ConversationShowContent = ({
             {showWorkspacePanel && (
               <button
                 type="button"
+                ref={contextTriggerRef}
                 className={`profile-info-btn context-info-btn ${isContextOpen ? "active" : ""}`}
                 onClick={() => setIsContextOpen(true)}
                 aria-label="Mở ngữ cảnh hội thoại"
@@ -407,9 +428,9 @@ export const ConversationShowContent = ({
               </button>
             )}
             {activeMode === "closed" && (
-              <span className="chat-mode-chip" title="Hội thoại đã đóng">
+              <span className="chat-mode-chip" title="Hội thoại đã đóng; không có thao tác tiếp nhận">
                 <Bot className="icon" />
-                <span>Đã đóng</span>
+                <span>Hội thoại đã đóng</span>
               </span>
             )}
           </div>
@@ -425,7 +446,7 @@ export const ConversationShowContent = ({
           showComposerTakeoverNotice={false}
         />
 
-        {showWorkspacePanel && isContextOpen && (
+        {showWorkspacePanel && isContextOpen && !isMobile && (
           <button
             type="button"
             className="context-overlay-scrim"
@@ -439,6 +460,10 @@ export const ConversationShowContent = ({
           lead={lead}
           open={isContextOpen}
           onClose={() => setIsContextOpen(false)}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            contextTriggerRef.current?.focus();
+          }}
         />
       )}
     </>

@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { Lead } from "../types";
 import {
   BusFront,
@@ -41,11 +43,14 @@ export const ConversationContextPanel = ({
   lead,
   open,
   onClose,
+  onCloseAutoFocus,
 }: {
   lead?: Lead;
   open: boolean;
   onClose: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) => {
+  const isMobile = useIsMobile();
   const candidateInfoItems = useMemo<CandidateInfoItem[]>(() => {
     const notes = lead?.notes;
     const dateOfBirth = lead?.birth_year
@@ -174,13 +179,61 @@ export const ConversationContextPanel = ({
     .filter((item) => !item.complete)
     .slice(0, 3);
 
+  const content = (
+    <CandidateContextBody
+      lead={lead}
+      candidateInfoItems={candidateInfoItems}
+      completedInfoCount={completedInfoCount}
+      completionPercent={completionPercent}
+      missingInfoItems={missingInfoItems}
+      onClose={onClose}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+        <SheetContent
+          side="right"
+          className="inbox-bg-container p-0 gap-0 sm:max-w-sm"
+          aria-describedby={undefined}
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
+          <SheetTitle className="sr-only">Thông tin ứng viên</SheetTitle>
+          {content}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   return (
     <aside
       className={`panel right-panel ${open ? "context-open" : ""}`}
       aria-label="Thông tin ứng viên"
       aria-hidden={!open}
     >
-      <header className="profile-header">
+      {content}
+    </aside>
+  );
+};
+
+const CandidateContextBody = ({
+  lead,
+  candidateInfoItems,
+  completedInfoCount,
+  completionPercent,
+  missingInfoItems,
+  onClose,
+}: {
+  lead?: Lead;
+  candidateInfoItems: CandidateInfoItem[];
+  completedInfoCount: number;
+  completionPercent: number;
+  missingInfoItems: CandidateInfoItem[];
+  onClose: () => void;
+}) => (
+  <>
+    <header className="profile-header">
         <div className="profile-title">
           <UserRound className="icon" aria-hidden="true" />
           <span className="profile-title-copy">
@@ -198,9 +251,9 @@ export const ConversationContextPanel = ({
             ×
           </button>
         </div>
-      </header>
+    </header>
 
-      <div className="profile-scroll">
+    <div className="profile-scroll">
         <section className="context-overview candidate-progress-card">
           <div className="candidate-progress-top">
             <span className="context-overview-kicker">
@@ -243,10 +296,9 @@ export const ConversationContextPanel = ({
             ))}
           </div>
         </section>
-      </div>
-    </aside>
-  );
-};
+    </div>
+  </>
+);
 
 const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
   const Icon = item.Icon;

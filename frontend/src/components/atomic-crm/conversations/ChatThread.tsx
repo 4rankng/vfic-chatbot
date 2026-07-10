@@ -237,9 +237,9 @@ export const ChatThread = ({
   // Message state lives in the normalized store (persists across conversation
   // switches). The hook drives data INTO the store; we read arrays out here.
   const messages = useConversationMessages(conversationId);
-  const { isLoading, isLoadingMore, hasMore } =
+  const { isLoading, isLoadingMore, hasMore, initialError, historyError } =
     useConversationFlags(conversationId);
-  const { loadMore, insertOptimistic, markOptimisticFailed } =
+  const { loadMore, insertOptimistic, markOptimisticFailed, retryInitial, retryHistory } =
     useConversationRealtime(conversationId);
   const dataProvider = useDataProvider<CrmDataProvider>();
   const { identity } = useGetIdentity();
@@ -476,6 +476,9 @@ export const ChatThread = ({
     <>
       <div
         className="chat-scroll-shell"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
         aria-label="Luồng tin nhắn"
         aria-busy={isLoading}
         ref={(el) => {
@@ -507,7 +510,20 @@ export const ChatThread = ({
               </div>
             </div>
           )}
-          {messages.length === 0 && !isLoading ? (
+          {historyError && messages.length > 0 ? (
+            <div className="chat-history-error" role="status">
+              <span>Không tải được tin nhắn cũ hơn.</span>
+              <button type="button" onClick={() => retryHistory(messages[0].id)}>
+                Thử lại
+              </button>
+            </div>
+          ) : null}
+          {messages.length === 0 && initialError ? (
+            <div className="chat-empty chat-load-error" role="status">
+              <span>Không thể tải tin nhắn. Nội dung chưa được xác nhận là trống.</span>
+              <button type="button" onClick={retryInitial}>Thử lại</button>
+            </div>
+          ) : messages.length === 0 && !isLoading ? (
             <div className="chat-empty" role="status">
               <span>Chưa có tin nhắn nào. Bắt đầu trò chuyện!</span>
             </div>

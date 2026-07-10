@@ -8,7 +8,7 @@
 // Rocket.Chat pattern: store = Map<id, msg>, sorted array derived at the
 // selector boundary, optimistic temps tracked for sweep-on-echo.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message } from "../types";
 import { chatRepository } from "./chatRepository";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
@@ -99,12 +99,15 @@ export const useConversationRealtime = (conversationId?: string) => {
   const patchMessage = useMessageStore((s) => s.patch);
   const setHasMore = useMessageStore((s) => s.setHasMore);
   const setLoadingMore = useMessageStore((s) => s.setLoadingMore);
+  const setInitialError = useMessageStore((s) => s.setInitialError);
+  const setHistoryError = useMessageStore((s) => s.setHistoryError);
   const messages = useConversationMessages(conversationId);
   const flags = useConversationFlags(conversationId);
   const isFetchingRef = useRef(false);
   const activeConversationRef = useRef<string | undefined>(conversationId);
   const requestSeqRef = useRef(0);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
+  const [initialRetry, setInitialRetry] = useState(0);
 
   // Initial fetch + subscribe on conversation open/switch.
   useEffect(() => {
@@ -119,6 +122,8 @@ export const useConversationRealtime = (conversationId?: string) => {
     if (!activeConversationId) {
       return;
     }
+
+    setInitialError(activeConversationId, null);
 
     // Reset the conversation's store state on open. If messages are already
     // cached (e.g. returning from A→B→A), setMessages below will refresh them;
@@ -173,13 +178,22 @@ export const useConversationRealtime = (conversationId?: string) => {
               )
             : chronological;
         setMessages(activeConversationId, merged, apiHasMore);
-      } catch {
+      } catch (error: unknown) {
         if (
           !cancelled &&
           requestSeqRef.current === requestSeq &&
           activeConversationRef.current === activeConversationId
         ) {
-          setMessages(activeConversationId, [], false);
+          const current = useMessageStore
+            .getState()
+            .conversations.get(activeConversationId);
+          if (current) {
+            useMessageStore.getState().setLoading(activeConversationId, false);
+          }
+          setInitialError(
+            activeConversationId,
+            error instanceof Error ? error.message : "Không tải được tin nhắn.",
+          );
         }
       }
     };
@@ -239,7 +253,9 @@ export const useConversationRealtime = (conversationId?: string) => {
     removeMessage,
     resetMessages,
     setMessages,
+    setInitialError,
     upsertMessages,
+    initialRetry,
   ]);
 
   // Reconnect gap-fill (Rocket.Chat useLoadMissedMessages pattern): on Socket.IO
@@ -325,15 +341,19 @@ export const useConversationRealtime = (conversationId?: string) => {
         }
         const older = keepConversationMessages(loadedOlder, activeConversationId);
         setHasMore(activeConversationId, apiHasMore);
+        setHistoryError(activeConversationId, null);
         if (older.length > 0) {
           upsertMessages(activeConversationId, older);
         }
-      } catch {
+      } catch (error: unknown) {
         if (
-          requestSeqRef.current === requestSeq ||
+          requestSeqRef.current === requestSeq &&
           activeConversationRef.current === activeConversationId
         ) {
-          setHasMore(activeConversationId, false);
+          setHistoryError(
+            activeConversationId,
+            error instanceof Error ? error.message : "Không tải được tin nhắn cũ.",
+          );
         }
       } finally {
         if (
@@ -348,7 +368,7 @@ export const useConversationRealtime = (conversationId?: string) => {
         }
       }
     },
-    [conversationId, setHasMore, setLoadingMore, upsertMessages],
+    [conversationId, setHasMore, setHistoryError, setLoadingMore, upsertMessages],
   );
 
   // Insert an optimistic temp message. Returns the temp id.
@@ -402,5 +422,7 @@ export const useConversationRealtime = (conversationId?: string) => {
     loadMore,
     insertOptimistic,
     markOptimisticFailed,
+    retryInitial: () => setInitialRetry((value) => value + 1),
+    retryHistory: (earliestId: string) => loadMore(earliestId),
   };
 };

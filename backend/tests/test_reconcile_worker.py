@@ -180,6 +180,7 @@ async def test_happy_path_enqueues_recovery(mock_session_cls, mock_enqueue):
     assert call_kwargs["conversation_id"] == str(conv.id)
     assert call_kwargs["version_at_start"] == conv.version
     assert call_kwargs["user_text"] == "xin chào"
+    assert call_kwargs["execution_source"] == "recovery"
     assert uuid.UUID(call_kwargs["lock_owner"])
     assert mock_redis.incrby.call_count >= 1
     mock_redis.set.assert_any_call("reconcile_unanswered_gauge", "1")
