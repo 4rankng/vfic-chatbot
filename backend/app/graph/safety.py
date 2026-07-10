@@ -32,9 +32,15 @@ class SafetyVerdict(TypedDict):
 FALLBACK_REPLY = "Xin lỗi, hiện tôi chưa tạo được phản hồi. Bạn vui lòng nhắn lại giúp tôi nhé."
 
 _RISK_RE = re.compile(
-    r"(```|<\/?minimax:|\b(JSON|workflow|node|prompt|regex|sql|database|debug|script|"
-    r"function|api|javascript|python|code)\b|\$\(|\{\{|\}\}|\"safe_to_send\"|"
-    r"\"final_answer\"|tool_call|logic nội bộ|tên node|biến)",
+    # Structural markers are high-precision signals of leaked reasoning / tool
+    # output — a normal recruitment reply never contains these.
+    r"(```|<\/?minimax:|\$\(|\{\{|\}\}|"
+    # JSON-shape leakage from the safety judge protocol itself.
+    r"\"safe_to_send\"|\"final_answer\"|tool_call|"
+    # Tagged leakage phrases (Vietnamese) — matched as phrases, not bare words,
+    # so natural prose mentioning "code"/"api" in a job description does not
+    # falsely escalate to the 10s+ LLM safety judge.
+    r"logic nội bộ|tên node|biến hệ thống|hướng dẫn hệ thống|lời nhắc hệ thống)",
     re.IGNORECASE,
 )
 

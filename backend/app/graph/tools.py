@@ -329,6 +329,14 @@ async def recommend_projects(
 async def search_bus_timetable(
     retrieval: RetrievalPort, company: str, question: str, limit: int = 50
 ) -> str:
+    s = get_settings()
+    # Bus timetables change rarely; cache the formatted result for the TTL so
+    # repeated timetable questions (a common pattern) skip the DB query.
+    cache_key = f"rag:bus_timetable:{_cache_digest(company, question, limit)}"
+    if s.rag_cache_enabled:
+        cached = await cache_get_json(cache_key)
+        if isinstance(cached, str):
+            return cached
     repo = retrieval
     rows = await repo.search_bus_timetable(company, question, limit)
     if not rows and company.strip():
@@ -358,7 +366,10 @@ async def search_bus_timetable(
             f"- {company_name} • Tuyến {route} ({shift}/{direction}) đầy đủ điểm dừng: "
             + "; ".join(parts)
         )
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    if s.rag_cache_enabled:
+        await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
+    return result
 
 
 async def get_product_features(retrieval: RetrievalPort, project_slug: str) -> str:
@@ -368,6 +379,15 @@ async def get_product_features(retrieval: RetrievalPort, project_slug: str) -> s
     (structured, non-RAG data reaching the agent). The agent is told to advise ONLY from
     this and to answer "chưa ghi rõ" for missing features rather than invent.
     """
+    s = get_settings()
+    # Product features change only when jobs are re-imported; cache the formatted
+    # result keyed by the knowledge version so FAQ/project edits invalidate it.
+    knowledge_version = await cache_version("knowledge") if s.rag_cache_enabled else "0"
+    cache_key = f"rag:product_features:{_cache_digest(project_slug, knowledge_version)}"
+    if s.rag_cache_enabled:
+        cached = await cache_get_json(cache_key)
+        if isinstance(cached, str):
+            return cached
     repo = retrieval
     pid = await repo.project_id_by_slug(project_slug)
     if pid is None:
@@ -391,7 +411,10 @@ async def get_product_features(retrieval: RetrievalPort, project_slug: str) -> s
         "QUY TẮC: chỉ tư vấn dựa trên dữ liệu trên. Với mục [CHƯA RÕ], "
         "trả lời 'tin tuyển dụng chưa ghi rõ', tuyệt đối không bịa."
     )
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    if s.rag_cache_enabled:
+        await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
+    return result
 
 
 async def recommend_jobs(
@@ -410,6 +433,15 @@ async def recommend_jobs(
     """
     s = get_settings()
     k = max(1, min(int(top_k or s.rec_top_k), 10))
+    # Cache per-lead: results depend on the candidate's profile, which is tracked
+    # by the memory:{chat_id} version (bumped on profile/memory writes). The TTL
+    # is a safety net; the version key keeps recommendations fresh after updates.
+    memory_version = await cache_version(f"memory:{chat_id}") if s.rag_cache_enabled else "0"
+    cache_key = f"rag:recommend_jobs:{_cache_digest(chat_id, k, province, memory_version)}"
+    if s.rag_cache_enabled:
+        cached = await cache_get_json(cache_key)
+        if isinstance(cached, str):
+            return cached
     try:
         scored = await retrieval.match_jobs_for_lead(chat_id, top_k=k, province=province)
     except Exception:
@@ -437,7 +469,10 @@ async def recommend_jobs(
         "nếu cần chi tiết lương/ca/KTX thì gọi get_product_features(project_slug). "
         "Tuyệt đối không bịa thông tin việc làm."
     )
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    if s.rag_cache_enabled:
+        await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
+    return result
 
 
 TOOLS_REGISTRY = {

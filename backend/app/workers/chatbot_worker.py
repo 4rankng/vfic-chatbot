@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 import uuid
@@ -85,6 +86,35 @@ async def _renew_direct_lock(job: dict) -> None:
             return
 
 
+async def _bridge_typing(chat_id: str, bot_token: str | None = None) -> None:
+    """Pulse the Zalo typing indicator until run_turn's heartbeat takes over.
+
+    The webhook fires a one-shot typing ping that expires after ~3-5s, and the
+    sustained ``_status_heartbeat`` only starts inside ``run_turn`` — after
+    ``build_deps``. This bridge closes that gap so the indicator never vanishes
+    during the preamble. It self-limits to a few pulses: once ``run_turn``'s
+    heartbeat is running it is redundant, and the caller cancels it before send.
+    All failures are swallowed (typing is best-effort).
+
+    ``bot_token`` is the live DB-resolved token carried via the job dict so the
+    pulses work in prod where the env ``ZALO_BOT_TOKEN`` is stale.
+    """
+    from app.core.config import get_settings
+
+    interval = get_settings().typing_heartbeat_seconds
+    for _ in range(4):  # ~14s max — enough to cover any realistic preamble
+        try:
+            from app.services.webhook import _fire_typing
+
+            await _fire_typing(chat_id, bot_token)
+        except Exception:  # noqa: BLE001
+            return
+        await asyncio.sleep(interval)
+
+
+
+
+
 def enqueue_chat_run(job: dict) -> bool:
     """Enqueue a bot turn onto the webhook_high RQ queue.
 
@@ -111,6 +141,38 @@ def run_chat_turn_job(job: dict) -> None:
 
     source = str(job.get("execution_source") or "queued")
     run_async(_run_job_async(job, source=source))
+
+
+def preload_imports() -> None:
+    """Import the heavy graph/LLM deps once in the parent worker process.
+
+    RQ forks a child process (``os.fork``) for every job via
+    ``Worker.fork_work_horse``. Without preloading, each forked child re-imports
+    langchain/openai/google + the graph layer from scratch — a ~5-7s cost that
+    dominated the per-turn preamble (measured ``preamble_ms`` avg 6.1s).
+
+    Importing these modules in the parent *before* ``w.work()`` lets the forked
+    child inherit them via copy-on-write, collapsing the preamble to <0.5s.
+    Call this once from ``run_worker.main`` before entering the RQ work loop.
+    """
+    import time as _time  # noqa: F401  — used for the startup log below
+
+    t0 = _time.monotonic()
+    # Core async + DB plumbing (cheap, but keeps the loop/engine singletons warm)
+    import app.workers.async_runner  # noqa: F401
+    import app.workers._db  # noqa: F401
+
+    # Heavy graph + LLM stack — these are the real import cost on a cold process.
+    import app.graph.factories  # noqa: F401  — pulls build_deps + all graph deps
+    import app.graph.runner  # noqa: F401
+    import app.graph.clients  # noqa: F401  — pulls langchain_openai, httpx
+    import app.graph.tools  # noqa: F401
+    import app.graph.context  # noqa: F401
+    # Touch the LLM client constructors so their langchain imports are realized.
+    from app.graph.clients import MiniMaxAgent, MiniMaxSafety  # noqa: F401
+
+    elapsed = _time.monotonic() - t0
+    logger.info("worker preload_imports completed in %.1fs", elapsed)
 
 
 def _enqueue_persist(persist_job: dict) -> None:
@@ -189,10 +251,24 @@ async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     heartbeat_task = (
         asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
     )
+    # Bridge the Bot typing indicator across the preamble. The webhook's one-shot
+    # typing expires after ~3-5s; without this, the indicator vanishes during
+    # build_deps and the user perceives a long "no status" gap. The bridge pulses
+    # until run_turn's own _status_heartbeat takes over, then is cancelled. No-op
+    # for OA (no typing API) and for jobs that predate zalo_chat_id.
+    zalo_channel = str(job.get("zalo_channel") or "")
+    bridge_task: asyncio.Task[None] | None = None
+    if zalo_channel == "bot" and job.get("zalo_chat_id"):
+        bridge_task = asyncio.create_task(
+            _bridge_typing(job["zalo_chat_id"], job.get("zalo_bot_token"))
+        )
     try:
         async with worker_session() as db:
             deps = await build_deps(db, session_factory=worker_session_factory())
             deps.persist = _enqueue_persist  # wire candidate extraction on SENT
+            # build_deps is done — run_turn's heartbeat will take over now.
+            if bridge_task is not None:
+                bridge_task.cancel()
             started_at = _now()
             try:
                 await run_turn(state, deps)
@@ -262,3 +338,7 @@ async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
                 pass
             except Exception:  # noqa: BLE001
                 logger.warning("direct chat turn lease heartbeat failed", exc_info=True)
+        if bridge_task is not None:
+            bridge_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await bridge_task

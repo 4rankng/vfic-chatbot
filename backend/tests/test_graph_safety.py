@@ -29,8 +29,19 @@ def test_fast_safety_strips_markdown_and_flags_code():
 
 
 def test_fast_safety_flags_internal_terms():
-    out = fast_safety_filter("Tôi sẽ chạy workflow và gọi api database")
+    # Structural leakage markers (JSON protocol keys, template injection, code
+    # fences) still escalate to the LLM safety judge.
+    out = fast_safety_filter('tool_call: {"safe_to_send": false, "final_answer": "x"}')
     assert out["needs_llm_safety"] is True
+
+
+def test_fast_safety_does_not_flag_tech_words_in_prose():
+    # Bare tech words (code/api/database/workflow) in natural prose must NOT
+    # escalate to the 10s+ LLM safety judge — they appear legitimately in job
+    # descriptions ("cần biết SQL", "làm việc với database", "viết code").
+    out = fast_safety_filter("Công việc yêu cầu bạn biết code, gọi api và dùng database.")
+    assert out["needs_llm_safety"] is False
+    assert out["safe_to_send"] is True
 
 
 def test_fast_safety_too_long_flagged():

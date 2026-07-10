@@ -31,6 +31,7 @@ T = TypeVar("T")
 # on the matching write path flips these, so the next read misses and re-reads.
 NS_INTEGRATION_MINIMAX = "integration_minimax"
 NS_INTEGRATION_OPENROUTER = "integration_openrouter"
+NS_INTEGRATION_ZALO = "integration_zalo"
 NS_PREAMBLE = "preamble"
 
 # Integration settings change only via the admin UI; 5 min is a safety net for
@@ -79,6 +80,16 @@ async def cached_openrouter_config(loader: Callable[[], Awaitable[dict]]) -> dic
     return await cached_value(
         key_prefix="preamble:openrouter",
         namespace=NS_INTEGRATION_OPENROUTER,
+        ttl_seconds=_INTEGRATION_TTL_SECONDS,
+        loader=loader,
+    )
+
+
+async def cached_zalo_config(loader: Callable[[], Awaitable[dict]]) -> dict:
+    """Cache the zalo runtime config dict (keyed by the zalo namespace)."""
+    return await cached_value(
+        key_prefix="preamble:zalo",
+        namespace=NS_INTEGRATION_ZALO,
         ttl_seconds=_INTEGRATION_TTL_SECONDS,
         loader=loader,
     )

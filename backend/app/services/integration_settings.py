@@ -24,8 +24,10 @@ from app.core.cache import bump_cache_version
 from app.core.preamble_cache import (
     NS_INTEGRATION_MINIMAX,
     NS_INTEGRATION_OPENROUTER,
+    NS_INTEGRATION_ZALO,
     cached_minimax_config,
     cached_openrouter_config,
+    cached_zalo_config,
 )
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
@@ -184,21 +186,25 @@ class IntegrationSettingsService:
         return values
 
     async def resolve_zalo(self) -> ZaloRuntimeConfig:
-        stored = await self._stored_values(ZALO_SETTING_KEYS)
-        return ZaloRuntimeConfig(
-            bot_token=stored.get(ZALO_BOT_TOKEN) or self.settings.zalo_bot_token,
-            bot_webhook_secret=(
-                stored.get(ZALO_BOT_WEBHOOK_SECRET) or self.settings.zalo_bot_webhook_secret
-            ),
-            oa_app_id=stored.get(ZALO_OA_APP_ID) or self.settings.zalo_oa_app_id,
-            oa_secret_key=stored.get(ZALO_OA_SECRET_KEY) or self.settings.zalo_oa_secret_key,
-            oa_access_token=(
-                stored.get(ZALO_OA_ACCESS_TOKEN) or self.settings.zalo_oa_access_token
-            ),
-            oa_refresh_token=(
-                stored.get(ZALO_OA_REFRESH_TOKEN) or self.settings.zalo_oa_refresh_token
-            ),
-        )
+        async def _load() -> dict:
+            stored = await self._stored_values(ZALO_SETTING_KEYS)
+            return ZaloRuntimeConfig(
+                bot_token=stored.get(ZALO_BOT_TOKEN) or self.settings.zalo_bot_token,
+                bot_webhook_secret=(
+                    stored.get(ZALO_BOT_WEBHOOK_SECRET) or self.settings.zalo_bot_webhook_secret
+                ),
+                oa_app_id=stored.get(ZALO_OA_APP_ID) or self.settings.zalo_oa_app_id,
+                oa_secret_key=stored.get(ZALO_OA_SECRET_KEY) or self.settings.zalo_oa_secret_key,
+                oa_access_token=(
+                    stored.get(ZALO_OA_ACCESS_TOKEN) or self.settings.zalo_oa_access_token
+                ),
+                oa_refresh_token=(
+                    stored.get(ZALO_OA_REFRESH_TOKEN) or self.settings.zalo_oa_refresh_token
+                ),
+            ).__dict__
+
+        cached = await cached_zalo_config(_load)
+        return ZaloRuntimeConfig(**cached)
 
     async def admin_view(self) -> dict:
         # Local import so tests can monkeypatch read_oa_signature_health.
@@ -382,6 +388,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
+            await bump_cache_version(NS_INTEGRATION_ZALO)
         return changed
 
     async def refresh_oa_access_token(self) -> str | None:
@@ -440,6 +447,7 @@ class IntegrationSettingsService:
                 payload={"rotated_refresh_token": bool(data.get("refresh_token"))},
             )
             await self.db.commit()
+            await bump_cache_version(NS_INTEGRATION_ZALO)
             return new_access
         finally:
             await redis.delete(lock_key)

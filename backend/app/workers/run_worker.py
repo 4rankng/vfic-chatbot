@@ -22,6 +22,18 @@ def main(queues: list[str]) -> None:
 
     conn = get_redis_sync()
     w = Worker(queues, connection=conn)
+
+    # Preload heavy imports (langchain/openai/graph layer) in the parent process
+    # BEFORE entering the work loop. RQ forks a child per job (os.fork); the
+    # child inherits these already-imported modules via copy-on-write, avoiding
+    # a ~5-7s re-import on every turn. See chatbot_worker.preload_imports.
+    try:
+        from app.workers.chatbot_worker import preload_imports
+
+        preload_imports()
+    except Exception:  # noqa: BLE001 — preload is an optimization, never fatal
+        print("WARNING: worker preload_imports failed; jobs will run with cold imports", file=sys.stderr)
+
     # Requeue any jobs stuck in StartedJobRegistry from a prior hard kill
     # (OOM, SIGKILL, docker --force-recreate).  This is the standard RQ
     # recovery primitive and is idempotent (no-op if nothing is stale).

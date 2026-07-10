@@ -236,14 +236,16 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         ):
             return {"outcome": "suppressed", "reason": "lock_owner_lost"}
     zalo = _zalo_for_conversation(deps, conv)
-    recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
 
     # Active-status heartbeat: native typing pulses while the turn processes.
-    # Cancelled before every real send so the indicator stops on the answer.
+    # Started right after the sender is resolved (before last_messages / pending)
+    # so the indicator appears as early as possible. Cancelled before every real
+    # send so the indicator stops on the answer.
     settings = get_settings()
     status_task = asyncio.create_task(
         _status_heartbeat(zalo, conv.zalo_chat_id, settings=settings)
     )
+    recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
     started = _now()
     pending_msg = await svc.record_bot_pending(conv)
     state.pending_message_id = pending_msg.id

@@ -155,6 +155,14 @@ class ZaloWebhookService:
             # Epoch anchor (not monotonic) so the RQ worker can compute remaining
             # wall-clock budget across the process boundary. See BotRunState.
             "received_at_epoch": time.time(),
+            # Carried so the worker can re-fire the Bot typing indicator on pickup
+            # (the webhook's one-shot expires after ~5s; this bridges the gap
+            # until run_turn's heartbeat starts). No-op for OA. The live DB-resolved
+            # token is carried so the bridge typing works even when the env
+            # ZALO_BOT_TOKEN is stale (the _fire_typing env fallback 401s in prod).
+            "zalo_chat_id": norm.zalo_chat_id,
+            "zalo_channel": norm.zalo_channel,
+            "zalo_bot_token": bot_token,
         }
         result = enqueue(job)
         if asyncio.iscoroutine(result):
