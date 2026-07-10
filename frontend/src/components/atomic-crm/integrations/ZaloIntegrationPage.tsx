@@ -533,14 +533,14 @@ const ZaloOaSignatureHealthBadge = ({
   }
   if (health.last_status === "verified") {
     return (
-      <p className="text-sm font-medium text-emerald-600">
+      <p className="text-sm font-medium text-[var(--success)]">
         ✅ Chữ ký webhook hợp lệ — cập nhật{" "}
         {formatRelativeEpoch(health.last_ts)}.
       </p>
     );
   }
   return (
-    <p className="text-sm font-medium text-red-600">
+    <p className="text-sm font-medium text-[var(--destructive)]">
       ❌ Chữ ký webhook bị từ chối — OA Secret Key có thể sai
       {health.consec_failures ? ` (×${health.consec_failures})` : ""}. Cập nhật{" "}
       {formatRelativeEpoch(health.last_mismatch_ts ?? health.last_ts)}.
@@ -660,8 +660,8 @@ const ZaloOaSignatureVerifyPanel = ({
             <p
               className={
                 result.verified
-                  ? "text-sm font-medium text-emerald-600"
-                  : "text-sm font-medium text-red-600"
+                  ? "text-sm font-medium text-[var(--success)]"
+                  : "text-sm font-medium text-[var(--destructive)]"
               }
             >
               {result.verified ? "✅" : "❌"} {result.detail}

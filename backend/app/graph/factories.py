@@ -204,7 +204,6 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
 
     try:
         primary = None
-        fallback = None
         if mm_fast and minimax_config.enabled and minimax_config.api_key:
             primary = _minimax_chat(
                 mm_fast,

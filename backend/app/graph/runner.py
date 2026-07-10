@@ -128,7 +128,10 @@ async def _agent_turn(
         lead_collection_instruction=lead_collection_instruction,
         route_hint=routing_instruction(route),
     )
-    llm_t0 = time.monotonic()
+    # LLM stage timing is captured inside ``MiniMaxAgent.agent`` (clients.py) as
+    # the split ``llm_queue_ms`` (semaphore wait) + ``llm_model_ms`` (inference)
+    # pair, written directly into the shared ``timings`` dict. No external timer
+    # here — wrapping the agent call would double-count the semaphore wait.
     reply = await deps.agent.agent(
         contextual_user_text,
         system=system,
@@ -140,8 +143,6 @@ async def _agent_turn(
         lookup_query=user_text,
         metrics=timings,
     )
-    if timings is not None:
-        timings["llm_ms"] = timings.get("llm_ms", 0) + int(round((time.monotonic() - llm_t0) * 1000))
     return deps.lead.ensure(reply, lead_collection_question)
 
 

@@ -1,17 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import { type PerfMetrics, usePerformanceStats } from "./usePerformanceStats";
+import {
+  type PerfMetrics,
+  type PerfSlowTurn,
+  type PerfTrendBucket,
+  usePerformanceStats,
+} from "./usePerformanceStats";
 import "./performance.css";
 
 const STAGE_LABELS: Record<string, string> = {
   webhook_to_pickup: "Webhook → nhận việc",
   preamble: "Khởi tạo",
   lead: "Lấy hồ sơ ứng viên",
-  llm: "LLM / RAG",
+  llm_queue: "LLM — chờ slot",
+  llm_model: "LLM — xử lý model",
   safety: "Kiểm duyệt an toàn",
   send: "Gửi Zalo",
   total: "Xử lý sau khởi tạo",
@@ -27,7 +33,8 @@ const STAGE_ORDER = [
   "webhook_to_pickup",
   "preamble",
   "lead",
-  "llm",
+  "llm_queue",
+  "llm_model",
   "safety",
   "send",
   "total",
@@ -97,6 +104,206 @@ const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
   );
 };
 
+/**
+ * CSS-only trend chart (no charting library in package.json).
+ * Each bucket is one vertical bar; height ∝ p95 latency. Error buckets get the
+ * destructive color so a spike in failures is visible at a glance.
+ */
+const TrendChart = ({ trend }: { trend: PerfTrendBucket[] }) => {
+  const maxP95 = Math.max(1, ...trend.map((b) => b.p95_ms ?? 0));
+  const totalErrors = trend.reduce((sum, b) => sum + b.errors, 0);
+
+  return (
+    <section className="performance-panel">
+      <h2>Xu hướng độ trễ</h2>
+      <p className="performance-panel-intro">
+        Mỗi cột là 5 phút (p95). Cột đỏ có lượt lỗi. Tổng{" "}
+        {totalErrors} lượt lỗi trong khoảng đã chọn.
+      </p>
+      {trend.length === 0 ? (
+        <p className="performance-empty">Chưa có dữ liệu xu hướng.</p>
+      ) : (
+        <div
+          className="performance-trend"
+          role="img"
+          aria-label="Xu hướng độ trễ p95 theo từng 5 phút"
+        >
+          {trend.map((b, i) => {
+            const heightPct = Math.max(
+              2,
+              ((b.p95_ms ?? 0) / maxP95) * 100,
+            );
+            const hasError = b.errors > 0;
+            const tooltip = `${b.bucket ?? "?"} · p95 ${fmtMs(b.p95_ms)} · ${b.turns} lượt · ${b.errors} lỗi`;
+            return (
+              <div
+                className={`performance-trend-bar${hasError ? " is-error" : ""}`}
+                key={`${b.bucket ?? i}`}
+                style={{ height: `${heightPct}%` }}
+                title={tooltip}
+              />
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+};
+
+const TurnBadges = ({ turn }: { turn: PerfSlowTurn }) => (
+  <div className="performance-badges">
+    {turn.degraded ? (
+      <span className="performance-badge is-destructive">Suy giảm</span>
+    ) : null}
+    {turn.retried_429 ? (
+      <span className="performance-badge is-warning">Retry 429</span>
+    ) : null}
+    {turn.used_fallback ? (
+      <span className="performance-badge is-warning">Fallback</span>
+    ) : null}
+  </div>
+);
+
+const TurnDetail = ({ turn }: { turn: PerfSlowTurn }) => (
+  <div className="performance-row-detail">
+    <div>
+      <strong>Lượt gọi LLM (model ms)</strong>
+      <ul>
+        {turn.llm_call_ms?.length
+          ? turn.llm_call_ms.map((ms, i) => (
+              <li key={i}>
+                Lần {i + 1}: <code>{ms} ms</code>
+              </li>
+            ))
+          : null}
+      </ul>
+    </div>
+    <div>
+      <strong>Chi tiết tool</strong>
+      <dl>
+        {turn.tool_breakdown && Object.keys(turn.tool_breakdown).length > 0
+          ? Object.entries(turn.tool_breakdown).map(([name, ms]) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd>{ms} ms</dd>
+              </div>
+            ))
+          : null}
+      </dl>
+    </div>
+    <div>
+      <strong>Token</strong>
+      <p>
+        Prompt: {turn.prompt_tokens ?? "—"} · Completion:{" "}
+        {turn.completion_tokens ?? "—"} · Cached: {turn.cached_tokens ?? "—"}
+      </p>
+    </div>
+  </div>
+);
+
+const SlowestTurnsTable = ({ slow_turns }: { slow_turns: PerfSlowTurn[] }) => {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  return (
+    <section className="performance-panel">
+      <h2>Các lượt chậm nhất</h2>
+      {slow_turns.length === 0 ? (
+        <p className="performance-empty">
+          Chưa có lượt nào được ghi nhận trong khoảng thời gian này.
+        </p>
+      ) : (
+        <div
+          className="performance-table-wrap"
+          role="region"
+          aria-label="Bảng các lượt chậm nhất"
+          tabIndex={0}
+        >
+          <table>
+            <thead>
+              <tr>
+                <th aria-label="Mở rộng" />
+                <th>Thời gian</th>
+                <th>Luồng</th>
+                <th>Ý định</th>
+                <th>Model</th>
+                <th>Chờ slot</th>
+                <th>Lượt LLM</th>
+                <th>Lượt tool</th>
+                <th>Token</th>
+                <th>Tổng</th>
+                <th>Hàng đợi</th>
+                <th>Cờ</th>
+                <th>Kết quả</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slow_turns.map((turn) => {
+                const isOpen = expandedId === turn.id;
+                const totalTokens =
+                  (turn.prompt_tokens ?? 0) + (turn.completion_tokens ?? 0);
+                return (
+                  <>
+                    <tr key={turn.id}>
+                      <td>
+                        <button
+                          type="button"
+                          className="performance-expand"
+                          aria-expanded={isOpen}
+                          aria-label={isOpen ? "Thu gọn" : "Mở rộng chi tiết"}
+                          onClick={() =>
+                            setExpandedId(isOpen ? null : turn.id)
+                          }
+                        >
+                          {isOpen ? (
+                            <ChevronDown className="size-4" />
+                          ) : (
+                            <ChevronRight className="size-4" />
+                          )}
+                        </button>
+                      </td>
+                      <td>
+                        {turn.started_at
+                          ? turn.started_at.replace("T", " ").slice(0, 19)
+                          : "Chưa có"}
+                      </td>
+                      <td>
+                        {LANE_LABELS[turn.lane ?? ""] ??
+                          turn.lane ??
+                          "Không rõ"}
+                      </td>
+                      <td>{turn.intent ?? "Chưa có"}</td>
+                      <td>{fmtMs(turn.llm_model_ms)}</td>
+                      <td>{fmtMs(turn.llm_queue_ms)}</td>
+                      <td>{turn.llm_calls ?? "Chưa có"}</td>
+                      <td>{turn.tool_calls ?? "Chưa có"}</td>
+                      <td>{totalTokens > 0 ? totalTokens.toLocaleString() : "—"}</td>
+                      <td>
+                        <strong>{fmtMs(turn.total_ms)}</strong>
+                      </td>
+                      <td>{turn.queue_depth ?? "Chưa có"}</td>
+                      <td>
+                        <TurnBadges turn={turn} />
+                      </td>
+                      <td>{turn.outcome || "Không rõ"}</td>
+                    </tr>
+                    {isOpen ? (
+                      <tr key={`${turn.id}-detail`} className="performance-detail-row">
+                        <td colSpan={13}>
+                          <TurnDetail turn={turn} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+};
+
 const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
   const percentiles = data.percentiles ?? {};
   const maxP95 = Math.max(
@@ -128,6 +335,8 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         />
       </section>
 
+      <TrendChart trend={data.trend ?? []} />
+
       <section className="performance-panel">
         <h2>Độ trễ theo giai đoạn</h2>
         <p className="performance-panel-intro">
@@ -137,6 +346,7 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         {STAGE_ORDER.map((key) => {
           const stage = percentiles[key] ?? { p50: null, p95: null, p99: null };
           const width = Math.max(2, ((stage.p95 ?? 0) / maxP95) * 100);
+          const isLlmStage = key === "llm_queue" || key === "llm_model";
 
           return (
             <div className="performance-stage" key={key}>
@@ -149,7 +359,7 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
               </div>
               <div className="performance-bar" aria-hidden="true">
                 <i
-                  className={key === "llm" ? "is-llm" : ""}
+                  className={isLlmStage ? "is-llm" : ""}
                   style={{ width: `${width}%` }}
                 />
               </div>
@@ -167,60 +377,7 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         <CountCard title="Theo kết quả" data={data.by_outcome} labels={{}} />
       </section>
 
-      <section className="performance-panel">
-        <h2>Các lượt chậm nhất</h2>
-        {data.slow_turns.length === 0 ? (
-          <p className="performance-empty">
-            Chưa có lượt nào được ghi nhận trong khoảng thời gian này.
-          </p>
-        ) : (
-          <div
-            className="performance-table-wrap"
-            role="region"
-            aria-label="Bảng các lượt chậm nhất"
-            tabIndex={0}
-          >
-            <table>
-              <thead>
-                <tr>
-                  <th>Thời gian</th>
-                  <th>Luồng</th>
-                  <th>Ý định</th>
-                  <th>LLM</th>
-                  <th>Lượt LLM</th>
-                  <th>Lượt tool</th>
-                  <th>Tổng</th>
-                  <th>Hàng đợi</th>
-                  <th>Kết quả</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.slow_turns.map((turn) => (
-                  <tr key={turn.id}>
-                    <td>
-                      {turn.started_at
-                        ? turn.started_at.replace("T", " ").slice(0, 19)
-                        : "Chưa có"}
-                    </td>
-                    <td>
-                      {LANE_LABELS[turn.lane ?? ""] ?? turn.lane ?? "Không rõ"}
-                    </td>
-                    <td>{turn.intent ?? "Chưa có"}</td>
-                    <td>{fmtMs(turn.llm_ms)}</td>
-                    <td>{turn.llm_calls ?? "Chưa có"}</td>
-                    <td>{turn.tool_calls ?? "Chưa có"}</td>
-                    <td>
-                      <strong>{fmtMs(turn.total_ms)}</strong>
-                    </td>
-                    <td>{turn.queue_depth ?? "Chưa có"}</td>
-                    <td>{turn.outcome || "Không rõ"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <SlowestTurnsTable slow_turns={data.slow_turns} />
     </>
   );
 };

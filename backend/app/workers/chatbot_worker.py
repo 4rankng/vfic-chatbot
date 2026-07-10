@@ -201,6 +201,7 @@ def _preamble_timings(state, started_at, *, lane: str, throttle: bool = False) -
         timings["queue_depth"] = state.queue_depth
     if throttle:
         timings["throttle"] = True
+        timings["degraded"] = True
     if state.received_at_epoch > 0 and state.preamble_start_epoch > 0:
         timings["webhook_to_pickup_ms"] = max(
             0, int(round((state.preamble_start_epoch - state.received_at_epoch) * 1000))

@@ -37,7 +37,8 @@ _STAGE_KEYS = [
     "webhook_to_pickup",
     "preamble",
     "lead",
-    "llm",
+    "llm_queue",
+    "llm_model",
     "safety",
     "send",
     "total",
@@ -73,6 +74,7 @@ async def performance(
     percentiles = await _percentiles(db, interval)
     by_lane, by_outcome = await _lane_outcome_counts(db, interval)
     slow_turns = await _slow_turns(db, interval)
+    trend = await _trend(db, interval)
     return {
         "window": window,
         "live": live,
@@ -80,14 +82,15 @@ async def performance(
         "by_lane": by_lane,
         "by_outcome": by_outcome,
         "slow_turns": slow_turns,
+        "trend": trend,
     }
 
 
 async def _percentiles(db: AsyncSession, interval: timedelta) -> dict:
     # One round-trip: one percentile_cont per (stage, p). (stage_timings->>'<k>_ms')
-    # is NULL when the stage was skipped (e.g. llm_ms on a fast-lane turn); the
-    # ::int cast yields NULL and percentile_cont ignores NULLs per-stage, so each
-    # stage is aggregated over exactly the turns that ran it.
+    # is NULL when the stage was skipped (e.g. llm_model_ms on a fast-lane turn);
+    # the ::int cast yields NULL and percentile_cont ignores NULLs per-stage, so
+    # each stage is aggregated over exactly the turns that ran it.
     cols = []
     for key in _STAGE_KEYS:
         value_sql = _stage_sql(key)
@@ -151,6 +154,8 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
                 + int(st.get("webhook_to_pickup_ms") or 0)
             )
         outcome = r.outcome if isinstance(r.outcome, str) else getattr(r.outcome, "value", str(r.outcome))
+        # degraded covers both the new explicit flag and the legacy throttle key.
+        degraded = bool(st.get("degraded") or st.get("throttle"))
         out.append({
             "id": r.id,
             "conversation_id": str(r.conversation_id),
@@ -158,13 +163,52 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
             "outcome": outcome,
             "lane": st.get("lane"),
             "intent": st.get("intent"),
-            "llm_ms": st.get("llm_ms"),
+            "llm_queue_ms": st.get("llm_queue_ms"),
+            "llm_model_ms": st.get("llm_model_ms"),
             "llm_calls": st.get("llm_calls"),
+            "llm_call_ms": st.get("llm_call_ms"),
             "tool_calls": st.get("tool_calls"),
             "tool_ms": st.get("tool_ms"),
+            "tool_breakdown": st.get("tool_breakdown"),
+            "prompt_tokens": st.get("prompt_tokens"),
+            "completion_tokens": st.get("completion_tokens"),
+            "cached_tokens": st.get("cached_tokens"),
+            "retried_429": st.get("retried_429"),
+            "used_fallback": st.get("used_fallback"),
+            "degraded": degraded,
             "prefetch_hit": st.get("prefetch_hit"),
             "pipeline_ms": pipeline_ms,
             "total_ms": end_to_end_ms,
             "queue_depth": st.get("queue_depth"),
         })
     return out
+
+
+async def _trend(db: AsyncSession, interval: timedelta) -> list[dict]:
+    """5-minute bucket time-series of end-to-end p95/p50 + turn/error counts.
+
+    Lets the dashboard answer "did latency spike?" — unanswerable from a single
+    p95 aggregate over the whole window. Buckets align to wall-clock 5-min
+    boundaries (floor(epoch/300)*300) so adjacent windows are comparable.
+    """
+    sql = text(
+        "SELECT to_timestamp(floor(extract(epoch from started_at)/300)*300) AS bucket, "
+        f"percentile_cont(0.95) WITHIN GROUP (ORDER BY {_END_TO_END_SQL}) AS p95_ms, "
+        f"percentile_cont(0.50) WITHIN GROUP (ORDER BY {_END_TO_END_SQL}) AS p50_ms, "
+        "COUNT(*) AS turns, "
+        "COUNT(*) FILTER (WHERE outcome != 'sent') AS errors "
+        "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings IS NOT NULL "
+        "GROUP BY 1 ORDER BY 1"
+    )
+    rows = (await db.execute(sql, {"interval": interval})).all()
+    return [
+        {
+            "bucket": r.bucket.isoformat() if r.bucket else None,
+            "p95_ms": _int(r.p95_ms),
+            "p50_ms": _int(r.p50_ms),
+            "turns": int(r.turns),
+            "errors": int(r.errors),
+        }
+        for r in rows
+    ]

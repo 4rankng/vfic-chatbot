@@ -162,11 +162,13 @@ def _ground_reply(reply: str, tool_results: list[str]) -> str:
         return reply
 
 
-async def _llm_call_with_retry(bound, messages):
+async def _llm_call_with_retry(bound, messages, *, metrics: dict | None = None):
     """Call bound.ainvoke with 1 retry on 429 (settings.llm_429_retry_sleep_seconds backoff).
 
     On second 429, raises LLMThrottled so the worker can send a static
-    degradation message without making another LLM call.
+    degradation message without making another LLM call. When ``metrics`` is
+    provided, sets ``retried_429 = True`` on the retry path so the dashboard can
+    flag turns that survived a rate-limit backoff.
     """
     from app.core.config import get_settings
     from app.graph.llm_semaphore import LLMThrottled
@@ -178,6 +180,8 @@ async def _llm_call_with_retry(bound, messages):
             _record_llm_429()
             logger.warning("llm_429_retry", exc_info=True)
             await asyncio.sleep(get_settings().llm_429_retry_sleep_seconds)
+            if metrics is not None:
+                metrics["retried_429"] = True
             try:
                 return await bound.ainvoke(messages)
             except Exception as exc2:
@@ -358,6 +362,11 @@ class MiniMaxAgent:
             for key in (
                 "llm_calls",
                 "llm_invoke_ms",
+                "llm_queue_ms",
+                "llm_model_ms",
+                "prompt_tokens",
+                "completion_tokens",
+                "cached_tokens",
                 "tool_calls",
                 "tool_rounds",
                 "tool_ms",
@@ -365,6 +374,7 @@ class MiniMaxAgent:
                 "prefetch_ms",
             ):
                 metrics.setdefault(key, 0)
+            metrics.setdefault("llm_call_ms", [])
         effective_query = lookup_query or user_text
         timetable_route = allowed_tools == ("search_bus_timetable",)
         faq_detail_route = allowed_tools == (
@@ -450,12 +460,18 @@ class MiniMaxAgent:
         )
         messages.append(HumanMessage(content=user_text))
         for _ in range(self.max_iters):
-            t0 = time.monotonic()
             if metrics is not None:
                 metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
+            # Split the LLM path into semaphore-queue wait vs. model inference.
+            # Previously a single timer covered both, so a 34s "LLM" p95 was
+            # ambiguous between a slow model and self-inflicted throttle wait.
+            sem_t0 = time.monotonic()
             try:
                 async with sem:
-                    ai = await _llm_call_with_retry(bound, messages)
+                    sem_wait_ms = int((time.monotonic() - sem_t0) * 1000)
+                    model_t0 = time.monotonic()
+                    ai = await _llm_call_with_retry(bound, messages, metrics=metrics)
+                    model_ms = int((time.monotonic() - model_t0) * 1000)
             except LLMThrottled:
                 raise
             except Exception as exc:
@@ -464,16 +480,27 @@ class MiniMaxAgent:
                     _record_llm_429()
                     logger.error("llm_429", exc_info=True)
                 raise
-            finally:
-                elapsed_ms = int((time.monotonic() - t0) * 1000)
-                if metrics is not None:
-                    metrics["llm_invoke_ms"] = (
-                        metrics.get("llm_invoke_ms", 0) + elapsed_ms
-                    )
-            _record_llm_latency(elapsed_ms)
+            iter_total_ms = int((time.monotonic() - sem_t0) * 1000)
+            if metrics is not None:
+                metrics["llm_invoke_ms"] = metrics.get("llm_invoke_ms", 0) + iter_total_ms
+                metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + sem_wait_ms
+                metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + model_ms
+                metrics["llm_call_ms"].append(model_ms)
+                if getattr(bound, "_fallback_used", False):
+                    metrics["used_fallback"] = True
+            # Live Redis counter tracks the full LLM path (queue + model) — the
+            # right number for the "is the LLM path slow right now?" live tile.
+            _record_llm_latency(iter_total_ms)
             # Phase 6: capture token usage + cost from the response.usage block.
-            _record_token_usage(getattr(ai, "usage_metadata", None) or getattr(ai, "response_metadata", {}).get("token_usage"))
-            logger.info("llm_invoke", extra={"llm_latency_ms": elapsed_ms})
+            usage = _record_token_usage(
+                getattr(ai, "usage_metadata", None)
+                or getattr(ai, "response_metadata", {}).get("token_usage")
+            )
+            if metrics is not None and usage.total_tokens > 0:
+                metrics["prompt_tokens"] = metrics.get("prompt_tokens", 0) + usage.prompt_tokens
+                metrics["completion_tokens"] = metrics.get("completion_tokens", 0) + usage.completion_tokens
+                metrics["cached_tokens"] = metrics.get("cached_tokens", 0) + usage.cached_tokens
+            logger.info("llm_invoke", extra={"llm_latency_ms": iter_total_ms})
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
             if not calls:
@@ -490,13 +517,21 @@ class MiniMaxAgent:
             async def _dispatch_one(tc: dict) -> str:
                 name = tc.get("name", "")
                 args = tc.get("args", {})
-                if make_retrieval is not None:
-                    try:
-                        async with make_retrieval() as fresh_retrieval:
-                            return await _dispatch_tool(fresh_retrieval, embedder, name, args)
-                    except Exception:  # noqa: BLE001 — session setup failed → shared
-                        logger.warning("isolated retrieval for tool %s failed, using shared", name, exc_info=True)
-                return await _dispatch_tool(retrieval, embedder, name, args)
+                tool_call_t0 = time.monotonic()
+                try:
+                    if make_retrieval is not None:
+                        try:
+                            async with make_retrieval() as fresh_retrieval:
+                                return await _dispatch_tool(fresh_retrieval, embedder, name, args)
+                        except Exception:  # noqa: BLE001 — session setup failed → shared
+                            logger.warning("isolated retrieval for tool %s failed, using shared", name, exc_info=True)
+                    return await _dispatch_tool(retrieval, embedder, name, args)
+                finally:
+                    if metrics is not None:
+                        breakdown = metrics.setdefault("tool_breakdown", {})
+                        breakdown[name] = breakdown.get(name, 0) + int(
+                            (time.monotonic() - tool_call_t0) * 1000
+                        )
 
             if len(calls) > 1 and make_retrieval is not None:
                 sem = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
@@ -554,6 +589,10 @@ class FallbackLLM:
     def __init__(self, primary, fallback):
         self.primary = primary
         self.fallback = fallback
+        # Per-instance flag set on failover. FallbackLLM is constructed per turn
+        # in build_deps, and bind_tools returns a fresh wrapper, so the flag
+        # never leaks across turns.
+        self._fallback_used = False
 
     def bind_tools(self, tools):
         bound_primary = (
@@ -570,6 +609,7 @@ class FallbackLLM:
         try:
             return await self.primary.ainvoke(messages, **kwargs)
         except Exception:
+            self._fallback_used = True
             _record_llm_fallback()
             logger.warning("Primary LLM failed, falling back to secondary provider", exc_info=True)
             return await self.fallback.ainvoke(messages, **kwargs)

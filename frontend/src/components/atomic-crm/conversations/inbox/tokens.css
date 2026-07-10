@@ -16,18 +16,19 @@
   /* Private inbox accent. Renamed from --accent to
      avoid colliding with the shadcn --accent hover-surface token, which is
      defined globally in index.css and consumed by ~50 primitives app-wide.
-     Tracks the global teal --primary so the inbox shares one brand color
-     instead of carrying its own blue identity. */
-  --primary-soft: #e8f5f0;
-  --primary-soft-border: #b7e2d2;
-  --inbox-accent: var(--primary);
+     --brand stays teal: it is the inbox's accent identity (used by ~120
+     icon/border/highlight call-sites), distinct from the ink --primary that
+     fills primary buttons. Teal = selection/active/healthy; ink = action. */
+  --primary-soft: #e3f0ea;
+  --primary-soft-border: #cce5df;
+  --inbox-accent: var(--color-teal, #1f6f54);
   --inbox-accent-light: var(--primary-soft);
-  --brand: var(--primary);
-  --brand-hover: #066047;
+  --brand: var(--color-teal, #1f6f54);
+  --brand-hover: #1a5f48;
   --brand-light: var(--primary-soft);
 
-  --success: var(--color-green, #087a5b);
-  --success-light: #e8f5f0;
+  --success: var(--color-green, #1f6f54);
+  --success-light: #e3f0ea;
 
   --rad-sm: 8px;
   --rad-md: 10px;
@@ -111,15 +112,15 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: #f7f8fa;
+  --chat-bg: #f5f6f1;
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
-     stays neutral white; bot + admin (outgoing) own the brand teal-soft. */
+     stays neutral white; bot + admin (outgoing) own the teal-soft on paper. */
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #e8f5f0;
+  --chat-bubble-out: #e3f0ea;
   --chat-bubble-user: #ffffff;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #e8f5f0;
-  --chat-bubble-agent: #e8f5f0;
+  --chat-bubble-bot: #e3f0ea;
+  --chat-bubble-agent: #e3f0ea;
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: rgba(255, 255, 255, 0.96);
   --chat-shadow:
@@ -129,18 +130,18 @@
   /* Workspace sidebar/rail — paper surface + ink + teal active.
      Dark variants re-declared in .dark below. */
   --workspace-bg: #ffffff;
-  --workspace-bg-deep: #f7f8fa;
+  --workspace-bg-deep: #f5f6f1;
   --workspace-border: var(--border);
-  --workspace-ink: #17212b;
-  --workspace-muted: #475467;
-  --workspace-faint: #667085;
-  --workspace-hover: #f2f4f7;
-  --workspace-active: var(--primary);
+  --workspace-ink: #15201c;
+  --workspace-muted: #5c6760;
+  --workspace-faint: #646e63;
+  --workspace-hover: #eceee5;
+  --workspace-active: var(--color-teal, #1f6f54);
   --workspace-active-border: var(--primary-soft-border);
-  --workspace-switcher-bg: #f1f4f6;
+  --workspace-switcher-bg: #eceee5;
   --workspace-switcher-bg-deep: #e3e9ee;
-  --workspace-switcher-active: var(--primary);
-  --workspace-switcher-hover: #fffdf7;
+  --workspace-switcher-active: var(--color-teal, #1f6f54);
+  --workspace-switcher-hover: #f5f6f1;
 }
 
 /* WorkspaceFrame deliberately wins over a global `.dark` preference. Legacy
@@ -152,14 +153,14 @@
   --ink: var(--foreground);
   --ink-muted: var(--muted-foreground);
   --border-strong: var(--border);
-  --border-glass: rgba(222, 210, 189, 0.62);
-  --primary-soft: #dcefeb;
+  --border-glass: rgba(199, 205, 188, 0.62);
+  --primary-soft: #e3f0ea;
   --primary-soft-border: #cce5df;
   --workspace-bg: var(--card);
   --workspace-bg-deep: var(--secondary);
   --workspace-muted: var(--muted-foreground);
   --workspace-hover: var(--secondary);
-  --workspace-active: var(--primary);
+  --workspace-active: var(--color-teal, #1f6f54);
 }
 
 @media (max-width: 767px) {

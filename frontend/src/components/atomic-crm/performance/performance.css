@@ -121,7 +121,7 @@
   background: var(--chart-1);
 }
 .performance-bar i.is-llm {
-  background: var(--primary);
+  background: var(--color-teal, #1f6f54);
 }
 .performance-count-list {
   margin: 0;
@@ -150,7 +150,7 @@
 }
 .performance-table-wrap table {
   width: 100%;
-  min-width: 680px;
+  min-width: 900px;
   border-collapse: collapse;
   font-size: 0.8rem;
 }
@@ -164,6 +164,116 @@
 .performance-table-wrap th {
   color: var(--muted-foreground);
   font-weight: 600;
+}
+.performance-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+.performance-expand:hover {
+  background: var(--muted);
+}
+.performance-expand:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.performance-detail-row td {
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+.performance-row-detail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.8rem;
+  white-space: normal;
+}
+.performance-row-detail strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+.performance-row-detail ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+.performance-row-detail dl {
+  margin: 0;
+}
+.performance-row-detail dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.performance-row-detail dt {
+  color: var(--muted-foreground);
+  font-family: monospace;
+}
+.performance-row-detail dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.performance-row-detail code {
+  font-variant-numeric: tabular-nums;
+}
+.performance-row-detail p {
+  margin: 0;
+  color: var(--foreground);
+}
+.performance-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.performance-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+.performance-badge.is-warning {
+  color: #1f1300;
+  background: var(--warning, #f59e0b);
+}
+.performance-badge.is-destructive {
+  color: var(--destructive-foreground, #fff);
+  background: var(--destructive);
+}
+/* Trend chart — CSS-only bar chart, no charting library. */
+.performance-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 120px;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background: var(--muted);
+}
+.performance-trend-bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--chart-1);
+  transition: opacity 0.15s;
+}
+.performance-trend-bar:hover {
+  opacity: 0.8;
+}
+.performance-trend-bar.is-error {
+  background: var(--destructive);
 }
 .performance-state {
   display: grid;

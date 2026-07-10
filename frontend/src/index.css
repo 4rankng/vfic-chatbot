@@ -49,10 +49,11 @@
   --color-feature-gap-soft: var(--feature-gap-soft);
   --color-feature-gap-border: var(--feature-gap-border);
 
-  /* VFIC semantic accents. Workspace surfaces intentionally stay neutral so
-     teal can communicate selection and primary action rather than decoration. */
-  --color-steel: #475467;
-  --color-steel-soft: #f2f4f7;
+  /* VFIC semantic accents — warm-paper workspace. Teal carries selection /
+     active / healthy signals; ink carries the primary action. These accents
+     stay decoratively restrained on the beige canvas. */
+  --color-steel: #5c6760;
+  --color-steel-soft: #eceee5;
   /* Tier B — perceptual tint. --primary and --background are real :root vars
      (not @theme inline), so this resolves per-theme at runtime. */
   --color-amber-soft: color-mix(
@@ -62,25 +63,39 @@
   );
   --color-ember: #b54708;
   --color-ember-soft: color-mix(in oklab, #b54708 12%, var(--background));
-  --color-muted-dim: #667085;
-  --color-green: #087a5b;
+  --color-muted-dim: #646e63;
+  --color-green: #1f6f54;
+  /* Warm-paper workspace accents. Hoisted from the kb-only --kb-* pattern so
+     the whole workspace shares one teal/paper/ink identity. */
+  --color-teal: #1f6f54;
+  --color-teal-soft: #e3f0ea;
+  --color-paper: #f5f6f1;
+  --color-paper-deep: #eceee5;
+  --color-ink-900: #15201c;
+  --color-ink-500: #5c6760;
+  --color-line: #dee2d8;
 }
 
 :root {
-  /* Shared workspace roles. These are deliberately cool-neutral: the canvas
-     recedes, while typography and the single green action carry hierarchy. */
-  --workspace-canvas: #f7f8fa;
-  --workspace-surface: #fcfcfd;
-  --workspace-surface-muted: #f2f4f7;
-  --workspace-ink: #17212b;
-  --workspace-ink-muted: #475467;
-  --workspace-border: #e4e7ec;
-  --workspace-focus: #087a5b;
-  --workspace-action: #087a5b;
-  --workspace-action-strong: #066047;
-  --workspace-success: #087a5b;
-  --workspace-warning: #b54708;
+  /* Shared workspace roles — warm-paper system. The beige canvas recedes; deep
+     ink carries the primary action; teal communicates selection / active /
+     healthy. Surfaces stay light by design (dark workspace is out of scope). */
+  --workspace-canvas: #f5f6f1;
+  --workspace-surface: #ffffff;
+  --workspace-surface-muted: #eceee5;
+  --workspace-ink: #15201c;
+  --workspace-ink-muted: #5c6760;
+  --workspace-border: #dee2d8;
+  --workspace-focus: #1f6f54;
+  --workspace-action: #15201c;
+  --workspace-action-strong: #0d1714;
+  --workspace-success: #1f6f54;
+  --workspace-warning: #8a5a14;
   --workspace-danger: #b23a2e;
+  --workspace-teal: #1f6f54;
+  --workspace-teal-soft: #e3f0ea;
+  --workspace-paper: #f5f6f1;
+  --workspace-paper-deep: #eceee5;
   --workspace-space-1: 0.25rem;
   --workspace-space-2: 0.5rem;
   --workspace-space-3: 0.75rem;
@@ -88,30 +103,38 @@
   --workspace-space-6: 1.5rem;
   --workspace-radius-control: 0.5rem;
   --workspace-radius-panel: 0.625rem;
-  --workspace-shadow-panel: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --workspace-shadow-panel: 0 1px 2px rgba(21, 32, 28, 0.05);
   --workspace-motion-fast: 160ms;
   --workspace-motion-standard: 240ms;
   --radius: 10px;
-  --background: #f7f8fa;
-  --foreground: #17212b;
+  --background: #f5f6f1;
+  --foreground: #15201c;
   --card: #ffffff;
-  --card-foreground: #17212b;
+  --card-foreground: #15201c;
   --popover: #ffffff;
-  --popover-foreground: #17212b;
-  --primary: #087a5b;
-  --primary-foreground: #ffffff;
-  --secondary: #f2f4f7;
-  --secondary-foreground: #17212b;
-  --muted: #f2f4f7;
-  --muted-foreground: #667085;
-  --accent: #e8f5f0;
-  --accent-foreground: #0b6b4f;
+  --popover-foreground: #15201c;
+  --primary: #15201c;
+  --primary-foreground: #f5f6f1;
+  --secondary: #eceee5;
+  --secondary-foreground: #15201c;
+  --muted: #eceee5;
+  --muted-foreground: #5c6760;
+  --accent: #e3f0ea;
+  --accent-foreground: #1f6f54;
   --destructive: #b23a2e;
   --destructive-foreground: #ffffff;
-  --border: #e4e7ec;
-  --input: #d0d5dd;
-  --ring: #087a5b;
-  --ember: #b45309;
+  --border: #dee2d8;
+  --input: #c7cdbc;
+  --ring: #1f6f54;
+  --ember: #8a5a14;
+  /* Global semantic accents. Promoted here (not just in inbox/tokens.css) so
+     pages that don't import the inbox barrel — e.g. ZaloIntegrationPage's
+     webhook-health badges — resolve --success/--warning without coupling to
+     inbox CSS. Track the workspace teal/ochre/rust identity. */
+  --success: var(--color-green);
+  --success-soft: var(--color-teal-soft);
+  --warning: #8a5a14;
+  --warning-soft: #f4ecda;
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
@@ -130,35 +153,35 @@
     var(--background)
   );
   --grid-color: transparent;
-  --shimmer-highlight: rgba(16, 24, 40, 0.06);
+  --shimmer-highlight: rgba(21, 32, 28, 0.06);
 
-  --chart-1: #475467;
-  --chart-2: #087a5b;
+  --chart-1: #5c6760;
+  --chart-2: #1f6f54;
   --chart-3: #b54708;
-  --chart-4: #066047;
-  --chart-5: #667085;
+  --chart-4: #8a5a14;
+  --chart-5: #9ca59c;
 
-  --sidebar: #fcfcfd;
-  --sidebar-foreground: #17212b;
-  --sidebar-primary: #087a5b;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8f5f0;
-  --sidebar-accent-foreground: #0b6b4f;
-  --sidebar-border: #e4e7ec;
-  --sidebar-ring: #087a5b;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #15201c;
+  --sidebar-primary: #15201c;
+  --sidebar-primary-foreground: #f5f6f1;
+  --sidebar-accent: #e3f0ea;
+  --sidebar-accent-foreground: #1f6f54;
+  --sidebar-border: #dee2d8;
+  --sidebar-ring: #1f6f54;
 
   /* Lead-priority avatar tones (inbox). bg tints use runtime var() so they
-     adapt per-theme; only the fixed ember/steel inks need a dark lift. */
-  --lead-hot-bg: #fff4ed;
-  --lead-hot-ink: #b54708;
-  --lead-warm-bg: #fff4ed;
-  --lead-warm-ink: #b54708;
+     adapt per-theme; inks use the warm rust/ochre/steel palette. */
+  --lead-hot-bg: #f8e7e4;
+  --lead-hot-ink: #9c2f24;
+  --lead-warm-bg: #f4ecda;
+  --lead-warm-ink: #8a5a14;
   --lead-cold-bg: color-mix(
     in oklab,
-    var(--color-muted-dim) 16%,
+    var(--color-muted-dim) 14%,
     var(--background)
   );
-  --lead-cold-ink: #475467;
+  --lead-cold-ink: #5c6760;
 }
 
 .dark {
@@ -243,8 +266,9 @@ input {
   }
 }
 
-/* Logged-in workspaces intentionally retain their light, warm palette even
-   when the global provider applies `.dark` for authentication pages. */
+/* Logged-in workspaces keep the warm-paper palette even when the global
+   provider applies `.dark` for authentication pages. The beige canvas, ink
+   primary, and teal accent are the source-of-truth look for the whole app. */
 .workspace-frame {
   --background: var(--workspace-canvas);
   --foreground: var(--workspace-ink);
@@ -253,13 +277,13 @@ input {
   --popover: var(--workspace-surface);
   --popover-foreground: var(--workspace-ink);
   --primary: var(--workspace-action);
-  --primary-foreground: #ffffff;
+  --primary-foreground: var(--workspace-paper);
   --secondary: var(--workspace-surface-muted);
   --secondary-foreground: var(--workspace-ink);
   --muted: var(--workspace-surface-muted);
   --muted-foreground: var(--workspace-ink-muted);
-  --accent: #e8f5f0;
-  --accent-foreground: var(--workspace-action-strong);
+  --accent: var(--workspace-teal-soft);
+  --accent-foreground: var(--workspace-teal);
   --destructive: var(--workspace-danger);
   --border: var(--workspace-border);
   --input: var(--workspace-border);
@@ -350,8 +374,8 @@ input {
 }
 
 .workspace-navigation-link.is-active {
-  background: #e8f5f0;
-  color: var(--workspace-action-strong);
+  background: var(--workspace-teal-soft);
+  color: var(--workspace-teal);
 }
 
 .workspace-navigation-icon {

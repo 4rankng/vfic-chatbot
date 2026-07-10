@@ -28,14 +28,31 @@ export interface PerfSlowTurn {
   outcome: string;
   lane: string | null;
   intent: string | null;
-  llm_ms: number | null;
+  llm_queue_ms: number | null;
+  llm_model_ms: number | null;
   llm_calls: number | null;
+  llm_call_ms: number[] | null;
   tool_calls: number | null;
   tool_ms: number | null;
+  tool_breakdown: Record<string, number> | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  cached_tokens: number | null;
+  retried_429: boolean | null;
+  used_fallback: boolean | null;
+  degraded: boolean | null;
   prefetch_hit: boolean | null;
   pipeline_ms: number | null;
   total_ms: number | null;
   queue_depth: number | null;
+}
+
+export interface PerfTrendBucket {
+  bucket: string | null;
+  p95_ms: number | null;
+  p50_ms: number | null;
+  turns: number;
+  errors: number;
 }
 
 export interface PerfMetrics {
@@ -45,6 +62,7 @@ export interface PerfMetrics {
   by_lane: Record<string, number>;
   by_outcome: Record<string, number>;
   slow_turns: PerfSlowTurn[];
+  trend: PerfTrendBucket[];
 }
 
 export const usePerformanceStats = (window = "24h") =>
