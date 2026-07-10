@@ -1,6 +1,7 @@
 # Design Tokens — Warm-Paper Workspace
 
-> **Status:** Active — supersedes the cool-neutral `.workspace-frame` palette.
+> **Status:** Superseded on 2026-07-10 by
+> [Graphite, Cloud, and Emerald](./design-tokens-graphite-cloud.md).
 > **Scope:** All logged-in recruiter/admin workspaces. Login, Forgot-Password,
 > and Knowledge pages already use this palette via `.kb-scope` and are unchanged.
 > **Dark workspace:** Out of scope. `.workspace-frame` forces a light palette

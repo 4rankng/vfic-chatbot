@@ -1,4 +1,23 @@
 .performance-page {
+  --foreground: #111827;
+  --muted-foreground: #4b5563;
+  --background: #eef2f6;
+  --card: #fafbfc;
+  --muted: #f4f6f8;
+  --border: #d4dce6;
+  --ring: #0f8a68;
+  --primary: #0f8a68;
+  --primary-foreground: #ffffff;
+  --accent: #dff3ec;
+  --destructive: #b42318;
+  --workspace-surface: #fafbfc;
+  --workspace-surface-muted: #f4f6f8;
+  --workspace-border: #d4dce6;
+  --workspace-success: #16835d;
+  --workspace-warning: #b7791f;
+  --workspace-action: #0f8a68;
+  --workspace-teal-soft: #dff3ec;
+  --chart-1: #0f8a68;
   display: grid;
   gap: 1.5rem;
   max-width: 1200px;

@@ -1134,7 +1134,7 @@ export const ZaloIntegrationPage = () => {
                   disabled={savingSection !== null || testingBot || !settings}
                 >
                   <Wifi className="size-4" />
-                  {testingBot ? "Đang kiểm tra" : "Kiểm tra kết nối"}
+                  {testingBot ? "Đang kiểm tra" : "Lưu & kiểm tra"}
                 </Button>
               </div>
             </SettingsCard>
@@ -1196,7 +1196,7 @@ export const ZaloIntegrationPage = () => {
                     disabled={savingSection !== null || testingOa || !settings}
                   >
                     <Wifi className="size-4" />
-                    {testingOa ? "Đang kiểm tra" : "Kiểm tra kết nối"}
+                    {testingOa ? "Đang kiểm tra" : "Lưu & kiểm tra"}
                   </Button>
                 </div>
                 <ZaloOaSignatureHealthBadge
@@ -1255,7 +1255,7 @@ export const ZaloIntegrationPage = () => {
                   disabled={savingSection !== null || testingMinimax || !minimaxSettings}
                 >
                   <Wifi className="size-4" />
-                  {testingMinimax ? "Đang kiểm tra" : "Kiểm tra kết nối"}
+                  {testingMinimax ? "Đang kiểm tra" : "Lưu & kiểm tra"}
                 </Button>
               </div>
             </SettingsCard>
@@ -1322,7 +1322,7 @@ export const ZaloIntegrationPage = () => {
                 disabled={savingSection !== null || testingOpenRouter || !openRouterSettings}
               >
                 <Wifi className="size-4" />
-                {testingOpenRouter ? "Đang kiểm tra" : "Kiểm tra kết nối"}
+                {testingOpenRouter ? "Đang kiểm tra" : "Lưu & kiểm tra"}
               </Button>
             </div>
           </SettingsCard>

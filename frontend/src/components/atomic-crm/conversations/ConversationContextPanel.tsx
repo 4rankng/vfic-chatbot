@@ -195,12 +195,14 @@ export const ConversationContextPanel = ({
       <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
         <SheetContent
           side="right"
-          className="inbox-bg-container p-0 gap-0 sm:max-w-sm"
+          className="candidate-context-sheet p-0 gap-0 sm:max-w-sm"
           aria-describedby={undefined}
           onCloseAutoFocus={onCloseAutoFocus}
         >
           <SheetTitle className="sr-only">Thông tin ứng viên</SheetTitle>
-          {content}
+          <div className="inbox-bg-container conversation-context-sheet-body">
+            {content}
+          </div>
         </SheetContent>
       </Sheet>
     );

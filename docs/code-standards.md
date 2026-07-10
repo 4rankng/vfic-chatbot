@@ -152,14 +152,14 @@ surrounding code.
 - `cn()` helper = `clsx` + `tailwind-merge` (`lib/utils.ts`).
 - Shadcn UI + Radix primitives.
 - `components.json` + `registry.json` drive the vendored Shadcn registry.
-- **`conversations/inbox.css` is a barrel** that `@import`s 11 section files
-  under `conversations/inbox/`: `tokens.css` (design tokens), `base.css`,
-  `chatops.css`, `features.css`, `personas.css` (largest), `workspace-rail.css`,
-  `conversation-list.css`, `chat.css`, `context-drawer.css`, `mobile.css`,
-  `typography.css`.
-  Design tokens (colors, spacing, radii) live in `tokens.css` — extend there
-  rather than scattering literals. Do not reintroduce the old monolithic CSS
-  file.
+- **`conversations/inbox.css` is a barrel** for the inbox sections. Keep rules
+  in their owning section; do not reintroduce a monolithic inbox stylesheet.
+- **Token ownership:** `src/index.css` owns shared `--workspace-*` semantic
+  roles. `conversations/inbox/tokens.css` supplies inbox aliases and
+  typography. Feature styles consume the shared roles and may introduce
+  feature-scoped aliases only when a local surface requires one (for example,
+  settings or performance). Do not restore the superseded warm-paper palette
+  or scatter competing color literals.
 - Typography is centralized: define font families, sizes, weights, and line
   heights in `tokens.css`; shared role selectors live in `typography.css`
   (imported last). Do not add one-off page title/card/control font sizes unless

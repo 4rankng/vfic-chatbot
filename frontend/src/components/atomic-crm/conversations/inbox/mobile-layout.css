@@ -11,7 +11,7 @@
   z-index: 45;
   border: 0;
   background: rgba(0, 0, 0, 0.32);
-  backdrop-filter: blur(2px);
+  backdrop-filter: none;
   cursor: default;
 }
 
@@ -56,21 +56,25 @@
   }
 
   .inbox-bg-container .chat-header {
-    flex-wrap: wrap;
-    align-content: center;
-    gap: 8px 10px;
-    min-height: 104px;
+    flex-wrap: nowrap;
+    align-content: initial;
+    gap: 8px;
+    min-height: 64px;
     padding: 10px 14px;
   }
 
   .inbox-bg-container .header-person {
-    flex: 1 1 100%;
-    max-width: 100%;
+    flex: 1 1 auto;
+    max-width: none;
   }
 
   .inbox-bg-container .header-actions {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-end;
+  }
+
+  .inbox-bg-container .candidate-signal-strip {
+    display: none;
   }
 
   .inbox-bg-container .mode-control {
@@ -243,7 +247,7 @@
     inset: 0;
     z-index: 4;
     background: var(--surface);
-    box-shadow: -24px 0 64px rgba(0, 0, 0, 0.2);
+    box-shadow: none;
     transform: translateX(105%);
     visibility: hidden;
     transition:
@@ -263,7 +267,7 @@
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
+    backdrop-filter: none;
     z-index: 2;
   }
   .inbox-bg-container .right-panel {
@@ -350,9 +354,14 @@
     padding: 0;
     border-radius: 999px;
   }
-  .inbox-bg-container .mode-menu-trigger span,
+  .inbox-bg-container .mode-menu-trigger:not(.mode-menu-trigger--primary) span,
   .inbox-bg-container .mode-menu-chevron {
     display: none;
+  }
+  .inbox-bg-container .mode-menu-trigger--primary {
+    width: auto;
+    padding-inline: 10px;
+    border-radius: 10px;
   }
   .inbox-bg-container .profile-info-btn {
     width: 44px;

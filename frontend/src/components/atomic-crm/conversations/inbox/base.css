@@ -126,7 +126,7 @@
   z-index: 50;
   background: var(--surface-solid);
   overflow: hidden;
-  box-shadow: -24px 0 64px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
   transform: translateX(105%);
   visibility: hidden;
   transition:

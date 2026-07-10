@@ -77,9 +77,9 @@
 }
 
 :root {
-  /* Shared workspace roles — warm-paper system. The beige canvas recedes; deep
-     ink carries the primary action; teal communicates selection / active /
-     healthy. Surfaces stay light by design (dark workspace is out of scope). */
+  /* Shared workspace roles — graphite navigation, cloud canvas, restrained
+     emerald actions. Surfaces stay light by design (dark workspace is out of
+     scope). */
   --workspace-canvas: #eef2f6;
   --workspace-surface: #fafbfc;
   --workspace-surface-muted: #f4f6f8;
@@ -93,6 +93,7 @@
   --workspace-warning: #b7791f;
   --workspace-danger: #c2414b;
   --workspace-teal: #0f8a68;
+  --workspace-teal-strong: #08765a;
   --workspace-teal-soft: #dff3ec;
   --workspace-paper: #fafbfc;
   --workspace-paper-deep: #f4f6f8;
@@ -539,7 +540,7 @@ input {
 
   .workspace-navigation-mobile .workspace-navigation-link.is-active {
     background: var(--workspace-teal-soft);
-    color: var(--workspace-teal);
+    color: var(--workspace-teal-strong);
     box-shadow: none;
   }
 

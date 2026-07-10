@@ -29,6 +29,11 @@ const LANE_LABELS: Record<string, string> = {
   faq_bypass: "FAQ bypass",
   unknown: "Không rõ",
 };
+const OUTCOME_LABELS: Record<string, string> = {
+  SENT: "Đã gửi",
+  SUPPRESSED: "Đã chặn",
+  ERROR: "Lỗi xử lý",
+};
 const STAGE_ORDER = [
   "webhook_to_pickup",
   "preamble",
@@ -232,7 +237,7 @@ const SlowestTurnsTable = ({ slow_turns }: { slow_turns: PerfSlowTurn[] }) => {
                 <th>Thời gian</th>
                 <th>Luồng</th>
                 <th>Ý định</th>
-                <th>Model</th>
+                <th>LLM xử lý</th>
                 <th>Chờ slot</th>
                 <th>Lượt LLM</th>
                 <th>Lượt tool</th>
@@ -291,7 +296,11 @@ const SlowestTurnsTable = ({ slow_turns }: { slow_turns: PerfSlowTurn[] }) => {
                       <td>
                         <TurnBadges turn={turn} />
                       </td>
-                      <td>{turn.outcome || "Không rõ"}</td>
+                      <td>
+                        {OUTCOME_LABELS[turn.outcome] ??
+                          turn.outcome ??
+                          "Không rõ"}
+                      </td>
                     </tr>
                     {isOpen ? (
                       <tr className="performance-detail-row">
@@ -313,6 +322,10 @@ const SlowestTurnsTable = ({ slow_turns }: { slow_turns: PerfSlowTurn[] }) => {
 
 const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
   const percentiles = data.percentiles ?? {};
+  const hasLatencyData = STAGE_ORDER.some((key) => {
+    const stage = percentiles[key];
+    return stage?.p50 != null || stage?.p95 != null || stage?.p99 != null;
+  });
   const maxP95 = Math.max(
     1,
     ...STAGE_ORDER.map((key) => percentiles[key]?.p95 ?? 0),
@@ -328,21 +341,22 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           tone="neutral"
         />
         <Metric
-          label="Worker đang chạy"
+          label="Worker đang bận"
           value={`${data.live.busy_workers}/${data.live.total_workers}`}
           tone="success"
+          hint="trên tổng worker"
         />
         <Metric
           label="LLM 429"
           value={String(data.live.minimax_429s_last_1m)}
           hint="trong 1 phút"
-          tone="warning"
+          tone={data.live.minimax_429s_last_1m > 0 ? "warning" : "success"}
         />
         <Metric
           label="Fallback"
           value={String(data.live.llm_fallbacks_last_2m)}
           hint={`Độ trễ TB: ${fmtMs(data.live.llm_avg_latency_ms)}`}
-          tone="warning"
+          tone={data.live.llm_fallbacks_last_2m > 0 ? "warning" : "success"}
         />
       </section>
 
@@ -354,7 +368,7 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           p50 · p95 · p99. “Tổng từ webhook” là độ trễ ứng viên thực sự chờ;
           thanh thể hiện p95.
         </p>
-        {STAGE_ORDER.map((key) => {
+        {hasLatencyData ? STAGE_ORDER.map((key) => {
           const stage = percentiles[key] ?? { p50: null, p95: null, p99: null };
           const width = Math.max(2, ((stage.p95 ?? 0) / maxP95) * 100);
           const isLlmStage = key === "llm_queue" || key === "llm_model";
@@ -377,7 +391,11 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
               </div>
             </div>
           );
-        })}
+        }) : (
+          <p className="performance-empty">
+            Chưa có lượt xử lý nào để phân tích độ trễ.
+          </p>
+        )}
       </section>
 
       <section className="performance-counts">
@@ -386,7 +404,11 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           data={data.by_lane}
           labels={LANE_LABELS}
         />
-        <CountCard title="Theo kết quả" data={data.by_outcome} labels={{}} />
+        <CountCard
+          title="Theo kết quả"
+          data={data.by_outcome}
+          labels={OUTCOME_LABELS}
+        />
       </section>
 
       <SlowestTurnsTable slow_turns={data.slow_turns} />
@@ -436,7 +458,7 @@ const PerformancePanel = () => {
           <p>
             {isPending
               ? "Đang tải số liệu cho khoảng thời gian đã chọn."
-              : "Theo dõi độ trễ và các lượt xử lý chậm theo thời gian thực."}
+              : "Theo dõi độ trễ và các lượt xử lý chậm trong khoảng thời gian đã chọn."}
           </p>
         </div>
         <div className="performance-window" aria-label="Khoảng thời gian">

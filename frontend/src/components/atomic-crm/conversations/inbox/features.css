@@ -53,11 +53,23 @@
 
 .settings-workspace-content {
   --settings-accent: #0f8a68;
+  --settings-accent-strong: #08765a;
   --settings-accent-soft: #dff3ec;
   --settings-canvas: #eef2f6;
   --settings-surface: #fafbfc;
   --settings-elevated: #ffffff;
   --settings-border: #d4dce6;
+  --ink: #111827;
+  --ink-muted: #4b5563;
+  --ink-faint: #6b7280;
+  --surface: #fafbfc;
+  --surface-solid: #ffffff;
+  --surface-hover: #f4f6f8;
+  --border: #d4dce6;
+  --border-strong: #c3ceda;
+  --workspace-bg: #eef2f6;
+  --workspace-surface-muted: #f4f6f8;
+  --primary-foreground: #ffffff;
   background:
     radial-gradient(
       circle at 18% 0%,
@@ -135,10 +147,10 @@
   display: grid;
   gap: 12px;
   overflow: hidden;
-  border: 1px solid #263247;
+  border: 1px solid var(--settings-border);
   border-radius: 10px;
-  background: #172033;
-  color: #dbe5f0;
+  background: var(--settings-surface);
+  color: var(--ink);
   padding: 12px;
   box-shadow: none;
 }
@@ -206,22 +218,22 @@
 }
 
 .settings-workspace-content .settings-side-nav-link {
-  color: #cbd5e1;
+  color: var(--ink);
 }
 
 .settings-workspace-content .settings-side-nav-link:hover {
-  background: #243149;
-  color: #f8fafc;
+  background: var(--workspace-surface-muted);
+  color: var(--ink);
 }
 
 .settings-workspace-content .settings-side-nav-link.is-active {
-  background: color-mix(in srgb, #0f8a68 28%, #243149);
-  color: #f0fdf8;
+  background: var(--settings-accent-soft);
+  color: var(--settings-accent-strong);
 }
 
 .settings-workspace-content .settings-side-nav-group-label,
 .settings-workspace-content .settings-side-nav-copy span {
-  color: #94a3b8;
+  color: var(--ink-muted);
 }
 
 .settings-workspace-content .settings-side-nav-copy strong {
@@ -413,6 +425,13 @@
 
 .settings-command-header .settings-save-button:hover {
   background: color-mix(in srgb, var(--settings-accent) 88%, var(--ink));
+}
+
+.settings-command-header .settings-save-button:disabled {
+  border-color: var(--settings-border);
+  background: var(--workspace-surface-muted);
+  color: var(--ink-muted);
+  opacity: 1;
 }
 
 
@@ -940,7 +959,11 @@
     grid-auto-columns: minmax(168px, 1fr);
     overflow-x: auto;
     padding-bottom: 2px;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+  }
+
+  .settings-side-nav-list::-webkit-scrollbar {
+    display: none;
   }
 
   .settings-side-nav-footer {

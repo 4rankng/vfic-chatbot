@@ -14,23 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Bot,
-  BusFront,
-  CalendarDays,
-  Check,
-  CircleDollarSign,
-  FileText,
-  Handshake,
-  Home,
-  MapPin,
-  MoreHorizontal,
-  NotepadText,
-  Phone,
-  UserRound,
-  FileBadge,
-  type LucideIcon,
-} from "lucide-react";
+import { Bot, Check, Handshake, UserRound, type LucideIcon } from "lucide-react";
 import { ConversationContextPanel } from "./ConversationContextPanel";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -62,120 +46,6 @@ const MODE_OPTIONS: Array<{
   },
 ];
 
-type CandidateSignal = {
-  key: string;
-  label: string;
-  value: string;
-  Icon: LucideIcon;
-};
-
-const displaySignalValue = (value: unknown) => {
-  if (value === undefined || value === null) return "";
-  return String(value).trim();
-};
-
-const formatGender = (gender: string | null | undefined) => {
-  const normalized = displaySignalValue(gender).toLocaleLowerCase("vi-VN");
-  if (!normalized || normalized === "unknown") return "";
-  if (normalized === "male" || normalized === "nam") return "Nam";
-  if (normalized === "female" || normalized === "nữ" || normalized === "nu") {
-    return "Nữ";
-  }
-  return displaySignalValue(gender);
-};
-
-const notesInclude = (notes: string | null | undefined, terms: string[]) => {
-  const normalized = notes?.toLocaleLowerCase("vi-VN") ?? "";
-  return terms.some((term) => normalized.includes(term));
-};
-
-const getCandidateSignals = (lead?: Lead): CandidateSignal[] => {
-  if (!lead) return [];
-
-  const signals: CandidateSignal[] = [];
-  const addSignal = (
-    key: string,
-    label: string,
-    value: unknown,
-    Icon: LucideIcon,
-  ) => {
-    const text = displaySignalValue(value);
-    if (!text) return;
-    signals.push({ key, label, value: text, Icon });
-  };
-
-  addSignal("phone", "Số điện thoại", lead.phone, Phone);
-  addSignal(
-    "residence",
-    "Nơi cư trú",
-    [lead.region, lead.living_area, lead.address].filter(Boolean).join(" · "),
-    MapPin,
-  );
-  addSignal("gender", "Giới tính", formatGender(lead.gender), UserRound);
-  addSignal(
-    "birth",
-    "Ngày sinh",
-    lead.birth_year
-      ? String(lead.birth_year)
-      : lead.age
-        ? `${lead.age} tuổi`
-        : "",
-    CalendarDays,
-  );
-  addSignal("experience", "Kinh nghiệm", lead.years_experience, FileBadge);
-  addSignal("job", "Công việc mong muốn", lead.desired_job, Handshake);
-  addSignal(
-    "salary",
-    "Mức lương mong muốn",
-    lead.expected_salary,
-    CircleDollarSign,
-  );
-
-  if (
-    notesInclude(lead.notes, [
-      "chỗ ở",
-      "cho o",
-      "nhà trọ",
-      "nha tro",
-      "ký túc",
-      "ky tuc",
-      "ktx",
-    ])
-  ) {
-    signals.push({
-      key: "housing",
-      label: "Chỗ ở",
-      value: "Đã ghi trong ghi chú",
-      Icon: Home,
-    });
-  }
-
-  if (
-    notesInclude(lead.notes, [
-      "đưa đón",
-      "dua don",
-      "xe đưa",
-      "xe dua",
-      "xe đón",
-      "xe don",
-      "bus",
-      "tuyến xe",
-      "tuyen xe",
-    ])
-  ) {
-    signals.push({
-      key: "pickup",
-      label: "Xe đưa đón",
-      value: "Đã ghi trong ghi chú",
-      Icon: BusFront,
-    });
-  }
-
-  addSignal("notes", "Ghi chú", lead.notes, NotepadText);
-
-  return signals;
-};
-
 /**
  * Inbox center pane: the conversation header (mobile list-toggle + candidate
  * quick facts) wrapped around a shared <ChatThread>. The thread itself
@@ -195,7 +65,6 @@ export const ConversationShowContent = ({
   const isMobile = useIsMobile();
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const [isContextOpen, setIsContextOpen] = useState(false);
-  const [activeSignalKey, setActiveSignalKey] = useState<string | null>(null);
   const leadListParams = useMemo(
     () => ({
       filter: { zalo_id: record?.zalo_chat_id },
@@ -248,16 +117,12 @@ export const ConversationShowContent = ({
   const name =
     lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
-  const candidateSignals = useMemo(() => getCandidateSignals(lead), [lead]);
-  const activeSignal =
-    candidateSignals.find((signal) => signal.key === activeSignalKey) ?? null;
   const {
     effectiveMode,
     isBotMode,
     canHumanReply,
     setConversationMode,
     handleTakeover,
-    handleRelease,
   } = useConversationActions(record);
   const activeMode = effectiveMode ?? record?.mode ?? "bot";
   const activeModeOption = MODE_OPTIONS.find(
@@ -267,20 +132,9 @@ export const ConversationShowContent = ({
 
   useEffect(() => {
     setIsContextOpen(false);
-    setActiveSignalKey(null);
   }, [record?.id]);
 
-  useEffect(() => {
-    if (
-      activeSignalKey &&
-      !candidateSignals.some((signal) => signal.key === activeSignalKey)
-    ) {
-      setActiveSignalKey(null);
-    }
-  }, [activeSignalKey, candidateSignals]);
-
   const openContextPanel = () => {
-    setActiveSignalKey(null);
     setIsContextOpen(true);
   };
 
@@ -316,6 +170,7 @@ export const ConversationShowContent = ({
                   <button
                     type="button"
                     className="person-name person-name-button"
+                    ref={contextTriggerRef}
                     onClick={openContextPanel}
                     aria-expanded={isContextOpen}
                     aria-controls="conversation-context-panel"
@@ -326,70 +181,9 @@ export const ConversationShowContent = ({
                   <span className="person-name">{name}</span>
                 )}
               </div>
-              {candidateSignals.length > 0 && (
-                <div
-                  className="candidate-signal-strip"
-                  aria-label="Thông tin ứng viên đã thu thập"
-                  role="list"
-                >
-                  {candidateSignals.map(({ key, label, value, Icon }) => {
-                    const isActive = activeSignalKey === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`candidate-signal-icon ${isActive ? "active" : ""}`}
-                        title={`${label}: ${value}`}
-                        aria-label={`${label}: ${value}`}
-                        aria-expanded={isActive}
-                        aria-controls="candidate-signal-value"
-                        role="listitem"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setActiveSignalKey(isActive ? null : key);
-                        }}
-                      >
-                        <Icon className="icon" aria-hidden="true" />
-                      </button>
-                    );
-                  })}
-                  {activeSignal ? (
-                    <div
-                      className="candidate-signal-popover"
-                      id="candidate-signal-value"
-                      role="status"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <span className="candidate-signal-label">
-                        {activeSignal.label}
-                      </span>
-                      <span className="candidate-signal-value">
-                        {activeSignal.value}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-              )}
             </div>
           </div>
           <div className="header-actions">
-            {activeMode === "bot" ? (
-              <button
-                type="button"
-                className="takeover-btn takeover-btn--header"
-                onClick={handleTakeover}
-              >
-                Tiếp nhận
-              </button>
-            ) : canHumanReply ? (
-              <button
-                type="button"
-                className="takeover-btn takeover-btn--header"
-                onClick={handleRelease}
-              >
-                Trả lại Chatbot
-              </button>
-            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -433,37 +227,6 @@ export const ConversationShowContent = ({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            {showWorkspacePanel && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    ref={contextTriggerRef}
-                    className="more-actions-trigger"
-                    aria-label="Thao tác khác"
-                    title="Thao tác khác"
-                  >
-                    <MoreHorizontal className="icon" aria-hidden="true" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={10}
-                  className="mode-menu-content"
-                >
-                  <DropdownMenuItem
-                    className="mode-menu-item"
-                    onSelect={openContextPanel}
-                  >
-                    <span className="mode-menu-icon">
-                      <FileText className="icon" aria-hidden="true" />
-                    </span>
-                    <span className="mode-menu-title">Thông tin ứng viên</span>
-                    <span className="mode-menu-check" aria-hidden="true" />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
             {activeMode === "closed" && (
               <span className="chat-mode-chip" title="Hội thoại đã đóng; không có thao tác tiếp nhận">
                 <Bot className="icon" />

@@ -1,4 +1,21 @@
 /* Context drawer */
+.candidate-context-sheet {
+  width: 100%;
+  max-width: 100%;
+  box-shadow: none !important;
+}
+
+.candidate-context-sheet > [data-slot="sheet-close"] {
+  display: none;
+}
+
+.candidate-context-sheet .conversation-context-sheet-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .inbox-bg-container .profile-header {
   min-height: 60px;
   display: flex;

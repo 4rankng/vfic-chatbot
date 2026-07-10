@@ -134,13 +134,21 @@ const ChatMessageRow = memo(
       [m.content],
     );
 
-    if (kind === "system" || kind === "event") {
+    if (kind === "system") {
+      return (
+        <div className="system-message" data-message-id={m.id}>
+          <span>{m.content}</span>
+        </div>
+      );
+    }
+
+    if (kind === "event") {
       return (
         <div
-          className={kind === "system" ? "day-marker" : "system-event"}
+          className="system-event"
           data-message-id={m.id}
         >
-          {kind === "event" ? <Sparkles className="icon" /> : null}
+          <Sparkles className="icon" />
           <span>{m.content}</span>
         </div>
       );

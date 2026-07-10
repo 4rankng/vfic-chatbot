@@ -68,7 +68,7 @@ const getAttentionLabel = (
   if (conversation.mode === "closed") return "Đã đóng";
   if (conversation.needs_human) return "Bot cần người";
   if (needsAttention) return "Chờ nhân viên";
-  return conversation.mode === "bot" ? "Chatbot đang xử lý" : "Đang theo dõi";
+  return "";
 };
 
 // Hoisted static style objects so list rows don't allocate brand-new objects on
@@ -213,7 +213,9 @@ const ConversationListItem = memo(
           <span className="conv-bottom">
             {subtitle && <span className="conv-preview">{subtitle}</span>}
             <span className="conv-meta-row">
-              <span className="conv-state-label">{attentionLabel}</span>
+              {attentionLabel ? (
+                <span className="conv-state-label">{attentionLabel}</span>
+              ) : null}
               {priorityChip ? (
                 <span
                   className={`mini-chip priority-${priorityChip.tone}`}
