@@ -147,7 +147,7 @@ def _preamble_timings(state, started_at, *, lane: str, throttle: bool = False) -
 async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run.
-    from app.workers._db import worker_session
+    from app.workers._db import worker_session, worker_session_factory
     from app.graph.factories import build_deps
     from app.graph.runner import BotRunState, run_turn
 
@@ -191,7 +191,7 @@ async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     )
     try:
         async with worker_session() as db:
-            deps = await build_deps(db)
+            deps = await build_deps(db, session_factory=worker_session_factory())
             deps.persist = _enqueue_persist  # wire candidate extraction on SENT
             started_at = _now()
             try:

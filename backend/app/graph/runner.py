@@ -127,6 +127,7 @@ async def _agent_turn(
         embedder=deps.embedder,
         allowed_tools=allowed_tools,
         use_fast=use_fast,
+        make_retrieval=deps.make_retrieval,
     )
     if timings is not None:
         timings["llm_ms"] = timings.get("llm_ms", 0) + int(round((time.monotonic() - llm_t0) * 1000))

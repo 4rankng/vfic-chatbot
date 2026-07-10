@@ -68,6 +68,16 @@ async def worker_session() -> AsyncIterator[AsyncSession]:
             raise
 
 
+def worker_session_factory() -> "async_sessionmaker[AsyncSession]":
+    """Return the session factory for the current worker event loop.
+
+    Lets callers open additional independent sessions (e.g. one per parallel
+    tool call) without sharing the turn's primary session — which is NOT safe
+    for concurrent use.
+    """
+    return _state_for_running_loop().factory
+
+
 async def dispose_worker_engines() -> None:
     """Dispose every cached worker engine on its owning event loop."""
     current_loop = asyncio.get_running_loop()

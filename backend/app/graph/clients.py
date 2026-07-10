@@ -296,7 +296,7 @@ class MiniMaxAgent:
             s = get_settings()
             self.max_iters = s.max_llm_calls_per_turn
 
-    async def agent(self, user_text, *, system, retrieval, embedder, allowed_tools=None, use_fast=False) -> str:
+    async def agent(self, user_text, *, system, retrieval, embedder, allowed_tools=None, use_fast=False, make_retrieval=None) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
         from app.graph.schemas import filter_tool_schemas
 
@@ -354,10 +354,38 @@ class MiniMaxAgent:
             calls = getattr(ai, "tool_calls", None)
             if not calls:
                 return _ground_reply(ai.content, tool_results)
-            # MiniMax occasionally omits tool_call.id; an empty tool_call_id breaks
-            # the OpenAI tool protocol on the next turn. Synthesize a stable id.
-            for idx, tc in enumerate(calls):
-                out = await _dispatch_tool(retrieval, embedder, tc["name"], tc.get("args", {}))
+            # --- Tool dispatch -------------------------------------------------
+            # When the LLM returns multiple tool_calls in one response, run them
+            # concurrently (each on its own DB session via ``make_retrieval``) so
+            # the latency is max(t1..tN) instead of t1+t2+..+tN. Sequential
+            # fallback when there's only one call or no factory is wired (tests).
+            async def _dispatch_one(tc: dict) -> str:
+                name = tc.get("name", "")
+                args = tc.get("args", {})
+                if make_retrieval is not None:
+                    try:
+                        async with make_retrieval() as fresh_retrieval:
+                            return await _dispatch_tool(fresh_retrieval, embedder, name, args)
+                    except Exception:  # noqa: BLE001 — session setup failed → shared
+                        logger.warning("isolated retrieval for tool %s failed, using shared", name, exc_info=True)
+                return await _dispatch_tool(retrieval, embedder, name, args)
+
+            if len(calls) > 1 and make_retrieval is not None:
+                sem = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
+
+                async def _bounded(tc: dict) -> str:
+                    async with sem:
+                        return await _dispatch_one(tc)
+
+                outs = await asyncio.gather(*[_bounded(tc) for tc in calls])
+            else:
+                outs = [await _dispatch_one(tc) for tc in calls]
+
+            # asyncio.gather preserves result order, so ToolMessage[i] matches
+            # tool_calls[i] exactly — the LLM sees identical context ordering.
+            # MiniMax occasionally omits tool_call.id; an empty tool_call_id
+            # breaks the OpenAI tool protocol on the next turn. Synthesize one.
+            for idx, (tc, out) in enumerate(zip(calls, outs)):
                 tool_results.append(str(out))
                 messages.append(
                     ToolMessage(

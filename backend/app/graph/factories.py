@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import asynccontextmanager
 
 from app.core.config import get_settings
 from app.graph.clients import (
@@ -231,8 +232,13 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
         return None
 
 
-async def build_deps(db):
-    """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo)."""
+async def build_deps(db, *, session_factory=None):
+    """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo).
+
+    ``session_factory`` (optional, an ``async_sessionmaker``) enables parallel tool
+    dispatch: each concurrent tool call opens its own session via the factory
+    instead of sharing ``db`` (which is NOT safe for concurrent use).
+    """
     from app.services.conversation import ConversationService
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.retrieval import RetrievalRepository
@@ -272,6 +278,19 @@ async def build_deps(db):
         minimax_config=minimax_config,
         openrouter_config=openrouter_config,
     )
+
+    # Parallel tool dispatch: each concurrent tool call gets its own session so
+    # the shared ``db`` is never used concurrently. Lazy import keeps the graph
+    # layer free of concrete-service imports at module load.
+    make_retrieval = None
+    if session_factory is not None:
+        @asynccontextmanager
+        async def _make_retrieval():
+            async with session_factory() as session:
+                yield RetrievalRepository(session)
+
+        make_retrieval = _make_retrieval
+
     return GraphDeps(
         db=db,
         agent=MiniMaxAgent(agent_llm, embedder, fast_llm=fast_llm),
@@ -283,6 +302,7 @@ async def build_deps(db):
         ),
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
+        make_retrieval=make_retrieval,
         lead=_LeadContextAdapter(db),
         faq_bypass=_FaqBypassAdapter(db, embedder),
         followup_allowed=_make_followup_allowed(db),

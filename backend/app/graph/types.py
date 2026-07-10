@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import AsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
@@ -78,6 +79,10 @@ class GraphDeps:
     retrieval: RetrievalPort
     # Lead-profile context for the agent prompt. None in tests that stub the turn.
     lead: LeadContextPort | None = None
+    # Factory that yields a fresh RetrievalPort on its own DB session, enabling
+    # parallel tool dispatch (each concurrent tool call gets an isolated session).
+    # None → tools run sequentially on the shared ``retrieval`` (tests, legacy).
+    make_retrieval: Callable[[], AsyncContextManager[RetrievalPort]] | None = None
     # Deterministic FAQ short-circuit (runs before the agent node). None in tests.
     faq_bypass: FaqBypassPort | None = None
     # Proactive follow-up guard: (allowed, reason). None in reactive-only tests.
