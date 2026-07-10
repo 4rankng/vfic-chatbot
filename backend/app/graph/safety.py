@@ -29,7 +29,9 @@ class SafetyVerdict(TypedDict):
 
 
 # --- Fast Safety Filter -------------------------------------------------------
-FALLBACK_REPLY = "Xin lỗi, hiện tôi chưa tạo được phản hồi. Bạn vui lòng nhắn lại giúp tôi nhé."
+# Friendly fallback when the bot can't produce a good reply. Short, natural,
+# and redirects the user — not robotic filler.
+FALLBACK_REPLY = "Mình không trả lời được, bạn hỏi câu khác đi nhé 🙏"
 
 _RISK_RE = re.compile(
     # Structural markers are high-precision signals of leaked reasoning / tool
@@ -219,13 +221,13 @@ TECHNICAL_FALLBACK = (
     "Tôi là trợ lý tìm việc của VFIC nên chỉ có thể hỗ trợ bạn các vấn đề liên quan đến "
     "tuyển dụng. Bạn đang muốn tìm việc ở khu vực nào nhỉ?"
 )
-GENERIC_FALLBACK = (
-    "Xin lỗi bạn, tôi chưa soạn được phản hồi phù hợp để gửi ngay lúc này. "
-    "Bạn nhắn lại giúp tôi nhu cầu tìm việc chính của bạn nhé?"
-)
+# Friendly redirect when the bot can't produce a good reply.
+GENERIC_FALLBACK = "Mình không trả lời được, bạn hỏi câu khác đi nhé 🙏"
 
 
 def retry_exhausted_fallback(original_user_text: str) -> str:
+    # Off-topic technical questions get a redirect to recruitment topics.
+    # Everything else gets SILENCE (empty string) — no filler text.
     return TECHNICAL_FALLBACK if _TECH_USER_RE.search(original_user_text or "") else GENERIC_FALLBACK
 
 
