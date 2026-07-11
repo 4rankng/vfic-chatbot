@@ -282,58 +282,39 @@ async def test_llm_throttle_propagates_uncaught(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_safety_verdict_safe_overrides_with_final_answer(monkeypatch):
+async def test_flagged_reply_redirects_to_fallback_without_llm_judge(monkeypatch):
+    """A reply the fast filter flags (code/JSON/empty) is redirected to the
+    deterministic fallback — no second LLM call.
+
+    The safety LLM judge was removed (it p50'd at 10.3s, as expensive as the
+    agent itself). The fast filter already handles every trigger it caught:
+    code/JSON leakage → retry_exhausted_fallback redirect, empty → FALLBACK_REPLY,
+    over-long → truncate. This test pins the redirect path for a code-leakage
+    reply (the most common trigger).
+    """
+    from app.graph.safety import GENERIC_FALLBACK, retry_exhausted_fallback
+
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
-    # reply contains code -> fast filter flags it for the LLM safety gate
-    _stub_agent(monkeypatch, "viết code python ```print('x')```")
-    verdict = (
-        '{"safe_to_send": true, "final_answer": '
-        '"Tôi chỉ tư vấn việc làm, không viết code được."}'
-    )
-    zalo = _FakeZalo()
-
-    res = await run_turn(
-        _state(), _deps(zalo, conversation=svc, safety=_FakeSafety(verdict)),
-    )
-
-    assert res["outcome"] == "sent"
-    # the safety gate's final_answer replaces the raw agent output
-    assert res["reply"] == "Tôi chỉ tư vấn việc làm, không viết code được."
-    assert zalo.sent[0][1] == res["reply"]
-
-
-@pytest.mark.asyncio
-async def test_safety_judge_crash_suppresses_flagged_candidate(monkeypatch):
-    """If the LLM safety judge crashes, the flagged candidate is NOT sent.
-
-    The fast filter already flagged the candidate (code in reply → needs LLM
-    vetting). With the judge down, we fail CLOSED: redirect to the deterministic
-    fallback rather than send unvetted output. The turn still completes and
-    records normally — no crash, no PENDING row left for reconcile.
-    """
-    from app.graph.safety import GENERIC_FALLBACK
-
-    conv = _FakeConv()
-    svc, recorded = _stub_svc(conv=conv, owned=True)
+    # reply contains code fences -> fast filter flags needs_llm_safety
     _stub_agent(monkeypatch, "viết code python ```print('x')```")
 
-    class _CrashingSafety:
-        async def safety(self, candidate: str) -> str:
-            raise RuntimeError("safety judge provider down")
+    class _MustNotJudge:
+        async def safety(self, candidate: str) -> str:  # noqa: ARG002
+            raise AssertionError("LLM safety judge must not be called")
 
     zalo = _FakeZalo()
     res = await run_turn(
-        _state(), _deps(zalo, conversation=svc, safety=_CrashingSafety()),
+        _state(), _deps(zalo, conversation=svc, safety=_MustNotJudge()),
     )
 
-    # The turn completed (did not crash) and sent the deterministic fallback.
     assert res["outcome"] == "sent"
-    assert res["reply"] == GENERIC_FALLBACK
-    assert zalo.sent[0][1] == GENERIC_FALLBACK
-    # The outcome was recorded (no PENDING row left behind).
-    assert recorded
-    assert recorded[0]["stage_timings"]["safety_ms"] >= 0
+    expected = retry_exhausted_fallback("tôi muốn tìm việc lái xe")
+    assert res["reply"] == expected
+    assert zalo.sent[0][1] == expected
+    # The GENERIC_FALLBACK is what retry_exhausted_fallback returns for a
+    # non-technical user (this test's user_text is a job query).
+    assert expected == GENERIC_FALLBACK
 
 
 # ---------------------------------------------------------------------------
@@ -548,9 +529,9 @@ async def test_faq_bypass_timeout_falls_through_to_agent(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_blocklisted_reply_redirects_without_llm_judge(monkeypatch):
+async def test_blocklisted_reply_redirects_deterministically(monkeypatch):
     """An LLM reply that trips the lexical blocklist is redirected to a fallback
-    and the (slower) LLM safety judge is never invoked."""
+    via the deterministic safety gate (no LLM judge)."""
     from app.graph.safety import GENERIC_FALLBACK
 
     _stub_agent(

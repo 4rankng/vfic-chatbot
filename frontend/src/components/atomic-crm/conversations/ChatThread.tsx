@@ -155,17 +155,19 @@ const ChatMessageRow = memo(
     }
 
     const deliveryLabel = deliveryStatusLabel(m.delivery_status);
-    const AvatarIcon = kind === "bot" ? Bot : UserRound;
-    const avatar = !isGrouped ? (
-      <span className="message-avatar">
-        <AvatarIcon className="icon" />
-      </span>
-    ) : (
-      <span
-        className="message-avatar-placeholder"
-        style={AVATAR_PLACEHOLDER_STYLE}
-      />
-    );
+    const avatar =
+      kind === "user" ? (
+        !isGrouped ? (
+          <span className="message-avatar">
+            <UserRound className="icon" />
+          </span>
+        ) : (
+          <span
+            className="message-avatar-placeholder"
+            style={AVATAR_PLACEHOLDER_STYLE}
+          />
+        )
+      ) : null;
     const bubble = (
       <div className="bubble">
         <div className="bubble-content">
@@ -210,12 +212,7 @@ const ChatMessageRow = memo(
             {avatar}
             {bubble}
           </>
-        ) : (
-          <>
-            {bubble}
-            {avatar}
-          </>
-        )}
+        ) : bubble}
       </div>
     );
   },

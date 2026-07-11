@@ -19,6 +19,7 @@ from typing import TypedDict
 
 from app.graph.ports import SendOutcome
 from app.graph.safety import (
+    blocklist_hit,
     fast_safety_filter,
     retry_exhausted_fallback,
 )
@@ -280,27 +281,24 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             )
             return _outcome("suppressed", reason="empty_message")
 
-        # 8. Safety gate (reuse fast filter + LLM safety)
+        # 8. Deterministic safety gate (fast filter only, no LLM judge).
+        # The LLM safety judge was removed (p50 10.3s, as expensive as the agent
+        # call). The fast filter handles every trigger deterministically: code/
+        # JSON/empty/over-long → redirect to fallback. A flagged proactive message
+        # is suppressed (proactive messages are optional — better to skip than
+        # send something the filter flagged).
         fs = fast_safety_filter(message)
         candidate = fs["output"]
 
-        if fs["needs_llm_safety"]:
-            from app.graph.safety import parse_verdict
-
-            verdict = parse_verdict(await deps.safety.safety(candidate))
-            if verdict["safe_to_send"]:
-                candidate = verdict["final_answer"] or candidate
-            else:
-                logger.info("proactive safety blocked: conversation=%s", conv.zalo_chat_id)
-                await svc.state.record_proactive_outcome(
-                    conv,
-                    message=candidate,
-                    result=SendOutcome(ok=False, error="safety_blocked"),
-                    lock_owner=lock_owner,
-                )
-                return _outcome("suppressed", reason="safety_blocked")
-        else:
-            candidate = fs["output"]
+        if fs["needs_llm_safety"] or blocklist_hit(message):
+            logger.info("proactive safety flagged: conversation=%s", conv.zalo_chat_id)
+            await svc.state.record_proactive_outcome(
+                conv,
+                message=retry_exhausted_fallback(message),
+                result=SendOutcome(ok=False, error="safety_blocked"),
+                lock_owner=lock_owner,
+            )
+            return _outcome("suppressed", reason="safety_blocked")
 
         # 9. Last-chance guards (re-read from DB for takeovers/opt-outs)
         await deps.db.refresh(conv)

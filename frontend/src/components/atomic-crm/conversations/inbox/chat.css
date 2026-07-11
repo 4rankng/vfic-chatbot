@@ -863,17 +863,6 @@
   border: 1px solid var(--border);
   color: var(--ink-muted);
 }
-.inbox-bg-container .message-row.bot .message-avatar {
-  background: var(--brand-light);
-  color: var(--brand);
-  border-color: transparent;
-}
-.inbox-bg-container .message-row.agent .message-avatar {
-  background: var(--inbox-accent-light);
-  color: var(--inbox-accent);
-  border-color: transparent;
-}
-
 .inbox-bg-container .bubble {
   max-width: min(64%, 600px);
   min-width: 0;

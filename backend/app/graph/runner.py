@@ -33,9 +33,7 @@ from app.graph.router import route_turn, routing_instruction, should_use_fast_mo
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.safety import (
     blocklist_hit,
-    build_retry_prompt,
     fast_safety_filter,
-    parse_verdict,
     retry_exhausted_fallback,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
@@ -378,48 +376,29 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
 
             state.reply = raw
 
-            # --- fast safety filter ---
+            # --- deterministic safety gate (no LLM judge) ---
+            # The fast filter strips <think>/markdown/code-fences from the raw
+            # reply and flags three triggers: empty output, over-long (>1800ch),
+            # and structural-leakage (code/JSON/node markers). Each is resolved
+            # deterministically — no second LLM call:
+            #   - blocklist hit  → retry_exhausted_fallback (hard redirect)
+            #   - risk-regex hit → retry_exhausted_fallback (same redirect path)
+            #   - empty          → FALLBACK_REPLY (already set by fast_safety_filter)
+            #   - over-long      → truncate_for_chat (already applied by fast filter)
+            # This replaces the former LLM safety judge (a ~10s second model call
+            # that p50'd at 10.3s — as expensive as the agent call itself). The
+            # judge added latency without adding safety: every trigger it caught
+            # was already handled deterministically above.
             fs = fast_safety_filter(raw)
             candidate = fs["output"]
 
-            # --- blocklist: hard redirect, no LLM safety judge ---
-            # A coarse deny-list hit on the raw output is resolved deterministically
-            # (redirect to a fallback) and skips the slower LLM judge entirely.
-            if blocklist_hit(raw):
+            if blocklist_hit(raw) or fs["needs_llm_safety"]:
+                # Either a coarse deny-list term OR a fast-filter flag (empty /
+                # over-long / structural leakage). Redirect to the deterministic
+                # fallback. For over-long, fast_safety_filter already truncated
+                # the output, but we still redirect because an over-long reply
+                # usually signals the model is off-track (not just verbose).
                 candidate = retry_exhausted_fallback(state.user_text)
-            # --- llm safety check (only when fast filter flagged AND not blocklisted) ---
-            elif fs["needs_llm_safety"]:
-                safety_t0 = time.monotonic()
-                try:
-                    verdict = parse_verdict(await deps.safety.safety(candidate))
-                except Exception:  # noqa: BLE001 — safety judge crashed
-                    # Fast filter already flagged this candidate; fail CLOSED
-                    # (don't send unvetted output) and redirect to the fallback.
-                    # The turn still records normally — no crash, no PENDING row.
-                    logger.warning(
-                        "safety judge crashed for %s; suppressing flagged candidate",
-                        conv.zalo_chat_id, exc_info=True,
-                    )
-                    candidate = retry_exhausted_fallback(state.user_text)
-                else:
-                    if verdict["safe_to_send"]:
-                        candidate = verdict["final_answer"] or candidate
-                    elif state.attempt < 1:
-                        state.attempt += 1
-                        retry_prompt = build_retry_prompt(state.user_text, candidate, verdict["issue_type"])
-                        raw2 = await _agent_turn(
-                            state,
-                            deps,
-                            retry_prompt,
-                            chat_id=conv.zalo_chat_id,
-                            recent_messages=recent_messages,
-                            timings=timings,
-                        )
-                        state.reply = raw2
-                        candidate = fast_safety_filter(raw2)["output"]
-                    else:
-                        candidate = retry_exhausted_fallback(state.user_text)
-                timings["safety_ms"] = int(round((time.monotonic() - safety_t0) * 1000))
 
         # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
         # server-side on version + lock_owner + lock liveness. Closes both the

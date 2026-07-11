@@ -10,6 +10,16 @@ Usage::
     python -m app.workers.run_worker webhook_high persistence_low
 
 Accepts queue names as positional arguments (required, no default).
+
+Runs with ``SimpleWorker`` (no ``os.fork`` per job). The default RQ ``Worker``
+forks a child for every job, and each forked child re-imports langchain/openai
++ reconstructs LLM clients — a ~5-7s cold cost on every turn (measured
+``preamble_ms`` avg 6.1s, p95 10.9s). ``SimpleWorker`` runs jobs in-process, so
+``preload_imports`` warms the modules once and ``_build_cached_clients`` reuses
+the LLM clients across all turns for the life of the worker process. The
+tradeoff is isolation: a crashing job can take the worker down (no fork
+boundary), so ``_run_job_async`` wraps the turn in a top-level catch and the
+direct/ASGI turn path (already no-fork) is the trusted precedent.
 """
 from __future__ import annotations
 
@@ -25,16 +35,16 @@ def main(queues: list[str]) -> None:
     # stderr (the previous silent-degradation path).
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    from rq import Worker
+    from rq import SimpleWorker
     from app.core.redis import get_redis_sync
 
     conn = get_redis_sync()
-    w = Worker(queues, connection=conn)
+    w = SimpleWorker(queues, connection=conn)
 
     # Preload heavy imports (langchain/openai/graph layer) in the parent process
-    # BEFORE the work loop. RQ forks a child per job (os.fork); the child
-    # inherits these modules via copy-on-write, avoiding a ~5-7s re-import on
-    # every turn (measured preamble_ms avg 6.1s without it).
+    # BEFORE the work loop. SimpleWorker runs jobs in-process (no fork), so the
+    # imports stay warm for every subsequent turn and the LLM-client cache
+    # (_build_cached_clients) hits on the 2nd+ turn.
     #
     # Not fatal (jobs still run, just slower), but a silent preload failure is
     # exactly what causes a chronically slow preamble — log at ERROR, not stderr.
@@ -44,8 +54,8 @@ def main(queues: list[str]) -> None:
         preload_imports()
     except Exception:
         logger.error(
-            "preload_imports FAILED — every forked job will pay the full "
-            "cold-import cost (~5-7s/turn). Fix the import error below.",
+            "preload_imports FAILED — every turn will pay the full cold-import "
+            "cost (~5-7s/turn). Fix the import error below.",
             exc_info=True,
         )
 

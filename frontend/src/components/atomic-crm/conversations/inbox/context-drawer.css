@@ -656,29 +656,32 @@
 
 .inbox-bg-container .candidate-info-grid {
   display: grid;
-  gap: 7px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--workspace-blue-line);
+  border-radius: 12px;
+  background: var(--surface-solid);
 }
 
 .inbox-bg-container .candidate-info-row {
-  min-height: 46px;
+  min-height: 54px;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) 18px;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border: 1px dashed color-mix(in srgb, var(--ink-faint) 26%, var(--border));
-  border-radius: var(--rad-sm);
-  background: color-mix(
-    in srgb,
-    var(--surface-solid) 82%,
-    var(--surface-hover)
-  );
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--workspace-blue-line);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--surface-solid) 78%, var(--surface-hover));
 }
 
 .inbox-bg-container .candidate-info-row.filled {
-  border-style: solid;
-  border-color: var(--border);
   background: var(--surface-solid);
+}
+
+.inbox-bg-container .candidate-info-row:last-child {
+  border-bottom: 0;
 }
 
 .inbox-bg-container .candidate-info-icon {
@@ -715,8 +718,8 @@
   font-size: var(--chat-fs-caption);
   font-weight: var(--chat-fw-semibold);
   line-height: var(--chat-lh-tight);
-  letter-spacing: 0;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
   overflow-wrap: anywhere;
 }
 
@@ -726,6 +729,40 @@
   font-weight: var(--chat-fw-medium);
   line-height: var(--chat-lh-body);
   overflow-wrap: anywhere;
+}
+
+.inbox-bg-container .candidate-info-row[data-field="notes"] {
+  align-items: start;
+}
+
+.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-copy {
+  padding-block: 2px;
+}
+
+.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value {
+  max-height: 12rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-color: var(--workspace-blue-line) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value::-webkit-scrollbar {
+  width: 8px;
+}
+
+.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--workspace-blue-line);
+  background-clip: padding-box;
+}
+
+.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .inbox-bg-container .candidate-info-row.filled .candidate-info-value {

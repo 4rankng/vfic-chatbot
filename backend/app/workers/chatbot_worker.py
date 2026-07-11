@@ -214,6 +214,22 @@ def _preamble_timings(state, started_at, *, lane: str, throttle: bool = False) -
 
 
 async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
+    # Top-level crash-guard: under SimpleWorker (no fork), an unhandled exception
+    # here would kill the worker process and interrupt every queued turn. The
+    # direct/ASGI path is the trusted no-fork precedent and relies on the same
+    # guarantee. run_turn has its own try/finally for the per-turn cleanup
+    # (status heartbeat cancellation); this guard is for failures OUTSIDE that
+    # (build_deps, BotRunState construction, the worker's own LLMThrottled path).
+    try:
+        await _run_job_async_inner(job, source=source)
+    except Exception:
+        logger.exception(
+            "chat turn crashed (conversation=%s); suppressed to protect the worker",
+            job.get("conversation_id", "?"),
+        )
+
+
+async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run.
     from app.workers._db import worker_session, worker_session_factory
