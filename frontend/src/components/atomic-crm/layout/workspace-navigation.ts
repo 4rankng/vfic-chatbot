@@ -116,3 +116,20 @@ export const getWorkspaceDestinations = (
           ? destination.id !== "account"
           : destination.id !== "settings" && destination.id !== "performance")),
   );
+
+/**
+ * Mobile keeps four primary destinations visible. This helper exposes the
+ * remaining allowed desktop destinations through the mobile overflow surface,
+ * so compact navigation never removes a capability.
+ */
+export const getWorkspaceOverflowDestinations = (
+  role: WorkspaceRole,
+): readonly WorkspaceDestination[] => {
+  const primaryIds = new Set(
+    getWorkspaceDestinations(role, "mobile").map(({ id }) => id),
+  );
+
+  return getWorkspaceDestinations(role, "desktop").filter(
+    ({ id }) => !primaryIds.has(id),
+  );
+};

@@ -521,6 +521,11 @@ input {
     backdrop-filter: none;
   }
 
+  .workspace-navigation-mobile
+    .workspace-navigation-items--with-overflow {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .workspace-navigation-mobile .workspace-navigation-link {
     min-height: 3.35rem;
     flex-direction: column;
@@ -533,9 +538,17 @@ input {
     color: var(--workspace-ink-muted);
   }
 
+  .workspace-navigation-mobile .workspace-navigation-more {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
   .workspace-navigation-mobile .workspace-navigation-link:hover {
-    background: var(--workspace-surface-muted);
-    color: var(--workspace-ink);
+    background: #f4f6f8;
+    color: #111827;
   }
 
   .workspace-navigation-mobile .workspace-navigation-link.is-active {
@@ -552,6 +565,64 @@ input {
     width: 1.25rem;
     height: 1.25rem;
   }
+}
+
+.mobile-nav-more-sheet {
+  width: 100%;
+  max-width: none;
+  gap: 0;
+  border: 1px solid #d4dce6;
+  border-radius: 1rem 1rem 0 0;
+  background: #fafbfc;
+  color: #111827;
+  padding: 1rem;
+  box-shadow: none !important;
+}
+
+.mobile-nav-more-sheet > [data-slot="sheet-close"] {
+  top: 0.9rem;
+  right: 0.9rem;
+  color: #475569;
+}
+
+.mobile-nav-more-title {
+  margin: 0;
+  color: #111827 !important;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.mobile-nav-more-items {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.mobile-nav-more-link {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid #d4dce6;
+  border-radius: 0.625rem;
+  background: #ffffff;
+  color: #111827;
+  padding: 0 0.875rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.mobile-nav-more-link svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: #0f8a68;
+}
+
+.mobile-nav-more-link.is-active {
+  border-color: #9bd5c4;
+  background: #dff3ec;
+  color: #08765a;
 }
 
 /* Respect prefers-reduced-motion globally: neuter animations/transitions for

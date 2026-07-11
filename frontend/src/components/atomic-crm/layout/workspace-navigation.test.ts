@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getWorkspaceDestinations,
+  getWorkspaceOverflowDestinations,
   normalizeWorkspacePath,
 } from "./workspace-navigation";
 
@@ -38,6 +39,13 @@ describe("workspace navigation", () => {
     expect(
       getWorkspaceDestinations("admin", "mobile").map(({ label }) => label),
     ).toEqual(["Tổng quan", "Tin nhắn", "Dự án", "Cài đặt"]);
+  });
+
+  it("keeps desktop-only admin destinations reachable through mobile overflow", () => {
+    expect(
+      getWorkspaceOverflowDestinations("admin").map(({ label }) => label),
+    ).toEqual(["Hiệu suất", "Tài khoản"]);
+    expect(getWorkspaceOverflowDestinations("recruiter")).toEqual([]);
   });
 
   it("matches nested workspace routes", () => {
