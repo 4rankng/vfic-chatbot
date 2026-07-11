@@ -32,20 +32,12 @@
   }
 
   .inbox-bg-container .conversation.active {
-    background: #e4efff;
+    background: #d8ecff;
     box-shadow: none;
   }
 
   .inbox-bg-container .conversation.needs-attention {
     background: var(--surface-solid);
-  }
-
-  .inbox-bg-container .conversation.active::before {
-    left: 0;
-    top: 50%;
-    bottom: auto;
-    height: 22px;
-    transform: translateY(-50%);
   }
 
   .inbox-bg-container .conv-name {
@@ -105,21 +97,9 @@
   background: var(--surface-solid);
 }
 .inbox-bg-container .conversation.active {
-  background: var(--brand-light);
+  background: #d8ecff;
   border-color: transparent;
   box-shadow: none;
-}
-.inbox-bg-container .conversation.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  bottom: auto;
-  width: 3px;
-  height: 22px;
-  background: var(--brand);
-  border-radius: 3px;
-  transform: translateY(-50%);
 }
 
 .inbox-bg-container .avatar {
@@ -347,7 +327,7 @@
 
   .inbox-bg-container .conversation.active {
     border-color: var(--workspace-blue-line);
-    background: #e4efff;
+    background: #d8ecff;
     box-shadow: none;
   }
 
@@ -359,18 +339,8 @@
     background: #f5f7fa;
   }
 
-  .inbox-bg-container .conversation.active::before {
-    left: 0;
-    top: 50%;
-    bottom: auto;
-    height: 100%;
-    background: var(--workspace-active);
-    border-radius: 0;
-    transform: translateY(-50%);
-  }
-
   .inbox-bg-container .conversation.active.needs-attention {
-    background: #e4efff;
+    background: #d8ecff;
   }
 
   .inbox-bg-container .conversation::after {

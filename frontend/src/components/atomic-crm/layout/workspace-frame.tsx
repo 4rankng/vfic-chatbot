@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { MoreHorizontal } from "lucide-react";
 
@@ -158,6 +158,7 @@ export const WorkspaceFrame = ({
   contentClassName,
 }: WorkspaceFrameProps) => {
   const location = useLocation();
+  const contentRef = useRef<HTMLElement>(null);
   const { count: attentionCount } = useNotifications();
   const routeValue =
     location.pathname === "/" && location.hash.startsWith("#/")
@@ -171,6 +172,20 @@ export const WorkspaceFrame = ({
     normalizedPath.startsWith("/conversations") &&
     new URLSearchParams(routeSearch).has("id");
 
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    content.scrollTop = 0;
+    content
+      .querySelectorAll<HTMLElement>(
+        ".dashboard-center-panel, .knowledge-center-panel, .settings-center-panel, .profile-center-panel, .persona-center-panel, .project-center-panel",
+      )
+      .forEach((panel) => {
+        panel.scrollTop = 0;
+      });
+  }, [routeValue]);
+
   return (
     <div className={cn("workspace-frame", className)}>
       <a className="workspace-skip-link" href="#main-content">
@@ -179,6 +194,7 @@ export const WorkspaceFrame = ({
       <Header />
       <WorkspaceNavigation surface="rail" attentionCount={attentionCount} />
       <main
+        ref={contentRef}
         id="main-content"
         className={cn("workspace-frame-content", contentClassName)}
       >

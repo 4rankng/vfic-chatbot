@@ -16,17 +16,10 @@ describe("workspace navigation", () => {
     );
   });
 
-  it("keeps account access in the desktop icon rail", () => {
+  it("keeps account out of the desktop icon rail", () => {
     expect(
       getWorkspaceDestinations("admin", "rail").map(({ label }) => label),
-    ).toEqual([
-      "Tổng quan",
-      "Tin nhắn",
-      "Dự án",
-      "Cài đặt",
-      "Hiệu suất",
-      "Tài khoản",
-    ]);
+    ).toEqual(["Tổng quan", "Tin nhắn", "Dự án", "Cài đặt", "Hiệu suất"]);
   });
 
   it("keeps settings hidden from recruiters and account available on mobile", () => {
@@ -44,7 +37,7 @@ describe("workspace navigation", () => {
   it("keeps desktop-only admin destinations reachable through mobile overflow", () => {
     expect(
       getWorkspaceOverflowDestinations("admin").map(({ label }) => label),
-    ).toEqual(["Hiệu suất", "Tài khoản"]);
+    ).toEqual(["Hiệu suất"]);
     expect(getWorkspaceOverflowDestinations("recruiter")).toEqual([]);
   });
 

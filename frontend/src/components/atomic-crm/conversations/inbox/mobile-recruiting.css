@@ -668,7 +668,7 @@
 }
 
 .inbox-bg-container .conversation.active {
-  background: var(--brand-light);
+  background: #d8ecff;
 }
 
 .inbox-bg-container .conversation.needs-attention {
@@ -677,11 +677,7 @@
 }
 
 .inbox-bg-container .conversation.active.needs-attention {
-  background: var(--brand-light);
-}
-
-.inbox-bg-container .conversation.active::before {
-  background: var(--brand);
+  background: #d8ecff;
 }
 
 .inbox-bg-container .conv-name {
@@ -709,19 +705,19 @@
 }
 
 .inbox-bg-container .mode-menu-trigger {
-  background: var(--paper);
+  background: #ffffff;
 }
 
 .inbox-bg-container .mode-menu-trigger.human {
-  color: var(--brand);
+  color: #344054;
 }
 
 .inbox-bg-container .mode-menu-trigger.semi_auto {
-  color: var(--warning);
+  color: #344054;
 }
 
 .inbox-bg-container .mode-menu-trigger.bot {
-  color: var(--brand);
+  color: #344054;
 }
 
 @media (max-width: 767px) {

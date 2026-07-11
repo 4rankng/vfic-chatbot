@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.graph.clients import FallbackLLM, MiniMaxAgent, MiniMaxSafety, OpenRouterEmbedder
+from app.graph.clients import MiniMaxAgent, MiniMaxSafety, OpenRouterEmbedder
 from app.graph.factories import build_deps, make_minimax_llm_json
 from app.graph.types import GraphDeps
 
@@ -27,6 +27,8 @@ class _Settings:
 
 
 class _SettingsWithFallback(_Settings):
+    """Both providers enabled (legacy name kept; no runtime fallback anymore)."""
+
     minimax_api_key = "sk-mm-fake"
     openrouter_enable = True
     openrouter_api_key = "sk-or-fake"
@@ -59,68 +61,6 @@ def test_minimax_json_missing_key_names_minimax(monkeypatch):
         make_minimax_llm_json()
 
 
-@pytest.mark.asyncio
-async def test_fallback_llm_retries_on_primary_failure():
-    """FallbackLLM tries primary first, falls back to secondary on exception."""
-
-    class _FailLLM:
-        async def ainvoke(self, messages, **kwargs):
-            raise ConnectionError("primary down")
-
-    class _OkLLM:
-        async def ainvoke(self, messages, **kwargs):
-            return "fallback-reply"
-
-    wrapped = FallbackLLM(_FailLLM(), _OkLLM())
-    result = await wrapped.ainvoke([])
-    assert result == "fallback-reply"
-
-
-@pytest.mark.asyncio
-async def test_fallback_llm_primary_success_skips_fallback():
-    """FallbackLLM returns primary result when it succeeds."""
-
-    class _OkLLM:
-        call_count = 0
-
-        async def ainvoke(self, messages, **kwargs):
-            self.call_count += 1
-            return f"primary-{self.call_count}"
-
-    class _ShouldNotBeCalled:
-        async def ainvoke(self, messages, **kwargs):
-            raise AssertionError("fallback should not be called when primary succeeds")
-
-    wrapped = FallbackLLM(_OkLLM(), _ShouldNotBeCalled())
-    result = await wrapped.ainvoke([])
-    assert result == "primary-1"
-
-
-@pytest.mark.asyncio
-async def test_fallback_llm_bind_tools_returns_fallback_wrapped():
-    """bind_tools on FallbackLLM returns a new FallbackLLM wrapping bound inner clients."""
-
-    class _Bindable:
-        def __init__(self, name):
-            self.name = name
-            self.bound = False
-
-        def bind_tools(self, tools):
-            self.bound = True
-            return self
-
-        async def ainvoke(self, messages, **kwargs):
-            raise RuntimeError(f"{self.name} not mocked for ainvoke")
-
-    primary = _Bindable("primary")
-    fallback = _Bindable("fallback")
-    wrapped = FallbackLLM(primary, fallback)
-    bound = wrapped.bind_tools([{"type": "function", "function": {"name": "test"}}])
-    assert isinstance(bound, FallbackLLM)
-    assert primary.bound
-    assert fallback.bound
-
-
 def test_active_provider_no_xor_when_both_enabled(monkeypatch):
     """_active_llm_provider returns the configured default when both are enabled."""
     from app.graph.clients import _active_llm_provider
@@ -150,10 +90,29 @@ def test_active_provider_openrouter_only(monkeypatch):
     assert _active_llm_provider() == "openrouter"
 
 
-def test_chat_for_role_returns_fallback_when_both_enabled(monkeypatch):
-    """_chat_for_role returns a FallbackLLM wrapping both providers when both are enabled."""
+def test_chat_for_role_returns_plain_client_default_minimax(monkeypatch):
+    """_chat_for_role returns a plain ChatOpenAI for the default provider (no wrapper)."""
+    from langchain_openai import ChatOpenAI
+
     from app.graph.clients import _chat_for_role
 
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _SettingsWithFallback())
     llm = _chat_for_role("agent", temperature=0.3)
-    assert isinstance(llm, FallbackLLM)
+    # No FallbackLLM wrapper — a plain ChatOpenAI for the single active provider.
+    assert isinstance(llm, ChatOpenAI)
+
+
+def test_chat_for_role_returns_openrouter_client_when_default(monkeypatch):
+    """_chat_for_role honors LLM_DEFAULT_PROVIDER=openrouter at the client level."""
+    from langchain_openai import ChatOpenAI
+
+    from app.graph.clients import _chat_for_role
+
+    class _OpenRouterDefault(_SettingsWithFallback):
+        llm_default_provider = "openrouter"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouterDefault())
+    llm = _chat_for_role("agent", temperature=0.3)
+    assert isinstance(llm, ChatOpenAI)
+    # The model name reflects the openrouter config, proving provider selection.
+    assert "deepseek" in llm.model_name

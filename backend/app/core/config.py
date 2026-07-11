@@ -313,10 +313,6 @@ class Settings(BaseSettings):
         )
 
     @property
-    def llm_fallback_enabled(self) -> bool:
-        return self.minimax_enable and self.openrouter_enable
-
-    @property
     def active_llm_request_timeout(self) -> int:
         return (
             self.openrouter_request_timeout

@@ -20,7 +20,6 @@ def collect_queue_health() -> dict:
     from app.core.redis import get_redis_sync
     from app.graph.clients import (
         _RKEY_429,
-        _RKEY_FALLBACK_COUNT,
         _RKEY_INVOKE_COUNT,
         _RKEY_INVOKE_MS,
     )
@@ -36,7 +35,6 @@ def collect_queue_health() -> dict:
     invoke_total_ms = int(conn.get(_RKEY_INVOKE_MS) or 0)
     avg_latency_ms = round(invoke_total_ms / invoke_count) if invoke_count else 0
     minimax_429s_1m = int(conn.get(_RKEY_429) or 0)
-    llm_fallbacks_2m = int(conn.get(_RKEY_FALLBACK_COUNT) or 0)
 
     return {
         "queue_depth": qd,
@@ -45,7 +43,6 @@ def collect_queue_health() -> dict:
         "llm_avg_latency_ms": avg_latency_ms,
         "llm_invokes_last_2m": invoke_count,
         "minimax_429s_last_1m": minimax_429s_1m,
-        "llm_fallbacks_last_2m": llm_fallbacks_2m,
         # Phase 6: today's token usage + estimated cost (best-effort, 0 if no turns yet).
         "llm_token_usage": collect_token_usage(),
     }

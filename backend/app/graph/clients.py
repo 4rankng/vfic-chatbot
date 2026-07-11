@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 _RKEY_429 = "llm:minimax_429s"  # INCR on 429, EXPIRE 60 (rolling minute)
 _RKEY_INVOKE_COUNT = "llm:invoke_count"
 _RKEY_INVOKE_MS = "llm:invoke_total_ms"
-_RKEY_FALLBACK_COUNT = "llm:fallback_count"
 
 
 def _record_llm_latency(ms: int) -> None:
@@ -52,18 +51,6 @@ def _record_llm_429() -> None:
         r.expire(_RKEY_429, 60)  # rolling 1-minute window
     except Exception:  # noqa: BLE001
         logger.warning("failed to record llm 429 to redis", exc_info=True)
-
-
-def _record_llm_fallback() -> None:
-    """Increment primary->fallback LLM failover count (best-effort, non-fatal)."""
-    try:
-        from app.core.redis import get_redis_sync
-
-        r = get_redis_sync()
-        r.incr(_RKEY_FALLBACK_COUNT)
-        r.expire(_RKEY_FALLBACK_COUNT, 120)
-    except Exception:  # noqa: BLE001
-        logger.warning("failed to record llm fallback to redis", exc_info=True)
 
 
 ModelRole = Literal["agent", "safety", "digest"]
@@ -499,8 +486,6 @@ class MiniMaxAgent:
                 if backoff_ms > 0:
                     metrics["llm_backoff_ms"] = metrics.get("llm_backoff_ms", 0) + backoff_ms
                 metrics["llm_call_ms"].append(model_ms - backoff_ms)
-                if getattr(bound, "_fallback_used", False):
-                    metrics["used_fallback"] = True
             # Live Redis counter tracks the full LLM path (queue + model) — the
             # right number for the "is the LLM path slow right now?" live tile.
             _record_llm_latency(iter_total_ms)
@@ -592,42 +577,6 @@ class MiniMaxSafety:
         return resp.content
 
 
-class FallbackLLM:
-    """Wraps a primary and fallback ChatOpenAI. On primary failure, retries once with fallback.
-
-    Transparent to callers: supports ``bind_tools`` and ``ainvoke`` just like ChatOpenAI,
-    so the existing agent/safety/digest code works unchanged.
-    """
-
-    def __init__(self, primary, fallback):
-        self.primary = primary
-        self.fallback = fallback
-        # Per-instance flag set on failover. FallbackLLM is constructed per turn
-        # in build_deps, and bind_tools returns a fresh wrapper, so the flag
-        # never leaks across turns.
-        self._fallback_used = False
-
-    def bind_tools(self, tools):
-        bound_primary = (
-            self.primary.bind_tools(tools) if hasattr(self.primary, "bind_tools") else self.primary
-        )
-        bound_fallback = (
-            self.fallback.bind_tools(tools)
-            if hasattr(self.fallback, "bind_tools")
-            else self.fallback
-        )
-        return FallbackLLM(bound_primary, bound_fallback)
-
-    async def ainvoke(self, messages, **kwargs):
-        try:
-            return await self.primary.ainvoke(messages, **kwargs)
-        except Exception:
-            self._fallback_used = True
-            _record_llm_fallback()
-            logger.warning("Primary LLM failed, falling back to secondary provider", exc_info=True)
-            return await self.fallback.ainvoke(messages, **kwargs)
-
-
 def _minimax_chat(
     model: str,
     *,
@@ -638,9 +587,10 @@ def _minimax_chat(
     """OpenAI-compatible MiniMax client from settings. Shared construction so
     model / base_url / timeout cannot drift between build_deps and the extractor.
 
-    ``max_retries`` defaults to 0 because ``FallbackLLM`` already handles provider-
-    level retry; the openai library's built-in retry would just waste time (3× the
-    timeout) before the fallback kicks in.
+    ``max_retries`` defaults to 0: the agent loop handles 429 explicitly via
+    ``_llm_call_with_retry`` (one backoff retry, then LLMThrottled → static
+    degradation reply). The openai library's built-in retry would just waste
+    time (3× the timeout) on top of that, so it stays off.
     """
     s = get_settings()
     resolved_api_key = api_key or s.minimax_api_key
@@ -686,19 +636,35 @@ def _openrouter_chat(
     )
 
 
-def _active_llm_provider(settings=None) -> Literal["minimax", "openrouter"]:
-    """Return the configured primary LLM provider name."""
+def _active_llm_provider(
+    settings=None,
+    *,
+    minimax_enabled: bool | None = None,
+    openrouter_enabled: bool | None = None,
+    default_provider: Literal["minimax", "openrouter"] | None = None,
+) -> Literal["minimax", "openrouter"]:
+    """Return the single configured LLM provider name for this process.
+
+    Resolution order: explicit ``default_provider`` override, then settings'
+    ``llm_default_provider`` if its provider is enabled, then whichever provider
+    is enabled. There is no runtime failover — this is called once per client
+    build, and switching providers is a deploy-time config change.
+    """
     s = settings or get_settings()
-    minimax_enabled = getattr(s, "minimax_enable", True)
-    openrouter_enabled = getattr(s, "openrouter_enable", False)
-    default_provider = getattr(s, "llm_default_provider", "minimax")
-    if default_provider == "openrouter" and openrouter_enabled:
+    mm_on = getattr(s, "minimax_enable", True) if minimax_enabled is None else minimax_enabled
+    or_on = (
+        getattr(s, "openrouter_enable", False)
+        if openrouter_enabled is None
+        else openrouter_enabled
+    )
+    preferred = default_provider or getattr(s, "llm_default_provider", "minimax")
+    if preferred == "openrouter" and or_on:
         return "openrouter"
-    if default_provider == "minimax" and minimax_enabled:
+    if preferred == "minimax" and mm_on:
         return "minimax"
-    if openrouter_enabled:
+    if or_on:
         return "openrouter"
-    if minimax_enabled:
+    if mm_on:
         return "minimax"
     raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
 
@@ -719,52 +685,23 @@ def _chat_for_role(
 ):
     """Build the OpenAI-compatible chat client for an agent/safety/digest role.
 
-    When both providers are enabled, returns a ``FallbackLLM`` that tries the
-    configured default first and automatically retries with the other provider.
+    Returns a plain ``ChatOpenAI`` for the single configured provider. The
+    active provider is resolved once by ``_active_llm_provider`` (default first,
+    falling back to whichever is enabled) — switching providers is a deploy-time
+    ``LLM_DEFAULT_PROVIDER`` change, not a runtime failover. There is no
+    per-call fallback: a failed provider call surfaces directly so the caller
+    (worker / safety judge) handles it. Removing the runtime failover wrapper
+    keeps the client stateless and safe to cache across turns.
     """
     s = get_settings()
-    minimax_on = getattr(s, "minimax_enable", True) if minimax_enabled is None else minimax_enabled
-    openrouter_on = (
-        getattr(s, "openrouter_enable", False)
-        if openrouter_enabled is None
-        else openrouter_enabled
+    provider = _active_llm_provider(
+        s,
+        minimax_enabled=minimax_enabled,
+        openrouter_enabled=openrouter_enabled,
+        default_provider=default_provider,
     )
-    preferred = default_provider or getattr(s, "llm_default_provider", "minimax")
 
-    if not minimax_on and not openrouter_on:
-        raise RuntimeError(
-            "No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true"
-        )
-
-    minimax_chat = None
-    if minimax_on:
-        resolved_minimax_key = minimax_api_key or s.minimax_api_key
-        if role == "digest":
-            if not resolved_minimax_key:
-                raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
-            from langchain_openai import ChatOpenAI
-
-            kwargs = (
-                {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
-            )
-            minimax_chat = ChatOpenAI(
-                model=s.minimax_digest_model or s.minimax_agent_model,
-                api_key=resolved_minimax_key,
-                base_url=s.minimax_base_url,
-                timeout=s.minimax_digest_timeout,
-                temperature=temperature,
-                **kwargs,
-            )
-        else:
-            model = s.minimax_agent_model if role == "agent" else s.minimax_safety_model
-            minimax_chat = _minimax_chat(
-                model,
-                temperature=temperature,
-                api_key=resolved_minimax_key,
-            )
-
-    openrouter_chat = None
-    if openrouter_on:
+    if provider == "openrouter":
         resolved_openrouter_key = openrouter_api_key or s.openrouter_api_key
         model = {
             "agent": openrouter_agent_model or s.openrouter_agent_model,
@@ -777,7 +714,7 @@ def _chat_for_role(
             ),
         }[role]
         timeout = s.openrouter_digest_timeout if role == "digest" else s.openrouter_request_timeout
-        openrouter_chat = _openrouter_chat(
+        return _openrouter_chat(
             model,
             temperature=temperature,
             timeout=timeout,
@@ -785,10 +722,27 @@ def _chat_for_role(
             api_key=resolved_openrouter_key,
         )
 
-    if minimax_chat and openrouter_chat:
-        if preferred == "openrouter":
-            return FallbackLLM(openrouter_chat, minimax_chat)
-        return FallbackLLM(minimax_chat, openrouter_chat)
-    if minimax_chat:
-        return minimax_chat
-    return openrouter_chat
+    # minimax
+    resolved_minimax_key = minimax_api_key or s.minimax_api_key
+    if role == "digest":
+        if not resolved_minimax_key:
+            raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
+        from langchain_openai import ChatOpenAI
+
+        kwargs = (
+            {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+        )
+        return ChatOpenAI(
+            model=s.minimax_digest_model or s.minimax_agent_model,
+            api_key=resolved_minimax_key,
+            base_url=s.minimax_base_url,
+            timeout=s.minimax_digest_timeout,
+            temperature=temperature,
+            **kwargs,
+        )
+    model = s.minimax_agent_model if role == "agent" else s.minimax_safety_model
+    return _minimax_chat(
+        model,
+        temperature=temperature,
+        api_key=resolved_minimax_key,
+    )

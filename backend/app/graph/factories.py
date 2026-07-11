@@ -188,46 +188,36 @@ def make_minimax_llm_json(
 def _build_fast_llm(*, minimax_config, openrouter_config):
     """Build the optional fast-tier LLM for low-complexity intents (Phase 5).
 
-    Returns ``None`` when no fast model is configured on either provider —
+    Returns ``None`` when no fast model is configured on the active provider —
     ``MiniMaxAgent`` then no-ops the ``use_fast`` switch (every turn uses the
     primary reasoning model, the pre-tiering default).
 
     The fast model is built directly (not via ``_chat_for_role``) because the
     role factory hard-codes the agent/safety model names. Here we explicitly use
     ``minimax_fast_model`` / ``openrouter_fast_model`` so the tier is genuine.
+
+    Only the single active provider's fast model is built — there is no runtime
+    failover between providers (a deploy-time ``LLM_DEFAULT_PROVIDER`` switch
+    changes the active provider for the whole process).
     """
     s = get_settings()
     mm_fast = (getattr(s, "minimax_fast_model", "") or "").strip()
     or_fast = (getattr(s, "openrouter_fast_model", "") or "").strip()
-    if not mm_fast and not or_fast:
-        return None
 
     try:
-        primary = None
-        if mm_fast and minimax_config.enabled and minimax_config.api_key:
-            primary = _minimax_chat(
-                mm_fast,
-                temperature=0.3,
-                api_key=minimax_config.api_key,
-            )
-        if or_fast and openrouter_config.enabled and openrouter_config.api_key:
-            or_llm = _openrouter_chat(
+        if minimax_config.enabled and mm_fast and minimax_config.api_key:
+            if minimax_config.default_provider != "openrouter":
+                return _minimax_chat(mm_fast, temperature=0.3, api_key=minimax_config.api_key)
+        if openrouter_config.enabled and or_fast and openrouter_config.api_key:
+            return _openrouter_chat(
                 or_fast,
                 temperature=0.3,
                 timeout=s.openrouter_request_timeout,
                 api_key=openrouter_config.api_key,
             )
-            if primary is not None:
-                from app.graph.clients import FallbackLLM
-
-                # Respect the configured default provider ordering.
-                if minimax_config.default_provider == "openrouter":
-                    return FallbackLLM(or_llm, primary)
-                return FallbackLLM(primary, or_llm)
-            return or_llm
-        return primary
+        return None
     except Exception:  # noqa: BLE001
-        logger.warning("fast-tier LLM build failed; falling back to primary only", exc_info=True)
+        logger.warning("fast-tier LLM build failed; primary-only tier", exc_info=True)
         return None
 
 

@@ -183,10 +183,9 @@
   }
 
   .inbox-bg-container .conversation.active {
-    background: transparent;
+    background: #d8ecff;
   }
 
-  .inbox-bg-container .conversation.active::before,
   .inbox-bg-container .conversation.needs-attention::after {
     display: none;
   }

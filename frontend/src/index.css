@@ -944,6 +944,16 @@ body {
   background-image: none;
 }
 
+/* The authenticated shell owns scrolling inside its content row. Prevent the
+   document itself from retaining a vertical offset that can move the shared
+   topbar and sidebar out of view between routes. */
+body:has(.workspace-frame),
+body:has(.workspace-frame) #root {
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
 /* Hide scrollbars on mobile viewports */
 @media screen and (max-width: 767px) {
   ::-webkit-scrollbar {

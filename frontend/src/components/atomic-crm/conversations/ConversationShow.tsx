@@ -17,6 +17,7 @@ import {
 import {
   Bot,
   Check,
+  ChevronDown,
   Handshake,
   PanelRight,
   UserRound,
@@ -31,24 +32,28 @@ const MODE_OPTIONS: Array<{
   mode: ReplyMode;
   label: string;
   title: string;
+  description: string;
   Icon: LucideIcon;
 }> = [
   {
     mode: "human",
     label: "Tư vấn viên",
     title: "Tư vấn viên - chỉ nhân sự trả lời ứng viên",
+    description: "Nhân viên trả lời trực tiếp",
     Icon: UserRound,
   },
   {
     mode: "semi_auto",
     label: "Bán tự động",
     title: "Bán tự động - ChatBot tiếp quản khi tư vấn viên không phản hồi",
+    description: "Chatbot hỗ trợ khi cần",
     Icon: Handshake,
   },
   {
     mode: "bot",
     label: "Chatbot",
     title: "Chatbot - ChatBot xử lý cuộc trò chuyện",
+    description: "Chatbot tự động xử lý",
     Icon: Bot,
   },
 ];
@@ -201,10 +206,16 @@ export const ConversationShowContent = ({
                   title="Đổi chế độ trả lời"
                   disabled={activeMode === "closed"}
                 >
-                  <ActiveModeIcon className="icon" />
+                  <span className="mode-menu-trigger-icon">
+                    <ActiveModeIcon className="icon" aria-hidden="true" />
+                  </span>
                   <span className="mode-menu-trigger-label">
                     {activeModeOption?.label ?? "Chế độ trả lời"}
                   </span>
+                  <ChevronDown
+                    className="mode-menu-trigger-chevron"
+                    aria-hidden="true"
+                  />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -226,7 +237,12 @@ export const ConversationShowContent = ({
                       <span className="mode-menu-icon">
                         <option.Icon className="icon" aria-hidden="true" />
                       </span>
-                      <span className="mode-menu-title">{option.label}</span>
+                      <span className="mode-menu-copy">
+                        <span className="mode-menu-title">{option.label}</span>
+                        <span className="mode-menu-description">
+                          {option.description}
+                        </span>
+                      </span>
                       <span className="mode-menu-check" aria-hidden="true">
                         {isActive ? <Check className="icon" /> : null}
                       </span>

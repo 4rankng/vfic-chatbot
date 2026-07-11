@@ -172,9 +172,7 @@ type SettingsItemId =
 
 type SettingsNavMode = "integrations" | "embedded";
 type IntegrationSectionId =
-  | "settings-zalo-channel"
-  | "settings-minimax"
-  | "settings-openrouter";
+  "settings-zalo-channel" | "settings-minimax" | "settings-openrouter";
 type SaveResult = "idle" | "success" | "error";
 
 type SettingsSectionNavItem = {
@@ -460,20 +458,6 @@ const SettingsNavLinkContent = ({
     </span>
   </>
 );
-
-const scrollToSettingsSection = (sectionId: string) => {
-  const section = document.getElementById(sectionId);
-  if (!section) return;
-
-  const prefersReducedMotion = window.matchMedia(
-    "(prefers-reduced-motion: reduce)",
-  ).matches;
-
-  section.scrollIntoView({
-    behavior: prefersReducedMotion ? "auto" : "smooth",
-    block: "start",
-  });
-};
 
 const SettingsSideNav = ({
   activeItemId,
@@ -931,7 +915,8 @@ export const ZaloIntegrationPage = () => {
       activeItemId !== "settings-zalo-channel" &&
       activeItemId !== "settings-minimax" &&
       activeItemId !== "settings-openrouter"
-    ) return;
+    )
+      return;
     const section = activeItemId;
     setSavingSection(section);
     setSaveResults((current) => ({ ...current, [section]: "idle" }));
@@ -943,7 +928,10 @@ export const ZaloIntegrationPage = () => {
       notify("Đã lưu cấu hình của mục này", { type: "success" });
     } catch (error) {
       setSaveResults((current) => ({ ...current, [section]: "error" }));
-      notify(`Không thể lưu cấu hình: ${(error as Error).message || "Vui lòng thử lại."}`, { type: "error" });
+      notify(
+        `Không thể lưu cấu hình: ${(error as Error).message || "Vui lòng thử lại."}`,
+        { type: "error" },
+      );
     } finally {
       setSavingSection(null);
     }
@@ -1060,12 +1048,13 @@ export const ZaloIntegrationPage = () => {
   };
 
   useEffect(() => {
-    if (!showingIntegrations) return;
     const animationFrame = window.requestAnimationFrame(() => {
-      scrollToSettingsSection(activeItem.itemId);
+      document
+        .querySelector<HTMLElement>(".settings-center-panel")
+        ?.scrollTo({ top: 0, behavior: "auto" });
     });
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeItem.itemId, showingIntegrations]);
+  }, [activeItem.itemId]);
 
   const renderInWorkspace = (content: ReactNode) => {
     if (isMobile) return content;
@@ -1252,7 +1241,9 @@ export const ZaloIntegrationPage = () => {
                   variant="outline"
                   className="settings-test-button"
                   onClick={testMinimaxConnection}
-                  disabled={savingSection !== null || testingMinimax || !minimaxSettings}
+                  disabled={
+                    savingSection !== null || testingMinimax || !minimaxSettings
+                  }
                 >
                   <Wifi className="size-4" />
                   {testingMinimax ? "Đang kiểm tra" : "Lưu & kiểm tra"}
@@ -1319,7 +1310,11 @@ export const ZaloIntegrationPage = () => {
                 variant="outline"
                 className="settings-test-button"
                 onClick={testOpenRouterConnection}
-                disabled={savingSection !== null || testingOpenRouter || !openRouterSettings}
+                disabled={
+                  savingSection !== null ||
+                  testingOpenRouter ||
+                  !openRouterSettings
+                }
               >
                 <Wifi className="size-4" />
                 {testingOpenRouter ? "Đang kiểm tra" : "Lưu & kiểm tra"}
@@ -1369,7 +1364,9 @@ export const ZaloIntegrationPage = () => {
                   <Button
                     className="settings-save-button"
                     onClick={saveActiveSection}
-                    disabled={savingSection === activeItemId || !changesForActiveSection}
+                    disabled={
+                      savingSection === activeItemId || !changesForActiveSection
+                    }
                   >
                     <Save className="size-4" />
                     {savingSection === activeItemId

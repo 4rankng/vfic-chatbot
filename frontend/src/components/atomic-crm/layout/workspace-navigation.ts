@@ -94,7 +94,7 @@ export const WORKSPACE_DESTINATIONS: readonly WorkspaceDestination[] = [
     label: "Tài khoản",
     to: "/profile",
     Icon: UserRound,
-    rail: true,
+    rail: false,
     mobile: true,
     isActive: (path) =>
       pathStartsWith("/profile")(path) || pathStartsWith("/users")(path),

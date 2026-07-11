@@ -175,7 +175,6 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
             "completion_tokens": st.get("completion_tokens"),
             "cached_tokens": st.get("cached_tokens"),
             "retried_429": st.get("retried_429"),
-            "used_fallback": st.get("used_fallback"),
             "degraded": degraded,
             "prefetch_hit": st.get("prefetch_hit"),
             "pipeline_ms": pipeline_ms,
