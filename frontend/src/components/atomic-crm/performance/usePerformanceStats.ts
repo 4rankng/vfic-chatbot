@@ -44,6 +44,12 @@ export interface PerfSlowTurn {
   pipeline_ms: number | null;
   total_ms: number | null;
   queue_depth: number | null;
+  db_ms: number | null;
+  db_breakdown: Record<string, number> | null;
+  faq_bypass_ms: number | null;
+  model_tier: string | null;
+  system_prompt_cache_hit: boolean | null;
+  dark_time_ms: number | null;
 }
 
 export interface PerfTrendBucket {

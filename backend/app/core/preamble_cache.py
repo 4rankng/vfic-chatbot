@@ -95,14 +95,20 @@ async def cached_zalo_config(loader: Callable[[], Awaitable[dict]]) -> dict:
     )
 
 
-async def cached_system_prompt(loader: Callable[[], Awaitable[str]]) -> str:
-    """Cache the fully-assembled system prompt string (keyed by the preamble namespace)."""
+async def cached_system_prompt(loader: Callable[[], Awaitable[str]]) -> tuple[str, bool]:
+    """Cache the fully-assembled system prompt string (keyed by the preamble namespace).
+
+    Returns ``(value, cache_hit)`` so the caller can record whether the prompt
+    came from Redis (sub-ms) or was assembled fresh (DB reads). The dashboard
+    uses this to distinguish a slow cache-miss (expected once per 10min) from a
+    slow Postgres read (actionable).
+    """
     # ``str`` is cached as a JSON string scalar; cache_get_json returns it as-is.
     version = await cache_version(NS_PREAMBLE)
     key = f"preamble:system_prompt:v{version}"
     cached = await cache_get_json(key)
     if isinstance(cached, str) and cached:
-        return cached
+        return cached, True
     value = await loader()
     await cache_set_json(key, value, ttl_seconds=_SYSTEM_PROMPT_TTL_SECONDS)
-    return value
+    return value, False

@@ -628,6 +628,14 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     assert st["system_prompt_ms"] == 5   # split: persona+index assembly
     assert st["send_ms"] >= 0
     assert st["total_ms"] >= st["send_ms"]
+    # DB path attribution: every DB call in run_turn is timed into db_ms +
+    # db_breakdown so a slow query is attributable (the previous blind spot).
+    assert "db_ms" in st
+    assert st["db_ms"] >= 0
+    assert "db_breakdown" in st
+    # At least the conversation fetch + record_bot_outcome were timed.
+    assert "get_conversation" in st["db_breakdown"]
+    assert "record_bot_outcome" in st["db_breakdown"]
 
 
 @pytest.mark.asyncio
@@ -642,7 +650,7 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
     from app.graph.runner import _agent_turn
 
     async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
-        return "fake system prompt"
+        return "fake system prompt", True
 
     class _FakeAgent:
         async def agent(self, user_text, **kwargs):  # noqa: ARG002

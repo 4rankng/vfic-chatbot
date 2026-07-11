@@ -185,8 +185,14 @@ async def test_cached_system_prompt_round_trips_string(monkeypatch):
         calls["n"] += 1
         return "PERSONA+INDEX"
 
-    assert await cached_system_prompt(loader) == "PERSONA+INDEX"
-    assert await cached_system_prompt(loader) == "PERSONA+INDEX"
+    # First call: cache miss → loader runs, returns (value, False).
+    value, hit = await cached_system_prompt(loader)
+    assert value == "PERSONA+INDEX"
+    assert hit is False
+    # Second call: cache hit → loader does NOT run, returns (value, True).
+    value, hit = await cached_system_prompt(loader)
+    assert value == "PERSONA+INDEX"
+    assert hit is True
     assert calls["n"] == 1
 
 

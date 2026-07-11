@@ -226,7 +226,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
 
     try:
         # 5. Build context
-        system = await build_system_prompt(deps.retrieval)
+        system, _ = await build_system_prompt(deps.retrieval)
 
         # Fetch lead profile (best-effort — failure just skips injection)
         lead_profile = ""

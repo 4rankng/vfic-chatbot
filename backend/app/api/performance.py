@@ -38,9 +38,10 @@ _STAGE_KEYS = [
     "preamble",
     "lead",
     "system_prompt",
+    "faq_bypass",
     "llm_queue",
     "llm_model",
-    "safety",
+    "db",
     "send",
     "total",
     "end_to_end",
@@ -62,6 +63,30 @@ def _stage_sql(key: str) -> str:
 
 def _int(v) -> int | None:
     return int(round(v)) if v is not None else None
+
+
+# The intra-turn stages that sum to total_ms. dark_time_ms = total_ms - sum(these).
+# When dark time spikes, the next timing probe goes inside the gap. Listed here
+# (not computed from the full stage_timings dict) so adding a new unmeasured
+# in-process computation does NOT silently inflate dark time.
+_MEASURED_STAGES = (
+    "lead_ms", "system_prompt_ms", "llm_queue_ms", "llm_model_ms",
+    "llm_backoff_ms", "tool_ms", "send_ms", "db_ms", "faq_bypass_ms",
+)
+
+
+def _dark_time_ms(st: dict) -> int | None:
+    """total_ms minus the sum of every measured intra-turn stage.
+
+    Returns None when total_ms itself is absent (lane skipped timing). A
+    consistently low value (<5% of total_ms) means instrumentation is
+    sufficient; a spike marks the spot to add the next probe.
+    """
+    total = st.get("total_ms")
+    if total is None:
+        return None
+    measured = sum(int(st.get(k) or 0) for k in _MEASURED_STAGES)
+    return max(0, int(total) - measured)
 
 
 @router.get("")
@@ -181,6 +206,20 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
             "pipeline_ms": pipeline_ms,
             "total_ms": end_to_end_ms,
             "queue_depth": st.get("queue_depth"),
+            # DB path attribution (Proposal 1): aggregate + per-call breakdown.
+            "db_ms": st.get("db_ms"),
+            "db_breakdown": st.get("db_breakdown"),
+            # FAQ bypass latency (Proposal 2) — null when the bypass cascade
+            # didn't run (agent lane or fast lane).
+            "faq_bypass_ms": st.get("faq_bypass_ms"),
+            # Model tier + system-prompt cache hit (Proposal 3).
+            "model_tier": st.get("model_tier"),
+            "system_prompt_cache_hit": st.get("system_prompt_cache_hit"),
+            # Dark time (Proposal 1): total_ms minus the sum of every measured
+            # intra-turn stage. When this is consistently low (<5% of total_ms),
+            # instrumentation is sufficient. A spike marks the exact spot to add
+            # the next probe. Computed from the pipeline (post-preamble) slice.
+            "dark_time_ms": _dark_time_ms(st),
         })
     return out
 

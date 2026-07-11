@@ -88,9 +88,10 @@ async def _agent_turn(
     from app.graph.context import build_system_prompt
 
     sys_t0 = time.monotonic()
-    system = await build_system_prompt(deps.retrieval)
+    system, sys_prompt_hit = await build_system_prompt(deps.retrieval)
     if timings is not None:
         timings["system_prompt_ms"] = int(round((time.monotonic() - sys_t0) * 1000))
+        timings["system_prompt_cache_hit"] = sys_prompt_hit
 
     # Fetch existing lead profile so the agent can see what info is already known
     # and subtly ask for the most important missing fields. Best-effort: DB error
@@ -112,6 +113,8 @@ async def _agent_turn(
     # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
     # the switch when no fast model was injected (tests / un-configured deployments).
     use_fast = should_use_fast_model(route)
+    if timings is not None:
+        timings["model_tier"] = "fast" if use_fast else "primary"
     try:
         lead_profile, lead_collection_question = await deps.lead.context(
             chat_id, user_text, recent_messages
@@ -240,18 +243,38 @@ async def _finish_terminal_reply(
     return {"outcome": outcome, "reply": text}
 
 
+def _stamp_db(timings: dict, key: str, t0: float) -> None:
+    """Accumulate wall-clock of one DB call into timings['db_ms'].
+
+    ``key`` is recorded into db_breakdown for per-call granularity when the
+    dashboard needs to localize a slow query. db_ms is the aggregate the
+    percentile chart reads.
+    """
+    elapsed = int(round((time.monotonic() - t0) * 1000))
+    timings["db_ms"] = timings.get("db_ms", 0) + elapsed
+    breakdown = timings.setdefault("db_breakdown", {})
+    breakdown[key] = breakdown.get(key, 0) + elapsed
+
+
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome."""
+    timings: dict = {"execution_source": state.execution_source}
     svc = deps.conversation
+
+    db_t0 = time.monotonic()
     conv = await svc.get(uuid.UUID(state.conversation_id))
+    _stamp_db(timings, "get_conversation", db_t0)
     if conv is None:
         return {"outcome": "error", "reason": "conversation_not_found"}
     lock_owner = state.lock_owner or None
     if lock_owner:
+        db_t0 = time.monotonic()
         await deps.db.refresh(conv)
-        if not await svc.recheck_ownership(
+        ok = await svc.recheck_ownership(
             conv, state.version_at_start, lock_owner=lock_owner
-        ):
+        )
+        _stamp_db(timings, "recheck_ownership", db_t0)
+        if not ok:
             return {"outcome": "suppressed", "reason": "lock_owner_lost"}
     zalo = _zalo_for_conversation(deps, conv)
 
@@ -263,17 +286,22 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     status_task = asyncio.create_task(
         _status_heartbeat(zalo, conv.zalo_chat_id, settings=settings)
     )
+    db_t0 = time.monotonic()
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
+    _stamp_db(timings, "last_messages", db_t0)
     started = _now()
+    db_t0 = time.monotonic()
     pending_msg = await svc.record_bot_pending(conv)
+    _stamp_db(timings, "record_bot_pending", db_t0)
     state.pending_message_id = pending_msg.id
 
     # Per-stage timing accumulator. The enqueue/preamble slice is derived from
     # the worker's epoch stamps (state.preamble_start_epoch / received_at_epoch);
     # intra-turn stages use time.monotonic() deltas against t0. Threaded into
     # record_bot_outcome -> BotRun.stage_timings for the performance dashboard.
+    # ``timings`` was initialized before the first DB call (db_ms accumulates
+    # across the whole turn, including the pre-t0 conversation fetch).
     turn_start_epoch = time.time()
-    timings: dict = {"execution_source": state.execution_source}
     if state.queue_depth is not None:
         timings["queue_depth"] = state.queue_depth
     if state.received_at_epoch > 0 and state.preamble_start_epoch > 0:
@@ -337,6 +365,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             outcome_label = "faq_cache"
         elif bypass is not None:
             timings["lane"] = "faq_bypass"
+            timings["faq_bypass_ms"] = int(round(bypass.latency_ms))
             # Admin-authored canonical FAQ text — sent verbatim, like the template
             # lane above (fast_safety_filter is tuned for LLM output, not curated text).
             candidate = bypass.answer
@@ -399,6 +428,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # as sent-but-unconfirmed, at-most-once) and the recheck→send TOCTOU (a
         # takeover or newer inbound bumping version before the claim yields rowcount
         # 0 → suppress). refresh() keeps the bound conv on committed state. ---
+        db_t0 = time.monotonic()
         await deps.db.refresh(conv)
         owned = await svc.claim_send(
             conv,
@@ -407,6 +437,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             pending_message_id=state.pending_message_id,
             reply=candidate,
         )
+        _stamp_db(timings, "claim_send", db_t0)
         if owned:
             await _cancel_status_task(status_task)
             send_t0 = time.monotonic()
@@ -419,6 +450,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
             timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
             _stamp_end_to_end(state, timings)
+            db_t0 = time.monotonic()
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
                 started_at=started, sent=send_result.ok,
@@ -428,6 +460,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 stage_timings=timings,
                 lock_owner=lock_owner,
             )
+            _stamp_db(timings, "record_bot_outcome", db_t0)
             if not send_result.ok:
                 return {
                     "outcome": "send_failed",
@@ -450,6 +483,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
 
         timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
         _stamp_end_to_end(state, timings)
+        db_t0 = time.monotonic()
         await svc.record_bot_outcome(
             conv, version_at_start=state.version_at_start, reply=candidate,
             started_at=started, sent=False,
@@ -457,6 +491,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             stage_timings=timings,
             lock_owner=lock_owner,
         )
+        _stamp_db(timings, "record_bot_outcome", db_t0)
         return {"outcome": "suppressed", "reply": candidate}
     finally:
         await _cancel_status_task(status_task)

@@ -46,6 +46,7 @@ class FaqBypassResult:
     tier: str = ""  # exact / hybrid
     score: float = 0.0
     reason: str = ""
+    latency_ms: float = 0.0
 
 
 class ConversationStatePort(Protocol):

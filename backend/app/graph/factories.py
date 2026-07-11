@@ -139,6 +139,7 @@ class _FaqBypassAdapter:
                 tier=decision.tier,
                 score=decision.top1_score,
                 reason=decision.reason,
+                latency_ms=latency_ms,
             )
         return None
 

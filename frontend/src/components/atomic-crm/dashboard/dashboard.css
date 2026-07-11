@@ -1,5 +1,8 @@
 .dashboard-workspace {
+  height: 100%;
   min-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   color: var(--workspace-ink, var(--foreground));
   background: var(--workspace-canvas, var(--background));
 }
@@ -8,6 +11,7 @@
   width: min(1160px, 100%);
   margin: 0 auto;
   padding: clamp(24px, 3vw, 40px);
+  padding-bottom: clamp(3rem, 4vw, 4rem);
 }
 
 .recruiting-command {

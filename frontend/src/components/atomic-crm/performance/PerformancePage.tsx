@@ -17,9 +17,10 @@ const STAGE_LABELS: Record<string, string> = {
   preamble: "Khởi tạo",
   lead: "Lấy hồ sơ ứng viên",
   system_prompt: "Xây prompt hệ thống",
+  faq_bypass: "FAQ bypass",
   llm_queue: "LLM — chờ slot",
   llm_model: "LLM — xử lý model",
-  safety: "Kiểm duyệt an toàn",
+  db: "Cơ sở dữ liệu",
   send: "Gửi Zalo",
   total: "Xử lý sau khởi tạo",
   end_to_end: "Tổng từ webhook",
@@ -40,9 +41,10 @@ const STAGE_ORDER = [
   "preamble",
   "lead",
   "system_prompt",
+  "faq_bypass",
   "llm_queue",
   "llm_model",
-  "safety",
+  "db",
   "send",
   "total",
   "end_to_end",
@@ -198,14 +200,50 @@ const TurnDetail = ({ turn }: { turn: PerfSlowTurn }) => (
       </dl>
     </div>
     <div>
-      <strong>Token</strong>
+      <strong>DB & bypass</strong>
+      <p>
+        DB tổng: <code>{turn.db_ms ?? "—"} ms</code>
+        {turn.faq_bypass_ms != null ? (
+          <> · FAQ bypass: <code>{turn.faq_bypass_ms} ms</code></>
+        ) : null}
+      </p>
+      {turn.db_breakdown && Object.keys(turn.db_breakdown).length > 0 ? (
+        <dl>
+          {Object.entries(turn.db_breakdown).map(([name, ms]) => (
+            <div key={name}>
+              <dt>{name}</dt>
+              <dd>{ms} ms</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </div>
+    <div>
+      <strong>Token & ngữ cảnh</strong>
       <p>
         Prompt: {turn.prompt_tokens ?? "—"} · Completion:{" "}
         {turn.completion_tokens ?? "—"} · Cached: {turn.cached_tokens ?? "—"}
       </p>
+      <p>
+        Model: <code>{turn.model_tier ?? "—"}</code> · Prompt cache:{" "}
+        {turn.system_prompt_cache_hit == null
+          ? "—"
+          : turn.system_prompt_cache_hit
+            ? "hit"
+            : "miss"}
+      </p>
       {turn.llm_backoff_ms ? (
         <p>
           Backoff 429: <code>{turn.llm_backoff_ms} ms</code>
+        </p>
+      ) : null}
+      {turn.dark_time_ms != null && turn.total_ms != null ? (
+        <p>
+          Dark time: <code>{turn.dark_time_ms} ms</code> ·{" "}
+          {turn.total_ms > 0
+            ? `${Math.round((turn.dark_time_ms / turn.total_ms) * 100)}%`
+            : "—"}{" "}
+          (tổng trừ các giai đoạn đã đo)
         </p>
       ) : null}
     </div>

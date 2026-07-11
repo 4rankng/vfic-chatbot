@@ -86,6 +86,10 @@ async def test_performance_bundle_shape(monkeypatch):
                     "preamble_ms": 1000,
                     "webhook_to_pickup_ms": 100,
                     "queue_depth": 1,
+                    "db_ms": 150,
+                    "db_breakdown": {"claim_send": 90, "record_bot_outcome": 60},
+                    "model_tier": "primary",
+                    "system_prompt_cache_hit": True,
                 },
             ),
         ]),
@@ -130,8 +134,21 @@ async def test_performance_bundle_shape(monkeypatch):
     assert slow["lane"] == "agent"
     assert slow["conversation_id"] == CONV_ID
     assert slow["started_at"].startswith("2026-07-09T11:42:48")
+    # DB path attribution (Proposal 1): db_ms + per-call breakdown surfaced.
+    assert slow["db_ms"] == 150
+    assert slow["db_breakdown"] == {"claim_send": 90, "record_bot_outcome": 60}
+    # Model tier + cache hit (Proposal 3).
+    assert slow["model_tier"] == "primary"
+    assert slow["system_prompt_cache_hit"] is True
+    # Dark time (Proposal 1): total_ms (5000) minus measured stages
+    # (llm_queue 300 + llm_model 4500 + db 150) = 50ms unaccounted.
+    assert slow["dark_time_ms"] == 50
     assert "end_to_end" in out["percentiles"]
     assert "llm" not in out["percentiles"]
+    assert "safety" not in out["percentiles"]  # stale stage removed
+    # New stages in the percentile chart.
+    assert "db" in out["percentiles"]
+    assert "faq_bypass" in out["percentiles"]
     # trend bucket mapped from the 4th SQL result
     assert len(out["trend"]) == 1
     t = out["trend"][0]
