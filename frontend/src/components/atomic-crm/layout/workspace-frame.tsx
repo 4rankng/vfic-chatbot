@@ -13,6 +13,7 @@ import {
 
 import { useRoleActions } from "../hooks/useRoleActions";
 import { useNotifications } from "./topbar/useNotifications";
+import Header from "./Header";
 import {
   getWorkspaceDestinations,
   getWorkspaceOverflowDestinations,
@@ -54,13 +55,13 @@ const WorkspaceNavigation = ({
       aria-label={
         surface === "mobile"
           ? "Điều hướng chính"
-          : "Điều hướng không gian làm việc"
+          : "Lối tắt không gian làm việc"
       }
       className={cn(
         "workspace-navigation",
         surface === "mobile"
           ? "workspace-navigation-mobile"
-          : "workspace-navigation-desktop",
+          : "workspace-navigation-rail",
       )}
     >
       <div
@@ -125,21 +126,23 @@ const WorkspaceNavigation = ({
             <SheetContent side="bottom" className="mobile-nav-more-sheet">
               <SheetTitle className="mobile-nav-more-title">Thêm</SheetTitle>
               <div className="mobile-nav-more-items">
-                {overflowDestinations.map(({ id, label, to, Icon, isActive }) => (
-                  <SheetClose asChild key={id}>
-                    <Link
-                      to={to}
-                      aria-current={isActive(path) ? "page" : undefined}
-                      className={cn(
-                        "mobile-nav-more-link",
-                        isActive(path) && "is-active",
-                      )}
-                    >
-                      <Icon aria-hidden="true" />
-                      <span>{label}</span>
-                    </Link>
-                  </SheetClose>
-                ))}
+                {overflowDestinations.map(
+                  ({ id, label, to, Icon, isActive }) => (
+                    <SheetClose asChild key={id}>
+                      <Link
+                        to={to}
+                        aria-current={isActive(path) ? "page" : undefined}
+                        className={cn(
+                          "mobile-nav-more-link",
+                          isActive(path) && "is-active",
+                        )}
+                      >
+                        <Icon aria-hidden="true" />
+                        <span>{label}</span>
+                      </Link>
+                    </SheetClose>
+                  ),
+                )}
               </div>
             </SheetContent>
           </Sheet>
@@ -173,7 +176,8 @@ export const WorkspaceFrame = ({
       <a className="workspace-skip-link" href="#main-content">
         Bỏ qua điều hướng
       </a>
-      <WorkspaceNavigation surface="desktop" attentionCount={attentionCount} />
+      <Header />
+      <WorkspaceNavigation surface="rail" attentionCount={attentionCount} />
       <main
         id="main-content"
         className={cn("workspace-frame-content", contentClassName)}

@@ -12,43 +12,35 @@
 
 @media (min-width: 768px) {
   .inbox-bg-container .conversations {
-    padding: 10px 10px 16px;
-    background: var(--workspace-bg-deep);
+    padding: 0;
+    background: var(--surface-solid);
   }
 
   .inbox-bg-container .conversation {
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border-color: transparent;
-    background: transparent;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 0;
+    border: 0;
+    background: var(--surface-solid);
     color: var(--workspace-muted);
     box-shadow: none;
   }
 
   .inbox-bg-container .conversation:hover {
-    border-color: transparent;
-    background: var(--workspace-hover);
+    background: #f5f7fa;
     transform: none;
   }
 
   .inbox-bg-container .conversation.active {
-    border-color: transparent;
-    background: var(--brand-light);
+    background: #e4efff;
     box-shadow: none;
   }
 
   .inbox-bg-container .conversation.needs-attention {
-    border-color: color-mix(in srgb, var(--success) 30%, transparent);
-    background: color-mix(
-      in srgb,
-      var(--success-light) 42%,
-      var(--workspace-bg)
-    );
+    background: var(--surface-solid);
   }
 
-  .inbox-bg-container .conversation.active::before,
-  .inbox-bg-container .conversation.needs-attention::after {
+  .inbox-bg-container .conversation.active::before {
     left: 0;
     top: 50%;
     bottom: auto;
@@ -67,7 +59,7 @@
   }
 
   .inbox-bg-container .avatar {
-    box-shadow: inset 0 0 0 1px var(--workspace-border);
+    box-shadow: inset 0 0 0 1px var(--workspace-blue-line);
   }
 
   .inbox-bg-container .mini-chip.channel.bot,
@@ -97,7 +89,7 @@
   min-height: 72px;
   padding: 10px 8px;
   border: 1px solid transparent;
-  border-radius: var(--rad-lg);
+  border-radius: 10px;
   background: transparent;
   text-align: left;
   transition: var(--transition);
@@ -110,19 +102,7 @@
   transform: none;
 }
 .inbox-bg-container .conversation.needs-attention {
-  border-color: color-mix(in srgb, var(--success) 24%, transparent);
-  background: color-mix(in srgb, var(--success-light) 45%, transparent);
-}
-.inbox-bg-container .conversation.needs-attention::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 3px;
-  height: 22px;
-  border-radius: 3px;
-  background: var(--inbox-accent);
-  transform: translateY(-50%);
+  background: var(--surface-solid);
 }
 .inbox-bg-container .conversation.active {
   background: var(--brand-light);
@@ -209,7 +189,9 @@
   width: 100%;
   min-width: 0;
   color: var(--ink-muted);
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   font-size: var(--chat-fs-list-preview);
   font-weight: var(--chat-fw-regular);
@@ -217,6 +199,18 @@
   overflow-wrap: anywhere;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.inbox-bg-container .conv-preview > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-bg-container .conv-preview-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: #98a2b3;
 }
 .inbox-bg-container .conv-bottom {
   display: grid;
@@ -297,12 +291,12 @@
 /* Lead-priority chip — TEXT is the accessible signal (readable without colour);
    the tint reinforces via the global lead-priority CSS vars. */
 .inbox-bg-container .mini-chip.priority-hot {
-  color: var(--lead-hot-ink);
-  background: var(--lead-hot-bg);
+  color: #ffffff;
+  background: var(--brand);
 }
 .inbox-bg-container .mini-chip.priority-warm {
-  color: var(--lead-warm-ink);
-  background: var(--lead-warm-bg);
+  color: #ffffff;
+  background: var(--brand);
 }
 .inbox-bg-container .mini-chip.priority-cold {
   border: 1px solid var(--workspace-border);
@@ -324,88 +318,76 @@
 
 @media (min-width: 768px) {
   .inbox-bg-container .conversations {
-    padding: 10px 10px 16px;
+    padding: 0;
   }
 
   .inbox-bg-container .conversation {
-    grid-template-columns: 34px minmax(0, 1fr);
-    align-items: start;
-    gap: 10px;
-    padding: 9px 10px;
-    border-radius: 8px;
-    border-color: transparent;
-    background: transparent;
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    min-height: 88px;
+    padding: 12px 14px 12px 16px;
+    border: 0;
+    border-radius: 0;
+    border-color: var(--workspace-blue-line);
+    background: var(--surface-solid);
     color: var(--workspace-muted);
     box-shadow: none;
   }
 
   .inbox-bg-container .conversation + .conversation {
-    margin-top: 8px;
+    margin-top: 0;
   }
 
   .inbox-bg-container .conversation:hover {
-    border-color: transparent;
-    background: var(--workspace-hover);
+    border-color: var(--workspace-blue-line);
+    background: #f5f7fa;
     transform: none;
   }
 
   .inbox-bg-container .conversation.active {
-    border-color: transparent;
-    background: var(--brand-light);
+    border-color: var(--workspace-blue-line);
+    background: #e4efff;
     box-shadow: none;
   }
 
   .inbox-bg-container .conversation.needs-attention {
-    border-color: color-mix(
-      in srgb,
-      var(--success) 30%,
-      var(--workspace-border)
-    );
-    background: color-mix(
-      in srgb,
-      var(--success-light) 42%,
-      var(--workspace-bg)
-    );
+    background: var(--surface-solid);
   }
 
   .inbox-bg-container .conversation.needs-attention:hover {
-    background: color-mix(
-      in srgb,
-      var(--success-light) 50%,
-      var(--workspace-bg)
-    );
-  }
-
-  .inbox-bg-container .conversation.needs-attention::after {
-    display: block;
+    background: #f5f7fa;
   }
 
   .inbox-bg-container .conversation.active::before {
     left: 0;
     top: 50%;
     bottom: auto;
-    height: 22px;
+    height: 100%;
     background: var(--workspace-active);
-    border-radius: 3px;
+    border-radius: 0;
     transform: translateY(-50%);
   }
 
-  .inbox-bg-container .conversation.needs-attention::after {
-    left: 0;
-    top: 50%;
-    bottom: auto;
-    height: 22px;
-    transform: translateY(-50%);
+  .inbox-bg-container .conversation.active.needs-attention {
+    background: #e4efff;
   }
 
-  .inbox-bg-container .conversation.active.needs-attention::after {
-    display: none;
+  .inbox-bg-container .conversation::after {
+    content: "";
+    position: absolute;
+    right: 14px;
+    bottom: 0;
+    left: 76px;
+    height: 1px;
+    background: var(--workspace-blue-line);
   }
 
   .inbox-bg-container .avatar {
-    width: 34px;
-    height: 34px;
-    margin-top: 2px;
+    width: 48px;
+    height: 48px;
+    margin-top: 0;
+    border-radius: 50%;
     box-shadow: inset 0 0 0 1px var(--workspace-border);
   }
 
@@ -419,7 +401,7 @@
 
   .inbox-bg-container .conv-name {
     color: var(--workspace-ink);
-    font-size: var(--chat-fs-list-title);
+    font-size: 15px;
     font-weight: var(--chat-fw-medium);
     line-height: 1.45;
   }
@@ -440,9 +422,9 @@
   }
 
   .inbox-bg-container .conv-preview {
-    display: block;
+    display: flex;
     color: var(--workspace-muted);
-    font-size: var(--chat-fs-list-preview);
+    font-size: 13.5px;
     line-height: var(--chat-lh-body);
     overflow: hidden;
     overflow-wrap: break-word;
@@ -464,8 +446,8 @@
   .inbox-bg-container .mini-chip {
     min-height: 20px;
     padding: 0 8px;
-    border-radius: 2px;
-    font-size: 10px;
+    border-radius: 999px;
+    font-size: 11px;
     line-height: 20px;
   }
 }

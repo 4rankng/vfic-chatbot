@@ -1,23 +1,16 @@
 .performance-page {
-  --foreground: #111827;
-  --muted-foreground: #4b5563;
-  --background: #eef2f6;
-  --card: #fafbfc;
-  --muted: #f4f6f8;
-  --border: #d4dce6;
-  --ring: #0f8a68;
-  --primary: #0f8a68;
+  --foreground: var(--workspace-ink);
+  --muted-foreground: var(--workspace-ink-muted);
+  --background: var(--workspace-canvas);
+  --card: var(--workspace-surface);
+  --muted: var(--workspace-surface-muted);
+  --border: var(--workspace-border);
+  --ring: var(--workspace-focus);
+  --primary: var(--workspace-action);
   --primary-foreground: #ffffff;
-  --accent: #dff3ec;
+  --accent: var(--workspace-teal-soft);
   --destructive: #b42318;
-  --workspace-surface: #fafbfc;
-  --workspace-surface-muted: #f4f6f8;
-  --workspace-border: #d4dce6;
-  --workspace-success: #16835d;
-  --workspace-warning: #b7791f;
-  --workspace-action: #0f8a68;
-  --workspace-teal-soft: #dff3ec;
-  --chart-1: #0f8a68;
+  --chart-1: var(--workspace-action);
   display: grid;
   gap: 1.5rem;
   max-width: 1200px;
@@ -117,8 +110,12 @@
   border-radius: 999px;
   background: var(--workspace-border, var(--border));
 }
-.performance-metric.is-success::before { background: var(--workspace-success, #16835d); }
-.performance-metric.is-warning::before { background: var(--workspace-warning, #b7791f); }
+.performance-metric.is-success::before {
+  background: var(--workspace-action);
+}
+.performance-metric.is-warning::before {
+  background: var(--workspace-warning, #b7791f);
+}
 .performance-panel {
   display: grid;
   gap: 0.75rem;
@@ -395,8 +392,15 @@
     flex-direction: column;
     gap: 0.15rem;
   }
-  .performance-page { gap: 1rem; padding: 1rem; }
-  .performance-metric, .performance-panel, .performance-state { padding: 1rem; }
+  .performance-page {
+    gap: 1rem;
+    padding: 1rem;
+  }
+  .performance-metric,
+  .performance-panel,
+  .performance-state {
+    padding: 1rem;
+  }
   .performance-skeletons {
     grid-template-columns: repeat(2, 1fr);
   }

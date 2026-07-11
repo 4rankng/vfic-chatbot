@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 export type WorkspaceRole = "admin" | "recruiter";
-export type WorkspaceNavigationSurface = "desktop" | "mobile";
+export type WorkspaceNavigationSurface = "rail" | "mobile";
 
 export type WorkspaceDestination = {
   id:
@@ -23,7 +23,7 @@ export type WorkspaceDestination = {
   to: string;
   Icon: LucideIcon;
   roles?: readonly WorkspaceRole[];
-  desktop: boolean;
+  rail: boolean;
   mobile: boolean;
   isActive: (normalizedPath: string) => boolean;
 };
@@ -43,7 +43,7 @@ export const WORKSPACE_DESTINATIONS: readonly WorkspaceDestination[] = [
     label: "Tổng quan",
     to: "/",
     Icon: Home,
-    desktop: true,
+    rail: true,
     mobile: true,
     isActive: (path) => path === "/",
   },
@@ -52,7 +52,7 @@ export const WORKSPACE_DESTINATIONS: readonly WorkspaceDestination[] = [
     label: "Tin nhắn",
     to: "/conversations",
     Icon: MessageCircle,
-    desktop: true,
+    rail: true,
     mobile: true,
     isActive: pathStartsWith("/conversations"),
   },
@@ -61,7 +61,7 @@ export const WORKSPACE_DESTINATIONS: readonly WorkspaceDestination[] = [
     label: "Dự án",
     to: "/projects",
     Icon: Briefcase,
-    desktop: true,
+    rail: true,
     mobile: true,
     isActive: pathStartsWith("/projects"),
   },
@@ -71,7 +71,7 @@ export const WORKSPACE_DESTINATIONS: readonly WorkspaceDestination[] = [
     to: "/settings",
     Icon: Settings,
     roles: ["admin"],
-    desktop: true,
+    rail: true,
     mobile: true,
     isActive: (path) =>
       pathStartsWith("/settings")(path) ||
@@ -85,7 +85,7 @@ export const WORKSPACE_DESTINATIONS: readonly WorkspaceDestination[] = [
     to: "/hieu-suat",
     Icon: Gauge,
     roles: ["admin"],
-    desktop: true,
+    rail: true,
     mobile: false,
     isActive: pathStartsWith("/hieu-suat"),
   },
@@ -94,7 +94,7 @@ export const WORKSPACE_DESTINATIONS: readonly WorkspaceDestination[] = [
     label: "Tài khoản",
     to: "/profile",
     Icon: UserRound,
-    desktop: true,
+    rail: true,
     mobile: true,
     isActive: (path) =>
       pathStartsWith("/profile")(path) || pathStartsWith("/users")(path),
@@ -129,7 +129,7 @@ export const getWorkspaceOverflowDestinations = (
     getWorkspaceDestinations(role, "mobile").map(({ id }) => id),
   );
 
-  return getWorkspaceDestinations(role, "desktop").filter(
+  return getWorkspaceDestinations(role, "rail").filter(
     ({ id }) => !primaryIds.has(id),
   );
 };

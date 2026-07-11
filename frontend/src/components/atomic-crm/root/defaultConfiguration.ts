@@ -7,7 +7,7 @@ export const defaultLightModeLogo = "/light-logo.png";
 
 export const defaultCurrency = "USD";
 
-export const defaultTitle = "VFIC";
+export const defaultTitle = "Ting Ting Soft";
 
 export const defaultCompanySectors = [
   { value: "communication-services", label: "Communication Services" },

@@ -42,11 +42,13 @@ const notesInclude = (notes: string | null | undefined, terms: string[]) => {
 export const ConversationContextPanel = ({
   lead,
   open,
+  persistent = false,
   onClose,
   onCloseAutoFocus,
 }: {
   lead?: Lead;
   open: boolean;
+  persistent?: boolean;
   onClose: () => void;
   onCloseAutoFocus?: (event: Event) => void;
 }) => {
@@ -187,6 +189,7 @@ export const ConversationContextPanel = ({
       completionPercent={completionPercent}
       missingInfoItems={missingInfoItems}
       onClose={onClose}
+      showClose={!persistent}
     />
   );
 
@@ -211,7 +214,7 @@ export const ConversationContextPanel = ({
   return (
     <aside
       id="conversation-context-panel"
-      className={`panel right-panel ${open ? "context-open" : ""}`}
+      className={`panel right-panel ${open ? "context-open" : ""} ${persistent ? "context-persistent" : ""}`}
       aria-label="Thông tin ứng viên"
       aria-hidden={!open}
     >
@@ -227,6 +230,7 @@ const CandidateContextBody = ({
   completionPercent,
   missingInfoItems,
   onClose,
+  showClose,
 }: {
   lead?: Lead;
   candidateInfoItems: CandidateInfoItem[];
@@ -234,16 +238,18 @@ const CandidateContextBody = ({
   completionPercent: number;
   missingInfoItems: CandidateInfoItem[];
   onClose: () => void;
+  showClose: boolean;
 }) => (
   <>
     <header className="profile-header">
-        <div className="profile-title">
-          <UserRound className="icon" aria-hidden="true" />
-          <span className="profile-title-copy">
-            <span>{display(lead?.name, "Ứng viên")}</span>
-            <small>{display(lead?.phone, "Chưa có số điện thoại")}</small>
-          </span>
-        </div>
+      <div className="profile-title">
+        <UserRound className="icon" aria-hidden="true" />
+        <span className="profile-title-copy">
+          <span>{display(lead?.name, "Ứng viên")}</span>
+          <small>{display(lead?.phone, "Chưa có số điện thoại")}</small>
+        </span>
+      </div>
+      {showClose ? (
         <div className="context-header-actions">
           <button
             type="button"
@@ -254,51 +260,49 @@ const CandidateContextBody = ({
             ×
           </button>
         </div>
+      ) : null}
     </header>
 
     <div className="profile-scroll">
-        <section className="context-overview candidate-progress-card">
-          <div className="candidate-progress-top">
-            <span className="context-overview-kicker">
-              Thông tin đã thu thập
-            </span>
-            <span className="candidate-progress-score">
-              {completedInfoCount}/{candidateInfoItems.length}
-            </span>
-          </div>
-          <div className="candidate-progress-meter" aria-hidden="true">
-            <span
-              className="candidate-progress-fill"
-              style={{ width: `${completionPercent}%` }}
-            />
-          </div>
-          <p>
-            Đã thu thập {completionPercent}% thông tin cần cho tư vấn tuyển
-            dụng.
-          </p>
-          {missingInfoItems.length > 0 ? (
-            <div
-              className="candidate-missing-list"
-              aria-label="Thông tin cần hỏi thêm"
-            >
-              {missingInfoItems.map((item) => (
-                <span className="candidate-missing-chip" key={item.key}>
-                  {item.label}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </section>
-        <section className="context-card">
-          <div className="section-head">
-            <h3>Thông tin ứng viên</h3>
-          </div>
-          <div className="candidate-info-grid">
-            {candidateInfoItems.map((item) => (
-              <CandidateInfoRow key={item.key} item={item} />
+      <section className="context-overview candidate-progress-card">
+        <div className="candidate-progress-top">
+          <span className="context-overview-kicker">Thông tin đã thu thập</span>
+          <span className="candidate-progress-score">
+            {completedInfoCount}/{candidateInfoItems.length}
+          </span>
+        </div>
+        <div className="candidate-progress-meter" aria-hidden="true">
+          <span
+            className="candidate-progress-fill"
+            style={{ width: `${completionPercent}%` }}
+          />
+        </div>
+        <p>
+          Đã thu thập {completionPercent}% thông tin cần cho tư vấn tuyển dụng.
+        </p>
+        {missingInfoItems.length > 0 ? (
+          <div
+            className="candidate-missing-list"
+            aria-label="Thông tin cần hỏi thêm"
+          >
+            {missingInfoItems.map((item) => (
+              <span className="candidate-missing-chip" key={item.key}>
+                {item.label}
+              </span>
             ))}
           </div>
-        </section>
+        ) : null}
+      </section>
+      <section className="context-card">
+        <div className="section-head">
+          <h3>Thông tin ứng viên</h3>
+        </div>
+        <div className="candidate-info-grid">
+          {candidateInfoItems.map((item) => (
+            <CandidateInfoRow key={item.key} item={item} />
+          ))}
+        </div>
+      </section>
     </div>
   </>
 );

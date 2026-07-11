@@ -15,8 +15,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export type UserMenuProps = {};
+export type UserMenuProps = {
+  variant?: "icon" | "topbar";
+};
 
 /**
  * User menu shown in the top-right of the admin layout. Surfaces the signed-in
@@ -24,7 +27,7 @@ export type UserMenuProps = {};
  * only), and logout. Profile/Users items render only on desktop layouts — the
  * matching routes are themselves desktop-gated in CRM.tsx.
  */
-export function UserMenu() {
+export function UserMenu({ variant = "icon" }: UserMenuProps) {
   const authProvider = useAuthProvider();
   const { data: identity } = useGetIdentity();
   const logout = useLogout();
@@ -48,9 +51,12 @@ export function UserMenu() {
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
+            size={variant === "topbar" ? "default" : "icon"}
             aria-label="Mở menu tài khoản"
-            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted ml-1 transition-colors relative"
+            className={cn(
+              "workspace-user-menu-trigger",
+              variant === "topbar" && "workspace-user-menu-trigger--labeled",
+            )}
           >
             {identity?.avatar ? (
               <img
@@ -61,6 +67,11 @@ export function UserMenu() {
             ) : (
               <User className="h-5 w-5" />
             )}
+            {variant === "topbar" ? (
+              <span className="workspace-user-menu-name">
+                {identity?.fullName ?? "Tài khoản"}
+              </span>
+            ) : null}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-40" align="end" forceMount>

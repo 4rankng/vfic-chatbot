@@ -23,13 +23,15 @@ import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
-import { UserRound } from "lucide-react";
+import { Reply, UserRound } from "lucide-react";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
   _lead?: Lead | null;
   _snippet?: string;
 };
+
+type QueueFilter = "all" | "attention" | "priority";
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 
@@ -211,7 +213,12 @@ const ConversationListItem = memo(
             <span className="conv-time">{time}</span>
           </span>
           <span className="conv-bottom">
-            {subtitle && <span className="conv-preview">{subtitle}</span>}
+            {subtitle && (
+              <span className="conv-preview">
+                <Reply className="conv-preview-icon" aria-hidden="true" />
+                <span>{subtitle}</span>
+              </span>
+            )}
             <span className="conv-meta-row">
               {attentionLabel ? (
                 <span className="conv-state-label">{attentionLabel}</span>
@@ -254,12 +261,18 @@ const ConversationListPanel = ({
   onSelect: (c: Conversation) => void;
   readIds: Set<string>;
 }) => {
-  const { data: conversations, isPending, error, refetch } = useListContext<Conversation>();
+  const {
+    data: conversations,
+    isPending,
+    error,
+    refetch,
+  } = useListContext<Conversation>();
   const { fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfinitePaginationContext();
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   // Defer the query used for filtering so fast typing never blocks the input;
   // the immediate `query` still drives the search box value.
   const deferredQuery = useDeferredValue(query);
@@ -328,6 +341,16 @@ const ConversationListPanel = ({
         };
       })
       .filter((c) => {
+        if (queueFilter === "attention" && !needsVisibleAttention(c, readIds)) {
+          return false;
+        }
+        if (
+          queueFilter === "priority" &&
+          c._lead?.lead_score !== "hot" &&
+          c._lead?.lead_score !== "warm"
+        ) {
+          return false;
+        }
         if (deferredQuery) {
           const haystack = [
             c.zalo_chat_id,
@@ -361,7 +384,7 @@ const ConversationListPanel = ({
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
       });
-  }, [conversations, leads, snippets, deferredQuery, readIds]);
+  }, [conversations, leads, snippets, deferredQuery, queueFilter, readIds]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -385,19 +408,40 @@ const ConversationListPanel = ({
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
       <WorkspaceRail
         searchSlot={
-          <label className="search">
-            <span className="sr-only">Tìm ứng viên hoặc số điện thoại</span>
-            <svg className="icon">
-              <use href="#i-search" />
-            </svg>
-            <input
-              type="search"
-              placeholder="Tìm ứng viên hoặc số điện thoại"
-              aria-label="Tìm ứng viên hoặc số điện thoại"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
+          <div className="inbox-toolbar">
+            <label className="search">
+              <span className="sr-only">Tìm ứng viên hoặc số điện thoại</span>
+              <svg className="icon">
+                <use href="#i-search" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Tìm kiếm"
+                aria-label="Tìm ứng viên hoặc số điện thoại"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            <div className="conversation-filters" aria-label="Lọc hội thoại">
+              {(
+                [
+                  ["all", "Tất cả hội thoại"],
+                  ["attention", "Cần phản hồi"],
+                  ["priority", "Ứng viên ưu tiên"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`conversation-filter is-${value}`}
+                  aria-label={label}
+                  aria-pressed={queueFilter === value}
+                  title={label}
+                  onClick={() => setQueueFilter(value)}
+                />
+              ))}
+            </div>
+          </div>
         }
       />
 
@@ -412,13 +456,19 @@ const ConversationListPanel = ({
         ) : error ? (
           <div className="empty-state" role="status">
             <span>Không tải được danh sách hội thoại.</span>
-            <button type="button" className="list-retry" onClick={() => void refetch()}>
+            <button
+              type="button"
+              className="list-retry"
+              onClick={() => void refetch()}
+            >
               Thử lại
             </button>
           </div>
         ) : rows.length === 0 ? (
           <div className="empty-state" role="status">
-            {query ? "Không tìm thấy hội thoại phù hợp." : "Chưa có hội thoại để hiển thị."}
+            {query || queueFilter !== "all"
+              ? "Không tìm thấy hội thoại phù hợp."
+              : "Chưa có hội thoại để hiển thị."}
           </div>
         ) : (
           rows.map((c) => (
@@ -572,7 +622,10 @@ const ConversationListContent = () => {
       }`}
     >
       <InboxIcons />
-      <div className={`app ${detailOpen ? "detail-open" : ""}`} id="app">
+      <div
+        className={`app ${detailOpen ? "detail-open has-selected-conversation" : ""}`}
+        id="app"
+      >
         <ConversationListPanel
           selectedId={selected?.id ?? null}
           onSelect={openConversation}

@@ -1,21 +1,20 @@
-/* Recruiting chat light overhaul -------------------------------------------------
-   Overrides the inherited Slack-purple workspace skin with a light recruiting
-   operations system. The app remains token-ready, but this surface intentionally
-   stays light-only for the current product direction. */
+/* Ting Ting console surface ------------------------------------------------------
+   This late-loaded file also styles recruiting pages, so its shared inbox tokens
+   must stay aligned with the authenticated blue console. */
 .inbox-bg-container,
 .mobile-dashboard-shell {
   color-scheme: light;
-  --paper-desk: #f7f8fa;
-  --paper-desk-deep: #f2f4f7;
+  --paper-desk: #e4dfd8;
+  --paper-desk-deep: #f1f3f6;
   --paper: #ffffff;
   --paper-soft: #f2f4f7;
   --paper-warm: #fff4dc;
-  --paper-green: #e8f5f0;
-  --paper-blue: #e6f1f8;
+  --paper-green: #dcf8c7;
+  --paper-blue: #e4efff;
   --paper-yellow: #fff3cf;
   --paper-line: #d0d5dd;
   --paper-line-soft: #e4e7ec;
-  --paper-teal-border: #b7e2d2;
+  --paper-teal-border: #bdd5f7;
   --priority: #b54708;
   --priority-bg: #fff4ed;
   --surface: var(--paper-desk);
@@ -38,13 +37,13 @@
   --input: var(--paper-line);
   --border-strong: var(--paper-line);
   --border-glass: rgba(208, 213, 221, 0.62);
-  --primary-soft: #e8f5f0;
+  --primary-soft: #e4efff;
   --primary-soft-border: var(--paper-teal-border);
-  --inbox-accent: #087a5b;
-  --inbox-accent-light: #e8f5f0;
-  --brand: #087a5b;
-  --brand-hover: #066047;
-  --brand-light: #e8f5f0;
+  --inbox-accent: #1777ff;
+  --inbox-accent-light: #e4efff;
+  --brand: #1777ff;
+  --brand-hover: #0267e8;
+  --brand-light: #e4efff;
   --success: #087a5b;
   --success-light: #e8f5f0;
   --warning: var(--priority);
@@ -53,13 +52,13 @@
   --danger-light: #f8e7e4;
   --info: #28786f;
   --info-light: #e6f1f8;
-  --chat-bg: var(--paper-desk);
+  --chat-bg: #e4dfd8;
   --chat-bubble-in: var(--paper);
-  --chat-bubble-out: #e8f5f0;
+  --chat-bubble-out: #dcf8c7;
   --chat-bubble-user: var(--paper);
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #e8f5f0;
-  --chat-bubble-agent: #e8f5f0;
+  --chat-bubble-bot: #dcf8c7;
+  --chat-bubble-agent: #dcf8c7;
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: rgba(255, 255, 255, 0.96);
   --workspace-bg: var(--paper);
@@ -69,11 +68,11 @@
   --workspace-muted: var(--ink-muted);
   --workspace-faint: var(--ink-faint);
   --workspace-hover: var(--paper-soft);
-  --workspace-active: #087a5b;
+  --workspace-active: #1777ff;
   --workspace-active-border: var(--paper-teal-border);
   --workspace-switcher-bg: var(--paper-soft);
   --workspace-switcher-bg-deep: var(--paper-desk);
-  --workspace-switcher-active: #087a5b;
+  --workspace-switcher-active: #1777ff;
   --workspace-switcher-hover: var(--paper);
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
   --shadow-md:
@@ -93,8 +92,8 @@
   --ink-muted: #475467;
   --ink-faint: #667085;
   --border-strong: var(--paper-line);
-  --brand: #087a5b;
-  --brand-light: #e8f5f0;
+  --brand: #1777ff;
+  --brand-light: #e4efff;
   color: var(--ink);
 }
 
@@ -643,9 +642,7 @@
 }
 
 .inbox-bg-container .workspace-rail {
-  background:
-    linear-gradient(180deg, rgba(40, 120, 111, 0.07), transparent 180px),
-    var(--surface-solid);
+  background: var(--surface-solid);
   color: var(--ink);
 }
 
@@ -671,12 +668,16 @@
 }
 
 .inbox-bg-container .conversation.active {
-  background: var(--paper-green);
+  background: var(--brand-light);
 }
 
 .inbox-bg-container .conversation.needs-attention {
-  border-color: #f3d3aa;
-  background: color-mix(in srgb, var(--priority-bg) 48%, var(--paper));
+  border-color: var(--paper-line-soft);
+  background: var(--paper);
+}
+
+.inbox-bg-container .conversation.active.needs-attention {
+  background: var(--brand-light);
 }
 
 .inbox-bg-container .conversation.active::before {
@@ -720,7 +721,7 @@
 }
 
 .inbox-bg-container .mode-menu-trigger.bot {
-  color: var(--info);
+  color: var(--brand);
 }
 
 @media (max-width: 767px) {

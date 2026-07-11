@@ -14,9 +14,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Bot, Check, Handshake, UserRound, type LucideIcon } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Handshake,
+  PanelRight,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import { ConversationContextPanel } from "./ConversationContextPanel";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, useIsWideDesktop } from "@/hooks/use-mobile";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -63,6 +70,7 @@ export const ConversationShowContent = ({
 }) => {
   const record = useRecordContext<Conversation>();
   const isMobile = useIsMobile();
+  const isWideDesktop = useIsWideDesktop();
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const [isContextOpen, setIsContextOpen] = useState(false);
   const leadListParams = useMemo(
@@ -131,8 +139,8 @@ export const ConversationShowContent = ({
   const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
 
   useEffect(() => {
-    setIsContextOpen(false);
-  }, [record?.id]);
+    setIsContextOpen(isWideDesktop);
+  }, [isWideDesktop, record?.id]);
 
   const openContextPanel = () => {
     setIsContextOpen(true);
@@ -172,7 +180,7 @@ export const ConversationShowContent = ({
                     className="person-name person-name-button"
                     ref={contextTriggerRef}
                     onClick={openContextPanel}
-                    aria-expanded={isContextOpen}
+                    aria-expanded={isWideDesktop || isContextOpen}
                     aria-controls="conversation-context-panel"
                   >
                     {name}
@@ -228,11 +236,30 @@ export const ConversationShowContent = ({
               </DropdownMenuContent>
             </DropdownMenu>
             {activeMode === "closed" && (
-              <span className="chat-mode-chip" title="Hội thoại đã đóng; không có thao tác tiếp nhận">
+              <span
+                className="chat-mode-chip"
+                title="Hội thoại đã đóng; không có thao tác tiếp nhận"
+              >
                 <Bot className="icon" />
                 <span>Hội thoại đã đóng</span>
               </span>
             )}
+            {!isWideDesktop ? (
+              <button
+                type="button"
+                className={`context-panel-trigger ${isContextOpen ? "active" : ""}`}
+                onClick={() => setIsContextOpen((open) => !open)}
+                aria-label={
+                  isContextOpen
+                    ? "Đóng thông tin ứng viên"
+                    : "Mở thông tin ứng viên"
+                }
+                aria-expanded={isContextOpen}
+                aria-controls="conversation-context-panel"
+              >
+                <PanelRight className="icon" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -246,7 +273,7 @@ export const ConversationShowContent = ({
           showComposerTakeoverNotice={false}
         />
 
-        {showWorkspacePanel && isContextOpen && !isMobile && (
+        {showWorkspacePanel && isContextOpen && !isMobile && !isWideDesktop && (
           <button
             type="button"
             className="context-overlay-scrim"
@@ -258,7 +285,8 @@ export const ConversationShowContent = ({
       {showWorkspacePanel && (
         <ConversationContextPanel
           lead={lead}
-          open={isContextOpen}
+          open={isWideDesktop || isContextOpen}
+          persistent={isWideDesktop}
           onClose={() => setIsContextOpen(false)}
           onCloseAutoFocus={(event) => {
             event.preventDefault();

@@ -22,9 +22,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: 14px 16px;
+  border-bottom: 3px solid var(--brand);
+  background: var(--surface-solid);
 }
 .inbox-bg-container .profile-title {
   display: flex;
@@ -61,7 +61,7 @@
   place-items: center;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--surface);
+  background: var(--workspace-bg-deep);
   color: var(--ink-muted);
   font-size: 16px;
   font-weight: 700;
@@ -71,16 +71,16 @@
 .inbox-bg-container .context-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 0;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
 
 .inbox-bg-container .context-tab {
-  min-height: 30px;
+  min-height: 42px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   color: var(--ink-muted);
   font-size: var(--chat-fs-meta);
@@ -90,7 +90,8 @@
 
 .inbox-bg-container .context-tab:hover,
 .inbox-bg-container .context-tab.active {
-  background: var(--brand-light);
+  box-shadow: inset 0 -3px 0 var(--brand);
+  background: transparent;
   color: var(--brand);
 }
 
@@ -106,11 +107,11 @@
 }
 
 .inbox-bg-container .context-card {
-  padding: 16px 18px;
+  padding: 18px;
   border: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--workspace-blue-line);
   border-radius: 0;
-  background: var(--surface);
+  background: var(--surface-solid);
 }
 
 .inbox-bg-container .context-card + .context-card {
@@ -187,7 +188,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--brand), var(--success));
+  background: var(--brand);
   transition: width 0.26s var(--ease);
 }
 
@@ -674,7 +675,11 @@
   padding: 8px 10px;
   border: 1px dashed color-mix(in srgb, var(--ink-faint) 26%, var(--border));
   border-radius: var(--rad-sm);
-  background: color-mix(in srgb, var(--surface-solid) 82%, var(--surface-hover));
+  background: color-mix(
+    in srgb,
+    var(--surface-solid) 82%,
+    var(--surface-hover)
+  );
 }
 
 .inbox-bg-container .candidate-info-row.filled {

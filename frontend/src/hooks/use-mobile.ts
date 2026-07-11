@@ -1,6 +1,7 @@
 import * as React from "react";
 
 const MOBILE_BREAKPOINT = 768;
+const WIDE_DESKTOP_BREAKPOINT = 1280;
 
 // Read the media query synchronously so the very first render picks the correct
 // shell — otherwise a phone paints the desktop frame for one frame before the
@@ -24,4 +25,24 @@ export function useIsMobile() {
   }, []);
 
   return isMobile;
+}
+
+function readIsWideDesktop(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia(`(min-width: ${WIDE_DESKTOP_BREAKPOINT}px)`).matches;
+}
+
+export function useIsWideDesktop() {
+  const [isWideDesktop, setIsWideDesktop] =
+    React.useState<boolean>(readIsWideDesktop);
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(`(min-width: ${WIDE_DESKTOP_BREAKPOINT}px)`);
+    const onChange = () => setIsWideDesktop(mql.matches);
+    mql.addEventListener("change", onChange);
+    setIsWideDesktop(mql.matches);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return isWideDesktop;
 }

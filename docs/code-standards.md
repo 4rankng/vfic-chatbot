@@ -158,8 +158,10 @@ surrounding code.
   roles. `conversations/inbox/tokens.css` supplies inbox aliases and
   typography. Feature styles consume the shared roles and may introduce
   feature-scoped aliases only when a local surface requires one (for example,
-  settings or performance). Do not restore the superseded warm-paper palette
-  or scatter competing color literals.
+  settings or performance). The authenticated shell follows the Ting Ting
+  console-blue system documented in `docs/design-tokens-graphite-cloud.md`.
+  Do not restore superseded warm-paper or graphite/emerald palettes, or scatter
+  competing color literals.
 - Typography is centralized: define font families, sizes, weights, and line
   heights in `tokens.css`; shared role selectors live in `typography.css`
   (imported last). Do not add one-off page title/card/control font sizes unless

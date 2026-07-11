@@ -16,9 +16,9 @@ describe("workspace navigation", () => {
     );
   });
 
-  it("keeps the approved desktop order for administrators", () => {
+  it("keeps account access in the desktop icon rail", () => {
     expect(
-      getWorkspaceDestinations("admin", "desktop").map(({ label }) => label),
+      getWorkspaceDestinations("admin", "rail").map(({ label }) => label),
     ).toEqual([
       "Tổng quan",
       "Tin nhắn",
@@ -49,7 +49,7 @@ describe("workspace navigation", () => {
   });
 
   it("matches nested workspace routes", () => {
-    const settings = getWorkspaceDestinations("admin", "desktop").find(
+    const settings = getWorkspaceDestinations("admin", "rail").find(
       ({ id }) => id === "settings",
     );
     expect(settings?.isActive("/knowledge_sources/documents")).toBe(true);

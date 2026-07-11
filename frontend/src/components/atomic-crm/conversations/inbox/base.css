@@ -66,7 +66,7 @@
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: var(--surface);
+  background: var(--workspace-bg-deep);
   box-shadow: none;
   isolation: isolate;
 }
@@ -76,6 +76,23 @@
 @media (min-width: 768px) {
   .workspace-frame-content .inbox-bg-container .app {
     grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .workspace-frame-content .inbox-bg-container .app.has-selected-conversation {
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) 360px;
+  }
+
+  .inbox-bg-container .right-panel.context-persistent {
+    position: relative;
+    inset: auto;
+    grid-column: 3;
+    width: auto;
+    max-width: none;
+    transform: none;
+    visibility: visible;
+    transition: none;
   }
 }
 
@@ -109,7 +126,7 @@
 
 @media (min-width: 768px) {
   .inbox-bg-container .left-panel {
-    border-right: 1px solid var(--workspace-border);
+    border-right: 1px solid var(--workspace-blue-line);
     background: var(--workspace-bg);
     color: var(--workspace-ink);
   }
@@ -122,9 +139,9 @@
   bottom: 0;
   width: min(396px, calc(100% - 80px));
   max-width: 100%;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--workspace-blue-line);
   z-index: 50;
-  background: var(--surface-solid);
+  background: var(--workspace-bg);
   overflow: hidden;
   box-shadow: none;
   transform: translateX(105%);
@@ -145,6 +162,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
+  background: var(--chat-bg);
 }
 
 .inbox-bg-container .app.dashboard-app {

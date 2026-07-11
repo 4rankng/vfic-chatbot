@@ -19,12 +19,12 @@
      --brand stays teal: it is the inbox's accent identity (used by ~120
      icon/border/highlight call-sites), distinct from the ink --primary that
      fills primary buttons. Teal = selection/active/healthy; ink = action. */
-  --primary-soft: #dff3ec;
-  --primary-soft-border: #bde7da;
-  --inbox-accent: #0f8a68;
+  --primary-soft: #e4efff;
+  --primary-soft-border: #bdd5f7;
+  --inbox-accent: #1777ff;
   --inbox-accent-light: var(--primary-soft);
-  --brand: #0f8a68;
-  --brand-hover: #0b7056;
+  --brand: #1777ff;
+  --brand-hover: #0267e8;
   --brand-light: var(--primary-soft);
 
   --success: #16835d;
@@ -112,34 +112,37 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: #f4f6f8;
+  --chat-bg: #e4dfd8;
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
      stays neutral white; bot + admin (outgoing) own the teal-soft on paper. */
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #dff3ec;
+  --chat-bubble-out: #dcf8c7;
   --chat-bubble-user: #ffffff;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #dff3ec;
-  --chat-bubble-agent: #dff3ec;
+  --chat-bubble-bot: #dcf8c7;
+  --chat-bubble-agent: #dcf8c7;
   --chat-bubble-agent-text: var(--ink);
-  --chat-header-bg: rgba(250, 251, 252, 0.98);
+  --chat-header-bg: rgba(255, 255, 255, 0.98);
   --chat-shadow: none;
 
   /* Workspace sidebar/rail — paper surface + ink + teal active.
      Dark variants re-declared in .dark below. */
   --workspace-bg: #ffffff;
-  --workspace-bg-deep: #f5f6f1;
+  --workspace-bg-deep: #f5f6f8;
   --workspace-border: var(--border);
-  --workspace-ink: #15201c;
-  --workspace-muted: #5c6760;
-  --workspace-faint: #646e63;
-  --workspace-hover: #eceee5;
-  --workspace-active: var(--color-teal, #1f6f54);
+  --workspace-ink: #344054;
+  --workspace-muted: #667085;
+  --workspace-faint: #98a2b3;
+  --workspace-hover: #f2f4f7;
+  --workspace-active: #1777ff;
   --workspace-active-border: var(--primary-soft-border);
-  --workspace-switcher-bg: #eceee5;
-  --workspace-switcher-bg-deep: #e3e9ee;
-  --workspace-switcher-active: var(--color-teal, #1f6f54);
-  --workspace-switcher-hover: #f5f6f1;
+  --workspace-switcher-bg: #506eae;
+  --workspace-switcher-bg-deep: #506eae;
+  --workspace-switcher-active: #304062;
+  --workspace-switcher-hover: #f8fafc;
+
+  --workspace-blue-wash: #eef4ff;
+  --workspace-blue-line: #d8dde6;
 }
 
 /* WorkspaceFrame deliberately wins over a global `.dark` preference. Legacy
@@ -152,13 +155,17 @@
   --ink-muted: var(--muted-foreground);
   --border-strong: var(--border);
   --border-glass: rgba(199, 205, 188, 0.62);
-  --primary-soft: #e3f0ea;
-  --primary-soft-border: #cce5df;
+  --primary-soft: #e4efff;
+  --primary-soft-border: #bdd5f7;
+  --inbox-accent: #1777ff;
+  --brand: #1777ff;
+  --brand-hover: #0267e8;
+  --brand-light: #e4efff;
   --workspace-bg: var(--card);
   --workspace-bg-deep: var(--secondary);
   --workspace-muted: var(--muted-foreground);
   --workspace-hover: var(--secondary);
-  --workspace-active: var(--color-teal, #1f6f54);
+  --workspace-active: #1777ff;
 }
 
 @media (max-width: 767px) {
@@ -233,6 +240,9 @@
   --workspace-switcher-bg-deep: #0b1220;
   --workspace-switcher-active: var(--primary);
   --workspace-switcher-hover: rgba(148, 163, 184, 0.16);
+  --workspace-blue-wash: rgba(15, 138, 104, 0.1);
+  --workspace-blue-line: rgba(148, 163, 184, 0.2);
+  --workspace-canvas-grid: rgba(148, 163, 184, 0.07);
 
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
