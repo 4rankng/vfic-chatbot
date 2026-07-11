@@ -274,23 +274,23 @@ async def test_build_deps_cache_survives_zalo_version_change(monkeypatch):
     reset_client_cache()
 
 
-# ── US-002: parallel resolve_* calls ────────────────────────────────────────
+# ── US-002: sequential resolve_* calls (session safety) ─────────────────────
 
 
 @pytest.mark.asyncio
-async def test_build_deps_resolves_integration_settings_concurrently(monkeypatch):
-    """resolve_minimax / resolve_openrouter overlap inside the cache build, not serial.
+async def test_build_deps_resolves_settings_without_concurrent_session_access(monkeypatch):
+    """resolve_minimax / resolve_openrouter run sequentially, never overlapping.
 
-    The two LLM-provider resolves each do a Redis read + conditional DB query +
-    decrypts. If they run serially their wall-clock sums; concurrent
-    (asyncio.gather) it collapses to the max. We assert overlap by wrapping
-    both resolves to record peak in-flight count, and forcing a yield so the
-    scheduler actually interleaves them (the noop Redis completes without
-    yielding, so without an explicit await the gather would run them to
-    completion one-by-one).
+    Both resolves share the same ``db`` AsyncSession. SQLAlchemy async sessions
+    do NOT permit concurrent operations on one connection — running them in
+    asyncio.gather causes ``InvalidRequestError: This session is provisioning a
+    new connection; concurrent operations are not permitted`` (a 100% crash on
+    cold cache, observed in production). This test is the regression guard: it
+    wraps both resolves to track peak in-flight count, and asserts peak never
+    exceeds 1 (no overlap).
 
-    resolve_zalo is excluded — it runs separately in build_deps (per-turn, not
-    part of the LLM client cache path) and does not gate client construction.
+    The cost is ~3ms extra on the cold path (once per process restart); warm
+    turns are Redis-only and unaffected.
     """
     from app.services.integration_settings import IntegrationSettingsService
 
@@ -300,7 +300,7 @@ async def test_build_deps_resolves_integration_settings_concurrently(monkeypatch
         async def _tracked(self):  # noqa: ANN001
             in_flight["n"] += 1
             in_flight["peak"] = max(in_flight["peak"], in_flight["n"])
-            await asyncio.sleep(0)  # yield so siblings start before we finish
+            await asyncio.sleep(0)  # yield — if siblings were concurrent they'd overlap here
             try:
                 return await orig(self)
             finally:
@@ -324,8 +324,9 @@ async def test_build_deps_resolves_integration_settings_concurrently(monkeypatch
     reset_client_cache()
     await build_deps(object())
 
-    assert in_flight["peak"] >= 2, (
-        f"resolve_* calls did not overlap (peak={in_flight['peak']}); "
-        "expected concurrent dispatch via asyncio.gather"
+    assert in_flight["peak"] == 1, (
+        f"resolve_* calls overlapped (peak={in_flight['peak']}); "
+        "expected sequential — concurrent session access crashes SQLAlchemy"
     )
+    assert in_flight["n"] == 0  # both fully completed
     reset_client_cache()

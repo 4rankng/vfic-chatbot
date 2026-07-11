@@ -286,12 +286,15 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
         if cached is not None:
             return cached  # type: ignore[return-value]
 
-        # Concurrent: each resolve is a Redis read + conditional DB query +
-        # AES-GCM decrypts; serial they summed to hundreds of ms on a cold cache.
-        minimax_config, openrouter_config = await asyncio.gather(
-            integration_settings.resolve_minimax(),
-            integration_settings.resolve_openrouter(),
-        )
+        # Sequential: both resolves share the same ``db`` session, and
+        # SQLAlchemy AsyncSession does NOT permit concurrent operations on one
+        # connection (InvalidRequestError: "provisioning a new connection;
+        # concurrent operations are not permitted"). On a cache hit each resolve
+        # is a sub-ms Redis read; the cold path (first turn after restart) pays
+        # two serial DB round-trips instead of one, but that happens once per
+        # process lifetime.
+        minimax_config = await integration_settings.resolve_minimax()
+        openrouter_config = await integration_settings.resolve_openrouter()
         agent_llm = _chat_for_role(
             "agent",
             temperature=0.3,
