@@ -177,17 +177,12 @@ export const ConversationContextPanel = ({
     candidateInfoItems.length > 0
       ? Math.round((completedInfoCount / candidateInfoItems.length) * 100)
       : 0;
-  const missingInfoItems = candidateInfoItems
-    .filter((item) => !item.complete)
-    .slice(0, 3);
-
   const content = (
     <CandidateContextBody
       lead={lead}
       candidateInfoItems={candidateInfoItems}
       completedInfoCount={completedInfoCount}
       completionPercent={completionPercent}
-      missingInfoItems={missingInfoItems}
       onClose={onClose}
       showClose={!persistent}
     />
@@ -228,7 +223,6 @@ const CandidateContextBody = ({
   candidateInfoItems,
   completedInfoCount,
   completionPercent,
-  missingInfoItems,
   onClose,
   showClose,
 }: {
@@ -236,7 +230,6 @@ const CandidateContextBody = ({
   candidateInfoItems: CandidateInfoItem[];
   completedInfoCount: number;
   completionPercent: number;
-  missingInfoItems: CandidateInfoItem[];
   onClose: () => void;
   showClose: boolean;
 }) => (
@@ -280,18 +273,6 @@ const CandidateContextBody = ({
         <p>
           Đã thu thập {completionPercent}% thông tin cần cho tư vấn tuyển dụng.
         </p>
-        {missingInfoItems.length > 0 ? (
-          <div
-            className="candidate-missing-list"
-            aria-label="Thông tin cần hỏi thêm"
-          >
-            {missingInfoItems.map((item) => (
-              <span className="candidate-missing-chip" key={item.key}>
-                {item.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
       </section>
       <section className="context-card">
         <div className="section-head">

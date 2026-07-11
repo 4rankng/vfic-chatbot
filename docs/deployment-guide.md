@@ -196,11 +196,12 @@ Sourced from `backend/.env.example` (committed template) and
 | `MINIMAX_SAFETY_MODEL` | `MiniMax-M2.5-highspeed`. |
 | `MINIMAX_DIGEST_MODEL` | Background KB digestion model. |
 | `MINIMAX_REQUEST_TIMEOUT` | 60s. |
-| `OPENROUTER_ENABLE` | Fallback provider toggle. |
+| `OPENROUTER_ENABLE` | Enables OpenRouter as a selectable generation provider. |
 | `OPENROUTER_API_KEY` | OpenRouter API key. |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1`. |
 | `OPENROUTER_AGENT_MODEL` / `OPENROUTER_SAFETY_MODEL` / `OPENROUTER_DIGEST_MODEL` | Default `deepseek/deepseek-v4-flash`. |
 | `OPENROUTER_REQUEST_TIMEOUT` / `OPENROUTER_DIGEST_TIMEOUT` | 60s / 180s. |
+| `LLM_DEFAULT_PROVIDER` | Selects `minimax` or `openrouter` when both are enabled; no runtime failover occurs. |
 | `GEMINI_API_KEY` | Embedding fallback only. |
 | `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-2`. |
 | `EMBEDDING_DIM` | 3072 (OpenRouter text-embedding-3-large). |

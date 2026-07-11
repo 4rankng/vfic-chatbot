@@ -531,10 +531,6 @@ export const ChatThread = ({
               <span>Không thể tải tin nhắn. Nội dung chưa được xác nhận là trống.</span>
               <button type="button" onClick={retryInitial}>Thử lại</button>
             </div>
-          ) : messages.length === 0 && !isLoading ? (
-            <div className="chat-empty" role="status">
-              <span>Chưa có tin nhắn nào. Bắt đầu trò chuyện!</span>
-            </div>
           ) : messages.length === 0 && isLoading ? (
             <div className="chat-empty" role="status">
               <span>Đang tải tin nhắn...</span>

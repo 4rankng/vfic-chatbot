@@ -112,7 +112,7 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: #e4dfd8;
+  --chat-bg: var(--workspace-canvas);
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
      stays neutral white; bot + admin (outgoing) own the teal-soft on paper. */
   --chat-bubble-in: #ffffff;

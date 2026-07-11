@@ -16,6 +16,7 @@ const STAGE_LABELS: Record<string, string> = {
   webhook_to_pickup: "Webhook → nhận việc",
   preamble: "Khởi tạo",
   lead: "Lấy hồ sơ ứng viên",
+  system_prompt: "Xây prompt hệ thống",
   llm_queue: "LLM — chờ slot",
   llm_model: "LLM — xử lý model",
   safety: "Kiểm duyệt an toàn",
@@ -38,6 +39,7 @@ const STAGE_ORDER = [
   "webhook_to_pickup",
   "preamble",
   "lead",
+  "system_prompt",
   "llm_queue",
   "llm_model",
   "safety",
@@ -164,9 +166,6 @@ const TurnBadges = ({ turn }: { turn: PerfSlowTurn }) => (
     ) : null}
     {turn.retried_429 ? (
       <span className="performance-badge is-warning">Retry 429</span>
-    ) : null}
-    {turn.used_fallback ? (
-      <span className="performance-badge is-warning">Fallback</span>
     ) : null}
   </div>
 );
@@ -353,10 +352,10 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           tone={data.live.minimax_429s_last_1m > 0 ? "warning" : "success"}
         />
         <Metric
-          label="Fallback"
-          value={String(data.live.llm_fallbacks_last_2m)}
-          hint={`Độ trễ TB: ${fmtMs(data.live.llm_avg_latency_ms)}`}
-          tone={data.live.llm_fallbacks_last_2m > 0 ? "warning" : "success"}
+          label="Độ trễ LLM TB"
+          value={fmtMs(data.live.llm_avg_latency_ms)}
+          hint={`${data.live.llm_invokes_last_2m} lượt trong 2 phút`}
+          tone="neutral"
         />
       </section>
 

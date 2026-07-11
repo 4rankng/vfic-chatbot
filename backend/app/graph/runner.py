@@ -83,9 +83,16 @@ async def _agent_turn(
 ) -> str:
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
+    # Redis-cached (10min TTL, version-bumped on persona/project edits) so a hit
+    # is sub-ms; a miss does 2 DB reads (persona + active-product index). Timed
+    # separately so the dashboard can attribute it rather than hiding it inside
+    # the (post-preamble) total_ms slice.
     from app.graph.context import build_system_prompt
 
+    sys_t0 = time.monotonic()
     system = await build_system_prompt(deps.retrieval)
+    if timings is not None:
+        timings["system_prompt_ms"] = int(round((time.monotonic() - sys_t0) * 1000))
 
     # Fetch existing lead profile so the agent can see what info is already known
     # and subtly ask for the most important missing fields. Best-effort: DB error
@@ -383,25 +390,36 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             # --- llm safety check (only when fast filter flagged AND not blocklisted) ---
             elif fs["needs_llm_safety"]:
                 safety_t0 = time.monotonic()
-                verdict = parse_verdict(await deps.safety.safety(candidate))
-                timings["safety_ms"] = int(round((time.monotonic() - safety_t0) * 1000))
-                if verdict["safe_to_send"]:
-                    candidate = verdict["final_answer"] or candidate
-                elif state.attempt < 1:
-                    state.attempt += 1
-                    retry_prompt = build_retry_prompt(state.user_text, candidate, verdict["issue_type"])
-                    raw2 = await _agent_turn(
-                        state,
-                        deps,
-                        retry_prompt,
-                        chat_id=conv.zalo_chat_id,
-                        recent_messages=recent_messages,
-                        timings=timings,
+                try:
+                    verdict = parse_verdict(await deps.safety.safety(candidate))
+                except Exception:  # noqa: BLE001 — safety judge crashed
+                    # Fast filter already flagged this candidate; fail CLOSED
+                    # (don't send unvetted output) and redirect to the fallback.
+                    # The turn still records normally — no crash, no PENDING row.
+                    logger.warning(
+                        "safety judge crashed for %s; suppressing flagged candidate",
+                        conv.zalo_chat_id, exc_info=True,
                     )
-                    state.reply = raw2
-                    candidate = fast_safety_filter(raw2)["output"]
-                else:
                     candidate = retry_exhausted_fallback(state.user_text)
+                else:
+                    if verdict["safe_to_send"]:
+                        candidate = verdict["final_answer"] or candidate
+                    elif state.attempt < 1:
+                        state.attempt += 1
+                        retry_prompt = build_retry_prompt(state.user_text, candidate, verdict["issue_type"])
+                        raw2 = await _agent_turn(
+                            state,
+                            deps,
+                            retry_prompt,
+                            chat_id=conv.zalo_chat_id,
+                            recent_messages=recent_messages,
+                            timings=timings,
+                        )
+                        state.reply = raw2
+                        candidate = fast_safety_filter(raw2)["output"]
+                    else:
+                        candidate = retry_exhausted_fallback(state.user_text)
+                timings["safety_ms"] = int(round((time.monotonic() - safety_t0) * 1000))
 
         # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
         # server-side on version + lock_owner + lock liveness. Closes both the

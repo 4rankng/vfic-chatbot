@@ -4,8 +4,8 @@
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 20px;
+  gap: 10px;
+  padding: 0 16px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -24,14 +24,14 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   overflow: visible;
 }
 .inbox-bg-container .header-avatar {
   position: relative;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -63,9 +63,9 @@
 }
 .inbox-bg-container .person-name {
   color: var(--ink);
-  font-size: var(--chat-fs-section-title);
-  font-weight: var(--chat-fw-bold);
-  line-height: var(--chat-lh-title);
+  font-size: var(--chat-fs-body);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--chat-lh-body);
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -322,11 +322,11 @@
   height: 15px;
 }
 .inbox-bg-container .mode-menu-trigger {
-  min-height: 38px;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 9px 4px 5px;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
   border: 1px solid #d8dde6;
   border-radius: 10px;
   background: var(--surface-solid);
@@ -371,10 +371,10 @@
   opacity: 0.7;
 }
 .inbox-bg-container .mode-menu-trigger-icon {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: grid;
-  flex: 0 0 28px;
+  flex: 0 0 26px;
   place-items: center;
   border: 1px solid #d8dde6;
   border-radius: 8px;
@@ -390,7 +390,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 650;
+  font-weight: var(--chat-fw-semibold);
 }
 .inbox-bg-container .mode-menu-trigger-chevron {
   width: 14px;
@@ -551,19 +551,14 @@
 
 @container (max-width: 760px) {
   .inbox-bg-container .chat-header {
-    min-height: 68px;
-    gap: 10px;
-    padding: 10px 12px;
+    min-height: 64px;
+    gap: 8px;
+    padding: 8px 12px;
   }
 
   .inbox-bg-container .header-person {
     flex: 1 1 auto;
     max-width: none;
-  }
-
-  .inbox-bg-container .person-name {
-    font-size: var(--chat-fs-section-title);
-    line-height: var(--chat-lh-title);
   }
 
   .inbox-bg-container .candidate-signal-strip {
@@ -575,24 +570,6 @@
     gap: 6px;
   }
 
-  .inbox-bg-container .mode-menu-trigger,
-  .inbox-bg-container .more-actions-trigger {
-    width: 44px;
-    height: 44px;
-    justify-content: center;
-    padding: 0;
-    border-radius: 10px;
-  }
-
-  .inbox-bg-container .mode-menu-trigger:not(.mode-menu-trigger--primary) span,
-  .inbox-bg-container .mode-menu-chevron {
-    display: none;
-  }
-
-  .inbox-bg-container .mode-menu-trigger--primary {
-    width: auto;
-    padding-inline: 10px;
-  }
 }
 
 @container (max-width: 640px) {

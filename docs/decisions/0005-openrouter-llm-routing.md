@@ -22,7 +22,8 @@ Use **OpenRouter** as the primary LLM gateway for text generation, with `langcha
 
 Key reasons:
 - **Multi-provider routing.** OpenRouter provides a single OpenAI-compatible API that can route to MiniMax, Anthropic, OpenAI, and other models. Switching the agent model requires only an env var change (`OPENROUTER_AGENT_MODEL`).
-- **Fallback.** OpenRouter can fall back to alternative providers if the primary is down or rate-limited.
+- **Provider selection.** The application can select OpenRouter for generation
+  through `LLM_DEFAULT_PROVIDER`; generation calls do not fail over at runtime.
 - **Cost control.** OpenRouter's routing allows cost optimization across providers.
 - **Standard client.** `langchain-openai` ChatOpenAI works with OpenRouter's OpenAI-compatible API — no custom client code.
 - **Embeddings via OpenRouter by default.** `openai/text-embedding-3-large` (dim 3072) provides high-quality multilingual (Vietnamese) embeddings. Gemini (`google-genai`) is available as an alternative via `EMBEDDING_PROVIDER=gemini`.
@@ -30,12 +31,12 @@ Key reasons:
 ## Consequences
 
 - **Positive:** Model flexibility — swap agent model via env var without code changes. Single billing surface (OpenRouter). Standard OpenAI-compatible tool-calling interface.
-- **Negative:** Additional network hop (app → OpenRouter → provider) adds ~100–200ms latency. OpenRouter 429s require handling (see `graph/clients.py:FallbackLLM`).
+- **Negative:** Additional network hop (app → OpenRouter → provider) adds ~100–200ms latency. OpenRouter 429s use the bounded retry and degradation path in `graph/clients.py`.
 - **Neutral:** Embeddings default to OpenRouter (`openai/text-embedding-3-large`) but can be switched to Gemini via `EMBEDDING_PROVIDER=gemini`. Both generation and embeddings are configured in `app/core/config.py` with `minimax_*` / `openrouter_*` / `embedding_*` env vars.
 
 ## Related
 
-- LLM clients: `backend/app/graph/clients.py` (`MiniMaxAgent`, `MiniMaxSafety`, `FallbackLLM`, embedder classes)
+- LLM clients: `backend/app/graph/clients.py` (`MiniMaxAgent`, `MiniMaxSafety`, embedder classes)
 - Config: `backend/app/core/config.py` (`minimax_api_key`, `openrouter_api_key`, `embedding_provider`, `embedding_dim`)
 - Usage tracking: `backend/app/graph/usage.py` (token + cost accounting in Redis)
 - [docs/system-architecture.md](../system-architecture.md) §9 (LLM provider architecture)

@@ -55,7 +55,7 @@
   --settings-accent: #0f8a68;
   --settings-accent-strong: #08765a;
   --settings-accent-soft: #dff3ec;
-  --settings-canvas: #eef2f6;
+  --settings-canvas: var(--workspace-canvas);
   --settings-surface: #fafbfc;
   --settings-elevated: #ffffff;
   --settings-border: #d4dce6;
@@ -67,23 +67,10 @@
   --surface-hover: #f4f6f8;
   --border: #d4dce6;
   --border-strong: #c3ceda;
-  --workspace-bg: #eef2f6;
+  --workspace-bg: var(--workspace-canvas);
   --workspace-surface-muted: #f4f6f8;
   --primary-foreground: #ffffff;
-  background:
-    radial-gradient(
-      circle at 18% 0%,
-      color-mix(in srgb, var(--workspace-bg) 62%, transparent),
-      transparent 34%
-    ),
-    linear-gradient(180deg, rgba(80, 58, 30, 0.035), transparent 260px),
-    var(--settings-canvas);
-  background-size:
-    auto,
-    auto,
-    28px 28px,
-    28px 28px,
-    auto;
+  background: var(--settings-canvas);
 }
 
 .settings-header-actions {
@@ -338,7 +325,8 @@
   min-height: auto;
   padding: 12px 2px 20px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 76%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--workspace-border) 76%, transparent);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -433,8 +421,6 @@
   color: var(--ink-muted);
   opacity: 1;
 }
-
-
 
 .profile-command-header {
   min-height: 104px;
@@ -692,11 +678,10 @@
   overflow: hidden;
   border: 1px solid var(--settings-border);
   border-radius: 10px;
-  background:
-    linear-gradient(
-      180deg,
-      var(--settings-surface),
-      var(--settings-surface)
+  background: linear-gradient(
+    180deg,
+    var(--settings-surface),
+    var(--settings-surface)
   );
   padding: 0;
   box-shadow: none;

@@ -124,7 +124,6 @@ async def test_performance_bundle_shape(monkeypatch):
     assert slow["completion_tokens"] == 80
     assert slow["cached_tokens"] == 0
     assert slow["retried_429"] is None
-    assert slow["used_fallback"] is None
     assert slow["degraded"] is False
     assert slow["prefetch_hit"] is True
     assert slow["intent"] == "timetable"

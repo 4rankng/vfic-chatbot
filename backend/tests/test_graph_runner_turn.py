@@ -303,6 +303,39 @@ async def test_safety_verdict_safe_overrides_with_final_answer(monkeypatch):
     assert zalo.sent[0][1] == res["reply"]
 
 
+@pytest.mark.asyncio
+async def test_safety_judge_crash_suppresses_flagged_candidate(monkeypatch):
+    """If the LLM safety judge crashes, the flagged candidate is NOT sent.
+
+    The fast filter already flagged the candidate (code in reply → needs LLM
+    vetting). With the judge down, we fail CLOSED: redirect to the deterministic
+    fallback rather than send unvetted output. The turn still completes and
+    records normally — no crash, no PENDING row left for reconcile.
+    """
+    from app.graph.safety import GENERIC_FALLBACK
+
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "viết code python ```print('x')```")
+
+    class _CrashingSafety:
+        async def safety(self, candidate: str) -> str:
+            raise RuntimeError("safety judge provider down")
+
+    zalo = _FakeZalo()
+    res = await run_turn(
+        _state(), _deps(zalo, conversation=svc, safety=_CrashingSafety()),
+    )
+
+    # The turn completed (did not crash) and sent the deterministic fallback.
+    assert res["outcome"] == "sent"
+    assert res["reply"] == GENERIC_FALLBACK
+    assert zalo.sent[0][1] == GENERIC_FALLBACK
+    # The outcome was recorded (no PENDING row left behind).
+    assert recorded
+    assert recorded[0]["stage_timings"]["safety_ms"] >= 0
+
+
 # ---------------------------------------------------------------------------
 # No hard cap on the agent (advisory deadline only)
 # ---------------------------------------------------------------------------
@@ -561,6 +594,7 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
             timings["lead_ms"] = 111
             timings["llm_queue_ms"] = 200
             timings["llm_model_ms"] = 799
+            timings["system_prompt_ms"] = 5
         return "Chào bạn!"
 
     monkeypatch.setattr(runner, "_agent_turn", _fake)
@@ -573,8 +607,55 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     assert st["lead_ms"] == 111          # threaded through from _agent_turn
     assert st["llm_queue_ms"] == 200     # split: semaphore wait
     assert st["llm_model_ms"] == 799     # split: model inference
+    assert st["system_prompt_ms"] == 5   # split: persona+index assembly
     assert st["send_ms"] >= 0
     assert st["total_ms"] >= st["send_ms"]
+
+
+@pytest.mark.asyncio
+async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
+    """The real _agent_turn stamps system_prompt_ms before the LLM call.
+
+    This is the instrumentation that lets the dashboard attribute the
+    persona + active-product-index assembly separately from model inference.
+    Uses a fake agent so no LLM call is made; build_system_prompt is stubbed
+    so no DB / Redis is touched.
+    """
+    from app.graph.runner import _agent_turn
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt"
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            return "reply"
+
+    class _FakeLead:
+        async def context(self, *a, **kw):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, q):  # noqa: ARG002
+            return ""
+
+        def ensure(self, reply, q):  # noqa: ARG002
+            return reply
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
+
+    state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="hi")
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+    timings: dict = {"lane": "agent"}
+
+    await _agent_turn(
+        state, deps, "hi",
+        chat_id="z1", recent_messages=[], timings=timings,
+    )
+
+    assert "system_prompt_ms" in timings
+    assert timings["system_prompt_ms"] >= 0
 
 
 @pytest.mark.asyncio

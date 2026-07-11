@@ -17,13 +17,14 @@
 }
 
 .inbox-bg-container .profile-header {
-  min-height: 60px;
+  height: 64px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 3px solid var(--brand);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--workspace-blue-line);
   background: var(--surface-solid);
 }
 .inbox-bg-container .profile-title {
@@ -72,9 +73,9 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: 0;
+  border-bottom: 1px solid var(--workspace-blue-line);
+  background: var(--surface-solid);
 }
 
 .inbox-bg-container .context-tab {
@@ -82,7 +83,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--ink-muted);
+  color: var(--workspace-muted);
   font-size: var(--chat-fs-meta);
   font-weight: var(--chat-fw-medium);
   transition: var(--transition);
@@ -90,24 +91,36 @@
 
 .inbox-bg-container .context-tab:hover,
 .inbox-bg-container .context-tab.active {
-  box-shadow: inset 0 -3px 0 var(--brand);
+  box-shadow: inset 0 -2px 0 var(--workspace-active);
   background: transparent;
-  color: var(--brand);
+  color: var(--workspace-active);
 }
 
 .inbox-bg-container .profile-scroll {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0;
-  background: var(--surface);
-  scrollbar-width: none;
+  background: var(--workspace-bg-deep);
+  scrollbar-width: thin;
+  scrollbar-color: var(--workspace-blue-line) transparent;
 }
 .inbox-bg-container .profile-scroll::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+}
+.inbox-bg-container .profile-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--workspace-blue-line);
+  background-clip: padding-box;
+}
+.inbox-bg-container .profile-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-faint);
 }
 
 .inbox-bg-container .context-card {
-  padding: 18px;
+  padding: 16px;
   border: 0;
   border-bottom: 1px solid var(--workspace-blue-line);
   border-radius: 0;
@@ -121,12 +134,12 @@
 .inbox-bg-container .context-overview {
   display: grid;
   gap: 8px;
-  padding: 16px 18px;
+  padding: 16px;
   margin: 0;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
-  background: var(--surface);
+  background: var(--surface-solid);
 }
 
 .inbox-bg-container .context-overview-copy {
@@ -190,26 +203,6 @@
   border-radius: inherit;
   background: var(--brand);
   transition: width 0.26s var(--ease);
-}
-
-.inbox-bg-container .candidate-missing-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.inbox-bg-container .candidate-missing-chip {
-  min-height: 28px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--brand) 20%, var(--border));
-  border-radius: 999px;
-  background: var(--brand-light);
-  color: var(--brand);
-  font-size: var(--chat-fs-caption);
-  font-weight: var(--chat-fw-bold);
-  line-height: var(--chat-lh-tight);
 }
 
 .inbox-bg-container .context-subject {

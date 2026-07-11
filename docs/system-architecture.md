@@ -300,22 +300,22 @@ Per-chat bot locks are durable conversation-row fields:
 
 | Path | Model | Role |
 |---|---|---|
-| MiniMax primary | `MiniMax-M2.7-highspeed` (agent), `MiniMax-M2.5-highspeed` (safety) | Always primary when `MINIMAX_ENABLE=true`. |
-| OpenRouter fallback | `deepseek/deepseek-v4-flash` default | Used when MiniMax disabled, or as fallback inside `FallbackLLM`. |
+| MiniMax | `MiniMax-M2.7-highspeed` (agent), `MiniMax-M2.5-highspeed` (safety) | Selected when `LLM_DEFAULT_PROVIDER=minimax`, or when it is the only enabled generation provider. |
+| OpenRouter | `deepseek/deepseek-v4-flash` default | Selected when `LLM_DEFAULT_PROVIDER=openrouter`, or when it is the only enabled generation provider. |
 | Embeddings | OpenRouter `text-embedding-3-large` (3072-dim) | Default. |
 | Embeddings fallback | Gemini `gemini-embedding-2` | `GeminiEmbedder` (`clients.py:127`). |
 
-- `FallbackLLM` (`clients.py:343`) wraps primary + fallback.
-- `_chat_for_role` (`clients.py:444`) returns `FallbackLLM` when both
-  MiniMax and OpenRouter are enabled.
+- `_chat_for_role` resolves one configured generation provider when the client
+  is built. It does not retry a failed turn through another LLM provider.
 - **429 handling:** `_llm_call_with_retry` (`clients.py:102`) retries once
   with jitter, then raises `LLMThrottled` → the worker sends a static
   Vietnamese degradation reply (no off-policy content reaches the candidate).
 - **Concurrency:** `llm_concurrency_limit` is a Redis-backed cross-process
   semaphore (`graph/llm_semaphore.py`); `0` = disabled. Separate
   `embed_concurrency_limit` for embeddings.
-- `active_llm_provider` property: MiniMax always primary when enabled;
-  OpenRouter sole only if MiniMax disabled; raises if neither enabled.
+- `active_llm_provider` property: selects `LLM_DEFAULT_PROVIDER` when that
+  provider is enabled; otherwise selects the remaining enabled provider; raises
+  if neither is enabled.
 
 ### MiniMax digest pipeline
 - `MINIMAX_DIGEST_MODEL` (background-only, generous timeout) digests raw KB

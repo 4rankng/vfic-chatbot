@@ -310,27 +310,6 @@ class TestRetry429:
         assert sleep_args[0] == get_settings().llm_429_retry_sleep_seconds
 
 
-class TestFallbackLLMObservability:
-    """Primary->fallback failovers are counted for ops visibility."""
-
-    @pytest.mark.asyncio
-    async def test_records_fallback_when_primary_fails(self):
-        from app.graph.clients import FallbackLLM
-
-        primary = AsyncMock()
-        primary.ainvoke = AsyncMock(side_effect=RuntimeError("primary down"))
-        fallback = AsyncMock()
-        fallback.ainvoke = AsyncMock(return_value=MagicMock(content="fallback ok"))
-
-        with patch("app.graph.clients._record_llm_fallback") as record:
-            result = await FallbackLLM(primary, fallback).ainvoke(["msg"])
-
-        assert result.content == "fallback ok"
-        record.assert_called_once()
-        primary.ainvoke.assert_called_once()
-        fallback.ainvoke.assert_called_once()
-
-
 # ── Degradation message in worker ───────────────────────────────────────────
 
 

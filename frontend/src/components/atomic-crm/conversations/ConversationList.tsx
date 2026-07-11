@@ -35,6 +35,12 @@ type QueueFilter = "all" | "attention" | "priority";
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 
+const QUEUE_FILTER_ICON: Record<QueueFilter, string> = {
+  all: "#i-filter",
+  attention: "#i-clock",
+  priority: "#i-sparkles",
+};
+
 const needsVisibleAttention = (
   conversation: Conversation,
   _readIds: Set<string>,
@@ -438,7 +444,11 @@ const ConversationListPanel = ({
                   aria-pressed={queueFilter === value}
                   title={label}
                   onClick={() => setQueueFilter(value)}
-                />
+                >
+                  <svg className="icon" aria-hidden="true">
+                    <use href={QUEUE_FILTER_ICON[value]} />
+                  </svg>
+                </button>
               ))}
             </div>
           </div>

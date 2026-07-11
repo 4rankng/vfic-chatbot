@@ -165,6 +165,21 @@
   background: var(--chat-bg);
 }
 
+/* The chat canvas uses the same neutral surface for empty and populated
+   conversations, so the empty state does not look like a system warning. */
+.inbox-bg-container
+  .app:not(
+    .dashboard-app,
+    .knowledge-app,
+    .settings-app,
+    .profile-app,
+    .persona-app,
+    .project-app
+  )
+  :is(.center-panel, .chat-scroll-shell) {
+  background: var(--chat-bg);
+}
+
 .inbox-bg-container .app.dashboard-app {
   grid-template-columns: 58px minmax(0, 1fr);
 }

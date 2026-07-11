@@ -4,7 +4,7 @@
 .inbox-bg-container,
 .mobile-dashboard-shell {
   color-scheme: light;
-  --paper-desk: #e4dfd8;
+  --paper-desk: var(--workspace-canvas);
   --paper-desk-deep: #f1f3f6;
   --paper: #ffffff;
   --paper-soft: #f2f4f7;
@@ -52,7 +52,7 @@
   --danger-light: #f8e7e4;
   --info: #28786f;
   --info-light: #e6f1f8;
-  --chat-bg: #e4dfd8;
+  --chat-bg: var(--workspace-canvas);
   --chat-bubble-in: var(--paper);
   --chat-bubble-out: #dcf8c7;
   --chat-bubble-user: var(--paper);

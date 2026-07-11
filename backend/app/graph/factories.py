@@ -10,9 +10,11 @@ stays langchain-free.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
 from app.core.config import get_settings
 from app.graph.clients import (
@@ -221,8 +223,117 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
         return None
 
 
+# ── Process-wide LLM client cache ───────────────────────────────────────────
+# The ChatOpenAI clients + embedder are expensive to construct (langchain_openai
+# import + httpx/pydantic wiring). Caching them avoids rebuilding on every turn.
+# Keyed by the minimax + openrouter + zalo integration-settings cache versions
+# so an admin edit (or an OA token rotation) invalidates on the next turn.
+#
+# Scope of the win:
+# - Direct/ASGI path (start_direct_chat_turn): multiple turns share one event
+#   loop + one _client_cache in the web process → the 2nd+ turn skips rebuild.
+# - RQ fork-per-job path: each forked child starts with an empty cache (the
+#   parent's cache cannot be inherited — ChatOpenAI wraps an httpx pool whose
+#   sockets must not be shared across fork()). So under default RQ each child
+#   builds once and exits; the per-turn win there is the asyncio.gather over
+#   the three resolve_* calls, not this cache. Moving chatbot turns off
+# fork-per-job
+#   (SimpleWorker) is what would make this cache bite on the worker path.
+#
+# ``_build_cached_clients`` is the single constructor; ``build_deps`` reads the
+# cache and only re-binds the per-turn pieces (db session, retrieval repo, lead
+# adapter, faq_bypass adapter, zalo sender with its refresh closure, followup
+# gate).
+
+
+@dataclass
+class _CachedClients:
+    agent_llm: object
+    safety_llm: object
+    fast_llm: object | None
+    embedder: object
+    zalo_config: object
+
+
+_client_cache: dict[str, object] = {}
+_client_cache_lock = asyncio.Lock()
+
+
+async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for lock)
+    """Return the cached LLM client bundle, building it once per settings version."""
+    from app.core.cache import cache_version
+    from app.services.integration_settings import IntegrationSettingsService
+
+    s = get_settings()
+    integration_settings = IntegrationSettingsService(db, settings=s)
+
+    mm_version = await cache_version("integration_minimax")
+    or_version = await cache_version("integration_openrouter")
+    zl_version = await cache_version("integration_zalo")
+    cache_key = f"mm:{mm_version}|or:{or_version}|zl:{zl_version}"
+
+    cached = _client_cache.get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    async with _client_cache_lock:
+        # Re-check inside the lock: a concurrent turn may have built it.
+        cached = _client_cache.get(cache_key)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+        # Concurrent: each resolve is a Redis read + conditional DB query +
+        # AES-GCM decrypts; serial they summed to hundreds of ms on a cold cache.
+        minimax_config, openrouter_config, zalo_config = await asyncio.gather(
+            integration_settings.resolve_minimax(),
+            integration_settings.resolve_openrouter(),
+            integration_settings.resolve_zalo(),
+        )
+        agent_llm, safety_llm = (
+            _chat_for_role(
+                role,
+                temperature=temp,
+                minimax_api_key=minimax_config.api_key,
+                openrouter_api_key=openrouter_config.api_key,
+                minimax_enabled=minimax_config.enabled,
+                openrouter_enabled=openrouter_config.enabled,
+                default_provider=minimax_config.default_provider,
+                openrouter_agent_model=openrouter_config.agent_model,
+                openrouter_safety_model=openrouter_config.safety_model,
+                openrouter_digest_model=openrouter_config.digest_model,
+            )
+            for role, temp in (("agent", 0.3), ("safety", 0.0))
+        )
+        embedder = build_embedder(s, openrouter_api_key=openrouter_config.api_key)
+        fast_llm = _build_fast_llm(
+            minimax_config=minimax_config,
+            openrouter_config=openrouter_config,
+        )
+        bundle = _CachedClients(
+            agent_llm=agent_llm,
+            safety_llm=safety_llm,
+            fast_llm=fast_llm,
+            embedder=embedder,
+            zalo_config=zalo_config,
+        )
+        _client_cache.clear()  # only one live version at a time
+        _client_cache[cache_key] = bundle
+        logger.info("llm_client_cache built key=%s", cache_key)
+        return bundle
+
+
+def reset_client_cache() -> None:
+    """Clear the LLM client cache. Tests use this between cases."""
+    _client_cache.clear()
+
+
 async def build_deps(db, *, session_factory=None):
     """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo).
+
+    The expensive LLM clients + embedder are cached process-wide (see
+    ``_build_cached_clients``); this function only re-binds the per-turn pieces:
+    the db session, retrieval/lead/faq_bypass adapters, the zalo sender (with
+    its token-refresh closure), and the followup gate.
 
     ``session_factory`` (optional, an ``async_sessionmaker``) enables parallel tool
     dispatch: each concurrent tool call opens its own session via the factory
@@ -233,40 +344,8 @@ async def build_deps(db, *, session_factory=None):
     from app.services.retrieval import RetrievalRepository
     from app.services.zalo_sender import ZaloChannelSender
 
-    s = get_settings()
-    integration_settings = IntegrationSettingsService(db, settings=s)
-    minimax_config = await integration_settings.resolve_minimax()
-    openrouter_config = await integration_settings.resolve_openrouter()
-    agent_llm = _chat_for_role(
-        "agent",
-        temperature=0.3,
-        minimax_api_key=minimax_config.api_key,
-        openrouter_api_key=openrouter_config.api_key,
-        minimax_enabled=minimax_config.enabled,
-        openrouter_enabled=openrouter_config.enabled,
-        default_provider=minimax_config.default_provider,
-        openrouter_agent_model=openrouter_config.agent_model,
-        openrouter_safety_model=openrouter_config.safety_model,
-        openrouter_digest_model=openrouter_config.digest_model,
-    )
-    safety_llm = _chat_for_role(
-        "safety",
-        temperature=0.0,
-        minimax_api_key=minimax_config.api_key,
-        openrouter_api_key=openrouter_config.api_key,
-        minimax_enabled=minimax_config.enabled,
-        openrouter_enabled=openrouter_config.enabled,
-        default_provider=minimax_config.default_provider,
-        openrouter_agent_model=openrouter_config.agent_model,
-        openrouter_safety_model=openrouter_config.safety_model,
-        openrouter_digest_model=openrouter_config.digest_model,
-    )
-    embedder = build_embedder(s, openrouter_api_key=openrouter_config.api_key)
-    zalo_config = await integration_settings.resolve_zalo()
-    fast_llm = _build_fast_llm(
-        minimax_config=minimax_config,
-        openrouter_config=openrouter_config,
-    )
+    clients = await _build_cached_clients(db)
+    integration_settings = IntegrationSettingsService(db, settings=get_settings())
 
     # Parallel tool dispatch: each concurrent tool call gets its own session so
     # the shared ``db`` is never used concurrently. Lazy import keeps the graph
@@ -282,18 +361,18 @@ async def build_deps(db, *, session_factory=None):
 
     return GraphDeps(
         db=db,
-        agent=MiniMaxAgent(agent_llm, embedder, fast_llm=fast_llm),
-        safety=MiniMaxSafety(safety_llm),
-        embedder=embedder,
+        agent=MiniMaxAgent(clients.agent_llm, clients.embedder, fast_llm=clients.fast_llm),
+        safety=MiniMaxSafety(clients.safety_llm),
+        embedder=clients.embedder,
         zalo=ZaloChannelSender(
-            zalo_config,
+            clients.zalo_config,
             refresh=lambda: integration_settings.refresh_oa_access_token(),
         ),
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
         make_retrieval=make_retrieval,
         lead=_LeadContextAdapter(db),
-        faq_bypass=_FaqBypassAdapter(db, embedder),
+        faq_bypass=_FaqBypassAdapter(db, clients.embedder),
         followup_allowed=_make_followup_allowed(db),
     )
 

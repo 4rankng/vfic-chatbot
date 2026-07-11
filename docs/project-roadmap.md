@@ -11,7 +11,7 @@ Ting Ting is **in production** at `bot.tingting.vip`. The core recruiting
 chatbot loop is live:
 
 - Zalo Bot Platform inbound + outbound, <1s webhook ack, async turn pipeline.
-- MiniMax M2.7 agent + M2.5 safety, OpenRouter fallback, pgvector RAG.
+- MiniMax M2.7 agent + M2.5 safety, selectable OpenRouter provider, pgvector RAG.
 - Recruiter console (React Admin, Vietnamese-only) with realtime Socket.IO
   inbox, lead kanban, knowledge base, personas, projects.
 - Proactive follow-up worker (6h/24h/46h cadence, Zalo-48h-safe).

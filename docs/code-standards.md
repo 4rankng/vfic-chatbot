@@ -80,8 +80,9 @@ surrounding code.
 
 ### LLM client rules
 - The admin integration settings choose whether MiniMax and OpenRouter are
-  enabled and which enabled provider is primary. The other enabled provider is
-  used as fallback. If neither is enabled, `active_llm_provider` raises.
+  enabled and which enabled provider is selected. There is no per-call provider
+  failover: a provider error reaches the normal turn error handling. If neither
+  is enabled, `active_llm_provider` raises.
 - `_llm_call_with_retry` retries once with jitter on 429, then raises
   `LLMThrottled` → the worker sends a static Vietnamese degradation reply.
 - Tool-loop ceiling = `max_llm_calls_per_turn` (default 6).

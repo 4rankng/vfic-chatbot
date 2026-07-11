@@ -13,10 +13,18 @@ Accepts queue names as positional arguments (required, no default).
 """
 from __future__ import annotations
 
+import logging
 import sys
+
+logger = logging.getLogger(__name__)
 
 
 def main(queues: list[str]) -> None:
+    # Configure root logging before RQ's work() sets up its handlers, so a
+    # preload failure below is visible in structured logs rather than lost to
+    # stderr (the previous silent-degradation path).
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
     from rq import Worker
     from app.core.redis import get_redis_sync
 
@@ -24,15 +32,22 @@ def main(queues: list[str]) -> None:
     w = Worker(queues, connection=conn)
 
     # Preload heavy imports (langchain/openai/graph layer) in the parent process
-    # BEFORE entering the work loop. RQ forks a child per job (os.fork); the
-    # child inherits these already-imported modules via copy-on-write, avoiding
-    # a ~5-7s re-import on every turn. See chatbot_worker.preload_imports.
+    # BEFORE the work loop. RQ forks a child per job (os.fork); the child
+    # inherits these modules via copy-on-write, avoiding a ~5-7s re-import on
+    # every turn (measured preamble_ms avg 6.1s without it).
+    #
+    # Not fatal (jobs still run, just slower), but a silent preload failure is
+    # exactly what causes a chronically slow preamble — log at ERROR, not stderr.
     try:
         from app.workers.chatbot_worker import preload_imports
 
         preload_imports()
-    except Exception:  # noqa: BLE001 — preload is an optimization, never fatal
-        print("WARNING: worker preload_imports failed; jobs will run with cold imports", file=sys.stderr)
+    except Exception:
+        logger.error(
+            "preload_imports FAILED — every forked job will pay the full "
+            "cold-import cost (~5-7s/turn). Fix the import error below.",
+            exc_info=True,
+        )
 
     # Requeue any jobs stuck in StartedJobRegistry from a prior hard kill
     # (OOM, SIGKILL, docker --force-recreate).  This is the standard RQ

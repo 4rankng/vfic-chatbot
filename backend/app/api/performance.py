@@ -37,6 +37,7 @@ _STAGE_KEYS = [
     "webhook_to_pickup",
     "preamble",
     "lead",
+    "system_prompt",
     "llm_queue",
     "llm_model",
     "safety",

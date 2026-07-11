@@ -41,7 +41,9 @@ Contains:
 2. Verify `OPENROUTER_API_KEY` is valid and has quota.
 3. Check `LLM_CONCURRENCY_LIMIT` — if too high, reduce to stay within provider limits.
 
-**Fix:** The `FallbackLLM` class in `graph/clients.py` should handle this. If fallbacks are exhausted, the bot sends `ERROR_REPLY` (a graceful fallback message). Reduce concurrency if 429s are frequent.
+**Fix:** The client retries one 429 with a short backoff. If it remains throttled,
+the worker sends its static Vietnamese degradation reply; it does not switch to
+another LLM provider. Reduce concurrency if 429s are frequent.
 
 ### Postgres migration errors
 

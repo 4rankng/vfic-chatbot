@@ -142,7 +142,7 @@ class BotRun(Base):
     # dashboard: webhook_to_pickup_ms / preamble_ms / lane / lead_ms /
     # llm_queue_ms / llm_model_ms / safety_ms / send_ms / total_ms (+ queue_depth,
     # intent, llm_calls, llm_call_ms[], prompt/completion/cached_tokens,
-    # tool_breakdown{}, retried_429, used_fallback, degraded). Nullable — older
+    # tool_breakdown{}, retried_429, degraded). Nullable — older
     # runs and any path that skips a stage simply omit the key. Aggregated via
     # percentile_cont over (stage_timings->>'<key>')::int.
     stage_timings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

@@ -13,7 +13,6 @@ Covers:
 * prompt/completion/cached tokens per turn (context-size correlation).
 * tool_breakdown — per-tool latency dict (long-pole identification under gather).
 * retried_429 flag — turn survived a rate-limit backoff.
-* used_fallback flag — FallbackLLM failover was exercised.
 """
 from __future__ import annotations
 
@@ -277,38 +276,3 @@ async def test_retried_429_flag_set_on_rate_limit_retry(monkeypatch):
     # The backoff sleep must be tracked separately from model inference so the
     # split stays clean (llm_model_ms excludes the sleep).
     assert metrics.get("llm_backoff_ms", 0) >= 0
-
-
-async def test_used_fallback_flag_set_on_failover():
-    """When FallbackLLM switches to the secondary, used_fallback=True."""
-    pytest.importorskip("langchain_core")
-    from app.graph.clients import FallbackLLM, MiniMaxAgent
-
-    class _FailingPrimary:
-        def bind_tools(self, tools):  # noqa: ARG002
-            return self
-
-        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
-            raise RuntimeError("primary provider down")
-
-    class _OkFallback:
-        def bind_tools(self, tools):  # noqa: ARG002
-            return self
-
-        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
-            return _FakeMsg(content="fallback reply")
-
-    fallback_llm = FallbackLLM(_FailingPrimary(), _OkFallback())
-    agent = MiniMaxAgent(fallback_llm, embedder=None, max_iters=5)
-    metrics: dict = {}
-
-    reply = await agent.agent(
-        "test",
-        system="sys",
-        retrieval=_FakeRetrieval(lambda n, a: "ok"),  # noqa: ARG005
-        embedder=None,
-        metrics=metrics,
-    )
-
-    assert reply == "fallback reply"
-    assert metrics.get("used_fallback") is True

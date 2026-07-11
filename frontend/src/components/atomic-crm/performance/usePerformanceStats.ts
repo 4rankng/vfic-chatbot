@@ -18,7 +18,6 @@ export interface PerfLive {
   llm_avg_latency_ms: number;
   llm_invokes_last_2m: number;
   minimax_429s_last_1m: number;
-  llm_fallbacks_last_2m: number;
 }
 
 export interface PerfSlowTurn {
@@ -40,7 +39,6 @@ export interface PerfSlowTurn {
   completion_tokens: number | null;
   cached_tokens: number | null;
   retried_429: boolean | null;
-  used_fallback: boolean | null;
   degraded: boolean | null;
   prefetch_hit: boolean | null;
   pipeline_ms: number | null;
