@@ -103,9 +103,7 @@ class _FaqBypassAdapter:
             # deployment is single-tenant, mirroring search_bus_timetable's
             # deliberate NULL-slug choice. Re-scope only if the bot goes
             # multi-project (pass the conversation's project id into both calls).
-            vector_rows = await repo.match_faq(
-                emb, top_k=fb.TOP_K, floor=fb.CANDIDATE_VECTOR_FLOOR
-            )
+            vector_rows = await repo.match_faq(emb, top_k=fb.TOP_K, floor=fb.CANDIDATE_VECTOR_FLOOR)
             lexical_rows = await repo.match_faq_lexical(
                 user_text, top_k=fb.TOP_K, threshold=fb.TRIGRAM_THRESHOLD
             )
@@ -121,18 +119,18 @@ class _FaqBypassAdapter:
         logger.info(
             "faq_bypass decision=%s tier=%s score=%.3f top2=%.3f margin=%.3f "
             "vec=%.3f tri=%.3f reason=%s latency_ms=%.1f faq_id=%s",
-            decision.decision, decision.tier, decision.top1_score,
-            decision.top2_score, decision.margin,
+            decision.decision,
+            decision.tier,
+            decision.top1_score,
+            decision.top2_score,
+            decision.margin,
             decision.scored.vec_sim if decision.scored else 0.0,
             decision.scored.tri_sim if decision.scored else 0.0,
-            decision.reason, latency_ms,
+            decision.reason,
+            latency_ms,
             decision.scored.faq_id if decision.scored else None,
         )
-        if (
-            decision.decision == fb.DECISION_ACCEPT
-            and decision.scored
-            and decision.scored.answer
-        ):
+        if decision.decision == fb.DECISION_ACCEPT and decision.scored and decision.scored.answer:
             return FaqBypassResult(
                 answer=decision.scored.answer,
                 faq_id=decision.scored.faq_id,
@@ -226,8 +224,11 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
 # ── Process-wide LLM client cache ───────────────────────────────────────────
 # The ChatOpenAI clients + embedder are expensive to construct (langchain_openai
 # import + httpx/pydantic wiring). Caching them avoids rebuilding on every turn.
-# Keyed by the minimax + openrouter + zalo integration-settings cache versions
-# so an admin edit (or an OA token rotation) invalidates on the next turn.
+# Keyed by the minimax + openrouter integration-settings cache versions ONLY —
+# the two providers whose settings actually drive agent_llm / embedder / fast_llm
+# construction. Zalo is deliberately excluded: its config feeds the per-turn
+# ZaloChannelSender (resolved fresh in build_deps), so an OA token rotation
+# invalidating this cache would force a needless 5-7s LLM-client rebuild.
 #
 # Scope of the win:
 # - Direct/ASGI path (start_direct_chat_turn): multiple turns share one event
@@ -236,14 +237,13 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
 #   parent's cache cannot be inherited — ChatOpenAI wraps an httpx pool whose
 #   sockets must not be shared across fork()). So under default RQ each child
 #   builds once and exits; the per-turn win there is the asyncio.gather over
-#   the three resolve_* calls, not this cache. Moving chatbot turns off
-# fork-per-job
-#   (SimpleWorker) is what would make this cache bite on the worker path.
+#   the resolve_* calls, not this cache. Moving chatbot turns off fork-per-job
+#   (SimpleWorker) is what makes this cache bite on the worker path.
 #
 # ``_build_cached_clients`` is the single constructor; ``build_deps`` reads the
 # cache and only re-binds the per-turn pieces (db session, retrieval repo, lead
-# adapter, faq_bypass adapter, zalo sender with its refresh closure, followup
-# gate).
+# adapter, faq_bypass adapter, zalo config + sender with its refresh closure,
+# followup gate).
 
 
 @dataclass
@@ -251,7 +251,6 @@ class _CachedClients:
     agent_llm: object
     fast_llm: object | None
     embedder: object
-    zalo_config: object
 
 
 _client_cache: dict[str, object] = {}
@@ -259,7 +258,14 @@ _client_cache_lock = asyncio.Lock()
 
 
 async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for lock)
-    """Return the cached LLM client bundle, building it once per settings version."""
+    """Return the cached LLM client bundle, building it once per settings version.
+
+    The cache key covers only the LLM providers (minimax + openrouter) whose
+    settings actually drive ``agent_llm`` / ``embedder`` / ``fast_llm``
+    construction. Zalo config is deliberately excluded — it feeds only the
+    per-turn ``ZaloChannelSender`` (resolved separately in ``build_deps``), so
+    a Zalo OA token refresh must NOT invalidate the expensive LLM clients.
+    """
     from app.core.cache import cache_version
     from app.services.integration_settings import IntegrationSettingsService
 
@@ -268,8 +274,7 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
 
     mm_version = await cache_version("integration_minimax")
     or_version = await cache_version("integration_openrouter")
-    zl_version = await cache_version("integration_zalo")
-    cache_key = f"mm:{mm_version}|or:{or_version}|zl:{zl_version}"
+    cache_key = f"mm:{mm_version}|or:{or_version}"
 
     cached = _client_cache.get(cache_key)
     if cached is not None:
@@ -283,10 +288,9 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
 
         # Concurrent: each resolve is a Redis read + conditional DB query +
         # AES-GCM decrypts; serial they summed to hundreds of ms on a cold cache.
-        minimax_config, openrouter_config, zalo_config = await asyncio.gather(
+        minimax_config, openrouter_config = await asyncio.gather(
             integration_settings.resolve_minimax(),
             integration_settings.resolve_openrouter(),
-            integration_settings.resolve_zalo(),
         )
         agent_llm = _chat_for_role(
             "agent",
@@ -309,7 +313,6 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
             agent_llm=agent_llm,
             fast_llm=fast_llm,
             embedder=embedder,
-            zalo_config=zalo_config,
         )
         _client_cache.clear()  # only one live version at a time
         _client_cache[cache_key] = bundle
@@ -342,11 +345,17 @@ async def build_deps(db, *, session_factory=None):
     clients = await _build_cached_clients(db)
     integration_settings = IntegrationSettingsService(db, settings=get_settings())
 
+    # Zalo config is resolved per-turn (cheap — Redis-cached via cached_zalo_config)
+    # so a rotated OA token takes effect on the very next turn without invalidating
+    # the expensive LLM client cache.
+    zalo_config = await integration_settings.resolve_zalo()
+
     # Parallel tool dispatch: each concurrent tool call gets its own session so
     # the shared ``db`` is never used concurrently. Lazy import keeps the graph
     # layer free of concrete-service imports at module load.
     make_retrieval = None
     if session_factory is not None:
+
         @asynccontextmanager
         async def _make_retrieval():
             async with session_factory() as session:
@@ -359,7 +368,7 @@ async def build_deps(db, *, session_factory=None):
         agent=MiniMaxAgent(clients.agent_llm, clients.embedder, fast_llm=clients.fast_llm),
         embedder=clients.embedder,
         zalo=ZaloChannelSender(
-            clients.zalo_config,
+            zalo_config,
             refresh=lambda: integration_settings.refresh_oa_access_token(),
         ),
         conversation=ConversationService(db),

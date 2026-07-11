@@ -181,11 +181,12 @@ async def test_build_deps_caches_llm_clients_across_turns(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_build_deps_cache_invalidates_on_version_change(monkeypatch):
-    """A bumped integration-settings cache version rebuilds the clients.
+    """A bumped minimax/openrouter cache version rebuilds the LLM clients.
 
     The fake cache_version namespaces its responses, so this catches a
-    regression where the cache key omits a namespace (the original bug: the
-    zalo version was missing, so a bot-token rotation didn't take effect).
+    regression where the cache key omits a namespace. The LLM client cache key
+    covers only minimax + openrouter — the two providers whose settings drive
+    agent_llm / embedder / fast_llm construction.
     """
     from app.graph import factories
 
@@ -211,33 +212,41 @@ async def test_build_deps_cache_invalidates_on_version_change(monkeypatch):
 
     await factories.build_deps(object())
     assert len(factories._client_cache) == 1
-    assert "mm:1|or:1|zl:1" in factories._client_cache
+    assert "mm:1|or:1" in factories._client_cache
 
     # A minimax bump (admin edited the agent model / key) invalidates.
     versions["integration_minimax"] = "2"
     await factories.build_deps(object())
-    assert "mm:2|or:1|zl:1" in factories._client_cache
+    assert "mm:2|or:1" in factories._client_cache
 
     reset_client_cache()
 
 
 @pytest.mark.asyncio
-async def test_build_deps_cache_invalidates_on_zalo_version_change(monkeypatch):
-    """A zalo-only version bump (bot-token rotation) must invalidate the cache.
+async def test_build_deps_cache_survives_zalo_version_change(monkeypatch):
+    """A zalo-only version bump (OA token refresh) must NOT rebuild LLM clients.
 
-    Regression guard: the cache key originally omitted the zalo namespace, so a
-    rotated bot_token did not take effect until process restart. The cached
-    zalo_config drives ZaloChannelSender, so a stale token means every outbound
-    bot message 401s.
+    Regression guard: the cache key previously included the zalo namespace, so
+    every OA token refresh invalidated the expensive LLM client cache (5-7s
+    rebuild of agent_llm + embedder + fast_llm) even though none of those
+    clients depend on Zalo config. ZaloConfig feeds only the per-turn
+    ZaloChannelSender, which is resolved fresh in build_deps — so a rotated
+    token still takes effect on the next turn without touching this cache.
     """
     from app.graph import factories
 
     reset_client_cache()
 
+    builds = {"n": 0}
+
     class _FakeLLM:
         pass
 
-    monkeypatch.setattr("app.graph.factories._chat_for_role", lambda *a, **k: _FakeLLM())
+    def _counting_chat_for_role(*args, **kwargs):
+        builds["n"] += 1
+        return _FakeLLM()
+
+    monkeypatch.setattr("app.graph.factories._chat_for_role", _counting_chat_for_role)
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
 
@@ -253,13 +262,14 @@ async def test_build_deps_cache_invalidates_on_zalo_version_change(monkeypatch):
     monkeypatch.setattr("app.core.cache.cache_version", _fake_cache_version)
 
     await factories.build_deps(object())
-    assert "mm:1|or:1|zl:1" in factories._client_cache
+    assert "mm:1|or:1" in factories._client_cache
+    assert builds["n"] == 1  # agent built once
 
-    # Only the zalo namespace bumps (token rotation). The cache MUST rebuild.
+    # Only the zalo namespace bumps (OA token refresh). The cache MUST NOT rebuild.
     versions["integration_zalo"] = "2"
     await factories.build_deps(object())
-    assert "mm:1|or:1|zl:2" in factories._client_cache
-    assert "mm:1|or:1|zl:1" not in factories._client_cache
+    assert "mm:1|or:1" in factories._client_cache  # same key, still cached
+    assert builds["n"] == 1  # no additional LLM client construction
 
     reset_client_cache()
 
@@ -269,14 +279,18 @@ async def test_build_deps_cache_invalidates_on_zalo_version_change(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_build_deps_resolves_integration_settings_concurrently(monkeypatch):
-    """resolve_minimax / resolve_openrouter / resolve_zalo overlap, not serial.
+    """resolve_minimax / resolve_openrouter overlap inside the cache build, not serial.
 
-    The three resolves each do a Redis read + conditional DB query + decrypts.
-    If they run serially their wall-clock sums; concurrent (asyncio.gather) it
-    collapses to the max. We assert overlap by wrapping all three resolves to
-    record peak in-flight count, and forcing a yield so the scheduler actually
-    interleaves them (the noop Redis completes without yielding, so without an
-    explicit await the gather would run them to completion one-by-one).
+    The two LLM-provider resolves each do a Redis read + conditional DB query +
+    decrypts. If they run serially their wall-clock sums; concurrent
+    (asyncio.gather) it collapses to the max. We assert overlap by wrapping
+    both resolves to record peak in-flight count, and forcing a yield so the
+    scheduler actually interleaves them (the noop Redis completes without
+    yielding, so without an explicit await the gather would run them to
+    completion one-by-one).
+
+    resolve_zalo is excluded — it runs separately in build_deps (per-turn, not
+    part of the LLM client cache path) and does not gate client construction.
     """
     from app.services.integration_settings import IntegrationSettingsService
 
@@ -291,6 +305,7 @@ async def test_build_deps_resolves_integration_settings_concurrently(monkeypatch
                 return await orig(self)
             finally:
                 in_flight["n"] -= 1
+
         return _tracked
 
     monkeypatch.setattr(
@@ -302,11 +317,6 @@ async def test_build_deps_resolves_integration_settings_concurrently(monkeypatch
         IntegrationSettingsService,
         "resolve_openrouter",
         _make_tracker(IntegrationSettingsService.resolve_openrouter),
-    )
-    monkeypatch.setattr(
-        IntegrationSettingsService,
-        "resolve_zalo",
-        _make_tracker(IntegrationSettingsService.resolve_zalo),
     )
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
