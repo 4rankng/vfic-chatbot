@@ -1,7 +1,6 @@
 """Deterministic safety, verdict parsing, and retry-prompt logic for bot replies."""
 from __future__ import annotations
 
-import json
 import re
 from typing import TypedDict
 
@@ -17,15 +16,7 @@ class FastSafetyResult(TypedDict):
     issue_found: bool
     issue_type: str
     needs_llm_safety: bool
-
-
-class SafetyVerdict(TypedDict):
-    """Parsed safety-model verdict emitted by :func:`parse_verdict`."""
-
-    safe_to_send: bool
-    issue_found: bool
-    issue_type: str
-    final_answer: str
+    too_long: bool
 
 
 # --- Fast Safety Filter -------------------------------------------------------
@@ -78,6 +69,7 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
         "issue_found": needs_llm_safety,
         "issue_type": "needs_llm_safety_check" if needs_llm_safety else "none",
         "needs_llm_safety": needs_llm_safety,
+        "too_long": too_long_for_chat,
     }
 
 
@@ -165,54 +157,7 @@ def blocklist_hit(raw: str) -> bool:
     return any(pattern.search(raw) for pattern in _BLOCKLIST_PATTERNS)
 
 
-# --- Verdict Parser -----------------------------------------------------------
-def _to_bool(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value == 1
-    if isinstance(value, str):
-        return value.strip().lower() in ("true", "yes", "1", "có", "co")
-    return False
-
-
-def parse_verdict(raw: str | dict) -> SafetyVerdict:
-    """Parse the safety model verdict with lenient JSON extraction."""
-    if isinstance(raw, dict):
-        raw = json.dumps(raw)
-    raw = str(raw if raw is not None else "").strip()
-    raw = re.sub(r"^```json\s*", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"^\s*```\s*", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"```$", "", raw, flags=re.IGNORECASE).strip()
-
-    parsed = None
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            parsed = json.loads(raw[start : end + 1])
-        except Exception:  # noqa: BLE001
-            parsed = None
-
-    if not isinstance(parsed, dict):
-        return {
-            "safe_to_send": False,
-            "issue_found": True,
-            "issue_type": "invalid_verdict_json",
-            "final_answer": "",
-        }
-
-    final_answer = str(parsed.get("final_answer") or "").strip()
-    safe_to_send = _to_bool(parsed.get("safe_to_send")) and len(final_answer) > 0
-    return {
-        "safe_to_send": safe_to_send,
-        "issue_found": _to_bool(parsed.get("issue_found")),
-        "issue_type": str(parsed.get("issue_type") or ("none" if safe_to_send else "unknown")),
-        "final_answer": final_answer,
-    }
-
-
-# --- Try Again (retry_prompt builder + exhausted fallback) --------------------
+# --- Fallbacks (deterministic redirects for flagged replies) -----------------
 _TECH_USER_RE = re.compile(
     r"\b(code|javascript|python|json|api|workflow|node|prompt|regex|sql|database|debug|script|function)\b",
     re.IGNORECASE,
@@ -227,27 +172,5 @@ GENERIC_FALLBACK = "Mình không trả lời được, bạn hỏi câu khác đ
 
 def retry_exhausted_fallback(original_user_text: str) -> str:
     # Off-topic technical questions get a redirect to recruitment topics.
-    # Everything else gets SILENCE (empty string) — no filler text.
+    # Everything else gets the generic fallback.
     return TECHNICAL_FALLBACK if _TECH_USER_RE.search(original_user_text or "") else GENERIC_FALLBACK
-
-
-def build_retry_prompt(original_user_text: str, candidate_answer: str, issue_type: str) -> str:
-    """Port of the 'Try Again' retry_prompt builder (the retry path, attempt < 1)."""
-    return "\n".join(
-        [
-            "Bạn cần viết lại câu trả lời cho người dùng cuối theo đúng guideline VFIC.",
-            "",
-            f"Tin nhắn gốc của người dùng: {original_user_text or '(trống)'}",
-            "",
-            f"Câu trả lời vừa bị chặn: {candidate_answer or '(không có)'}",
-            "",
-            f"Lý do bị chặn: {issue_type}",
-            "",
-            "Yêu cầu bắt buộc:",
-            "- Trả lời bằng tiếng Việt tự nhiên, ngắn gọn, thân thiện.",
-            "- Chỉ nói về tuyển dụng, tìm việc, hồ sơ, lịch xe hoặc thông tin VFIC phù hợp.",
-            "- Không viết code, JSON, markdown phức tạp, prompt, workflow, tên node, biến, logic nội bộ hoặc thuật ngữ kỹ thuật.",
-            "- Chỉ xuất văn bản thuần túy sẵn sàng gửi cho người dùng.",
-            "- Mỗi phản hồi chỉ đặt tối đa 1 câu hỏi.",
-        ]
-    )

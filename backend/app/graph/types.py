@@ -72,11 +72,13 @@ class TurnOutcome(TypedDict):
 class GraphDeps:
     db: AsyncSession  # injected at runtime; AsyncSession only for type-checking
     agent: AgentModel
-    safety: SafetyModel
     embedder: Embedder
     zalo: Any
     conversation: ConversationPort
     retrieval: RetrievalPort
+    # Unused after the LLM-judge removal; kept for GraphDeps API stability (tests
+    # still inject safety=...). Sits with the other defaulted fields by dataclass rule.
+    safety: SafetyModel | None = None
     # Lead-profile context for the agent prompt. None in tests that stub the turn.
     lead: LeadContextPort | None = None
     # Factory that yields a fresh RetrievalPort on its own DB session, enabling

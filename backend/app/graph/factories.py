@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from app.core.config import get_settings
 from app.graph.clients import (
     MiniMaxAgent,
-    MiniMaxSafety,
     _chat_for_role,
     _minimax_chat,
     _openrouter_chat,
@@ -249,7 +248,6 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
 @dataclass
 class _CachedClients:
     agent_llm: object
-    safety_llm: object
     fast_llm: object | None
     embedder: object
     zalo_config: object
@@ -289,20 +287,17 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
             integration_settings.resolve_openrouter(),
             integration_settings.resolve_zalo(),
         )
-        agent_llm, safety_llm = (
-            _chat_for_role(
-                role,
-                temperature=temp,
-                minimax_api_key=minimax_config.api_key,
-                openrouter_api_key=openrouter_config.api_key,
-                minimax_enabled=minimax_config.enabled,
-                openrouter_enabled=openrouter_config.enabled,
-                default_provider=minimax_config.default_provider,
-                openrouter_agent_model=openrouter_config.agent_model,
-                openrouter_safety_model=openrouter_config.safety_model,
-                openrouter_digest_model=openrouter_config.digest_model,
-            )
-            for role, temp in (("agent", 0.3), ("safety", 0.0))
+        agent_llm = _chat_for_role(
+            "agent",
+            temperature=0.3,
+            minimax_api_key=minimax_config.api_key,
+            openrouter_api_key=openrouter_config.api_key,
+            minimax_enabled=minimax_config.enabled,
+            openrouter_enabled=openrouter_config.enabled,
+            default_provider=minimax_config.default_provider,
+            openrouter_agent_model=openrouter_config.agent_model,
+            openrouter_safety_model=openrouter_config.safety_model,
+            openrouter_digest_model=openrouter_config.digest_model,
         )
         embedder = build_embedder(s, openrouter_api_key=openrouter_config.api_key)
         fast_llm = _build_fast_llm(
@@ -311,7 +306,6 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
         )
         bundle = _CachedClients(
             agent_llm=agent_llm,
-            safety_llm=safety_llm,
             fast_llm=fast_llm,
             embedder=embedder,
             zalo_config=zalo_config,
@@ -362,7 +356,6 @@ async def build_deps(db, *, session_factory=None):
     return GraphDeps(
         db=db,
         agent=MiniMaxAgent(clients.agent_llm, clients.embedder, fast_llm=clients.fast_llm),
-        safety=MiniMaxSafety(clients.safety_llm),
         embedder=clients.embedder,
         zalo=ZaloChannelSender(
             clients.zalo_config,

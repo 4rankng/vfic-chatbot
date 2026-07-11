@@ -307,7 +307,7 @@ input {
   grid-column: 2;
   grid-row: 2;
   overflow: hidden;
-  border-top-left-radius: 1.5rem;
+  border-top-left-radius: 2rem;
   background: var(--workspace-canvas);
 }
 

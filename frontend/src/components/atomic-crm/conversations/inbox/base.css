@@ -20,6 +20,14 @@
   text-rendering: optimizeLegibility;
 }
 
+/* The workspace frame already reserves the global top bar. Its embedded
+   inbox must fill that remaining grid cell rather than starting another
+   viewport-height layout that is clipped by the frame. */
+.workspace-frame-content > .inbox-bg-container {
+  height: 100%;
+  min-height: 0;
+}
+
 /* Chat-element + base-reset rules are scoped to .inbox-bg-container, where the
    shared <ChatThread> renders. The former lead-page .chat-surface scope was
    removed with the dead leads UI; inbox-shell layout rules also stay scoped to
@@ -222,32 +230,32 @@
 
 .inbox-bg-container .dashboard-workspace-content {
   min-height: 100%;
-  padding: 24px 24px 32px;
+  padding: 24px 24px 48px;
 }
 
 .inbox-bg-container .knowledge-workspace-content {
   min-height: 100%;
-  padding: 20px 22px 28px;
+  padding: 20px 22px 48px;
 }
 
 .inbox-bg-container .settings-workspace-content {
   min-height: 100%;
-  padding: 24px 24px 32px;
+  padding: 24px 24px 48px;
 }
 
 .inbox-bg-container .profile-workspace-content {
   min-height: 100%;
-  padding: 24px 24px 32px;
+  padding: 24px 24px 48px;
 }
 
 .inbox-bg-container .persona-workspace-content {
   min-height: 100%;
-  padding: 24px 24px 32px;
+  padding: 24px 24px 48px;
 }
 
 .inbox-bg-container .project-workspace-content {
   min-height: 100%;
-  padding: 24px 24px 32px;
+  padding: 24px 24px 48px;
 }
 
 .inbox-bg-container .knowledge-channel-inner {

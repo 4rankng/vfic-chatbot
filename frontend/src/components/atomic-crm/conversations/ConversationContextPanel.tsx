@@ -290,7 +290,6 @@ const CandidateContextBody = ({
 
 const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
   const Icon = item.Icon;
-  const isScrollableNote = item.key === "notes";
 
   return (
     <div
@@ -302,14 +301,7 @@ const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
       </span>
       <span className="candidate-info-copy">
         <span className="candidate-info-label">{item.label}</span>
-        <span
-          className="candidate-info-value"
-          tabIndex={isScrollableNote ? 0 : undefined}
-          role={isScrollableNote ? "region" : undefined}
-          aria-label={isScrollableNote ? "Nội dung ghi chú, cuộn để xem toàn bộ" : undefined}
-        >
-          {item.value}
-        </span>
+        <span className="candidate-info-value">{item.value}</span>
       </span>
       <span className="candidate-info-state" aria-hidden="true">
         {item.complete ? <Check className="icon" /> : null}

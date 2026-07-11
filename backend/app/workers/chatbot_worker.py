@@ -144,17 +144,15 @@ def run_chat_turn_job(job: dict) -> None:
 
 
 def preload_imports() -> None:
-    """Import the heavy graph/LLM deps once in the parent worker process.
+    """Import the heavy graph/LLM deps once in the worker process.
 
-    RQ forks a child process (``os.fork``) for every job via
-    ``Worker.fork_work_horse``. Without preloading, each forked child re-imports
-    langchain/openai/google + the graph layer from scratch — a ~5-7s cost that
-    dominated the per-turn preamble (measured ``preamble_ms`` avg 6.1s).
-
-    Importing these modules in the parent *before* ``w.work()`` lets the forked
-    child inherit them via copy-on-write. Client construction still happens per
-    child, but the multi-second SDK import is removed from every turn. Call this
-    once from ``run_worker.main`` before entering the RQ work loop.
+    ``run_worker`` uses ``SimpleWorker`` (no ``os.fork`` per job), so jobs run
+    in-process and these imports stay warm for every turn. Combined with
+    ``_build_cached_clients`` (which reuses the ChatOpenAI clients across turns),
+    this removes the ~5-7s cold-import + client-construction cost that dominated
+    the per-turn preamble under the old fork-per-job model (measured
+    ``preamble_ms`` avg 6.1s, p95 10.9s). Call once from ``run_worker.main``
+    before entering the work loop.
     """
     import time as _time  # noqa: F401  — used for the startup log below
 
@@ -169,13 +167,13 @@ def preload_imports() -> None:
     import app.graph.clients  # noqa: F401  — client wrappers; SDKs stay lazy
     import app.graph.tools  # noqa: F401
     import app.graph.context  # noqa: F401
-    # Client construction imports these lazily. Import them explicitly in the
-    # parent so every forked job does not pay the multi-second SDK import cost.
+    # Client construction imports these lazily. Import them explicitly so the
+    # first turn does not pay the multi-second SDK import cost.
     import langchain_core.messages  # noqa: F401
     import langchain_openai  # noqa: F401
 
     # Touch the wrappers used by the graph after the SDK modules are warm.
-    from app.graph.clients import MiniMaxAgent, MiniMaxSafety  # noqa: F401
+    from app.graph.clients import MiniMaxAgent  # noqa: F401
 
     elapsed = _time.monotonic() - t0
     logger.info("worker preload_imports completed in %.1fs", elapsed)
@@ -220,9 +218,16 @@ async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     # guarantee. run_turn has its own try/finally for the per-turn cleanup
     # (status heartbeat cancellation); this guard is for failures OUTSIDE that
     # (build_deps, BotRunState construction, the worker's own LLMThrottled path).
+    #
+    # Re-raises cooperative-control exceptions (CancelledError on job timeout /
+    # worker shutdown, KeyboardInterrupt, SystemExit) so they're not swallowed —
+    # catching BaseException here would break graceful shutdown. Everything else
+    # is logged and suppressed so one bad job can't take the worker down.
     try:
         await _run_job_async_inner(job, source=source)
-    except Exception:
+    except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException:
         logger.exception(
             "chat turn crashed (conversation=%s); suppressed to protect the worker",
             job.get("conversation_id", "?"),

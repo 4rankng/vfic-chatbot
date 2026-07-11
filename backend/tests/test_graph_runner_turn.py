@@ -554,6 +554,43 @@ async def test_blocklisted_reply_redirects_deterministically(monkeypatch):
     assert zalo.sent == [("z1", GENERIC_FALLBACK)]
 
 
+@pytest.mark.asyncio
+async def test_overlong_clean_reply_is_truncated_and_sent(monkeypatch):
+    """A clean (no code/JSON) reply over 1800 chars is truncated and SENT, not
+    redirected to the fallback.
+
+    A detailed job-presentation with multiple benefit lines can legitimately
+    exceed 1800 chars — the persona explicitly exempts the job template from
+    the 300-char cadence. Redirecting those to "Mình không trả lời được" would
+    discard valid content. fast_safety_filter already truncated the output;
+    the runner sends the truncated version as-is.
+    """
+    from app.graph.safety import truncate_for_chat
+
+    long_reply = "Tên công việc: Operator LG Display\n" + ("Quyền lợi: bảo hiểm, phụ cấp, KTX. " * 100)
+    assert len(long_reply) > 1800  # sanity
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, long_reply)
+
+    class _MustNotJudge:
+        async def safety(self, candidate: str) -> str:  # noqa: ARG002
+            raise AssertionError("LLM safety judge must not be called")
+
+    zalo = _FakeZalo()
+    res = await run_turn(
+        _state(), _deps(zalo, conversation=svc, safety=_MustNotJudge()),
+    )
+
+    assert res["outcome"] == "sent"
+    # The reply is the truncated version, not the fallback.
+    expected = truncate_for_chat(long_reply.split("</think>")[-1] if "</think>" in long_reply else long_reply)
+    assert res["reply"] == expected
+    assert len(res["reply"]) <= 1802
+    assert "Mình không trả lời được" not in res["reply"]
+
+
 # ---------------------------------------------------------------------------
 # Per-stage stage_timings capture (Option A metrics)
 # ---------------------------------------------------------------------------

@@ -739,32 +739,6 @@
   padding-block: 2px;
 }
 
-.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value {
-  max-height: 12rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 8px;
-  scrollbar-color: var(--workspace-blue-line) transparent;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-}
-
-.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value::-webkit-scrollbar {
-  width: 8px;
-}
-
-.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: var(--workspace-blue-line);
-  background-clip: padding-box;
-}
-
-.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-value:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
 .inbox-bg-container .candidate-info-row.filled .candidate-info-value {
   color: var(--ink);
 }

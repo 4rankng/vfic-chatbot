@@ -378,27 +378,20 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
 
             # --- deterministic safety gate (no LLM judge) ---
             # The fast filter strips <think>/markdown/code-fences from the raw
-            # reply and flags three triggers: empty output, over-long (>1800ch),
-            # and structural-leakage (code/JSON/node markers). Each is resolved
-            # deterministically — no second LLM call:
-            #   - blocklist hit  → retry_exhausted_fallback (hard redirect)
-            #   - risk-regex hit → retry_exhausted_fallback (same redirect path)
-            #   - empty          → FALLBACK_REPLY (already set by fast_safety_filter)
-            #   - over-long      → truncate_for_chat (already applied by fast filter)
+            # reply and flags three triggers, each resolved deterministically:
+            #   - blocklist hit     → retry_exhausted_fallback (hard redirect)
+            #   - empty/risk-regex  → retry_exhausted_fallback (redirect)
+            #   - over-long (>1800) → truncate_for_chat, then SEND (already
+            #     applied by fast_safety_filter — a detailed job-presentation
+            #     reply is legitimate content, not a safety issue)
             # This replaces the former LLM safety judge (a ~10s second model call
-            # that p50'd at 10.3s — as expensive as the agent call itself). The
-            # judge added latency without adding safety: every trigger it caught
-            # was already handled deterministically above.
+            # that p50'd at 10.3s). The judge added latency without adding safety.
             fs = fast_safety_filter(raw)
             candidate = fs["output"]
 
-            if blocklist_hit(raw) or fs["needs_llm_safety"]:
-                # Either a coarse deny-list term OR a fast-filter flag (empty /
-                # over-long / structural leakage). Redirect to the deterministic
-                # fallback. For over-long, fast_safety_filter already truncated
-                # the output, but we still redirect because an over-long reply
-                # usually signals the model is off-track (not just verbose).
+            if blocklist_hit(raw) or (fs["needs_llm_safety"] and not fs["too_long"]):
                 candidate = retry_exhausted_fallback(state.user_text)
+            # else: over-long was already truncated by fast_safety_filter; send it.
 
         # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
         # server-side on version + lock_owner + lock liveness. Closes both the

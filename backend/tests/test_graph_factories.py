@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from app.graph.clients import MiniMaxAgent, MiniMaxSafety, OpenRouterEmbedder
+from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
 from app.graph.factories import build_deps, make_minimax_llm_json, reset_client_cache
 from app.graph.types import GraphDeps
 
@@ -68,7 +68,8 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     deps = await build_deps(object())
     assert isinstance(deps, GraphDeps)
     assert isinstance(deps.agent, MiniMaxAgent)
-    assert isinstance(deps.safety, MiniMaxSafety)
+    # safety client is no longer constructed (LLM judge removed); field is None.
+    assert deps.safety is None
     assert isinstance(deps.embedder, OpenRouterEmbedder)
     assert deps.zalo is not None
 
@@ -168,7 +169,7 @@ async def test_build_deps_caches_llm_clients_across_turns(monkeypatch):
 
     await build_deps(object())
     first_count = call_count["n"]
-    assert first_count == 2  # agent + safety, one each
+    assert first_count == 1  # agent only (safety client removed)
 
     deps2 = await build_deps(object())
     # No additional _chat_for_role calls — clients came from the cache.

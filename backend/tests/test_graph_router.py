@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.router import route_turn, routing_instruction
-from app.graph.safety import build_retry_prompt
 
 
 def test_route_recommendation_query_prefers_recommendation_tool_path():
@@ -58,7 +57,14 @@ def test_route_out_of_scope_beats_fast_lane_help_keyword():
 
 
 def test_route_internal_safety_retry_prompt_is_not_out_of_scope():
-    retry_prompt = build_retry_prompt("tôi muốn tìm việc", "bad", "needs_llm_safety_check")
+    # A safety retry prompt (built by the agent loop when re-generating a flagged
+    # reply) contains the user's original text + instructions. The router must
+    # classify it as general, not out_of_scope, so the retry isn't bounced.
+    retry_prompt = (
+        "Bạn cần viết lại câu trả lời cho người dùng cuối theo đúng guideline VFIC.\n\n"
+        "Tin nhắn gốc của người dùng: tôi muốn tìm việc\n\n"
+        "Yêu cầu bắt buộc:\n- Trả lời bằng tiếng Việt tự nhiên.\n"
+    )
     route = route_turn(retry_prompt)
 
     assert route.intent == "general"

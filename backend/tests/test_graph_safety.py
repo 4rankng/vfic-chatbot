@@ -5,9 +5,7 @@ import pytest
 
 from app.graph.safety import (
     blocklist_hit,
-    build_retry_prompt,
     fast_safety_filter,
-    parse_verdict,
     retry_exhausted_fallback,
     truncate_for_chat,
 )
@@ -60,39 +58,9 @@ def test_fast_safety_strips_minimax_think_reasoning():
     assert out["output"].startswith("Chào bạn")
 
 
-def test_parse_verdict_clean_json():
-    v = parse_verdict('{"safe_to_send": true, "issue_found": false, "issue_type": "none", "final_answer": "ok"}')
-    assert v["safe_to_send"] is True
-    assert v["final_answer"] == "ok"
-
-
-def test_parse_verdict_fenced_json():
-    v = parse_verdict('```json\n{"safe_to_send": true, "final_answer": "hi"}\n```')
-    assert v["safe_to_send"] is True and v["final_answer"] == "hi"
-
-
-def test_parse_verdict_invalid_json():
-    v = parse_verdict("not json at all")
-    assert v["safe_to_send"] is False
-    assert v["issue_type"] == "invalid_verdict_json"
-
-
-def test_parse_verdict_vietnamese_bool_and_empty_final_blocks_send():
-    # safe_to_send "có" but empty final_answer -> not safe
-    v = parse_verdict('{"safe_to_send": "có", "final_answer": ""}')
-    assert v["safe_to_send"] is False
-
-
 def test_retry_exhausted_fallback_technical_vs_generic():
     assert "tuyển dụng" in retry_exhausted_fallback("viết code python giúp tôi")
     assert retry_exhausted_fallback("tôi muốn tìm việc") != retry_exhausted_fallback("viết code")
-
-
-def test_build_retry_prompt_contains_user_text_and_rules():
-    p = build_retry_prompt("viết code", "đây là ```print```", "code_detected")
-    assert "viết code" in p
-    assert "code_detected" in p
-    assert "1 câu hỏi" in p
 
 
 def test_truncate_for_chat_keeps_short_text_and_cuts_at_word_boundary():

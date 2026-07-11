@@ -283,18 +283,18 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
 
         # 8. Deterministic safety gate (fast filter only, no LLM judge).
         # The LLM safety judge was removed (p50 10.3s, as expensive as the agent
-        # call). The fast filter handles every trigger deterministically: code/
-        # JSON/empty/over-long → redirect to fallback. A flagged proactive message
-        # is suppressed (proactive messages are optional — better to skip than
-        # send something the filter flagged).
+        # call). The fast filter handles every trigger deterministically:
+        #   - blocklist/empty/risk-regex → suppress (proactive messages are
+        #     optional — skip rather than send something flagged)
+        #   - over-long → truncate and send (legitimate detailed nudge)
         fs = fast_safety_filter(message)
         candidate = fs["output"]
 
-        if fs["needs_llm_safety"] or blocklist_hit(message):
+        if blocklist_hit(message) or (fs["needs_llm_safety"] and not fs["too_long"]):
             logger.info("proactive safety flagged: conversation=%s", conv.zalo_chat_id)
             await svc.state.record_proactive_outcome(
                 conv,
-                message=retry_exhausted_fallback(message),
+                message=candidate,
                 result=SendOutcome(ok=False, error="safety_blocked"),
                 lock_owner=lock_owner,
             )
