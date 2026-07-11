@@ -200,7 +200,7 @@ button.dashboard-candidate-row:hover {
 
 @media (max-width: 767px) {
   .dashboard-workspace-content {
-    padding: 20px 16px;
+    padding: 20px 16px calc(5.75rem + env(safe-area-inset-bottom));
   }
   .recruiting-hero,
   .dashboard-inline-error {

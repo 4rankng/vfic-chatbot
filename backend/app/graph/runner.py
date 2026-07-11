@@ -357,6 +357,15 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 bypass = None
             except Exception:  # noqa: BLE001 — bypass must never break a turn
                 logger.warning("faq_bypass adapter raised; abstaining", exc_info=True)
+                # The bypass adapter shares this turn's session (RetrievalRepository
+                # on deps.db). If it raised on a DB error the session is now in a
+                # needs-rollback state; clear it so the next DB op (refresh /
+                # claim_send below) does not cascade into a rollback error. Safe
+                # because record_bot_pending above already committed its row.
+                try:
+                    await deps.db.rollback()
+                except Exception:  # noqa: BLE001 — best-effort; worker_session also rolls back
+                    logger.debug("faq_bypass recovery rollback failed", exc_info=True)
                 bypass = None
 
         if fast is not None:
@@ -396,6 +405,15 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 raise  # let worker handle degradation msg (no LLM call)
             except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
                 logger.warning("agent error: %s", exc)
+                # The agent path may have used deps.db (lead / system-prompt reads).
+                # Clear any aborted transaction before the error-reply path reuses
+                # the session (claim_send / record_bot_outcome), otherwise the
+                # recovery itself raises a rollback error. Safe: record_bot_pending
+                # already committed.
+                try:
+                    await deps.db.rollback()
+                except Exception:  # noqa: BLE001 — best-effort; worker_session also rolls back
+                    logger.debug("agent-error recovery rollback failed", exc_info=True)
                 timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
                 return await _finish_terminal_reply(
                     state, deps, conv, svc, zalo, ERROR_REPLY, started, "error",

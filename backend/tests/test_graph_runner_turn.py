@@ -45,8 +45,28 @@ class _FakeConv:
 
 
 class _FakeDB:
+    """Minimal session stand-in.
+
+    Supports ``rollback`` plus a poison flag so adapter-error tests can mimic a
+    SQLAlchemy session left in a needs-rollback state: once ``_poisoned`` is set
+    (an adapter's DB call failed), any further ``refresh`` raises until
+    ``rollback()`` clears it — mirroring ``PendingRollbackError``.
+    """
+
+    def __init__(self) -> None:
+        self.rollbacks = 0
+        self._poisoned = False
+
     async def refresh(self, conv) -> None:
+        if self._poisoned:
+            raise RuntimeError(
+                "simulated PendingRollbackError: session needs rollback"
+            )
         return None
+
+    async def rollback(self) -> None:
+        self._poisoned = False
+        self.rollbacks += 1
 
 
 class _SendResult:
@@ -132,9 +152,10 @@ def _deps(
     safety=object(),
     persist=None,
     faq_bypass=None,
+    db=None,
 ) -> GraphDeps:
     return GraphDeps(
-        db=_FakeDB(), agent=object(), safety=safety,
+        db=db if db is not None else _FakeDB(), agent=object(), safety=safety,
         embedder=object(), zalo=zalo, conversation=conversation,
         retrieval=object(), persist=persist, faq_bypass=faq_bypass,
     )
@@ -589,6 +610,60 @@ async def test_overlong_clean_reply_is_truncated_and_sent(monkeypatch):
     assert res["reply"] == expected
     assert len(res["reply"]) <= 1802
     assert "Mình không trả lời được" not in res["reply"]
+
+
+# ---------------------------------------------------------------------------
+# Adapter-error session safety: a swallowed adapter error must not poison the turn
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_failure_rolls_back_session_before_next_db_op(monkeypatch):
+    """A faq_bypass adapter shares the turn's session (RetrievalRepository on
+    deps.db). If its DB call fails, the session is left needing rollback; the
+    swallowing ``except`` in run_turn must roll back before continuing, else the
+    next DB op (the pre-send ``refresh``) raises a rollback error and the whole
+    turn is lost — repeating on every message until the worker is restarted.
+    """
+    db = _FakeDB()
+
+    class _BoomBypass:
+        async def try_answer(self, _text):  # noqa: ARG002
+            db._poisoned = True  # adapter query failed, poisoning the session
+            raise RuntimeError("faq_bypass DB error")
+
+    conv = _FakeConv()
+    svc, _recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "agent reply")  # agent lane succeeds after abstain
+
+    deps = _deps(_FakeZalo(), conversation=svc, faq_bypass=_BoomBypass(), db=db)
+    res = await run_turn(_state(), deps)
+
+    assert db.rollbacks >= 1, "adapter error must roll back the shared session"
+    assert res["outcome"] == "sent", "turn must complete, not cascade into a rollback error"
+
+
+@pytest.mark.asyncio
+async def test_agent_error_rolls_back_session_before_error_reply(monkeypatch):
+    """When the agent path raises after touching the session, run_turn must roll
+    back before recording the ERROR_REPLY — otherwise the recovery write itself
+    raises a rollback error and the user gets nothing at all.
+    """
+    db = _FakeDB()
+
+    async def _boom(state, deps, user_text, *, chat_id, recent_messages, timings=None):  # noqa: ARG001
+        db._poisoned = True  # agent's lead / system-prompt read failed
+        raise RuntimeError("agent DB error")
+
+    monkeypatch.setattr(runner, "_agent_turn", _boom)
+    conv = _FakeConv()
+    svc, _recorded = _stub_svc(conv=conv, owned=True)
+
+    deps = _deps(_FakeZalo(), conversation=svc, db=db)
+    res = await run_turn(_state(), deps)
+
+    assert db.rollbacks >= 1, "agent error must roll back before the error reply"
+    assert res["outcome"] == "error", "ERROR_REPLY recovery must still complete"
 
 
 # ---------------------------------------------------------------------------

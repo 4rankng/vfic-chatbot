@@ -20,11 +20,11 @@
   text-rendering: optimizeLegibility;
 }
 
-/* The workspace frame already reserves the global top bar. Any inbox nested
-   in that frame must fill the remaining grid cell rather than start another
-   viewport-height layout that is clipped by the frame. The mobile context
-   sheet follows the same parent-height contract. */
-.workspace-frame-content .inbox-bg-container,
+/* The workspace frame already reserves the global top bar. Its inbox root
+   must fill the remaining grid cell rather than start another viewport-height
+   layout that is clipped by the frame. The mobile context sheet follows the
+   same parent-height contract. */
+.workspace-frame-content > .inbox-bg-container,
 .candidate-context-sheet .conversation-context-sheet-body {
   height: 100%;
   min-height: 0;

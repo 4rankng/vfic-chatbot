@@ -612,6 +612,7 @@ input {
   .workspace-frame {
     display: block;
     height: auto;
+    min-height: 100dvh;
     background: var(--workspace-canvas);
     overflow: visible;
   }
@@ -946,12 +947,31 @@ body {
 
 /* The authenticated shell owns scrolling inside its content row. Prevent the
    document itself from retaining a vertical offset that can move the shared
-   topbar and sidebar out of view between routes. */
-body:has(.workspace-frame),
-body:has(.workspace-frame) #root {
-  width: 100%;
-  height: 100dvh;
-  overflow: hidden;
+   topbar and sidebar out of view between routes. On mobile the shell becomes a
+   normal flowing document (see the <=767px block above), so the lock is
+   desktop-only — otherwise content taller than the viewport (dashboard,
+   knowledge, settings, personas, projects, profile) is permanently cropped. */
+@media (min-width: 768px) {
+  body:has(.workspace-frame),
+  body:has(.workspace-frame) #root {
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
+/* Mobile: let the document scroll naturally. The workspace frame is
+   `height: auto` here, so locking body/#root would clip everything below the
+   fold. The fixed bottom-nav stays put; the conversation detail shell is
+   exactly 100dvh and does not overflow, so it is unaffected. */
+@media (max-width: 767px) {
+  body:has(.workspace-frame),
+  body:has(.workspace-frame) #root {
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
 }
 
 /* Hide scrollbars on mobile viewports */
