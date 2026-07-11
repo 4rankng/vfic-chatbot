@@ -453,6 +453,12 @@
   }
   .inbox-bg-container .chat-scroller {
     padding: 14px 0 18px;
+    /* Ensure virtua's VList scroll container works on mobile:
+       explicit height inheritance + allow touch scrolling. */
+    height: 100%;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
   .inbox-bg-container .new-message-jump {
     bottom: 10px;

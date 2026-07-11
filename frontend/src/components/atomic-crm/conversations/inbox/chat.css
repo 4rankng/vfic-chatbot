@@ -647,7 +647,11 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow: hidden;
+  /* Was overflow:hidden — blocked touch-scroll on mobile because virtua's
+     internal scroll container couldn't receive touch events through the clip.
+     Use overflow-x clip + allow y so the child scroller owns the scroll. */
+  overflow-x: hidden;
+  overflow-y: visible;
   background: var(--chat-bg);
 }
 
