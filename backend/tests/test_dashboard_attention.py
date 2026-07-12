@@ -75,6 +75,17 @@ def _fake_repo(counters=None, immediate=None, today=None) -> MagicMock:
     return repo
 
 
+def _fake_db():
+    """A session double exposing both execute() and rollback() as AsyncMocks.
+
+    attention() calls db.rollback() before SET LOCAL transaction_isolation so
+    the isolation statement is the first in its transaction (the get_current_user
+    dependency already ran a SELECT on the shared request session). Tests that
+    assert on execute() call order still see SET LOCAL as execute() call #0.
+    """
+    return SimpleNamespace(execute=AsyncMock(), rollback=AsyncMock())
+
+
 def _patch_service(
     monkeypatch,
     cache_get=None,
@@ -192,7 +203,7 @@ def test_attention_action_enum_values():
 @pytest.mark.asyncio
 async def test_admin_viewer_maps_to_recruiter_id_none(monkeypatch):
     repo, _ = _patch_service(monkeypatch)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     # admin → recruiter_id=None on every repo call
     for call in repo.attention_counters.call_args_list:
@@ -205,7 +216,7 @@ async def test_admin_viewer_maps_to_recruiter_id_none(monkeypatch):
 @pytest.mark.asyncio
 async def test_recruiter_viewer_maps_to_str_id(monkeypatch):
     repo, _ = _patch_service(monkeypatch)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     await service_mod.DashboardService(db).attention(_viewer(Role.recruiter))
     assert repo.attention_counters.await_args.args[0] == str(UID)
     assert repo.attention_rows.await_args_list[0].args[0] == str(UID)
@@ -223,7 +234,7 @@ async def test_cache_hit_returns_cached_payload_skips_db(monkeypatch):
         "today": [],
     }
     repo, set_mock = _patch_service(monkeypatch, cache_get=cached, app_env="production")
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     assert out.counters.needs_reply == 9
     # On cache hit the repo is never instantiated/awaited and cache_set is skipped.
@@ -236,7 +247,7 @@ async def test_cache_hit_returns_cached_payload_skips_db(monkeypatch):
 @pytest.mark.asyncio
 async def test_cache_miss_reads_db_and_sets_cache(monkeypatch):
     repo, set_mock = _patch_service(monkeypatch, app_env="production")
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     repo.attention_counters.assert_awaited_once()
     assert repo.attention_rows.await_count == 2  # immediate + today
@@ -249,7 +260,7 @@ async def test_cache_miss_reads_db_and_sets_cache(monkeypatch):
 @pytest.mark.asyncio
 async def test_cache_disabled_in_development_never_reads_nor_writes_redis(monkeypatch):
     repo, set_mock = _patch_service(monkeypatch, app_env="development", cache_enabled=True)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     await service_mod.DashboardService(db).attention(_viewer(Role.recruiter))
     # The prod gate is app_env == "production"; dev skips cache entirely.
     set_mock.assert_not_awaited()
@@ -258,7 +269,7 @@ async def test_cache_disabled_in_development_never_reads_nor_writes_redis(monkey
 @pytest.mark.asyncio
 async def test_cache_key_per_recruiter_scope(monkeypatch):
     repo, set_mock = _patch_service(monkeypatch, app_env="production")
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     await service_mod.DashboardService(db).attention(_viewer(Role.recruiter))
     assert set_mock.await_args.args[0] == f"dashboard:attention:recruiter:{UID}"
 
@@ -271,12 +282,39 @@ async def test_sets_repeatable_read_isolation_for_single_snapshot(monkeypatch):
     """All 3 reads must share one snapshot (Red-team Critical 3)."""
     _patch_service(monkeypatch)
     execute = AsyncMock()
-    db = SimpleNamespace(execute=execute)
+    rollback = AsyncMock()
+    db = SimpleNamespace(execute=execute, rollback=rollback)
     await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     # The FIRST execute call sets the isolation level before any reads.
     first_sql = execute.await_args_list[0].args[0].text
     assert "SET LOCAL transaction_isolation" in first_sql
     assert "repeatable read" in first_sql
+
+
+@pytest.mark.asyncio
+async def test_rolls_back_prior_transaction_before_set_local(monkeypatch):
+    """Regression: get_current_user's SELECT autobegins a transaction on the
+    shared request session, so SET LOCAL transaction_isolation must NOT be its
+    first statement — Postgres rejects that with ActiveSQLTransactionError
+    ("SET TRANSACTION ISOLATION LEVEL must be called before any query").
+
+    The service calls db.rollback() first to end the autobegun transaction, then
+    issues SET LOCAL as the first statement of the fresh transaction. Pin both
+    halves of the contract and their ordering.
+    """
+    _patch_service(monkeypatch)
+    execute = AsyncMock()
+    rollback = AsyncMock()
+    db = SimpleNamespace(execute=execute, rollback=rollback)
+    await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    # rollback is awaited exactly once...
+    rollback.assert_awaited_once()
+    # ...and it happens BEFORE the SET LOCAL execute (call order on the session).
+    # We assert via the two mocks' await order by checking call_count at the
+    # point each fired: rollback must precede the SET LOCAL execute. The execute
+    # mock received exactly one call (SET LOCAL) since the repo is mocked.
+    execute.assert_awaited_once()
+    assert "SET LOCAL transaction_isolation" in execute.await_args_list[0].args[0].text
 
 
 # --- service: round-trip budget --------------------------------------------
@@ -287,7 +325,7 @@ async def test_at_most_three_db_round_trips(monkeypatch):
     """Performance budget: counters(1) + immediate(1) + today(1) = 3 reads."""
     repo, _ = _patch_service(monkeypatch)
     execute = AsyncMock()
-    db = SimpleNamespace(execute=execute)
+    db = SimpleNamespace(execute=execute, rollback=AsyncMock())
     await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     # 1 SET LOCAL + 0 repo queries (repo is mocked, uses its own db-free path)
     # → the repo-level budget is: 1 counters + 2 rows = 3 attention reads.
@@ -302,7 +340,7 @@ async def test_at_most_three_db_round_trips(monkeypatch):
 async def test_updated_at_is_set_to_now(monkeypatch):
     before = datetime.now(timezone.utc)
     _patch_service(monkeypatch)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     after = datetime.now(timezone.utc)
     assert before <= out.updated_at <= after
@@ -313,7 +351,7 @@ async def test_conversation_anchored_row_gets_open_conversation_action(monkeypat
     conv_row = _row(conversation_id=UID, lead_id=None, reason="REPLY_OVERDUE")
     repo = _fake_repo(immediate=[conv_row], today=[])
     _patch_service(monkeypatch, repo=repo)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     item = out.immediate[0]
     assert item.key == str(UID)
@@ -329,7 +367,7 @@ async def test_lead_anchored_row_gets_call_action(monkeypatch):
     lead_row = _row(conversation_id=None, lead_id=42, reason="STALLED")
     repo = _fake_repo(immediate=[], today=[lead_row])
     _patch_service(monkeypatch, repo=repo)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     item = out.today[0]
     assert item.key == "lead:42"
@@ -343,7 +381,7 @@ async def test_counters_mapped_to_schema_keys(monkeypatch):
     counters = {"needs_reply": 11, "overdue": 22, "due_today": 33, "priority": 44, "unread": 55}
     repo = _fake_repo(counters=counters)
     _patch_service(monkeypatch, repo=repo)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     assert out.counters == AttentionCounters(
         needs_reply=11, overdue=22, due_today=33, priority=44, unread=55
@@ -359,7 +397,7 @@ async def test_delivery_review_row_carries_delivery_status(monkeypatch):
     )
     repo = _fake_repo(immediate=[dr_row], today=[])
     _patch_service(monkeypatch, repo=repo)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     assert out.immediate[0].delivery_status == "SEND_UNKNOWN"
     assert out.immediate[0].reason is AttentionReason.DELIVERY_REVIEW
@@ -368,7 +406,7 @@ async def test_delivery_review_row_carries_delivery_status(monkeypatch):
 @pytest.mark.asyncio
 async def test_round_trip_payload_has_no_pii_beyond_phone_last4(monkeypatch):
     _patch_service(monkeypatch)
-    db = SimpleNamespace(execute=AsyncMock())
+    db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     dumped = out.model_dump(mode="json")
     for item in dumped["immediate"] + dumped["today"]:

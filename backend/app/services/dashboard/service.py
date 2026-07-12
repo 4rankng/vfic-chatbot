@@ -161,6 +161,16 @@ class DashboardService:
         # request-scoped session's autobegin semantics (a bare begin() here would
         # collide if the session already began implicitly). SET LOCAL scopes the
         # isolation to the current transaction and is cheap.
+        #
+        # The get_current_user dependency already ran a SELECT on this session to
+        # load the viewer, autobeginning a read-only transaction. Postgres
+        # requires SET TRANSACTION ISOLATION LEVEL to be the first statement of
+        # its transaction, so roll back the autobegun transaction first; the SET
+        # LOCAL below then opens a fresh transaction as its first statement, and
+        # the repo reads inherit its REPEATABLE READ snapshot. Safe because the
+        # viewer is fully read above and the repo uses raw SQL (no identity-map
+        # dependency).
+        await self.db.rollback()
         await self.db.execute(text("SET LOCAL transaction_isolation = 'repeatable read'"))
 
         # Round-trip budget: 3 (counters=1 + immediate=1 + today=1). No gather —

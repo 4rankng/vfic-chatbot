@@ -44,7 +44,7 @@ All routers registered in `backend/app/main.py` under `API_V1_PREFIX = "/api/v1"
 | `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project CRUD, FAQ, features |
 | `personas` | `/api/v1/knowledge/personas` | `personas` | `require_admin` | AI agent persona CRUD |
 | `jobs` | `/api/v1/jobs` | `jobs` | JWT (list/get); `require_admin` (create/update) | Job postings |
-| `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics |
+| `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
 | `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Performance observability |
 | `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` | Integration settings (Zalo, LLM) |
 | `realtime` | `/realtime` | — | JWT via `?token=` or Bearer | Legacy SSE endpoint |
@@ -130,6 +130,80 @@ Socket.IO server at `/socket.io/` (mounted via `socketio.ASGIApp` in `main.py`).
 | `presence heartbeat` | — | Keep presence alive |
 | `presence typing` | `{conversation_id}` | Notify others of typing |
 | `presence stop typing` | `{conversation_id}` | Notify others of stopped typing |
+
+## Recruiter Attention Dashboard
+
+### `GET /api/v1/dashboard/attention`
+
+Read-only, viewer-scoped attention queue replacing the legacy client-side dashboard
+aggregation. Returns five exact counters plus two bounded, deduplicated queues so a
+recruiter sees who needs attention now, why, and what action comes next.
+
+**Auth:** JWT (admin sees all; recruiter sees own + unassigned).
+
+**Snapshot consistency:** all reads execute inside one transaction at REPEATABLE READ
+(`SET LOCAL transaction_isolation`), so the five counters and the bounded queue rows
+share a single snapshot — no badge/queue disagreement under concurrent webhook writes.
+
+**Performance budget:** ≤ 3 DB round-trips per request (1 counters query + 2 bounded
+queue reads), backed by a per-viewer Redis cache (~30s TTL, `dashboard:attention:{scope}`).
+
+**PII minimization:** each row returns `phone_last4` only (never the full phone), and
+**no `latest_message` body** (candidate-authored free text may contain third-party PII
+and is not needed to prioritize work). Use `last_inbound_at` for elapsed-time display.
+
+**Response contract** (`app/schemas/dashboard.py`):
+
+```json
+{
+  "updated_at": "2026-07-12T10:30:00Z",
+  "counters": {
+    "needs_reply": 12,
+    "overdue": 4,
+    "due_today": 7,
+    "priority": 3,
+    "unread": 9
+  },
+  "immediate": [AttentionItem, ...],
+  "today": [AttentionItem, ...]
+}
+```
+
+Each queue is bounded to 8 rows; counters cover the full filtered set. Each
+`AttentionItem` carries `key`, `reason`, `urgency_at`, `conversation_id?`, `lead_id?`,
+`name?`, `phone_last4?`, `desired_job?`, `lead_stage?`, `lead_score?`,
+`last_inbound_at?`, `due_at?`, `delivery_status?`, and `action`
+(`OPEN_CONVERSATION` | `CALL`). A candidate appears once, under its highest-priority reason.
+
+**Reason precedence** (1 = highest): `DELIVERY_REVIEW` → `HUMAN_ESCALATION` →
+`REPLY_OVERDUE` → `FOLLOWUP_OVERDUE` → `WAITING_REPLY` → `PRIORITY_NO_ACTION` →
+`FOLLOWUP_TODAY` → `UNREAD` → `STALLED`.
+
+**Approved thresholds:**
+- Unanswered inbound becomes overdue after **30 minutes**.
+- Hot or `REGISTERED` candidate (within **7 days** of creation) needs action after **24 hours**
+  without a recruiter response when no future follow-up or `next_action_at` exists.
+  The 7-day window prevents terminal `REGISTERED` leads from flooding the priority counter.
+- Active candidate becomes stalled after **48 hours** without activity (lead update OR
+  linked-conversation inbound/outbound).
+- Latest failed/ambiguous (`SEND_UNKNOWN`) delivery is review-only; no one-click resend.
+
+**Join & dedup contract:** `leads` and `conversations` have no foreign key (only a
+nullable `zalo_id == zalo_chat_id` soft match) and independent `assigned_recruiter_id`
+columns. Viewer scope is applied to **both** the anchor and enrichment tables per reason.
+`zalo_id IS NULL` leads are eligible only for lead-anchored reasons.
+
+**Caveat — `unread_count` lag:** `Conversation.unread_count` is reset server-side only on
+`markAsRead`; it lags the frontend's optimistic read state. The UNREAD counter reflects
+the server view, which may differ momentarily from the inbox display.
+
+### `GET /api/v1/conversations?reason=<REASON_ENUM>`
+
+Continuation filter for the attention dashboard's "Mở hộp thư" drill-down. Accepts any
+`AttentionReason` enum value and delegates to `ConversationService.list_by_attention_reason`,
+which reuses the same reason predicates as `/dashboard/attention` (DRY). Returns the
+standard `ConversationListResponse` shape. When `reason` is absent, the existing
+`list_conversations` behavior is unchanged.
 
 ## Custom DataProvider Methods
 
