@@ -6,6 +6,7 @@ limit in production, and it fails open (never blocks auth) when Redis is
 unavailable. No live Redis — the production branch is exercised against a
 counting fake.
 """
+
 from types import SimpleNamespace
 
 import pytest

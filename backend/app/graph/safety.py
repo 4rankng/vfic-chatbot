@@ -1,4 +1,5 @@
 """Deterministic safety, verdict parsing, and retry-prompt logic for bot replies."""
+
 from __future__ import annotations
 
 import re
@@ -57,8 +58,10 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
     # Deterministic resolution for an over-long reply: truncate at a word
     # boundary so the output is bounded even if the LLM safety judge is later
     # disabled (Slice E.4). The flag still routes to the judge when enabled.
-    output = truncate_for_chat(cleaned or FALLBACK_REPLY) if too_long_for_chat else (
-        cleaned or FALLBACK_REPLY
+    output = (
+        truncate_for_chat(cleaned or FALLBACK_REPLY)
+        if too_long_for_chat
+        else (cleaned or FALLBACK_REPLY)
     )
     needs_llm_safety = empty_after_clean or too_long_for_chat or bool(_RISK_RE.search(raw))
 
@@ -145,9 +148,7 @@ _BLOCKLIST_PATTERNS = (
     ),
     # Unmistakable vulgarity / profanity (Vietnamese + English), narrow set.
     re.compile(r"(địt|lồn|cặc|buồi|dâm)", re.IGNORECASE),
-    re.compile(
-        r"\b(fuck|shit|bitch|cunt|dick|asshole|motherfucker)\b", re.IGNORECASE
-    ),
+    re.compile(r"\b(fuck|shit|bitch|cunt|dick|asshole|motherfucker)\b", re.IGNORECASE),
 )
 
 
@@ -173,4 +174,6 @@ GENERIC_FALLBACK = "Mình không trả lời được, bạn hỏi câu khác đ
 def retry_exhausted_fallback(original_user_text: str) -> str:
     # Off-topic technical questions get a redirect to recruitment topics.
     # Everything else gets the generic fallback.
-    return TECHNICAL_FALLBACK if _TECH_USER_RE.search(original_user_text or "") else GENERIC_FALLBACK
+    return (
+        TECHNICAL_FALLBACK if _TECH_USER_RE.search(original_user_text or "") else GENERIC_FALLBACK
+    )

@@ -12,6 +12,7 @@ POSIX-ARE → Python ``re`` notes baked in here:
     ``re.sub(..., count=1)``.
   * ``ilike '%X%'`` → ``X.casefold() in s.casefold()`` substring test.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -238,7 +239,10 @@ def parse_bus_timetable(content: str) -> ParsedBusTimetable:
                 pending_notes = _concat_ws(pending_notes, _LEADING_DASH.sub("", line_text, count=1))
                 continue
 
-            if current_admin_block == "hanoi_outbound" and _RE_ADMIN_ROUTE.match(line_text) is not None:
+            if (
+                current_admin_block == "hanoi_outbound"
+                and _RE_ADMIN_ROUTE.match(line_text) is not None
+            ):
                 route_text = _LEADING_DASH.sub("", line_text, count=1)
                 routes.append(
                     BusRoute(

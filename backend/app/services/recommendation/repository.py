@@ -8,6 +8,7 @@ Two-stage ranker over the existing ``jobs`` table — no new tables, no migratio
 
 All data columns already exist on ``jobs`` (``job.py``); this module only reads them.
 """
+
 from __future__ import annotations
 
 import logging

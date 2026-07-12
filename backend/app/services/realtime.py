@@ -7,6 +7,7 @@ per-conversation rooms via the Socket.IO Redis bus. SSE is retained during the
 cutover (dual publish); removing the SSE endpoint is a documented follow-up once
 Socket.IO is confirmed live in production.
 """
+
 import json
 import logging
 
@@ -24,9 +25,7 @@ async def publish_event(event_type: str, payload: dict) -> None:
     room derived from the payload so only subscribed clients receive it.
     """
     try:
-        await get_redis().publish(
-            CHANNEL, json.dumps({"type": event_type, "payload": payload})
-        )
+        await get_redis().publish(CHANNEL, json.dumps({"type": event_type, "payload": payload}))
     except Exception as exc:  # noqa: BLE001 — realtime must not break writes
         logger.warning("realtime publish failed: %s", exc)
     try:

@@ -4,6 +4,7 @@ All worker enqueue functions follow the same pattern: try to push a job onto a
 named Redis-backed queue, log but never raise on failure. This helper centralises
 that logic so callers are one-liners.
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,5 +44,7 @@ def enqueue_job(
         q.enqueue(fn, *args, job_timeout=job_timeout, **kwargs)
         return True
     except Exception as exc:  # noqa: BLE001 — enqueue failure must not break the caller
-        logger.error("failed to enqueue %s on queue %s: %s", fn.__name__, queue_name, exc, exc_info=True)
+        logger.error(
+            "failed to enqueue %s on queue %s: %s", fn.__name__, queue_name, exc, exc_info=True
+        )
         return False

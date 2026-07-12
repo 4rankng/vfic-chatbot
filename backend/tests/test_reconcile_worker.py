@@ -7,6 +7,7 @@ Pure unit tests with mocked dependencies. Critical assertions:
 - enqueue fail → release_lock + enqueue_failed counter
 - Happy path → enqueue called + re_enqueued counter
 """
+
 from __future__ import annotations
 
 import uuid
@@ -90,6 +91,7 @@ def _mock_db_for_process(
     execute_result = MagicMock()
     execute_result.rowcount = 1 if lock_acquired else 0
     db.execute = AsyncMock(return_value=execute_result)
+
     def _scalar_result(value: Message | None) -> MagicMock:
         result = MagicMock()
         result.first.return_value = value

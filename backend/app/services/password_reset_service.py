@@ -1,4 +1,5 @@
 """Password reset OTP lifecycle."""
+
 import asyncio
 import hmac
 import logging
@@ -84,13 +85,9 @@ class PasswordResetService:
             payload={"email": normalized},
         )
         await self.db.commit()
-        asyncio.create_task(
-            self._send_reset_email(user_id=user.id, email=normalized, otp=otp)
-        )
+        asyncio.create_task(self._send_reset_email(user_id=user.id, email=normalized, otp=otp))
 
-    async def _send_reset_email(
-        self, *, user_id: uuid.UUID, email: str, otp: str
-    ) -> None:
+    async def _send_reset_email(self, *, user_id: uuid.UUID, email: str, otp: str) -> None:
         from app.core.db import async_session
 
         try:

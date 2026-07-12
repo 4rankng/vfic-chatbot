@@ -14,6 +14,7 @@ tests pin the *real* public signature so any caller/service mismatch fails CI
 before it can reach production. They are signature-only on purpose: the defect
 is a contract violation, and signature introspection is the direct assertion.
 """
+
 from __future__ import annotations
 
 import inspect

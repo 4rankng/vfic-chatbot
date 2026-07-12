@@ -4,6 +4,7 @@ The single place conversation/message realtime events are published. Extracts th
 ``publish_event(...)`` calls that were duplicated across every state transition in
 ``ConversationService``. Identical channels + payloads — just one definition now.
 """
+
 from __future__ import annotations
 
 from app.schemas.conversation import ConversationOut, MessageOut

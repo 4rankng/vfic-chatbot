@@ -1,4 +1,5 @@
 """Zalo Official Account outbound client."""
+
 from __future__ import annotations
 
 import json
@@ -62,9 +63,7 @@ class ZaloOASender:
         if not token:
             return {"error": -1, "message": "zalo_oa_access_token not configured"}
         try:
-            async with httpx.AsyncClient(
-                timeout=self._settings.zalo_bot_request_timeout
-            ) as client:
+            async with httpx.AsyncClient(timeout=self._settings.zalo_bot_request_timeout) as client:
                 resp = await client.post(
                     f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
                     json=body,
@@ -81,16 +80,12 @@ class ZaloOASender:
             return data
         return {"error": -1, "message": f"non-JSON response: {data!r}"}
 
-    async def _get(
-        self, path: str, *, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def _get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
         token = self._token
         if not token:
             return {"error": -1, "message": "zalo_oa_access_token not configured"}
         try:
-            async with httpx.AsyncClient(
-                timeout=self._settings.zalo_bot_request_timeout
-            ) as client:
+            async with httpx.AsyncClient(timeout=self._settings.zalo_bot_request_timeout) as client:
                 resp = await client.get(
                     f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
                     params=params,
@@ -188,9 +183,7 @@ class ZaloOASender:
                 "recipient": {"user_id": chat_id},
                 "message": {"text": chunk, "quote_message_id": quote_message_id},
             }
-            return self._send_result(
-                await self._post_with_refresh("/v3.0/oa/message/cs", body)
-            )
+            return self._send_result(await self._post_with_refresh("/v3.0/oa/message/cs", body))
 
         return await _aggregate_chunked_send(chunks, send_chunk)
 
@@ -329,9 +322,7 @@ class ZaloOASender:
         if not user_id:
             return None
         data_param = quote(json.dumps({"user_id": user_id}, separators=(",", ":")))
-        envelope = await self._get_with_refresh(
-            "/v3.0/oa/user/detail", params={"data": data_param}
-        )
+        envelope = await self._get_with_refresh("/v3.0/oa/user/detail", params={"data": data_param})
         if not isinstance(envelope, dict) or envelope.get("error") not in (0, "0", None):
             logger.info(
                 "zalo OA user-detail lookup failed error=%s",

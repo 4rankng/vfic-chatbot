@@ -12,6 +12,7 @@ verifies the access JWT via the same ``get_user_from_token`` used by REST,
 refuses on failure, and rooms the connection by user and (on demand) by
 conversation. This replaces the SSE ``?token=`` workaround.
 """
+
 from __future__ import annotations
 
 import logging
@@ -143,6 +144,7 @@ async def _leave_lead(sid, data):  # type: ignore[no-untyped-def]
 
 
 # --- presence events (viewing / typing) ---
+
 
 @sio.on("presence join")
 async def _presence_join(sid, data):  # type: ignore[no-untyped-def]

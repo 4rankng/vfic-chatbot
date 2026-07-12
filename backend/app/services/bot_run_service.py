@@ -1,4 +1,5 @@
 """Read-only bot-run listing (the takeover race-guard audit trail)."""
+
 from __future__ import annotations
 
 import uuid

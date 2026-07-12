@@ -3,6 +3,7 @@
 Follows the ConversationEventBus pattern: a single place where lead realtime
 events are published so the service layer stays decoupled from transport details.
 """
+
 from __future__ import annotations
 
 from app.schemas.lead import LeadOut

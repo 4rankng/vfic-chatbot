@@ -13,22 +13,35 @@ same scale.
 
 ### Roles
 
+Tokens marked **[var-only]** do not generate a Tailwind utility (Tailwind v4
+suppresses certain `--text-*` names). Consume them in CSS via `var(--fs-*)`.
+All others emit both the utility and the CSS var.
+
 | Role | Utility | CSS var | Desktop | Used for |
 |---|---|---|---|---|
 | Display | `text-display` | `--fs-display` | 24→32px (fluid) | Login hero only |
-| Page title | `text-page-title` | `--fs-page-title` | 22→24px (fluid) | Every page `<h1>` |
-| Metric | `text-metric` | `--fs-metric` | 20→24px (fluid) | Stat numbers (perf dashboard) |
-| Section title | `text-section-title` | `--fs-section-title` | 16px | `<h2>` |
+| Page title | `text-page-title` | `--fs-page-title` | 22→24px (fluid) | Every page `<h1>` / `<h2>` title |
+| Metric | `text-metric` | `--fs-metric` | 20→24px (fluid) | Stat numbers (perf dashboard, ingest ring) |
+| Section title | **[var-only]** | `--fs-section-title` | 16px | `<h2>` (in CSS) |
 | Subsection | `text-subsection` | `--fs-subsection` | 15px | `<h3>`, small headings |
-| Card title | `text-card-title` | `--fs-card-title` | 14px | `<CardTitle>`, card headers |
-| Row title | `text-row-title` | `--fs-row-title` | 14px | List row primary text |
-| Body | `text-body` | `--fs-body` | 14px | Default body text |
+| Card title | **[var-only]** | `--fs-card-title` | 14px | Card headers (in CSS; `<CardTitle>` inherits) |
+| Row title | **[var-only]** | `--fs-row-title` | 14px | List row primary text (in CSS) |
+| Body | **[var-only]** | `--fs-body` | 14px | Default body text (in CSS) |
 | Body small | `text-body-sm` | `--fs-body-sm` | 13px | Secondary body |
 | Control | `text-control` | `--fs-control` | 14px | `<Button>` labels |
-| Input | `text-input` | `--fs-input` | 14px | `<Input>`, `<Textarea>` |
+| Input | *(none — use `text-sm`)* | `--fs-input` | 14px | `<Input>`, `<Textarea>` (see collision note below) |
 | Meta | `text-meta` | `--fs-meta` | 12px | Timestamps, labels |
 | Caption | `text-caption` | `--fs-caption` | 11.5px | Kickers, eyebrows, helpers |
 | Badge | `text-badge` | `--fs-badge` | 11.5px | `<Badge>`, chips |
+
+> **⚠️ Naming collision warning.** Tailwind v4's `text-{name}` utility
+> resolves to a **color** when a `--color-{name}` token exists. `--color-input`
+> is defined (border token), so `text-input` emits `color: var(--input)` —
+> NOT a font-size. Using it on `<Input>` recolors the text to the border color
+> (WCAG-failing). For this reason there is **no `--text-input` token**; inputs
+> use `text-sm` (which equals the 14px scale value) directly. Other unsafe
+> names (all claimed by `--color-*`): foreground, background, card, popover,
+> primary, secondary, muted, accent, destructive, border, ring.
 
 ### Weights / line-heights / tracking
 
@@ -43,8 +56,10 @@ same scale.
 - Fixed roles (body through badge) scale uniformly via the **mobile root boost**:
   `html { font-size: 17px }` at `max-width: 767px` (in `index.css`). One knob,
   not per-token overrides.
-- Fluid roles (`display`, `page-title`, `metric`) use `clamp(min, preferred, max)`
-  so they can grow on wide screens but **never balloon** — the hard ceiling is
+- Fluid roles (`display`, `page-title`, `metric`) use `min(clamp(min, preferred, max), Npx)`
+  with an **absolute px ceiling** so they can grow on wide screens but **never
+  balloon** — even under the 17px mobile root boost. Without the px cap,
+  `clamp`'s rem-based max would itself scale up (2rem × 17px = 34px), defeating
   the safeguard that killed the old 34px / 42px outliers.
 - Inputs keep `font-size: 16px !important` on mobile — this is a **documented
   exception** required to prevent iOS Safari auto-zoom on focus. Do not remove it.

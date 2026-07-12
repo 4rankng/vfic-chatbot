@@ -324,9 +324,7 @@ async def test_llm_call_latency_sql_casts_call_ms_to_numeric(monkeypatch):
     stubs = _install_compute_stubs(monkeypatch)
     await performance("24h", _admin=SimpleNamespace())
 
-    latency_query = next(
-        q for q in stubs.queries if _ROUTE_LLM_CALL_LATENCY in q
-    )
+    latency_query = next(q for q in stubs.queries if _ROUTE_LLM_CALL_LATENCY in q)
     # Every percentile_cont in this query must ORDER BY call_ms::int (or ::numeric).
     # The buggy form was `ORDER BY call_ms` — bare text, rejected by Postgres.
     assert "ORDER BY call_ms::int" in latency_query, latency_query

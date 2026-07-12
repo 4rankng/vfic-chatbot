@@ -4,6 +4,7 @@ No I/O, no DB, no LLM — same input always yields same output. Unit-tested dire
 ``tests/test_knowledge_coercion.py``. These helpers are the seam that lets the pipeline
 orchestrator stay free of inline parsing/normalisation.
 """
+
 from __future__ import annotations
 
 import json
@@ -125,7 +126,9 @@ def _coerce_feature(raw: Any, catalog_row: Any) -> dict:
         "is_highlight": bool(raw.get("is_highlight", False)) and not is_missing,
         "is_missing": is_missing,
         "needs_clarification": bool(raw.get("needs_clarification", False)),
-        "evidence_text": (str(raw.get("evidence_text") or raw.get("evidence") or "").strip() or None),
+        "evidence_text": (
+            str(raw.get("evidence_text") or raw.get("evidence") or "").strip() or None
+        ),
         "strength_score": _clamp_strength(raw.get("strength_score")),
     }
 

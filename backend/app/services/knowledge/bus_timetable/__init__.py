@@ -6,6 +6,7 @@ Layering (mirrors the parent ``knowledge`` package):
     parser/     line-by-line state machine (models + normalize only — no DB)
     repository/ raw-SQL persistence (sqlalchemy + app.core only)
 """
+
 from __future__ import annotations
 
 from app.services.knowledge.bus_timetable.models import (

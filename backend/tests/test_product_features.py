@@ -5,6 +5,7 @@ MiniMax key): exactly-16-rows-per-project, highlight/missing/value_json coercion
 idempotent re-run, best-effort (never blocks ingest), and the get_product_features
 agent tool (structured, non-RAG — precedent: search_bus_timetable).
 """
+
 import json
 import uuid
 
@@ -61,13 +62,28 @@ def _features_payload():
             {
                 "feature_key": "take_home_income",
                 "value_text": "10–13 triệu/tháng",
-                "value_json": {"min": 10000000, "max": 13000000, "currency": "VND", "period": "month"},
+                "value_json": {
+                    "min": 10000000,
+                    "max": 13000000,
+                    "currency": "VND",
+                    "period": "month",
+                },
                 "is_highlight": True,
                 "strength_score": 0.9,
                 "evidence_text": "thu nhập 10-13 triệu",
             },
-            {"feature_key": "pay_frequency", "value_text": "Trả lương theo tuần", "is_highlight": True, "strength_score": 0.95},
-            {"feature_key": "commute_support", "value_text": "Có xe đưa đón Thái Bình", "is_highlight": False, "strength_score": 0.7},
+            {
+                "feature_key": "pay_frequency",
+                "value_text": "Trả lương theo tuần",
+                "is_highlight": True,
+                "strength_score": 0.95,
+            },
+            {
+                "feature_key": "commute_support",
+                "value_text": "Có xe đưa đón Thái Bình",
+                "is_highlight": False,
+                "strength_score": 0.7,
+            },
         ]
     }
 
@@ -100,14 +116,17 @@ async def _make_doc(db, raw, *, project_id=None):
 
 def _count_features(db, project_id) -> ...:
     return db.execute(
-        text("SELECT count(*) FROM job_feature_values WHERE project_id = :p"), {"p": str(project_id)}
+        text("SELECT count(*) FROM job_feature_values WHERE project_id = :p"),
+        {"p": str(project_id)},
     )
 
 
 # --------------------------------------------------------------------------- extraction
 async def test_extract_writes_exactly_16_rows(db_session, clean_kb, clean_features):
     proj = await _seed_project(db_session)
-    doc = await _make_doc(db_session, "LG Display tuyển operator lương 10-13 triệu.", project_id=proj.id)
+    doc = await _make_doc(
+        db_session, "LG Display tuyển operator lương 10-13 triệu.", project_id=proj.id
+    )
 
     async def llm_json(system, user):
         return json.dumps(_features_payload())

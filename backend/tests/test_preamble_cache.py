@@ -4,6 +4,7 @@ Covers: cache hit/miss, version-bump invalidation, Redis-down safety, and the
 invariant that ``resolve_zalo`` is never cached. All I/O (Redis) is mocked —
 no live process required.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -103,9 +104,7 @@ async def test_cached_value_version_bump_invalidates(monkeypatch):
         calls["n"] += 1
         return f"v{calls['n']}"
 
-    await cached_value(
-        key_prefix="test:k", namespace="test_ns", ttl_seconds=60, loader=loader
-    )
+    await cached_value(key_prefix="test:k", namespace="test_ns", ttl_seconds=60, loader=loader)
     # Bump again — the next read must miss and re-load.
     await bump_cache_version("test_ns")  # → version "2"
     out = await cached_value(

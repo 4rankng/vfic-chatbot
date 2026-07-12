@@ -85,9 +85,7 @@ async def search_user_memory(
         if isinstance(cached, str):
             return cached
     emb = vec_literal(await _cached_embed(embedder, query))
-    rows = await retrieval.match_memories(
-        emb, top_k, json.dumps({"chat_id": chat_id})
-    )
+    rows = await retrieval.match_memories(emb, top_k, json.dumps({"chat_id": chat_id}))
     if not rows:
         result = "Không có thông tin ghi nhớ về người dùng này."
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
@@ -187,9 +185,7 @@ async def search_knowledge(
 
         sem_hit = await semantic_cache_get(raw_emb)
         if sem_hit is not None:
-            logger.debug(
-                "search_knowledge semantic cache hit (sim=%.3f)", sem_hit.similarity
-            )
+            logger.debug("search_knowledge semantic cache hit (sim=%.3f)", sem_hit.similarity)
             return sem_hit.result
 
     # FAQ-first pre-pass: prepend canonical FAQ answers when a strong match exists.
@@ -241,9 +237,7 @@ async def list_active_projects(retrieval: RetrievalPort) -> str:
 def _recommend_terms(query: str) -> list[str]:
     normalized = normalize_vietnamese_text(query or "")
     terms = [
-        term
-        for term in normalized.split()
-        if len(term) >= 3 and term not in _RECOMMEND_STOPWORDS
+        term for term in normalized.split() if len(term) >= 3 and term not in _RECOMMEND_STOPWORDS
     ]
     seen: set[str] = set()
     return [term for term in terms if not (term in seen or seen.add(term))]
@@ -295,8 +289,7 @@ async def recommend_projects(
         if location and any(term in normalize_vietnamese_text(location) for term in terms):
             reasons.append(f"địa điểm: {location}")
         role_hits = [
-            role for role in roles
-            if any(term in normalize_vietnamese_text(role) for term in terms)
+            role for role in roles if any(term in normalize_vietnamese_text(role) for term in terms)
         ]
         if role_hits:
             reasons.append("vị trí: " + ", ".join(role_hits[:3]))

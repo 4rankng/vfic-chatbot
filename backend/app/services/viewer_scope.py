@@ -13,6 +13,7 @@ predicates.
   The caller still owns the admin/``None`` branch and the ``AND``/``WHERE``
   glue (those are tied to the surrounding query text); this owns the invariant.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import ColumnElement, Select, or_
@@ -20,9 +21,7 @@ from sqlalchemy import ColumnElement, Select, or_
 from app.models.user import Role, User
 
 
-def viewer_scope_condition(
-    column: ColumnElement, viewer: User
-) -> ColumnElement[bool] | None:
+def viewer_scope_condition(column: ColumnElement, viewer: User) -> ColumnElement[bool] | None:
     """Return the ORM viewer-scope predicate, or ``None`` for admins.
 
     ``None`` means "no restriction" — callers should skip ``.where()`` entirely

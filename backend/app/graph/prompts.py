@@ -33,7 +33,9 @@ Quy tắc:
 - Nếu chỉ cần sửa rất nhẹ như xóa markdown hoặc làm câu chữ tự nhiên hơn, vẫn có thể trả safe_to_send=true và đặt final_answer là bản đã làm sạch.
 - Nếu câu trả lời cần viết lại đáng kể vì chứa nội dung kỹ thuật/code/lạc đề, trả safe_to_send=false."""
 
-ERROR_REPLY = """Xin lỗi bạn, tôi đang gặp chút sự cố kỹ thuật. Bạn vui lòng nhắn lại sau ít phút nhé 🙏"""
+ERROR_REPLY = (
+    """Xin lỗi bạn, tôi đang gặp chút sự cố kỹ thuật. Bạn vui lòng nhắn lại sau ít phút nhé 🙏"""
+)
 
 # Sent when the propagated ~10s deadline expires before the agent finished (tôi/bạn
 # voice per persona.md). Distinct from DEGRADATION_REPLY (LLM throttled / high traffic):

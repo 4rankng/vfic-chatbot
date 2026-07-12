@@ -9,6 +9,7 @@ constructed inside the turn, the agent LLM, the Zalo sender, and the two lazy
 DB-hitting helpers (build_system_prompt, conversation_allowed_by_followup_rules).
 No DB / Redis / LLM.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -57,8 +58,13 @@ class _FakeConv:
 
 
 class _SendResult:
-    def __init__(self, ok: bool = True, msg_id: str = "mid-1",
-                 error: str | None = None, error_class: str | None = None) -> None:
+    def __init__(
+        self,
+        ok: bool = True,
+        msg_id: str = "mid-1",
+        error: str | None = None,
+        error_class: str | None = None,
+    ) -> None:
         self.ok = ok
         self.msg_id = msg_id
         self.error = error
@@ -119,6 +125,7 @@ def _stub_svc(*, acquired: bool = True, owned: bool = True):
 
 def _patch_lazy_helpers(monkeypatch) -> None:
     """Neutralize the lazy DB-hitting system-prompt build inside the turn."""
+
     async def _system_prompt(db):
         return "", True
 

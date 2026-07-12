@@ -2,6 +2,7 @@
 
 Schema is owned by Alembic (raw-SQL baseline); these mirror the tables for queries.
 """
+
 from app.models.audit import AuditEvent
 from app.models.base import Base
 from app.models.company import Company, Project

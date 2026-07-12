@@ -1,4 +1,5 @@
 """Conversation release dispatch tests."""
+
 from __future__ import annotations
 
 import uuid
@@ -14,9 +15,7 @@ async def test_release_dispatches_unanswered_turn_through_rq(monkeypatch) -> Non
     from app.api import conversations
 
     conversation = SimpleNamespace()
-    service = SimpleNamespace(
-        release_and_enqueue_unanswered=AsyncMock(return_value=conversation)
-    )
+    service = SimpleNamespace(release_and_enqueue_unanswered=AsyncMock(return_value=conversation))
     expected = object()
     monkeypatch.setattr(conversations, "ConversationService", lambda _db: service)
     monkeypatch.setattr(conversations, "_load", AsyncMock(return_value=conversation))

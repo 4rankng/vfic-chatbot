@@ -5,6 +5,7 @@ reuse the same live tiles without duplicating the Redis/RQ reads. The dict shape
 returned here is the contract for both endpoints — do not change the keys without
 updating ``/health/queue`` consumers.
 """
+
 from __future__ import annotations
 
 

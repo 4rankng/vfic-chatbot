@@ -1,6 +1,7 @@
 """Unit tests for graph/safety.py — the deterministic guards (off-topic/code
 detection, verdict parsing, retry builder). These implement acceptance #5
 (off-topic refusal) without needing an LLM."""
+
 import pytest
 
 from app.graph.safety import (
@@ -50,9 +51,7 @@ def test_fast_safety_too_long_flagged():
 def test_fast_safety_strips_minimax_think_reasoning():
     # MiniMax M2 reasoning models emit <think>…</think>; the deliberation must
     # never reach the user — only the reply after </think> is sent.
-    out = fast_safety_filter(
-        "<think>internal reasoning SECRETKEY here</think>Chào bạn! 😊"
-    )
+    out = fast_safety_filter("<think>internal reasoning SECRETKEY here</think>Chào bạn! 😊")
     assert "SECRETKEY" not in out["output"]
     assert "<think>" not in out["output"]
     assert out["output"].startswith("Chào bạn")

@@ -1,4 +1,5 @@
 """Conversation / message schemas."""
+
 import uuid
 from datetime import datetime
 

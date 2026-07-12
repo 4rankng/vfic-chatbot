@@ -14,7 +14,7 @@ export const NotFound = () => {
   return (
     <div className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-2 text-center">
       <SearchX className="h-16 w-16 text-muted-foreground" />
-      <h1 className="text-2xl font-semibold">
+      <h1 className="text-page-title font-semibold">
         <Translate i18nKey="ra.page.not_found" />
       </h1>
       <p className="max-w-xl text-muted-foreground">

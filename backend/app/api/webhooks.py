@@ -11,6 +11,7 @@ accept-unsigned behavior for ergonomics.
 The raw body is logged at INFO so the Bot Platform payload shape is observable
 during bring-up.
 """
+
 import asyncio
 import hmac
 import json
@@ -60,9 +61,7 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
             return JSONResponse({"detail": "invalid secret token"}, status_code=401)
     elif _settings.app_env != "development":
         # No secret configured in non-dev -> refuse rather than accept blind.
-        return JSONResponse(
-            {"detail": "webhook verification not configured"}, status_code=503
-        )
+        return JSONResponse({"detail": "webhook verification not configured"}, status_code=503)
     # else: dev/test with no secret -> accept unchanged (ergonomics).
 
     # Pass the DB-resolved bot token so the fire-and-forget typing indicator uses

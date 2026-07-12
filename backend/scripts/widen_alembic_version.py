@@ -15,6 +15,7 @@ script covers databases that already applied 0001 before the column was widened
 No-op when the table does not yet exist (fresh DB before its first migration) or
 when the column is already wide enough — safe to invoke unconditionally.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import create_engine, text

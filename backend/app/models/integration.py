@@ -1,4 +1,5 @@
 """Admin-managed integration settings."""
+
 import uuid
 from datetime import datetime
 

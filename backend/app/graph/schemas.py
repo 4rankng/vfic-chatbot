@@ -4,6 +4,7 @@ Co-located with the agent tools (``app.graph.tools``) the schemas describe. ``_d
 routes a named tool call to its function; used by ``MiniMaxAgent``'s tool loop in
 ``clients.py``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -56,7 +57,10 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"},
-                    "project_slug": {"type": "string", "description": "slug dự án (từ danh mục) để giới hạn tìm kiếm"},
+                    "project_slug": {
+                        "type": "string",
+                        "description": "slug dự án (từ danh mục) để giới hạn tìm kiếm",
+                    },
                 },
                 "required": ["query"],
             },
@@ -193,9 +197,13 @@ async def _dispatch_tool(retrieval, embedder, name: str, args: dict) -> str:
     try:
         t0 = time.monotonic()
         if name == "search_user_memory":
-            result = await search_user_memory(retrieval, embedder, args.get("chat_id", ""), args.get("query", ""))
+            result = await search_user_memory(
+                retrieval, embedder, args.get("chat_id", ""), args.get("query", "")
+            )
         elif name == "search_knowledge":
-            result = await search_knowledge(retrieval, embedder, args.get("query", ""), args.get("project_slug"))
+            result = await search_knowledge(
+                retrieval, embedder, args.get("query", ""), args.get("project_slug")
+            )
         elif name == "list_active_projects":
             result = await list_active_projects(retrieval)
         elif name == "recommend_projects":
@@ -210,13 +218,20 @@ async def _dispatch_tool(retrieval, embedder, name: str, args: dict) -> str:
                 province=args.get("province"),
             )
         elif name == "search_bus_timetable":
-            result = await search_bus_timetable(retrieval, args.get("company", ""), args.get("question", ""))
+            result = await search_bus_timetable(
+                retrieval, args.get("company", ""), args.get("question", "")
+            )
         elif name == "get_product_features":
             result = await get_product_features(retrieval, args.get("project_slug", ""))
         else:
             logger.warning("unknown tool dispatched: %s (args=%s)", name, args)
             return "unknown tool"
-        logger.debug("tool %s completed in %.1fms (%d chars)", name, (time.monotonic() - t0) * 1000, len(result))
+        logger.debug(
+            "tool %s completed in %.1fms (%d chars)",
+            name,
+            (time.monotonic() - t0) * 1000,
+            len(result),
+        )
         return result
     except Exception:
         logger.warning("tool %s failed (args=%s)", name, args, exc_info=True)

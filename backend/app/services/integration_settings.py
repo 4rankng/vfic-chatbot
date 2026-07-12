@@ -282,7 +282,8 @@ class IntegrationSettingsService:
             return OpenRouterRuntimeConfig(
                 api_key=stored.get(OPENROUTER_API_KEY) or self.settings.openrouter_api_key,
                 base_url=self.settings.openrouter_base_url,
-                agent_model=stored.get(OPENROUTER_AGENT_MODEL) or self.settings.openrouter_agent_model,
+                agent_model=stored.get(OPENROUTER_AGENT_MODEL)
+                or self.settings.openrouter_agent_model,
                 safety_model=(
                     stored.get(OPENROUTER_SAFETY_MODEL) or self.settings.openrouter_safety_model
                 ),
@@ -478,7 +479,6 @@ class IntegrationSettingsService:
                 await redis.delete(lock_key)
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA token refresh lock cleanup failed", exc_info=True)
-
 
     async def update_minimax(
         self,

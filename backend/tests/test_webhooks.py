@@ -219,6 +219,7 @@ async def test_webhook_persists_explicit_name_before_queuing_turn(monkeypatch):
         "app.services.webhook.MessageDedupService.claim",
         AsyncMock(return_value=True),
     )
+
     async def persist_name(*_args, **_kwargs):
         events.append("profile")
         return "LiteQA"

@@ -311,9 +311,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
             await deps.db.commit()
             return _outcome("suppressed", reason=f"rule_{rule_reason}")
-        owned = await svc.recheck_ownership(
-            conv, version_at_start, lock_owner=lock_owner
-        )
+        owned = await svc.recheck_ownership(conv, version_at_start, lock_owner=lock_owner)
         if not owned:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
             await deps.db.commit()
@@ -325,7 +323,11 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             return _outcome("suppressed", reason="48h_window_post_generation")
 
         # 10. Send
-        sender = deps.zalo.for_conversation(conv) if hasattr(deps.zalo, "for_conversation") else deps.zalo
+        sender = (
+            deps.zalo.for_conversation(conv)
+            if hasattr(deps.zalo, "for_conversation")
+            else deps.zalo
+        )
         result = await sender.send_message(conv.zalo_chat_id, candidate)
 
     except Exception as exc:

@@ -1,4 +1,5 @@
 """Pure tests for the shared Zalo OA signature verifier (no IO)."""
+
 from __future__ import annotations
 
 import hashlib

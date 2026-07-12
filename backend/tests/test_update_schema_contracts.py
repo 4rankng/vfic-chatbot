@@ -46,7 +46,14 @@ def test_lead_update_accepts_stage_changes():
         (FollowUpCreate, {"due_at": "2030-01-01T00:00:00Z", "status": "DONE"}),
         (ProjectCreate, {"slug": "lg", "name": "LG", "id": "8d833c84-1a4a-4ab2-a358-4f8ef1563b7b"}),
         (PersonaCreate, {"name": "Agent", "body_md": "Body", "created_by": "me"}),
-        (UserCreate, {"email": "a@example.com", "password": "password123", "confirm_password": "password123"}),
+        (
+            UserCreate,
+            {
+                "email": "a@example.com",
+                "password": "password123",
+                "confirm_password": "password123",
+            },
+        ),
         (UploadRequest, {"file_name": "a.md", "content": "body", "status": "PUBLISHED"}),
         (SearchTestRequest, {"query": "x", "filters": {}}),
         (JobSearchRequest, {"query": "x", "stage": "NEW"}),

@@ -3,6 +3,7 @@
 The schema is managed by Alembic (raw-SQL baseline). ORM models mirror the tables
 for querying; they do NOT generate migrations.
 """
+
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

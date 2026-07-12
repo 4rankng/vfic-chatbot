@@ -15,6 +15,7 @@ Implementation is a linear scan over a Redis HASH of recent entries (query vecto
 result). A full HNSW in Redis is YAGNI at current query volumes; the ring is capped
 at ``semantic_cache_capacity`` entries with LRU eviction via a sorted-set timestamp.
 """
+
 from __future__ import annotations
 
 import logging
@@ -45,7 +46,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
         nb += y * y
     if na == 0.0 or nb == 0.0:
         return 0.0
-    return dot / ((na ** 0.5) * (nb ** 0.5))
+    return dot / ((na**0.5) * (nb**0.5))
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,9 @@ async def _keys() -> tuple[str, str, str]:
     return _VEC_KEY.format(ver=ver), _RESULT_KEY.format(ver=ver), _TS_KEY.format(ver=ver)
 
 
-async def semantic_cache_get(query_vec: list[float], *, threshold: float | None = None) -> SemanticCacheHit | None:
+async def semantic_cache_get(
+    query_vec: list[float], *, threshold: float | None = None
+) -> SemanticCacheHit | None:
     """Return a cached result if a similar query exceeds the similarity threshold.
 
     Linear scan over the stored query vectors. Returns ``None`` on miss, disabled,

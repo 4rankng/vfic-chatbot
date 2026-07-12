@@ -1,4 +1,5 @@
 """Prompt-context assembly for chatbot turns."""
+
 from __future__ import annotations
 
 from app.graph.types import _speaker
@@ -28,9 +29,7 @@ def build_agent_user_text(
         history = history[:-1]
 
     if history:
-        history_lines = [
-            f"- {_speaker(m)}: {m.body.strip()}" for m in history
-        ]
+        history_lines = [f"- {_speaker(m)}: {m.body.strip()}" for m in history]
     else:
         history_lines = ["- (chưa có tin nhắn trước đó)"]
 

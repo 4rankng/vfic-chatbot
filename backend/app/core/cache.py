@@ -3,6 +3,7 @@
 Cache failures must never affect chat turns or dashboard reads. Callers use
 short TTLs plus versioned keys for data that changes often.
 """
+
 from __future__ import annotations
 
 import json

@@ -1,30 +1,18 @@
-import { AlertTriangle, Inbox, MessageCircle, Phone } from "lucide-react";
-import { useMemo, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { AlertTriangle, MessageCircle, Phone } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 
 import { Skeleton } from "@/components/ui/skeleton";
 
 import {
   ATTENTION_QUERY_KEY,
-  COUNTER_LABELS,
   REASON_LABELS,
-  type AttentionCounters,
   type AttentionDashboard,
   type AttentionItem,
-  type AttentionReason,
   fetchAttentionDashboard,
   formatElapsed,
 } from "./attentionDashboard";
-import {
-  COUNTER_ORDER,
-  continuationLabel,
-  deriveCacheDiscriminators,
-  filterByCounter,
-  representativeReasonForCounter,
-  showContinuation,
-  type CounterKey,
-} from "./recruitingCommandCenterLogic";
+import { deriveCacheDiscriminators } from "./recruitingCommandCenterLogic";
 import { DashboardEmptyIllustration } from "./DashboardEmptyIllustration";
 
 type RecruitingCommandCenterProps = {
@@ -102,8 +90,7 @@ export const RecruitingCommandCenter = ({
   //   - retained data + error banner iff isError && data (partial failure)
   // staleTime (25s) sits just under the 30s refetch so a routine refetch does
   // not flip the query back to a fetching-without-data state; gcTime keeps the
-  // last good snapshot around for 5 minutes after unmount/counter-swap.
-  // placeholderData: keepPreviousData smooths the counter-swap transition.
+  // last good snapshot around for 5 minutes after unmount.
   const { data, isPending, isFetching, isError, refetch, dataUpdatedAt } =
     useQuery<AttentionDashboard>({
       queryKey: ATTENTION_QUERY_KEY,
@@ -111,26 +98,15 @@ export const RecruitingCommandCenter = ({
       refetchInterval: 30_000,
       staleTime: 25_000,
       gcTime: 5 * 60_000,
-      placeholderData: keepPreviousData,
     });
-
-  const [selectedCounter, setSelectedCounter] = useState<CounterKey | null>(
-    null,
-  );
 
   const shellClass =
     variant === "mobile"
       ? "recruiting-command recruiting-command-mobile"
       : "recruiting-command";
 
-  const immediateRows = useMemo(
-    () => filterByCounter(data?.immediate ?? [], selectedCounter),
-    [data?.immediate, selectedCounter],
-  );
-  const todayRows = useMemo(
-    () => filterByCounter(data?.today ?? [], selectedCounter),
-    [data?.today, selectedCounter],
-  );
+  const immediateRows = data?.immediate ?? [];
+  const todayRows = data?.today ?? [];
 
   // Skeleton on first load only; cached data + refetch never flashes a skeleton.
   // Retained data + error banner on partial failure; retry pane on initial fail.
@@ -175,27 +151,15 @@ export const RecruitingCommandCenter = ({
         </div>
       ) : null}
 
-      <CounterStrip
-        counters={data?.counters}
-        selected={selectedCounter}
-        onSelect={setSelectedCounter}
-        disabled={showSkeleton || showInitialError}
-      />
-
       <section className="recruiting-two-column">
         <AttentionPanel
           title="Ứng viên cần xử lý ngay"
           eyebrow="Cần phản hồi"
           rows={immediateRows}
-          totalCount={data?.immediate.length ?? 0}
-          exactTotal={
-            selectedCounter && data ? data.counters[selectedCounter] : null
-          }
           state={{
             showSkeleton,
             showInitialError,
             hasRows: immediateRows.length > 0,
-            selectedCounter,
           }}
           navigate={navigate}
           onRetry={refetch}
@@ -205,15 +169,10 @@ export const RecruitingCommandCenter = ({
           title="Cần xử lý hôm nay"
           eyebrow="Theo dõi hôm nay"
           rows={todayRows}
-          totalCount={data?.today.length ?? 0}
-          exactTotal={
-            selectedCounter && data ? data.counters[selectedCounter] : null
-          }
           state={{
             showSkeleton,
             showInitialError,
             hasRows: todayRows.length > 0,
-            selectedCounter,
           }}
           navigate={navigate}
           onRetry={refetch}
@@ -228,16 +187,12 @@ type PanelState = {
   showSkeleton: boolean;
   showInitialError: boolean;
   hasRows: boolean;
-  selectedCounter: CounterKey | null;
 };
 
 type AttentionPanelProps = {
   title: string;
   eyebrow: string;
   rows: AttentionItem[];
-  totalCount: number;
-  /** Exact counter total when a counter is selected (authoritative backend value). */
-  exactTotal: number | null;
   state: PanelState;
   navigate: Navigate;
   onRetry: () => void;
@@ -248,33 +203,11 @@ const AttentionPanel = ({
   title,
   eyebrow,
   rows,
-  totalCount,
-  exactTotal,
   state,
   navigate,
   onRetry,
   secondary,
 }: AttentionPanelProps) => {
-  // The continuation reason is the representative reason of the selected
-  // counter, if any; for the unfiltered view we do not show the link (the
-  // preview already is the whole queue).
-  const continuationReason = state.selectedCounter
-    ? representativeReasonForCounter(state.selectedCounter)
-    : null;
-  // `exactTotal` is the cross-queue counter total (e.g. `overdue` =
-  // REPLY_OVERDUE + FOLLOWUP_OVERDUE across both queues); the link navigates to
-  // `?reason=<representativeReason>` (ONE reason), so the inbox filtered set may
-  // be smaller than exactTotal. The comparison is exactTotal > rows.length:
-  // surface the link whenever the authoritative total beats what THIS panel
-  // currently shows.
-  const shouldShowContinuation = showContinuation({
-    selectedCounter: state.selectedCounter,
-    hasRows: state.hasRows,
-    exactTotal,
-    renderedRowCount: rows.length,
-    totalCount,
-  });
-
   return (
     <article className="recruiting-panel">
       <div className="recruiting-panel-header">
@@ -302,122 +235,29 @@ const AttentionPanel = ({
             onRetry={onRetry}
           />
         ) : state.hasRows ? (
-          <>
-            {rows.map((row) => (
-              <AttentionRow key={row.key} row={row} navigate={navigate} />
-            ))}
-            {shouldShowContinuation && continuationReason ? (
-              <ContinuationLink
-                reason={continuationReason}
-                navigate={navigate}
-              />
-            ) : null}
-          </>
+          rows.map((row) => (
+            <AttentionRow key={row.key} row={row} navigate={navigate} />
+          ))
         ) : (
           <EmptyDashboardList
             content={
-              state.selectedCounter
+              secondary
                 ? {
-                    title: "Không có mục nào trong nhóm đã chọn",
+                    title: "Không có việc cần xử lý hôm nay",
                     description:
-                      "Hàng đợi này hiện không có công việc cần theo dõi.",
-                    illustration: secondary ? "calendar" : "inbox",
+                      "Bạn đã hoàn thành tất cả công việc cần theo dõi.",
+                    illustration: "calendar",
                   }
-                : secondary
-                  ? {
-                      title: "Không có việc cần xử lý hôm nay",
-                      description:
-                        "Bạn đã hoàn thành tất cả công việc cần theo dõi.",
-                      illustration: "calendar",
-                    }
-                  : {
-                      title: "Không có ứng viên cần xử lý ngay",
-                      description: "Mọi cuộc trò chuyện hiện đã được xử lý.",
-                      illustration: "inbox",
-                    }
+                : {
+                    title: "Không có ứng viên cần xử lý ngay",
+                    description: "Mọi cuộc trò chuyện hiện đã được xử lý.",
+                    illustration: "inbox",
+                  }
             }
           />
         )}
       </div>
     </article>
-  );
-};
-
-type ContinuationLinkProps = {
-  reason: AttentionReason;
-  navigate: Navigate;
-};
-
-const ContinuationLink = ({ reason, navigate }: ContinuationLinkProps) => {
-  // Phase 2 attention-dashboard continuation (Critical 2 Option A): navigate to
-  // the inbox with `?reason=<enum>`. ConversationList reads `reason` at its
-  // `<InfiniteListBase>` mount and passes it as the list's permanent `filter`,
-  // so the data provider emits `?reason=<enum>` and the backend
-  // `list_conversations` delegates to `list_by_attention_reason` (Phase 1).
-  //
-  // FIX 4: the label is the neutral "Mở hộp thư" — it deliberately does NOT
-  // promise "N rows", because the counter total spans multiple reasons (and
-  // both queues) while `?reason=` drills into a single representative reason.
-  return (
-    <button
-      type="button"
-      className="dashboard-continuation"
-      onClick={() => navigate(`/conversations?reason=${reason}`)}
-    >
-      <span>{continuationLabel()}</span>
-      <Inbox className="size-4" aria-hidden="true" />
-    </button>
-  );
-};
-
-const CounterStrip = ({
-  counters,
-  selected,
-  onSelect,
-  disabled,
-}: {
-  counters: AttentionCounters | undefined;
-  selected: CounterKey | null;
-  onSelect: (next: CounterKey | null) => void;
-  disabled: boolean;
-}) => {
-  const safeCounters: AttentionCounters = counters ?? {
-    needs_reply: 0,
-    overdue: 0,
-    due_today: 0,
-    priority: 0,
-    unread: 0,
-  };
-
-  return (
-    <div
-      className="attention-counter-strip"
-      role="group"
-      aria-label="Bộ lọc theo loại cần xử lý"
-    >
-      {COUNTER_ORDER.map((key) => {
-        const isPressed = selected === key;
-        const count = safeCounters[key];
-        return (
-          <button
-            key={key}
-            type="button"
-            className="attention-counter-btn"
-            aria-pressed={isPressed}
-            aria-label={`${COUNTER_LABELS[key]}: ${count}`}
-            disabled={disabled}
-            onClick={() => onSelect(isPressed ? null : key)}
-          >
-            <span className="attention-counter-count" aria-hidden="true">
-              {count}
-            </span>
-            <span className="attention-counter-label">
-              {COUNTER_LABELS[key]}
-            </span>
-          </button>
-        );
-      })}
-    </div>
   );
 };
 

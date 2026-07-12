@@ -4,6 +4,7 @@ The Markdown file is the admin authoring contract. This module converts it into
 small normalized records that the ingest pipeline can trust without asking an
 LLM to reinterpret business facts.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -292,7 +293,9 @@ def _sections(body: str) -> dict[str, str]:
     return sections
 
 
-def _validate_date_field(metadata: dict[str, Any], key: str, errors: list[str], *, required: bool) -> None:
+def _validate_date_field(
+    metadata: dict[str, Any], key: str, errors: list[str], *, required: bool
+) -> None:
     value = metadata.get(key)
     if value is None and not required:
         return

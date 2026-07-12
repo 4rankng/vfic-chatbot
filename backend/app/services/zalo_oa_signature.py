@@ -13,6 +13,7 @@ Shared by the inbound webhook (``app/api/webhooks.py``) and the admin
 "verify a captured event" test-connection probe (``app/api/integrations.py``) so
 both paths reason about one verifier instead of drifting.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,9 +30,7 @@ def to_json(value: object) -> str:
 
 def compute_mac(app_id: str, data_text: str, timestamp: str, secret_key: str) -> str:
     """The documented Zalo OA digest: sha256(appId + data + timestamp + secret)."""
-    return hashlib.sha256(
-        f"{app_id}{data_text}{timestamp}{secret_key}".encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(f"{app_id}{data_text}{timestamp}{secret_key}".encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -51,7 +50,7 @@ def _strip_prefix(signature: str) -> str:
     normalized = (signature or "").strip()
     for prefix in ("sha256=", "mac="):
         if normalized.startswith(prefix):
-            normalized = normalized[len(prefix):]
+            normalized = normalized[len(prefix) :]
     return normalized
 
 
@@ -77,9 +76,7 @@ def verify_signature(
     ts_candidates: list[tuple[str, str]] = []
     if timestamp_header:
         ts_candidates.append(("header_ts", str(timestamp_header)))
-    body_ts = (
-        payload.get("timestamp") or payload.get("timeStamp") or payload.get("time_stamp")
-    )
+    body_ts = payload.get("timestamp") or payload.get("timeStamp") or payload.get("time_stamp")
     if body_ts:
         ts_candidates.append(("body_ts", str(body_ts)))
     if not ts_candidates:

@@ -1,4 +1,5 @@
 """Deterministic rank fusion for independent retrieval signals."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

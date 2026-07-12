@@ -5,6 +5,7 @@ lookup + batched vector INSERT). NO business logic, NO embedder calls — the se
 computes embeddings + canonical-key dedup; this repo only persists. Does not commit;
 the owning service controls the transaction boundary.
 """
+
 from __future__ import annotations
 
 import json

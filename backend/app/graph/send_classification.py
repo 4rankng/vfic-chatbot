@@ -15,6 +15,7 @@ before failing is treated as SEND_UNKNOWN (at-most-once bias — a stuck message
 is recoverable by a manual resend; a duplicate reply is not). Only definite
 pre-send connection failures stay retryable (FAILED).
 """
+
 from __future__ import annotations
 
 import httpx
@@ -68,4 +69,5 @@ def delivery_status_for_send_error(error_class: str | None, ok: bool):
     if ok or error_class not in AMBIGUOUS_SEND_CLASSES:
         return None
     from app.models.conversation import DeliveryStatus
+
     return DeliveryStatus.SEND_UNKNOWN

@@ -10,6 +10,7 @@ Ports are intentionally loose-typed (``Any`` for domain objects): they describe
 *what the brain calls*, not the full service surface, so the concrete service can
 evolve without dragging the contract along.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -136,9 +137,7 @@ class RetrievalPort(Protocol):
 
     async def match_memories(self, embedding: str, top_k: int, filters_json: str) -> list[Any]: ...
 
-    async def project_id_by_slug(
-        self, slug: str, *, active_only: bool = False
-    ) -> Any: ...
+    async def project_id_by_slug(self, slug: str, *, active_only: bool = False) -> Any: ...
 
     async def match_faq(
         self, embedding: str, *, top_k: int = 3, project_ids: list[str] | None = None

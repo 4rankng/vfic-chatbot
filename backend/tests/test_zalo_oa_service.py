@@ -707,9 +707,7 @@ async def test_parse_oa_user_profile_priority() -> None:
     """Module-level parser picks 240 > avatar > 120."""
     from app.services.zalo_oa_service import _parse_oa_user_profile
 
-    p1 = _parse_oa_user_profile(
-        {"avatar": "full", "avatars": {"240": "hi", "120": "lo"}}
-    )
+    p1 = _parse_oa_user_profile({"avatar": "full", "avatars": {"240": "hi", "120": "lo"}})
     assert p1.avatar_url == "hi"
 
     p2 = _parse_oa_user_profile({"avatar": "full"})

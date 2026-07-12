@@ -4,6 +4,7 @@ Validates the conservative bias: anything that could have reached Zalo before
 failing is treated as ambiguous (SEND_UNKNOWN); only definite pre-send
 connection failures stay retryable (FAILED).
 """
+
 from __future__ import annotations
 
 import httpx
@@ -26,9 +27,10 @@ def test_read_timeout_is_ambiguous():
 
 
 def test_remote_protocol_error_is_ambiguous():
-    assert classify_transport_error(
-        httpx.RemoteProtocolError("server closed")
-    ) == "remote_protocol_error"
+    assert (
+        classify_transport_error(httpx.RemoteProtocolError("server closed"))
+        == "remote_protocol_error"
+    )
 
 
 def test_read_error_is_ambiguous():

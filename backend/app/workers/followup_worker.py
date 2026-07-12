@@ -4,6 +4,7 @@ The ``scheduler`` container (``rqscheduler``) periodically enqueues the
 ``run_proactive_followup_tick`` job onto the ``followup`` queue. ``worker-followup``
 `` consumes it and fans out per-lead ``run_followup_job`` jobs (also on ``followup``).
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,8 +43,11 @@ async def _run_followup_async(job: dict) -> None:
             enqueued_dt = datetime.now(timezone.utc)
         age = (datetime.now(timezone.utc) - enqueued_dt).total_seconds()
         if age > PROACTIVE_JOB_MAX_AGE_SECONDS:
-            logger.info("proactive followup job stale: age=%ds, max=%ds, dropped",
-                        age, PROACTIVE_JOB_MAX_AGE_SECONDS)
+            logger.info(
+                "proactive followup job stale: age=%ds, max=%ds, dropped",
+                age,
+                PROACTIVE_JOB_MAX_AGE_SECONDS,
+            )
             return
 
     from app.workers._db import worker_session
@@ -67,8 +71,11 @@ async def _run_followup_async(job: dict) -> None:
 
         deps = await build_deps(db)
         outcome = await run_proactive_turn(conv, deps)
-        logger.info("proactive followup complete: conversation=%s outcome=%s",
-                     conv.zalo_chat_id, outcome.get("outcome"))
+        logger.info(
+            "proactive followup complete: conversation=%s outcome=%s",
+            conv.zalo_chat_id,
+            outcome.get("outcome"),
+        )
 
 
 def run_proactive_followup_tick() -> None:

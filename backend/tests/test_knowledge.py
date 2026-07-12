@@ -6,6 +6,7 @@ migration. They also target the pre-migration approve/reject workflow (since rep
 by publish_version/archive/delete) and the removed Google-Drive ``drive_file_id`` path.
 Skipped wholesale here.
 """
+
 import pytest
 from sqlalchemy import text  # noqa: F401  (used by skipped integration tests)
 
@@ -13,7 +14,9 @@ from app.services.knowledge import KnowledgeService  # noqa: F401  (used by skip
 
 pytestmark = [
     pytest.mark.asyncio,
-    pytest.mark.skip(reason="integration test: needs live DB + seeded admin (moved out of unit suite)"),
+    pytest.mark.skip(
+        reason="integration test: needs live DB + seeded admin (moved out of unit suite)"
+    ),
 ]
 
 # These were previously imported from tests.conftest (removed with the integration
@@ -36,15 +39,19 @@ async def _emb(_text):
 
 async def test_upload_process_approve_search(client, db_session, clean_kb):
     svc = KnowledgeService(db_session)
-    doc = await svc.upload("jobs.pdf", "LG Display tuyển công nhân lương 15 triệu", drive_file_id="f1")
+    doc = await svc.upload(
+        "jobs.pdf", "LG Display tuyển công nhân lương 15 triệu", drive_file_id="f1"
+    )
     assert doc.status.value == "UPLOADED"
 
     # process: embeds 1 chunk, publishes it, rebuilds bus timetable (best-effort)
     doc = await svc.process(_emb, doc)
     assert doc.status.value == "APPROVED"
-    n_chunks = (await db_session.execute(
-        text("SELECT count(*) FROM knowledge_chunks WHERE document_id = :d"), {"d": str(doc.id)}
-    )).scalar()
+    n_chunks = (
+        await db_session.execute(
+            text("SELECT count(*) FROM knowledge_chunks WHERE document_id = :d"), {"d": str(doc.id)}
+        )
+    ).scalar()
     assert n_chunks == 1
 
     # search surfaces it immediately after successful processing

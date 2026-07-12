@@ -93,6 +93,7 @@ PROMPTS: list[str] = [
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def strip_think(raw: str) -> str:
     """Remove MiniMax M2.x reasoning wrap (force-think tags).
 
@@ -119,7 +120,9 @@ def extract_usage(msg) -> dict:
     meta = getattr(msg, "usage_metadata", None)
     if isinstance(meta, dict):
         usage["prompt_tokens"] = meta.get("input_tokens", 0) or meta.get("prompt_tokens", 0)
-        usage["completion_tokens"] = meta.get("output_tokens", 0) or meta.get("completion_tokens", 0)
+        usage["completion_tokens"] = meta.get("output_tokens", 0) or meta.get(
+            "completion_tokens", 0
+        )
         usage["total_tokens"] = meta.get("total_tokens", 0)
         details = meta.get("output_token_details", {}) or meta.get("completion_tokens_details", {})
         usage["reasoning_tokens"] = details.get("reasoning_tokens", 0)
@@ -198,6 +201,7 @@ def percentile(values: list[float], p: float) -> float:
 # Core benchmark loop
 # ---------------------------------------------------------------------------
 
+
 async def one_call(client, system_prompt: str, user_msg: str) -> dict:
     """Single ainvoke with timing. Returns sample dict; never raises."""
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -215,7 +219,9 @@ async def one_call(client, system_prompt: str, user_msg: str) -> dict:
     }
     try:
         t0 = time.perf_counter()
-        msg = await client.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_msg)])
+        msg = await client.ainvoke(
+            [SystemMessage(content=system_prompt), HumanMessage(content=user_msg)]
+        )
         elapsed = time.perf_counter() - t0
 
         usage = extract_usage(msg)
@@ -287,6 +293,7 @@ async def bench_one_model(entry: dict, system_prompt: str, settings, tool_schema
 # Aggregation
 # ---------------------------------------------------------------------------
 
+
 def aggregate(results: list[dict]) -> list[dict]:
     """Compute per-model aggregate stats from raw samples."""
     agg_list = []
@@ -302,35 +309,38 @@ def aggregate(results: list[dict]) -> list[dict]:
             continue
 
         latencies = [s["latency_s"] for s in ok]
-        tps_list = [
-            s["completion_tokens"] / s["latency_s"]
-            for s in ok
-            if s["latency_s"] > 0
-        ]
+        tps_list = [s["completion_tokens"] / s["latency_s"] for s in ok if s["latency_s"] > 0]
 
-        agg_list.append({
-            "entry": entry,
-            "success_rate": r["success_rate"],
-            "n_ok": r["n_ok"],
-            "n_fail": r["n_fail"],
-            "errors": r["errors"],
-            "latency_mean": round(statistics.mean(latencies), 3),
-            "latency_p50": round(percentile(latencies, 50), 3),
-            "latency_p95": round(percentile(latencies, 95), 3),
-            "latency_max": round(max(latencies), 3),
-            "tps_mean": round(statistics.mean(tps_list), 1) if tps_list else 0,
-            "prompt_tokens_mean": round(statistics.mean([s["prompt_tokens"] for s in ok]), 0),
-            "completion_tokens_mean": round(statistics.mean([s["completion_tokens"] for s in ok]), 0),
-            "reasoning_tokens_mean": round(statistics.mean([s["reasoning_tokens"] for s in ok]), 0),
-            "reply_chars_mean": round(statistics.mean([s["reply_chars"] for s in ok]), 0),
-            "tool_call_rate": round(sum(1 for s in ok if s["had_tool_calls"]) / len(ok), 2),
-        })
+        agg_list.append(
+            {
+                "entry": entry,
+                "success_rate": r["success_rate"],
+                "n_ok": r["n_ok"],
+                "n_fail": r["n_fail"],
+                "errors": r["errors"],
+                "latency_mean": round(statistics.mean(latencies), 3),
+                "latency_p50": round(percentile(latencies, 50), 3),
+                "latency_p95": round(percentile(latencies, 95), 3),
+                "latency_max": round(max(latencies), 3),
+                "tps_mean": round(statistics.mean(tps_list), 1) if tps_list else 0,
+                "prompt_tokens_mean": round(statistics.mean([s["prompt_tokens"] for s in ok]), 0),
+                "completion_tokens_mean": round(
+                    statistics.mean([s["completion_tokens"] for s in ok]), 0
+                ),
+                "reasoning_tokens_mean": round(
+                    statistics.mean([s["reasoning_tokens"] for s in ok]), 0
+                ),
+                "reply_chars_mean": round(statistics.mean([s["reply_chars"] for s in ok]), 0),
+                "tool_call_rate": round(sum(1 for s in ok if s["had_tool_calls"]) / len(ok), 2),
+            }
+        )
     return agg_list
 
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
+
 
 def render_leaderboard(aggs: list[dict], baseline_label: str, sort_key: str = "latency") -> str:
     """Render a speed-leaderboard table as a string."""
@@ -377,7 +387,7 @@ def render_leaderboard(aggs: list[dict], baseline_label: str, sort_key: str = "l
             )
             continue
 
-        ok_pct = f"{a['success_rate']*100:.0f}%"
+        ok_pct = f"{a['success_rate'] * 100:.0f}%"
         n = a["n_ok"]
         lat_mean = f"{a['latency_mean']:.2f}s"
         lat_p50 = f"{a['latency_p50']:.2f}s"
@@ -387,7 +397,7 @@ def render_leaderboard(aggs: list[dict], baseline_label: str, sort_key: str = "l
         out_tok = f"{a['completion_tokens_mean']:.0f}"
         reas = f"{a['reasoning_tokens_mean']:.0f}"
         reply = f"{a['reply_chars_mean']:.0f}"
-        tool = f"{a['tool_call_rate']*100:.0f}%"
+        tool = f"{a['tool_call_rate'] * 100:.0f}%"
 
         # vs baseline ratio
         if is_baseline or baseline_p50 is None or baseline_p50 == 0:
@@ -421,27 +431,52 @@ def write_artifact(aggs: list[dict], meta: dict, outdir: Path) -> Path:
 
     payload = {"meta": meta, "models": []}
     for a in aggs:
-        model_payload = {"entry": a["entry"], "success_rate": a["success_rate"], "n_ok": a["n_ok"], "n_fail": a["n_fail"], "errors": a["errors"]}
+        model_payload = {
+            "entry": a["entry"],
+            "success_rate": a["success_rate"],
+            "n_ok": a["n_ok"],
+            "n_fail": a["n_fail"],
+            "errors": a["errors"],
+        }
         if a.get("skipped") or a["n_ok"] == 0:
             model_payload["skipped"] = True
         else:
-            model_payload.update({
-                "latency": {"mean_s": a["latency_mean"], "p50_s": a["latency_p50"], "p95_s": a["latency_p95"], "max_s": a["latency_max"]},
-                "prompt_tokens_mean": a["prompt_tokens_mean"],
-                "completion_tokens_mean": a["completion_tokens_mean"],
-                "reasoning_tokens_mean": a["reasoning_tokens_mean"],
-                "tps_mean": a["tps_mean"],
-                "reply_chars_mean": a["reply_chars_mean"],
-                "tool_call_rate": a["tool_call_rate"],
-            })
+            model_payload.update(
+                {
+                    "latency": {
+                        "mean_s": a["latency_mean"],
+                        "p50_s": a["latency_p50"],
+                        "p95_s": a["latency_p95"],
+                        "max_s": a["latency_max"],
+                    },
+                    "prompt_tokens_mean": a["prompt_tokens_mean"],
+                    "completion_tokens_mean": a["completion_tokens_mean"],
+                    "reasoning_tokens_mean": a["reasoning_tokens_mean"],
+                    "tps_mean": a["tps_mean"],
+                    "reply_chars_mean": a["reply_chars_mean"],
+                    "tool_call_rate": a["tool_call_rate"],
+                }
+            )
         # Include raw samples
         if "samples" in a:
             model_payload["samples"] = [
-                {k: v for k, v in s.items() if k in (
-                    "prompt_idx", "latency_s", "prompt_tokens", "completion_tokens",
-                    "total_tokens", "reasoning_tokens", "reply_chars",
-                    "had_tool_calls", "success", "error",
-                )}
+                {
+                    k: v
+                    for k, v in s.items()
+                    if k
+                    in (
+                        "prompt_idx",
+                        "latency_s",
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "total_tokens",
+                        "reasoning_tokens",
+                        "reply_chars",
+                        "had_tool_calls",
+                        "success",
+                        "error",
+                    )
+                }
                 for s in a["samples"]
             ]
         payload["models"].append(model_payload)
@@ -454,15 +489,31 @@ def write_artifact(aggs: list[dict], meta: dict, outdir: Path) -> Path:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Speed benchmark: LLM models for VFIC chatbot")
-    p.add_argument("--models", type=str, default="", help="Comma-separated labels to test (default: all)")
-    p.add_argument("--add", type=str, action="append", default=[], dest="adds",
-                   help="Quick-add a model: nvidia/nemotron-3-nano-30b-a3b (auto-detect provider by '/' → openrouter)")
-    p.add_argument("--runs", type=int, default=None, help=f"Override RUNS_PER_PROMPT ({RUNS_PER_PROMPT})")
+    p.add_argument(
+        "--models", type=str, default="", help="Comma-separated labels to test (default: all)"
+    )
+    p.add_argument(
+        "--add",
+        type=str,
+        action="append",
+        default=[],
+        dest="adds",
+        help="Quick-add a model: nvidia/nemotron-3-nano-30b-a3b (auto-detect provider by '/' → openrouter)",
+    )
+    p.add_argument(
+        "--runs", type=int, default=None, help=f"Override RUNS_PER_PROMPT ({RUNS_PER_PROMPT})"
+    )
     p.add_argument("--warmup", type=int, default=None, help=f"Override WARMUP_RUNS ({WARMUP_RUNS})")
     p.add_argument("--no-tools", action="store_true", help="Skip binding tool schemas")
-    p.add_argument("--sort", choices=["latency", "tps"], default="latency", help="Table sort key (default: latency)")
+    p.add_argument(
+        "--sort",
+        choices=["latency", "tps"],
+        default="latency",
+        help="Table sort key (default: latency)",
+    )
     p.add_argument("--no-json", action="store_true", help="Skip writing JSON artifact")
     return p.parse_args(argv)
 
@@ -470,6 +521,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main() -> None:
     global WARMUP_RUNS, RUNS_PER_PROMPT, BIND_TOOLS
@@ -514,18 +566,21 @@ async def main() -> None:
 
     # Load settings (pydantic reads backend/.env automatically)
     from app.core.config import get_settings
+
     settings = get_settings()
 
     # Load real production workload
     from app.graph.prompts import AGENT_SYSTEM_PROMPT
+
     tool_schemas = None
     if BIND_TOOLS:
         from app.graph.schemas import TOOL_SCHEMAS
+
         tool_schemas = TOOL_SCHEMAS
 
-    print(f"{'='*90}")
+    print(f"{'=' * 90}")
     print("  VFIC Chatbot — Speed Benchmark")
-    print(f"{'='*90}")
+    print(f"{'=' * 90}")
     print(f"  Baseline     : {baseline_label}")
     print(f"  Models       : {[e['label'] for e in entries]}")
     print(f"  Prompts      : {len(PROMPTS)}")
@@ -534,7 +589,7 @@ async def main() -> None:
     print(f"  Temperature  : {TEMPERATURE}")
     print(f"  Timeout      : {TIMEOUT_S}s")
     print(f"  Total calls  : ~{len(entries) * (WARMUP_RUNS + RUNS_PER_PROMPT * len(PROMPTS))}")
-    print(f"{'='*90}")
+    print(f"{'=' * 90}")
     print()
 
     t_total_start = time.monotonic()
@@ -553,15 +608,17 @@ async def main() -> None:
             results.append(r)
         except Exception as exc:
             print(f" ... FAILED ({type(exc).__name__}: {exc})", flush=True)
-            results.append({
-                "entry": entry,
-                "success_rate": 0.0,
-                "n_ok": 0,
-                "n_fail": 0,
-                "errors": {str(exc): 1},
-                "samples": [],
-                "skipped": True,
-            })
+            results.append(
+                {
+                    "entry": entry,
+                    "success_rate": 0.0,
+                    "n_ok": 0,
+                    "n_fail": 0,
+                    "errors": {str(exc): 1},
+                    "samples": [],
+                    "skipped": True,
+                }
+            )
 
     total_elapsed = time.monotonic() - t_total_start
 
@@ -576,17 +633,21 @@ async def main() -> None:
     # Write JSON artifact
     if not args.no_json:
         outdir = Path(__file__).resolve().parent / "bench_out"
-        artifact = write_artifact(aggs, {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "bind_tools": BIND_TOOLS,
-            "warmup_runs": WARMUP_RUNS,
-            "runs_per_prompt": RUNS_PER_PROMPT,
-            "temperature": TEMPERATURE,
-            "timeout_s": TIMEOUT_S,
-            "n_prompts": len(PROMPTS),
-            "baseline_label": baseline_label,
-            "sort_key": args.sort,
-        }, outdir)
+        artifact = write_artifact(
+            aggs,
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "bind_tools": BIND_TOOLS,
+                "warmup_runs": WARMUP_RUNS,
+                "runs_per_prompt": RUNS_PER_PROMPT,
+                "temperature": TEMPERATURE,
+                "timeout_s": TIMEOUT_S,
+                "n_prompts": len(PROMPTS),
+                "baseline_label": baseline_label,
+                "sort_key": args.sort,
+            },
+            outdir,
+        )
         print(f"  Artifact : {artifact}")
 
     print(f"  Wall time: {total_elapsed:.1f}s")

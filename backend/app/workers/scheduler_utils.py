@@ -10,6 +10,7 @@ every copy fired on its own interval, over-running both ticks ~12x.
 STABLE id so later boots re-score the same sorted-set member instead of
 appending another.
 """
+
 from __future__ import annotations
 
 import logging

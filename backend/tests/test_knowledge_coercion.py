@@ -4,6 +4,7 @@ No DB, no LLM, no asyncio — these lock the LLM-output coercion behavior so the
 clean-architecture refactor (splitting knowledge_pipeline.py into the services/knowledge/
 package) cannot regress it. Sync functions by design (no asyncio mark).
 """
+
 import json
 from types import SimpleNamespace
 
@@ -116,7 +117,12 @@ def test_coerce_feature_highlight_suppressed_when_missing():
 
 def test_coerce_feature_happy_preserves_value_json_and_highlight():
     out = _coerce_feature(
-        {"value_text": "10 triệu", "value_json": {"min": 10}, "is_highlight": True, "strength_score": 0.9},
+        {
+            "value_text": "10 triệu",
+            "value_json": {"min": 10},
+            "is_highlight": True,
+            "strength_score": 0.9,
+        },
         _catalog(),
     )
     assert out["is_missing"] is False
@@ -173,7 +179,10 @@ def test_missing_feature_text_prefers_worker_question():
 
 
 def test_missing_feature_text_falls_back_to_name_when_no_question():
-    assert _missing_feature_text(_catalog(worker_question_vi="")) == "Tin tuyển dụng chưa ghi rõ: Thu nhập."
+    assert (
+        _missing_feature_text(_catalog(worker_question_vi=""))
+        == "Tin tuyển dụng chưa ghi rõ: Thu nhập."
+    )
 
 
 def test_product_feature_prompt_inlines_catalog_and_replaces_placeholder():

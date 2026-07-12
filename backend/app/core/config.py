@@ -168,8 +168,8 @@ class Settings(BaseSettings):
     # confirming no false-positive cross-topic hits on the gold set.
     semantic_cache_enabled: bool = False
     semantic_cache_threshold: float = 0.95  # cosine similarity required for a hit
-    semantic_cache_capacity: int = 200       # max cached queries (LRU-evicted)
-    semantic_cache_ttl_seconds: int = 1800   # 30 min
+    semantic_cache_capacity: int = 200  # max cached queries (LRU-evicted)
+    semantic_cache_ttl_seconds: int = 1800  # 30 min
 
     # Token/cost accounting (Phase 6). Per-million-token USD rates for cost estimation.
     # Default to MiniMax M2.7 documented rates; set to 0 to track tokens only (cost=0).
@@ -272,12 +272,12 @@ class Settings(BaseSettings):
     # Structured Job↔Lead recommendation engine weights (Phase 2).
     # MiniMax §7.2: "weights must be re-tuned against labeled hires after the
     # first 1,000 production conversations; this is a starting point."
-    rec_weight_title: float = 0.35       # desired_job ↔ job.title overlap
-    rec_weight_salary: float = 0.25      # expected_salary band overlap
-    rec_weight_location: float = 0.20    # living_area/region ↔ province/district
-    rec_weight_support: float = 0.10     # accommodation/transport flag match
+    rec_weight_title: float = 0.35  # desired_job ↔ job.title overlap
+    rec_weight_salary: float = 0.25  # expected_salary band overlap
+    rec_weight_location: float = 0.20  # living_area/region ↔ province/district
+    rec_weight_support: float = 0.10  # accommodation/transport flag match
     rec_weight_experience: float = 0.10  # years_experience fit / "no exp required" bonus
-    rec_top_k: int = 5                   # default shortlist size
+    rec_top_k: int = 5  # default shortlist size
 
     # Grounding enforcement (Phase 3): strip job_ids the reply cites that were not
     # in the tool results shown to the LLM. Best-effort; never blocks a turn.

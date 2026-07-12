@@ -120,7 +120,11 @@ async def _fire_user_reply(chat_id: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.post(WEBHOOK_URL, json=payload)
-        resp_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        resp_json = (
+            resp.json()
+            if resp.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
         logger.info(
             "AUTO-REPLY WEBHOOK %s  %s",
             resp.status_code,

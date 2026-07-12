@@ -13,6 +13,7 @@ Cost model: env-configurable per-million-token rates by provider. Defaults are t
 documented MiniMax rates (the primary provider). When rates are unset, only token
 counts are tracked (cost = 0) so the path never blocks on missing pricing.
 """
+
 from __future__ import annotations
 
 import logging
@@ -60,7 +61,9 @@ def parse_usage(usage_obj: object | None) -> TokenUsage:
     try:
         if isinstance(usage_obj, dict):
             prompt = int(usage_obj.get("prompt_tokens", 0) or usage_obj.get("input_tokens", 0) or 0)
-            completion = int(usage_obj.get("completion_tokens", 0) or usage_obj.get("output_tokens", 0) or 0)
+            completion = int(
+                usage_obj.get("completion_tokens", 0) or usage_obj.get("output_tokens", 0) or 0
+            )
             cached = int(
                 usage_obj.get("prompt_cache_hit_tokens", 0)
                 or usage_obj.get("cached_tokens", 0)
@@ -69,9 +72,13 @@ def parse_usage(usage_obj: object | None) -> TokenUsage:
             )
             return TokenUsage(prompt, completion, cached)
         # Attribute-style (langchain-openai Usage object).
-        prompt = int(getattr(usage_obj, "prompt_tokens", 0) or getattr(usage_obj, "input_tokens", 0) or 0)
+        prompt = int(
+            getattr(usage_obj, "prompt_tokens", 0) or getattr(usage_obj, "input_tokens", 0) or 0
+        )
         completion = int(
-            getattr(usage_obj, "completion_tokens", 0) or getattr(usage_obj, "output_tokens", 0) or 0
+            getattr(usage_obj, "completion_tokens", 0)
+            or getattr(usage_obj, "output_tokens", 0)
+            or 0
         )
         cached = int(
             getattr(usage_obj, "prompt_cache_hit_tokens", 0)
@@ -96,7 +103,9 @@ def _estimate_cost(usage: TokenUsage) -> float:
         in_rate = float(getattr(s, "llm_cost_per_mtok_input", 0) or 0)
         out_rate = float(getattr(s, "llm_cost_per_mtok_output", 0) or 0)
         billable_input = max(usage.prompt_tokens - usage.cached_tokens, 0)
-        return (billable_input / 1_000_000) * in_rate + (usage.completion_tokens / 1_000_000) * out_rate
+        return (billable_input / 1_000_000) * in_rate + (
+            usage.completion_tokens / 1_000_000
+        ) * out_rate
     except Exception:  # noqa: BLE001
         return 0.0
 

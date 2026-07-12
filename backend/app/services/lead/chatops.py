@@ -8,6 +8,7 @@ Extracted from ``LeadService``: the in-conversation assist panel builder
 constructed with the owning ``LeadService`` as a collaborator and reaches its
 collaborators through it. ``LeadService`` forwards via thin delegates.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta, timezone

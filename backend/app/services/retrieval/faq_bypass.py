@@ -15,6 +15,7 @@ Cascade order (per query):
   3. HYBRID — vector (cosine) + trigram similarity, deterministically re-ranked
   4. GATE   — score >= SCORE_FLOOR AND (top1 - top2) >= MARGIN, else abstain
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -23,13 +24,13 @@ from typing import Any
 from app.core.text import normalize_vietnamese_text
 
 # ── tunable constants (edit here to tune) ────────────────────────────────────
-SCORE_FLOOR = 0.78            # final hybrid score required to accept
-MARGIN = 0.12                 # top1 must beat top2 by at least this
-VECTOR_WEIGHT = 0.60          # hybrid re-rank weight for the vector arm
-TRIGRAM_WEIGHT = 0.40         # hybrid re-rank weight for the trigram arm
-TRIGRAM_THRESHOLD = 0.30      # passed to match_faq_lexical SQL WHERE
-TOP_K = 5                     # candidates fetched per arm
-EXACT_MIN_CHARS = 3           # skip exact tier for very short normalized queries
+SCORE_FLOOR = 0.78  # final hybrid score required to accept
+MARGIN = 0.12  # top1 must beat top2 by at least this
+VECTOR_WEIGHT = 0.60  # hybrid re-rank weight for the vector arm
+TRIGRAM_WEIGHT = 0.40  # hybrid re-rank weight for the trigram arm
+TRIGRAM_THRESHOLD = 0.30  # passed to match_faq_lexical SQL WHERE
+TOP_K = 5  # candidates fetched per arm
+EXACT_MIN_CHARS = 3  # skip exact tier for very short normalized queries
 CANDIDATE_VECTOR_FLOOR = 0.55  # looser SQL floor for vector candidate generation
 
 TIER_EXACT = "exact"
@@ -183,38 +184,66 @@ def decide(
             reason = _rule_ok(cand, q_norm)
             if reason == "ok":
                 return FaqBypassDecision(
-                    DECISION_ACCEPT, TIER_EXACT, cand, 1.0, top2_score,
-                    1.0 - top2_score, "exact_match",
+                    DECISION_ACCEPT,
+                    TIER_EXACT,
+                    cand,
+                    1.0,
+                    top2_score,
+                    1.0 - top2_score,
+                    "exact_match",
                 )
             return FaqBypassDecision(
-                DECISION_ABSTAIN, TIER_EXACT, cand, 1.0, top2_score,
-                1.0 - top2_score, f"exact_blocked:{reason}",
+                DECISION_ABSTAIN,
+                TIER_EXACT,
+                cand,
+                1.0,
+                top2_score,
+                1.0 - top2_score,
+                f"exact_blocked:{reason}",
             )
 
     # TIER 2 — hybrid gate
     if top1 is None:
-        return FaqBypassDecision(
-            DECISION_ABSTAIN, TIER_NONE, None, 0.0, 0.0, 0.0, "no_candidates"
-        )
+        return FaqBypassDecision(DECISION_ABSTAIN, TIER_NONE, None, 0.0, 0.0, 0.0, "no_candidates")
     if top1_score < score_floor:
         return FaqBypassDecision(
-            DECISION_ABSTAIN, TIER_HYBRID, top1, top1_score, top2_score,
-            actual_margin, f"below_floor:{top1_score:.2f}",
+            DECISION_ABSTAIN,
+            TIER_HYBRID,
+            top1,
+            top1_score,
+            top2_score,
+            actual_margin,
+            f"below_floor:{top1_score:.2f}",
         )
     if actual_margin < margin:
         return FaqBypassDecision(
-            DECISION_ABSTAIN, TIER_HYBRID, top1, top1_score, top2_score,
-            actual_margin, f"margin_fail:{actual_margin:.2f}",
+            DECISION_ABSTAIN,
+            TIER_HYBRID,
+            top1,
+            top1_score,
+            top2_score,
+            actual_margin,
+            f"margin_fail:{actual_margin:.2f}",
         )
     reason = _rule_ok(top1, q_norm)
     if reason != "ok":
         return FaqBypassDecision(
-            DECISION_ABSTAIN, TIER_HYBRID, top1, top1_score, top2_score,
-            actual_margin, f"rule_blocked:{reason}",
+            DECISION_ABSTAIN,
+            TIER_HYBRID,
+            top1,
+            top1_score,
+            top2_score,
+            actual_margin,
+            f"rule_blocked:{reason}",
         )
     return FaqBypassDecision(
-        DECISION_ACCEPT, TIER_HYBRID, top1, top1_score, top2_score,
-        actual_margin, "hybrid_match",
+        DECISION_ACCEPT,
+        TIER_HYBRID,
+        top1,
+        top1_score,
+        top2_score,
+        actual_margin,
+        "hybrid_match",
     )
 
 

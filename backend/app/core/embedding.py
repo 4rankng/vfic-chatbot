@@ -1,4 +1,5 @@
 """Shared embedding helpers for batch-then-fallback patterns."""
+
 from __future__ import annotations
 
 import logging

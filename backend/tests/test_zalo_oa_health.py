@@ -1,4 +1,5 @@
 """Signature-health recorder — hermetic via a fake async redis (no real Redis)."""
+
 from __future__ import annotations
 
 import pytest
@@ -66,7 +67,9 @@ async def test_success_after_mismatch_resets_failure_count(fake_redis):
 
 @pytest.mark.asyncio
 async def test_record_never_raises_when_redis_fails(monkeypatch):
-    monkeypatch.setattr(zalo_oa_health, "get_redis", lambda: (_ for _ in ()).throw(RuntimeError("down")))
+    monkeypatch.setattr(
+        zalo_oa_health, "get_redis", lambda: (_ for _ in ()).throw(RuntimeError("down"))
+    )
     # Must not raise, and read must return None when Redis is unavailable.
     await zalo_oa_health.record_oa_signature(ok=True)
     assert await zalo_oa_health.read_oa_signature_health() is None

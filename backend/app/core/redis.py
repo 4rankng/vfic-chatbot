@@ -3,6 +3,7 @@
 RQ requires a blocking redis client; the app uses the async one for SSE fan-out
 and the per-chat mutex fallback.
 """
+
 import redis
 import redis.asyncio as aioredis
 

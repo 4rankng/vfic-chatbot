@@ -16,6 +16,7 @@ The TTLs below are internal tuning constants, not deployment knobs: the preamble
 changes only on admin edits (which bump the version immediately), so the TTL is
 just a safety net for a missed bump — not a value operators need to tune.
 """
+
 from __future__ import annotations
 
 import logging

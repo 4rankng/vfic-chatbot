@@ -94,7 +94,7 @@ export const REASON_LABELS: Record<AttentionReason, string> = {
   REPLY_OVERDUE: "Quá hạn phản hồi",
   FOLLOWUP_OVERDUE: "Quá hạn theo dõi",
   WAITING_REPLY: "Đang chờ phản hồi",
-  PRIORITY_NO_ACTION: "Ưu tiên chưa xử lý",
+  PRIORITY_NO_ACTION: "Ứng viên ưu tiên cần liên hệ",
   FOLLOWUP_TODAY: "Theo dõi hôm nay",
   UNREAD: "Chưa đọc",
   STALLED: "Đang ngưng trệ",

@@ -14,6 +14,7 @@ Covers:
 * tool_breakdown — per-tool latency dict (long-pole identification under gather).
 * retried_429 flag — turn survived a rate-limit backoff.
 """
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -132,7 +133,13 @@ async def test_per_call_latency_list():
     llm = _ScriptedLLM(
         [
             [{"name": "list_active_projects", "args": {}, "id": "c1"}],
-            [{"name": "search_bus_timetable", "args": {"company": "X", "question": "y"}, "id": "c2"}],
+            [
+                {
+                    "name": "search_bus_timetable",
+                    "args": {"company": "X", "question": "y"},
+                    "id": "c2",
+                }
+            ],
             "final answer",
         ],
         usage={"input_tokens": 100, "output_tokens": 10},

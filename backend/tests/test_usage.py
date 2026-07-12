@@ -3,6 +3,7 @@
 The parsing + cost-estimation logic is pure-Python and fully testable. The Redis
 accumulation is best-effort and covered by the disabled-path / error-swallow tests.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -38,7 +39,9 @@ def test_parse_usage_dict_with_prompt_cache_hit_tokens():
 
 def test_parse_usage_attribute_style():
     """langchain Usage object: attribute access."""
-    u = parse_usage(SimpleNamespace(prompt_tokens=100, completion_tokens=50, prompt_cache_hit_tokens=20))
+    u = parse_usage(
+        SimpleNamespace(prompt_tokens=100, completion_tokens=50, prompt_cache_hit_tokens=20)
+    )
     assert u.prompt_tokens == 100
     assert u.completion_tokens == 50
     assert u.cached_tokens == 20

@@ -1,4 +1,5 @@
 """Job CRUD + semantic search over the documents view."""
+
 from __future__ import annotations
 
 from typing import Awaitable, Callable
@@ -20,12 +21,18 @@ class JobService:
     async def get(self, job_id) -> Job | None:
         return await self.db.get(Job, job_id)
 
-    async def list(self, *, status_: JobStatus | None = None, page: int = 1, per_page: int = 25) -> tuple[list[Job], int]:
+    async def list(
+        self, *, status_: JobStatus | None = None, page: int = 1, per_page: int = 25
+    ) -> tuple[list[Job], int]:
         q = select(Job)
         if status_ is not None:
             q = q.where(Job.status == status_)
         total = await self.db.scalar(select(func.count()).select_from(q.subquery()))
-        rows = (await self.db.scalars(q.order_by(desc(Job.created_at)).offset((page - 1) * per_page).limit(per_page))).all()
+        rows = (
+            await self.db.scalars(
+                q.order_by(desc(Job.created_at)).offset((page - 1) * per_page).limit(per_page)
+            )
+        ).all()
         return list(rows), int(total or 0)
 
     async def create(self, data: dict) -> Job:
@@ -46,4 +53,6 @@ class JobService:
     async def search(self, embedder: Embedder, query: str, top_k: int = 25) -> list[dict]:
         emb = vec_literal(await embedder(query))
         rows = await RetrievalRepository(self.db).match_documents(emb, top_k, "{}")
-        return [{"id": str(r.id), "content": r.content, "similarity": float(r.similarity)} for r in rows]
+        return [
+            {"id": str(r.id), "content": r.content, "similarity": float(r.similarity)} for r in rows
+        ]

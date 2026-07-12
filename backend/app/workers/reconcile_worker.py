@@ -14,6 +14,7 @@ Loop-safety: a completed turn (sent OR suppressed) leaves ``BOT/SENT`` or
 ``BOT/SUPPRESSED`` as the newest message → excluded.  ``acquire_lock`` is
 taken *before* touching any PENDING row → overlapping ticks cannot double-enqueue.
 """
+
 from __future__ import annotations
 
 import logging
@@ -208,17 +209,19 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                 # SLA budget from recovery time (not the original inbound time,
                 # which would already be exhausted). Without it BotRunState's
                 # deadline defaults to 0.0 → unbounded agent budget on recoveries.
-                ok = enqueue_chat_run({
-                    "conversation_id": str(conv_fresh.id),
-                    "version_at_start": conv_fresh.version,
-                    "user_text": user_text,
-                    "user_name": "",
-                    "reply_to_message_id": reply_to_message_id,
-                    "lock_owner": str(lock_owner),
-                    "execution_source": "recovery",
-                    "received_at": datetime.now(timezone.utc).isoformat(),
-                    "received_at_epoch": time.time(),
-                })
+                ok = enqueue_chat_run(
+                    {
+                        "conversation_id": str(conv_fresh.id),
+                        "version_at_start": conv_fresh.version,
+                        "user_text": user_text,
+                        "user_name": "",
+                        "reply_to_message_id": reply_to_message_id,
+                        "lock_owner": str(lock_owner),
+                        "execution_source": "recovery",
+                        "received_at": datetime.now(timezone.utc).isoformat(),
+                        "received_at_epoch": time.time(),
+                    }
+                )
 
                 if not ok:
                     # Backpressure / Redis down — release lock, leave for next sweep.
@@ -280,5 +283,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     pipe.execute()
     logger.info(
         "reconcile tick complete: %d candidates scanned, %d re-enqueued, %d send_unknown skipped",
-        len(candidates), re_enqueued, send_unknown_skipped,
+        len(candidates),
+        re_enqueued,
+        send_unknown_skipped,
     )

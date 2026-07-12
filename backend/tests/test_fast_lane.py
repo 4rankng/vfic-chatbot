@@ -4,6 +4,7 @@ Pins the route table (greeting / thanks / goodbye / help / fall-through) and the
 persona-voice invariant (tôi/bạn, never em/anh/chị) on every canned template.
 Feeds Slice F's broader persona-voice guard.
 """
+
 from __future__ import annotations
 
 import re
@@ -59,8 +60,8 @@ def test_match_routes_non_factual_traffic(text, intent, reply):
         "lương bao nhiêu",
         "tôi muốn lái xe",
         "có xe đưa đón không",
-        "",          # empty → fall through
-        "????",      # only punctuation → fall through
+        "",  # empty → fall through
+        "????",  # only punctuation → fall through
     ],
 )
 def test_match_falls_through_factual_or_empty(text):

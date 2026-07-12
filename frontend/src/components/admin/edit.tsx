@@ -136,7 +136,7 @@ export const EditView = ({
           className,
         )}
       >
-        <h2 className="text-2xl font-bold tracking-tight">
+        <h2 className="text-page-title font-bold tracking-tight">
           {title !== undefined ? title : context.defaultTitle}
         </h2>
         {actions ?? (

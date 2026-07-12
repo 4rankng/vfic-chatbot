@@ -45,7 +45,7 @@ const BotRunListContent = () => {
   return (
     <div className="px-4 py-5 md:px-0 md:py-0">
       <TopToolbar>
-        <h2 className="mr-auto text-2xl font-bold tracking-tight text-foreground">
+        <h2 className="mr-auto text-page-title font-bold tracking-tight text-foreground">
           Lần chạy bot
         </h2>
       </TopToolbar>

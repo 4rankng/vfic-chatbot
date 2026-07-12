@@ -121,9 +121,7 @@ async def list_project_bus_timetable(
     db: AsyncSession = Depends(get_db),
 ) -> BusTimetableResponse:
     """List the project's structured bus routes with ordered pickup stops."""
-    return await ProjectService(db).list_bus_timetable(
-        project_id, page=page, per_page=per_page
-    )
+    return await ProjectService(db).list_bus_timetable(project_id, page=page, per_page=per_page)
 
 
 @router.get("/{project_id}/faq", response_model=ProjectFaqResponse)

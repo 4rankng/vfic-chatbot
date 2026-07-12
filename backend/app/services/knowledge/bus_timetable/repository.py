@@ -6,6 +6,7 @@ idempotent project/company/source upsert, three scoped DELETEs, then route /
 stop / service-day UPSERTs with the exact ``ON CONFLICT`` clauses. The parser
 produces the rows; this repo owns the SQL. No business logic.
 """
+
 from __future__ import annotations
 
 import json
@@ -141,11 +142,20 @@ class BusTimetableRepo:
                         "RETURNING id"
                     ),
                     {
-                        "pid": pid, "cid": cid, "sid": sid,
-                        "rname": route.route_name, "rno": route.route_no, "rvar": route.route_variant,
-                        "rgkey": route.route_group_key, "shift": route.shift, "dir": route.direction,
-                        "area": route.area, "mode": route.mode, "page": route.source_page,
-                        "notes": route.notes, "meta": json.dumps(route.metadata, ensure_ascii=False),
+                        "pid": pid,
+                        "cid": cid,
+                        "sid": sid,
+                        "rname": route.route_name,
+                        "rno": route.route_no,
+                        "rvar": route.route_variant,
+                        "rgkey": route.route_group_key,
+                        "shift": route.shift,
+                        "dir": route.direction,
+                        "area": route.area,
+                        "mode": route.mode,
+                        "page": route.source_page,
+                        "notes": route.notes,
+                        "meta": json.dumps(route.metadata, ensure_ascii=False),
                     },
                 )
             ).scalar()
@@ -162,8 +172,11 @@ class BusTimetableRepo:
                     ),
                     [
                         {
-                            "rid": str(route_id), "order": stop.stop_order, "sname": stop.stop_name,
-                            "aliases": list(stop.stop_aliases), "stime": stop.scheduled_time,
+                            "rid": str(route_id),
+                            "order": stop.stop_order,
+                            "sname": stop.stop_name,
+                            "aliases": list(stop.stop_aliases),
+                            "stime": stop.scheduled_time,
                             "raw": stop.raw_stop_text,
                         }
                         for stop in route.stops
@@ -187,9 +200,15 @@ class BusTimetableRepo:
                 ),
                 [
                     {
-                        "pid": pid, "cid": cid, "sid": sid, "rgkey": day.route_group_key,
-                        "rgname": day.route_group_name, "dgroup": day.day_group, "dlabel": day.day_label,
-                        "stype": day.service_type, "acode": day.availability_code,
+                        "pid": pid,
+                        "cid": cid,
+                        "sid": sid,
+                        "rgkey": day.route_group_key,
+                        "rgname": day.route_group_name,
+                        "dgroup": day.day_group,
+                        "dlabel": day.day_label,
+                        "stype": day.service_type,
+                        "acode": day.availability_code,
                         "meta": json.dumps(day.metadata, ensure_ascii=False),
                     }
                     for day in parsed.service_days
@@ -203,7 +222,9 @@ class BusTimetableRepo:
         await db.commit()
         routes_rebuilt = (
             await db.execute(
-                text("SELECT count(*)::int FROM bus_routes WHERE knowledge_source_id = CAST(:sid AS uuid)"),
+                text(
+                    "SELECT count(*)::int FROM bus_routes WHERE knowledge_source_id = CAST(:sid AS uuid)"
+                ),
                 {"sid": sid},
             )
         ).scalar()

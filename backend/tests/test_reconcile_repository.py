@@ -5,6 +5,7 @@ the SQL predicate is loop-safe: only ``WORKER``-newest, ``BOT/PENDING``-newest,
 or ``BOT/FAILED``-newest conversations are returned; ``BOT/SENT``,
 ``BOT/SUPPRESSED``, and in-grace messages are excluded.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -30,7 +31,10 @@ async def test_returns_candidates_from_db():
 
     now = datetime.now(timezone.utc)
     result = await repo.find_reconcile_candidates(
-        now=now, grace_seconds=120, max_age_seconds=86400, limit=50,
+        now=now,
+        grace_seconds=120,
+        max_age_seconds=86400,
+        limit=50,
     )
 
     assert result == [conv]
@@ -43,7 +47,10 @@ async def test_returns_empty_list_when_no_candidates():
 
     now = datetime.now(timezone.utc)
     result = await repo.find_reconcile_candidates(
-        now=now, grace_seconds=120, max_age_seconds=86400, limit=50,
+        now=now,
+        grace_seconds=120,
+        max_age_seconds=86400,
+        limit=50,
     )
 
     assert result == []
@@ -60,7 +67,10 @@ async def test_sql_contains_loop_free_predicate():
 
     now = datetime.now(timezone.utc)
     await repo.find_reconcile_candidates(
-        now=now, grace_seconds=120, max_age_seconds=86400, limit=50,
+        now=now,
+        grace_seconds=120,
+        max_age_seconds=86400,
+        limit=50,
     )
 
     call_args = db.scalars.call_args
@@ -111,7 +121,10 @@ async def test_sql_params_include_time_bounds():
 
     now = datetime(2026, 6, 30, 12, 0, 0, tzinfo=timezone.utc)
     await repo.find_reconcile_candidates(
-        now=now, grace_seconds=120, max_age_seconds=86400, limit=50,
+        now=now,
+        grace_seconds=120,
+        max_age_seconds=86400,
+        limit=50,
     )
 
     call_args = db.scalars.call_args

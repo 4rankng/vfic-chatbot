@@ -23,6 +23,7 @@ import { Navigate, useNavigate } from "react-router";
 import { usePermissions } from "ra-core";
 import { useDashboardStats } from "./useDashboardStats";
 import { stageLabel } from "../knowledge/stageTone";
+import { LoadingState } from "../misc/LoadingState";
 
 type Variant = "desktop" | "mobile";
 
@@ -209,7 +210,7 @@ const DonutMetric = ({
         aria-label={`${label}: ${formatPercent(percent)}`}
       >
         <div className="grid size-[82px] place-items-center rounded-full bg-card text-center">
-          <span className="font-mono text-2xl font-semibold tracking-tight">
+          <span className="font-mono text-metric font-semibold tracking-tight">
             {formatPercent(percent)}
           </span>
         </div>
@@ -692,11 +693,10 @@ export const KnowledgeIngestPanel = ({ variant }: { variant: Variant }) => {
   if (isPending) {
     return (
       <div className={v.rootClass}>
-        <div
-          className={`flex w-full items-center justify-center text-muted-foreground ${v.spinnerClass}`}
-        >
-          <Activity className="size-8 animate-spin" />
-        </div>
+        <LoadingState
+          className={v.spinnerClass}
+          label="Đang tải dữ liệu vận hành…"
+        />
       </div>
     );
   }

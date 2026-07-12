@@ -5,6 +5,7 @@ entrypoints run async jobs on a process-local event loop; this module keeps one
 SQLAlchemy async engine/sessionmaker per event loop so pooled asyncpg
 connections never cross loop boundaries.
 """
+
 from __future__ import annotations
 
 import asyncio

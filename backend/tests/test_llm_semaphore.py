@@ -1,4 +1,5 @@
 """Tests for Redis-backed LLM semaphore, 429 retry, and degradation path."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +22,7 @@ _REDIS_PATCH = "app.core.redis.get_redis_sync"
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def fake_redis():
@@ -86,9 +88,7 @@ class TestDisabledSemaphore:
     @pytest.mark.asyncio
     async def test_passthrough_multiple_concurrent(self):
         sem = RedisLlmSemaphore(limit=0)
-        results = await asyncio.gather(
-            self._acquire(sem), self._acquire(sem), self._acquire(sem)
-        )
+        results = await asyncio.gather(self._acquire(sem), self._acquire(sem), self._acquire(sem))
         assert all(r for r in results)
 
     @staticmethod
@@ -359,7 +359,9 @@ class TestDegradationMessage:
 
         # Patch lazy imports at their SOURCE modules
         with patch("app.workers._db.worker_session", return_value=mock_db):
-            with patch("app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps):
+            with patch(
+                "app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps
+            ):
                 with patch("app.graph.runner.run_turn", new_callable=AsyncMock) as mock_run:
                     mock_run.side_effect = LLMThrottled("rate limit")
                     with patch("app.services.conversation.ConversationService") as MockSvc:
@@ -407,7 +409,9 @@ class TestDegradationMessage:
         mock_svc.record_bot_outcome = AsyncMock()
 
         with patch("app.workers._db.worker_session", return_value=mock_db):
-            with patch("app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps):
+            with patch(
+                "app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps
+            ):
                 with patch("app.graph.runner.run_turn", new_callable=AsyncMock) as mock_run:
                     mock_run.side_effect = LLMThrottled("rate limit")
                     with patch("app.services.conversation.ConversationService") as MockSvc:

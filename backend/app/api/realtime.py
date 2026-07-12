@@ -3,6 +3,7 @@
 EventSource cannot set Authorization headers, so the JWT is accepted via ?token=
 (or the Bearer header). Auth is enforced before the stream opens.
 """
+
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status

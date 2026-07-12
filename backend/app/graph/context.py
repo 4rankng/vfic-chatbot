@@ -11,6 +11,7 @@ All DB lookups are best-effort: any failure collapses to ``AGENT_SYSTEM_PROMPT``
 persona/index hiccup can never break a chat turn. SQL lives in
 ``app.services.retrieval.RetrievalRepository``; this module only assembles the prompt.
 """
+
 from __future__ import annotations
 
 from app.core.preamble_cache import cached_system_prompt
@@ -85,22 +86,21 @@ async def active_projects_index(retrieval: RetrievalPort) -> str:
             seg += f"; địa điểm: {loc}"
         lines.append(seg)
 
-        persona_body = _strip_stale_refusal_rules(
-            str(getattr(r, "persona_body_md", "") or "")
-        )
+        persona_body = _strip_stale_refusal_rules(str(getattr(r, "persona_body_md", "") or ""))
         if persona_body:
             persona_name = str(getattr(r, "persona_name", "") or "Agent dự án")
             persona_groups.setdefault((persona_name, persona_body), []).append(str(r.slug))
 
     prompt = (
         _INDEX_HEADER
-        + "\n" + "\n".join(lines)
+        + "\n"
+        + "\n".join(lines)
         + "\nKhi ứng viên quan tâm một dự án cụ thể: với câu hỏi về thu nhập/lương, ca làm, tăng ca, "
-          "phụ cấp, KTX, xe đưa đón, thưởng, hồ sơ... hãy gọi get_product_features(project_slug) để lấy "
-          "các đặc điểm sản phẩm; với câu hỏi mở/tìm thêm chi tiết, gọi search_knowledge(project_slug). "
-          "Riêng câu hỏi về tuyến xe, điểm đón hoặc giờ đón phải dùng search_bus_timetable trước, "
-          "không dùng get_product_features thay cho lịch xe chi tiết. "
-          "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."
+        "phụ cấp, KTX, xe đưa đón, thưởng, hồ sơ... hãy gọi get_product_features(project_slug) để lấy "
+        "các đặc điểm sản phẩm; với câu hỏi mở/tìm thêm chi tiết, gọi search_knowledge(project_slug). "
+        "Riêng câu hỏi về tuyến xe, điểm đón hoặc giờ đón phải dùng search_bus_timetable trước, "
+        "không dùng get_product_features thay cho lịch xe chi tiết. "
+        "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."
     )
     if persona_groups:
         blocks = [
@@ -108,9 +108,7 @@ async def active_projects_index(retrieval: RetrievalPort) -> str:
             "áp dụng Agent tương ứng cho phần tư vấn dự án đó. Nếu chưa xác định dự án, dùng Agent mặc định.",
         ]
         for (persona_name, persona_body), slugs in persona_groups.items():
-            blocks.append(
-                f"\nSlug: {', '.join(slugs)}\nAgent: {persona_name}\n{persona_body}"
-            )
+            blocks.append(f"\nSlug: {', '.join(slugs)}\nAgent: {persona_name}\n{persona_body}")
         prompt += _PROJECT_PERSONA_HEADER + "\n" + "\n".join(blocks)
     return prompt
 
@@ -132,4 +130,6 @@ async def build_system_prompt(retrieval: RetrievalPort) -> tuple[str, bool]:
     try:
         return await cached_system_prompt(_assemble)
     except Exception:  # noqa: BLE001
-        return _strip_stale_refusal_rules(AGENT_SYSTEM_PROMPT) + "\n\n" + _RUNTIME_RETRIEVAL_RULES, False
+        return _strip_stale_refusal_rules(
+            AGENT_SYSTEM_PROMPT
+        ) + "\n\n" + _RUNTIME_RETRIEVAL_RULES, False

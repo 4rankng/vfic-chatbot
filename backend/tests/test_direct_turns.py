@@ -1,4 +1,5 @@
 """Direct interactive-turn launcher tests."""
+
 from __future__ import annotations
 
 import asyncio

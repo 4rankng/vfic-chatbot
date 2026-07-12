@@ -1,4 +1,5 @@
 """Shared graph types: the BotRunState payload + the GraphDeps injection container."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable

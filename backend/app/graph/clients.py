@@ -496,7 +496,9 @@ class MiniMaxAgent:
             )
             if metrics is not None and usage.total_tokens > 0:
                 metrics["prompt_tokens"] = metrics.get("prompt_tokens", 0) + usage.prompt_tokens
-                metrics["completion_tokens"] = metrics.get("completion_tokens", 0) + usage.completion_tokens
+                metrics["completion_tokens"] = (
+                    metrics.get("completion_tokens", 0) + usage.completion_tokens
+                )
                 metrics["cached_tokens"] = metrics.get("cached_tokens", 0) + usage.cached_tokens
             logger.info("llm_invoke", extra={"llm_latency_ms": iter_total_ms})
             messages.append(ai)
@@ -507,6 +509,7 @@ class MiniMaxAgent:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
                 metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
             tool_t0 = time.monotonic()
+
             # --- Tool dispatch -------------------------------------------------
             # When the LLM returns multiple tool_calls in one response, run them
             # concurrently (each on its own DB session via ``make_retrieval``) so
@@ -522,7 +525,11 @@ class MiniMaxAgent:
                             async with make_retrieval() as fresh_retrieval:
                                 return await _dispatch_tool(fresh_retrieval, embedder, name, args)
                         except Exception:  # noqa: BLE001 — session setup failed → shared
-                            logger.warning("isolated retrieval for tool %s failed, using shared", name, exc_info=True)
+                            logger.warning(
+                                "isolated retrieval for tool %s failed, using shared",
+                                name,
+                                exc_info=True,
+                            )
                     return await _dispatch_tool(retrieval, embedder, name, args)
                 finally:
                     if metrics is not None:
@@ -653,9 +660,7 @@ def _active_llm_provider(
     s = settings or get_settings()
     mm_on = getattr(s, "minimax_enable", True) if minimax_enabled is None else minimax_enabled
     or_on = (
-        getattr(s, "openrouter_enable", False)
-        if openrouter_enabled is None
-        else openrouter_enabled
+        getattr(s, "openrouter_enable", False) if openrouter_enabled is None else openrouter_enabled
     )
     preferred = default_provider or getattr(s, "llm_default_provider", "minimax")
     if preferred == "openrouter" and or_on:
@@ -729,9 +734,7 @@ def _chat_for_role(
             raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
         from langchain_openai import ChatOpenAI
 
-        kwargs = (
-            {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
-        )
+        kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
         return ChatOpenAI(
             model=s.minimax_digest_model or s.minimax_agent_model,
             api_key=resolved_minimax_key,

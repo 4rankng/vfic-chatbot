@@ -16,6 +16,7 @@ the safety/ownership/suppress branches are unit-testable with fakes (no API keys
 Live parity (acceptance #4 grounding / #5 off-topic via real MiniMax) is exercised through
 graph/factories.py + graph/clients.py.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -66,9 +67,7 @@ def _stamp_end_to_end(state: BotRunState, timings: dict | None) -> None:
     """Record candidate-visible latency from webhook receipt through completion."""
     if timings is None or state.received_at_epoch <= 0:
         return
-    timings["end_to_end_ms"] = max(
-        0, int(round((time.time() - state.received_at_epoch) * 1000))
-    )
+    timings["end_to_end_ms"] = max(0, int(round((time.time() - state.received_at_epoch) * 1000)))
 
 
 async def _agent_turn(
@@ -123,11 +122,15 @@ async def _agent_turn(
         if lead_collection_question:
             lead_collection_instruction = deps.lead.instruction(lead_collection_question)
     except Exception:  # noqa: BLE001
-        logger.warning("lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True)
+        logger.warning(
+            "lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True
+        )
     if timings is not None:
         # Accumulate so a safety-retry (a second _agent_turn call) adds to the
         # first attempt rather than overwriting; total_ms still spans the turn.
-        timings["lead_ms"] = timings.get("lead_ms", 0) + int(round((time.monotonic() - lead_t0) * 1000))
+        timings["lead_ms"] = timings.get("lead_ms", 0) + int(
+            round((time.monotonic() - lead_t0) * 1000)
+        )
 
     contextual_user_text = build_agent_user_text(
         chat_id=chat_id,
@@ -232,7 +235,9 @@ async def _finish_terminal_reply(
     # after the request may have reached Zalo → SEND_UNKNOWN (non-retriable), so
     # the error-reply path cannot produce a duplicate on reconcile recovery.
     _error_class = send_result.error_class if (send_result and not send_result.ok) else None
-    _override = delivery_status_for_send_error(_error_class, ok=bool(send_result and send_result.ok))
+    _override = delivery_status_for_send_error(
+        _error_class, ok=bool(send_result and send_result.ok)
+    )
     await svc.record_bot_outcome(
         conv,
         version_at_start=state.version_at_start,
@@ -299,9 +304,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     if lock_owner:
         db_t0 = time.monotonic()
         await deps.db.refresh(conv)
-        ok = await svc.recheck_ownership(
-            conv, state.version_at_start, lock_owner=lock_owner
-        )
+        ok = await svc.recheck_ownership(conv, state.version_at_start, lock_owner=lock_owner)
         _stamp_db(timings, "recheck_ownership", db_t0)
         if not ok:
             return {"outcome": "suppressed", "reason": "lock_owner_lost"}
@@ -312,9 +315,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     # so the indicator appears as early as possible. Cancelled before every real
     # send so the indicator stops on the answer.
     settings = get_settings()
-    status_task = asyncio.create_task(
-        _status_heartbeat(zalo, conv.zalo_chat_id, settings=settings)
-    )
+    status_task = asyncio.create_task(_status_heartbeat(zalo, conv.zalo_chat_id, settings=settings))
     db_t0 = time.monotonic()
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
     _stamp_db(timings, "last_messages", db_t0)
@@ -353,11 +354,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # no LLM call. Factual questions are never templated — they fall through
         # here, then through the FAQ-bypass cascade below, before reaching the
         # RAG + agent path.
-        fast = (
-            fast_lane.match(state.user_text)
-            if settings.faq_fast_lane_enabled
-            else None
-        )
+        fast = fast_lane.match(state.user_text) if settings.faq_fast_lane_enabled else None
 
         # --- deterministic FAQ-bypass cascade (zero LLM calls) ---
         # Runs only for non-template traffic. On a high-confidence hit it answers
@@ -415,7 +412,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             logger.info(
                 "faq_bypass abstained (low margin) tier=%s score=%.3f runner_up=%.3f "
                 "margin=%.3f threshold=%.3f — falling through to agent",
-                bypass.tier, bypass.score,
+                bypass.tier,
+                bypass.score,
                 bypass.runner_up_score or 0.0,
                 bypass.score - (bypass.runner_up_score or 0.0),
                 settings.faq_abstain_margin,
@@ -443,7 +441,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             }
             logger.info(
                 "faq_bypass hit tier=%s score=%.3f reason=%s faq_id=%s",
-                bypass.tier, bypass.score, bypass.reason, bypass.faq_id,
+                bypass.tier,
+                bypass.score,
+                bypass.reason,
+                bypass.faq_id,
             )
         else:
             timings["lane"] = "agent"
@@ -478,7 +479,14 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     logger.debug("agent-error recovery rollback failed", exc_info=True)
                 timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
                 return await _finish_terminal_reply(
-                    state, deps, conv, svc, zalo, ERROR_REPLY, started, "error",
+                    state,
+                    deps,
+                    conv,
+                    svc,
+                    zalo,
+                    ERROR_REPLY,
+                    started,
+                    "error",
                     status_task=status_task,
                     stage_timings=timings,
                 )
@@ -539,8 +547,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             if send_error_class in AMBIGUOUS_SEND_CLASSES:
                 override_status = DeliveryStatus.SEND_UNKNOWN
             await svc.record_bot_outcome(
-                conv, version_at_start=state.version_at_start, reply=candidate,
-                started_at=started, sent=send_result.ok,
+                conv,
+                version_at_start=state.version_at_start,
+                reply=candidate,
+                started_at=started,
+                sent=send_result.ok,
                 pending_message_id=state.pending_message_id,
                 external_error=None if send_result.ok else send_result.error,
                 zalo_message_id=send_result.msg_id,
@@ -579,8 +590,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         _stamp_end_to_end(state, timings)
         db_t0 = time.monotonic()
         await svc.record_bot_outcome(
-            conv, version_at_start=state.version_at_start, reply=candidate,
-            started_at=started, sent=False,
+            conv,
+            version_at_start=state.version_at_start,
+            reply=candidate,
+            started_at=started,
+            sent=False,
             pending_message_id=state.pending_message_id,
             stage_timings=timings,
             lock_owner=lock_owner,

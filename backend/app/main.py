@@ -1,4 +1,5 @@
 """VFIC API entrypoint."""
+
 import asyncio
 import logging
 import uuid
@@ -39,9 +40,7 @@ logger = logging.getLogger("app")
 async def lifespan(app: FastAPI):
     logger.info("vfic backend starting env=%s", settings.app_env)
     if not settings.resend_api_key:
-        logger.warning(
-            "RESEND_API_KEY is unset — password-reset emails will fail silently"
-        )
+        logger.warning("RESEND_API_KEY is unset — password-reset emails will fail silently")
     # Ensure a default persona exists (idempotent, non-fatal). resolve_persona falls
     # back to persona.md regardless.
     try:
@@ -65,13 +64,19 @@ async def lifespan(app: FastAPI):
 
         sched = Scheduler(connection=get_redis_sync(), queue_name="followup")
         try:
-            register_unique_tick(sched, run_proactive_followup_tick, PROACTIVE_TICK_INTERVAL_SECONDS)
-            logger.info("proactive follow-up tick registered: interval=%ds", PROACTIVE_TICK_INTERVAL_SECONDS)
+            register_unique_tick(
+                sched, run_proactive_followup_tick, PROACTIVE_TICK_INTERVAL_SECONDS
+            )
+            logger.info(
+                "proactive follow-up tick registered: interval=%ds", PROACTIVE_TICK_INTERVAL_SECONDS
+            )
         except Exception:  # noqa: BLE001
             logger.exception("proactive scheduler registration failed (non-fatal)")
         try:
             register_unique_tick(sched, run_reconcile_tick, settings.reconcile_interval_seconds)
-            logger.info("reconcile sweep tick registered: interval=%ds", settings.reconcile_interval_seconds)
+            logger.info(
+                "reconcile sweep tick registered: interval=%ds", settings.reconcile_interval_seconds
+            )
         except Exception:  # noqa: BLE001
             logger.exception("reconcile scheduler registration failed (non-fatal)")
     except Exception:  # noqa: BLE001
@@ -121,6 +126,7 @@ async def metrics() -> dict:
 
     Unauthenticated (internal ops endpoint, same trust level as /health).
     """
+
     def _collect() -> dict:
         from rq import Queue, Worker
         from app.core.redis import get_redis_sync

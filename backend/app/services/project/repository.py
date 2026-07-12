@@ -225,7 +225,9 @@ class ProjectRepository:
         await self.db.flush()
         return doc
 
-    async def ensure_active_faq_file(self, project: Project, document: KnowledgeDocument) -> KBTextFile:
+    async def ensure_active_faq_file(
+        self, project: Project, document: KnowledgeDocument
+    ) -> KBTextFile:
         version = None
         if project.active_kb_version_id is not None:
             version = await self.db.get(KBVersion, project.active_kb_version_id)
@@ -306,9 +308,7 @@ class ProjectRepository:
     async def set_chunk_embedding(self, chunk_id: uuid.UUID, embedding: str) -> None:
         await self.db.execute(
             text(
-                "UPDATE knowledge_chunks "
-                "SET embedding = CAST(:embedding AS vector) "
-                "WHERE id = :cid"
+                "UPDATE knowledge_chunks SET embedding = CAST(:embedding AS vector) WHERE id = :cid"
             ),
             {"cid": str(chunk_id), "embedding": embedding},
         )

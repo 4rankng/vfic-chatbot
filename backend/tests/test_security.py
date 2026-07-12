@@ -6,6 +6,7 @@ token check rides on them — so pin their contract: argon2 hash/verify round-tr
 shape, and the failure modes (tampered / malformed / expired -> ValueError) that
 callers rely on to turn a bad token into a clean 401 instead of an unhandled 500.
 """
+
 from datetime import timedelta
 
 import pytest
@@ -14,6 +15,7 @@ from app.core import security
 
 
 # --- argon2 hash/verify ------------------------------------------------------
+
 
 def test_hash_verify_round_trip_and_rejects_wrong_password():
     hashed = security.hash_password_sync("correct horse battery staple")
@@ -39,6 +41,7 @@ async def test_async_hash_and_verify_match_sync_semantics():
 
 
 # --- JWT issue/decode --------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_access_token_round_trips_claims():

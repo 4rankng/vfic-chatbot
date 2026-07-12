@@ -1,4 +1,5 @@
 """Shared Vietnamese text normalization utilities."""
+
 from __future__ import annotations
 
 import unicodedata

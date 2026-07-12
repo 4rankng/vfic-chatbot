@@ -3,6 +3,7 @@
 JWT replaces Supabase Auth. Access tokens are short-lived; refresh tokens are
 rotated on each /refresh and rejected if the user has since been disabled/deleted.
 """
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -72,9 +73,7 @@ async def forgot_password(
 ) -> None:
     normalized = body.email.strip().lower()
     await enforce_rate_limit(request, "auth-forgot-password", limit=5, window=300)
-    await enforce_rate_limit_key(
-        "auth-forgot-password-email", normalized, limit=3, window=900
-    )
+    await enforce_rate_limit_key("auth-forgot-password-email", normalized, limit=3, window=900)
     await PasswordResetService(db).request_reset(normalized)
 
 

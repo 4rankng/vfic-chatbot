@@ -685,7 +685,15 @@
 }
 
 .inbox-bg-container .chat-history-top-spacer {
-  min-height: 20px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px 0;
+}
+
+.inbox-bg-container .chat-history-loading {
+  width: fit-content;
 }
 
 .inbox-bg-container .chat-history-bottom-spacer {

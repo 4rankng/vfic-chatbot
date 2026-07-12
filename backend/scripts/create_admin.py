@@ -5,6 +5,7 @@
 
 Uses the SYNC database url (psycopg). Idempotent: refuses if the email exists.
 """
+
 import argparse
 import sys
 
@@ -38,11 +39,7 @@ def main() -> int:
         # This prevents deploy from recreating a deleted bootstrap admin
         # when a real admin account is already in use.
         if args.only_if_no_admins:
-            any_admin = session.scalar(
-                select(User.id)
-                .where(User.role == Role.admin)
-                .limit(1)
-            )
+            any_admin = session.scalar(select(User.id).where(User.role == Role.admin).limit(1))
             if any_admin is not None:
                 print("an admin already exists; skipping bootstrap", file=sys.stderr)
                 return 0

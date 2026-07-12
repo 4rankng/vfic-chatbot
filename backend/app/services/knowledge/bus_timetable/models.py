@@ -1,4 +1,5 @@
 """Pure dataclasses for the bus-timetable parser output (stdlib only)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

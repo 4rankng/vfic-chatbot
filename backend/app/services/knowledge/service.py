@@ -253,7 +253,9 @@ class KnowledgeService:
             {"vid": str(version_id)},
         )
         await self.db.execute(
-            text("UPDATE projects SET active_kb_version_id = :vid, updated_at = now() WHERE id = :pid"),
+            text(
+                "UPDATE projects SET active_kb_version_id = :vid, updated_at = now() WHERE id = :pid"
+            ),
             {"pid": str(project_id), "vid": str(version_id)},
         )
         await self.db.commit()

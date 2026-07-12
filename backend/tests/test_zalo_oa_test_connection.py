@@ -1,4 +1,5 @@
 """Wiring: webhook records signature health; L3 verify endpoint; admin_view surfaces health."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +22,7 @@ class _FakeRequest:
 # ---------------------------------------------------------------------------
 # L1: the inbound webhook records the signature outcome
 # ---------------------------------------------------------------------------
+
 
 class _WebhookSvc:
     """Stub for IntegrationSettingsService as used by app.api.webhooks."""
@@ -48,9 +50,7 @@ async def test_oa_webhook_records_verified_on_valid_signature(monkeypatch):
         "message": {"text": "hi", "msg_id": "m1"},
     }
     raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    digest = hashlib.sha256(
-        app_id.encode() + raw + b"1700000000" + secret.encode()
-    ).hexdigest()
+    digest = hashlib.sha256(app_id.encode() + raw + b"1700000000" + secret.encode()).hexdigest()
 
     _WebhookSvc.config = ZaloRuntimeConfig(
         oa_app_id=app_id, oa_secret_key=secret, oa_access_token="t"
@@ -151,6 +151,7 @@ async def test_oa_webhook_records_mismatch_but_still_processes(monkeypatch):
 # L3: the verify-captured-event endpoint
 # ---------------------------------------------------------------------------
 
+
 class _IntSvc:
     config = None
 
@@ -247,6 +248,7 @@ async def test_verify_endpoint_reports_malformed_body(monkeypatch):
 # ---------------------------------------------------------------------------
 # admin_view surfaces the passive signature health
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_admin_view_includes_oa_signature_health(monkeypatch):

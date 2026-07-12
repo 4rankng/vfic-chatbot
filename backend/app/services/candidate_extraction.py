@@ -3,6 +3,7 @@
 One LLM call returns both structured CRM lead fields and memory facts. `leads`
 remains the canonical UI/profile store; `memories` remains recall context.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,12 @@ from app.prompts.candidate_extraction import CANDIDATE_EXTRACT_SYSTEM_PROMPT
 from app.services.lead.events import LeadEventBus
 from app.services.lead.normalizers import extract_self_reported_name, normalize_lead
 from app.services.lead.repository import LeadRepository
-from app.services.memory_service import BatchEmbedder, MemoryService, greeting_gate, parse_memory_facts
+from app.services.memory_service import (
+    BatchEmbedder,
+    MemoryService,
+    greeting_gate,
+    parse_memory_facts,
+)
 
 Extractor = Callable[[str, str], Awaitable[str]]
 
@@ -125,9 +131,7 @@ class CandidateExtractionService:
             logger.debug("candidate extraction skipped by greeting_gate: '%s'", user_text[:80])
             return CandidateExtraction(lead_patch=None, memory_facts=[])
 
-        result = await CandidateExtractionService.extract(
-            extractor, user_text, bot_output, chat_id
-        )
+        result = await CandidateExtractionService.extract(extractor, user_text, bot_output, chat_id)
         await CandidateExtractionService.upsert_lead(db, result.lead_patch)
 
         if result.memory_facts:

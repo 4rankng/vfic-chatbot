@@ -30,7 +30,9 @@ def missing_fields(lead: Lead) -> list[str]:
 
 def assist_summary(lead: Lead, latest_worker: Message | None) -> str:
     if lead.lead_score == LeadScore.not_interested or lead.lead_stage == LeadStage.SKIPPED:
-        return "Ứng viên đã thể hiện không quan tâm. Nên dừng nhắn chủ động trừ khi có tín hiệu mới."
+        return (
+            "Ứng viên đã thể hiện không quan tâm. Nên dừng nhắn chủ động trừ khi có tín hiệu mới."
+        )
     if latest_worker is not None:
         snippet = latest_worker.body.strip().replace("\n", " ")[:140]
         return f"Tin nhắn gần nhất của ứng viên: {snippet}"
@@ -41,7 +43,9 @@ def assist_summary(lead: Lead, latest_worker: Message | None) -> str:
 
 def suggested_reply(lead: Lead, missing: list[str]) -> str:
     if lead.lead_score == LeadScore.not_interested or lead.lead_stage == LeadStage.SKIPPED:
-        return "Cảm ơn bạn đã phản hồi. Nếu sau này bạn muốn tìm việc lại, mình luôn sẵn sàng hỗ trợ."
+        return (
+            "Cảm ơn bạn đã phản hồi. Nếu sau này bạn muốn tìm việc lại, mình luôn sẵn sàng hỗ trợ."
+        )
     if missing:
         fields = " và ".join(missing[:2])
         return f"Mình hỗ trợ bạn nhanh hơn nếu bạn cho mình {fields} nhé."

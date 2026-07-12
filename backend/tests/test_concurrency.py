@@ -2,6 +2,7 @@
 
 Pure unit tests with mocked DB sessions — no live database or Redis required.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -28,6 +29,7 @@ from app.services.presence import _get_viewers, join_viewing, leave_viewing
 
 
 # --- helpers ---
+
 
 def _make_conv(
     *,
@@ -78,6 +80,7 @@ def _make_lead(*, id: int = 1, version: int = 1) -> Lead:
 @dataclass
 class FakeResult:
     """Minimal mock of SQLAlchemy Result with rowcount."""
+
     rowcount: int = 0
     _scalar_return: object | None = None
 
@@ -91,6 +94,7 @@ class FakeResult:
 @dataclass
 class FakeRefreshMixin:
     """Mixin providing db.refresh that copies attributes from a fresh dict."""
+
     _fresh_data: dict = field(default_factory=dict)
 
     async def refresh(self, obj) -> None:
@@ -100,6 +104,7 @@ class FakeRefreshMixin:
 
 
 # --- ConversationState tests ---
+
 
 @pytest.mark.asyncio
 async def test_take_over_success_when_unassigned():
@@ -239,6 +244,7 @@ async def test_record_bot_outcome_updates_pending_message_in_place():
 
     db = AsyncMock()
     db.add = MagicMock()
+
     async def _flush():
         for call in db.add.call_args_list:
             obj = call.args[0]
@@ -348,11 +354,17 @@ async def test_claim_send_requires_pending_row_and_lock_owner():
     state = ConversationState(db, MagicMock(), AsyncMock())
 
     assert not await state.claim_send(
-        conv, version_at_start=3, lock_owner=uuid.uuid4(), pending_message_id=None,
+        conv,
+        version_at_start=3,
+        lock_owner=uuid.uuid4(),
+        pending_message_id=None,
         reply="Trả lời thật",
     )
     assert not await state.claim_send(
-        conv, version_at_start=3, lock_owner=None, pending_message_id=42,
+        conv,
+        version_at_start=3,
+        lock_owner=None,
+        pending_message_id=42,
         reply="Trả lời thật",
     )
     db.execute.assert_not_called()
@@ -372,7 +384,10 @@ async def test_claim_send_gates_on_version_and_lock_owner_in_one_statement():
 
     db.execute = AsyncMock(return_value=FakeResult(rowcount=1))
     assert await state.claim_send(
-        conv, version_at_start=3, lock_owner=owner, pending_message_id=42,
+        conv,
+        version_at_start=3,
+        lock_owner=owner,
+        pending_message_id=42,
         reply="Trả lời thật",
     )
 
@@ -394,7 +409,10 @@ async def test_claim_send_gates_on_version_and_lock_owner_in_one_statement():
     # rowcount 0 ⇒ not claimed (suppress); a recruiter reply bumped version, etc.
     db.execute = AsyncMock(return_value=FakeResult(rowcount=0))
     assert not await state.claim_send(
-        conv, version_at_start=3, lock_owner=owner, pending_message_id=42,
+        conv,
+        version_at_start=3,
+        lock_owner=owner,
+        pending_message_id=42,
         reply="Trả lời thật",
     )
 
@@ -500,6 +518,7 @@ async def test_record_bot_outcome_does_not_clear_mismatched_owner():
 
 # --- LeadService optimistic concurrency tests ---
 
+
 @pytest.mark.asyncio
 async def test_lead_update_optimistic_conflict():
     """Lead update with stale version raises ConflictError (rowcount=0)."""
@@ -587,7 +606,9 @@ async def test_lead_assign_success():
     db = AsyncMock()
     # First execute: the atomic UPDATE (version check)
     db.execute = AsyncMock(return_value=FakeResult(rowcount=1))
-    db.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "assigned_recruiter_id", recruiter.id))
+    db.refresh = AsyncMock(
+        side_effect=lambda obj: setattr(obj, "assigned_recruiter_id", recruiter.id)
+    )
     db.commit = AsyncMock()
     db.flush = AsyncMock()
     db.add = MagicMock()
@@ -620,6 +641,7 @@ async def test_lead_set_stage_optimistic_conflict():
 
 
 # --- Presence tests (mocked Redis) ---
+
 
 @pytest.mark.asyncio
 async def test_presence_join_leave():
@@ -662,6 +684,7 @@ async def test_get_viewers_parses_json():
 
 
 # --- ConversationConflict carries owner_name ---
+
 
 def test_conversation_conflict_owner_name():
     """ConversationConflict stores optional owner_name."""

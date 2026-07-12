@@ -12,6 +12,7 @@ Contract:
 - Supplements a missing lead name from ``display_name`` but never overwrites a
   non-empty name (recruiter/candidate-provided names win).
 """
+
 from __future__ import annotations
 
 import logging
@@ -69,9 +70,7 @@ class ProfileEnrichmentService:
         try:
             profile = await self.sender.get_user_detail(user_id)
         except Exception:  # noqa: BLE001 — enrichment is best-effort
-            logger.info(
-                "oa profile enrichment transport error zalo_id=%s", zalo_id
-            )
+            logger.info("oa profile enrichment transport error zalo_id=%s", zalo_id)
             return False
         if profile is None or not (profile.avatar_url or profile.display_name):
             return False
@@ -102,9 +101,7 @@ class ProfileEnrichmentService:
             if saved is not None:
                 await LeadEventBus().lead_updated(saved)
         except Exception:  # noqa: BLE001 — realtime is best-effort
-            logger.info(
-                "oa profile enrichment realtime emit failed zalo_id=%s", zalo_id
-            )
+            logger.info("oa profile enrichment realtime emit failed zalo_id=%s", zalo_id)
         return True
 
 

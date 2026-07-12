@@ -14,6 +14,7 @@ We isolate the control flow by faking the two coupling points:
 No DB / Redis / LLM. These pin *current* behavior; one assertion documents a
 surprising-but-intentional-to-pin outcome mapping in the agent-error branch.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -59,9 +60,7 @@ class _FakeDB:
 
     async def refresh(self, conv) -> None:
         if self._poisoned:
-            raise RuntimeError(
-                "simulated PendingRollbackError: session needs rollback"
-            )
+            raise RuntimeError("simulated PendingRollbackError: session needs rollback")
         return None
 
     async def rollback(self) -> None:
@@ -70,8 +69,13 @@ class _FakeDB:
 
 
 class _SendResult:
-    def __init__(self, ok: bool = True, error: str | None = None,
-                 msg_id: str = "mid-1", error_class: str | None = None) -> None:
+    def __init__(
+        self,
+        ok: bool = True,
+        error: str | None = None,
+        msg_id: str = "mid-1",
+        error_class: str | None = None,
+    ) -> None:
         self.ok = ok
         self.error = error
         self.msg_id = msg_id
@@ -156,9 +160,15 @@ def _deps(
     db=None,
 ) -> GraphDeps:
     return GraphDeps(
-        db=db if db is not None else _FakeDB(), agent=object(), safety=safety,
-        embedder=object(), zalo=zalo, conversation=conversation,
-        retrieval=object(), persist=persist, faq_bypass=faq_bypass,
+        db=db if db is not None else _FakeDB(),
+        agent=object(),
+        safety=safety,
+        embedder=object(),
+        zalo=zalo,
+        conversation=conversation,
+        retrieval=object(),
+        persist=persist,
+        faq_bypass=faq_bypass,
     )
 
 
@@ -215,8 +225,8 @@ async def test_ownership_lost_during_generation_suppresses_send(monkeypatch):
     res = await run_turn(_state(), _deps(zalo, conversation=svc, persist=persisted.append))
 
     assert res["outcome"] == "suppressed"
-    assert zalo.sent == []          # takeover during generation -> do not send
-    assert persisted == []          # extraction only runs after a real send
+    assert zalo.sent == []  # takeover during generation -> do not send
+    assert persisted == []  # extraction only runs after a real send
 
 
 @pytest.mark.asyncio
@@ -283,10 +293,11 @@ async def test_zalo_ambiguous_send_timeout_is_send_unknown(monkeypatch):
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, "Chào bạn!")
-    zalo = _FakeZalo(results=[
-        _SendResult(ok=False, error="transport error: read timeout",
-                    error_class="read_timeout")
-    ])
+    zalo = _FakeZalo(
+        results=[
+            _SendResult(ok=False, error="transport error: read timeout", error_class="read_timeout")
+        ]
+    )
 
     res = await run_turn(_state(), _deps(zalo, conversation=svc))
 
@@ -295,6 +306,7 @@ async def test_zalo_ambiguous_send_timeout_is_send_unknown(monkeypatch):
     assert res["reply"] == "Chào bạn!"
     # The override routes to SEND_UNKNOWN (non-retriable) — closes the duplicate window.
     from app.models.conversation import DeliveryStatus
+
     assert recorded[0]["delivery_status"] is DeliveryStatus.SEND_UNKNOWN
 
 
@@ -304,10 +316,13 @@ async def test_zalo_connect_error_stays_retryable_failed(monkeypatch):
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, "Chào bạn!")
-    zalo = _FakeZalo(results=[
-        _SendResult(ok=False, error="transport error: connect failed",
-                    error_class="connect_error")
-    ])
+    zalo = _FakeZalo(
+        results=[
+            _SendResult(
+                ok=False, error="transport error: connect failed", error_class="connect_error"
+            )
+        ]
+    )
 
     res = await run_turn(_state(), _deps(zalo, conversation=svc))
 
@@ -367,7 +382,8 @@ async def test_flagged_reply_redirects_to_fallback_without_llm_judge(monkeypatch
 
     zalo = _FakeZalo()
     res = await run_turn(
-        _state(), _deps(zalo, conversation=svc, safety=_MustNotJudge()),
+        _state(),
+        _deps(zalo, conversation=svc, safety=_MustNotJudge()),
     )
 
     assert res["outcome"] == "sent"
@@ -445,7 +461,7 @@ async def test_slow_turn_pulses_typing_but_sends_no_filler(monkeypatch):
     sent_texts = [text for _, text in zalo.sent]
     assert res["outcome"] == "sent"
     assert sent_texts == ["Câu trả lời thật của tôi."]  # only the real answer, no filler
-    assert zalo.actions.count("typing") >= 1            # typing indicator still pulses
+    assert zalo.actions.count("typing") >= 1  # typing indicator still pulses
 
 
 @pytest.mark.asyncio
@@ -485,9 +501,7 @@ async def test_greeting_hits_fast_lane_no_llm_no_persist(monkeypatch):
     persisted: list[dict] = []
     zalo = _FakeZalo()
 
-    state = BotRunState(
-        conversation_id=CONV_ID, version_at_start=1, user_text="chào bạn"
-    )
+    state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="chào bạn")
     res = await run_turn(state, _deps(zalo, conversation=svc, persist=persisted.append))
 
     assert res["outcome"] == "faq_cache"
@@ -526,9 +540,7 @@ async def test_faq_bypass_hit_sends_answer_without_agent_or_persist(monkeypatch)
     persisted: list[dict] = []
     zalo = _FakeZalo()
     bypass = _FakeFaqBypass(
-        result=FaqBypassResult(
-            answer="Câu trả lời FAQ", faq_id="abc", tier="hybrid", score=0.9
-        )
+        result=FaqBypassResult(answer="Câu trả lời FAQ", faq_id="abc", tier="hybrid", score=0.9)
     )
 
     res = await run_turn(
@@ -550,9 +562,7 @@ async def test_faq_bypass_miss_falls_through_to_agent(monkeypatch):
     svc, _ = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(result=None)
 
-    res = await run_turn(
-        _state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass)
-    )
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
 
     assert res["outcome"] == "sent"
     assert res["reply"] == "trả lời từ agent"
@@ -566,9 +576,7 @@ async def test_faq_bypass_exception_falls_through_to_agent(monkeypatch):
     svc, _ = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(exc=RuntimeError("adapter blew up"))
 
-    res = await run_turn(
-        _state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass)
-    )
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
 
     assert res["outcome"] == "sent"
     assert res["reply"] == "trả lời từ agent"
@@ -582,9 +590,7 @@ async def test_faq_bypass_timeout_falls_through_to_agent(monkeypatch):
     svc, _ = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(exc=asyncio.TimeoutError())
 
-    res = await run_turn(
-        _state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass)
-    )
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
 
     assert res["outcome"] == "sent"
     assert res["reply"] == "trả lời từ agent"
@@ -629,7 +635,9 @@ async def test_overlong_clean_reply_is_truncated_and_sent(monkeypatch):
     """
     from app.graph.safety import truncate_for_chat
 
-    long_reply = "Tên công việc: Operator LG Display\n" + ("Quyền lợi: bảo hiểm, phụ cấp, KTX. " * 100)
+    long_reply = "Tên công việc: Operator LG Display\n" + (
+        "Quyền lợi: bảo hiểm, phụ cấp, KTX. " * 100
+    )
     assert len(long_reply) > 1800  # sanity
 
     conv = _FakeConv()
@@ -642,12 +650,15 @@ async def test_overlong_clean_reply_is_truncated_and_sent(monkeypatch):
 
     zalo = _FakeZalo()
     res = await run_turn(
-        _state(), _deps(zalo, conversation=svc, safety=_MustNotJudge()),
+        _state(),
+        _deps(zalo, conversation=svc, safety=_MustNotJudge()),
     )
 
     assert res["outcome"] == "sent"
     # The reply is the truncated version, not the fallback.
-    expected = truncate_for_chat(long_reply.split("</think>")[-1] if "</think>" in long_reply else long_reply)
+    expected = truncate_for_chat(
+        long_reply.split("</think>")[-1] if "</think>" in long_reply else long_reply
+    )
     assert res["reply"] == expected
     assert len(res["reply"]) <= 1802
     assert "Mình không trả lời được" not in res["reply"]
@@ -738,10 +749,10 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     assert recorded, "record_bot_outcome must be called"
     st = recorded[0]["stage_timings"]
     assert st["lane"] == "agent"
-    assert st["lead_ms"] == 111          # threaded through from _agent_turn
-    assert st["llm_queue_ms"] == 200     # split: semaphore wait
-    assert st["llm_model_ms"] == 799     # split: model inference
-    assert st["system_prompt_ms"] == 5   # split: persona+index assembly
+    assert st["lead_ms"] == 111  # threaded through from _agent_turn
+    assert st["llm_queue_ms"] == 200  # split: semaphore wait
+    assert st["llm_model_ms"] == 799  # split: model inference
+    assert st["system_prompt_ms"] == 5  # split: persona+index assembly
     assert st["send_ms"] >= 0
     assert st["total_ms"] >= st["send_ms"]
     # DB path attribution: every DB call in run_turn is timed into db_ms +
@@ -815,8 +826,12 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
     timings: dict = {"lane": "agent"}
 
     await _agent_turn(
-        state, deps, "hi",
-        chat_id="z1", recent_messages=[], timings=timings,
+        state,
+        deps,
+        "hi",
+        chat_id="z1",
+        recent_messages=[],
+        timings=timings,
     )
 
     assert "system_prompt_ms" in timings
@@ -861,8 +876,12 @@ async def test_agent_turn_does_not_append_collection_question(monkeypatch):
     deps.lead = _FakeLead()
 
     result = await _agent_turn(
-        state, deps, "hi",
-        chat_id="z1", recent_messages=[], timings={"lane": "agent"},
+        state,
+        deps,
+        "hi",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
     )
     # The reply must be returned verbatim — no appended canonical question.
     assert result == raw_reply
@@ -927,8 +946,11 @@ async def test_faq_bypass_high_margin_is_accepted_with_metadata(monkeypatch):
     svc, recorded = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(
         result=FaqBypassResult(
-            answer="Câu trả lời FAQ", faq_id="x", tier="hybrid",
-            score=0.90, runner_up_score=0.70,  # margin 0.20 > 0.03 default
+            answer="Câu trả lời FAQ",
+            faq_id="x",
+            tier="hybrid",
+            score=0.90,
+            runner_up_score=0.70,  # margin 0.20 > 0.03 default
         )
     )
     res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
@@ -951,8 +973,11 @@ async def test_faq_bypass_low_margin_abstains_to_agent(monkeypatch):
     _stub_agent(monkeypatch, "Trả lời từ agent")
     bypass = _FakeFaqBypass(
         result=FaqBypassResult(
-            answer="Câu trả lời FAQ sai", faq_id="x", tier="hybrid",
-            score=0.85, runner_up_score=0.84,  # margin 0.01 < 0.03 default → abstain
+            answer="Câu trả lời FAQ sai",
+            faq_id="x",
+            tier="hybrid",
+            score=0.85,
+            runner_up_score=0.84,  # margin 0.01 < 0.03 default → abstain
         )
     )
     res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
@@ -981,8 +1006,11 @@ async def test_faq_bypass_no_runner_up_never_abstains(monkeypatch):
     svc, recorded = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(
         result=FaqBypassResult(
-            answer="Câu trả lời FAQ", faq_id="x", tier="exact",
-            score=0.50, runner_up_score=None,  # single result → never abstain
+            answer="Câu trả lời FAQ",
+            faq_id="x",
+            tier="exact",
+            score=0.50,
+            runner_up_score=None,  # single result → never abstain
         )
     )
     res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
@@ -1024,7 +1052,7 @@ async def test_stage_timings_captures_preamble_and_webhook_to_pickup(monkeypatch
 
     assert res["outcome"] == "sent"
     st = recorded[0]["stage_timings"]
-    assert st["webhook_to_pickup_ms"] >= 150       # ~0.2s enqueue→pickup
+    assert st["webhook_to_pickup_ms"] >= 150  # ~0.2s enqueue→pickup
     assert st["preamble_ms"] >= 0
     assert st["queue_depth"] == 3
-    assert st["end_to_end_ms"] >= 350               # measured from webhook receipt
+    assert st["end_to_end_ms"] >= 350  # measured from webhook receipt

@@ -11,6 +11,7 @@ edge must stay lazy / absent). This guard parses each graph module's source and
 fails fast if a top-level services import appears — function-level imports are
 still allowed, so the composition root keeps working.
 """
+
 from __future__ import annotations
 
 import ast

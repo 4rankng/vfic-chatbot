@@ -26,6 +26,7 @@ Usage::
         response = await bound.ainvoke(messages)
     # token automatically released, even on exception
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 class LLMThrottled(Exception):
     """Raised when LLM 429 retry is exhausted — no LLM call should follow."""
+
     pass
 
 
@@ -69,10 +71,16 @@ class RedisLlmSemaphore:
             self._initialized = True
             logger.info(
                 "llm_semaphore initialized",
-                extra={"key": self._key, "limit": self._limit, "tokens_added": self._limit - current},
+                extra={
+                    "key": self._key,
+                    "limit": self._limit,
+                    "tokens_added": self._limit - current,
+                },
             )
         except Exception:  # noqa: BLE001
-            logger.warning("failed to initialize semaphore tokens for key=%s", self._key, exc_info=True)
+            logger.warning(
+                "failed to initialize semaphore tokens for key=%s", self._key, exc_info=True
+            )
 
     async def __aenter__(self) -> "RedisLlmSemaphore":
         """Acquire a token (blocking with timeout)."""
@@ -122,7 +130,12 @@ class RedisLlmSemaphore:
                 if abs(delta) > 1:
                     logger.warning(
                         "llm_semaphore token drift",
-                        extra={"key": self._key, "expected": self._limit, "actual": count, "delta": delta},
+                        extra={
+                            "key": self._key,
+                            "expected": self._limit,
+                            "actual": count,
+                            "delta": delta,
+                        },
                     )
             except Exception:  # noqa: BLE001
                 pass  # release must be best-effort

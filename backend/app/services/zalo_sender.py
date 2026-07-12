@@ -1,4 +1,5 @@
 """Channel-aware Zalo sender facade."""
+
 from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
@@ -14,7 +15,7 @@ def external_chat_id(conv: Conversation) -> str:
     chat_id = conv.zalo_chat_id
     prefix = f"{channel}:"
     if channel == "oa" and chat_id.startswith(prefix):
-        return chat_id[len(prefix):]
+        return chat_id[len(prefix) :]
     return chat_id
 
 

@@ -1,4 +1,5 @@
 """Bot-run schemas (read-only ops audit trail)."""
+
 from __future__ import annotations
 
 import uuid

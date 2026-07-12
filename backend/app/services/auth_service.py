@@ -3,6 +3,7 @@
 Failed logins are recorded with actor_id=NULL (or the matched-but-disabled user),
 which is the minimum needed for security review without leaking timing side-channels.
 """
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

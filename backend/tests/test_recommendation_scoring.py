@@ -3,6 +3,7 @@
 The scorer is pure Python (no DB, no LLM) so every signal is pinned in isolation.
 Repository-level hard filters are covered by the tool test's fake-retrieval path.
 """
+
 from __future__ import annotations
 
 from app.services.recommendation.scoring import (

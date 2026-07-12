@@ -1,4 +1,5 @@
 """User model (replaces Supabase `profiles` + `auth.users`)."""
+
 import enum
 import uuid
 from datetime import datetime

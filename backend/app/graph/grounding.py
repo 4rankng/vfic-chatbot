@@ -11,6 +11,7 @@ pure functions to close that loop:
 Intentionally pure (no DB, no LLM) so :mod:`backend.tests.test_grounding` can pin
 every branch in isolation. The wiring into the agent loop is in :mod:`clients`.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,7 +19,9 @@ from dataclasses import dataclass
 
 # Job IDs surface in tool results as "id=uuid" (from recommend_jobs) or bare UUIDs.
 # We match both the tagged form and standalone UUIDs to catch loose citations.
-_JOB_ID_TAG_RE = re.compile(r"id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.IGNORECASE)
+_JOB_ID_TAG_RE = re.compile(
+    r"id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.IGNORECASE
+)
 _BARE_UUID_RE = re.compile(
     r"\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b", re.IGNORECASE
 )

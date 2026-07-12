@@ -6,6 +6,7 @@ distinct from :mod:`bus_timetable.parser`, which extracts routes from free-form
 LG-Display HTML. Depends only on the bus-timetable data models / normalize / repair
 constants plus a few shared text primitives — no DB, no LLM.
 """
+
 from __future__ import annotations
 
 import re
@@ -115,7 +116,9 @@ def _route_fields_and_rows(
         if match:
             fields[match.group(1)] = _parse_scalar(match.group(2))
             current = None
-    rows = _parse_markdown_table(lines[table_start:], errors, title) if table_start is not None else []
+    rows = (
+        _parse_markdown_table(lines[table_start:], errors, title) if table_start is not None else []
+    )
     return fields, rows
 
 

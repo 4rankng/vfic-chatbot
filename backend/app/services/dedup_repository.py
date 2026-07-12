@@ -1,4 +1,5 @@
 """Data-access layer for the 8-second message-dedup window (``message_dedup`` table)."""
+
 from __future__ import annotations
 
 from sqlalchemy import text

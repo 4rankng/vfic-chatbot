@@ -1,4 +1,5 @@
 """Job + dashboard schemas."""
+
 from __future__ import annotations
 
 import uuid
@@ -80,6 +81,7 @@ class StageBreakdownItem(BaseModel):
     share of the in-scope pipeline. Order/label/color are fixed client-side from
     the canonical LEAD_STAGES list; the backend only reports value + count +
     percentage so it never downloads lead rows just to count them."""
+
     value: str
     count: int
     percentage: int

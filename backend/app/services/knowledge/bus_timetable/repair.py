@@ -11,6 +11,7 @@ library. The service-day grammar it shares with the canonical parser
 ``VALID_SERVICE_TYPES``) is defined here and imported back by
 :mod:`app.services.knowledge.canonical` so the two modules never import each other.
 """
+
 from __future__ import annotations
 
 import re
@@ -50,9 +51,7 @@ def repair_canonical_markdown(text: str) -> CanonicalRepairResult:
     content for the validator to reject.
     """
     normalized = _normalize_markdown_text(text)
-    blocks = list(
-        re.finditer(r"^###\s+(Bus Route:\s+.+?)\s*$", normalized, flags=re.MULTILINE)
-    )
+    blocks = list(re.finditer(r"^###\s+(Bus Route:\s+.+?)\s*$", normalized, flags=re.MULTILINE))
     if not blocks:
         return CanonicalRepairResult(text=text, repairs=[])
 

@@ -3,6 +3,7 @@
 Pure string constants only — no imports from services / graph / models — so this module
 sits at the bottom of the dependency graph and can be reused by any layer.
 """
+
 from __future__ import annotations
 
 DIGEST_SYSTEM_PROMPT = """Bạn là bộ phân tích tài liệu cho chatbot tuyển dụng VFIC. \

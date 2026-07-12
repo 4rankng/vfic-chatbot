@@ -3,6 +3,7 @@
 No database, no API keys — only deterministic pure functions and simple mocks.
 Matches the project convention: plain pytest, no heavy fixtures.
 """
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -34,7 +35,7 @@ class TestParseLeadJson:
         assert parse_lead_json('{"name": "Dũng"}') == {"name": "Dũng"}
 
     def test_json_in_code_block(self):
-        assert parse_lead_json("```json\n{\"name\": \"Dũng\"}\n```") == {"name": "Dũng"}
+        assert parse_lead_json('```json\n{"name": "Dũng"}\n```') == {"name": "Dũng"}
 
     def test_non_json_returns_empty(self):
         assert parse_lead_json("hello world") == {}
@@ -328,9 +329,13 @@ class TestLeadProfileText:
 
     def test_all_fields_populated(self):
         lead = {
-            "name": "Lan", "phone": "0912", "desired_job": "kho",
-            "expected_salary": "8 triệu", "region": "Hải Phòng",
-            "living_area": "An Lão", "notes": "xăm kín người",
+            "name": "Lan",
+            "phone": "0912",
+            "desired_job": "kho",
+            "expected_salary": "8 triệu",
+            "region": "Hải Phòng",
+            "living_area": "An Lão",
+            "notes": "xăm kín người",
         }
         text = lead_profile_text(lead)
         assert "chưa có" not in text
@@ -347,7 +352,9 @@ class TestLeadProfileText:
 # greeting_gate (reused from memory_service for lead extraction)
 # ---------------------------------------------------------------------------
 class TestGreetingGate:
-    @pytest.mark.parametrize("text", ["ok", "okie", "dạ", "vâng", "cảm ơn", "hi", "hello", "👍", "😊"])
+    @pytest.mark.parametrize(
+        "text", ["ok", "okie", "dạ", "vâng", "cảm ơn", "hi", "hello", "👍", "😊"]
+    )
     def test_skips_greetings(self, text):
         assert not greeting_gate(text)
 
@@ -407,15 +414,26 @@ class TestLeadCollectionQuestion:
         assert "sinh sống" in q.lower()
 
     def test_has_living_asks_salary(self):
-        lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho",
-                "region": "Hải Phòng", "living_area": "An Lão"}
+        lead = {
+            "name": "Dũng",
+            "phone": "0987",
+            "desired_job": "kho",
+            "region": "Hải Phòng",
+            "living_area": "An Lão",
+        }
         q = self._ask(lead=lead, current_user_text="ok", recent_messages=[])
         assert "lương" in q.lower()
 
     def test_all_fields_returns_empty(self):
-        lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho",
-                "region": "HP", "living_area": "An Lão", "expected_salary": "8tr",
-                "notes": "xăm kín"}
+        lead = {
+            "name": "Dũng",
+            "phone": "0987",
+            "desired_job": "kho",
+            "region": "HP",
+            "living_area": "An Lão",
+            "expected_salary": "8tr",
+            "notes": "xăm kín",
+        }
         q = self._ask(lead=lead, current_user_text="ok", recent_messages=[])
         assert q == ""
 
@@ -431,8 +449,13 @@ class TestLeadCollectionQuestion:
         assert "vị trí" not in q.lower() and "công việc" not in q.lower()
 
     def test_current_text_has_salary_keyword_skips_salary_ask(self):
-        lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho",
-                "region": "HP", "living_area": "An Lão"}
+        lead = {
+            "name": "Dũng",
+            "phone": "0987",
+            "desired_job": "kho",
+            "region": "HP",
+            "living_area": "An Lão",
+        }
         q = self._ask(lead=lead, current_user_text="lương 8 triệu là được", recent_messages=[])
         assert "lương" not in q.lower() or q == ""
 

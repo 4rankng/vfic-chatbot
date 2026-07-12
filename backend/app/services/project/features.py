@@ -5,6 +5,7 @@ project's worker product features, plus the structured bus-timetable catalog
 read. The parent service composes this via thin delegates so the public
 ``ProjectService`` surface is unchanged.
 """
+
 from __future__ import annotations
 
 import json

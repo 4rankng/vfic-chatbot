@@ -4,6 +4,7 @@ The router is intentionally cheap and conservative: it never calls an LLM and it
 does not decide the final answer. It annotates the turn with an intent/strategy
 so the existing tool-calling agent can start from the right retrieval path.
 """
+
 from __future__ import annotations
 
 import re
@@ -170,7 +171,9 @@ def route_turn(user_text: str) -> TurnRoute:
         return TurnRoute("general", "agent", reason="internal_retry_prompt", confidence=0.1)
 
     if _has_any(text, _OUT_OF_SCOPE_TERMS):
-        return TurnRoute("out_of_scope", "safe_redirect", reason="off_domain_terms", confidence=0.85)
+        return TurnRoute(
+            "out_of_scope", "safe_redirect", reason="off_domain_terms", confidence=0.85
+        )
 
     if fast_lane_match(raw) is not None:
         return TurnRoute("small_talk", "template", reason="fast_lane_match", confidence=0.95)

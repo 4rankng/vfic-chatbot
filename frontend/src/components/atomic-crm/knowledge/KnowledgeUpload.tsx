@@ -370,6 +370,7 @@ export const KnowledgeUpload = ({
             Hủy
           </Button>
           <Button onClick={submit} disabled={!canSubmit}>
+            {busy ? <RefreshCw className="size-4 animate-spin" /> : null}
             {busy ? "Đang tải lên..." : "Tải lên"}
           </Button>
         </DialogFooter>

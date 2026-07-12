@@ -19,7 +19,7 @@ export const ConfirmationRequired = () => {
       </div>
       <div className="h-full text-center">
         <div className="max-w-sm mx-auto h-full flex flex-col justify-center gap-4">
-          <h1 className="text-2xl font-bold mb-4">
+          <h1 className="text-page-title font-bold mb-4">
             {translate("crm.auth.welcome_title", {
               _: "Welcome to Atomic CRM",
             })}

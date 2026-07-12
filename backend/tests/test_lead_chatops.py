@@ -74,9 +74,7 @@ def test_chatops_manual_tag_payloads_preserve_custom_labels():
         [{"key": "custom_uu_tien_ca_dem", "label": "Ưu tiên ca đêm", "tone": "info"}],
     )
 
-    assert payloads == [
-        {"key": "custom_uu_tien_ca_dem", "label": "Ưu tiên ca đêm", "tone": "info"}
-    ]
+    assert payloads == [{"key": "custom_uu_tien_ca_dem", "label": "Ưu tiên ca đêm", "tone": "info"}]
 
 
 def test_chatops_signals_expose_real_actions_for_next_best_steps():

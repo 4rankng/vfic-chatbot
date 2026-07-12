@@ -24,6 +24,7 @@ from app.services.knowledge.bus_timetable.repair import repair_canonical_markdow
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
+
 def _render_frontmatter(fields: dict) -> str:
     lines = ["---"]
     for key, value in fields.items():
@@ -94,6 +95,7 @@ def _bus_route_block(*, service_days: str, table_rows: str) -> str:
 
 # ── parse_canonical_markdown: happy paths ─────────────────────────────────
 
+
 def test_parse_full_template_document():
     doc = parse_canonical_markdown(load_template())
 
@@ -115,16 +117,19 @@ def test_parse_minimal_valid_document():
     assert doc.document_summary == "Test Doc"
     # company overview + 1 feature + policy + faq + contacts (no bus routes section)
     assert len(doc.chunks) == 5
-    assert {chunk.category for chunk in doc.chunks} == {"job", "feature", "policy", "faq", "contact"}
+    assert {chunk.category for chunk in doc.chunks} == {
+        "job",
+        "feature",
+        "policy",
+        "faq",
+        "contact",
+    }
     assert doc.bus_timetable.routes == []
 
 
 def test_parse_faq_schema_document():
     fields = _base_frontmatter(schema_version=FAQ_SCHEMA_VERSION, content_type="faq")
-    body = (
-        "\n## FAQ\n\n"
-        "### FAQ: Greeting\n\nQuestion: Xin chao?\n\nAnswer: Chao ban.\n"
-    )
+    body = "\n## FAQ\n\n### FAQ: Greeting\n\nQuestion: Xin chao?\n\nAnswer: Chao ban.\n"
     doc = parse_canonical_markdown(_render_frontmatter(fields) + body)
     assert doc.metadata["schema_version"] == FAQ_SCHEMA_VERSION
     assert len(doc.chunks) == 1
@@ -146,6 +151,7 @@ def test_parse_normalizes_crlf_and_bom():
 
 
 # ── parse_canonical_markdown: validation errors ───────────────────────────
+
 
 def _errors_for(text: str) -> list[str]:
     with pytest.raises(CanonicalValidationError) as exc_info:
@@ -237,6 +243,7 @@ def test_parse_silently_drops_bus_route_with_unknown_service_day():
 
 # ── repair_canonical_markdown ─────────────────────────────────────────────
 
+
 def test_repair_is_noop_without_bus_route_blocks():
     text = _doc()
     result = repair_canonical_markdown(text)
@@ -250,7 +257,10 @@ def test_repair_is_noop_for_already_valid_bus_route():
         service_days="- mon_thu: outbound_admin_and_day=A",
         table_rows="| 1 | Stop A | A | 06:15 | note |",
     )
-    text = "### Bus Route: R\n\nroute_id: r\nroute_group: G\nroute_name: R\nshift: day\ndirection: outbound\n\n" + block.split("### Bus Route: Test route\n\n", 1)[1]
+    text = (
+        "### Bus Route: R\n\nroute_id: r\nroute_group: G\nroute_name: R\nshift: day\ndirection: outbound\n\n"
+        + block.split("### Bus Route: Test route\n\n", 1)[1]
+    )
     result = repair_canonical_markdown(text)
     assert not result.changed
     assert result.repairs == []
@@ -258,14 +268,8 @@ def test_repair_is_noop_for_already_valid_bus_route():
 
 def test_repair_applies_all_three_repair_codes():
     block = _bus_route_block(
-        service_days=(
-            "- mon_thu: not applicable\n"
-            "- fri: outbound_admin_and_day=A, return_night=M"
-        ),
-        table_rows=(
-            "| 1 | Stop A | A | 6:15 |  |\n"
-            "| 2 | Stop B | B | 06:30 or 06:45 |  |"
-        ),
+        service_days=("- mon_thu: not applicable\n- fri: outbound_admin_and_day=A, return_night=M"),
+        table_rows=("| 1 | Stop A | A | 6:15 |  |\n| 2 | Stop B | B | 06:30 or 06:45 |  |"),
     )
     result = repair_canonical_markdown(block)
     assert result.changed
@@ -328,6 +332,7 @@ def test_repair_then_parse_round_trip():
 
 
 # ── build_contextual_text + to_unit ───────────────────────────────────────
+
 
 def test_build_contextual_text_shape():
     doc = parse_canonical_markdown(_doc())

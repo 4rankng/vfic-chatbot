@@ -7,6 +7,7 @@ publishes onto the same Socket.IO Redis bus the AsyncServer
 every connected browser socket. ``write_only=True`` means NO local server is
 needed here — it only publishes.
 """
+
 from __future__ import annotations
 
 import logging

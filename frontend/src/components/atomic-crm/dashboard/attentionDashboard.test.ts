@@ -43,6 +43,12 @@ describe("REASON_LABELS", () => {
       [...ATTENTION_REASONS].sort(),
     );
   });
+
+  it("uses an action-oriented label for priority candidates needing outreach", () => {
+    expect(REASON_LABELS.PRIORITY_NO_ACTION).toBe(
+      "Ứng viên ưu tiên cần liên hệ",
+    );
+  });
 });
 
 describe("COUNTER_LABELS", () => {

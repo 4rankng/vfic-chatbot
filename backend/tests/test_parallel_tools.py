@@ -11,6 +11,7 @@ concurrently via ``asyncio.gather``. This test suite pins:
 * Individual tool failures never crash the gather (error isolation).
 * The ``parallel_tool_max_concurrency`` semaphore caps simultaneous calls.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -196,10 +197,12 @@ async def test_agent_records_model_and_tool_round_metrics():
     async def handler(name, args):  # noqa: ARG001
         return f"result-{name}"
 
-    llm = _ScriptedLLM([
-        [{"name": "list_active_projects", "args": {}, "id": "c1"}],
-        "done",
-    ])
+    llm = _ScriptedLLM(
+        [
+            [{"name": "list_active_projects", "args": {}, "id": "c1"}],
+            "done",
+        ]
+    )
     agent = MiniMaxAgent(llm, embedder=None, max_iters=5)
     metrics: dict[str, int] = {}
 
@@ -376,9 +379,7 @@ async def test_faq_detail_prefetches_grounded_context_without_tool_round(monkeyp
     )
 
     assert reply == "Thu nhập cơ bản là 8 triệu theo tin tuyển dụng."
-    assert dispatched == [
-        ("search_knowledge", {"query": "lương công nhân LG Display bao nhiêu?"})
-    ]
+    assert dispatched == [("search_knowledge", {"query": "lương công nhân LG Display bao nhiêu?"})]
     assert llm.calls == 1
     assert llm.bind_calls == 0
     assert metrics["prefetch_hit"] is True
@@ -436,10 +437,12 @@ async def test_single_tool_call_uses_shared_retrieval():
     # _dispatch_one for each call regardless. For a single call the sequential
     # list-comp runs _dispatch_one which WILL use make_retrieval.
     # So this test verifies: single call + make_retrieval → factory is used.
-    llm = _ScriptedLLM([
-        [{"name": "list_active_projects", "args": {}, "id": "c1"}],
-        "done",
-    ])
+    llm = _ScriptedLLM(
+        [
+            [{"name": "list_active_projects", "args": {}, "id": "c1"}],
+            "done",
+        ]
+    )
     agent = MiniMaxAgent(llm, embedder=None, max_iters=5)
 
     await agent.agent(
@@ -588,16 +591,14 @@ async def test_semaphore_caps_concurrency():
         return f"R:{name}"
 
     # 6 tool calls, concurrency cap = 2 → max_concurrent should be ≤ 2
-    tool_calls = [
-        {"name": "list_active_projects", "args": {}, "id": f"c{i}"}
-        for i in range(6)
-    ]
+    tool_calls = [{"name": "list_active_projects", "args": {}, "id": f"c{i}"} for i in range(6)]
     llm = _ScriptedLLM([tool_calls, "done"])
     agent = MiniMaxAgent(llm, embedder=None, max_iters=5)
     make_retrieval = _make_retrieval_factory(handler)
 
     # Override the concurrency setting to 2
     from app.core.config import get_settings
+
     settings = get_settings()
     original = settings.parallel_tool_max_concurrency
     settings.parallel_tool_max_concurrency = 2

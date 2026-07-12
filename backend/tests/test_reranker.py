@@ -4,6 +4,7 @@ The reranker is a post-fusion tail on ``match_documents``. When disabled (defaul
 the fused list passes through unchanged; when enabled it re-sorts by blended
 similarity. Pure-Python: no DB, no model API.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace

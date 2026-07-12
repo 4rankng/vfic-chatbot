@@ -12,6 +12,7 @@ Key patterns:
 All keys auto-expire after ``VIEWER_TTL`` seconds of inactivity (heartbeat
 required to stay alive). Typing keys expire after ``TYPING_TTL`` seconds.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,7 +35,9 @@ def _typing_key(entity_type: str, entity_id: str, user_id: str) -> str:
     return f"vfic:presence:typing:{entity_type}:{entity_id}:{user_id}"
 
 
-async def join_viewing(entity_type: str, entity_id, user_id: str, user_name: str | None = None) -> dict:
+async def join_viewing(
+    entity_type: str, entity_id, user_id: str, user_name: str | None = None
+) -> dict:
     """Register a user as viewing an entity. Returns current viewers."""
     redis = get_redis()
     key = _viewer_key(entity_type, entity_id)
@@ -70,7 +73,9 @@ async def leave_viewing(entity_type: str, entity_id, user_id: str) -> dict:
     return viewers
 
 
-async def heartbeat_viewing(entity_type: str, entity_id, user_id: str, user_name: str | None = None) -> dict:
+async def heartbeat_viewing(
+    entity_type: str, entity_id, user_id: str, user_name: str | None = None
+) -> dict:
     """Refresh the TTL for a viewer (called periodically while viewing)."""
     redis = get_redis()
     key = _viewer_key(entity_type, entity_id)
@@ -81,7 +86,9 @@ async def heartbeat_viewing(entity_type: str, entity_id, user_id: str, user_name
     return await _get_viewers(redis, key)
 
 
-async def start_typing(entity_type: str, entity_id: str, user_id: str, user_name: str | None = None) -> None:
+async def start_typing(
+    entity_type: str, entity_id: str, user_id: str, user_name: str | None = None
+) -> None:
     """Signal that a user is typing. Auto-expires after TYPING_TTL."""
     redis = get_redis()
     key = _typing_key(entity_type, entity_id, user_id)
@@ -134,7 +141,9 @@ async def get_typing_users(entity_type: str, entity_id: str) -> list[dict]:
         # Extract user_id from key pattern
         parts = key.decode() if isinstance(key, bytes) else key
         user_id = parts.split(":")[-1]
-        typing_users.append({"user_id": user_id, "user_name": name.decode() if isinstance(name, bytes) else name})
+        typing_users.append(
+            {"user_id": user_id, "user_name": name.decode() if isinstance(name, bytes) else name}
+        )
     return typing_users
 
 

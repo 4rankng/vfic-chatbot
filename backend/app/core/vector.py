@@ -4,6 +4,7 @@ Used by every service/tool that hands an embedding to a `CAST(:emb AS vector)`
 query, so the wire format (precision, brackets, empty-handling) is defined once
 instead of copy-pasted across modules where it had already started to drift.
 """
+
 from __future__ import annotations
 
 

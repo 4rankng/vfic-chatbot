@@ -4,6 +4,7 @@ Central helper so every privileged action is recorded the same way. The caller i
 responsible for committing the session (record_audit only flushes, so it can be
 composed with other writes in one transaction).
 """
+
 import uuid
 from typing import Any
 

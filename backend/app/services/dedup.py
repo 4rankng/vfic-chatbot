@@ -12,6 +12,7 @@ per-chat mutex ``Conversation.bot_locked_until`` (acquired in
 serializes a late duplicate into a ``{"status": "locked"}`` no-op instead of a
 double-send. Raise the window only if prod logs show retry-driven ``locked`` spikes.
 """
+
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession

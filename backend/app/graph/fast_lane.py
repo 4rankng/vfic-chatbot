@@ -23,6 +23,7 @@ Add factual-intent fast-laning only behind a KB-confidence gate (out of scope
 for v1; see plan "Out of scope"). The persona-voice guard test pins tôi/bạn on
 every template, including future ones.
 """
+
 from __future__ import annotations
 
 import re
@@ -41,12 +42,8 @@ GREETING_REPLY = (
     "Chào bạn! Tôi là trợ lý tuyển dụng của VFIC. "
     "Bạn đang muốn tìm hiểu việc làm, mức lương, xe đưa đón hay hồ sơ ứng tuyển?"
 )
-THANKS_REPLY = (
-    "Rất vui được hỗ trợ bạn! Nếu bạn cần thêm thông tin việc làm, cứ nhắn cho tôi nhé."
-)
-GOODBYE_REPLY = (
-    "Hẹn gặp lại bạn nhé! Khi cần hỗ trợ việc làm VFIC, bạn nhắn tôi bất cứ lúc nào."
-)
+THANKS_REPLY = "Rất vui được hỗ trợ bạn! Nếu bạn cần thêm thông tin việc làm, cứ nhắn cho tôi nhé."
+GOODBYE_REPLY = "Hẹn gặp lại bạn nhé! Khi cần hỗ trợ việc làm VFIC, bạn nhắn tôi bất cứ lúc nào."
 HELP_REPLY = (
     "Tôi có thể hỗ trợ bạn tìm hiểu về tuyển dụng VFIC: việc làm đang tuyển, "
     "mức lương và phụ cấp, xe đưa đón, địa điểm làm việc, hồ sơ ứng tuyển, "
@@ -55,28 +52,78 @@ HELP_REPLY = (
 
 # --- exact-phrase sets (normalized: ASCII, lowercase, no accents) --------------
 _GREETING_PHRASES = {
-    "hi", "hii", "hiii", "helo", "hello", "halo", "hey",
-    "hi ban", "hello ban",
-    "chao", "chao ban", "chao anh", "chao chi", "chao em", "chao ad", "chao admin",
-    "chao cac ban", "a chao", "e chao",
-    "xin chao", "xin chao ban", "xin chao anh", "xin chao chi", "xin chao em",
+    "hi",
+    "hii",
+    "hiii",
+    "helo",
+    "hello",
+    "halo",
+    "hey",
+    "hi ban",
+    "hello ban",
+    "chao",
+    "chao ban",
+    "chao anh",
+    "chao chi",
+    "chao em",
+    "chao ad",
+    "chao admin",
+    "chao cac ban",
+    "a chao",
+    "e chao",
+    "xin chao",
+    "xin chao ban",
+    "xin chao anh",
+    "xin chao chi",
+    "xin chao em",
 }
 
 _THANKS_PHRASES = {
-    "cam on", "cam on ban", "cam on ad", "cam on admin", "cam on nhe", "cam on nhieu",
-    "cam on ban nhe", "xin cam on", "xin cam on ban",
-    "thank", "thanks", "thank you", "thank you ban", "thanks ban", "tks", "tk",
+    "cam on",
+    "cam on ban",
+    "cam on ad",
+    "cam on admin",
+    "cam on nhe",
+    "cam on nhieu",
+    "cam on ban nhe",
+    "xin cam on",
+    "xin cam on ban",
+    "thank",
+    "thanks",
+    "thank you",
+    "thank you ban",
+    "thanks ban",
+    "tks",
+    "tk",
 }
 
 _GOODBYE_PHRASES = {
-    "tam biet", "tam biet ban", "tam biet nhe", "bai", "bye", "bye bye",
-    "hen gap lai", "hen gap lai ban", "hen gap", "di nhe", "nha tam biet",
+    "tam biet",
+    "tam biet ban",
+    "tam biet nhe",
+    "bai",
+    "bye",
+    "bye bye",
+    "hen gap lai",
+    "hen gap lai ban",
+    "hen gap",
+    "di nhe",
+    "nha tam biet",
 }
 
 # help/meta: word-boundary keywords → the generic menu reply (correct for any meta ask)
 _HELP_TERMS = (
-    "giup", "help", "ho tro", "ban la ai", "ban la gi", "ban biet gi",
-    "lam duoc gi", "lam gi duoc", "hoi gi duoc", "hoi duoc gi", "co the giup",
+    "giup",
+    "help",
+    "ho tro",
+    "ban la ai",
+    "ban la gi",
+    "ban biet gi",
+    "lam duoc gi",
+    "lam gi duoc",
+    "hoi gi duoc",
+    "hoi duoc gi",
+    "co the giup",
 )
 
 

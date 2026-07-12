@@ -12,6 +12,7 @@ Layering inside this package:
     service/      high-level CRUD + ingest orchestration
     file_extraction/  DOCX/text extraction utilities
 """
+
 from __future__ import annotations
 
 from app.services.knowledge.coercion import DigestError, validate_digest

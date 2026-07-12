@@ -5,6 +5,7 @@ skip of pure greetings/affirmations). canonical_key dedup is accent-insensitive:
 a fact already stored under the same canonical key for this chat is not re-saved.
 Embeddings via Gemini are injected for tests.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,10 +26,39 @@ logger = logging.getLogger(__name__)
 
 # Verbatim skip list from the 'Should Persist?' node.
 _SKIP = {
-    "ok", "okie", "oke", "okay", "okey", "yes", "no", "da", "dạ", "vang", "vâng",
-    "dung", "đúng", "sai", "cam on", "cảm ơn", "cám ơn", "thank", "thanks", "hi",
-    "hey", "hello", "chao", "chào", "xin chao", "xin chào", "ad", "admin",
-    "👍", "👌", "😊", "😄", "🎉",
+    "ok",
+    "okie",
+    "oke",
+    "okay",
+    "okey",
+    "yes",
+    "no",
+    "da",
+    "dạ",
+    "vang",
+    "vâng",
+    "dung",
+    "đúng",
+    "sai",
+    "cam on",
+    "cảm ơn",
+    "cám ơn",
+    "thank",
+    "thanks",
+    "hi",
+    "hey",
+    "hello",
+    "chao",
+    "chào",
+    "xin chao",
+    "xin chào",
+    "ad",
+    "admin",
+    "👍",
+    "👌",
+    "😊",
+    "😄",
+    "🎉",
 }
 
 
@@ -67,7 +97,11 @@ def _flatten_facts(raw) -> list[str]:
             if t:
                 out.append(t)
         elif isinstance(node, dict):
-            picked = [node[k] for k in ("fact", "facts", "text", "content", "memory", "value") if k in node]
+            picked = [
+                node[k]
+                for k in ("fact", "facts", "text", "content", "memory", "value")
+                if k in node
+            ]
             items = picked if picked else list(node.values())
             for v in items:
                 walk(v)
@@ -102,7 +136,9 @@ class MemoryService:
         return await embed_with_fallback(embed_batch, facts, label="memory embedder")
 
     @staticmethod
-    async def save(db: AsyncSession, embed_batch: BatchEmbedder, chat_id: str, facts: list[str]) -> int:
+    async def save(
+        db: AsyncSession, embed_batch: BatchEmbedder, chat_id: str, facts: list[str]
+    ) -> int:
         repo = MemoryRepository(db)
         existing = await repo.fetch_canonical_keys(chat_id)
 
@@ -122,7 +158,9 @@ class MemoryService:
         rows = [
             (
                 fact,
-                json.dumps({"chat_id": chat_id, "canonical_key": canonical_key(fact), "zalo_id": chat_id}),
+                json.dumps(
+                    {"chat_id": chat_id, "canonical_key": canonical_key(fact), "zalo_id": chat_id}
+                ),
                 vec_literal(emb),
             )
             for fact, emb in zip(new_facts, embeddings)

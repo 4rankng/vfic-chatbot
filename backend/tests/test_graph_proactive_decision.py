@@ -10,6 +10,7 @@ These pin the parser's leniency (markdown fences, prose around JSON, malformed
 input) and the context builder's history filtering (suppressed messages dropped,
 speaker labels, the JSON-instruction contract).
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -30,9 +31,7 @@ def test_parse_decision_clean_json():
     d = parse_proactive_decision(
         '{"send": true, "message": "Chào anh, còn tìm việc không?", "reason": "warm lead"}'
     )
-    assert d == {"send": True,
-                 "message": "Chào anh, còn tìm việc không?",
-                 "reason": "warm lead"}
+    assert d == {"send": True, "message": "Chào anh, còn tìm việc không?", "reason": "warm lead"}
 
 
 def test_parse_decision_dict_input_is_jsonified():
@@ -84,8 +83,7 @@ def _msg(body, sender, status=DeliveryStatus.DELIVERED):
 
 
 def test_proactive_text_includes_chat_id_and_instruction():
-    text = _build_proactive_user_text(chat_id="zalo-123", recent_messages=[],
-                                      lead_profile="")
+    text = _build_proactive_user_text(chat_id="zalo-123", recent_messages=[], lead_profile="")
     assert "CHAT_ID: zalo-123" in text
     # the single-call JSON decision contract is always present
     assert '"send": true' in text

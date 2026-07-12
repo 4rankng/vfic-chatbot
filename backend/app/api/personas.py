@@ -57,7 +57,7 @@ async def list_personas(
 async def create_persona(
     body: PersonaCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> PersonaOut:
-        return PersonaOut.model_validate(await PersonaService(db).create(body, admin))
+    return PersonaOut.model_validate(await PersonaService(db).create(body, admin))
 
 
 @router.get("/{persona_id}", response_model=PersonaOut)
@@ -79,7 +79,7 @@ async def update_persona(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> PersonaOut:
-        return PersonaOut.model_validate(await PersonaService(db).update(persona_id, body, admin))
+    return PersonaOut.model_validate(await PersonaService(db).update(persona_id, body, admin))
 
 
 @router.delete("/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)

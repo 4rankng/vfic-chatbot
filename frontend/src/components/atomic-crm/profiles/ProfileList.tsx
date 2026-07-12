@@ -51,7 +51,7 @@ export const ProfileList = () => {
     <CanAccess resource="users" action="list" accessDenied={<AccessDenied />}>
       <ListBase perPage={25} sort={{ field: "created_at", order: "DESC" }}>
         <TopToolbar>
-          <h2 className="mr-auto text-2xl font-bold tracking-tight text-foreground">
+          <h2 className="mr-auto text-page-title font-bold tracking-tight text-foreground">
             {translate("resources.users.name", { smart_count: 2 })}
           </h2>
           <CreateButton />

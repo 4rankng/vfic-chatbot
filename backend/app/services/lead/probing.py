@@ -1,4 +1,5 @@
 """Lead-profile probing rules used by chatbot turns."""
+
 from __future__ import annotations
 
 import re
@@ -17,7 +18,9 @@ def _last_bot_message(recent_messages: list[Message]) -> str:
 
 def _bot_asked_for_name(text: str) -> bool:
     lowered = (text or "").casefold()
-    return "tên" in lowered and any(token in lowered for token in ("bạn", "cho tôi", "cho mình", "xin"))
+    return "tên" in lowered and any(
+        token in lowered for token in ("bạn", "cho tôi", "cho mình", "xin")
+    )
 
 
 def _current_text_answers_name(current_user_text: str, recent_messages: list[Message]) -> bool:
@@ -25,7 +28,10 @@ def _current_text_answers_name(current_user_text: str, recent_messages: list[Mes
     if not text or _PHONE_RE.search(text):
         return False
     lowered = text.casefold()
-    if any(marker in lowered for marker in ("tôi tên", "mình tên", "em tên", "anh tên", "chị tên", "tên là")):
+    if any(
+        marker in lowered
+        for marker in ("tôi tên", "mình tên", "em tên", "anh tên", "chị tên", "tên là")
+    ):
         return True
     if _bot_asked_for_name(_last_bot_message(recent_messages)):
         return 1 <= len(text.split()) <= 5 and len(text) <= 50
@@ -68,15 +74,25 @@ ASKABLE_FIELDS: list[tuple[str, str]] = [
 FIELD_DETECT_KEYWORDS: dict[str, tuple[str, ...]] = {
     "desired_job": ("làm việc", "công việc", "vị trí", "ứng tuyển", "muốn làm", "tìm việc"),
     "region": (
-        "tỉnh", "thành phố",
-        "hải phòng", "hai phong",
-        "hà nội", "ha noi",
-        "đà nẵng", "da nang",
-        "hcm", "hồ chí minh", "ho chi minh",
-        "bình dương", "binh duong",
-        "đồng nai", "dong nai",
-        "bắc ninh", "bac ninh",
-        "hưng yên", "hung yen",
+        "tỉnh",
+        "thành phố",
+        "hải phòng",
+        "hai phong",
+        "hà nội",
+        "ha noi",
+        "đà nẵng",
+        "da nang",
+        "hcm",
+        "hồ chí minh",
+        "ho chi minh",
+        "bình dương",
+        "binh duong",
+        "đồng nai",
+        "dong nai",
+        "bắc ninh",
+        "bac ninh",
+        "hưng yên",
+        "hung yen",
     ),
     "living_area": ("sống ở", "đang sống", "sinh sống", "quê ở", "địa chỉ"),
     "expected_salary": ("lương", "triệu"),

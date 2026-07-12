@@ -11,6 +11,7 @@ production conversations; this is a starting point, not a final answer."
 Intentionally pure so :mod:`backend/tests/test_recommendation_scoring` can pin every
 signal in isolation without a database.
 """
+
 from __future__ import annotations
 
 import re

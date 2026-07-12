@@ -8,6 +8,7 @@ route constrains the LLM's decision surface. These tests pin:
 * A routed turn never exposes tools outside its lane (the core determinism guarantee).
 * ``MiniMaxAgent.agent`` forwards ``allowed_tools`` to ``bind_tools`` (requires langchain).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -62,7 +63,9 @@ def test_filter_recommend_route_excludes_timetable():
 
 def test_filter_unknown_tool_name_is_ignored_silently():
     """A future/typo tool name must not crash the filter."""
-    names = {s["function"]["name"] for s in filter_tool_schemas(("recommend_projects", "no_such_tool"))}
+    names = {
+        s["function"]["name"] for s in filter_tool_schemas(("recommend_projects", "no_such_tool"))
+    }
     assert "recommend_projects" in names
     assert "no_such_tool" not in names
 

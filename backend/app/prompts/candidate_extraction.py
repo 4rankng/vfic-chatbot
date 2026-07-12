@@ -2,6 +2,7 @@
 
 This module lives in the neutral ``app.prompts`` layer and has no graph/services imports.
 """
+
 from __future__ import annotations
 
 CANDIDATE_EXTRACT_SYSTEM_PROMPT = """Bạn là bộ trích xuất hồ sơ ứng viên cho chatbot tuyển dụng lao động phổ thông VFIC. Dựa vào tin nhắn người dùng và phản hồi của bot, trả về DUY NHẤT một object JSON hợp lệ có đúng 2 khóa cấp cao: lead_patch và memory_facts.

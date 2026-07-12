@@ -6,6 +6,7 @@ multipart upload-file endpoint) need a seeded admin + live Postgres + the
 ``db_session``/``client``/``clean_kb`` fixtures that were relocated out of this
 unit suite during the Supabase->FastAPI migration; they are skipped here.
 """
+
 import io
 import json
 import uuid
@@ -81,7 +82,11 @@ def test_extract_text_docx():
     d.add_paragraph("Dòng hai lương 10 triệu")
     buf = io.BytesIO()
     d.save(buf)
-    txt = extract_text("a.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buf.getvalue())
+    txt = extract_text(
+        "a.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        buf.getvalue(),
+    )
     assert "LG Display" in txt and "10 triệu" in txt
 
 
@@ -94,7 +99,11 @@ def test_extract_text_xlsx():
     ws.append(["operator", "9000000"])
     buf = io.BytesIO()
     wb.save(buf)
-    txt = extract_text("a.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.getvalue())
+    txt = extract_text(
+        "a.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        buf.getvalue(),
+    )
     assert "operator" in txt and "9000000" in txt
 
 
@@ -109,7 +118,10 @@ def test_split_for_digest_respects_size():
 # --------------------------------------------------------------------------- validate
 def test_validate_digest_happy_and_coercion():
     summary, units = validate_digest(
-        {"document_summary": "s", "units": [{"content": "c", "category": "WEIRD", "confidence": "nope"}]}
+        {
+            "document_summary": "s",
+            "units": [{"content": "c", "category": "WEIRD", "confidence": "nope"}],
+        }
     )
     assert summary == "s" and len(units) == 1
     u = units[0]
@@ -134,10 +146,14 @@ async def _make_doc(db, raw, *, project_id=None):
 
 @_integration_skip
 async def test_pipeline_run_writes_rich_chunks(db_session, clean_kb):
-    doc = await _make_doc(db_session, "LG Display tuyển operator ca đêm lương 10 triệu ở Hải Phòng.")
+    doc = await _make_doc(
+        db_session, "LG Display tuyển operator ca đêm lương 10 triệu ở Hải Phòng."
+    )
 
     async def llm_json(system, user):
-        return json.dumps(_units_payload("LG Display Hải Phòng tuyển operator ca đêm lương 10 triệu."))
+        return json.dumps(
+            _units_payload("LG Display Hải Phòng tuyển operator ca đêm lương 10 triệu.")
+        )
 
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).run(doc)
     await db_session.refresh(doc)
@@ -217,7 +233,14 @@ async def test_build_project_index_card(db_session, clean_kb):
     await svc.process(_FakeEmbedder(), doc)  # chunk it
 
     async def llm_json(system, user):
-        return json.dumps({"summary": "Nhà máy LG Display", "key_roles": ["operator"], "location": "Hải Phòng", "highlights": ["lương cao"]})
+        return json.dumps(
+            {
+                "summary": "Nhà máy LG Display",
+                "key_roles": ["operator"],
+                "location": "Hải Phòng",
+                "highlights": ["lương cao"],
+            }
+        )
 
     await KnowledgePipeline(db_session, _FakeEmbedder(), llm_json).build_project_index(proj.id)
     await db_session.refresh(proj)
@@ -241,7 +264,9 @@ async def test_search_test_scoped_to_project(db_session, clean_kb):
 
 # --------------------------------------------------------------------------- multipart API (integration)
 @_integration_skip
-async def test_upload_file_endpoint_extracts_and_enqueues(client, db_session, clean_kb, monkeypatch):
+async def test_upload_file_endpoint_extracts_and_enqueues(
+    client, db_session, clean_kb, monkeypatch
+):
     enqueued: list[str] = []
     monkeypatch.setattr(
         "app.api.knowledge.enqueue_ingest", lambda doc_id: enqueued.append(str(doc_id))
@@ -255,7 +280,13 @@ async def test_upload_file_endpoint_extracts_and_enqueues(client, db_session, cl
 
     r = await client.post(
         "/api/v1/knowledge/documents/upload-file",
-        files={"file": ("lg.docx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={
+            "file": (
+                "lg.docx",
+                buf.getvalue(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
     )
     assert r.status_code == 201, r.text
     body = r.json()

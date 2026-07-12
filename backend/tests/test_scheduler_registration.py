@@ -18,9 +18,9 @@ def test_cancels_matching_jobs_and_keeps_unrelated():
     tick_name = f"{tick.__module__}.{tick.__name__}"
 
     # Simulate 5 legacy dupes for THIS tick + 1 unrelated job.
-    sched.get_jobs.return_value = [
-        _make_job(tick_name) for _ in range(5)
-    ] + [_make_job("app.workers.reconcile_worker.run_reconcile_tick")]
+    sched.get_jobs.return_value = [_make_job(tick_name) for _ in range(5)] + [
+        _make_job("app.workers.reconcile_worker.run_reconcile_tick")
+    ]
 
     register_unique_tick(sched, tick, interval=1800)
 

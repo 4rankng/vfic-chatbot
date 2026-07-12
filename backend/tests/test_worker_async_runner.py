@@ -1,4 +1,5 @@
 """Worker async runner regression tests."""
+
 from __future__ import annotations
 
 

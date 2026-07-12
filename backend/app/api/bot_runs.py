@@ -5,6 +5,7 @@ org-wide ops diagnostic, matching the frontend automation page. Note
 `proposed_reply` is the bot's draft and may echo candidate content; writes are
 bot-side only.
 """
+
 from __future__ import annotations
 
 import uuid

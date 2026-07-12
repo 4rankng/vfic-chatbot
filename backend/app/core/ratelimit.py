@@ -5,6 +5,7 @@ credential-stuffing / brute-force DoS on the 1-vCPU droplet. Fail-open: a Redis
 hiccup never blocks the protected endpoint — auth must stay available, and the
 per-chat mutex elsewhere already depends on the same Redis.
 """
+
 import logging
 
 from fastapi import HTTPException, Request, status
@@ -24,9 +25,7 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-async def enforce_rate_limit(
-    request: Request, prefix: str, limit: int, window: int
-) -> None:
+async def enforce_rate_limit(request: Request, prefix: str, limit: int, window: int) -> None:
     """Reject with 429 once bucket ``rl:<prefix>:<ip>`` exceeds ``limit``/``window``s.
 
     Disabled in development: the limiter is a production protection against

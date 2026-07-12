@@ -2,6 +2,7 @@
 
 All I/O (httpx, Redis, DB) is mocked — no live process required.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -123,9 +124,7 @@ async def test_refresh_persists_new_token_and_rotates_refresh_token(monkeypatch)
     async def fake_record_audit(*_args, **kwargs):
         audits.append(kwargs)
 
-    monkeypatch.setattr(
-        "app.services.integration_settings.record_audit", fake_record_audit
-    )
+    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
 
     service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
     db = _RefreshDb(_seed(service))

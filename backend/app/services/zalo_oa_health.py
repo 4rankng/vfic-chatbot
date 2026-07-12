@@ -9,6 +9,7 @@ secret; this passive signal is what catches it.
 Recording is best-effort: a Redis hiccup must NEVER change the webhook's
 signature verdict, so every call swallows its own errors.
 """
+
 from __future__ import annotations
 
 import logging

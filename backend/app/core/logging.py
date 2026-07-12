@@ -12,6 +12,7 @@ RQ → LangGraph → Zalo send logs and onto ``BotRun.trace_id``. Distinct from
 ``request_id`` only inside the worker process (where the HTTP request is gone);
 on the web process they carry the same value. Dependency-free (stdlib only).
 """
+
 import json
 import logging
 import sys

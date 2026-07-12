@@ -4,6 +4,7 @@ Covers: short-circuit when avatar+name already present, successful apply,
 transport-error tolerance, missing-profile no-op, and non-overwrite of an
 existing name.
 """
+
 from __future__ import annotations
 
 
@@ -93,9 +94,7 @@ async def test_short_circuits_when_avatar_and_name_already_present() -> None:
 
 async def test_applies_avatar_and_name_for_missing_lead_profile() -> None:
     db = _FakeDB()
-    profile = OAUserProfile(
-        avatar_url="https://zalo.me/a.jpg", display_name="Nguyễn An"
-    )
+    profile = OAUserProfile(avatar_url="https://zalo.me/a.jpg", display_name="Nguyễn An")
     sender = _FakeSender(profile)
     svc = _make_service(db, sender, lead_row={"avatar_url": None, "name": ""})
 

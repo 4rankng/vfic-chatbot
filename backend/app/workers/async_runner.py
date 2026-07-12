@@ -4,6 +4,7 @@ RQ calls job functions synchronously.  Keeping one event loop per worker process
 lets async clients and SQLAlchemy engines stay bound to a stable loop instead of
 being recreated for every job.
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -6,6 +6,7 @@ disable ANN (and warn, once) on a mismatch instead of silently querying a
 wrong-width index. These pin that behavior so a future change can't quietly
 re-introduce the bare ``== 3072`` literal or drop the mismatch signal.
 """
+
 from __future__ import annotations
 
 import logging

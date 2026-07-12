@@ -46,10 +46,10 @@ def test_persona_has_core_sections():
     7-part template), but these topics must all appear.
     """
     topics = [
-        "Vai trò",          # who the bot is
+        "Vai trò",  # who the bot is
         "Nguyên tắc giao tiếp",  # communication rules
-        "Dùng tool",        # tool-usage rules
-        "Tránh",            # what to avoid (hallucination, off-topic)
+        "Dùng tool",  # tool-usage rules
+        "Tránh",  # what to avoid (hallucination, off-topic)
     ]
     for topic in topics:
         assert topic in AGENT_SYSTEM_PROMPT, f"persona missing topic: {topic!r}"

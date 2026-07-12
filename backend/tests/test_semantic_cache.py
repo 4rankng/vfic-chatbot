@@ -4,6 +4,7 @@ The cosine similarity + disabled-path logic is pure-Python and fully testable.
 The Redis store/scan path is integration-level and covered by the existing
 ``no_cache_io`` test fixtures in test_graph_tools when the flag is on.
 """
+
 from __future__ import annotations
 
 import pytest

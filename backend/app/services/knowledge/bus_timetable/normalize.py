@@ -10,6 +10,7 @@ Key fidelity point: Postgres ``unaccent`` maps ``đ``/``Đ`` to ``d`` (the defau
 ``đ`` (U+0111). So an explicit ``đ/Đ`` translation must run BEFORE NFD, or every
 ``đ``-bearing name (Hà Nội, Đông Triều, Hưng Hà, …) would mis-normalise.
 """
+
 from __future__ import annotations
 
 import re

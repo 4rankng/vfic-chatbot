@@ -19,6 +19,7 @@ The auth model is: the bot token is embedded in the URL path
 (``/bot{TOKEN}/{method}``); there is no Authorization header. All methods
 are POST ``application/json``.
 """
+
 from __future__ import annotations
 
 import logging

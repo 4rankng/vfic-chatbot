@@ -22,6 +22,4 @@ def test_remove_trigger_generated_leads_targets_only_seed_conversation_ids():
 
     compiled = session.statement.compile()
     assert "DELETE FROM leads" in str(compiled)
-    assert list(compiled.params.values()) == [
-        ["zalo_conv_seed_0000", "zalo_conv_seed_0001"]
-    ]
+    assert list(compiled.params.values()) == [["zalo_conv_seed_0000", "zalo_conv_seed_0001"]]

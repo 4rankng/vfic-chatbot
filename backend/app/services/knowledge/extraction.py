@@ -5,6 +5,7 @@ module no longer parses Office/PDF. It keeps only ``split_for_digest`` — the n
 paragraph-aware splitter that bounds each digest LLM call to a sane input size
 (the LLM does the real semantic splitting per section).
 """
+
 from __future__ import annotations
 
 from app.core.config import DIGEST_MAX_SECTIONS, DIGEST_SECTION_CHARS

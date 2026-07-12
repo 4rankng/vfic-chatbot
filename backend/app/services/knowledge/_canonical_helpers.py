@@ -6,6 +6,7 @@ They live in a leaf module so the two parsers can depend on them without importi
 each other — the document parser calls into the bus-route parser, so a direct
 back-edge would be a circular import.
 """
+
 from __future__ import annotations
 
 import re

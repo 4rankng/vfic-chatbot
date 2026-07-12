@@ -10,6 +10,7 @@ Sync ``*_sync`` helpers exist for the handful of genuinely synchronous callers
 (the create_admin / migrate_from_supabase scripts). The async app must NEVER call
 the ``_sync`` variants from an ``async def``.
 """
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict

@@ -5,6 +5,7 @@ The runner decides whether a turn qualifies for the fast-tier model via
 is actually configured. These tests pin the eligibility policy + the agent's
 switch behavior; the LLM construction is covered by the existing factories tests.
 """
+
 from __future__ import annotations
 
 from app.graph.router import (
@@ -77,7 +78,9 @@ async def test_agent_uses_fast_llm_when_use_fast_and_configured():
     primary = _RecordingLLM("primary")
     agent = MiniMaxAgent(primary, embedder=None, max_iters=1, fast_llm=fast)
 
-    reply = await agent.agent("thanks", system="sys", retrieval=object(), embedder=None, use_fast=True)
+    reply = await agent.agent(
+        "thanks", system="sys", retrieval=object(), embedder=None, use_fast=True
+    )
     assert "fast" in reply
 
 
@@ -102,7 +105,9 @@ async def test_agent_uses_primary_llm_when_use_fast_but_no_fast_configured():
     primary = _RecordingLLM("primary")
     agent = MiniMaxAgent(primary, embedder=None, max_iters=1, fast_llm=None)
 
-    reply = await agent.agent("thanks", system="sys", retrieval=object(), embedder=None, use_fast=True)
+    reply = await agent.agent(
+        "thanks", system="sys", retrieval=object(), embedder=None, use_fast=True
+    )
     assert "primary" in reply
 
 
@@ -128,5 +133,7 @@ async def test_agent_uses_primary_llm_when_use_fast_false():
     primary = _RecordingLLM("primary")
     agent = MiniMaxAgent(primary, embedder=None, max_iters=1, fast_llm=fast)
 
-    reply = await agent.agent("gợi ý việc", system="sys", retrieval=object(), embedder=None, use_fast=False)
+    reply = await agent.agent(
+        "gợi ý việc", system="sys", retrieval=object(), embedder=None, use_fast=False
+    )
     assert "primary" in reply

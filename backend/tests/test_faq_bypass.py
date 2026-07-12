@@ -5,6 +5,7 @@ Covers the pure gate logic (``build_exact_map`` / ``rerank`` / ``decide``) and t
 exception-abstain). Runner-level wiring (hit routes through the send tail, miss /
 exception / None fall through) is pinned in ``test_graph_runner_turn.py``.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -194,7 +195,10 @@ async def test_adapter_returns_result_on_confident_hit(monkeypatch):
 
     vector_rows = [_row(id="1", similarity=0.95, answer="Trả lời 1", questions=["luong"])]
     lexical_rows = [_row(id="1", similarity=0.8), _row(id="2", similarity=0.5)]
-    monkeypatch.setattr("app.services.retrieval.RetrievalRepository", lambda db: _FakeRepo(vector_rows, lexical_rows))
+    monkeypatch.setattr(
+        "app.services.retrieval.RetrievalRepository",
+        lambda db: _FakeRepo(vector_rows, lexical_rows),
+    )
 
     async def _fake_cached(embedder, query):
         return [0.1] * 8
@@ -213,7 +217,9 @@ async def test_adapter_abstains_on_low_score(monkeypatch):
     from app.graph.factories import _FaqBypassAdapter
 
     vector_rows = [_row(id="1", similarity=0.4)]  # below SCORE_FLOOR
-    monkeypatch.setattr("app.services.retrieval.RetrievalRepository", lambda db: _FakeRepo(vector_rows, []))
+    monkeypatch.setattr(
+        "app.services.retrieval.RetrievalRepository", lambda db: _FakeRepo(vector_rows, [])
+    )
     monkeypatch.setattr("app.graph.tools._cached_embed", lambda e, q: _async([0.1] * 8))
 
     adapter = _FaqBypassAdapter(db=object(), embedder=object())

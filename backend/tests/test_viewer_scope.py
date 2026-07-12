@@ -5,6 +5,7 @@ lives, so a refactor cannot silently change who sees what. No DB needed — the
 ORM predicate is compiled to SQL string form and the raw-SQL fragment is
 checked directly.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -45,16 +46,16 @@ def test_filter_admin_leaves_statement_unchanged():
     from sqlalchemy import select
 
     stmt = select(Conversation)
-    assert viewer_scope_filter(stmt, Conversation.assigned_recruiter_id,
-                               _viewer(Role.admin)) is stmt
+    assert (
+        viewer_scope_filter(stmt, Conversation.assigned_recruiter_id, _viewer(Role.admin)) is stmt
+    )
 
 
 def test_filter_recruiter_adds_where_clause():
     from sqlalchemy import select
 
     stmt = select(Conversation)
-    out = viewer_scope_filter(stmt, Conversation.assigned_recruiter_id,
-                              _viewer(Role.recruiter))
+    out = viewer_scope_filter(stmt, Conversation.assigned_recruiter_id, _viewer(Role.recruiter))
     assert out is not stmt  # a new statement with the scope predicate attached
     sql = str(out.compile(compile_kwargs={"literal_binds": False}))
     assert "IS NULL" in sql.upper()
@@ -64,9 +65,7 @@ def test_filter_recruiter_adds_where_clause():
 
 
 def test_sql_fragment_unaliased_single_table():
-    assert viewer_scope_sql() == (
-        "(assigned_recruiter_id = :uid OR assigned_recruiter_id IS NULL)"
-    )
+    assert viewer_scope_sql() == ("(assigned_recruiter_id = :uid OR assigned_recruiter_id IS NULL)")
 
 
 def test_sql_fragment_with_conversation_alias():

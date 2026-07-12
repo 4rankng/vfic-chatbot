@@ -25,6 +25,7 @@ import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
 import { useConversationMessages, useConversationFlags } from "./messageStore";
 import { LeadAvatar } from "./LeadAvatar";
+import { LoadingState } from "../misc/LoadingState";
 import { Bot, Sparkles } from "lucide-react";
 
 // ChatThread is the reusable message thread + composer. It owns the realtime
@@ -524,12 +525,11 @@ export const ChatThread = ({
         >
           {isLoadingMore && (
             <div className="chat-history-top-spacer">
-              <div
-                className="day-marker"
-                style={{ margin: "8px 0", background: "transparent" }}
-              >
-                <span>Đang tải tin nhắn cũ hơn...</span>
-              </div>
+              <LoadingState
+                compact
+                className="chat-history-loading"
+                label="Đang tải tin nhắn cũ hơn…"
+              />
             </div>
           )}
           {historyError && messages.length > 0 ? (
@@ -546,9 +546,7 @@ export const ChatThread = ({
               <button type="button" onClick={retryInitial}>Thử lại</button>
             </div>
           ) : messages.length === 0 && isLoading ? (
-            <div className="chat-empty" role="status">
-              <span>Đang tải tin nhắn...</span>
-            </div>
+            <LoadingState className="min-h-full" label="Đang tải tin nhắn…" />
           ) : null}
           {messages.map((m, i) => (
             <Fragment key={`${m.conversation_id}:${m.id}`}>

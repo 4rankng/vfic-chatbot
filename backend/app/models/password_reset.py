@@ -3,6 +3,7 @@
 Only HMAC hashes of OTPs are stored; the raw code exists only long enough to be
 sent by email.
 """
+
 import uuid
 from datetime import datetime
 

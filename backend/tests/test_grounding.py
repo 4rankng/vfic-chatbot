@@ -3,6 +3,7 @@
 Pure-function tests: no DB, no LLM. The agent-loop wiring is tested via the
 existing graph client integration path (requires langchain).
 """
+
 from __future__ import annotations
 
 from app.graph.grounding import (

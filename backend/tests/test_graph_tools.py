@@ -9,6 +9,7 @@ No DB, embeddings, Redis, or LLM: a fake embedder + a fake ``RetrievalRepository
 stand in for the outside world. These are characterization tests — they pin
 *current* behavior so refactors stay behavior-preserving.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -124,9 +125,11 @@ def test_format_row_prefers_source_quote_then_summary():
         content="ignored-when-quote-present",
         source_quote="Lương 15 triệu",
         summary="Mô tả ngắn",
-        metadata={"citation": {"label": "JD"},
-                  "document_metadata": {"title": "tin tuyển dụng"},
-                  "chunk_metadata": {"route_id": "R1"}},
+        metadata={
+            "citation": {"label": "JD"},
+            "document_metadata": {"title": "tin tuyển dụng"},
+            "chunk_metadata": {"route_id": "R1"},
+        },
         source_file=None,
         line_start=None,
         line_end=None,
@@ -175,8 +178,9 @@ def test_format_row_marks_effective_window():
         content="x",
         source_quote="q",
         summary=None,
-        metadata={"document_metadata": {"effective_from": "2026-01-01",
-                                        "effective_to": "2026-06-01"}},
+        metadata={
+            "document_metadata": {"effective_from": "2026-01-01", "effective_to": "2026-06-01"}
+        },
         source_file=None,
         line_start=None,
         line_end=None,
@@ -192,18 +196,22 @@ def test_format_row_marks_effective_window():
 @pytest.mark.asyncio
 async def test_search_user_memory_empty_returns_fixed_notice(no_cache_io):
     repo = _make_repo(match_memories=lambda self, emb, top_k, filt_json: _empty())
-    out = await search_user_memory(retrieval=repo, embedder=_FakeEmbedder(),
-                                   chat_id="c1", query="hi")
+    out = await search_user_memory(
+        retrieval=repo, embedder=_FakeEmbedder(), chat_id="c1", query="hi"
+    )
     assert out == "Không có thông tin ghi nhớ về người dùng này."
 
 
 @pytest.mark.asyncio
 async def test_search_user_memory_formats_rows_with_similarity(no_cache_io):
-    rows = [SimpleNamespace(content="đã làm lái xe 5 năm", similarity=0.91),
-            SimpleNamespace(content="sống Bình Dương", similarity=0.82)]
+    rows = [
+        SimpleNamespace(content="đã làm lái xe 5 năm", similarity=0.91),
+        SimpleNamespace(content="sống Bình Dương", similarity=0.82),
+    ]
     repo = _make_repo(match_memories=lambda self, *a, **k: _const(rows))
-    out = await search_user_memory(retrieval=repo, embedder=_FakeEmbedder(),
-                                   chat_id="c1", query="kinh nghiệm")
+    out = await search_user_memory(
+        retrieval=repo, embedder=_FakeEmbedder(), chat_id="c1", query="kinh nghiệm"
+    )
     assert "đã làm lái xe 5 năm (sim=0.91)" in out
     assert "sống Bình Dương (sim=0.82)" in out
     assert out.count("\n") == 1  # two rows joined by a single newline
@@ -223,8 +231,10 @@ async def test_list_active_projects_empty(no_cache_io):
 
 @pytest.mark.asyncio
 async def test_list_active_projects_formats_catalog(no_cache_io):
-    rows = [SimpleNamespace(slug="tai-xe", name="Tài xế", summary="Tuyển tài xế"),
-            SimpleNamespace(slug="khac", name="Khác", summary=None)]
+    rows = [
+        SimpleNamespace(slug="tai-xe", name="Tài xế", summary="Tuyển tài xế"),
+        SimpleNamespace(slug="khac", name="Khác", summary=None),
+    ]
     repo = _make_repo(list_active_projects=lambda self: _const(rows))
     out = await list_active_projects(retrieval=repo)
     assert "- tai-xe (Tài xế): Tuyển tài xế" in out
@@ -283,8 +293,9 @@ async def test_recommend_projects_ranks_by_catalog_terms(no_cache_io):
 async def test_search_knowledge_unknown_slug_returns_not_found(no_cache_io):
     repo = _make_repo(project_id_by_slug=lambda self, slug, **k: _none())
     embedder = _FakeEmbedder()
-    out = await search_knowledge(retrieval=repo, embedder=embedder,
-                                 query="lương", project_slug="khong-ton-tai")
+    out = await search_knowledge(
+        retrieval=repo, embedder=embedder, query="lương", project_slug="khong-ton-tai"
+    )
     assert out == "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
     assert embedder.calls == []  # never embedded — slug miss is cheap
 
@@ -314,12 +325,27 @@ async def test_get_product_features_empty_notice(no_cache_io):
 @pytest.mark.asyncio
 async def test_get_product_features_flags_missing_and_highlight(no_cache_io):
     rows = [
-        SimpleNamespace(name_vi="Lương", value_text="15tr",
-                        is_missing=True, needs_clarification=False, is_highlight=False),
-        SimpleNamespace(name_vi="Chế độ", value_text="BHXH",
-                        is_missing=False, needs_clarification=False, is_highlight=True),
-        SimpleNamespace(name_vi="Thưởng", value_text="theo quý",
-                        is_missing=False, needs_clarification=False, is_highlight=False),
+        SimpleNamespace(
+            name_vi="Lương",
+            value_text="15tr",
+            is_missing=True,
+            needs_clarification=False,
+            is_highlight=False,
+        ),
+        SimpleNamespace(
+            name_vi="Chế độ",
+            value_text="BHXH",
+            is_missing=False,
+            needs_clarification=False,
+            is_highlight=True,
+        ),
+        SimpleNamespace(
+            name_vi="Thưởng",
+            value_text="theo quý",
+            is_missing=False,
+            needs_clarification=False,
+            is_highlight=False,
+        ),
     ]
     repo = _make_repo(
         project_id_by_slug=lambda self, slug, **k: _const(7),
@@ -340,21 +366,36 @@ async def test_get_product_features_flags_missing_and_highlight(no_cache_io):
 @pytest.mark.asyncio
 async def test_search_bus_timetable_groups_stops_under_route(no_cache_io, monkeypatch):
     rows = [
-        SimpleNamespace(_mapping={
-            "company_name": "VFIC", "route_name": "Bình Dương – Tây Ninh",
-            "shift": "Sáng", "direction": "Chiều đi",
-            "stop_name": "Bến xe", "scheduled_time": "05:30",
-        }),
-        SimpleNamespace(_mapping={
-            "company_name": "VFIC", "route_name": "Bình Dương – Tây Ninh",
-            "shift": "Sáng", "direction": "Chiều đi",
-            "stop_name": "Ngã tư", "scheduled_time": "05:50",
-        }),
-        SimpleNamespace(_mapping={
-            "company_name": "VFIC", "route_name": "Bình Dương – Tây Ninh",
-            "shift": "Sáng", "direction": "Chiều đi",
-            "stop_name": "Không giờ", "scheduled_time": "",
-        }),
+        SimpleNamespace(
+            _mapping={
+                "company_name": "VFIC",
+                "route_name": "Bình Dương – Tây Ninh",
+                "shift": "Sáng",
+                "direction": "Chiều đi",
+                "stop_name": "Bến xe",
+                "scheduled_time": "05:30",
+            }
+        ),
+        SimpleNamespace(
+            _mapping={
+                "company_name": "VFIC",
+                "route_name": "Bình Dương – Tây Ninh",
+                "shift": "Sáng",
+                "direction": "Chiều đi",
+                "stop_name": "Ngã tư",
+                "scheduled_time": "05:50",
+            }
+        ),
+        SimpleNamespace(
+            _mapping={
+                "company_name": "VFIC",
+                "route_name": "Bình Dương – Tây Ninh",
+                "shift": "Sáng",
+                "direction": "Chiều đi",
+                "stop_name": "Không giờ",
+                "scheduled_time": "",
+            }
+        ),
     ]
     repo = _make_repo(
         search_bus_timetable=lambda self, company, question, limit: _const(rows),
@@ -400,8 +441,11 @@ async def test_recommend_jobs_formats_scored_results_with_reasons(no_cache_io):
     scored = [
         ScoredJob(
             job=JobCandidate(
-                id="job-1", title="Nhân viên kho", province="Bình Dương",
-                salary_min=10_000_000, salary_max=14_000_000,
+                id="job-1",
+                title="Nhân viên kho",
+                province="Bình Dương",
+                salary_min=10_000_000,
+                salary_max=14_000_000,
             ),
             score=0.82,
             reasons=["vị trí khớp mong muốn", "lương 10-14 triệu phù hợp"],
@@ -420,6 +464,7 @@ async def test_recommend_jobs_formats_scored_results_with_reasons(no_cache_io):
 @pytest.mark.asyncio
 async def test_recommend_jobs_exception_returns_fallback_not_crash(no_cache_io):
     """A retrieval failure must not crash the tool — guided fallback instead."""
+
     async def _boom(self, chat_id, **k):
         raise RuntimeError("db down")
 

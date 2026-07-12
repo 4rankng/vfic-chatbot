@@ -9,6 +9,7 @@ NO business logic, NO LLM/embedder calls — callers compute the embedding (a
 graph-layer concern) and hand the repo a vector literal. Methods return SQLAlchemy
 Row lists/scalars exactly as the inline ``db.execute(...).all()`` calls did.
 """
+
 from __future__ import annotations
 
 import json
@@ -153,9 +154,7 @@ class RetrievalRepository:
     def _lexical_terms(cls, query: str | None) -> list[str]:
         q = cls._normalize_text(query or "")
         terms = [
-            term
-            for term in q.split()
-            if len(term) >= 3 and term not in cls._LEXICAL_STOPWORDS
+            term for term in q.split() if len(term) >= 3 and term not in cls._LEXICAL_STOPWORDS
         ]
         seen: set[str] = set()
         return [term for term in terms if not (term in seen or seen.add(term))]
@@ -302,7 +301,8 @@ class RetrievalRepository:
         )
         logger.debug(
             "match_documents vector branch: %d rows (floor=%.2f)",
-            len(vector_rows), self.SIMILARITY_FLOOR,
+            len(vector_rows),
+            self.SIMILARITY_FLOOR,
         )
         terms = self._lexical_terms(query_text)
         if not terms:
@@ -325,7 +325,10 @@ class RetrievalRepository:
         )
         logger.debug(
             "match_documents RRF fused: %d rows (%d lexical, %d vector, top_k=%d)",
-            len(merged), len(lexical_rows), len(vector_rows), top_k,
+            len(merged),
+            len(lexical_rows),
+            len(vector_rows),
+            top_k,
         )
         from app.services.retrieval.reranker import rerank_if_enabled
 
@@ -375,7 +378,8 @@ class RetrievalRepository:
         ).all()
         logger.debug(
             "match_faq: %d rows (floor=%.2f, category=faq)",
-            len(rows), floor,
+            len(rows),
+            floor,
         )
         return list(rows)
 
@@ -434,7 +438,8 @@ class RetrievalRepository:
         ).all()
         logger.debug(
             "match_faq_lexical: %d rows (threshold=%.2f, category=faq)",
-            len(rows), threshold,
+            len(rows),
+            threshold,
         )
         return list(rows)
 

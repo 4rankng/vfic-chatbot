@@ -5,6 +5,7 @@ admin-managed FAQ pairs, including the embedding write and the maintenance of th
 managed FAQ document's raw text. The parent service composes this via a thin
 delegate so the public ``ProjectService`` surface is unchanged.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -107,9 +108,7 @@ class ProjectFaqService:
         # Override search_text directly so the trigram arm of the FAQ bypass sees
         # the variants too (the search_text trigger would otherwise rebuild it
         # from content alone — see ProjectRepository.set_chunk_search_text).
-        await self.repo.set_chunk_search_text(
-            chunk.id, "\n".join([question, *variants, answer])
-        )
+        await self.repo.set_chunk_search_text(chunk.id, "\n".join([question, *variants, answer]))
         await record_audit(
             self.db,
             action="create_project_faq",
@@ -159,7 +158,9 @@ class ProjectFaqService:
             body.required_terms if body.required_terms is not None else (chunk.required_terms or [])
         )
         forbidden = self._clean_terms(
-            body.forbidden_terms if body.forbidden_terms is not None else (chunk.forbidden_terms or [])
+            body.forbidden_terms
+            if body.forbidden_terms is not None
+            else (chunk.forbidden_terms or [])
         )
         chunk.content = self._faq_content(question, answer)
         chunk.questions = [question, *variants]
@@ -196,9 +197,7 @@ class ProjectFaqService:
         # later autoflush): once content/source_quote/summary are clean here, no
         # subsequent statement can re-fire the trigger and clobber the override.
         await self.db.flush()
-        await self.repo.set_chunk_search_text(
-            chunk.id, "\n".join([question, *variants, answer])
-        )
+        await self.repo.set_chunk_search_text(chunk.id, "\n".join([question, *variants, answer]))
         await record_audit(
             self.db,
             action="update_project_faq",

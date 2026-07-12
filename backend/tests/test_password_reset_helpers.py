@@ -5,6 +5,7 @@ integration-level by repo convention (no live DB in this suite), but the
 security-sensitive pure helpers are pinned here: HMAC OTP hashing, six-digit
 generation, email normalization, and the error type callers catch.
 """
+
 from app.services import password_reset_service as prs
 
 
@@ -18,10 +19,10 @@ def test_hash_otp_is_deterministic_and_sensitive_to_otp_and_email():
     same_otp_diff_email = prs._hash_otp("other@example.com", "123456")
     same_email_diff_otp = prs._hash_otp("user@example.com", "654321")
 
-    assert a == b                 # deterministic for the same email + OTP
+    assert a == b  # deterministic for the same email + OTP
     assert a != same_otp_diff_email  # the email binds the hash (can't replay across accounts)
     assert a != same_email_diff_otp  # the OTP must affect the hash
-    assert len(a) == 64           # sha256 hex digest
+    assert len(a) == 64  # sha256 hex digest
     assert all(ch in "0123456789abcdef" for ch in a)
 
 

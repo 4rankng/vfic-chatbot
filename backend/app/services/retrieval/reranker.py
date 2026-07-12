@@ -15,6 +15,7 @@ and the interface (:class:`Reranker`) is ready for a hosted backend later.
 Controlled by ``rag_rerank_enabled`` (default off). When off, ``rerank`` is the
 identity — the fused list passes through unchanged.
 """
+
 from __future__ import annotations
 
 import logging
