@@ -213,6 +213,28 @@
   font-weight: var(--chat-fw-semibold);
   line-height: 1.25;
 }
+.inbox-bg-container .conv-state-label.is-human-escalation {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid #f6d365;
+  border-radius: 999px;
+  background: #fff8db;
+  color: #8a5a00;
+  animation: human-escalation-pulse 2.8s ease-in-out infinite;
+}
+.inbox-bg-container .conv-state-icon {
+  width: 12px;
+  height: 12px;
+}
+
+@keyframes human-escalation-pulse {
+  50% {
+    box-shadow: 0 0 0 3px rgb(246 211 101 / 28%);
+  }
+}
 .inbox-bg-container .list-retry {
   margin-top: 8px;
   border: 0;
@@ -424,6 +446,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .inbox-bg-container .conversation.needs-attention::after {
+    animation: none;
+  }
+
+  .inbox-bg-container .conv-state-label.is-human-escalation {
     animation: none;
   }
 }

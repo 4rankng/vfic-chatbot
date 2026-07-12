@@ -75,7 +75,7 @@ async def test_oa_webhook_accepts_unsigned_empty_registration_probe(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_oa_webhook_temporarily_processes_unsigned_real_event(monkeypatch):
+async def test_oa_webhook_rejects_unsigned_real_event(monkeypatch):
     from app.api import webhooks
 
     cfg = SimpleNamespace(oa_secret_key="oa-secret", oa_app_id="app-1")
@@ -93,6 +93,39 @@ async def test_oa_webhook_temporarily_processes_unsigned_real_event(monkeypatch)
     ).encode()
 
     response = await webhooks.zalo_oa_webhook(FakeRequest(raw), db=AsyncMock())
+
+    assert response.status_code == 401
+    handle.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
+    from app.api import webhooks
+    from app.services.zalo_oa_signature import compute_mac
+
+    app_id, secret, ts = "app-1", "oa-secret", "1700000000"
+    raw = json.dumps(
+        {
+            "event_name": "user_send_text",
+            "app_id": app_id,
+            "timestamp": ts,
+            "sender": {"id": "user-1"},
+            "message": {"msg_id": "msg-1", "text": "Xin chào"},
+        }
+    ).encode()
+    digest = compute_mac(app_id, raw.decode("utf-8"), ts, secret)
+
+    cfg = SimpleNamespace(oa_secret_key=secret, oa_app_id=app_id)
+    settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
+    handle = AsyncMock(return_value={"status": "queued"})
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+
+    req = FakeRequest(
+        raw,
+        headers={"x-zevent-signature": f"sha256={digest}", "x-zevent-timestamp": ts},
+    )
+    response = await webhooks.zalo_oa_webhook(req, db=AsyncMock())
 
     assert response.status_code == 200
     handle.assert_awaited_once()

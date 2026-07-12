@@ -23,7 +23,7 @@ import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
-import { Reply, UserRound } from "lucide-react";
+import { AlertTriangle, Reply, UserRound } from "lucide-react";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
@@ -74,7 +74,7 @@ const getAttentionLabel = (
   needsAttention: boolean,
 ): string => {
   if (conversation.mode === "closed") return "Đã đóng";
-  if (conversation.needs_human) return "Bot cần người";
+  if (conversation.needs_human) return "Cần xử lý";
   if (needsAttention) return "Chờ nhân viên";
   return "";
 };
@@ -227,7 +227,16 @@ const ConversationListItem = memo(
             )}
             <span className="conv-meta-row">
               {attentionLabel ? (
-                <span className="conv-state-label">{attentionLabel}</span>
+                <span
+                  className={`conv-state-label ${
+                    conversation.needs_human ? "is-human-escalation" : ""
+                  }`}
+                >
+                  {conversation.needs_human ? (
+                    <AlertTriangle aria-hidden="true" className="conv-state-icon" />
+                  ) : null}
+                  {attentionLabel}
+                </span>
               ) : null}
               {priorityChip ? (
                 <span

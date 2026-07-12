@@ -116,10 +116,12 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         )
         if not oa_result.verified:
             # The signing scheme is known (sha256(app_id+raw_body+header_ts+secret),
-            # verified by app.services.zalo_oa_signature). A mismatch now means a
-            # wrong/stale secret or a replay out of the timestamp window — log the
-            # identifying headers (never the body/secret) and let the health badge
-            # surface ongoing failures.
+            # verified by app.services.zalo_oa_signature). With the signing credential
+            # now configured, a mismatch is a genuine authenticity failure: tampering,
+            # a replay outside the timestamp window, or a stale/rotated secret. Log the
+            # identifying headers (never the body/secret), record the failure to the
+            # passive health badge so admins see a misconfigured secret without a Test
+            # button, and reject before any state mutation or bot turn is enqueued.
             logger.warning(
                 "zalo oa signature mismatch app_id=%r event_name=%r payload_keys=%r "
                 "ts_header=%r body_ts=%r sig=%r",
@@ -130,9 +132,8 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
                 body_ts,
                 signature,
             )
-            # Temporary bring-up mode: record the mismatch but continue processing.
-            # Remove this override once Zalo's signing credential is available.
             asyncio.create_task(record_oa_signature(ok=False))
+            return JSONResponse({"detail": "invalid signature"}, status_code=401)
         else:
             asyncio.create_task(record_oa_signature(ok=True))
     elif _settings.app_env != "development":

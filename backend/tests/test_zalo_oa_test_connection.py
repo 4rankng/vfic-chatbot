@@ -112,7 +112,7 @@ async def test_oa_webhook_uses_event_app_id_for_signature(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oa_webhook_records_mismatch_and_temporarily_processes(monkeypatch):
+async def test_oa_webhook_rejects_mismatch_and_records_health(monkeypatch):
     from app.api import webhooks
     from app.services.integration_settings import ZaloRuntimeConfig
 
@@ -139,9 +139,9 @@ async def test_oa_webhook_records_mismatch_and_temporarily_processes(monkeypatch
     resp = await webhooks.zalo_oa_webhook(req, db=AsyncMock())
     await asyncio.sleep(0)  # let the fire-and-forget health record run
 
-    assert resp.status_code == 200
+    assert resp.status_code == 401
     recorder.assert_called_once_with(ok=False)
-    handler.assert_awaited_once()
+    handler.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

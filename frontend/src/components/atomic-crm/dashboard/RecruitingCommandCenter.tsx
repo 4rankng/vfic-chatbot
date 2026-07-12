@@ -48,7 +48,7 @@ const isWaitingForHuman = (conversation: Conversation): boolean => {
 };
 
 const attentionReason = (conversation: Conversation): string => {
-  if (conversation.needs_human) return "Bot cần người";
+  if (conversation.needs_human) return "Cần xử lý";
   if (conversation.mode === "semi_auto") return "Chờ nhân viên";
   if (conversation.mode === "human") return "Cần phản hồi";
   return "Cần phản hồi";
