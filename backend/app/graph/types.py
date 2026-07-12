@@ -53,6 +53,10 @@ class BotRunState:
     # ``queued`` for normal RQ turns, ``recovery`` for offline reconciliation,
     # and ``direct`` for the retained ASGI adapter. Stored only in stage timings.
     execution_source: str = "recovery"
+    # Webhook request_id propagated end-to-end so one trace_id query returns
+    # every log line for a single candidate message's journey. Empty for legacy
+    # jobs / tests; stamped on BotRun.trace_id by record_bot_outcome.
+    trace_id: str = ""
 
 
 class TurnOutcome(TypedDict):

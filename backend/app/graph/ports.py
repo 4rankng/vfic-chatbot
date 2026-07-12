@@ -39,6 +39,10 @@ class FaqBypassResult:
     The deterministic FAQ-bypass cascade returns this when it is confident;
     ``None`` means "abstain — route to the agent". ``answer`` is the only field
     the runner sends; the rest are carried for the decision log.
+
+    ``runner_up_score`` carries the second-best match's similarity so the runner
+    can abstain on low-margin hits (top only slightly better than runner-up →
+    fall through to the LLM). ``None`` when only one candidate was returned.
     """
 
     answer: str
@@ -47,6 +51,7 @@ class FaqBypassResult:
     score: float = 0.0
     reason: str = ""
     latency_ms: float = 0.0
+    runner_up_score: float | None = None
 
 
 class ConversationStatePort(Protocol):
@@ -81,6 +86,9 @@ class ConversationPort(Protocol):
         zalo_message_id: str | None = None,
         stage_timings: dict | None = None,
         lock_owner: Any = None,
+        delivery_status: Any = None,
+        trace_id: str | None = None,
+        outcome_metadata: dict | None = None,
     ) -> None: ...
 
     async def recheck_ownership(

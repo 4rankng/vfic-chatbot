@@ -45,12 +45,19 @@ class SendResult:
     ``ok``/``msg_id``/``error`` match the shape downstream persistence (and the
     OA-era call sites) expect; ``raw`` carries the full upstream envelope when
     the caller wants more than the parsed fields (e.g. for logging).
+
+    ``error_class`` disambiguates transport failures so the runner can classify
+    ambiguous sends (timeout / reset AFTER the request may have reached the
+    provider) as ``SEND_UNKNOWN`` rather than retryable ``FAILED``. ``None`` on
+    success and on definite upstream-rejected envelopes. Set by the sender's
+    ``_post`` transport-error branch; see ``_TRANSPORT_ERROR_CLASS``.
     """
 
     ok: bool
     msg_id: str | None = None
     error: str | None = None
     raw: dict[str, Any] | None = None
+    error_class: str | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +89,21 @@ class WebhookInfo:
 ChatAction = Literal["typing", "upload_photo"]
 ZALO_MAX_TEXT_CHARS = 2000
 ZALO_VISIBLE_BUBBLE_CHARS = 420
+
+
+# ---------------------------------------------------------------------------
+# Transport-error classification (re-exported from the graph layer)
+# ---------------------------------------------------------------------------
+#
+# The classifier + AMBIGUOUS_SEND_CLASSES live in app.graph.send_classification
+# (a leaf utility with no service deps) so the graph runner can import the
+# constant without re-introducing the graph<->services cycle. The services
+# layer imports it here (services → graph is the allowed direction) and the
+# senders' ``_post`` swallows stamp the error_class onto the returned envelope.
+
+from app.graph.send_classification import (  # noqa: E402 — after constants for grouping
+    classify_transport_error as _classify_transport_error,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +158,11 @@ async def _post(
             resp = await client.post(url, json=body)
         data = resp.json()
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "description": f"transport error: {exc}"}
+        return {
+            "ok": False,
+            "description": f"transport error: {exc}",
+            "error_class": _classify_transport_error(exc),
+        }
     if not isinstance(data, dict):
         return {"ok": False, "description": f"non-JSON response: {data!r}"}
     if "ok" not in data:
@@ -162,7 +188,12 @@ def _send_result(envelope: dict[str, Any]) -> SendResult:
         msg_id = result_dict.get("message_id")
         return SendResult(ok=True, msg_id=str(msg_id) if msg_id is not None else None, raw=envelope)
     desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
-    return SendResult(ok=False, error=str(desc), raw=envelope)
+    return SendResult(
+        ok=False,
+        error=str(desc),
+        raw=envelope,
+        error_class=envelope.get("error_class"),
+    )
 
 
 async def _aggregate_chunked_send(

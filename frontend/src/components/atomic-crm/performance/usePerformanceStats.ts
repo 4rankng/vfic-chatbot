@@ -60,6 +60,13 @@ export interface PerfTrendBucket {
   errors: number;
 }
 
+/** Delivery-reliability counters (Phase 3 messaging-hardening). */
+export interface PerfReliability {
+  send_unknown_count: number;
+  suppressed_count: number;
+  failed_count: number;
+}
+
 export interface PerfMetrics {
   window: string;
   live: PerfLive;
@@ -68,6 +75,7 @@ export interface PerfMetrics {
   by_outcome: Record<string, number>;
   slow_turns: PerfSlowTurn[];
   trend: PerfTrendBucket[];
+  reliability: PerfReliability;
 }
 
 export const usePerformanceStats = (window = "24h") =>

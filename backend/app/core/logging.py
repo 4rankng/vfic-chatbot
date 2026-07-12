@@ -3,7 +3,14 @@
 Emits one JSON object per record to stdout. The ``request_id`` field is populated
 from the ``request_id_ctx`` context var, which ``RequestIdMiddleware`` (main.py)
 sets on every request so a single user-visible failure traces cleanly across the
-web process, RQ workers, and outbound Zalo calls. Dependency-free (stdlib only).
+web process, RQ workers, and outbound Zalo calls.
+
+The ``trace_id`` field is the logical turn trace: the webhook stamps the
+``request_id`` into the RQ job dict, and the worker re-stashes it in
+``trace_id_ctx`` (contextvars do not cross processes) so the same id flows through
+RQ → LangGraph → Zalo send logs and onto ``BotRun.trace_id``. Distinct from
+``request_id`` only inside the worker process (where the HTTP request is gone);
+on the web process they carry the same value. Dependency-free (stdlib only).
 """
 import json
 import logging
@@ -14,6 +21,10 @@ from typing import Any
 # Set by RequestIdMiddleware; defaults to "-" for non-request contexts (workers,
 # startup) so logs always carry the field.
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
+# Set by the RQ worker from the job dict's ``trace_id`` (the originating webhook's
+# request_id). "-" in non-turn contexts. On the web process this matches
+# request_id; in the worker it's the only link back to the originating request.
+trace_id_ctx: ContextVar[str] = ContextVar("trace_id", default="-")
 
 
 # Standard LogRecord attributes — anything else came from extra={}.
@@ -28,6 +39,7 @@ class _JsonFormatter(logging.Formatter):
             "logger": record.name,
             "msg": record.getMessage(),
             "request_id": request_id_ctx.get(),
+            "trace_id": trace_id_ctx.get(),
         }
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)

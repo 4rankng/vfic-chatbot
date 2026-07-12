@@ -57,10 +57,12 @@ class _FakeConv:
 
 
 class _SendResult:
-    def __init__(self, ok: bool = True, msg_id: str = "mid-1", error: str | None = None) -> None:
+    def __init__(self, ok: bool = True, msg_id: str = "mid-1",
+                 error: str | None = None, error_class: str | None = None) -> None:
         self.ok = ok
         self.msg_id = msg_id
         self.error = error
+        self.error_class = error_class
 
 
 class _FakeZalo:

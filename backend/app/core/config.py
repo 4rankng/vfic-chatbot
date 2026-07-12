@@ -233,6 +233,12 @@ class Settings(BaseSettings):
     # templates with ZERO LLM calls. Factual questions are never templated here — they
     # stay on the RAG + agent path.
     faq_fast_lane_enabled: bool = True
+    # Phase 4 messaging-hardening: when the top FAQ-bypass match is only this much
+    # better than the runner-up (similarity delta < margin), abstain to the LLM
+    # instead of trusting a low-confidence answer. 0.0 = never abstain on margin
+    # (preserve legacy behavior). Tune from the performance dashboard's abstention
+    # rate after a week of production data.
+    faq_abstain_margin: float = 0.03
     # Minimum time slice required to safely start an LLM call (TTFT + a meaningful token
     # span). If _remaining() < send_margin_seconds + min_llm_time_budget, skip the LLM and
     # send a human fallback — a 2-3s slice cannot complete a useful generation.

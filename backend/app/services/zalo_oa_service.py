@@ -10,6 +10,7 @@ from app.core.config import Settings, ZALO_OA_API_BASE, get_settings
 from app.services.zalo_bot_service import (
     SendResult,
     _aggregate_chunked_send,
+    _classify_transport_error,
     _split_long_plain_text,
 )
 
@@ -55,7 +56,11 @@ class ZaloOASender:
                 )
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            return {"error": -1, "message": f"transport error: {exc}"}
+            return {
+                "error": -1,
+                "message": f"transport error: {exc}",
+                "error_class": _classify_transport_error(exc),
+            }
         if isinstance(data, dict):
             return data
         return {"error": -1, "message": f"non-JSON response: {data!r}"}
@@ -91,7 +96,12 @@ class ZaloOASender:
                 raw=envelope,
             )
         message = envelope.get("message") or envelope.get("error_message") or error
-        return SendResult(ok=False, error=str(message), raw=envelope)
+        return SendResult(
+            ok=False,
+            error=str(message),
+            raw=envelope,
+            error_class=envelope.get("error_class"),
+        )
 
     @staticmethod
     def _is_token_invalid(envelope: dict[str, Any]) -> bool:

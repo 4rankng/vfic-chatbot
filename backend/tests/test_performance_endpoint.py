@@ -1,14 +1,20 @@
 """Unit tests for the /admin/performance endpoint + the worker preamble-timings helper.
 
-No DB / Redis: the endpoint's SQL is exercised against a fake AsyncSession that
-returns canned Row-like objects, and collect_queue_health is stubbed. Pins the
-response shape the Hiệu suất panel consumes and the enqueue/preamble slicing.
+No DB / Redis: the endpoint's SQL is exercised against a fake ``async_session``
+factory whose sessions return canned Row-like objects (routed by SQL content so
+the test is insensitive to ``asyncio.gather`` scheduling order), and
+``collect_queue_health`` + the cache primitives are stubbed. Pins the response
+shape the Hiệu suất panel consumes, the concurrent dispatch of the reads, and the
+cache hit/miss/fall-through behaviour.
 """
+
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -30,16 +36,66 @@ class _FakeResult:
         return self._all
 
 
-class _FakeDB:
-    """Returns a queued sequence of _FakeResult, one per execute() call."""
+class _RoutingSession:
+    """Fake AsyncSession that dispatches ``execute(sql)`` by SQL content.
 
-    def __init__(self, results) -> None:
-        self._results = list(results)
-        self.queries: list[str] = []
+    Order-independent: each of the 5 dashboard helpers issues one query with a
+    distinct SQL shape, so routing by keyword makes the test insensitive to
+    ``asyncio.gather`` scheduling order (the per-read sessions may execute in any
+    sequence). Records every issued statement in ``self.queries`` for assertions.
+    """
+
+    def __init__(self, routes: list[tuple[str, _FakeResult]], queries: list[str]):
+        self._routes = routes
+        self.queries = queries
 
     async def execute(self, stmt, params=None):
-        self.queries.append(str(stmt))
-        return self._results.pop(0)
+        sql = str(stmt)
+        self.queries.append(sql)
+        for needle, result in self._routes:
+            if needle in sql:
+                return result
+        raise AssertionError(f"no fake route matched SQL: {sql[:120]}…")
+
+
+class _FakeSessionCM:
+    """Async context manager yielding a ``_RoutingSession``."""
+
+    def __init__(self, session: _RoutingSession) -> None:
+        self._session = session
+
+    async def __aenter__(self):
+        return self._session
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _make_session_factory(routes: list[tuple[str, _FakeResult]]):
+    """Return a no-arg factory + a shared ``queries`` list.
+
+    Each call yields a fresh session backed by the same route table and sharing
+    one ``queries`` list, mirroring the real ``async_session`` factory where each
+    ``async with`` gets its own session but the pool is shared.
+    """
+    queries: list[str] = []
+
+    def factory():
+        return _FakeSessionCM(_RoutingSession(routes, queries))
+
+    return factory, queries
+
+
+# Route keywords — each matches exactly one helper's SQL.
+# NOTE: the trend SQL also contains "percentile_cont" (for its p95/p50 buckets),
+# so _ROUTE_TREND must be checked before _ROUTE_PERCENTILES in the routes list
+# (see _standard_routes + the empty-window routes). Otherwise the trend query
+# would incorrectly match the percentiles route.
+_ROUTE_PERCENTILES = "percentile_cont"
+_ROUTE_LANE_OUTCOME = "GROUP BY 1, 2"
+_ROUTE_SLOW_TURNS = "LIMIT 20"
+_ROUTE_TREND = "to_timestamp"
+_ROUTE_RELIABILITY = "messages m"
 
 
 def _percentile_row() -> SimpleNamespace:
@@ -53,58 +109,114 @@ def _percentile_row() -> SimpleNamespace:
     return SimpleNamespace(**attrs)
 
 
-@pytest.mark.asyncio
-async def test_performance_bundle_shape(monkeypatch):
+def _standard_routes() -> list[tuple[str, _FakeResult]]:
+    """Canned results for the five dashboard reads.
+
+    Order matters: routes are matched in list order, so the most-specific
+    keywords come first. In particular ``_percentiles`` and ``_trend`` both
+    contain ``percentile_cont``, so ``_trend`` (matched on ``to_timestamp``)
+    must precede ``_percentiles`` (matched on the now-leftover
+    ``percentile_cont``).
+    """
+    return [
+        (
+            _ROUTE_RELIABILITY,
+            _FakeResult(one=SimpleNamespace(send_unknown=2, suppressed=5, failed=1)),
+        ),
+        (
+            _ROUTE_TREND,
+            _FakeResult(
+                all_rows=[
+                    SimpleNamespace(
+                        bucket=datetime(2026, 7, 9, 11, 40, tzinfo=timezone.utc),
+                        p95_ms=3000.0,
+                        p50_ms=1500.0,
+                        turns=10,
+                        errors=1,
+                    ),
+                ]
+            ),
+        ),
+        (
+            _ROUTE_SLOW_TURNS,
+            _FakeResult(
+                all_rows=[
+                    SimpleNamespace(
+                        id=1,
+                        conversation_id=uuid.UUID(CONV_ID),
+                        started_at=datetime(2026, 7, 9, 11, 42, 48, tzinfo=timezone.utc),
+                        outcome="SENT",
+                        stage_timings={
+                            "lane": "agent",
+                            "intent": "timetable",
+                            "llm_queue_ms": 300,
+                            "llm_model_ms": 4500,
+                            "llm_calls": 1,
+                            "llm_call_ms": [4500],
+                            "tool_calls": 0,
+                            "tool_breakdown": {},
+                            "prompt_tokens": 1200,
+                            "completion_tokens": 80,
+                            "cached_tokens": 0,
+                            "prefetch_hit": True,
+                            "total_ms": 5000,
+                            "preamble_ms": 1000,
+                            "webhook_to_pickup_ms": 100,
+                            "queue_depth": 1,
+                            "db_ms": 150,
+                            "db_breakdown": {"claim_send": 90, "record_bot_outcome": 60},
+                            "model_tier": "primary",
+                            "system_prompt_cache_hit": True,
+                        },
+                    ),
+                ]
+            ),
+        ),
+        (
+            _ROUTE_LANE_OUTCOME,
+            _FakeResult(
+                all_rows=[
+                    SimpleNamespace(lane="agent", outcome="SENT", n=5),
+                    SimpleNamespace(lane="fast_lane", outcome="SENT", n=3),
+                ]
+            ),
+        ),
+        (_ROUTE_PERCENTILES, _FakeResult(one=_percentile_row())),
+    ]
+
+
+def _install_compute_stubs(monkeypatch, routes=None) -> SimpleNamespace:
+    """Patch ``async_session`` + queue health + force cache miss.
+
+    Returns a namespace with ``.queries`` (issued SQL strings) and ``.captured``
+    (what ``cache_set_json`` was called with) for assertions.
+    """
+    factory, queries = _make_session_factory(routes if routes is not None else _standard_routes())
+    monkeypatch.setattr(perf_mod, "async_session", factory)
     monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
-    db = _FakeDB([
-        _FakeResult(one=_percentile_row()),
-        _FakeResult(all_rows=[
-            SimpleNamespace(lane="agent", outcome="SENT", n=5),
-            SimpleNamespace(lane="fast_lane", outcome="SENT", n=3),
-        ]),
-        _FakeResult(all_rows=[
-            SimpleNamespace(
-                id=1,
-                conversation_id=uuid.UUID(CONV_ID),
-                started_at=datetime(2026, 7, 9, 11, 42, 48, tzinfo=timezone.utc),
-                outcome="SENT",
-                stage_timings={
-                    "lane": "agent",
-                    "intent": "timetable",
-                    "llm_queue_ms": 300,
-                    "llm_model_ms": 4500,
-                    "llm_calls": 1,
-                    "llm_call_ms": [4500],
-                    "tool_calls": 0,
-                    "tool_breakdown": {},
-                    "prompt_tokens": 1200,
-                    "completion_tokens": 80,
-                    "cached_tokens": 0,
-                    "prefetch_hit": True,
-                    "total_ms": 5000,
-                    "preamble_ms": 1000,
-                    "webhook_to_pickup_ms": 100,
-                    "queue_depth": 1,
-                    "db_ms": 150,
-                    "db_breakdown": {"claim_send": 90, "record_bot_outcome": 60},
-                    "model_tier": "primary",
-                    "system_prompt_cache_hit": True,
-                },
-            ),
-        ]),
-        _FakeResult(all_rows=[
-            SimpleNamespace(
-                bucket=datetime(2026, 7, 9, 11, 40, tzinfo=timezone.utc),
-                p95_ms=3000.0,
-                p50_ms=1500.0,
-                turns=10,
-                errors=1,
-            ),
-        ]),
-    ])
+    # Force cache miss so _compute runs.
+    async def _miss(_key):
+        return None
 
-    out = await performance("24h", _admin=SimpleNamespace(), db=db)
+    monkeypatch.setattr(perf_mod, "cache_get_json", _miss)
+    captured: dict[str, Any] = {}
+
+    async def _set(key, value, ttl_seconds):
+        captured["key"] = key
+        captured["value"] = value
+        captured["ttl"] = ttl_seconds
+
+    monkeypatch.setattr(perf_mod, "cache_set_json", _set)
+    return SimpleNamespace(queries=queries, captured=captured)
+
+
+@pytest.mark.asyncio
+async def test_performance_bundle_shape(monkeypatch):
+    stubs = _install_compute_stubs(monkeypatch)
+    queries = stubs.queries
+
+    out = await performance("24h", _admin=SimpleNamespace())
 
     assert out["window"] == "24h"
     assert out["live"] == {"queue_depth": 0}
@@ -149,35 +261,199 @@ async def test_performance_bundle_shape(monkeypatch):
     # New stages in the percentile chart.
     assert "db" in out["percentiles"]
     assert "faq_bypass" in out["percentiles"]
-    # trend bucket mapped from the 4th SQL result
+    # trend bucket mapped from the trend SQL result
     assert len(out["trend"]) == 1
     t = out["trend"][0]
     assert t["p95_ms"] == 3000
     assert t["p50_ms"] == 1500
     assert t["turns"] == 10
     assert t["errors"] == 1
-    # four distinct SQL statements were issued (percentiles / counts / slow turns / trend)
-    assert len(db.queries) == 4
+    # five distinct SQL statements issued (percentiles / counts / slow turns / trend / reliability)
+    assert len(queries) == 5
+    # reliability section: SEND_UNKNOWN + suppressed + failed counts.
+    assert out["reliability"]["send_unknown_count"] == 2
+    assert out["reliability"]["suppressed_count"] == 5
+    assert out["reliability"]["failed_count"] == 1
+    # Phase 4: cache was written with the expected key + TTL.
+    captured = stubs.captured
+    assert captured["key"] == "perf:dashboard:24h"
+    assert captured["ttl"] == 30
+    assert captured["value"] == out
 
 
 @pytest.mark.asyncio
 async def test_performance_empty_window_returns_nulls(monkeypatch):
     """No instrumented turns in the window -> null percentiles, empty aggregates."""
-    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
-    db = _FakeDB([
-        _FakeResult(one=_percentile_row()),  # percentile_cont over no rows -> all NULL
-        _FakeResult(all_rows=[]),
-        _FakeResult(all_rows=[]),
-        _FakeResult(all_rows=[]),  # trend: no buckets
-    ])
-    out = await performance("1h", _admin=SimpleNamespace(), db=db)
+    routes = [
+        (
+            _ROUTE_PERCENTILES,
+            _FakeResult(one=_percentile_row()),
+        ),  # percentile_cont over no rows -> all NULL
+        (_ROUTE_LANE_OUTCOME, _FakeResult(all_rows=[])),
+        (_ROUTE_SLOW_TURNS, _FakeResult(all_rows=[])),
+        (_ROUTE_TREND, _FakeResult(all_rows=[])),  # trend: no buckets
+        (
+            _ROUTE_RELIABILITY,
+            _FakeResult(one=SimpleNamespace(send_unknown=0, suppressed=0, failed=0)),
+        ),
+    ]
+    _install_compute_stubs(monkeypatch, routes=routes)
+
+    out = await performance("1h", _admin=SimpleNamespace())
     assert out["window"] == "1h"
     assert out["by_lane"] == {}
     assert out["by_outcome"] == {}
     assert out["slow_turns"] == []
     assert out["trend"] == []
+    assert out["reliability"] == {"send_unknown_count": 0, "suppressed_count": 0, "failed_count": 0}
     # _percentile_row had real ints, so just confirm shape keys exist for every stage
     assert set(out["percentiles"]) == set(perf_mod._STAGE_KEYS)
+
+
+@pytest.mark.asyncio
+async def test_performance_cache_hit_short_circuits(monkeypatch):
+    """Cache hit returns the cached payload and skips all DB queries."""
+    cached_payload = {
+        "window": "24h",
+        "live": {"queue_depth": 0},
+        "percentiles": {},
+        "by_lane": {},
+        "by_outcome": {},
+        "slow_turns": [],
+        "trend": [],
+        "reliability": {"send_unknown_count": 0, "suppressed_count": 0, "failed_count": 0},
+    }
+    factory, queries = _make_session_factory(_standard_routes())
+    # Even though the factory is installed, a cache hit should never touch it.
+    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
+
+    async def _hit(_key):
+        return cached_payload
+
+    monkeypatch.setattr(perf_mod, "cache_get_json", _hit)
+    set_called = False
+
+    async def _set(_key, _value, _ttl):
+        nonlocal set_called
+        set_called = True
+
+    monkeypatch.setattr(perf_mod, "cache_set_json", _set)
+
+    out = await performance("24h", _admin=SimpleNamespace())
+
+    assert out is cached_payload
+    assert queries == []  # no DB read ran on the hit path
+    assert set_called is False  # cache_set must not run on a hit
+
+
+@pytest.mark.asyncio
+async def test_performance_cache_miss_populates_cache(monkeypatch):
+    """Cache miss computes the payload and writes it under the window-scoped key."""
+    stubs = _install_compute_stubs(monkeypatch)
+
+    out = await performance("7d", _admin=SimpleNamespace())
+    captured = stubs.captured
+    assert captured["key"] == "perf:dashboard:7d"
+    assert captured["ttl"] == 30
+    assert captured["value"] == out
+
+
+@pytest.mark.asyncio
+async def test_performance_cache_failure_falls_through(monkeypatch):
+    """If cache_get_json raises, the endpoint still computes and returns correctly.
+
+    ``cache.py``'s helpers swallow exceptions and return None, but the handler
+    must remain correct even if a different stub raises — the compute path is
+    the source of truth and must run regardless of cache state.
+    """
+    factory, _ = _make_session_factory(_standard_routes())
+    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
+
+    async def _raises(_key):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(perf_mod, "cache_get_json", _raises)
+
+    async def _noop(_key, _value, ttl_seconds):
+        return None
+
+    monkeypatch.setattr(perf_mod, "cache_set_json", _noop)
+
+    out = await performance("24h", _admin=SimpleNamespace())
+    # Compute path ran and produced a well-formed payload.
+    assert out["window"] == "24h"
+    assert out["live"] == {"queue_depth": 0}
+    assert out["percentiles"]["llm_model"]["p95"] == 500
+    assert out["reliability"]["send_unknown_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_performance_queries_dispatched_concurrently(monkeypatch):
+    """The five DB reads run concurrently via asyncio.gather, not sequentially.
+
+    Proves overlap: each read holds an in-flight slot for a short sleep; if the
+    reads were sequential the max concurrency would be 1, but gather makes it ≥ 2.
+    """
+    inflight = 0
+    max_inflight = 0
+
+    class _ConcurrencySession:
+        async def execute(self, stmt, params=None):
+            nonlocal inflight, max_inflight
+            inflight += 1
+            max_inflight = max(max_inflight, inflight)
+            try:
+                # Yield control so sibling gather tasks can enter their execute.
+                await asyncio.sleep(0)
+            finally:
+                inflight -= 1
+            # Route by SQL content so the payload still assembles correctly.
+            sql = str(stmt)
+            if _ROUTE_PERCENTILES in sql:
+                return _FakeResult(one=_percentile_row())
+            if _ROUTE_LANE_OUTCOME in sql:
+                return _FakeResult(
+                    all_rows=[
+                        SimpleNamespace(lane="agent", outcome="SENT", n=1),
+                    ]
+                )
+            if _ROUTE_SLOW_TURNS in sql:
+                return _FakeResult(all_rows=[])
+            if _ROUTE_TREND in sql:
+                return _FakeResult(all_rows=[])
+            if _ROUTE_RELIABILITY in sql:
+                return _FakeResult(one=SimpleNamespace(send_unknown=0, suppressed=0, failed=0))
+            raise AssertionError(f"unmatched SQL: {sql[:80]}")
+
+    class _CM:
+        async def __aenter__(self):
+            return _ConcurrencySession()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    def factory():
+        return _CM()
+
+    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
+
+    async def _miss(_key):
+        return None
+
+    monkeypatch.setattr(perf_mod, "cache_get_json", _miss)
+
+    async def _set(_k, _v, ttl_seconds):
+        return None
+
+    monkeypatch.setattr(perf_mod, "cache_set_json", _set)
+
+    await performance("24h", _admin=SimpleNamespace())
+
+    # gather ran ≥ 2 reads in flight simultaneously — sequential would be 1.
+    assert max_inflight >= 2, f"reads were not concurrent (max_inflight={max_inflight})"
 
 
 def test_worker_preamble_timings_slices_enqueue_and_preamble():
@@ -185,9 +461,7 @@ def test_worker_preamble_timings_slices_enqueue_and_preamble():
     carries queue_depth + the throttle flag."""
     from app.workers.chatbot_worker import _preamble_timings
 
-    state = SimpleNamespace(
-        received_at_epoch=1000.0, preamble_start_epoch=1000.3, queue_depth=2
-    )
+    state = SimpleNamespace(received_at_epoch=1000.0, preamble_start_epoch=1000.3, queue_depth=2)
     started_at = datetime.fromtimestamp(1000.9, tz=timezone.utc)
 
     t = _preamble_timings(state, started_at, lane="agent", throttle=True)
@@ -198,7 +472,7 @@ def test_worker_preamble_timings_slices_enqueue_and_preamble():
         "throttle": True,
         "degraded": True,
         "webhook_to_pickup_ms": 300,  # 0.3s
-        "preamble_ms": 600,           # 0.6s
+        "preamble_ms": 600,  # 0.6s
     }
 
 

@@ -10,6 +10,7 @@ import {
   type PerfTrendBucket,
   usePerformanceStats,
 } from "./usePerformanceStats";
+import { formatTrendBucket, getTrendAxisTicks } from "./trendAxis";
 import "./performance.css";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -120,9 +121,17 @@ const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
  * Each bucket is one vertical bar; height ∝ p95 latency. Error buckets get the
  * destructive color so a spike in failures is visible at a glance.
  */
-const TrendChart = ({ trend }: { trend: PerfTrendBucket[] }) => {
+const TrendChart = ({
+  trend,
+  window,
+}: {
+  trend: PerfTrendBucket[];
+  window: PerfMetrics["window"];
+}) => {
   const maxP95 = Math.max(1, ...trend.map((b) => b.p95_ms ?? 0));
   const totalErrors = trend.reduce((sum, b) => sum + b.errors, 0);
+  const includesDate = window === "7d";
+  const axisTicks = getTrendAxisTicks(trend, includesDate);
 
   return (
     <section className="performance-panel">
@@ -134,28 +143,52 @@ const TrendChart = ({ trend }: { trend: PerfTrendBucket[] }) => {
       {trend.length === 0 ? (
         <p className="performance-empty">Chưa có dữ liệu xu hướng.</p>
       ) : (
-        <div
-          className="performance-trend"
-          role="img"
-          aria-label="Xu hướng độ trễ p95 theo từng 5 phút"
-        >
-          {trend.map((b, i) => {
-            const heightPct = Math.max(
-              2,
-              ((b.p95_ms ?? 0) / maxP95) * 100,
-            );
-            const hasError = b.errors > 0;
-            const tooltip = `${b.bucket ?? "?"} · p95 ${fmtMs(b.p95_ms)} · ${b.turns} lượt · ${b.errors} lỗi`;
-            return (
-              <div
-                className={`performance-trend-bar${hasError ? " is-error" : ""}`}
-                key={`${b.bucket ?? i}`}
-                style={{ height: `${heightPct}%` }}
-                title={tooltip}
-              />
-            );
-          })}
-        </div>
+        <>
+          <div
+            className="performance-trend"
+            role="img"
+            aria-label="Xu hướng độ trễ p95 theo từng 5 phút"
+          >
+            {trend.map((b, i) => {
+              const heightPct = Math.max(
+                2,
+                ((b.p95_ms ?? 0) / maxP95) * 100,
+              );
+              const hasError = b.errors > 0;
+              const tooltip = `${formatTrendBucket(b.bucket, true)} · p95 ${fmtMs(b.p95_ms)} · ${b.turns} lượt · ${b.errors} lỗi`;
+              return (
+                <div
+                  className={`performance-trend-bar${hasError ? " is-error" : ""}`}
+                  key={`${b.bucket ?? i}`}
+                  style={{ height: `${heightPct}%` }}
+                  title={tooltip}
+                />
+              );
+            })}
+          </div>
+          <div className="performance-trend-axis" aria-hidden="true">
+            {axisTicks.map((tick) => {
+              const position =
+                trend.length > 1 ? (tick.index / (trend.length - 1)) * 100 : 0;
+              const edgeClass =
+                tick.index === 0
+                  ? "is-first"
+                  : tick.index === trend.length - 1
+                    ? "is-last"
+                    : "";
+
+              return (
+                <span
+                  className={edgeClass}
+                  key={tick.index}
+                  style={{ left: `${position}%` }}
+                >
+                  {tick.label}
+                </span>
+              );
+            })}
+          </div>
+        </>
       )}
     </section>
   );
@@ -397,7 +430,7 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         />
       </section>
 
-      <TrendChart trend={data.trend ?? []} />
+      <TrendChart trend={data.trend ?? []} window={data.window} />
 
       <section className="performance-panel">
         <h2>Độ trễ theo giai đoạn</h2>
@@ -448,10 +481,45 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         />
       </section>
 
+      <ReliabilityPanel reliability={data.reliability} />
+
       <SlowestTurnsTable slow_turns={data.slow_turns} />
     </>
   );
 };
+
+const ReliabilityPanel = ({
+  reliability,
+}: {
+  reliability: {
+    send_unknown_count: number;
+    suppressed_count: number;
+    failed_count: number;
+  };
+}) => (
+  <section className="performance-panel">
+    <h2>Độ tin cậy giao gửi</h2>
+    <div className="performance-reliability">
+      <div className="reliability-stat">
+        <span className="reliability-value">{reliability.send_unknown_count}</span>
+        <span className="reliability-label">Gửi không xác định</span>
+        <span className="reliability-hint">
+          Timeout sau khi Zalo có thể đã nhận — không thử lại
+        </span>
+      </div>
+      <div className="reliability-stat">
+        <span className="reliability-value">{reliability.suppressed_count}</span>
+        <span className="reliability-label">Bị chặn</span>
+        <span className="reliability-hint">Recruiter tiếp quản giữa lượt</span>
+      </div>
+      <div className="reliability-stat">
+        <span className="reliability-value">{reliability.failed_count}</span>
+        <span className="reliability-label">Thất bại</span>
+        <span className="reliability-hint">Lỗi gửi — sẽ thử lại</span>
+      </div>
+    </div>
+  </section>
+);
 
 const CountCard = ({
   title,

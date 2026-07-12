@@ -138,6 +138,7 @@ class _FaqBypassAdapter:
                 score=decision.top1_score,
                 reason=decision.reason,
                 latency_ms=latency_ms,
+                runner_up_score=decision.top2_score if decision.top2_score > 0 else None,
             )
         return None
 

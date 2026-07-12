@@ -3,7 +3,16 @@
 Aggregates ``BotRun.stage_timings`` (captured by ``app.graph.runner.run_turn``) into
 p50/p95/p99 per stage, plus by-lane/outcome counts and the slowest recent turns.
 Live tiles reuse the ``/health/queue`` snapshot via ``collect_queue_health``. Admin-only.
+
+Latency strategy (migration 0032 + concurrent reads + Redis cache):
+- The five time-windowed reads (``_percentiles``, ``_lane_outcome_counts``,
+  ``_slow_turns``, ``_trend``, ``_reliability``) run concurrently via
+  ``asyncio.gather``, each on its own ``AsyncSession`` (a single session is not
+  safe for concurrent use). Pool ``pool_size=10`` has ample headroom for 5 reads.
+- The assembled payload is cached in Redis for 30 s (``_CACHE_TTL_SECONDS``),
+  matching the frontend ``staleTime``. Auth always runs before the cache lookup.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,11 +23,20 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_admin
-from app.core.db import get_db
+from app.core.cache import cache_get_json, cache_set_json
+from app.core.db import async_session
 from app.core.ops_health import collect_queue_health
 from app.models.user import User
 
 router = APIRouter(prefix="/admin/performance", tags=["performance"])
+
+# Response cache TTL — matches frontend staleTime (usePerformanceStats.ts).
+_CACHE_TTL_SECONDS = 30
+
+
+def _cache_key(window: str) -> str:
+    return f"perf:dashboard:{window}"
+
 
 # Time windows accepted via ?window=. Values are timedeltas bound as parameters
 # and cast to interval in SQL via (:interval)::interval. Both halves matter:
@@ -70,8 +88,15 @@ def _int(v) -> int | None:
 # (not computed from the full stage_timings dict) so adding a new unmeasured
 # in-process computation does NOT silently inflate dark time.
 _MEASURED_STAGES = (
-    "lead_ms", "system_prompt_ms", "llm_queue_ms", "llm_model_ms",
-    "llm_backoff_ms", "tool_ms", "send_ms", "db_ms", "faq_bypass_ms",
+    "lead_ms",
+    "system_prompt_ms",
+    "llm_queue_ms",
+    "llm_model_ms",
+    "llm_backoff_ms",
+    "tool_ms",
+    "send_ms",
+    "db_ms",
+    "faq_bypass_ms",
 )
 
 
@@ -93,14 +118,41 @@ def _dark_time_ms(st: dict) -> int | None:
 async def performance(
     window: str = Query("24h", pattern="^(1h|24h|7d)$"),
     _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
 ) -> dict:
     interval = _WINDOWS[window]
-    live = await asyncio.to_thread(collect_queue_health)
-    percentiles = await _percentiles(db, interval)
-    by_lane, by_outcome = await _lane_outcome_counts(db, interval)
-    slow_turns = await _slow_turns(db, interval)
-    trend = await _trend(db, interval)
+    key = _cache_key(window)
+    # cache_get_json/cache_set_json swallow internally, but wrap defensively so
+    # a Redis outage (or a stub that raises) never breaks the dashboard — the
+    # compute path is the source of truth.
+    try:
+        cached = await cache_get_json(key)
+    except Exception:  # noqa: BLE001 — cache must never break the endpoint
+        cached = None
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+    payload = await _compute(interval, window)
+    try:
+        await cache_set_json(key, payload, ttl_seconds=_CACHE_TTL_SECONDS)
+    except Exception:  # noqa: BLE001 — cache write failure is non-fatal
+        pass
+    return payload
+
+
+async def _compute(interval: timedelta, window: str) -> dict:
+    """Run all dashboard reads concurrently and assemble the response payload.
+
+    Each DB read opens its own short-lived ``AsyncSession`` (a single session
+    cannot be shared across concurrent ``gather`` coroutines). Queue health is a
+    sync Redis call run via ``asyncio.to_thread`` and is gathered with the rest.
+    """
+    live, percentiles, (by_lane, by_outcome), slow_turns, trend, reliability = await asyncio.gather(
+        asyncio.to_thread(collect_queue_health),
+        _with_session(_percentiles, interval),
+        _with_session_tuple(_lane_outcome_counts, interval),
+        _with_session(_slow_turns, interval),
+        _with_session(_trend, interval),
+        _with_session(_reliability, interval),
+    )
     return {
         "window": window,
         "live": live,
@@ -109,6 +161,49 @@ async def performance(
         "by_outcome": by_outcome,
         "slow_turns": slow_turns,
         "trend": trend,
+        "reliability": reliability,
+    }
+
+
+async def _with_session(coro_fn, interval: timedelta):
+    """Open a short-lived session and run ``coro_fn(session, interval)``.
+
+    Per-read sessions make ``asyncio.gather`` safe (one ``AsyncSession`` may not
+    serve two concurrent operations).
+    """
+    async with async_session() as session:
+        return await coro_fn(session, interval)
+
+
+async def _with_session_tuple(coro_fn, interval: timedelta):
+    """Same as ``_with_session`` for helpers that return a tuple (lane/outcome)."""
+    async with async_session() as session:
+        return await coro_fn(session, interval)
+
+
+async def _reliability(db: AsyncSession, interval: timedelta) -> dict:
+    """Delivery-reliability counters: SEND_UNKNOWN (ambiguous send) + suppressed turns.
+
+    Surfaced separately from by_outcome because these are reliability signals, not
+    lane/outcome distributions. ``send_unknown_count`` is the canary for the
+    duplicate-reply window closed in Phase 1 — a spike means Zalo transport
+    timeouts. ``suppressed_count`` is the human-takeover cancellation rate.
+    """
+    sql = text(
+        "SELECT "
+        "COUNT(*) FILTER (WHERE m.delivery_status = 'SEND_UNKNOWN') AS send_unknown, "
+        "COUNT(*) FILTER (WHERE m.delivery_status = 'SUPPRESSED') AS suppressed, "
+        "COUNT(*) FILTER (WHERE m.delivery_status = 'FAILED') AS failed "
+        "FROM messages m "
+        "JOIN bot_runs b ON b.id = m.bot_run_id "
+        "WHERE b.started_at >= now() - (:interval)::interval "
+        "AND m.sender = 'BOT'"
+    )
+    row = (await db.execute(sql, {"interval": interval})).one_or_none()
+    return {
+        "send_unknown_count": int(row.send_unknown or 0) if row else 0,
+        "suppressed_count": int(row.suppressed or 0) if row else 0,
+        "failed_count": int(row.failed or 0) if row else 0,
     }
 
 
@@ -122,8 +217,7 @@ async def _percentiles(db: AsyncSession, interval: timedelta) -> dict:
         value_sql = _stage_sql(key)
         for p, alias in (("0.5", "p50"), ("0.95", "p95"), ("0.99", "p99")):
             cols.append(
-                f"percentile_cont({p}) WITHIN GROUP "
-                f"(ORDER BY {value_sql}) AS {key}_{alias}"
+                f"percentile_cont({p}) WITHIN GROUP (ORDER BY {value_sql}) AS {key}_{alias}"
             )
     sql = (
         "SELECT " + ", ".join(cols) + " "
@@ -155,7 +249,9 @@ async def _lane_outcome_counts(db: AsyncSession, interval: timedelta) -> tuple[d
     for r in rows:
         lane = r.lane or "unknown"
         by_lane[lane] = by_lane.get(lane, 0) + int(r.n)
-        outcome = r.outcome if isinstance(r.outcome, str) else getattr(r.outcome, "value", str(r.outcome))
+        outcome = (
+            r.outcome if isinstance(r.outcome, str) else getattr(r.outcome, "value", str(r.outcome))
+        )
         by_outcome[outcome] = by_outcome.get(outcome, 0) + int(r.n)
     return by_lane, by_outcome
 
@@ -179,48 +275,52 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
                 + int(st.get("preamble_ms") or 0)
                 + int(st.get("webhook_to_pickup_ms") or 0)
             )
-        outcome = r.outcome if isinstance(r.outcome, str) else getattr(r.outcome, "value", str(r.outcome))
+        outcome = (
+            r.outcome if isinstance(r.outcome, str) else getattr(r.outcome, "value", str(r.outcome))
+        )
         # degraded covers both the new explicit flag and the legacy throttle key.
         degraded = bool(st.get("degraded") or st.get("throttle"))
-        out.append({
-            "id": r.id,
-            "conversation_id": str(r.conversation_id),
-            "started_at": r.started_at.isoformat() if r.started_at else None,
-            "outcome": outcome,
-            "lane": st.get("lane"),
-            "intent": st.get("intent"),
-            "llm_queue_ms": st.get("llm_queue_ms"),
-            "llm_model_ms": st.get("llm_model_ms"),
-            "llm_backoff_ms": st.get("llm_backoff_ms"),
-            "llm_calls": st.get("llm_calls"),
-            "llm_call_ms": st.get("llm_call_ms"),
-            "tool_calls": st.get("tool_calls"),
-            "tool_ms": st.get("tool_ms"),
-            "tool_breakdown": st.get("tool_breakdown"),
-            "prompt_tokens": st.get("prompt_tokens"),
-            "completion_tokens": st.get("completion_tokens"),
-            "cached_tokens": st.get("cached_tokens"),
-            "retried_429": st.get("retried_429"),
-            "degraded": degraded,
-            "prefetch_hit": st.get("prefetch_hit"),
-            "pipeline_ms": pipeline_ms,
-            "total_ms": end_to_end_ms,
-            "queue_depth": st.get("queue_depth"),
-            # DB path attribution (Proposal 1): aggregate + per-call breakdown.
-            "db_ms": st.get("db_ms"),
-            "db_breakdown": st.get("db_breakdown"),
-            # FAQ bypass latency (Proposal 2) — null when the bypass cascade
-            # didn't run (agent lane or fast lane).
-            "faq_bypass_ms": st.get("faq_bypass_ms"),
-            # Model tier + system-prompt cache hit (Proposal 3).
-            "model_tier": st.get("model_tier"),
-            "system_prompt_cache_hit": st.get("system_prompt_cache_hit"),
-            # Dark time (Proposal 1): total_ms minus the sum of every measured
-            # intra-turn stage. When this is consistently low (<5% of total_ms),
-            # instrumentation is sufficient. A spike marks the exact spot to add
-            # the next probe. Computed from the pipeline (post-preamble) slice.
-            "dark_time_ms": _dark_time_ms(st),
-        })
+        out.append(
+            {
+                "id": r.id,
+                "conversation_id": str(r.conversation_id),
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "outcome": outcome,
+                "lane": st.get("lane"),
+                "intent": st.get("intent"),
+                "llm_queue_ms": st.get("llm_queue_ms"),
+                "llm_model_ms": st.get("llm_model_ms"),
+                "llm_backoff_ms": st.get("llm_backoff_ms"),
+                "llm_calls": st.get("llm_calls"),
+                "llm_call_ms": st.get("llm_call_ms"),
+                "tool_calls": st.get("tool_calls"),
+                "tool_ms": st.get("tool_ms"),
+                "tool_breakdown": st.get("tool_breakdown"),
+                "prompt_tokens": st.get("prompt_tokens"),
+                "completion_tokens": st.get("completion_tokens"),
+                "cached_tokens": st.get("cached_tokens"),
+                "retried_429": st.get("retried_429"),
+                "degraded": degraded,
+                "prefetch_hit": st.get("prefetch_hit"),
+                "pipeline_ms": pipeline_ms,
+                "total_ms": end_to_end_ms,
+                "queue_depth": st.get("queue_depth"),
+                # DB path attribution (Proposal 1): aggregate + per-call breakdown.
+                "db_ms": st.get("db_ms"),
+                "db_breakdown": st.get("db_breakdown"),
+                # FAQ bypass latency (Proposal 2) — null when the bypass cascade
+                # didn't run (agent lane or fast lane).
+                "faq_bypass_ms": st.get("faq_bypass_ms"),
+                # Model tier + system-prompt cache hit (Proposal 3).
+                "model_tier": st.get("model_tier"),
+                "system_prompt_cache_hit": st.get("system_prompt_cache_hit"),
+                # Dark time (Proposal 1): total_ms minus the sum of every measured
+                # intra-turn stage. When this is consistently low (<5% of total_ms),
+                # instrumentation is sufficient. A spike marks the exact spot to add
+                # the next probe. Computed from the pipeline (post-preamble) slice.
+                "dark_time_ms": _dark_time_ms(st),
+            }
+        )
     return out
 
 

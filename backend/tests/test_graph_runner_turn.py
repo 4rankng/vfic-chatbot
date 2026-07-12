@@ -71,10 +71,11 @@ class _FakeDB:
 
 class _SendResult:
     def __init__(self, ok: bool = True, error: str | None = None,
-                 msg_id: str = "mid-1") -> None:
+                 msg_id: str = "mid-1", error_class: str | None = None) -> None:
         self.ok = ok
         self.error = error
         self.msg_id = msg_id
+        self.error_class = error_class
 
 
 class _FakeZalo:
@@ -263,7 +264,7 @@ async def test_lock_owner_lost_before_turn_suppresses_without_pending(monkeypatc
 @pytest.mark.asyncio
 async def test_zalo_send_failure_is_reported_as_send_failed(monkeypatch):
     conv = _FakeConv()
-    svc, _ = _stub_svc(conv=conv, owned=True)
+    svc, recorded = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, "Chào bạn!")
     zalo = _FakeZalo(results=[_SendResult(ok=False, error="zalo_rate_limited")])
 
@@ -272,6 +273,46 @@ async def test_zalo_send_failure_is_reported_as_send_failed(monkeypatch):
     assert res["outcome"] == "send_failed"
     assert res["reason"] == "zalo_rate_limited"
     assert res["reply"] == "Chào bạn!"
+    # A definite rejection (no error_class) stays FAILED — the reconciler may retry.
+    assert recorded[0]["delivery_status"] is None  # no override → FAILED computed downstream
+
+
+@pytest.mark.asyncio
+async def test_zalo_ambiguous_send_timeout_is_send_unknown(monkeypatch):
+    """Transport timeout after the request may have reached Zalo → SEND_UNKNOWN."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    zalo = _FakeZalo(results=[
+        _SendResult(ok=False, error="transport error: read timeout",
+                    error_class="read_timeout")
+    ])
+
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
+
+    assert res["outcome"] == "send_unknown"
+    assert res["reason"] == "transport error: read timeout"
+    assert res["reply"] == "Chào bạn!"
+    # The override routes to SEND_UNKNOWN (non-retriable) — closes the duplicate window.
+    from app.models.conversation import DeliveryStatus
+    assert recorded[0]["delivery_status"] is DeliveryStatus.SEND_UNKNOWN
+
+
+@pytest.mark.asyncio
+async def test_zalo_connect_error_stays_retryable_failed(monkeypatch):
+    """A pre-send connection failure (definitely not sent) stays retryable FAILED."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    zalo = _FakeZalo(results=[
+        _SendResult(ok=False, error="transport error: connect failed",
+                    error_class="connect_error")
+    ])
+
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
+
+    assert res["outcome"] == "send_failed"
+    assert recorded[0]["delivery_status"] is None  # no override → FAILED (retryable)
 
 
 @pytest.mark.asyncio
@@ -714,6 +755,32 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_trace_id_propagates_to_record_bot_outcome(monkeypatch):
+    """state.trace_id flows through to record_bot_outcome for BotRun.trace_id stamping."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    state = _state()
+    state.trace_id = "abc-123-trace"
+    res = await run_turn(state, _deps(_FakeZalo(), conversation=svc))
+
+    assert res["outcome"] == "sent"
+    assert recorded[0]["trace_id"] == "abc-123-trace"
+
+
+@pytest.mark.asyncio
+async def test_empty_trace_id_passes_none(monkeypatch):
+    """When state.trace_id is empty (legacy/test turns), record_bot_outcome gets None."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc))  # trace_id=""
+
+    assert res["outcome"] == "sent"
+    assert recorded[0]["trace_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
     """The real _agent_turn stamps system_prompt_ms before the LLM call.
 
@@ -801,6 +868,84 @@ async def test_stage_timings_records_faq_bypass_lane(monkeypatch):
 
     assert res["outcome"] == "faq_bypass"
     assert recorded[0]["stage_timings"]["lane"] == "faq_bypass"
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_high_margin_is_accepted_with_metadata(monkeypatch):
+    """High-margin FAQ match (score - runner_up > faq_abstain_margin) is accepted;
+    outcome_metadata carries similarity + runner_up + abstained=False."""
+    from app.graph.ports import FaqBypassResult
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        raise AssertionError("agent must not be called on a high-margin FAQ hit")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    bypass = _FakeFaqBypass(
+        result=FaqBypassResult(
+            answer="Câu trả lời FAQ", faq_id="x", tier="hybrid",
+            score=0.90, runner_up_score=0.70,  # margin 0.20 > 0.03 default
+        )
+    )
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
+
+    assert res["outcome"] == "faq_bypass"
+    md = recorded[0]["outcome_metadata"]
+    assert md["abstained"] is False
+    assert md["similarity_score"] == 0.90
+    assert md["runner_up_score"] == 0.70
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_low_margin_abstains_to_agent(monkeypatch):
+    """Low-margin FAQ match (score - runner_up < faq_abstain_margin) falls through to
+    the LLM; outcome_metadata records abstained=True with the scores."""
+    from app.graph.ports import FaqBypassResult
+
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Trả lời từ agent")
+    bypass = _FakeFaqBypass(
+        result=FaqBypassResult(
+            answer="Câu trả lời FAQ sai", faq_id="x", tier="hybrid",
+            score=0.85, runner_up_score=0.84,  # margin 0.01 < 0.03 default → abstain
+        )
+    )
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
+
+    # Agent answered (not the FAQ), but the abstention is recorded in metadata.
+    assert res["outcome"] == "sent"
+    assert res["reply"] == "Trả lời từ agent"
+    md = recorded[0]["outcome_metadata"]
+    assert md["abstained"] is True
+    assert md["similarity_score"] == 0.85
+    assert md["runner_up_score"] == 0.84
+    # The timing lane is agent (fell through), but faq_abstained flag is stamped.
+    assert recorded[0]["stage_timings"].get("faq_abstained") is True
+
+
+@pytest.mark.asyncio
+async def test_faq_bypass_no_runner_up_never_abstains(monkeypatch):
+    """Single-result FAQ match (runner_up_score=None) never abstains."""
+    from app.graph.ports import FaqBypassResult
+
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        raise AssertionError("agent must not be called when there's no runner-up")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    bypass = _FakeFaqBypass(
+        result=FaqBypassResult(
+            answer="Câu trả lời FAQ", faq_id="x", tier="exact",
+            score=0.50, runner_up_score=None,  # single result → never abstain
+        )
+    )
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
+
+    assert res["outcome"] == "faq_bypass"
+    assert recorded[0]["outcome_metadata"]["abstained"] is False
 
 
 @pytest.mark.asyncio

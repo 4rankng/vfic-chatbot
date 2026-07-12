@@ -22,6 +22,7 @@ from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import request_id_ctx
 from app.services.conversation import ConversationService
 from app.services.dedup import MessageDedupService
 from app.services.zalo_oa_events import parse_oa_webhook_event
@@ -155,6 +156,11 @@ class ZaloWebhookService:
             # Epoch anchor (not monotonic) so the RQ worker can compute remaining
             # wall-clock budget across the process boundary. See BotRunState.
             "received_at_epoch": time.time(),
+            # End-to-end trace id: the webhook's request_id, propagated through
+            # RQ → BotRunState → BotRun.trace_id so one query returns every log
+            # line for a single candidate message's journey. Contextvar does not
+            # cross processes, so the worker re-stashes it from this field.
+            "trace_id": request_id_ctx.get(),
             # Carried so the worker can re-fire the Bot typing indicator on pickup
             # (the webhook's one-shot expires after ~5s; this bridges the gap
             # until run_turn's heartbeat starts). No-op for OA. The live DB-resolved

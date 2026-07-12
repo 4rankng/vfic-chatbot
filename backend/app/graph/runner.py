@@ -36,8 +36,9 @@ from app.graph.safety import (
     fast_safety_filter,
     retry_exhausted_fallback,
 )
+from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
-from app.models.conversation import Message
+from app.models.conversation import DeliveryStatus, Message
 
 logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
@@ -238,6 +239,7 @@ async def _finish_terminal_reply(
         zalo_message_id=send_result.msg_id if send_result else None,
         stage_timings=stage_timings,
         lock_owner=lock_owner,
+        trace_id=state.trace_id or None,
     )
     outcome = base_outcome if (send_result is None or send_result.ok) else "send_failed"
     return {"outcome": outcome, "reply": text}
@@ -254,6 +256,22 @@ def _stamp_db(timings: dict, key: str, t0: float) -> None:
     timings["db_ms"] = timings.get("db_ms", 0) + elapsed
     breakdown = timings.setdefault("db_breakdown", {})
     breakdown[key] = breakdown.get(key, 0) + elapsed
+
+
+def _faq_should_abstain(bypass, settings) -> bool:
+    """True when the top FAQ match is only marginally better than the runner-up.
+
+    A low margin (score - runner_up_score < faq_abstain_margin) means the
+    semantic match is low-confidence — the top hit may not be the right answer.
+    Fall through to the LLM instead. Returns False when there's no runner-up
+    (single result) or the margin setting is 0 (legacy behavior).
+    """
+    margin = settings.faq_abstain_margin
+    if margin <= 0:
+        return False
+    if bypass.runner_up_score is None:
+        return False
+    return (bypass.score - bypass.runner_up_score) < margin
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
@@ -317,6 +335,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     try:
         candidate = ""
         outcome_label = "sent"
+        faq_metadata: dict | None = None
 
         # --- FAQ / template fast lane (zero LLM calls) ---
         # Greetings / thanks / goodbye / help return instant tôi/bạn templates with
@@ -368,6 +387,30 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     logger.debug("faq_bypass recovery rollback failed", exc_info=True)
                 bypass = None
 
+        # Abstention check: if the top FAQ match is only marginally better than
+        # the runner-up, record the abstention and clear bypass so the turn falls
+        # through to the agent branch below (the elif chain cannot fall through
+        # an already-matched branch).
+        if bypass is not None and _faq_should_abstain(bypass, settings):
+            timings["faq_bypass_ms"] = int(round(bypass.latency_ms))
+            timings["faq_abstained"] = True
+            faq_metadata = {
+                "faq_id": bypass.faq_id,
+                "tier": bypass.tier,
+                "similarity_score": bypass.score,
+                "runner_up_score": bypass.runner_up_score,
+                "abstained": True,
+            }
+            logger.info(
+                "faq_bypass abstained (low margin) tier=%s score=%.3f runner_up=%.3f "
+                "margin=%.3f threshold=%.3f — falling through to agent",
+                bypass.tier, bypass.score,
+                bypass.runner_up_score or 0.0,
+                bypass.score - (bypass.runner_up_score or 0.0),
+                settings.faq_abstain_margin,
+            )
+            bypass = None
+
         if fast is not None:
             timings["lane"] = "fast_lane"
             candidate = fast.reply
@@ -379,6 +422,14 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             # lane above (fast_safety_filter is tuned for LLM output, not curated text).
             candidate = bypass.answer
             outcome_label = "faq_bypass"
+            # Stamp provenance so the threshold can be tuned from production data.
+            faq_metadata = {
+                "faq_id": bypass.faq_id,
+                "tier": bypass.tier,
+                "similarity_score": bypass.score,
+                "runner_up_score": bypass.runner_up_score,
+                "abstained": False,
+            }
             logger.info(
                 "faq_bypass hit tier=%s score=%.3f reason=%s faq_id=%s",
                 bypass.tier, bypass.score, bypass.reason, bypass.faq_id,
@@ -469,6 +520,13 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
             _stamp_end_to_end(state, timings)
             db_t0 = time.monotonic()
+            # Classify transport failures: ambiguous (timeout/reset after the
+            # request may have reached Zalo) → SEND_UNKNOWN (non-retriable); every
+            # other failure stays FAILED (the reconciler may re-enqueue).
+            send_error_class = send_result.error_class if not send_result.ok else None
+            override_status: DeliveryStatus | None = None
+            if send_error_class in AMBIGUOUS_SEND_CLASSES:
+                override_status = DeliveryStatus.SEND_UNKNOWN
             await svc.record_bot_outcome(
                 conv, version_at_start=state.version_at_start, reply=candidate,
                 started_at=started, sent=send_result.ok,
@@ -477,11 +535,18 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 zalo_message_id=send_result.msg_id,
                 stage_timings=timings,
                 lock_owner=lock_owner,
+                delivery_status=override_status,
+                trace_id=state.trace_id or None,
+                outcome_metadata=faq_metadata,
             )
             _stamp_db(timings, "record_bot_outcome", db_t0)
             if not send_result.ok:
                 return {
-                    "outcome": "send_failed",
+                    "outcome": (
+                        "send_unknown"
+                        if override_status is DeliveryStatus.SEND_UNKNOWN
+                        else "send_failed"
+                    ),
                     "reason": send_result.error,
                     "reply": candidate,
                 }
@@ -508,6 +573,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             pending_message_id=state.pending_message_id,
             stage_timings=timings,
             lock_owner=lock_owner,
+            trace_id=state.trace_id or None,
+            outcome_metadata=faq_metadata,
         )
         _stamp_db(timings, "record_bot_outcome", db_t0)
         return {"outcome": "suppressed", "reply": candidate}

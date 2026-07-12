@@ -53,6 +53,12 @@ class DeliveryStatus(str, enum.Enum):
     SUPPRESSED = "SUPPRESSED"
     DELIVERED = "DELIVERED"
     READ = "READ"
+    # SEND_UNKNOWN: the Zalo POST raised a transport exception (timeout / reset)
+    # AFTER the request may have reached Zalo. Non-retriable — the reconciler skips
+    # these rows (blindly re-running would risk a duplicate reply). Surfaced on the
+    # recruiter console for manual confirm/cancel. Conservative classifier (the
+    # blanket "unknown" catch-all also lands here) biases toward at-most-once.
+    SEND_UNKNOWN = "SEND_UNKNOWN"
 
 
 class BotRunOutcome(str, enum.Enum):
@@ -90,6 +96,15 @@ class Conversation(Base):
     )
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
+    )
+    # Strict per-conversation monotonic counter for debugging — increments on
+    # EVERY mutation (inbound, bot outcome, receipt, recruiter action, mode
+    # change), unlike `version` which intentionally skips bot outcomes to avoid
+    # invalidating in-flight optimistic-lock guards. Used to answer "did B
+    # process before A?" without ambiguity. Pure observability — no guard logic
+    # consumes it.
+    conversation_seq: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default=text("1")
     )
     taken_over_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     assigned_recruiter_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -146,6 +161,15 @@ class BotRun(Base):
     # runs and any path that skips a stage simply omit the key. Aggregated via
     # percentile_cont over (stage_timings->>'<key>')::int.
     stage_timings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Webhook request_id propagated through the RQ job dict + BotRunState so one
+    # trace_id query returns every log line for a single candidate message's
+    # journey (webhook → RQ → LangGraph → Zalo send). Nullable — legacy runs and
+    # direct/test turns may not stamp it. Indexed for log-correlation queries.
+    trace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    # Phase 4 FAQ-bypass provenance: similarity_score, runner_up_score,
+    # decision_threshold, faq_document_id, abstained (bool). Surfaces the
+    # abstention rate on the performance dashboard to tune the margin.
+    outcome_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class Message(Base):

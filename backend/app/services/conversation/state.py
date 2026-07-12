@@ -35,11 +35,13 @@ _SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
 
 # Forward-only delivery progression for receipt handling (READ > DELIVERED > SENT).
-# PENDING/SENDING/FAILED/SUPPRESSED sit at 0 so a receipt never revives a non-sent row
-# (SENDING is a transient pre-send claim, not a delivered state).
+# PENDING/SENDING/SEND_UNKNOWN/FAILED/SUPPRESSED sit at 0 so a receipt never revives a
+# non-sent row (SENDING is a transient pre-send claim, not a delivered state;
+# SEND_UNKNOWN is an ambiguous-send terminal state, also non-revivable).
 _DELIVERY_RANK = {
     DeliveryStatus.PENDING: 0,
     DeliveryStatus.SENDING: 0,
+    DeliveryStatus.SEND_UNKNOWN: 0,
     DeliveryStatus.FAILED: 0,
     DeliveryStatus.SUPPRESSED: 0,
     DeliveryStatus.SENT: 1,
@@ -174,6 +176,7 @@ class ConversationState:
         if conv.mode != ConversationMode.BOT:
             conv.unread_count = (conv.unread_count or 0) + 1
         conv.version += 1
+        conv.conversation_seq += 1
         await self.db.flush()
         await self.db.commit()
         await self.db.refresh(msg)
@@ -405,12 +408,20 @@ class ConversationState:
         zalo_message_id: str | None = None,
         stage_timings: dict | None = None,
         lock_owner: uuid.UUID | str | None = None,
+        delivery_status: DeliveryStatus | None = None,
+        trace_id: str | None = None,
+        outcome_metadata: dict | None = None,
     ) -> Message:
         """Log a bot_run + BOT message; clears the lock.
 
         ``sent=False`` means either ownership suppression or delivery failure.
         ``external_error`` disambiguates real send failures so recovery can
         retry them instead of treating them as completed suppressed turns.
+
+        ``delivery_status`` overrides the computed status. Used by the send path
+        to stamp ``SEND_UNKNOWN`` when a transport exception may have reached
+        Zalo (non-retriable — the reconciler skips these). When None, the status
+        is derived from ``sent``/``external_error`` as before (backward compat).
 
         ``stage_timings`` is the per-stage wall-clock dict captured by run_turn
         (webhook_to_pickup / preamble / lane / lead / llm / safety / send /
@@ -424,13 +435,14 @@ class ConversationState:
             if sent
             else BotRunOutcome.SUPPRESSED
         )
-        delivery_status = (
-            DeliveryStatus.FAILED
-            if external_error
-            else DeliveryStatus.SENT
-            if sent
-            else DeliveryStatus.SUPPRESSED
-        )
+        if delivery_status is None:
+            delivery_status = (
+                DeliveryStatus.FAILED
+                if external_error
+                else DeliveryStatus.SENT
+                if sent
+                else DeliveryStatus.SUPPRESSED
+            )
         run = BotRun(
             conversation_id=conv.id,
             version_at_start=version_at_start,
@@ -439,6 +451,8 @@ class ConversationState:
             started_at=started_at,
             ended_at=utcnow(),
             stage_timings=stage_timings,
+            trace_id=trace_id or None,
+            outcome_metadata=outcome_metadata,
         )
         self.db.add(run)
         await self.db.flush()
@@ -481,6 +495,7 @@ class ConversationState:
                     bot_locked_until=None,
                     bot_lock_owner=None,
                     bot_lock_heartbeat_at=None,
+                    conversation_seq=Conversation.conversation_seq + 1,
                 )
                 .execution_options(synchronize_session=False)
             )
@@ -490,6 +505,11 @@ class ConversationState:
                 conv.bot_lock_heartbeat_at = None
         if delivery_status == DeliveryStatus.SENT:
             conv.last_outbound_at = utcnow()
+        # Bump the strict monotonic seq for every bot outcome (the key delta vs
+        # `version`, which intentionally skips bot outcomes). The no-owner branch
+        # touches conv in Python below; the owner branch bumped via SQL above.
+        if owner is None:
+            conv.conversation_seq = (conv.conversation_seq or 1) + 1
         await self.db.commit()
         await self.db.refresh(msg)
         await self.events.message_created(msg, conv)
@@ -619,6 +639,7 @@ class ConversationState:
             conv.last_followup_at = utcnow()
             conv.followup_count = (conv.followup_count or 0) + 1
             conv.version += 1
+            conv.conversation_seq += 1
         else:
             conv.last_followup_attempt_at = utcnow()
         await self.db.commit()
@@ -653,6 +674,7 @@ class ConversationState:
                 bot_lock_owner=None,
                 bot_lock_heartbeat_at=None,
                 version=Conversation.version + 1,
+                conversation_seq=Conversation.conversation_seq + 1,
             )
             .execution_options(synchronize_session=False)
         )
@@ -689,6 +711,7 @@ class ConversationState:
         conv.assigned_recruiter_id = None
         conv.taken_over_at = None
         conv.version += 1
+        conv.conversation_seq += 1
         self.db.add(
             Message(
                 conversation_id=conv.id,
@@ -731,6 +754,7 @@ class ConversationState:
                 bot_lock_owner=None,
                 bot_lock_heartbeat_at=None,
                 version=Conversation.version + 1,
+                conversation_seq=Conversation.conversation_seq + 1,
             )
             .execution_options(synchronize_session=False)
         )
@@ -769,6 +793,7 @@ class ConversationState:
         conv.status = ConversationStatus.CLOSED
         conv.mode = ConversationMode.CLOSED
         conv.version += 1
+        conv.conversation_seq += 1
         await record_audit(
             self.db,
             action="close_conversation",
@@ -785,6 +810,7 @@ class ConversationState:
         conv.status = ConversationStatus.OPEN
         conv.mode = ConversationMode.BOT
         conv.version += 1
+        conv.conversation_seq += 1
         await record_audit(
             self.db,
             action="reopen_conversation",
@@ -825,6 +851,7 @@ class ConversationState:
         conv.last_followup_attempt_at = None
         conv.followup_opted_out = False
         conv.version += 1
+        conv.conversation_seq += 1
         await record_audit(
             self.db,
             action="clear_conversation_history",
@@ -862,6 +889,7 @@ class ConversationState:
             conv.last_outbound_at = utcnow()
         conv.taken_over_at = utcnow()
         conv.version += 1
+        conv.conversation_seq += 1
         await record_audit(
             self.db,
             action="send_recruiter_message",

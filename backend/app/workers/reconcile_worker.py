@@ -30,6 +30,7 @@ _RECONCILE_FAILED_SEND = "reconcile_failed_send_total"
 _RECONCILE_SKIPPED_LOCKED = "reconcile_skipped_locked_total"
 _RECONCILE_ENQUEUE_FAILED = "reconcile_enqueue_failed_total"
 _RECONCILE_UNKNOWN_SEND = "reconcile_unknown_send_outcome"
+_RECONCILE_SEND_UNKNOWN_SKIPPED = "reconcile_send_unknown_skipped_total"
 _RECONCILE_STALE_LOCK_BROKEN = "reconcile_stale_lock_broken"
 _RECONCILE_UNANSWERED_GAUGE = "reconcile_unanswered_gauge"
 _RECONCILE_TICK_LOCK = "reconcile_tick_lock"  # SETNX non-reentrancy key
@@ -100,6 +101,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     skipped_locked = 0
     enqueue_failed = 0
     unknown_send_outcome = 0
+    send_unknown_skipped = 0
     stale_locks_broken = 0
 
     for conv in candidates:
@@ -184,6 +186,14 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                         reason = "stale_pending"
                     elif newest.delivery_status.name == "FAILED":
                         reason = "failed_send"
+                    elif newest.delivery_status.name == "SEND_UNKNOWN":
+                        # Ambiguous send (transport timeout after Zalo may have
+                        # accepted the message). NON-retriable — re-enqueuing
+                        # risks a duplicate reply. Release the lock and surface
+                        # for manual review on the console.
+                        send_unknown_skipped += 1
+                        await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
+                        continue
                     else:
                         await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                         continue
@@ -263,7 +273,12 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_ENQUEUE_FAILED, enqueue_failed)
     if unknown_send_outcome:
         pipe.incrby(_RECONCILE_UNKNOWN_SEND, unknown_send_outcome)
+    if send_unknown_skipped:
+        pipe.incrby(_RECONCILE_SEND_UNKNOWN_SKIPPED, send_unknown_skipped)
     if stale_locks_broken:
         pipe.incrby(_RECONCILE_STALE_LOCK_BROKEN, stale_locks_broken)
     pipe.execute()
-    logger.info("reconcile tick complete: %d candidates scanned, %d re-enqueued", len(candidates), re_enqueued)
+    logger.info(
+        "reconcile tick complete: %d candidates scanned, %d re-enqueued, %d send_unknown skipped",
+        len(candidates), re_enqueued, send_unknown_skipped,
+    )

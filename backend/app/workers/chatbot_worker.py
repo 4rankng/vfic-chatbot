@@ -7,8 +7,11 @@ import logging
 import time
 import uuid
 
+from app.core.logging import trace_id_ctx
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES
 from app.graph.types import _now
+from app.models.conversation import DeliveryStatus
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +266,11 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
 
     received_at_epoch = float(job.get("received_at_epoch") or 0.0)
     sla = get_settings().sla_seconds
+    # End-to-end trace id carried from the webhook through the RQ job dict.
+    # Contextvars do not cross processes, so re-stash it here so every structured
+    # log line inside the turn carries the originating request's id.
+    trace_id = str(job.get("trace_id") or "")
+    _trace_token = trace_id_ctx.set(trace_id or "-")
     state = BotRunState(
         conversation_id=job["conversation_id"],
         version_at_start=int(job["version_at_start"]),
@@ -275,6 +283,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
         preamble_start_epoch=job_start_epoch,
         queue_depth=queue_depth,
         execution_source=source,
+        trace_id=trace_id,
     )
     heartbeat_task = (
         asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
@@ -321,6 +330,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                         sent = False
                         external_error: str | None = None
                         zalo_message_id: str | None = None
+                        degradation_override: DeliveryStatus | None = None
                         if owned:
                             sender = (
                                 deps.zalo.for_conversation(conv)
@@ -340,6 +350,14 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             sent = send_result.ok
                             external_error = None if send_result.ok else send_result.error
                             zalo_message_id = send_result.msg_id
+                            # Mirror the runner's SEND_UNKNOWN classifier so a
+                            # degradation reply that times out at Zalo is also
+                            # non-retriable (at-most-once).
+                            if (
+                                not send_result.ok
+                                and send_result.error_class in AMBIGUOUS_SEND_CLASSES
+                            ):
+                                degradation_override = DeliveryStatus.SEND_UNKNOWN
                         throttle_timings = _preamble_timings(
                             state, started_at, lane="agent", throttle=True
                         )
@@ -354,6 +372,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             zalo_message_id=zalo_message_id,
                             stage_timings=throttle_timings,
                             lock_owner=lock_owner,
+                            delivery_status=degradation_override,
                         )
                 except Exception:  # noqa: BLE001
                     logger.error("failed to send degradation reply", exc_info=True)
@@ -370,3 +389,4 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
             bridge_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await bridge_task
+        trace_id_ctx.reset(_trace_token)
