@@ -5,7 +5,6 @@ import {
   Cpu,
   MessageCircle,
   PlugZap,
-  Save,
   Settings,
   UsersRound,
   Wifi,
@@ -137,7 +136,7 @@ type IntegrationConfigTestResult = {
 const ZALO_TEST_FIELD_LABELS: Record<string, string> = {
   zalo_bot_token: "Bot Token",
   zalo_oa_app_id: "Zalo App ID",
-  zalo_oa_secret_key: "Webhook Secret",
+  zalo_oa_secret_key: "Bot Secret",
   zalo_oa_access_token: "OA Access Token",
   zalo_oa_refresh_token: "OA Refresh Token",
 };
@@ -169,9 +168,6 @@ type SettingsItemId =
   | "settings-users";
 
 type SettingsNavMode = "integrations" | "embedded";
-type IntegrationSectionId =
-  "settings-zalo-channel" | "settings-minimax" | "settings-openrouter";
-type SaveResult = "idle" | "success" | "error";
 
 type SettingsSectionNavItem = {
   itemId: SettingsItemId;
@@ -681,15 +677,6 @@ export const ZaloIntegrationPage = () => {
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
     "settings-zalo-channel",
   );
-  const [savingSection, setSavingSection] =
-    useState<IntegrationSectionId | null>(null);
-  const [saveResults, setSaveResults] = useState<
-    Record<IntegrationSectionId, SaveResult>
-  >({
-    "settings-zalo-channel": "idle",
-    "settings-minimax": "idle",
-    "settings-openrouter": "idle",
-  });
   const [testingBot, setTestingBot] = useState(false);
   const [testingOa, setTestingOa] = useState(false);
   const [testingMinimax, setTestingMinimax] = useState(false);
@@ -896,37 +883,6 @@ export const ZaloIntegrationPage = () => {
     return nextOpenRouter;
   };
 
-  const saveActiveSection = async () => {
-    if (!minimaxEnabled && !openRouterEnabled) {
-      notify("Cần bật ít nhất một model cho chatbot.", { type: "warning" });
-      return;
-    }
-    if (
-      activeItemId !== "settings-zalo-channel" &&
-      activeItemId !== "settings-minimax" &&
-      activeItemId !== "settings-openrouter"
-    )
-      return;
-    const section = activeItemId;
-    setSavingSection(section);
-    setSaveResults((current) => ({ ...current, [section]: "idle" }));
-    try {
-      if (section === "settings-zalo-channel") await saveZaloChanges();
-      if (section === "settings-minimax") await saveMinimaxChanges();
-      if (section === "settings-openrouter") await saveOpenRouterChanges();
-      setSaveResults((current) => ({ ...current, [section]: "success" }));
-      notify("Đã lưu cấu hình của mục này", { type: "success" });
-    } catch (error) {
-      setSaveResults((current) => ({ ...current, [section]: "error" }));
-      notify(
-        `Không thể lưu cấu hình: ${(error as Error).message || "Vui lòng thử lại."}`,
-        { type: "error" },
-      );
-    } finally {
-      setSavingSection(null);
-    }
-  };
-
   const testChannel = async (
     path: string,
     label: string,
@@ -1015,25 +971,9 @@ export const ZaloIntegrationPage = () => {
       saveOpenRouterChanges,
     );
 
-  const changesForActiveSection =
-    activeItemId === "settings-zalo-channel"
-      ? Object.keys(changedPayload).length > 0
-      : activeItemId === "settings-minimax"
-        ? Object.keys(changedMinimaxPayload).length > 0
-        : activeItemId === "settings-openrouter"
-          ? Object.keys(changedOpenRouterPayload).length > 0
-          : false;
-  const activeSaveResult =
-    activeItemId === "settings-zalo-channel" ||
-    activeItemId === "settings-minimax" ||
-    activeItemId === "settings-openrouter"
-      ? saveResults[activeItemId]
-      : "idle";
-
   const activeItem =
     SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
     SETTINGS_NAV_ITEMS[0];
-  const showingIntegrations = activeItem.mode === "integrations";
   const headerCopy = SETTINGS_VIEW_COPY[activeItem.itemId];
 
   const selectSettingsItem = (itemId: SettingsItemId) => {
@@ -1098,7 +1038,7 @@ export const ZaloIntegrationPage = () => {
               />
               <SecretInput
                 id="zalo_bot_webhook_secret"
-                label="Webhook Secret"
+                label="Bot Secret"
                 status={
                   settings?.zalo_bot_webhook_secret ?? {
                     configured: false,
@@ -1113,7 +1053,7 @@ export const ZaloIntegrationPage = () => {
                   variant="outline"
                   className="settings-test-button"
                   onClick={testBotConnection}
-                  disabled={savingSection !== null || testingBot || !settings}
+                  disabled={testingBot || !settings}
                 >
                   <Wifi className="size-4" />
                   {testingBot ? "Đang kiểm tra" : "Lưu & kiểm tra"}
@@ -1142,7 +1082,7 @@ export const ZaloIntegrationPage = () => {
 
                 <SecretInput
                   id="zalo_oa_secret_key"
-                  label="Webhook Secret"
+                  label="Bot Secret"
                   status={settings?.zalo_oa_secret_key ?? { configured: false }}
                   value={form.zalo_oa_secret_key}
                   onChange={setValue}
@@ -1175,7 +1115,7 @@ export const ZaloIntegrationPage = () => {
                     variant="outline"
                     className="settings-test-button"
                     onClick={testOaConnection}
-                    disabled={savingSection !== null || testingOa || !settings}
+                    disabled={testingOa || !settings}
                   >
                     <Wifi className="size-4" />
                     {testingOa ? "Đang kiểm tra" : "Lưu & kiểm tra"}
@@ -1234,9 +1174,7 @@ export const ZaloIntegrationPage = () => {
                   variant="outline"
                   className="settings-test-button"
                   onClick={testMinimaxConnection}
-                  disabled={
-                    savingSection !== null || testingMinimax || !minimaxSettings
-                  }
+                  disabled={testingMinimax || !minimaxSettings}
                 >
                   <Wifi className="size-4" />
                   {testingMinimax ? "Đang kiểm tra" : "Lưu & kiểm tra"}
@@ -1303,11 +1241,7 @@ export const ZaloIntegrationPage = () => {
                 variant="outline"
                 className="settings-test-button"
                 onClick={testOpenRouterConnection}
-                disabled={
-                  savingSection !== null ||
-                  testingOpenRouter ||
-                  !openRouterSettings
-                }
+                disabled={testingOpenRouter || !openRouterSettings}
               >
                 <Wifi className="size-4" />
                 {testingOpenRouter ? "Đang kiểm tra" : "Lưu & kiểm tra"}
@@ -1352,33 +1286,6 @@ export const ZaloIntegrationPage = () => {
                   <p>{headerCopy.description}</p>
                 </div>
               </div>
-              {showingIntegrations ? (
-                <div className="settings-header-actions">
-                  <Button
-                    className="settings-save-button"
-                    onClick={saveActiveSection}
-                    disabled={
-                      savingSection === activeItemId || !changesForActiveSection
-                    }
-                  >
-                    <Save className="size-4" />
-                    {savingSection === activeItemId
-                      ? "Đang lưu"
-                      : activeSaveResult === "error"
-                        ? "Thử lưu lại"
-                        : "Lưu cấu hình"}
-                  </Button>
-                  <p className="settings-save-status" aria-live="polite">
-                    {activeSaveResult === "success"
-                      ? "Đã lưu mục này. Các mục khác chưa thay đổi."
-                      : activeSaveResult === "error"
-                        ? "Lưu chưa thành công. Bạn có thể thử lại."
-                        : changesForActiveSection
-                          ? "Có thay đổi chưa lưu trong mục này."
-                          : "Mục này chưa có thay đổi cần lưu."}
-                  </p>
-                </div>
-              ) : null}
             </header>
 
             {renderSettingsBody()}

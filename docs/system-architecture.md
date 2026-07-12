@@ -135,6 +135,136 @@ Candidate    Zalo        Caddy      FastAPI    Redis(RQ)   worker-chatbot   Post
    │          │            │           │           │             │─persistence_low (lead extract)─────────────────────────►│            │            │
 ```
 
+### 2.1 Verified sequence diagram (Mermaid)
+
+> Verified against source on 2026-07-12. File:line anchors point at
+> `backend/app/`. Read alongside the simplified ASCII above; this diagram
+> adds the two no-LLM fast paths, the four-layer mode/ownership guard,
+> and the three-phase message persistence the ASCII omits.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Zalo user
+    participant Z as Zalo (OA / Bot)
+    participant E as Caddy edge
+    participant W as FastAPI webhook<br/>(api/webhooks.py)
+    participant H as ZaloWebhookService<br/>(services/webhook.py)
+    participant DB as Postgres
+    participant RQ as Redis / RQ<br/>(queue: webhook_high)
+    participant WK as worker-chatbot<br/>(graph/runner.py)
+    participant ZS as ZaloChannelSender<br/>(services/zalo_sender.py)
+    participant RT as Socket.IO<br/>(realtime/emitter.py)
+
+    U->>Z: message
+    Z->>E: POST /webhooks/zalo/{chatbot,oa}
+    E->>W: raw body + headers
+
+    Note over W,H: ── adapter preamble ──
+    W->>DB: resolve_zalo() (encrypted IntegrationSetting)
+    W->>W: verify signature<br/>Bot: shared-secret compare (X-Bot-Api-Secret-Token)<br/>OA: SHA256 HMAC (X-ZEvent-Signature)
+    W->>H: handle(payload)
+
+    Note over H: ── normalize BEFORE dedup ──<br/>(msg_hash is computed during normalize)
+    H->>H: normalize → NormalizedMessage<br/>(return "ignored" if non-text)
+    H->>DB: dedup.claim(chat_id, msg_hash)<br/>message_dedup table, 8s window<br/>return "duplicate" if seen
+    H->>DB: ensure conversation (upsert Conversation)
+    H->>DB: record_inbound → Message WORKER row<br/>bump unread, opt-out check
+    H-->>RT: message.created + conversation.updated
+
+    rect rgb(245, 235, 235)
+    Note over H,DB: ── mode policy guard layer 1/4 ──
+    H->>H: run_start_guard(conv)<br/>HUMAN / CLOSED → "starved_human_mode"<br/>SEMI_AUTO → wait 5min after human inactive<br/>BOT → allow
+    end
+
+    rect rgb(245, 235, 235)
+    Note over H,DB: ── mode policy guard layer 2/4 ──
+    H->>DB: acquire_lock(conv.id)<br/>atomic bot_locked_until UPDATE<br/>return "locked" if held
+    end
+
+    H->>Z: fire typing indicator (bot channel only,<br/>fire-and-forget asyncio.create_task)
+    H->>RQ: enqueue_chat_run(job)
+    Note over H,RQ: backpressure: max_depth check,<br/>503 + lock release on enqueue fail
+    W-->>E: 200 ACK {status: "processing"} (< 1s)
+    E-->>Z: 200
+    Z-->>U: delivered (inbound)
+
+    Note over WK: ══ bot turn (run_turn, line 259) ══
+
+    RQ->>WK: job
+    WK->>DB: get conv + refresh
+    rect rgb(245, 235, 235)
+    Note over WK,DB: ── mode policy guard layer 3/4 ──
+    WK->>WK: recheck_ownership(conv, version_at_start, lock_owner)<br/>mismatch → "suppressed" (lock_owner_lost)
+    end
+
+    WK->>DB: record_bot_pending → Message BOT PENDING<br/>"Đang soạn trả lời..."
+    WK-->>RT: message.created + conversation.updated
+    WK->>Z: typing heartbeat (every 4s, bot channel)
+
+    rect rgb(230, 245, 235)
+    Note over WK: ── no-LLM fast path (zero model calls) ──
+    alt template fast lane (greetings/thanks/help)
+        WK->>WK: fast_lane.match(text) → canned reply
+    else FAQ semantic bypass (Redis-cached embeddings)
+        WK->>WK: faq_bypass.try_answer(text) → canonical KB answer
+    else fall through to agent
+        WK->>WK: build_system_prompt (persona + active-product catalog)
+        WK->>WK: route_turn → 8 intents, deterministic (no LLM)
+        WK->>DB: lead.context(chat_id) → profile + probing question
+        WK->>WK: build_agent_user_text (history + lead + route hint)
+        Note over WK,ZS: prefetch tool for high-confidence routes<br/>(search_knowledge / search_bus_timetable)
+        WK->>WK: agent.agent() LLM loop (max 6 iterations)<br/>Redis concurrency semaphore,<br/>tool dispatch = WHERE RAG RETRIEVAL HAPPENS<br/>(search_knowledge, recommend_jobs, get_product_features...)
+        WK->>WK: grounding.strip — remove hallucinated job IDs
+    end
+    end
+
+    Note over WK: ── safety ──
+    WK->>WK: fast_safety_filter (strip think/code/markdown, truncate)<br/>blocklist_hit → deterministic fallback
+
+    rect rgb(245, 235, 235)
+    Note over WK,DB: ── mode policy guard layer 4/4 (closes TOCTOU) ──
+    WK->>DB: claim_send — atomic conditional UPDATE<br/>PENDING → SENDING only if<br/>version + lock_owner + TTL all still valid<br/>else → "suppressed"
+    end
+
+    alt owned (claim succeeded)
+        WK->>ZS: send_message(chat_id, candidate)
+        ZS->>ZS: pick Bot vs OA by conv.zalo_channel
+        alt OA token-invalid response
+            ZS->>ZS: refresh_oa_access_token<br/>(Redis SET NX lock, single-use refresh_token)<br/>retry once
+        end
+        ZS->>Z: Bot: bot-api.zaloplatforms.com/bot{token}/sendMessage<br/>OA: openapi.zalo.me/v3.0/oa/message/cs<br/>(text chunked at 420 chars)
+        Z-->>ZS: send result
+        ZS-->>WK: SendResult(ok)
+        WK->>DB: record_bot_outcome → Message SENT/FAILED<br/>+ BotRun row (stage_timings JSONB)<br/>clear per-chat lock
+        WK-->>RT: message.created + conversation.updated
+        Z-->>U: bot reply
+        WK->>RQ: enqueue persistence_low (lead extract, fire-and-forget)
+    else not owned (takeover won the race)
+        WK->>DB: record_bot_outcome → SUPPRESSED
+    end
+
+    Note over RT: recruiter console receives updates<br/>via room conv:{conversation_id}
+
+    rect rgb(245, 245, 220)
+    Note over RQ,WK: ── reconcile recovery (every ~60s) ──
+    RQ->>WK: run_reconcile_tick
+    WK->>DB: sweep conversations with newest BOT/FAILED<br/>also resolve stale SENDING → SENT (at-most-once)
+    WK->>RQ: re-enqueue fresh turn (full re-run, not just HTTP POST)
+    end
+```
+
+**Key corrections vs naive "webhook → dedup → normalize → worker → send" sketches**
+
+| Naive sketch | Verified reality |
+|---|---|
+| `dedup → normalize` | `normalize → dedup` — dedup key is computed during normalize (`webhook.py:111`, `:115`) |
+| `verify signature (HMAC)` | Two schemes: Bot = shared-secret compare; OA = SHA256 HMAC (`zalo_oa_signature.py:58`) |
+| `apply mode policy` (one step) | Four layers: webhook gate, lock, recheck, atomic `claim_send` (`webhook.py:130`, `:134`, `runner.py:273`, `state.py:329`) |
+| `worker: retrieve → generate → policy` | Ten stages incl. two no-LLM fast paths (template + FAQ bypass), routing, lead context, grounding, safety (`runner.py:259-515`) |
+| `enqueue → Zalo OA Send Message API` | Worker sends directly (no outbox); Bot and OA are distinct APIs; OA has token-refresh retry (`zalo_sender.py:21`, `zalo_oa_service.py:110`) |
+| (missing) | Reconcile worker re-enqueues FAILED turns (~60s); stale SENDING → SENT on worker crash (`reconcile_worker.py`) |
+
 ---
 
 ## 3. Bot-turn pipeline topology
