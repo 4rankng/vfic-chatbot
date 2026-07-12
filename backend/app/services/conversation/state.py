@@ -865,6 +865,25 @@ class ConversationState:
         await self.events.conversation_updated(conv)
         return conv
 
+    async def delete(self, conv: Conversation, actor: User) -> None:
+        """Hard-delete a spam or test conversation while retaining its Lead.
+
+        The database cascades the conversation deletion to messages and bot runs.
+        Audit rows store the conversation id as text, so the deletion remains
+        traceable after the source row is gone. Admin-only enforcement lives at
+        the API boundary.
+        """
+        await record_audit(
+            self.db,
+            action="delete_conversation",
+            actor_id=actor.id,
+            target_type="conversation",
+            target_id=str(conv.id),
+            payload={"hard_delete": "conversation,messages,bot_runs"},
+        )
+        await self.db.delete(conv)
+        await self.db.commit()
+
     async def mark_read(self, conv: Conversation) -> Conversation:
         conv.unread_count = 0
         await self.db.commit()

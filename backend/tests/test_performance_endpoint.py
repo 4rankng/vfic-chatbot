@@ -274,6 +274,10 @@ async def test_performance_bundle_shape(monkeypatch):
     assert out["reliability"]["send_unknown_count"] == 2
     assert out["reliability"]["suppressed_count"] == 5
     assert out["reliability"]["failed_count"] == 1
+    reliability_query = next(query for query in queries if _ROUTE_RELIABILITY in query)
+    # This query must run before migration 0030 adds SEND_UNKNOWN to the enum.
+    # Casting to text makes the dashboard deploy-safe during a rolling migration.
+    assert "m.delivery_status::text = 'SEND_UNKNOWN'" in reliability_query
     # Phase 4: cache was written with the expected key + TTL.
     captured = stubs.captured
     assert captured["key"] == "perf:dashboard:24h"

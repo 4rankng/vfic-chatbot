@@ -114,6 +114,21 @@ async def get_conversation(
     return ConversationOut.model_validate(await _load(conv_id, db, user))
 
 
+@router.delete("/{conv_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    conv_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Permanently remove a spam or test conversation from the inbox.
+
+    Database foreign keys cascade to messages and bot runs. The candidate lead is
+    intentionally retained so a future Zalo message can start a clean thread.
+    """
+    await ConversationService(db).delete(await _load(conv_id, db), admin)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/{conv_id}/last-messages", response_model=list[MessageOut])
 async def last_messages(
     conv_id: uuid.UUID,

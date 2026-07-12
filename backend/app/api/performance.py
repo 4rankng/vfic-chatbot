@@ -196,9 +196,9 @@ async def _reliability(db: AsyncSession, interval: timedelta) -> dict:
     """
     sql = text(
         "SELECT "
-        "COUNT(*) FILTER (WHERE m.delivery_status = 'SEND_UNKNOWN') AS send_unknown, "
-        "COUNT(*) FILTER (WHERE m.delivery_status = 'SUPPRESSED') AS suppressed, "
-        "COUNT(*) FILTER (WHERE m.delivery_status = 'FAILED') AS failed "
+        "COUNT(*) FILTER (WHERE m.delivery_status::text = 'SEND_UNKNOWN') AS send_unknown, "
+        "COUNT(*) FILTER (WHERE m.delivery_status::text = 'SUPPRESSED') AS suppressed, "
+        "COUNT(*) FILTER (WHERE m.delivery_status::text = 'FAILED') AS failed "
         "FROM messages m "
         "JOIN bot_runs b ON b.id = m.bot_run_id "
         "WHERE b.started_at >= now() - (:interval)::interval "

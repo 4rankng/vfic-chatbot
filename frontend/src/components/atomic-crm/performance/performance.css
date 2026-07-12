@@ -13,6 +13,7 @@
   --chart-1: var(--workspace-action);
   height: 100%;
   min-height: 100%;
+  align-content: start;
   overflow-y: auto;
   overscroll-behavior: contain;
   -ms-overflow-style: none;
@@ -364,14 +365,34 @@
   display: grid;
   justify-items: start;
   gap: 0.75rem;
-  max-width: 42rem;
+  max-width: 44rem;
+  padding: 1.5rem;
+  border-color: color-mix(in srgb, var(--destructive) 28%, var(--border));
+  background: color-mix(
+    in srgb,
+    var(--destructive) 4%,
+    var(--workspace-surface, var(--card))
+  );
 }
 .performance-state svg {
+  padding: 0.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
   color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
 }
 .performance-state h2,
 .performance-state p {
   margin: 0;
+}
+.performance-state h2 {
+  font-size: 1.125rem;
+}
+.performance-state p {
+  max-width: 36rem;
+  color: var(--muted-foreground);
+  line-height: 1.55;
 }
 .performance-state div {
   display: flex;

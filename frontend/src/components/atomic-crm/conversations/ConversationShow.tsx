@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRecordContext, useGetList, ShowBase } from "ra-core";
+import {
+  useDataProvider,
+  useGetList,
+  useNotify,
+  usePermissions,
+  useRecordContext,
+  useRefresh,
+  ShowBase,
+} from "ra-core";
 import type { Conversation, Lead } from "../types";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import { Confirm } from "@/components/admin/confirm";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import { getLeadStatusColor, getZaloUserId } from "./conversationDisplay";
 import { ChatThread } from "./ChatThread";
@@ -19,7 +29,9 @@ import {
   Check,
   ChevronDown,
   Handshake,
+  MoreHorizontal,
   PanelRight,
+  Trash2,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
@@ -76,8 +88,14 @@ export const ConversationShowContent = ({
   const record = useRecordContext<Conversation>();
   const isMobile = useIsMobile();
   const isWideDesktop = useIsWideDesktop();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const { permissions } = usePermissions();
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const [isContextOpen, setIsContextOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const leadListParams = useMemo(
     () => ({
       filter: { zalo_id: record?.zalo_chat_id },
@@ -150,6 +168,24 @@ export const ConversationShowContent = ({
 
   const openContextPanel = () => {
     setIsContextOpen(true);
+  };
+
+  const deleteConversation = async () => {
+    if (!record || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await dataProvider.delete("conversations", {
+        id: record.id,
+        previousData: record,
+      });
+      notify("Đã xóa vĩnh viễn hội thoại.", { type: "success" });
+      setDeleteOpen(false);
+      refresh();
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -255,6 +291,32 @@ export const ConversationShowContent = ({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
+            {permissions === "admin" && record ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="icon-btn ghost"
+                    aria-label="Thao tác hội thoại"
+                    title="Thao tác hội thoại"
+                  >
+                    <MoreHorizontal className="icon" aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" sideOffset={10}>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setDeleteOpen(true);
+                    }}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    Xóa vĩnh viễn hội thoại
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             {activeMode === "closed" && (
               <span
                 className="chat-mode-chip"
@@ -314,6 +376,16 @@ export const ConversationShowContent = ({
           }}
         />
       )}
+      <Confirm
+        isOpen={deleteOpen}
+        loading={isDeleting}
+        title="Xóa vĩnh viễn hội thoại?"
+        content="Toàn bộ tin nhắn và lượt xử lý chatbot của hội thoại này sẽ bị xóa. Hành động này không thể hoàn tác."
+        confirm="Xóa vĩnh viễn"
+        confirmColor="warning"
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => void deleteConversation()}
+      />
     </>
   );
 };

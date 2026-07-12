@@ -233,6 +233,9 @@ class ConversationService:
     async def clear_history(self, conv: Conversation, actor: User) -> Conversation:
         return await self.state.clear_history(conv, actor)
 
+    async def delete(self, conv: Conversation, actor: User) -> None:
+        await self.state.delete(conv, actor)
+
     async def mark_read(self, conv: Conversation) -> Conversation:
         return await self.state.mark_read(conv)
 

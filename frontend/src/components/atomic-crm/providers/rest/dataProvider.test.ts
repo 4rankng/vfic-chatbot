@@ -143,4 +143,28 @@ describe("restProvider custom conversation actions", () => {
     );
     expect((res as Record<string, unknown>).mode).toBe("semi_auto");
   });
+
+  it("deletes a conversation through its dedicated REST record route", async () => {
+    let url = "";
+    const fetch = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+      url = typeof input === "string" ? input : (input as URL).toString();
+      return {
+        ok: true,
+        status: 204,
+        json: async () => undefined,
+      } as unknown as Response;
+    });
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
+
+    await provider.delete("conversations", {
+      id: "conversation-1",
+      previousData: { id: "conversation-1" },
+    });
+
+    expect(url).toContain("/api/v1/conversations/conversation-1");
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/conversations/conversation-1"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });

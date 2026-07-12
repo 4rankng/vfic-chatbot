@@ -111,6 +111,25 @@ async def test_admin_clear_history_returns_204(transport, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_admin_delete_conversation_returns_204(transport, mock_db):
+    """Admin DELETE /{conv_id} permanently removes a test conversation."""
+    conv_id = str(mock_db.get.return_value.id)
+
+    with patch("app.api.conversations.ConversationService") as MockSvc:
+        mock_svc_instance = AsyncMock()
+        MockSvc.return_value = mock_svc_instance
+
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            resp = await client.delete(f"/api/v1/conversations/{conv_id}")
+
+    assert resp.status_code == 204
+    MockSvc.assert_called_once_with(mock_db)
+    mock_svc_instance.delete.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_recruiter_clear_history_returns_403(recruiter_transport):
     """Recruiter DELETE /{conv_id}/history → 403 Forbidden."""
     conv_id = str(uuid.uuid4())
@@ -121,6 +140,19 @@ async def test_recruiter_clear_history_returns_403(recruiter_transport):
         resp = await client.delete(
             f"/api/v1/conversations/{conv_id}/history"
         )
+
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_recruiter_delete_conversation_returns_403(recruiter_transport):
+    """Recruiters cannot permanently remove a conversation."""
+    conv_id = str(uuid.uuid4())
+
+    async with httpx.AsyncClient(
+        transport=recruiter_transport, base_url="http://test"
+    ) as client:
+        resp = await client.delete(f"/api/v1/conversations/{conv_id}")
 
     assert resp.status_code == 403
 
