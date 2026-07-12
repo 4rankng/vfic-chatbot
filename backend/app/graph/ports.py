@@ -113,8 +113,9 @@ class LeadContextPort(Protocol):
 
     ``context`` does one DB fetch and returns both the profile text and the
     next lead-collection question (``""`` each on miss); ``profile_text`` is the
-    single-fetch flavor used by the proactive turn. ``instruction`` / ``ensure``
-    are pure prompt-assembly post-processors.
+    single-fetch flavor used by the proactive turn. ``instruction`` is a pure
+    prompt-assembly post-processor. The agent is the single owner of contact
+    questions — there is no post-reply CTA append.
     """
 
     async def profile_text(self, chat_id: str) -> str: ...
@@ -124,8 +125,6 @@ class LeadContextPort(Protocol):
     ) -> tuple[str, str]: ...
 
     def instruction(self, question: str) -> str: ...
-
-    def ensure(self, reply: str, question: str) -> str: ...
 
 
 class RetrievalPort(Protocol):

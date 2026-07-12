@@ -152,7 +152,7 @@ async def _agent_turn(
         lookup_query=user_text,
         metrics=timings,
     )
-    return deps.lead.ensure(reply, lead_collection_question)
+    return reply
 
 
 async def _status_heartbeat(zalo, chat_id: str, *, settings) -> None:

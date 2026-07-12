@@ -67,11 +67,6 @@ class _LeadContextAdapter:
 
         return lead_collection_instruction(question=question)
 
-    def ensure(self, reply: str, question: str) -> str:
-        from app.services.lead.probing import ensure_lead_collection_question
-
-        return ensure_lead_collection_question(reply, question)
-
 
 class _FaqBypassAdapter:
     """FaqBypassPort backed by RetrievalRepository + the shared cached embedder.

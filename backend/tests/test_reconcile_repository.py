@@ -66,19 +66,18 @@ async def test_sql_contains_loop_free_predicate():
     call_args = db.scalars.call_args
     sql_text = str(call_args[0][0])  # the text(...) clause
 
-    # Loop-safety: must match WORKER or BOT+PENDING/SENDING/FAILED/SEND_UNKNOWN
-    # (NOT SENT/SUPPRESSED — those are terminal successes or intentional skips).
-    # SEND_UNKNOWN is included so the reconciler can reach the explicit skip
-    # branch + counter (otherwise it's filtered upstream and the counter is dead).
+    # Loop-safety: must match WORKER or BOT+PENDING/SENDING/FAILED. SENT,
+    # SUPPRESSED, and SEND_UNKNOWN are terminal and must never enter a sweep.
     assert "m.sender = 'WORKER'" in sql_text
     assert "m.sender = 'BOT'" in sql_text
-    assert "m.delivery_status IN ('PENDING', 'SENDING', 'FAILED', 'SEND_UNKNOWN')" in sql_text
-    # Permanent recipient rejections must not enter the recovery sweep. The
-    # qualification is channel-specific so a generic Bot/OA failure remains retryable.
+    assert "m.delivery_status IN ('PENDING', 'SENDING', 'FAILED')" in sql_text
+    # The confirmed OA recipient rejection must not enter the recovery sweep;
+    # generic failures and Bot `Not Found` remain retryable until a structured
+    # provider error classification is available.
     assert "c.zalo_channel = 'oa'" in sql_text
     assert "LIKE '%user_id is invalid%'" in sql_text
-    assert "c.zalo_channel = 'bot'" in sql_text
-    assert "LIKE 'chunk % failed: not found'" in sql_text
+    assert "c.zalo_channel = 'bot'" not in sql_text
+    assert "SEND_UNKNOWN" not in sql_text
     # Stale-lock recovery: a crashed worker's live lock with a stale heartbeat is
     # included so reconcile can break it (instead of waiting the full bot_lock_ttl).
     assert "bot_lock_heartbeat_at" in sql_text

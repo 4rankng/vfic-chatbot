@@ -265,7 +265,7 @@ sequenceDiagram
 | `apply mode policy` (one step) | Four layers: webhook gate, lock, recheck, atomic `claim_send` (`webhook.py:130`, `:134`, `runner.py:273`, `state.py:329`) |
 | `worker: retrieve → generate → policy` | Ten stages incl. two no-LLM fast paths (template + FAQ bypass), routing, lead context, grounding, safety (`runner.py:259-515`) |
 | `enqueue → Zalo OA Send Message API` | Worker sends directly (no outbox); Bot and OA are distinct APIs; OA has token-refresh retry (`zalo_sender.py:21`, `zalo_oa_service.py:110`) |
-| (missing) | Reconcile worker re-enqueues retryable FAILED turns (~60s); known permanent recipient rejections are excluded, and stale SENDING → SENT on worker crash (`reconcile_worker.py`) |
+| (missing) | Reconcile worker re-enqueues retryable FAILED turns (~60s); the known permanent OA invalid-recipient error is excluded, and stale SENDING → SENT on worker crash (`reconcile_worker.py`) |
 
 ---
 

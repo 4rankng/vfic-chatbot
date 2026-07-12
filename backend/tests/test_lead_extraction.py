@@ -19,7 +19,7 @@ from app.services.lead.normalizers import (
     normalize_phone,
     parse_lead_json,
 )
-from app.services.lead.probing import ensure_lead_collection_question, lead_collection_question
+from app.services.lead.probing import lead_collection_question
 from app.services.memory_service import greeting_gate
 
 
@@ -440,89 +440,3 @@ class TestLeadCollectionQuestion:
         lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho"}
         q = self._ask(lead=lead, current_user_text="tôi ở Hải Phòng", recent_messages=[])
         assert "tỉnh" not in q.lower() and "thành" not in q.lower()
-
-
-# ---------------------------------------------------------------------------
-# ensure_lead_collection_question — append-only
-# ---------------------------------------------------------------------------
-class TestEnsureLeadCollectionQuestion:
-    _ensure = staticmethod(ensure_lead_collection_question)
-
-    def test_no_question_returns_reply(self):
-        assert self._ensure("hello", "") == "hello"
-
-    def test_empty_reply_returns_question(self):
-        assert self._ensure("", "hỏi tên?") == "hỏi tên?"
-
-    def test_question_already_in_reply(self):
-        reply = "Chào bạn, bạn cho tôi xin tên nhé?"
-        assert self._ensure(reply, "Bạn cho tôi xin tên?") == reply
-
-    def test_appends_when_missing(self):
-        result = self._ensure("Chào bạn, tôi có thể giúp gì?", "Bạn cho tôi xin tên?")
-        assert result.endswith("Bạn cho tôi xin tên?")
-        assert "Chào bạn, tôi có thể giúp gì?" in result
-
-    def test_never_replaces_last_paragraph(self):
-        """Always append the collection question without replacing model text."""
-        reply = "Chào bạn!\n\nBạn quan tâm đến vị trí nào?"
-        result = self._ensure(reply, "Bạn cho tôi xin tên?")
-        assert "vị trí nào?" in result
-        assert "tên" in result
-
-    # --- semantic dedup: model asked the same field in different wording ---
-    # Regression: previously the system would append the canonical phone question
-    # even when the LLM had just asked for phone (or name+phone) in its own words,
-    # producing two asks for the same field in one message.
-    def test_model_asks_phone_in_own_words_no_append(self):
-        reply = "Bạn cho mình xin số điện thoại nhé?"
-        result = self._ensure(
-            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
-        )
-        assert result == reply  # no duplicate append
-
-    def test_prod_example_1_liteqa_no_double_phone(self):
-        """Prod Example 1 verbatim: name-ack 'LiteQA' + phone ask in para 2.
-        System must NOT append the canonical phone question a second time."""
-        reply = (
-            "Dạ LiteQA, mình đã ghi nhận tên của bạn rồi nhé! 😊\n\n"
-            "VFIC cần số điện thoại để nhân viên liên hệ tư vấn và hỗ trợ bạn "
-            "ứng tuyển. Bạn cho mình xin số điện thoại được không? 📱"
-        )
-        result = self._ensure(
-            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
-        )
-        assert result == reply  # phone asked once in para 2 → no append
-
-    def test_model_asks_name_and_phone_no_phone_append(self):
-        """Prod Example 2: model asked 'tên và số điện thoại' together — that's
-        ALLOWED. The bug is that the system would then append the canonical
-        phone question, making PHONE asked twice. Assert no append."""
-        reply = "Bạn ơi, cho mình xin tên và số điện thoại để VFIC liên hệ nhé?"
-        result = self._ensure(
-            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
-        )
-        assert result == reply  # phone already asked → no append
-
-    def test_model_asks_sdt_abbreviation_no_append(self):
-        reply = "Cho tôi xin SĐT nhé?"
-        result = self._ensure(
-            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
-        )
-        assert result == reply
-
-    def test_model_asks_name_in_own_words_no_append(self):
-        reply = "Bạn xưng hô là gì vậy?"
-        result = self._ensure(reply, "Bạn cho tôi xin tên để tiện hỗ trợ nhé?")
-        assert result == reply
-
-    def test_model_asks_different_field_still_appends(self):
-        """If the model asks about job but the canonical question is phone,
-        still append the phone question."""
-        reply = "Bạn muốn ứng tuyển vị trí nào?"
-        result = self._ensure(
-            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
-        )
-        assert result.endswith(
-            "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
-        )

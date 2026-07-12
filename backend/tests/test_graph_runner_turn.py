@@ -805,9 +805,6 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
         def instruction(self, q):  # noqa: ARG002
             return ""
 
-        def ensure(self, reply, q):  # noqa: ARG002
-            return reply
-
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
 
@@ -824,6 +821,52 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
 
     assert "system_prompt_ms" in timings
     assert timings["system_prompt_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_agent_turn_does_not_append_collection_question(monkeypatch):
+    """Single-ownership regression: _agent_turn returns the raw agent reply.
+
+    The canonical lead-collection CTA is NOT appended — the LLM is the sole
+    asker. Previously ensure_lead_collection_question would tack a phone/name
+    question onto the reply, producing duplicate asks when the LLM had already
+    asked in its own wording. This test locks in that the append is gone.
+    """
+    from app.graph.runner import _agent_turn
+
+    raw_reply = "Dạ, tôi có thể hỗ trợ bạn về lương và ca làm tại LG Display."
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            return raw_reply
+
+    class _FakeLead:
+        async def context(self, *a, **kw):  # noqa: ARG002
+            # Return a non-empty collection question to prove it is NOT used
+            # to append anything to the reply.
+            return "", "Bạn cho tôi xin số điện thoại để VFIC liên hệ nhé?"
+
+        def instruction(self, q):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
+
+    state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="hi")
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    result = await _agent_turn(
+        state, deps, "hi",
+        chat_id="z1", recent_messages=[], timings={"lane": "agent"},
+    )
+    # The reply must be returned verbatim — no appended canonical question.
+    assert result == raw_reply
+    assert "số điện thoại" not in result
 
 
 @pytest.mark.asyncio
