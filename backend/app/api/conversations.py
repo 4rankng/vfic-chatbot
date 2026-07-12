@@ -21,6 +21,7 @@ from app.schemas.conversation import (
     MessageOut,
     SendMessageRequest,
 )
+from app.schemas.dashboard import AttentionReason
 from app.services.conversation import ConversationConflict, ConversationService
 from app.workers.chatbot_worker import enqueue_chat_run
 
@@ -50,10 +51,30 @@ async def list_conversations(
         None, description="Sort field (updated_at, created_at, last_inbound_at)"
     ),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
+    reason: str | None = Query(
+        None,
+        description=(
+            "Attention reason filter (DELIVERY_REVIEW|HUMAN_ESCALATION|REPLY_OVERDUE|"
+            "FOLLOWUP_OVERDUE|WAITING_REPLY|PRIORITY_NO_ACTION|FOLLOWUP_TODAY|"
+            "UNREAD|STALLED). Routes the recruiter to the conversations the attention "
+            "dashboard surfaced for this reason."
+        ),
+    ),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationListResponse:
     svc = ConversationService(db)
+    if reason is not None:
+        # Validate against the canonical enum; FastAPI does not do this for a
+        # plain str param, so reject unknown values with 422 explicitly.
+        if reason not in AttentionReason._value2member_map_:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid reason")
+        rows, total = await svc.list_by_attention_reason(
+            viewer=user, reason=reason, page=page, per_page=per_page
+        )
+        return ConversationListResponse(
+            data=[ConversationOut.model_validate(r) for r in rows], total=total
+        )
     rows, total = await svc.list(
         viewer=user,
         page=page,
@@ -184,9 +205,7 @@ async def take_over(
         conv = await ConversationService(db).take_over(conv, user)
     except ConversationConflict as exc:
         who = exc.owner_name or "nhân viên khác"
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận"
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận")
     return ConversationOut.model_validate(conv)
 
 
@@ -212,9 +231,7 @@ async def semi_auto(
         conv = await ConversationService(db).semi_auto(conv, user)
     except ConversationConflict as exc:
         who = exc.owner_name or "nhân viên khác"
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận"
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận")
     return ConversationOut.model_validate(conv)
 
 

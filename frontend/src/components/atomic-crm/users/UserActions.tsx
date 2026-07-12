@@ -14,9 +14,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Power, PowerOff, Trash2 } from "lucide-react";
-import { useState } from "react";
+import {
+  KeyRound,
+  MoreHorizontal,
+  Pencil,
+  Power,
+  PowerOff,
+  Trash2,
+} from "lucide-react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
+import { requestPasswordResetOtp } from "../login/passwordRecoveryService";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 
@@ -27,6 +35,9 @@ export const UserActions = () => {
   const notify = useNotify();
   const refresh = useRefresh();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
+  const resetPendingRef = useRef(false);
   if (!record) return null;
 
   const editPath = createPath({
@@ -65,6 +76,24 @@ export const UserActions = () => {
     }
   };
 
+  const requestPasswordReset = async () => {
+    if (record.disabled || resetPendingRef.current) return;
+    resetPendingRef.current = true;
+    setResetPending(true);
+    try {
+      await requestPasswordResetOtp(record.email);
+      notify("Nếu tài khoản đủ điều kiện, email đặt lại mật khẩu sẽ được gửi.", {
+        type: "success",
+      });
+      setResetOpen(false);
+    } catch (e) {
+      notify((e as Error).message, { type: "error" });
+    } finally {
+      resetPendingRef.current = false;
+      setResetPending(false);
+    }
+  };
+
   return (
     <>
       <div
@@ -87,7 +116,7 @@ export const UserActions = () => {
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="w-44"
+            className="w-64"
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
           >
@@ -114,6 +143,18 @@ export const UserActions = () => {
               )}
               {record.disabled ? "Kích hoạt" : "Vô hiệu hóa"}
             </DropdownMenuItem>
+            {!record.disabled ? (
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setResetOpen(true);
+                }}
+              >
+                <KeyRound className="size-4" />
+                Gửi email đặt lại mật khẩu
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
@@ -129,6 +170,18 @@ export const UserActions = () => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <Confirm
+        isOpen={resetOpen}
+        loading={resetPending}
+        title="Gửi email đặt lại mật khẩu?"
+        content={`Hệ thống sẽ gửi mã xác thực đặt lại mật khẩu đến ${record.email}. Quản trị viên không thể xem hoặc đặt mật khẩu của tài khoản này.`}
+        confirm={resetPending ? "Đang gửi…" : "Gửi email"}
+        ConfirmIcon={KeyRound}
+        onClose={() => {
+          if (!resetPending) setResetOpen(false);
+        }}
+        onConfirm={() => void requestPasswordReset()}
+      />
       <Confirm
         isOpen={deleteOpen}
         title="Xóa vĩnh viễn tài khoản?"

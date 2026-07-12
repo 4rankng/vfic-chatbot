@@ -1,0 +1,465 @@
+"""Unit tests for the recruiter attention dashboard service + schema contract.
+
+Pure-unit (mock-based, no DB) — mirrors the project's test_viewer_scope /
+test_conversation_release pattern. The repository SQL is exercised by
+integration tests; here we pin the SERVICE logic: cache hit/miss, viewer-scope
+mapping, snapshot-consistency transaction wiring, response assembly, key/action
+derivation, and the strict Pydantic contract (extra="forbid", PII minimization).
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from pydantic import ValidationError
+
+from app.models.user import Role
+from app.schemas.dashboard import (
+    AttentionAction,
+    AttentionCounters,
+    AttentionDashboardOut,
+    AttentionItemOut,
+    AttentionReason,
+)
+from app.services.dashboard import service as service_mod
+
+UID = uuid.UUID("11111111-1111-1111-1111-111111111111")
+OTHER_UID = uuid.UUID("22222222-2222-2222-2222-222222222222")
+
+
+def _viewer(role: Role, uid=UID) -> SimpleNamespace:
+    return SimpleNamespace(role=role, id=uid)
+
+
+def _row(**over) -> dict:
+    """A repo attention row with every AttentionItemOut field except body."""
+    base = {
+        "reason": "REPLY_OVERDUE",
+        "urgency_at": datetime(2026, 7, 12, 3, 0, tzinfo=timezone.utc),
+        "conversation_id": UID,
+        "lead_id": None,
+        "name": "Nguyen Van A",
+        "phone_last4": "1234",
+        "desired_job": "Lái xe",
+        "lead_stage": "CONTACTING",
+        "lead_score": "hot",
+        "last_inbound_at": datetime(2026, 7, 12, 2, 0, tzinfo=timezone.utc),
+        "due_at": None,
+        "delivery_status": None,
+    }
+    base.update(over)
+    return base
+
+
+def _fake_repo(counters=None, immediate=None, today=None) -> MagicMock:
+    """A DashboardRepository double whose attention methods are AsyncMocks.
+
+    Captures the recruiter_id each method was called with so viewer-scope
+    mapping can be asserted without a DB.
+    """
+    repo = MagicMock()
+    repo.attention_counters = AsyncMock(
+        return_value=counters
+        or {"needs_reply": 5, "overdue": 2, "due_today": 1, "priority": 3, "unread": 4}
+    )
+    repo.attention_rows = AsyncMock(
+        side_effect=lambda rid, queue, limit=8: {
+            "immediate": immediate or [_row()],
+            "today": today or [],
+        }[queue]
+    )
+    return repo
+
+
+def _patch_service(
+    monkeypatch,
+    cache_get=None,
+    cache_set=None,
+    repo=None,
+    app_env="development",
+    cache_enabled=True,
+):
+    """Wire fakes into the service module and return the repo double."""
+    monkeypatch.setattr(service_mod, "cache_get_json", AsyncMock(return_value=cache_get))
+    set_mock = AsyncMock()
+    if cache_set is not None:
+        set_mock.return_value = cache_set
+    monkeypatch.setattr(service_mod, "cache_set_json", set_mock)
+    settings = SimpleNamespace(
+        app_env=app_env,
+        dashboard_cache_enabled=cache_enabled,
+        dashboard_cache_ttl_seconds=30,
+    )
+    monkeypatch.setattr(service_mod, "get_settings", lambda: settings)
+    captured_repo = repo or _fake_repo()
+    monkeypatch.setattr(service_mod, "DashboardRepository", lambda _db: captured_repo)
+    return captured_repo, set_mock
+
+
+# --- schema contract --------------------------------------------------------
+
+
+def test_attention_item_rejects_extra_fields():
+    with pytest.raises(ValidationError):
+        AttentionItemOut(
+            key="k",
+            reason="REPLY_OVERDUE",
+            urgency_at=datetime.now(timezone.utc),
+            action="OPEN_CONVERSATION",
+            unexpected="leak",
+        )
+
+
+def test_attention_item_rejects_full_phone_field():
+    """PII minimization: only phone_last4 is allowed, never full ``phone``."""
+    with pytest.raises(ValidationError):
+        AttentionItemOut(
+            key="k",
+            reason="REPLY_OVERDUE",
+            urgency_at=datetime.now(timezone.utc),
+            action="OPEN_CONVERSATION",
+            phone="0901234567",
+        )
+
+
+def test_attention_item_accepts_phone_last4_only():
+    item = AttentionItemOut(
+        key="k",
+        reason="REPLY_OVERDUE",
+        urgency_at=datetime.now(timezone.utc),
+        action="OPEN_CONVERSATION",
+        phone_last4="4567",
+    )
+    assert item.phone_last4 == "4567"
+
+
+def test_attention_item_has_no_latest_message_field():
+    """latest_message body is deliberately excluded (third-party PII risk)."""
+    item = AttentionItemOut(
+        key="k",
+        reason="UNREAD",
+        urgency_at=datetime.now(timezone.utc),
+        action="OPEN_CONVERSATION",
+    )
+    assert not hasattr(item, "latest_message")
+    dumped = item.model_dump()
+    assert "latest_message" not in dumped
+    assert "body" not in dumped
+
+
+def test_attention_counters_rejects_extra_fields():
+    with pytest.raises(ValidationError):
+        AttentionCounters(needs_reply=1, overdue=1, due_today=1, priority=1, unread=1, extra=0)
+
+
+def test_attention_dashboard_out_rejects_extra_fields():
+    with pytest.raises(ValidationError):
+        AttentionDashboardOut(
+            updated_at=datetime.now(timezone.utc),
+            counters=AttentionCounters(needs_reply=0, overdue=0, due_today=0, priority=0, unread=0),
+            immediate=[],
+            today=[],
+            bonus=True,
+        )
+
+
+def test_attention_reason_enum_has_all_nine_reasons():
+    expected = {
+        "DELIVERY_REVIEW",
+        "HUMAN_ESCALATION",
+        "REPLY_OVERDUE",
+        "FOLLOWUP_OVERDUE",
+        "WAITING_REPLY",
+        "PRIORITY_NO_ACTION",
+        "FOLLOWUP_TODAY",
+        "UNREAD",
+        "STALLED",
+    }
+    assert {r.value for r in AttentionReason} == expected
+
+
+def test_attention_action_enum_values():
+    assert {a.value for a in AttentionAction} == {"OPEN_CONVERSATION", "CALL"}
+
+
+# --- service: viewer-scope mapping -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_admin_viewer_maps_to_recruiter_id_none(monkeypatch):
+    repo, _ = _patch_service(monkeypatch)
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    # admin → recruiter_id=None on every repo call
+    for call in repo.attention_counters.call_args_list:
+        assert call.args[0] is None
+    assert repo.attention_rows.await_args_list[0].args[0] is None  # immediate
+    assert repo.attention_rows.await_args_list[1].args[0] is None  # today
+    assert isinstance(out, AttentionDashboardOut)
+
+
+@pytest.mark.asyncio
+async def test_recruiter_viewer_maps_to_str_id(monkeypatch):
+    repo, _ = _patch_service(monkeypatch)
+    db = SimpleNamespace(execute=AsyncMock())
+    await service_mod.DashboardService(db).attention(_viewer(Role.recruiter))
+    assert repo.attention_counters.await_args.args[0] == str(UID)
+    assert repo.attention_rows.await_args_list[0].args[0] == str(UID)
+
+
+# --- service: cache hit / miss ---------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_returns_cached_payload_skips_db(monkeypatch):
+    cached = {
+        "updated_at": datetime(2026, 7, 12, 1, 0, tzinfo=timezone.utc).isoformat(),
+        "counters": {"needs_reply": 9, "overdue": 8, "due_today": 7, "priority": 6, "unread": 5},
+        "immediate": [],
+        "today": [],
+    }
+    repo, set_mock = _patch_service(monkeypatch, cache_get=cached, app_env="production")
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    assert out.counters.needs_reply == 9
+    # On cache hit the repo is never instantiated/awaited and cache_set is skipped.
+    repo.attention_counters.assert_not_awaited()
+    repo.attention_rows.assert_not_awaited()
+    set_mock.assert_not_awaited()
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cache_miss_reads_db_and_sets_cache(monkeypatch):
+    repo, set_mock = _patch_service(monkeypatch, app_env="production")
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    repo.attention_counters.assert_awaited_once()
+    assert repo.attention_rows.await_count == 2  # immediate + today
+    set_mock.assert_awaited_once()
+    # cache key is per-viewer
+    assert set_mock.await_args.args[0] == "dashboard:attention:admin"
+    assert isinstance(out, AttentionDashboardOut)
+
+
+@pytest.mark.asyncio
+async def test_cache_disabled_in_development_never_reads_nor_writes_redis(monkeypatch):
+    repo, set_mock = _patch_service(monkeypatch, app_env="development", cache_enabled=True)
+    db = SimpleNamespace(execute=AsyncMock())
+    await service_mod.DashboardService(db).attention(_viewer(Role.recruiter))
+    # The prod gate is app_env == "production"; dev skips cache entirely.
+    set_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cache_key_per_recruiter_scope(monkeypatch):
+    repo, set_mock = _patch_service(monkeypatch, app_env="production")
+    db = SimpleNamespace(execute=AsyncMock())
+    await service_mod.DashboardService(db).attention(_viewer(Role.recruiter))
+    assert set_mock.await_args.args[0] == f"dashboard:attention:recruiter:{UID}"
+
+
+# --- service: snapshot consistency -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sets_repeatable_read_isolation_for_single_snapshot(monkeypatch):
+    """All 3 reads must share one snapshot (Red-team Critical 3)."""
+    _patch_service(monkeypatch)
+    execute = AsyncMock()
+    db = SimpleNamespace(execute=execute)
+    await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    # The FIRST execute call sets the isolation level before any reads.
+    first_sql = execute.await_args_list[0].args[0].text
+    assert "SET LOCAL transaction_isolation" in first_sql
+    assert "repeatable read" in first_sql
+
+
+# --- service: round-trip budget --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_at_most_three_db_round_trips(monkeypatch):
+    """Performance budget: counters(1) + immediate(1) + today(1) = 3 reads."""
+    repo, _ = _patch_service(monkeypatch)
+    execute = AsyncMock()
+    db = SimpleNamespace(execute=execute)
+    await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    # 1 SET LOCAL + 0 repo queries (repo is mocked, uses its own db-free path)
+    # → the repo-level budget is: 1 counters + 2 rows = 3 attention reads.
+    assert repo.attention_counters.await_count == 1
+    assert repo.attention_rows.await_count == 2
+
+
+# --- service: response assembly --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_updated_at_is_set_to_now(monkeypatch):
+    before = datetime.now(timezone.utc)
+    _patch_service(monkeypatch)
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    after = datetime.now(timezone.utc)
+    assert before <= out.updated_at <= after
+
+
+@pytest.mark.asyncio
+async def test_conversation_anchored_row_gets_open_conversation_action(monkeypatch):
+    conv_row = _row(conversation_id=UID, lead_id=None, reason="REPLY_OVERDUE")
+    repo = _fake_repo(immediate=[conv_row], today=[])
+    _patch_service(monkeypatch, repo=repo)
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    item = out.immediate[0]
+    assert item.key == str(UID)
+    assert item.action is AttentionAction.OPEN_CONVERSATION
+    assert item.reason is AttentionReason.REPLY_OVERDUE
+    assert item.conversation_id == UID
+    assert item.phone_last4 == "1234"
+    assert item.lead_stage == "CONTACTING"
+
+
+@pytest.mark.asyncio
+async def test_lead_anchored_row_gets_call_action(monkeypatch):
+    lead_row = _row(conversation_id=None, lead_id=42, reason="STALLED")
+    repo = _fake_repo(immediate=[], today=[lead_row])
+    _patch_service(monkeypatch, repo=repo)
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    item = out.today[0]
+    assert item.key == "lead:42"
+    assert item.action is AttentionAction.CALL
+    assert item.conversation_id is None
+    assert item.lead_id == 42
+
+
+@pytest.mark.asyncio
+async def test_counters_mapped_to_schema_keys(monkeypatch):
+    counters = {"needs_reply": 11, "overdue": 22, "due_today": 33, "priority": 44, "unread": 55}
+    repo = _fake_repo(counters=counters)
+    _patch_service(monkeypatch, repo=repo)
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    assert out.counters == AttentionCounters(
+        needs_reply=11, overdue=22, due_today=33, priority=44, unread=55
+    )
+
+
+@pytest.mark.asyncio
+async def test_delivery_review_row_carries_delivery_status(monkeypatch):
+    dr_row = _row(
+        reason="DELIVERY_REVIEW",
+        delivery_status="SEND_UNKNOWN",
+        conversation_id=UID,
+    )
+    repo = _fake_repo(immediate=[dr_row], today=[])
+    _patch_service(monkeypatch, repo=repo)
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    assert out.immediate[0].delivery_status == "SEND_UNKNOWN"
+    assert out.immediate[0].reason is AttentionReason.DELIVERY_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_round_trip_payload_has_no_pii_beyond_phone_last4(monkeypatch):
+    _patch_service(monkeypatch)
+    db = SimpleNamespace(execute=AsyncMock())
+    out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
+    dumped = out.model_dump(mode="json")
+    for item in dumped["immediate"] + dumped["today"]:
+        assert "phone" not in item or item.get("phone") is None
+        assert "latest_message" not in item
+        assert "body" not in item
+
+
+# --- repository: vn_today helper (pure, no DB) -----------------------------
+
+
+def test_vn_today_predicate_uses_ho_chi_minh_zone():
+    from app.services.dashboard.repository import DashboardRepository
+
+    sql = DashboardRepository._vn_today_predicate("f.due_at")
+    # Both sides must convert via Asia/Ho_Chi_Minh (not UTC date math).
+    assert sql.count("Asia/Ho_Chi_Minh") == 2
+    assert "::date" in sql
+    assert "f.due_at" in sql
+    assert "now()" in sql
+
+
+# --- repository: viewer-scope contract on lead-anchored CTEs (N1) ---------
+#
+# The four lead-anchored CTEs LEFT JOIN conversations to surface conversation_id
+# + last_inbound_at. That join must apply viewer scope (c_scope) so a recruiter
+# never sees another recruiter's conversation_id via a zalo_id soft match. These
+# are string-level contract tests pinning the fix: they construct a
+# DashboardRepository with a mock session, drive attention_rows with a real
+# recruiter_id, capture the compiled SQL, and assert the c_scope fragment is in
+# each lead-anchored LEFT JOIN condition.
+
+
+async def _captured_attention_sql(recruiter_id: str | None, queue: str) -> str:
+    """Run ``DashboardRepository.attention_rows`` against a mock session and
+    return the compiled SQL string passed to ``db.execute``.
+
+    The mock's execute returns a result whose ``.mappings()`` yields nothing —
+    we only care about the SQL text, not the rows.
+    """
+    from app.services.dashboard.repository import DashboardRepository
+
+    repo = DashboardRepository(db=MagicMock())
+    repo.db.execute = AsyncMock(return_value=SimpleNamespace(mappings=lambda: iter([])))
+    await repo.attention_rows(recruiter_id, queue, limit=8)
+    call = repo.db.execute.await_args
+    return call.args[0].text
+
+
+@pytest.mark.asyncio
+async def test_lead_anchored_ctes_include_c_scope_in_left_join_immediate():
+    """N1 fix: followup_overdue (the one lead-anchored CTE in the immediate
+    queue) must scope its LEFT JOIN to conversations on c_scope."""
+    sql = await _captured_attention_sql(str(UID), "immediate")
+    # The followup_overdue LEFT JOIN must carry the c_scope fragment so a
+    # recruiter's lead does not surface another recruiter's conversation_id.
+    assert (
+        "c.zalo_chat_id = l.zalo_id AND (c.assigned_recruiter_id = :uid "
+        "OR c.assigned_recruiter_id IS NULL)"
+    ) in sql
+
+
+@pytest.mark.asyncio
+async def test_lead_anchored_ctes_include_c_scope_in_left_join_today():
+    """N1 fix: priority_no_action + stalled + followup_today (the lead-anchored
+    CTEs in the today queue) must each scope their LEFT JOIN on c_scope."""
+    sql = await _captured_attention_sql(str(UID), "today")
+    expected_fragment = (
+        "c.zalo_chat_id = l.zalo_id AND (c.assigned_recruiter_id = :uid "
+        "OR c.assigned_recruiter_id IS NULL)"
+    )
+    # Three lead-anchored CTEs in the today queue: priority_no_action,
+    # followup_today, stalled. Each contributes one scoped LEFT JOIN.
+    assert sql.count(expected_fragment) == 3
+
+
+@pytest.mark.asyncio
+async def test_admin_attendance_rows_omits_c_scope_predicate():
+    """For admin (recruiter_id is None), c_scope is a no-op '(TRUE)' — the LEFT
+    JOIN keeps matching all conversations. Pins the admin/global branch."""
+    sql = await _captured_attention_sql(None, "today")
+    # c_scope for admin collapses to (TRUE), so the join reads ... = l.zalo_id AND (TRUE)
+    assert "c.zalo_chat_id = l.zalo_id AND (TRUE)" in sql
+    # and never references :uid on the admin path
+    assert ":uid" not in sql
+
+
+@pytest.mark.asyncio
+async def test_lead_anchored_left_join_is_outer_so_null_conversation_is_kept():
+    """The scoped LEFT JOIN must stay a LEFT JOIN: when no in-scope conversation
+    matches, c.* is NULL and the lead-anchored row still surfaces with action=CALL
+    + key='lead:<id>'. Pin that the join keyword is LEFT JOIN (not JOIN)."""
+    sql = await _captured_attention_sql(str(UID), "immediate")
+    assert "LEFT JOIN conversations c ON c.zalo_chat_id = l.zalo_id" in sql

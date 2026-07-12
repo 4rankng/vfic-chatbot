@@ -66,6 +66,23 @@ class ConversationRepository:
             )
         ).first()
 
+    async def get_visible_by_ids(self, *, viewer: User, ids: list[uuid.UUID]) -> list[Conversation]:
+        """Viewer-scoped fetch of conversations by id list.
+
+        Used by the attention-reason continuation (GET /conversations?reason=...)
+        to resolve full Conversation rows for the conversation IDs the attention
+        dashboard surfaced. Returns at most one row per id, viewer-scoped
+        (admin = all, recruiter = own + unassigned). Empty id list short-circuits.
+        """
+        if not ids:
+            return []
+        stmt = viewer_scope_filter(
+            select(Conversation).where(Conversation.id.in_(ids)),
+            Conversation.assigned_recruiter_id,
+            viewer,
+        )
+        return list((await self.db.scalars(stmt)).all())
+
     async def last_messages_batch(self, *, viewer: User, ids_str: str) -> dict[str, str]:
         """Latest message body per conversation, in ONE set-based query.
 
@@ -166,11 +183,7 @@ class ConversationRepository:
         a message after the latest successful bot/recruiter reply. Scoped like
         ``list`` (admin = all, recruiter = own + unassigned). Backs the
         notification badge so it never downloads conversation rows."""
-        stmt = (
-            select(func.count())
-            .select_from(Conversation)
-            .where(_unanswered_inbound_condition())
-        )
+        stmt = select(func.count()).select_from(Conversation).where(_unanswered_inbound_condition())
         stmt = viewer_scope_filter(stmt, Conversation.assigned_recruiter_id, viewer)
         return int((await self.db.scalar(stmt)) or 0)
 
@@ -328,11 +341,9 @@ class ConversationRepository:
         # db.scalars(text(...)) — the latter returns only the first column (c.id
         # as a raw asyncpg UUID) rather than a Conversation ORM instance, causing
         # AttributeError downstream in reconcile_worker when it accesses conv.id.
-        stmt = (
-            select(Conversation)
-            .from_statement(
-                text(
-                    """
+        stmt = select(Conversation).from_statement(
+            text(
+                """
                     SELECT c.*
                       FROM conversations c
                      WHERE c.mode IN ('BOT', 'SEMI_AUTO')
@@ -375,14 +386,18 @@ class ConversationRepository:
                      ORDER BY c.last_inbound_at DESC NULLS LAST
                      LIMIT :limit
                     """
-                )
             )
         )
-        rows = (await self.db.scalars(stmt, {
-            "now": now,
-            "now_minus_grace": now_minus_grace,
-            "now_minus_max_age": now_minus_max_age,
-            "stale_cutoff": now_minus_stale_lock,
-            "limit": limit,
-        })).all()
+        rows = (
+            await self.db.scalars(
+                stmt,
+                {
+                    "now": now,
+                    "now_minus_grace": now_minus_grace,
+                    "now_minus_max_age": now_minus_max_age,
+                    "stale_cutoff": now_minus_stale_lock,
+                    "limit": limit,
+                },
+            )
+        ).all()
         return list(rows)

@@ -74,7 +74,7 @@ const UserListContent = ({
     className={
       embedded
         ? "settings-embedded-users-list"
-        : "px-4 py-5 pb-24 md:px-0 md:py-0 md:pb-0"
+        : "mx-auto w-full max-w-[1440px] px-4 py-5 pb-24 md:px-6 md:py-6 md:pb-6 lg:px-8"
     }
   >
     <TopToolbar className="flex-nowrap items-start gap-3">

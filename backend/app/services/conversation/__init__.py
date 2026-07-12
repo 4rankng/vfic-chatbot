@@ -96,6 +96,58 @@ class ConversationService:
     async def needs_attention_count(self, *, viewer: User) -> int:
         return await self.repo.needs_attention_count(viewer=viewer)
 
+    async def list_by_attention_reason(
+        self, *, viewer: User, reason: str, page: int, per_page: int
+    ) -> tuple[list[Conversation], int]:
+        """Conversations matching an attention reason, viewer-scoped.
+
+        Reuses ``DashboardRepository.attention_rows`` (the same predicates the
+        /dashboard/attention endpoint uses) so the reason definitions stay DRY.
+        Fetches BOTH immediate and today queues, filters to the requested reason,
+        then resolves full Conversation rows with viewer scoping.
+
+        Rows the dashboard surfaced with a NULL ``conversation_id`` (CALL-only,
+        ``zalo_id IS NULL`` leads) are skipped here — this endpoint returns
+        conversations, and those leads have no thread to open.
+        """
+        import uuid as _uuid
+
+        from app.models.user import Role
+        from app.services.dashboard.repository import DashboardRepository
+
+        recruiter_id = None if viewer.role == Role.admin else str(viewer.id)
+        repo = DashboardRepository(self.db)
+        # Large limit to cover the full filtered set — these are bounded by real
+        # attention volume, not unbounded. Both queues are fetched because a
+        # reason's home queue is an implementation detail of the dashboard view;
+        # the continuation must work regardless of where the row surfaced.
+        immediate = await repo.attention_rows(recruiter_id, "immediate", limit=500)
+        today = await repo.attention_rows(recruiter_id, "today", limit=500)
+        ids: list[_uuid.UUID] = []
+        for row in [*immediate, *today]:
+            if row.get("reason") != reason:
+                continue
+            cid = row.get("conversation_id")
+            if cid is None:
+                continue  # CALL-only lead row, no thread to open
+            ids.append(_uuid.UUID(str(cid)))
+        # Dedup (a conversation can surface under multiple reasons across the two
+        # queues) while preserving first-seen order for a stable inbox.
+        seen: set[_uuid.UUID] = set()
+        unique_ids: list[_uuid.UUID] = []
+        for cid in ids:
+            if cid not in seen:
+                seen.add(cid)
+                unique_ids.append(cid)
+        total = len(unique_ids)
+        start = (page - 1) * per_page
+        page_ids = unique_ids[start : start + per_page]
+        rows = await self.repo.get_visible_by_ids(viewer=viewer, ids=page_ids)
+        # Preserve the filtered order in the returned page.
+        rows_by_id = {r.id: r for r in rows}
+        ordered = [rows_by_id[cid] for cid in page_ids if cid in rows_by_id]
+        return ordered, total
+
     async def last_messages(self, conv: Conversation, limit: int = 50) -> list[Message]:
         return await self.repo.last_messages(conv, limit)
 

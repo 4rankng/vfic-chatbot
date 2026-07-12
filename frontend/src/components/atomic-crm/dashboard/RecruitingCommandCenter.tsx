@@ -266,7 +266,7 @@ export const RecruitingCommandCenter = ({
             </div>
             <span className="dashboard-panel-count">{counts.contacts}</span>
           </div>
-          <div className="dashboard-candidate-list">
+          <div className="dashboard-candidate-list dashboard-contact-bubbles">
             {isPending ? (
               <DashboardListSkeleton />
             ) : data?.contactsError ? (
@@ -322,14 +322,14 @@ const ContactRow = ({ lead }: { lead: Lead }) => {
   const phone = normalizeText(lead.phone);
 
   return (
-    <div className="dashboard-candidate-row is-static">
+    <div className="dashboard-candidate-row is-static is-contact-bubble">
       <CandidateAvatar name={name} />
       <span className="dashboard-candidate-main">
         <strong>{name}</strong>
         <span>{phone}</span>
       </span>
       <span className="dashboard-candidate-meta">
-        <Phone className="size-4" />
+        <Phone className="size-4" aria-hidden="true" />
       </span>
     </div>
   );

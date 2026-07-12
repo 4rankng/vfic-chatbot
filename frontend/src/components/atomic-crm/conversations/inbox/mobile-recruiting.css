@@ -368,6 +368,21 @@
   display: grid;
 }
 
+.inbox-bg-container .dashboard-candidate-list.dashboard-contact-bubbles,
+.mobile-dashboard-shell .dashboard-candidate-list.dashboard-contact-bubbles {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.dashboard-contact-bubbles > .dashboard-empty-list,
+.dashboard-contact-bubbles > .dashboard-candidate-row.is-skeleton {
+  flex: 1 0 100%;
+  width: 100%;
+}
+
 .inbox-bg-container .dashboard-candidate-row,
 .mobile-dashboard-shell .dashboard-candidate-row {
   min-height: 66px;
@@ -392,6 +407,28 @@
 
 .dashboard-candidate-row:last-child {
   border-bottom: 0;
+}
+
+.inbox-bg-container .dashboard-candidate-row.is-contact-bubble,
+.mobile-dashboard-shell .dashboard-candidate-row.is-contact-bubble {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 58px;
+  grid-template-columns: 38px minmax(0, auto) 32px;
+  gap: 10px;
+  border: 1px solid var(--paper-line-soft);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-light) 14%, var(--surface-solid));
+  padding: 8px 10px;
+}
+
+.dashboard-candidate-row.is-contact-bubble .dashboard-candidate-meta {
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-solid);
+  color: var(--brand);
 }
 
 .dashboard-candidate-avatar {
