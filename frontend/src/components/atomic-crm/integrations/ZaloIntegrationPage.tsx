@@ -25,6 +25,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { apiJson } from "../providers/rest/api";
+import {
+  buildZaloUpdatePayload,
+  type ZaloFormState,
+  type ZaloSettingsScope,
+} from "./zaloUpdatePayload";
 import { InboxIcons } from "../conversations/InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PersonaList } from "../personas/PersonaList";
@@ -83,14 +88,7 @@ type OpenRouterSettings = {
 
 type LlmProvider = "minimax" | "openrouter";
 
-type FormState = {
-  zalo_bot_token: string;
-  zalo_bot_webhook_secret: string;
-  zalo_oa_app_id: string;
-  zalo_oa_secret_key: string;
-  zalo_oa_access_token: string;
-  zalo_oa_refresh_token: string;
-};
+type FormState = ZaloFormState;
 
 type MinimaxFormState = {
   minimax_api_key: string;
@@ -138,8 +136,8 @@ type IntegrationConfigTestResult = {
 
 const ZALO_TEST_FIELD_LABELS: Record<string, string> = {
   zalo_bot_token: "Bot Token",
-  zalo_oa_app_id: "OA App ID",
-  zalo_oa_secret_key: "OA Secret",
+  zalo_oa_app_id: "Zalo App ID",
+  zalo_oa_secret_key: "Webhook Secret",
   zalo_oa_access_token: "OA Access Token",
   zalo_oa_refresh_token: "OA Refresh Token",
 };
@@ -525,7 +523,7 @@ const ZaloOaSignatureHealthBadge = ({
   }
   return (
     <p className="text-sm font-medium text-[var(--destructive)]">
-      ❌ Chữ ký webhook bị từ chối — OA Secret Key có thể sai
+      ❌ Chữ ký webhook bị từ chối — Webhook Secret có thể sai
       {health.consec_failures ? ` (×${health.consec_failures})` : ""}. Cập nhật{" "}
       {formatRelativeEpoch(health.last_mismatch_ts ?? health.last_ts)}.
     </p>
@@ -570,7 +568,7 @@ const ZaloOaSignatureVerifyPanel = ({
       setResult(out);
       notify(
         out.verified
-          ? "Chữ ký khớp — OA Secret Key đúng."
+          ? "Chữ ký khớp — Webhook Secret đúng."
           : "Chữ ký không khớp.",
         { type: out.verified ? "success" : "warning" },
       );
@@ -595,7 +593,7 @@ const ZaloOaSignatureVerifyPanel = ({
         <div className="settings-oa-verify-body">
           <p className="text-xs text-muted-foreground">
             Dán một sự kiện thật từ Zalo (console test hoặc log máy chủ) để xác
-            nhận OA Secret Key đã đúng. Body phải là nguyên văn byte-for-byte
+            nhận Webhook Secret đã đúng. Body phải là nguyên văn byte-for-byte
             Zalo gửi.
           </p>
           <div className="settings-field">
@@ -725,19 +723,7 @@ export const ZaloIntegrationPage = () => {
   }, [permissions, permissionsPending]);
 
   const changedPayload = useMemo(() => {
-    const payload: Partial<FormState> = {};
-    for (const key of Object.keys(form) as (keyof FormState)[]) {
-      const value = form[key].trim();
-      if (!value) continue;
-      if (
-        key === "zalo_oa_app_id" &&
-        value === settings?.zalo_oa_app_id.value
-      ) {
-        continue;
-      }
-      payload[key] = value;
-    }
-    return payload;
+    return buildZaloUpdatePayload(form, settings?.zalo_oa_app_id.value);
   }, [form, settings]);
 
   const changedMinimaxPayload = useMemo(() => {
@@ -852,14 +838,18 @@ export const ZaloIntegrationPage = () => {
     }
   };
 
-  const saveZaloChanges = async () => {
-    if (Object.keys(changedPayload).length === 0) return settings;
+  const saveZaloChanges = async (scope: ZaloSettingsScope = "all") => {
+    const payload =
+      scope === "all"
+        ? changedPayload
+        : buildZaloUpdatePayload(form, settings?.zalo_oa_app_id.value, scope);
+    if (Object.keys(payload).length === 0) return settings;
 
     const nextZalo = await apiJson<ZaloSettings>(
       "/api/v1/admin/integrations/zalo",
       {
         method: "PUT",
-        body: changedPayload,
+        body: payload,
       },
     );
     setSettings(nextZalo);
@@ -941,10 +931,11 @@ export const ZaloIntegrationPage = () => {
     path: string,
     label: string,
     busySetter: (busy: boolean) => void,
+    scope: Exclude<ZaloSettingsScope, "all">,
   ) => {
     busySetter(true);
     try {
-      await saveZaloChanges();
+      await saveZaloChanges(scope);
       const result = await apiJson<ZaloChannelTestResult>(path, {
         method: "POST",
       });
@@ -972,6 +963,7 @@ export const ZaloIntegrationPage = () => {
       "/api/v1/admin/integrations/zalo/bot/test",
       "Zalo Chatbot",
       setTestingBot,
+      "bot",
     );
 
   const testOaConnection = () =>
@@ -979,6 +971,7 @@ export const ZaloIntegrationPage = () => {
       "/api/v1/admin/integrations/zalo/oa/test",
       "Zalo OA",
       setTestingOa,
+      "oa",
     );
 
   const testConfiguredIntegration = async (
@@ -1135,7 +1128,7 @@ export const ZaloIntegrationPage = () => {
               <div className="settings-oa-fields">
                 <div className="settings-field">
                   <div className="flex items-center justify-between gap-3">
-                    <Label htmlFor="zalo_oa_app_id">OA App ID</Label>
+                    <Label htmlFor="zalo_oa_app_id">Zalo App ID</Label>
                   </div>
                   <Input
                     id="zalo_oa_app_id"
@@ -1149,7 +1142,7 @@ export const ZaloIntegrationPage = () => {
 
                 <SecretInput
                   id="zalo_oa_secret_key"
-                  label="OA Secret"
+                  label="Webhook Secret"
                   status={settings?.zalo_oa_secret_key ?? { configured: false }}
                   value={form.zalo_oa_secret_key}
                   onChange={setValue}

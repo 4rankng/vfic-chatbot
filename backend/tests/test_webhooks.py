@@ -57,6 +57,47 @@ async def test_oa_webhook_dispatches_turn_through_rq(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_oa_webhook_accepts_unsigned_empty_registration_probe(monkeypatch):
+    from app.api import webhooks
+
+    settings_service = MagicMock()
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", settings_service)
+    handle = AsyncMock(return_value={"status": "queued"})
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+
+    response = await webhooks.zalo_oa_webhook(FakeRequest(b"{}"), db=AsyncMock())
+
+    assert response.status_code == 200
+    assert response.body == b'{"status":"verified"}'
+    settings_service.assert_not_called()
+    handle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_oa_webhook_temporarily_processes_unsigned_real_event(monkeypatch):
+    from app.api import webhooks
+
+    cfg = SimpleNamespace(oa_secret_key="oa-secret", oa_app_id="app-1")
+    settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
+    handle = AsyncMock(return_value={"status": "queued"})
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    raw = json.dumps(
+        {
+            "event_name": "user_send_text",
+            "timestamp": "1700000000",
+            "sender": {"id": "user-1"},
+            "message": {"msg_id": "msg-1", "text": "Xin chào"},
+        }
+    ).encode()
+
+    response = await webhooks.zalo_oa_webhook(FakeRequest(raw), db=AsyncMock())
+
+    assert response.status_code == 200
+    handle.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_zalo_webhook_returns_400_for_malformed_json():
     from app.api.webhooks import zalo_webhook
 

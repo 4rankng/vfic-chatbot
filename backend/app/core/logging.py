@@ -46,3 +46,7 @@ def setup_logging(level: str = "INFO") -> None:
     root.setLevel(level)
     # uvicorn.access is verbose and redundant with our request logging.
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # httpx INFO records include full request URLs. Zalo Bot Platform embeds the
+    # bearer token in that URL, so application-owned logs must record outcomes
+    # without allowing the transport logger to disclose credentials.
+    logging.getLogger("httpx").setLevel(logging.WARNING)

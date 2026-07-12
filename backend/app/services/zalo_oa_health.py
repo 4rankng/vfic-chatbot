@@ -1,7 +1,7 @@
 """Redis-backed health of the Zalo OA inbound webhook signature check.
 
 The webhook records the outcome of every real signature verification so the
-admin integration status can surface "the stored OA Secret Key is rejecting real
+admin integration status can surface "the stored Webhook Secret is rejecting real
 Zalo events" the moment it happens — no Test button needed. The live Test
 Connection probe authenticates with the access_token and cannot detect a wrong
 secret; this passive signal is what catches it.

@@ -91,7 +91,8 @@ another LLM provider. Reduce concurrency if 429s are frequent.
 2. Check that the Zalo OA app is configured to point to the correct webhook URL (`https://bot.tingting.vip/webhooks/...`).
 3. Check logs for HMAC validation errors from `backend/app/api/webhooks.py`.
 
-**Fix:** Zalo OA access tokens expire and must be refreshed. Check `zalo_oa_token_refresh.py` logic and the `zalo_oa_health` endpoint. If the webhook secret changed, update it in `.env` and restart.
+**Fix:** Zalo OA access tokens expire and must be refreshed. The OA connection
+test refreshes and retries once when Zalo rejects the access token.
 
 **Never disable HMAC validation**, even for testing. Use `backend/mock_servers/` for local development.
 
@@ -100,7 +101,10 @@ another LLM provider. Reduce concurrency if 429s are frequent.
 **Symptom:** Zalo OA OAuth flow fails; can't connect Zalo account; token refresh fails.
 
 **Checks:**
-1. Verify `ZALO_OA_APP_ID` and `ZALO_OA_APP_SECRET` in `.env`.
+1. Verify the Zalo App ID, Zalo App Secret, OA access token, and OA refresh token
+   saved in Admin > Integrations. The ID and secret belong to the Developer App
+   selected in API Explorer, not the Official Account itself. Environment values
+   are development/bootstrap fallbacks.
 2. Check the OAuth callback URL is correctly registered in the Zalo OA console.
 3. Check `backend/app/services/zalo_oa_service.py` and `zalo_oa_token_refresh.py` for token lifecycle issues.
 4. Run the test connection endpoint: see `test_zalo_oa_test_connection.py`.

@@ -92,6 +92,108 @@ async def test_oa_sender_get_oa_info_uses_read_only_profile_endpoint(
     assert captured["headers"] == {"access_token": "oa-token"}
 
 
+async def test_oa_sender_get_oa_info_refreshes_invalid_token_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class _FakeResp:
+        def __init__(self, data: dict[str, Any]) -> None:
+            self._data = data
+
+        def json(self) -> dict[str, Any]:
+            return self._data
+
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def get(self, url: str, *, headers=None, **kw):
+            calls.append({"url": url, "headers": headers})
+            if len(calls) == 1:
+                return _FakeResp({"error": -216, "message": "Access token is invalid"})
+            return _FakeResp({"error": 0, "data": {"oa_id": "oa-1"}})
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    refresh_calls: list[int] = []
+
+    async def refresh() -> str | None:
+        refresh_calls.append(1)
+        return "oa-token-new"
+
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token-old",
+        refresh=refresh,
+    )
+
+    result = await sender.get_oa_info()
+
+    assert result.ok is True
+    assert refresh_calls == [1]
+    assert calls == [
+        {
+            "url": "https://openapi.zalo.me/v2.0/oa/getoa",
+            "headers": {"access_token": "oa-token-old"},
+        },
+        {
+            "url": "https://openapi.zalo.me/v2.0/oa/getoa",
+            "headers": {"access_token": "oa-token-new"},
+        },
+    ]
+
+
+async def test_oa_sender_get_oa_info_returns_original_error_when_refresh_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get_calls: list[int] = []
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": -216, "message": "Access token is invalid"}
+
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def get(self, url: str, *, headers=None, **kw):
+            get_calls.append(1)
+            return _FakeResp()
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+
+    async def refresh() -> str | None:
+        raise RuntimeError("redis unavailable")
+
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token-old",
+        refresh=refresh,
+    )
+
+    result = await sender.get_oa_info()
+
+    assert result.ok is False
+    assert result.error == "Access token is invalid"
+    assert get_calls == [1]
+
+
 async def test_oa_sender_send_media_uses_cs_media_template(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -256,6 +358,49 @@ async def test_oa_sender_send_retries_once_after_token_refresh(
     assert len(calls) == 2
     assert calls[0]["headers"] == {"access_token": "old-token"}
     assert calls[1]["headers"] == {"access_token": "new-token"}
+
+
+async def test_oa_sender_send_returns_original_error_when_refresh_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": -216, "message": "Access token is invalid"}
+
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def post(self, url: str, *, json=None, headers=None, **kw):
+            calls.append(1)
+            return _FakeResp()
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+
+    async def refresh() -> str | None:
+        raise RuntimeError("redis unavailable")
+
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token-old",
+        refresh=refresh,
+    )
+
+    result = await sender.send_message("user-1", "hello", quote_message_id="inbound-1")
+
+    assert result.ok is False
+    assert result.error == "chunk 1/1 failed: Access token is invalid"
+    assert calls == [1]
 
 
 async def test_oa_sender_without_refresh_returns_error_on_token_invalid(

@@ -69,6 +69,13 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+.inbox-bg-container .zalo-user-id {
+  margin-top: 2px;
+  color: var(--workspace-ink-muted);
+  font-size: var(--chat-fs-caption);
+  line-height: var(--chat-lh-tight);
+  overflow-wrap: anywhere;
+}
 .inbox-bg-container .person-name-button {
   appearance: none;
   border: 0;

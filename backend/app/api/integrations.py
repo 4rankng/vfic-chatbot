@@ -179,6 +179,7 @@ async def test_zalo_oa(
         result = await ZaloOASender(
             settings=settings_service.settings,
             access_token=cfg.oa_access_token,
+            refresh=settings_service.refresh_oa_access_token,
         ).get_oa_info()
         connected = result.ok
         if not result.ok:
@@ -203,9 +204,9 @@ async def verify_zalo_oa_signature(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ZaloOaSignatureVerifyOut:
-    """Verify a captured Zalo OA webhook event against the stored OA Secret Key.
+    """Verify a captured Zalo OA webhook event against the stored Webhook Secret.
 
-    Lets an admin confirm the configured OA Secret Key is the value Zalo actually
+    Lets an admin confirm the configured Webhook Secret is the value Zalo actually
     signs with, by pasting a real event's ``X-ZEvent-Signature`` + raw body +
     ``X-ZEvent-Timestamp`` (from the Zalo console test or server logs). The live
     Test Connection probe authenticates with the access_token and cannot detect a
@@ -221,7 +222,7 @@ async def verify_zalo_oa_signature(
             secret_configured=secret_configured,
             app_id_configured=app_id_configured,
             matched_label=None,
-            detail="OA Secret Key hoặc App ID chưa được cấu hình.",
+            detail="Webhook Secret hoặc Zalo App ID chưa được cấu hình.",
         )
     try:
         payload = json.loads(body.raw_body)
@@ -247,9 +248,9 @@ async def verify_zalo_oa_signature(
         app_id_configured=True,
         matched_label=result.matched_label,
         detail=(
-            "Chữ ký khớp — OA Secret Key đúng."
+            "Chữ ký khớp — Webhook Secret đúng."
             if result.verified
-            else "Chữ ký không khớp — OA Secret Key có thể sai (khác App Secret), "
+            else "Chữ ký không khớp — Webhook Secret có thể sai, "
             "hoặc body/timestamp không khớp nguyên văn byte-for-byte."
         ),
     )

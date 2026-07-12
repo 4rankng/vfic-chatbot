@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
 import logging
 import os
@@ -35,7 +36,8 @@ from app.services.audit_service import record_audit
 logger = logging.getLogger(__name__)
 
 # OA OAuth token endpoint (grant_type=authorization_code | refresh_token).
-# Tokens are opaque and short-lived (~1h); refresh on demand rather than by clock.
+# Access tokens are opaque and valid for 25 hours; refresh tokens are valid for
+# three months but single-use. Refresh on demand and persist every rotated pair.
 ZALO_OA_TOKEN_URL = "https://oauth.zaloapp.com/v4/oa/access_token"
 
 
@@ -410,10 +412,22 @@ class IntegrationSettingsService:
 
         redis = get_redis()
         lock_key = "zalo:oa:token:refresh"
-        acquired = await redis.set(lock_key, "1", nx=True, ex=30)
+        try:
+            acquired = await redis.set(lock_key, "1", nx=True, ex=30)
+        except Exception:  # noqa: BLE001
+            logger.warning("zalo OA token refresh lock unavailable", exc_info=True)
+            return None
         if not acquired:
-            # Another worker is refreshing; hand back whatever is stored now.
-            return cfg.oa_access_token or None
+            # Another worker owns the single-use refresh token. Wait briefly for
+            # it to persist the rotated pair, reading Postgres directly so the
+            # integration cache cannot hand back our stale access token.
+            for _ in range(20):
+                await asyncio.sleep(0.1)
+                stored = await self._stored_values((ZALO_OA_ACCESS_TOKEN,))
+                refreshed = stored.get(ZALO_OA_ACCESS_TOKEN)
+                if refreshed and refreshed != cfg.oa_access_token:
+                    return refreshed
+            return None
 
         try:
             headers = {"secret_key": cfg.oa_secret_key} if cfg.oa_secret_key else {}
@@ -438,19 +452,32 @@ class IntegrationSettingsService:
             await self._write_secret(ZALO_OA_ACCESS_TOKEN, new_access)
             if data.get("refresh_token"):
                 await self._write_secret(ZALO_OA_REFRESH_TOKEN, str(data["refresh_token"]))
-            await record_audit(
-                self.db,
-                action="refresh_zalo_oa_token",
-                actor_id=None,
-                target_type="integration_settings",
-                target_id="zalo",
-                payload={"rotated_refresh_token": bool(data.get("refresh_token"))},
-            )
+            # Persist the rotated credential pair before nonessential audit/cache
+            # work. Zalo refresh tokens are single-use; losing the new token due
+            # to an audit failure would require manual re-authorization.
             await self.db.commit()
-            await bump_cache_version(NS_INTEGRATION_ZALO)
+            try:
+                await record_audit(
+                    self.db,
+                    action="refresh_zalo_oa_token",
+                    actor_id=None,
+                    target_type="integration_settings",
+                    target_id="zalo",
+                    payload={"rotated_refresh_token": bool(data.get("refresh_token"))},
+                )
+                await self.db.commit()
+            except Exception:  # noqa: BLE001
+                logger.warning("zalo OA token refresh audit failed", exc_info=True)
+            try:
+                await bump_cache_version(NS_INTEGRATION_ZALO)
+            except Exception:  # noqa: BLE001
+                logger.warning("zalo OA token refresh cache invalidation failed", exc_info=True)
             return new_access
         finally:
-            await redis.delete(lock_key)
+            try:
+                await redis.delete(lock_key)
+            except Exception:  # noqa: BLE001
+                logger.warning("zalo OA token refresh lock cleanup failed", exc_info=True)
 
 
     async def update_minimax(

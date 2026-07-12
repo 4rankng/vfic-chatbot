@@ -139,6 +139,7 @@ async def test_refresh_persists_new_token_and_rotates_refresh_token(monkeypatch)
     token = await service.refresh_oa_access_token()
 
     assert token == "at-new"
+    assert fake_client.last_headers == {"secret_key": "oa-secret"}
     assert db.committed is True
     assert service.cipher.decrypt(db._by_key[ZALO_OA_ACCESS_TOKEN].encrypted_value) == "at-new"
     assert service.cipher.decrypt(db._by_key[ZALO_OA_REFRESH_TOKEN].encrypted_value) == "rt-2"
@@ -159,12 +160,13 @@ async def test_refresh_returns_stored_token_when_lock_held(monkeypatch):
     fake_client = _FakeClient({"access_token": "at-new"})
     monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_client)
     monkeypatch.setattr("app.core.redis.get_redis", lambda: _FakeRedis(set_ok=False))
+    monkeypatch.setattr("asyncio.sleep", AsyncMockNoop())
 
     token = await service.refresh_oa_access_token()
 
-    # Another worker holds the lock: return the currently stored access token,
-    # do NOT call Zalo, do NOT persist.
-    assert token == "at-old"
+    # Another worker holds the lock and no new token appears: never retry with
+    # the known-expired access token.
+    assert token is None
     assert fake_client.posted == 0
     assert db.committed is False
 

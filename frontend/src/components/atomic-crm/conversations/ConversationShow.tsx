@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRecordContext, useGetList, ShowBase } from "ra-core";
 import type { Conversation, Lead } from "../types";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
-import { getLeadStatusColor } from "./conversationDisplay";
+import { getLeadStatusColor, getZaloUserId } from "./conversationDisplay";
 import { ChatThread } from "./ChatThread";
 import {
   type ConversationMode,
@@ -129,6 +129,7 @@ export const ConversationShowContent = ({
 
   const name =
     lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;
+  const zaloUserId = getZaloUserId(record?.zalo_chat_id, record?.zalo_channel);
   const colors = getLeadStatusColor(lead);
   const {
     effectiveMode,
@@ -194,6 +195,9 @@ export const ConversationShowContent = ({
                   <span className="person-name">{name}</span>
                 )}
               </div>
+              {zaloUserId && (
+                <div className="zalo-user-id">Zalo ID: {zaloUserId}</div>
+              )}
             </div>
           </div>
           <div className="header-actions">

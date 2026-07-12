@@ -116,10 +116,28 @@ class ZaloOASender:
         """
         envelope = await self._post(path, body)
         if self._is_token_invalid(envelope) and self._refresh is not None:
-            new_token = await self._refresh()
+            try:
+                new_token = await self._refresh()
+            except Exception:  # noqa: BLE001
+                logger.warning("zalo OA access-token refresh failed", exc_info=True)
+                return envelope
             if new_token:
                 self._access_token = new_token
                 envelope = await self._post(path, body)
+        return envelope
+
+    async def _get_with_refresh(self, path: str) -> dict[str, Any]:
+        """GET, refreshing and retrying once when Zalo rejects the access token."""
+        envelope = await self._get(path)
+        if self._is_token_invalid(envelope) and self._refresh is not None:
+            try:
+                new_token = await self._refresh()
+            except Exception:  # noqa: BLE001
+                logger.warning("zalo OA access-token refresh failed", exc_info=True)
+                return envelope
+            if new_token:
+                self._access_token = new_token
+                envelope = await self._get(path)
         return envelope
 
     async def send_message(
@@ -263,5 +281,5 @@ class ZaloOASender:
         )
 
     async def get_oa_info(self) -> SendResult:
-        envelope = await self._get("/v2.0/oa/getoa")
+        envelope = await self._get_with_refresh("/v2.0/oa/getoa")
         return self._send_result(envelope)

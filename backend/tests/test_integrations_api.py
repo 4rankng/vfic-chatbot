@@ -20,6 +20,9 @@ class _Service:
     async def resolve_zalo(self) -> ZaloRuntimeConfig:
         return self.config
 
+    async def refresh_oa_access_token(self) -> str | None:
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Bot Platform channel: POST /zalo/bot/test
@@ -123,9 +126,10 @@ async def test_zalo_oa_reports_missing_fields_without_live_probe(monkeypatch):
 
 async def test_zalo_oa_redacts_token_in_error(monkeypatch):
     class _OAClient:
-        def __init__(self, *, settings, access_token: str) -> None:
+        def __init__(self, *, settings, access_token: str, refresh) -> None:
             assert settings is _Service.settings
             assert access_token == "oa-token"
+            assert callable(refresh)
 
         async def get_oa_info(self) -> SendResult:
             return SendResult(ok=False, error="expired oa-token")
@@ -149,9 +153,10 @@ async def test_zalo_oa_redacts_token_in_error(monkeypatch):
 
 async def test_zalo_oa_reports_connected_after_successful_probe(monkeypatch):
     class _OAClient:
-        def __init__(self, *, settings, access_token: str) -> None:
+        def __init__(self, *, settings, access_token: str, refresh) -> None:
             assert settings is _Service.settings
             assert access_token == "oa-token"
+            assert callable(refresh)
 
         async def get_oa_info(self) -> SendResult:
             return SendResult(ok=True)
@@ -169,6 +174,43 @@ async def test_zalo_oa_reports_connected_after_successful_probe(monkeypatch):
 
     assert result.connected is True
     assert result.errors == []
+
+
+async def test_zalo_oa_refreshes_invalid_access_token_and_retries(monkeypatch):
+    calls: list[str] = []
+
+    class _RefreshService(_Service):
+        async def refresh_oa_access_token(self) -> str | None:
+            calls.append("refresh")
+            return "oa-token-new"
+
+    class _OAClient:
+        def __init__(self, *, settings, access_token: str, refresh) -> None:
+            assert settings is _RefreshService.settings
+            assert access_token == "oa-token-old"
+            self._token = access_token
+            self._refresh = refresh
+
+        async def get_oa_info(self) -> SendResult:
+            calls.append(f"get:{self._token}")
+            self._token = await self._refresh() or self._token
+            calls.append(f"get:{self._token}")
+            return SendResult(ok=True)
+
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _RefreshService)
+    monkeypatch.setattr(integrations, "ZaloOASender", _OAClient)
+    _RefreshService.config = ZaloRuntimeConfig(
+        oa_app_id="oa-app",
+        oa_secret_key="oa-secret",
+        oa_access_token="oa-token-old",
+        oa_refresh_token="oa-refresh",
+    )
+
+    result = await integrations.test_zalo_oa(_admin=object(), db=object())
+
+    assert result.connected is True
+    assert result.errors == []
+    assert calls == ["get:oa-token-old", "refresh", "get:oa-token-new"]
 
 
 # ---------------------------------------------------------------------------

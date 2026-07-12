@@ -74,7 +74,45 @@ async def test_oa_webhook_records_verified_on_valid_signature(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oa_webhook_records_mismatch_and_returns_401(monkeypatch):
+async def test_oa_webhook_uses_event_app_id_for_signature(monkeypatch):
+    from app.api import webhooks
+    from app.services.integration_settings import ZaloRuntimeConfig
+
+    event_app_id, secret = "developer-app-1", "secret"
+    payload = {
+        "app_id": event_app_id,
+        "timestamp": "1700000000",
+        "event_name": "user_send_text",
+        "sender": {"id": "u1"},
+        "message": {"text": "hi", "msg_id": "m1"},
+    }
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    digest = hashlib.sha256(
+        event_app_id.encode() + raw + b"1700000000" + secret.encode()
+    ).hexdigest()
+
+    # An administrator may have entered the OA ID in the legacy App ID field.
+    # Authenticity still comes from the event App ID plus the configured secret.
+    _WebhookSvc.config = ZaloRuntimeConfig(
+        oa_app_id="oa-id-not-app-id", oa_secret_key=secret, oa_access_token="t"
+    )
+    recorder = AsyncMock()
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
+    monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
+    handler = AsyncMock(return_value={"status": "queued"})
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handler)
+
+    req = _FakeRequest(raw, headers={"x-zevent-signature": f"mac={digest}"})
+    resp = await webhooks.zalo_oa_webhook(req, db=AsyncMock())
+    await asyncio.sleep(0)
+
+    assert resp.status_code == 200
+    recorder.assert_called_once_with(ok=True)
+    handler.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_oa_webhook_records_mismatch_and_temporarily_processes(monkeypatch):
     from app.api import webhooks
     from app.services.integration_settings import ZaloRuntimeConfig
 
@@ -84,6 +122,8 @@ async def test_oa_webhook_records_mismatch_and_returns_401(monkeypatch):
     recorder = AsyncMock()
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
     monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
+    handler = AsyncMock(return_value={"status": "queued"})
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handler)
 
     raw = json.dumps(
         {
@@ -99,8 +139,9 @@ async def test_oa_webhook_records_mismatch_and_returns_401(monkeypatch):
     resp = await webhooks.zalo_oa_webhook(req, db=AsyncMock())
     await asyncio.sleep(0)  # let the fire-and-forget health record run
 
-    assert resp.status_code == 401
+    assert resp.status_code == 200
     recorder.assert_called_once_with(ok=False)
+    handler.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

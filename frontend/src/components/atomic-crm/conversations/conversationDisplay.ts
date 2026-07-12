@@ -1,5 +1,16 @@
 import { type Lead } from "../types";
 
+/** Return the external Zalo recipient ID stored by the channel provider. */
+export const getZaloUserId = (
+  zaloChatId: string | null | undefined,
+  zaloChannel?: string,
+) => {
+  if (!zaloChatId) return "";
+  return zaloChannel === "oa" && zaloChatId.startsWith("oa:")
+    ? zaloChatId.slice("oa:".length)
+    : zaloChatId;
+};
+
 export const getLeadStatusColor = (lead?: Lead | null) => {
   if (!lead)
     return {

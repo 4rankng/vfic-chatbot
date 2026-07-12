@@ -18,7 +18,7 @@ class PlainStatus(BaseModel):
 class ZaloOaSignatureHealth(BaseModel):
     """Passive result of the last real inbound OA webhook signature check.
 
-    Surfaced on the integration status so a wrong OA Secret Key is visible the
+    Surfaced on the integration status so a wrong Webhook Secret is visible the
     moment Zalo sends a real signed event, without clicking Test — the live Test
     probe authenticates with the access_token and cannot detect a wrong secret.
     """
@@ -93,7 +93,7 @@ class ZaloChannelTestOut(BaseModel):
 
 
 class ZaloOaSignatureVerifyRequest(BaseModel):
-    """A captured Zalo OA webhook event to verify against the stored OA Secret Key."""
+    """A captured Zalo OA webhook event to verify against the stored Webhook Secret."""
 
     model_config = ConfigDict(extra="forbid")
 
