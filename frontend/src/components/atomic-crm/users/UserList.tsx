@@ -13,7 +13,14 @@ import { TopToolbar } from "../layout/TopToolbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarDays, Mail, Plus, ShieldOff, UserCog } from "lucide-react";
+import {
+  CalendarDays,
+  Mail,
+  Plus,
+  ShieldOff,
+  UserCog,
+  UserRound,
+} from "lucide-react";
 import { Link } from "react-router";
 import { UserActions } from "./UserActions";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
@@ -173,7 +180,7 @@ const UserMobileList = () => {
           <Card className="gap-3 overflow-hidden rounded-xl p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
-                {initials(user.full_name || user.email)}
+                <UserRound className="size-5" aria-hidden="true" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-2">
@@ -202,14 +209,6 @@ const UserMobileList = () => {
     </div>
   );
 };
-
-const initials = (value: string) =>
-  value
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat("vi-VN", {

@@ -16,6 +16,7 @@ import {
   counterForReason,
   formatElapsed,
   isAttentionReason,
+  reasonLabelForQueue,
 } from "./attentionDashboard";
 
 describe("REASON_LABELS", () => {
@@ -23,7 +24,9 @@ describe("REASON_LABELS", () => {
     for (const reason of ATTENTION_REASONS) {
       const label = REASON_LABELS[reason];
       expect(typeof label, `label for ${reason}`).toBe("string");
-      expect(label.length, `label for ${reason} is non-empty`).toBeGreaterThan(0);
+      expect(label.length, `label for ${reason} is non-empty`).toBeGreaterThan(
+        0,
+      );
     }
   });
 
@@ -47,6 +50,16 @@ describe("REASON_LABELS", () => {
   it("uses an action-oriented label for priority candidates needing outreach", () => {
     expect(REASON_LABELS.PRIORITY_NO_ACTION).toBe(
       "Ứng viên ưu tiên cần liên hệ",
+    );
+  });
+
+  it("omits the duplicate priority reason from the today queue", () => {
+    expect(reasonLabelForQueue("PRIORITY_NO_ACTION", "today")).toBeNull();
+    expect(reasonLabelForQueue("PRIORITY_NO_ACTION", "immediate")).toBe(
+      "Ứng viên ưu tiên cần liên hệ",
+    );
+    expect(reasonLabelForQueue("FOLLOWUP_TODAY", "today")).toBe(
+      "Theo dõi hôm nay",
     );
   });
 });

@@ -1,4 +1,4 @@
-import { AlertTriangle, MessageCircle, Phone } from "lucide-react";
+import { AlertTriangle, MessageCircle, Phone, UserRound } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 
@@ -9,8 +9,10 @@ import {
   REASON_LABELS,
   type AttentionDashboard,
   type AttentionItem,
+  type AttentionQueue,
   fetchAttentionDashboard,
   formatElapsed,
+  reasonLabelForQueue,
 } from "./attentionDashboard";
 import { deriveCacheDiscriminators } from "./recruitingCommandCenterLogic";
 import { DashboardEmptyIllustration } from "./DashboardEmptyIllustration";
@@ -27,16 +29,6 @@ const candidateName = (row: AttentionItem): string => {
   if (name) return name;
   const suffix = row.phone_last4 ?? row.conversation_id?.slice(-4) ?? "";
   return suffix ? `Ứng viên ${suffix}` : "Ứng viên chưa định danh";
-};
-
-const initialsFor = (name: string): string => {
-  const words = name
-    .split(/\s+/)
-    .map((word) => word.trim())
-    .filter(Boolean);
-  if (words.length === 0) return "UV";
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
 };
 
 const formatClock = (value: string | null | undefined): string => {
@@ -236,7 +228,12 @@ const AttentionPanel = ({
           />
         ) : state.hasRows ? (
           rows.map((row) => (
-            <AttentionRow key={row.key} row={row} navigate={navigate} />
+            <AttentionRow
+              key={row.key}
+              row={row}
+              navigate={navigate}
+              queue={secondary ? "today" : "immediate"}
+            />
           ))
         ) : (
           <EmptyDashboardList
@@ -261,23 +258,26 @@ const AttentionPanel = ({
   );
 };
 
-const CandidateAvatar = ({ name }: { name: string }) => (
+const CandidateAvatar = () => (
   <span className="dashboard-candidate-avatar" aria-hidden>
-    {initialsFor(name)}
+    <UserRound className="size-5" />
   </span>
 );
 
 const AttentionRow = ({
   row,
   navigate,
+  queue,
 }: {
   row: AttentionItem;
   navigate: Navigate;
+  queue: AttentionQueue;
 }) => {
   const name = candidateName(row);
   const onClick = rowOnClick(row, navigate);
   const elapsed = formatElapsed(row.urgency_at);
   const reasonLabel = REASON_LABELS[row.reason] ?? row.reason;
+  const visibleReasonLabel = reasonLabelForQueue(row.reason, queue);
   const stage = normalizeText(row.lead_stage);
   const desiredJob = normalizeText(row.desired_job);
   const phoneHint = normalizeText(row.phone_last4)
@@ -288,9 +288,6 @@ const AttentionRow = ({
   // static row that still displays the last-4 identifier hint.
   const sub = (
     <span className="dashboard-candidate-sub">
-      {stage ? (
-        <span className="dashboard-stage-chip">{stageLabel(stage)}</span>
-      ) : null}
       {desiredJob ? <span className="dashboard-job">{desiredJob}</span> : null}
       {phoneHint ? (
         <span
@@ -303,9 +300,19 @@ const AttentionRow = ({
       ) : null}
     </span>
   );
+  const candidateTitle = (
+    <span className="dashboard-candidate-title">
+      <strong>{name}</strong>
+      {stage ? (
+        <span className="dashboard-stage-chip">{stageLabel(stage)}</span>
+      ) : null}
+    </span>
+  );
   const meta = (
     <span className="dashboard-candidate-meta">
-      <span className="dashboard-reason-label">{reasonLabel}</span>
+      {visibleReasonLabel ? (
+        <span className="dashboard-reason-label">{visibleReasonLabel}</span>
+      ) : null}
       {elapsed ? <small>{elapsed}</small> : null}
     </span>
   );
@@ -319,9 +326,9 @@ const AttentionRow = ({
           elapsed ? `, ${elapsed}` : ""
         }`}
       >
-        <CandidateAvatar name={name} />
+        <CandidateAvatar />
         <span className="dashboard-candidate-main">
-          <strong>{name}</strong>
+          {candidateTitle}
           {sub}
         </span>
         {meta}
@@ -336,9 +343,9 @@ const AttentionRow = ({
         elapsed ? `, ${elapsed}` : ""
       }${phoneHint ? `, số cuối ${row.phone_last4}` : ""}`}
     >
-      <CandidateAvatar name={name} />
+      <CandidateAvatar />
       <span className="dashboard-candidate-main">
-        <strong>{name}</strong>
+        {candidateTitle}
         {sub}
       </span>
       {meta}

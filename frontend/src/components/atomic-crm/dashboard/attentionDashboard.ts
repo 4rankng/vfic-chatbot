@@ -100,6 +100,22 @@ export const REASON_LABELS: Record<AttentionReason, string> = {
   STALLED: "Đang ngưng trệ",
 };
 
+/** Dashboard queues already supply context for some otherwise useful reasons. */
+export type AttentionQueue = "immediate" | "today";
+
+/**
+ * Avoid repeating the purpose of the secondary queue inside its priority rows.
+ * The full reason remains available to assistive technology through the row's
+ * accessible name.
+ */
+export const reasonLabelForQueue = (
+  reason: AttentionReason,
+  queue: AttentionQueue,
+): string | null =>
+  queue === "today" && reason === "PRIORITY_NO_ACTION"
+    ? null
+    : REASON_LABELS[reason];
+
 /** Vietnamese labels for the five counters (plan §Requirements). */
 export const COUNTER_LABELS: Record<keyof AttentionCounters, string> = {
   needs_reply: "Cần phản hồi",

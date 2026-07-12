@@ -80,6 +80,7 @@
 .recruiting-two-column {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.9fr);
+  align-items: start;
   gap: 24px;
 }
 .recruiting-panel {
@@ -178,6 +179,21 @@ button.dashboard-candidate-row:active {
   font-size: 14px;
   font-weight: 600;
 }
+.dashboard-candidate-main .dashboard-candidate-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dashboard-candidate-main .dashboard-candidate-title > strong {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.dashboard-candidate-main .dashboard-candidate-title .dashboard-stage-chip {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+}
 .dashboard-candidate-main strong,
 .dashboard-candidate-main span {
   overflow: hidden;
@@ -195,18 +211,18 @@ button.dashboard-candidate-row:active {
   text-align: right;
 }
 .dashboard-empty-list {
-  min-height: 236px;
+  min-height: 180px;
   display: grid;
   align-content: center;
   justify-items: center;
   gap: 10px;
-  padding: 20px 12px 24px;
+  padding: 16px 12px 20px;
   text-align: center;
 }
 .dashboard-empty-illustration {
   width: clamp(112px, 28vw, 140px);
   height: auto;
-  max-height: 112px;
+  max-height: 88px;
   display: block;
 }
 .dashboard-empty-copy {

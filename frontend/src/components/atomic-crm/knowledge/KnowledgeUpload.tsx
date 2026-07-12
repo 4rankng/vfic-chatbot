@@ -247,7 +247,7 @@ export const KnowledgeUpload = ({
                 }}
               >
                 <input {...getInputProps()} />
-                <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-background text-primary shadow-xs ring-1 ring-border transition-transform group-hover:scale-105">
+                <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-background text-primary ring-1 ring-border">
                   <UploadCloud className="size-6" />
                 </span>
                 <p className="text-base font-semibold">

@@ -171,8 +171,43 @@
 .performance-legend i { display: inline-block; width: 1rem; height: 0.15rem; background: var(--primary); }
 .performance-legend i.is-target { height: 0; border-top: 2px dashed var(--danger); background: transparent; }
 
-.performance-trend { position: relative; display: flex; align-items: end; gap: 1px; height: 12rem; padding: 0.7rem 0.5rem 0.4rem; overflow: hidden; border: 1px solid var(--border); border-radius: 0.55rem; background: var(--muted); }
-.performance-trend::before { position: absolute; inset: 25% 0 auto; height: 1px; background: var(--border); content: ""; box-shadow: 0 48px 0 var(--border), 0 96px 0 var(--border); }
+.performance-trend {
+  position: relative;
+  display: flex;
+  align-items: end;
+  gap: 1px;
+  height: 12rem;
+  padding: 0.7rem 0.5rem 0.4rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent calc(25% - 0.5px),
+      var(--border) calc(25% - 0.5px),
+      var(--border) calc(25% + 0.5px),
+      transparent calc(25% + 0.5px)
+    ),
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - 0.5px),
+      var(--border) calc(50% - 0.5px),
+      var(--border) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    ),
+    linear-gradient(
+      to bottom,
+      transparent calc(75% - 0.5px),
+      var(--border) calc(75% - 0.5px),
+      var(--border) calc(75% + 0.5px),
+      transparent calc(75% + 0.5px)
+    ),
+    var(--muted);
+}
+.performance-trend::before {
+  display: none;
+}
 .performance-target-line { position: absolute; z-index: 1; right: 0; left: 0; border-top: 1px dashed var(--danger); }
 .performance-target-line b { position: absolute; right: 0.2rem; top: -1.35rem; padding: 0.1rem 0.25rem; border-radius: 0.25rem; color: var(--danger); background: var(--card); font-size: 0.68rem; }
 .performance-trend-bar { position: relative; z-index: 2; flex: 1; min-width: 2px; padding: 0; border: 0; border-radius: 0.12rem 0.12rem 0 0; background: var(--primary); cursor: default; }

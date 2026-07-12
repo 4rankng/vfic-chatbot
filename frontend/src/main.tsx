@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
+import "./flat-surfaces.css";
 import App from "./App.tsx";
 
 // After a new deploy, the service worker may replace its pre-cache while

@@ -1,0 +1,46 @@
+/*
+ * Flat console contract
+ *
+ * Surfaces are separated with borders, spacing, and tonal backgrounds—not
+ * drop shadows, inset highlights, or raised hover states. This layer loads
+ * after the shared token file so it applies consistently to vendored
+ * primitives and feature-owned styles without changing their contracts.
+ */
+
+:root {
+  --workspace-shadow-panel: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+}
+
+:where(#root, [data-radix-portal], [data-sonner-toaster]) * {
+  box-shadow: none !important;
+}
+
+/* Keep known raised interactions flat without disturbing transforms that are
+   required for layout, positioning, or panel transitions. */
+:where(#root, [data-radix-portal], [data-sonner-toaster])
+  :is(
+    .workspace-icon-action:hover,
+    .workspace-logo-tile:hover,
+    .context-action:hover:not(:disabled),
+    .settings-side-nav-link:active,
+    .candidate-signal-icon:hover,
+    .candidate-signal-icon.active,
+    .profile-info-btn:hover,
+    .inline-takeover-btn:hover,
+    .emoji-option:hover
+  ) {
+  transform: none !important;
+  translate: none !important;
+  scale: none !important;
+}
+
+/* Shadow-based focus rings disappear with the flat treatment, so provide an
+   explicit, high-contrast outline for keyboard users. */
+:where(#root, [data-radix-portal], [data-sonner-toaster])
+  :is(button, a, input, textarea, select, [role="button"]):focus-visible {
+  outline: 2px solid var(--workspace-focus, var(--ring)) !important;
+  outline-offset: 2px;
+}

@@ -12,14 +12,17 @@ The authenticated workspace uses the **graphite / cloud / emerald** palette:
 |---|---|---|
 | Application shell | `--workspace-shell` | `#0F172A` (slate-900) |
 | Main canvas | `--workspace-canvas` | `#EEF2F6` |
-| Surfaces | `--workspace-surface` | white / elevated |
+| Surfaces | `--workspace-surface` | white / flat |
 | Text | `--workspace-ink` / `--workspace-ink-muted` | slate scale |
 | Borders | `--workspace-border` | slate-200 |
 | Brand / focus / actions | `--workspace-action` / `--workspace-focus` | emerald (`#0F8A68`) |
 
 **Usage guidance:**
 - Shell (`#0F172A`) only for navigation surfaces (sidebar, top bar).
-- Elevated white used sparingly — default to canvas.
+- White surfaces stay flat and are separated with borders, spacing, and tonal
+  backgrounds — default to canvas where a surface is not needed.
+- Do not use drop shadows, inset highlights, or hover/active lift effects.
+  Preserve keyboard focus with a visible outline instead.
 - Emerald for selection, focus rings, primary actions, and healthy status only.
 
 > **Note:** `docs/design-tokens-warm-paper.md` is **superseded** (replaced 2026-07-10). Do not use warm-paper tokens. It remains for reference only.

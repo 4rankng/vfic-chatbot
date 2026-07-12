@@ -147,7 +147,7 @@ export const InlineKnowledgeUploader = () => {
             <input {...getInputProps()} />
             <div className="flex max-w-[28rem] flex-col items-center">
               <span className="flex size-12 items-center justify-center rounded-[10px] bg-card text-[var(--kb-teal)] shadow-[inset_0_0_0_1px_var(--border)]">
-                <UploadCloud className="size-5 transition-transform group-hover:-translate-y-0.5" />
+                <UploadCloud className="size-5" />
               </span>
               <p className="mt-3 text-sm font-semibold text-foreground">
                 {isDragActive
