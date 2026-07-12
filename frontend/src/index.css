@@ -76,7 +76,95 @@
   --color-line: #dee2d8;
 }
 
+/* Typography scale — site-wide, single source of truth.
+   Defined as plain @theme (not inline) so each token emits BOTH a text-*
+   utility (e.g. text-page-title) AND a :root CSS var. Semantic role names,
+   never raw sizes — add new roles here, not one-off values in components.
+
+   Fluid roles use clamp(min, preferred, max) so headings can never balloon;
+   the mobile html=17px root boost scales fixed roles uniformly, replacing
+   the old per-token px mobile overrides. */
+@theme {
+  /* Fluid roles — page titles and metrics that may flex with viewport. */
+  --text-display: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+  --text-display--line-height: 1.15;
+  --text-display--letter-spacing: -0.01em;
+
+  --text-page-title: clamp(1.375rem, 1.25rem + 0.5vw, 1.5rem);
+  --text-page-title--line-height: 1.2;
+  --text-page-title--letter-spacing: -0.01em;
+
+  --text-metric: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+  --text-metric--line-height: 1.15;
+  --text-metric--letter-spacing: -0.01em;
+
+  /* Fixed roles — step with the rem root, so no per-token px overrides. */
+  --text-section-title: 1rem;
+  --text-section-title--line-height: 1.3;
+
+  --text-subsection: 0.9375rem;
+  --text-subsection--line-height: 1.3;
+
+  --text-card-title: 0.875rem;
+  --text-card-title--line-height: 1.3;
+
+  --text-row-title: 0.875rem;
+  --text-row-title--line-height: 1.25;
+
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.45;
+
+  --text-body-sm: 0.8125rem;
+  --text-body-sm--line-height: 1.45;
+
+  --text-control: 0.875rem;
+  --text-control--line-height: 1.25;
+
+  --text-input: 0.875rem;
+  --text-input--line-height: 1.45;
+
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.3;
+
+  --text-caption: 0.71875rem;
+  --text-caption--line-height: 1.25;
+
+  --text-badge: 0.71875rem;
+  --text-badge--line-height: 1.25;
+}
+
 :root {
+  /* Semantic aliases for use in custom CSS (typography.css, dashboard.css,
+     performance.css, etc.) — points at the @theme text-* tokens so Tailwind
+     utilities and raw var() consumers share one source. */
+  --fs-display: var(--text-display);
+  --fs-page-title: var(--text-page-title);
+  --fs-metric: var(--text-metric);
+  --fs-section-title: var(--text-section-title);
+  --fs-subsection: var(--text-subsection);
+  --fs-card-title: var(--text-card-title);
+  --fs-row-title: var(--text-row-title);
+  --fs-body: var(--text-body);
+  --fs-body-sm: var(--text-body-sm);
+  --fs-control: var(--text-control);
+  --fs-input: var(--text-input);
+  --fs-meta: var(--text-meta);
+  --fs-caption: var(--text-caption);
+  --fs-badge: var(--text-badge);
+
+  /* Weight / line-height / letter-spacing scale. */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --lh-tight: 1.15;
+  --lh-snug: 1.3;
+  --lh-normal: 1.45;
+  --lh-relaxed: 1.6;
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;
+
   /* Shared authenticated-console roles. The shell follows the Ting Ting
      blue operations-console direction; semantic success remains green. */
   --workspace-shell: #506eae;

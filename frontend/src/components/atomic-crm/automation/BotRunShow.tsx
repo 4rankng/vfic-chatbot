@@ -9,7 +9,7 @@ import { durationLabel, formatDateTime, outcomeMeta } from "./botRunMeta";
 
 const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
   <div className="flex flex-col gap-1 border-b py-3 last:border-0">
-    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+    <span className="text-caption uppercase tracking-wide text-muted-foreground">
       {label}
     </span>
     <span className="text-sm">{value ?? "—"}</span>

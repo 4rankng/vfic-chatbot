@@ -87,7 +87,7 @@ export const ForgotPasswordPage = () => {
               </p>
             </div>
             <div className="space-y-3">
-              <h1 className="kb-display text-balance text-[clamp(1.65rem,3.05vw,2.65rem)] leading-none text-foreground">
+              <h1 className="kb-display text-balance text-display leading-none text-foreground">
                 Khôi phục mật khẩu
               </h1>
               <p className="mx-auto max-w-[360px] text-sm leading-6 text-muted-foreground">

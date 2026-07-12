@@ -89,7 +89,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
               </p>
             </div>
             <div className="space-y-3">
-              <h1 className="kb-display text-balance text-[clamp(1.65rem,3.05vw,2.65rem)] leading-none text-foreground">
+              <h1 className="kb-display text-balance text-display leading-none text-foreground">
                 {translate("crm.auth.welcome_back", {
                   _: "Chào mừng bạn trở lại!",
                 })}

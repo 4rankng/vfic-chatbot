@@ -62,6 +62,7 @@ class Lead(Base):
     desired_job: Mapped[str | None] = mapped_column(Text)
     years_experience: Mapped[str | None] = mapped_column(Text)
     expected_salary: Mapped[str | None] = mapped_column(Text)
+    avatar_url: Mapped[str | None] = mapped_column(Text)
     lead_score: Mapped[LeadScore | None] = mapped_column(
         Enum(LeadScore, name="lead_score", create_type=False)
     )

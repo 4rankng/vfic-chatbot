@@ -627,6 +627,18 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
         "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
     )
 
+    # Capture the best-effort OA profile enrichment enqueue (fire-and-forget on
+    # the persistence_low queue). Mocked so the test never touches Redis.
+    enrich_calls: list[dict] = []
+
+    def _fake_enqueue_enrich(job):
+        enrich_calls.append(job)
+
+    monkeypatch.setattr(
+        "app.workers.persistence_worker.enqueue_enrich_oa_profile",
+        _fake_enqueue_enrich,
+    )
+
     db = MagicMock()
     db.refresh = AsyncMock()
     enqueued: list[dict] = []
@@ -651,3 +663,7 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
     assert enqueued[0]["user_text"] == "Xin chào"
     assert enqueued[0]["lock_owner"] == str(lock_owner)
     assert enqueued[0]["execution_source"] == "queued"
+    # The OA profile enrichment job is enqueued fire-and-forget with the
+    # conversation-scoped zalo_id and the external OA user id.
+    assert len(enrich_calls) == 1
+    assert enrich_calls[0] == {"zalo_id": "oa:user-123", "user_id": "user-123"}

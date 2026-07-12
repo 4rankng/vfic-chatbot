@@ -68,7 +68,7 @@ const TermListInput = ({
   };
   return (
     <div className="grid gap-1">
-      <span className="text-[11px] font-medium text-muted-foreground">
+      <span className="text-caption font-medium text-muted-foreground">
         {label}
       </span>
       {values.length > 0 && (
@@ -76,7 +76,7 @@ const TermListInput = ({
           {values.map((value, idx) => (
             <span
               key={`${value}-${idx}`}
-              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px]"
+              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-caption"
             >
               {value}
               <button
@@ -427,7 +427,7 @@ const FaqRow = ({
               {item.answer}
             </p>
             {(item.source_name || item.source_anchor) && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
+              <p className="mt-2 text-caption text-muted-foreground">
                 {item.source_name ?? "FAQ"}
                 {item.source_anchor ? ` • ${item.source_anchor}` : ""}
               </p>

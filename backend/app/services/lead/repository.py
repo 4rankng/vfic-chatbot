@@ -18,7 +18,7 @@ from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadTag
 _FETCH_SQL = text(
     """
     SELECT id, zalo_id, name, phone, birth_year, age, living_area, address, gender,
-           region, desired_job, years_experience, expected_salary,
+           region, desired_job, years_experience, expected_salary, avatar_url,
            lead_score, lead_stage, notes, version
     FROM leads WHERE zalo_id = :zalo_id
     """

@@ -17,12 +17,12 @@
 }
 .project-feature-group-title {
   color: var(--foreground);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: var(--fs-card-title);
+  font-weight: var(--fw-semibold);
 }
 .project-feature-group-count {
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
 }
 .project-feature-chip {
   color: var(--foreground);

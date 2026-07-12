@@ -22,7 +22,7 @@ const BotRunRow = ({ run }: { run: BotRun }) => {
     >
       <span
         className={cn(
-          "mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+          "mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-badge font-semibold uppercase tracking-wide",
           meta.classes,
         )}
       >

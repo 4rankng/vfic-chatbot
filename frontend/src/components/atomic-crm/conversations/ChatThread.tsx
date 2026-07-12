@@ -24,7 +24,8 @@ import { HumanReplyError } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
 import { useConversationMessages, useConversationFlags } from "./messageStore";
-import { Bot, Sparkles, UserRound } from "lucide-react";
+import { LeadAvatar } from "./LeadAvatar";
+import { Bot, Sparkles } from "lucide-react";
 
 // ChatThread is the reusable message thread + composer. It owns the realtime
 // subscription, the virtualised scroller (with all the snap / load-more arming
@@ -68,6 +69,7 @@ type ChatMessageRowProps = {
   message: Message;
   kind: MessageKind;
   isGrouped: boolean;
+  candidateAvatarUrl?: string | null;
 };
 
 const deliveryStatusLabel = (status?: Message["delivery_status"]) => {
@@ -128,7 +130,7 @@ const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 ChatItemList.displayName = "ChatItemList";
 
 const ChatMessageRow = memo(
-  ({ message: m, kind, isGrouped }: ChatMessageRowProps) => {
+  ({ message: m, kind, isGrouped, candidateAvatarUrl }: ChatMessageRowProps) => {
     const textBlocks = useMemo(
       () => splitMessageTextBlocks(m.content),
       [m.content],
@@ -158,9 +160,12 @@ const ChatMessageRow = memo(
     const avatar =
       kind === "user" ? (
         !isGrouped ? (
-          <span className="message-avatar">
-            <UserRound className="icon" />
-          </span>
+          <LeadAvatar
+            src={candidateAvatarUrl}
+            className="message-avatar"
+            iconSize={16}
+            alt="Ảnh đại diện ứng viên"
+          />
         ) : (
           <span
             className="message-avatar-placeholder"
@@ -225,6 +230,10 @@ export interface ChatThreadProps {
    * Omitted on surfaces that only display the thread (none today, but the
    * thread degrades gracefully: no takeover, no markAsRead). */
   conversation?: Conversation;
+  /** Candidate avatar URL (from the loaded lead). When present, user message
+   * rows render the image; absent/null keeps the UserRound icon. Passed from
+   * the parent surface so the thread never issues its own lead fetch. */
+  candidateAvatarUrl?: string | null;
   isBotModeOverride?: boolean;
   canHumanReplyOverride?: boolean;
   onTakeoverOverride?: () => void;
@@ -234,6 +243,7 @@ export interface ChatThreadProps {
 export const ChatThread = ({
   conversationId,
   conversation,
+  candidateAvatarUrl,
   isBotModeOverride,
   canHumanReplyOverride,
   onTakeoverOverride,
@@ -472,9 +482,16 @@ export const ChatThread = ({
       const prevMsg = index > 0 ? messages[index - 1] : null;
       const prevKind = prevMsg ? classify(prevMsg) : null;
       const isGrouped = prevKind === kind;
-      return <ChatMessageRow message={m} kind={kind} isGrouped={isGrouped} />;
+      return (
+        <ChatMessageRow
+          message={m}
+          kind={kind}
+          isGrouped={isGrouped}
+          candidateAvatarUrl={candidateAvatarUrl}
+        />
+      );
     },
-    [messages],
+    [messages, candidateAvatarUrl],
   );
 
   return (

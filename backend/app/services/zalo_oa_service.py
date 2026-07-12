@@ -1,8 +1,11 @@
 """Zalo Official Account outbound client."""
 from __future__ import annotations
 
+import json
 import logging
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -15,6 +18,19 @@ from app.services.zalo_bot_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class OAUserProfile:
+    """Normalized subset of Zalo OA ``/v3.0/oa/user/detail`` we persist.
+
+    ``avatar_url`` is chosen in priority order from the documented response:
+    ``data.avatars.240`` > ``data.avatar`` > ``data.avatars.120``. Empty when
+    Zalo returned no usable image so the caller keeps the initials fallback.
+    """
+
+    display_name: str = ""
+    avatar_url: str = ""
 
 
 class ZaloOASender:
@@ -65,7 +81,9 @@ class ZaloOASender:
             return data
         return {"error": -1, "message": f"non-JSON response: {data!r}"}
 
-    async def _get(self, path: str) -> dict[str, Any]:
+    async def _get(
+        self, path: str, *, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         token = self._token
         if not token:
             return {"error": -1, "message": "zalo_oa_access_token not configured"}
@@ -75,6 +93,7 @@ class ZaloOASender:
             ) as client:
                 resp = await client.get(
                     f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
+                    params=params,
                     headers={"access_token": token},
                 )
             data = resp.json()
@@ -136,9 +155,11 @@ class ZaloOASender:
                 envelope = await self._post(path, body)
         return envelope
 
-    async def _get_with_refresh(self, path: str) -> dict[str, Any]:
+    async def _get_with_refresh(
+        self, path: str, *, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """GET, refreshing and retrying once when Zalo rejects the access token."""
-        envelope = await self._get(path)
+        envelope = await self._get(path, params=params)
         if self._is_token_invalid(envelope) and self._refresh is not None:
             try:
                 new_token = await self._refresh()
@@ -147,7 +168,7 @@ class ZaloOASender:
                 return envelope
             if new_token:
                 self._access_token = new_token
-                envelope = await self._get(path)
+                envelope = await self._get(path, params=params)
         return envelope
 
     async def send_message(
@@ -293,3 +314,51 @@ class ZaloOASender:
     async def get_oa_info(self) -> SendResult:
         envelope = await self._get_with_refresh("/v2.0/oa/getoa")
         return self._send_result(envelope)
+
+    async def get_user_detail(self, user_id: str) -> OAUserProfile | None:
+        """Fetch a user's display name + avatar via ``GET /v3.0/oa/user/detail``.
+
+        Zalo's v3 user-detail endpoint takes a compact JSON object
+        ``{"user_id": "<oa-scoped id>"}`` URL-encoded into a ``data`` query param.
+        Returns a normalized profile on success, or ``None`` for any transport
+        error, malformed envelope, permission denial, or missing payload — the
+        caller keeps the initials fallback in every case. Only structured,
+        non-PII context is logged so Zalo responses never reach log streams.
+        """
+        user_id = (user_id or "").strip()
+        if not user_id:
+            return None
+        data_param = quote(json.dumps({"user_id": user_id}, separators=(",", ":")))
+        envelope = await self._get_with_refresh(
+            "/v3.0/oa/user/detail", params={"data": data_param}
+        )
+        if not isinstance(envelope, dict) or envelope.get("error") not in (0, "0", None):
+            logger.info(
+                "zalo OA user-detail lookup failed error=%s",
+                envelope.get("error") if isinstance(envelope, dict) else "non-dict",
+            )
+            return None
+        data = envelope.get("data")
+        if not isinstance(data, dict):
+            return None
+        return _parse_oa_user_profile(data)
+
+
+def _parse_oa_user_profile(data: dict[str, Any]) -> OAUserProfile:
+    """Pick display_name + the best-documented avatar URL from a Zalo payload.
+
+    Priority: ``avatars.240`` > ``avatar`` > ``avatars.120``. Returns empty
+    strings when no usable image is present so callers fall back to initials.
+    """
+    display_name = str(data.get("display_name") or "").strip()
+
+    avatars = data.get("avatars")
+    avatar_240 = ""
+    avatar_120 = ""
+    if isinstance(avatars, dict):
+        avatar_240 = str(avatars.get("240") or "").strip()
+        avatar_120 = str(avatars.get("120") or "").strip()
+    avatar = str(data.get("avatar") or "").strip()
+
+    avatar_url = avatar_240 or avatar or avatar_120
+    return OAUserProfile(display_name=display_name, avatar_url=avatar_url)

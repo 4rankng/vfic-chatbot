@@ -116,7 +116,6 @@ async def semantic_cache_put(query_vec: list[float], result: str) -> None:
     """
     import json
 
-    from app.core.cache import cache_version
     from app.core.redis import get_redis
 
     s = _settings()

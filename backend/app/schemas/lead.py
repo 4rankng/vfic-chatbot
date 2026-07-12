@@ -26,6 +26,7 @@ class LeadOut(BaseModel):
     desired_job: str | None = None
     years_experience: str | None = None
     expected_salary: str | None = None
+    avatar_url: str | None = None
     lead_score: LeadScore | None = None
     lead_stage: LeadStage
     assigned_recruiter_id: uuid.UUID | None = None

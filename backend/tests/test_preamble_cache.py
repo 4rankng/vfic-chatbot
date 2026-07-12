@@ -6,14 +6,9 @@ no live process required.
 """
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from app.core.preamble_cache import (
-    NS_INTEGRATION_MINIMAX,
-    NS_INTEGRATION_OPENROUTER,
-    NS_PREAMBLE,
     cached_minimax_config,
     cached_openrouter_config,
     cached_system_prompt,

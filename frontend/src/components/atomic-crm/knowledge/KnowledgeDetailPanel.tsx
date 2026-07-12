@@ -96,7 +96,7 @@ export const KnowledgeDetailPanel = ({
           <h3 className="kb-display break-words text-lg text-foreground sm:text-xl">
             {source.file_name}
           </h3>
-          <p className="kb-mono mt-1 break-words text-[12.5px] text-muted-foreground">
+          <p className="kb-mono mt-1 break-words text-meta text-muted-foreground">
             {project?.name ?? source.project_name ?? "Chưa gắn dự án"} ·{" "}
             {source.mime_type || "Tài liệu"} · Cập nhật{" "}
             {getRelativeTimeString(source.updated_at ?? source.created_at)}
@@ -256,7 +256,7 @@ export const KnowledgeDetailPanel = ({
 
 const InfoBlock = ({ label, value }: { label: string; value: string }) => (
   <div className="min-w-0 bg-background px-3 py-3 sm:bg-card sm:px-4">
-    <div className="kb-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+    <div className="kb-mono text-badge font-semibold uppercase tracking-[0.08em] text-muted-foreground">
       {label}
     </div>
     <div className="kb-mono mt-1.5 break-words text-lg font-semibold text-foreground">

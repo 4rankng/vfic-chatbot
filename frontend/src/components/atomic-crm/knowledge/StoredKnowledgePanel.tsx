@@ -93,7 +93,7 @@ export const StoredKnowledgePanel = ({
             tra.
           </p>
         </div>
-        <Badge className="kb-mono rounded-full bg-[var(--kb-teal-soft)] text-[11px] text-[var(--kb-teal)] hover:bg-[var(--kb-teal-soft)]">
+        <Badge className="kb-mono rounded-full bg-[var(--kb-teal-soft)] text-caption text-[var(--kb-teal)] hover:bg-[var(--kb-teal-soft)]">
           {source.digest_meta?.unit_count ?? units.length} đơn vị
         </Badge>
       </div>
@@ -158,7 +158,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
           <Chip>{labelFromMap(unit.content_type, CONTENT_TYPE_LABELS)}</Chip>
         )}
         {unit.route_id && <Chip>{unit.route_id}</Chip>}
-        <span className="kb-mono text-[11px] text-muted-foreground sm:ml-auto">
+        <span className="kb-mono text-caption text-muted-foreground sm:ml-auto">
           #{unit.chunk_index + 1}
         </span>
       </div>
@@ -201,7 +201,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
             </div>
           )}
           {unit.source_anchor && (
-            <div className="kb-mono break-words text-[11px]">
+            <div className="kb-mono break-words text-caption">
               Mốc nguồn: {localizeKnowledgeText(unit.source_anchor)}
             </div>
           )}
@@ -246,7 +246,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
             {entityEntries.slice(0, 8).map(([key, value]) => (
               <span
                 key={key}
-                className="kb-mono rounded-full bg-secondary px-2 py-1 text-[11px] text-[var(--kb-ink-700)]"
+                className="kb-mono rounded-full bg-secondary px-2 py-1 text-caption text-[var(--kb-ink-700)]"
               >
                 {labelFromMap(key, ENTITY_LABELS)}: {String(value)}
               </span>

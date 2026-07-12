@@ -109,6 +109,7 @@ class ZaloWebhookService:
             else:
                 return await handle_oa_side_event(db, event)
         else:
+            event = None
             norm = ZaloWebhookService.normalize_bot(payload)
             if norm is None:
                 return {"status": "ignored"}
@@ -203,6 +204,24 @@ class ZaloWebhookService:
         if result is False:
             await svc.release_lock(conv, lock_owner=lock_owner)  # no worker will clear it
             return {"status": "start_failed", "conversation_id": str(conv.id)}
+
+        # Best-effort OA profile (avatar/name) enrichment. Fire-and-forget on the
+        # low-priority queue; never blocks the webhook ack. Only the external OA
+        # user id is carried — the worker resolves live credentials and short-
+        # circuits when the lead already has an avatar (no unbounded Zalo calls).
+        if channel == "oa" and event is not None and event.sender_id:
+            try:
+                from app.workers.persistence_worker import enqueue_enrich_oa_profile
+
+                enqueue_enrich_oa_profile(
+                    {"zalo_id": norm.zalo_chat_id, "user_id": event.sender_id}
+                )
+            except Exception:  # noqa: BLE001 — enrichment is best-effort
+                logger.debug(
+                    "oa profile enrichment enqueue failed chat=%s",
+                    norm.zalo_chat_id,
+                    exc_info=True,
+                )
         return {"status": "processing", "conversation_id": str(conv.id)}
 
 

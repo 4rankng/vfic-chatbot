@@ -71,7 +71,7 @@ export const AuthError = (props: AuthErrorProps) => {
       )}
       {...rest}
     >
-      <h1 className="flex items-center text-3xl my-5 gap-3" role="alert">
+      <h1 className="flex items-center text-page-title my-5 gap-3" role="alert">
         <CircleAlert className="w-2em h-2em" />
         <Translate i18nKey={title} />
       </h1>

@@ -169,7 +169,7 @@ export const ProjectPicker = ({
                       <span className="min-w-0 flex-1 truncate">
                         {project.name}
                       </span>
-                      <span className="kb-mono shrink-0 text-[11px] text-muted-foreground">
+                      <span className="kb-mono shrink-0 text-caption text-muted-foreground">
                         {project.slug}
                       </span>
                     </CommandItem>

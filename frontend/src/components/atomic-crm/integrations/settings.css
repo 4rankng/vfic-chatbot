@@ -1,3 +1,3 @@
 .settings-header-actions { display: grid; justify-items: end; gap: .35rem; }
-.settings-save-status { max-width: 20rem; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.35; text-align: right; }
+.settings-save-status { max-width: 20rem; margin: 0; color: var(--muted-foreground); font-size: var(--fs-meta); line-height: var(--lh-snug); text-align: right; }
 @media (max-width: 767px) { .settings-header-actions { width: 100%; justify-items: stretch; }.settings-save-status { max-width: none; text-align: left; } }

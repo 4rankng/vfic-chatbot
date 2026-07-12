@@ -13,6 +13,7 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { Confirm } from "@/components/admin/confirm";
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import { getLeadStatusColor, getZaloUserId } from "./conversationDisplay";
+import { LeadAvatar } from "./LeadAvatar";
 import { ChatThread } from "./ChatThread";
 import {
   type ConversationMode,
@@ -202,18 +203,14 @@ export const ConversationShowContent = ({
             </svg>
           </button>
           <div className="header-person">
-            <div
+            <LeadAvatar
+              src={lead?.avatar_url}
+              bg={colors.bg}
+              ink={colors.ink}
+              iconSize={18}
               className="header-avatar"
-              style={{
-                background: colors.bg,
-                color: colors.ink,
-              }}
-            >
-              <UserRound
-                className="icon"
-                style={{ width: "18px", height: "18px" }}
-              />
-            </div>
+              alt={`Ảnh đại diện của ${name}`}
+            />
             <div className="person-copy">
               <div className="person-name-row">
                 {showWorkspacePanel ? (
@@ -349,6 +346,7 @@ export const ConversationShowContent = ({
           key={record?.id ?? "empty"}
           conversationId={record?.id ?? ""}
           conversation={record}
+          candidateAvatarUrl={lead?.avatar_url}
           isBotModeOverride={isBotMode}
           canHumanReplyOverride={canHumanReply}
           onTakeoverOverride={handleTakeover}

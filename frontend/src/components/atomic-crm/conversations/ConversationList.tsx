@@ -23,6 +23,7 @@ import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
+import { LeadAvatar } from "./LeadAvatar";
 import {
   isAttentionReason,
   type QueueFilter,
@@ -35,7 +36,6 @@ import {
   RefreshCw,
   Reply,
   SearchX,
-  UserRound,
 } from "lucide-react";
 import "./inbox.css";
 
@@ -126,11 +126,6 @@ const UNREAD_BADGE_COUNT_STYLE: React.CSSProperties = {
   boxShadow: "0 0 0 2px var(--card)",
 } as const;
 
-const AVATAR_ICON_STYLE: React.CSSProperties = {
-  width: "18px",
-  height: "18px",
-} as const;
-
 // Hoisted skeleton styles — same rationale as UNREAD_BADGE_*: avoid
 // allocating fresh style objects on every render of the skeleton row.
 const SKELETON_AVATAR_STYLE: React.CSSProperties = {
@@ -208,17 +203,14 @@ const ConversationListItem = memo(
         aria-current={isActive ? "page" : undefined}
         aria-pressed={isActive}
       >
-        <span
+        <LeadAvatar
+          src={lead?.avatar_url}
+          bg={colors.bg}
+          ink={colors.ink}
+          iconSize={18}
           className="avatar round"
-          style={
-            {
-              "--avatar-bg": colors.bg,
-              "--avatar-ink": colors.ink,
-              position: "relative",
-            } as React.CSSProperties
-          }
+          alt={`Ảnh đại diện của ${name}`}
         >
-          <UserRound className="icon" style={AVATAR_ICON_STYLE} />
           {unread > 0 && (
             <span
               aria-label={`${unread} tin nhắn chưa đọc`}
@@ -229,7 +221,7 @@ const ConversationListItem = memo(
               {unread > 1 ? (unread > 9 ? "9+" : unread) : ""}
             </span>
           )}
-        </span>
+        </LeadAvatar>
         <span className="conv-body">
           <span className="conv-top">
             <span className="conv-name">{name}</span>

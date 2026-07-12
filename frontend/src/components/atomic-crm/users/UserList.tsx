@@ -79,7 +79,7 @@ const UserListContent = ({
   >
     <TopToolbar className="flex-nowrap items-start gap-3">
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-2xl font-bold tracking-tight md:text-xl md:font-semibold">
+        <h2 className="truncate text-page-title font-bold tracking-tight">
           {title}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground lg:hidden">

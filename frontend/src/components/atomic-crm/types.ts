@@ -63,6 +63,7 @@ export type Lead = {
   desired_job: string;
   years_experience?: string | null;
   expected_salary: string;
+  avatar_url?: string | null;
   qualification_reasons?: string[];
   lead_score: LeadScoreValue | null;
   lead_stage: string;

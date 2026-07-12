@@ -65,10 +65,10 @@ export const KnowledgeSourceRow = ({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="break-words text-[13.5px] font-semibold text-foreground">
+            <div className="break-words text-body-sm font-semibold text-foreground">
               {source.file_name}
             </div>
-            <div className="kb-mono mt-1 break-words text-[11.5px] text-muted-foreground">
+            <div className="kb-mono mt-1 break-words text-caption text-muted-foreground">
               {project?.name ?? "Chưa gắn dự án"} ·{" "}
               {getRelativeTimeString(source.updated_at ?? source.created_at)} ·{" "}
               {source.digest_meta?.unit_count ?? 0} đơn vị
@@ -169,7 +169,7 @@ export const PipelineMiniProgress = ({
   const percent = pipelinePercent(source);
   return (
     <div className="min-w-0">
-      <div className="kb-mono flex items-center justify-between gap-2 text-[11px]">
+      <div className="kb-mono flex items-center justify-between gap-2 text-caption">
         <span className="font-semibold text-[var(--kb-teal)]">
           {isPossiblyStuck(source)
             ? "Đang chờ worker"
@@ -203,7 +203,7 @@ export const Chip = ({
 }) => (
   <span
     className={cn(
-      "kb-mono rounded-full px-2 py-1 text-[11px] font-semibold leading-none",
+      "kb-mono rounded-full px-2 py-1 text-caption font-semibold leading-none",
       tone === "neutral" && "bg-secondary text-[var(--kb-ink-700)]",
       tone === "success" && "bg-[var(--kb-teal-soft)] text-[var(--kb-teal)]",
       tone === "warning" && "bg-[var(--kb-ochre-soft)] text-[var(--kb-ochre)]",

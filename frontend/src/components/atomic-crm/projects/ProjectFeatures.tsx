@@ -365,7 +365,7 @@ const ReadinessHero = ({
           />
         )}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-caption text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <i className="size-2.5 rounded-[3px] bg-feature-ready" />
           Đầy đủ
@@ -430,7 +430,7 @@ const FeatureGroup = ({
                     <span className="truncate">{name}</span>
                   </span>
                   {!ready && f && (
-                    <span className="line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                    <span className="line-clamp-2 text-caption leading-4 text-muted-foreground">
                       {getFillHint(f)}
                     </span>
                   )}
@@ -504,14 +504,14 @@ const FeatureCard = ({
             {ready ? (
               <Badge
                 variant="outline"
-                className="border-feature-ready/25 bg-feature-ready-soft text-[10px] text-feature-ready"
+                className="border-feature-ready/25 bg-feature-ready-soft text-badge text-feature-ready"
               >
                 Đầy đủ
               </Badge>
             ) : (
               <Badge
                 variant="secondary"
-                className="border border-feature-gap-border bg-feature-gap-soft text-[10px] text-feature-gap"
+                className="border border-feature-gap-border bg-feature-gap-soft text-badge text-feature-gap"
               >
                 Thiếu thông tin
               </Badge>

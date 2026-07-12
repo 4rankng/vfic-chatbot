@@ -74,7 +74,7 @@ def test_extract_text_csv_txt_md():
 
 
 def test_extract_text_docx():
-    import docx
+    docx = pytest.importorskip("docx")
 
     d = docx.Document()
     d.add_paragraph("Dòng một LG Display")
@@ -86,9 +86,9 @@ def test_extract_text_docx():
 
 
 def test_extract_text_xlsx():
-    from openpyxl import Workbook
+    openpyxl = pytest.importorskip("openpyxl")
 
-    wb = Workbook()
+    wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["vị trí", "lương"])
     ws.append(["operator", "9000000"])

@@ -141,7 +141,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
           {route.route_no && (
             <Badge
               variant="outline"
-              className="h-5 rounded-md px-1.5 text-[10px]"
+              className="h-5 rounded-md px-1.5 text-badge"
             >
               Tuyến {route.route_no}
             </Badge>
@@ -151,7 +151,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
           {shiftLabel(route.shift)} • {directionLabel(route.direction)}
         </div>
       </div>
-      <Badge variant="secondary" className="shrink-0 text-[10px]">
+      <Badge variant="secondary" className="shrink-0 text-badge">
         {route.stops.length} điểm
       </Badge>
     </div>
@@ -167,7 +167,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
               {stop.stop_name}
             </span>
             {stop.scheduled_time && (
-              <span className="font-mono text-[11px] text-muted-foreground">
+              <span className="font-mono text-caption text-muted-foreground">
                 {stop.scheduled_time}
               </span>
             )}

@@ -15,9 +15,9 @@
 ) {
   color: var(--ink);
   font-family: var(--crm-font-family);
-  font-size: var(--crm-fs-body);
-  font-weight: var(--crm-fw-regular);
-  line-height: var(--crm-lh-body);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -58,16 +58,16 @@
     .recruiting-hero h1
   ) {
   color: var(--ink);
-  font-size: var(--crm-fs-page-title);
-  font-weight: var(--crm-fw-bold);
-  line-height: var(--crm-lh-heading);
+  font-size: var(--fs-page-title);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
   letter-spacing: 0;
 }
 
 .inbox-bg-container .workspace-heading {
-  font-size: var(--chat-fs-page-title);
-  font-weight: var(--crm-fw-bold);
-  line-height: var(--crm-lh-heading);
+  font-size: var(--fs-page-title);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
   letter-spacing: 0;
 }
 
@@ -91,9 +91,9 @@
     .project-section-heading span,
     .persona-panel-eyebrow
   ) {
-  font-size: var(--crm-fs-caption);
-  font-weight: var(--crm-fw-semibold);
-  line-height: var(--crm-lh-tight);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
   letter-spacing: 0.06em;
 }
 
@@ -118,9 +118,9 @@
     .persona-create-heading h1
   ) {
   color: var(--ink);
-  font-size: var(--crm-fs-card-title);
-  font-weight: var(--crm-fw-bold);
-  line-height: var(--crm-lh-title);
+  font-size: var(--fs-card-title);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
   letter-spacing: 0;
 }
 
@@ -141,9 +141,9 @@
     .project-rail-item strong
   ) {
   color: var(--ink);
-  font-size: var(--crm-fs-row-title);
-  font-weight: var(--crm-fw-bold);
-  line-height: var(--crm-lh-title);
+  font-size: var(--fs-row-title);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
   letter-spacing: 0;
 }
 
@@ -170,16 +170,16 @@
     .persona-create-heading p
   ) {
   color: var(--ink-muted);
-  font-size: var(--crm-fs-meta);
-  font-weight: var(--crm-fw-medium);
-  line-height: var(--crm-lh-body);
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-normal);
   letter-spacing: 0;
 }
 
 .inbox-bg-container .bubble {
-  font-size: var(--chat-fs-message);
-  font-weight: var(--crm-fw-regular);
-  line-height: var(--chat-lh-message);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
   letter-spacing: 0;
 }
 
@@ -200,9 +200,9 @@
     .profile-action-button,
     .project-feature-detail-toggle
   ) {
-  font-size: var(--crm-fs-control);
-  font-weight: var(--crm-fw-semibold);
-  line-height: var(--crm-lh-title);
+  font-size: var(--fs-control);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
   letter-spacing: 0;
 }
 
@@ -224,9 +224,9 @@
     .profile-input,
     .profile-select-trigger
   ) {
-  font-size: var(--crm-fs-input);
-  font-weight: var(--crm-fw-regular);
-  line-height: var(--crm-lh-body);
+  font-size: var(--fs-input);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
   letter-spacing: 0;
 }
 
@@ -246,9 +246,9 @@
     .project-feature-group-count,
     .project-feature-chip > span:first-child
   ) {
-  font-size: var(--crm-fs-badge);
-  font-weight: var(--crm-fw-semibold);
-  line-height: var(--crm-lh-tight);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
   letter-spacing: 0;
 }
 
@@ -263,8 +263,8 @@
     .project-workspace-content
   )
   :is(.dashboard-panel-count, .queue-command-row b) {
-  font-size: var(--crm-fs-body);
-  font-weight: var(--crm-fw-bold);
-  line-height: var(--crm-lh-title);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
   font-variant-numeric: tabular-nums;
 }

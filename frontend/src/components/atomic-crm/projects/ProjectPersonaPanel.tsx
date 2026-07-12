@@ -175,7 +175,7 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
                             <span className="min-w-0 flex-1 truncate">
                               {persona.name}
                             </span>
-                            <span className="font-mono text-[11px] text-muted-foreground">
+                            <span className="font-mono text-caption text-muted-foreground">
                               {persona.slug}
                             </span>
                           </CommandItem>

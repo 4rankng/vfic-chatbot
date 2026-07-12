@@ -475,3 +475,249 @@ async def test_oa_sender_send_anonymous_uses_phone_recipient(
     assert result.msg_id == "oa-anon-1"
     assert captured["json"]["recipient"] == {"phone": "84901234567"}
     assert captured["json"]["message"] == {"text": "Xin chào"}
+
+
+# ── get_user_detail (avatar/name profile lookup) ────────────────────
+
+
+async def test_get_user_detail_encodes_data_param_and_parses_avatars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Successful lookup URL-encodes the JSON data param and picks avatars.240."""
+    captured: dict[str, Any] = {}
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {
+                "error": 0,
+                "data": {
+                    "display_name": "Nguyễn Văn An",
+                    "avatar": "https://zalo.me/a/full.jpg",
+                    "avatars": {
+                        "120": "https://zalo.me/a/120.jpg",
+                        "240": "https://zalo.me/a/240.jpg",
+                    },
+                },
+            }
+
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def get(self, url: str, *, params=None, headers=None, **kw):
+            captured["url"] = url
+            captured["params"] = params
+            captured["headers"] = headers
+            return _FakeResp()
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    profile = await sender.get_user_detail("user-abc")
+
+    assert profile is not None
+    # Priority: avatars.240 > avatar > avatars.120
+    assert profile.avatar_url == "https://zalo.me/a/240.jpg"
+    assert profile.display_name == "Nguyễn Văn An"
+    assert captured["url"] == "https://openapi.zalo.me/v3.0/oa/user/detail"
+    assert captured["headers"] == {"access_token": "oa-token"}
+    # The data param is a compact-JSON, URL-encoded string carrying user_id.
+    assert captured["params"]["data"] == "%7B%22user_id%22%3A%22user-abc%22%7D"
+
+
+async def test_get_user_detail_falls_back_to_avatar_when_no_240(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {
+                "error": 0,
+                "data": {
+                    "display_name": "Lê Thị Bình",
+                    "avatar": "https://zalo.me/b/full.jpg",
+                },
+            }
+
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def get(self, url: str, *, params=None, headers=None, **kw):
+            return _FakeResp()
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    profile = await sender.get_user_detail("user-b")
+
+    assert profile is not None
+    assert profile.avatar_url == "https://zalo.me/b/full.jpg"
+
+
+async def test_get_user_detail_returns_none_on_permission_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-zero error envelope (e.g. missing permission) yields None, not raise."""
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": -201, "message": "permission denied"}
+
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def get(self, url: str, *, params=None, headers=None, **kw):
+            return _FakeResp()
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    profile = await sender.get_user_detail("user-c")
+
+    assert profile is None
+
+
+async def test_get_user_detail_returns_none_on_transport_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def get(self, url: str, *, params=None, headers=None, **kw):
+            raise ConnectionError("network down")
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    profile = await sender.get_user_detail("user-d")
+
+    assert profile is None
+
+
+async def test_get_user_detail_refreshes_token_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale-token envelope triggers one refresh + retry on user-detail."""
+    calls: list[str] = []
+
+    class _FakeResp:
+        def __init__(self, data: dict[str, Any]) -> None:
+            self._data = data
+
+        def json(self) -> dict[str, Any]:
+            return self._data
+
+    class _FakeClient:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def __aenter__(self) -> "_FakeClient":
+            return self
+
+        async def get(self, url: str, *, params=None, headers=None, **kw):
+            calls.append(headers["access_token"])
+            if len(calls) == 1:
+                return _FakeResp({"error": -216, "message": "Access token is invalid"})
+            return _FakeResp(
+                {"error": 0, "data": {"display_name": "X", "avatar": "https://z/x.jpg"}}
+            )
+
+    import app.services.zalo_oa_service as svc
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    refresh_calls: list[int] = []
+
+    async def refresh() -> str | None:
+        refresh_calls.append(1)
+        return "oa-token-new"
+
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token-old",
+        refresh=refresh,
+    )
+
+    profile = await sender.get_user_detail("user-e")
+
+    assert profile is not None
+    assert profile.avatar_url == "https://z/x.jpg"
+    assert refresh_calls == [1]
+    assert calls == ["oa-token-old", "oa-token-new"]
+
+
+async def test_get_user_detail_empty_user_id_returns_none() -> None:
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+    assert await sender.get_user_detail("") is None
+    assert await sender.get_user_detail("   ") is None
+
+
+async def test_parse_oa_user_profile_priority() -> None:
+    """Module-level parser picks 240 > avatar > 120."""
+    from app.services.zalo_oa_service import _parse_oa_user_profile
+
+    p1 = _parse_oa_user_profile(
+        {"avatar": "full", "avatars": {"240": "hi", "120": "lo"}}
+    )
+    assert p1.avatar_url == "hi"
+
+    p2 = _parse_oa_user_profile({"avatar": "full"})
+    assert p2.avatar_url == "full"
+
+    p3 = _parse_oa_user_profile({"avatars": {"120": "lo"}})
+    assert p3.avatar_url == "lo"
+
+    p4 = _parse_oa_user_profile({})
+    assert p4.avatar_url == ""
+    assert p4.display_name == ""

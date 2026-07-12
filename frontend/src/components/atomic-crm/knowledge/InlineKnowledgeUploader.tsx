@@ -94,7 +94,7 @@ export const InlineKnowledgeUploader = () => {
             <BookOpen className="size-5" />
           </span>
           <div className="min-w-0">
-            <h4 className="text-[15px] font-semibold leading-6 text-foreground">
+            <h4 className="text-subsection font-semibold leading-6 text-foreground">
               Bắt đầu bằng một nguồn kiến thức
             </h4>
             <p className="mt-1 max-w-[34rem] text-sm leading-6 text-muted-foreground">
@@ -107,7 +107,7 @@ export const InlineKnowledgeUploader = () => {
 
       <div className="mt-6 grid gap-5">
         <div className="grid gap-2">
-          <label className="kb-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          <label className="kb-mono text-caption font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             1. Dự án
           </label>
           <ProjectPicker value={projectChoice} onChange={setProjectChoice} />
@@ -115,7 +115,7 @@ export const InlineKnowledgeUploader = () => {
 
         <div className="grid gap-2">
           <div className="flex items-center justify-between gap-3">
-            <label className="kb-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <label className="kb-mono text-caption font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               2. Tệp nguồn
             </label>
             <span className="hidden text-xs text-muted-foreground sm:inline">
@@ -182,7 +182,7 @@ export const InlineKnowledgeUploader = () => {
                 <p className="truncate text-sm font-semibold text-foreground">
                   {file.name}
                 </p>
-                <p className="kb-mono mt-0.5 text-[11px] text-[var(--kb-teal)]">
+                <p className="kb-mono mt-0.5 text-caption text-[var(--kb-teal)]">
                   {formatFileSize(file.size)}
                 </p>
               </div>

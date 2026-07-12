@@ -57,7 +57,7 @@ const V: Record<Variant, VariantConfig> = {
     contentClass: "px-4 pb-4",
     spinnerClass: "h-[220px]",
     titleClass: "text-base",
-    descriptionClass: "text-[11px]",
+    descriptionClass: "text-caption",
     issueSubtitle: (minutes) => `${minutes} phút`,
   },
 };
@@ -137,7 +137,7 @@ const CompactMetric = ({
 }) => (
   <div className="min-w-0 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
     <div className="flex items-start justify-between gap-2">
-      <span className="min-w-0 text-[11px] font-bold uppercase leading-snug tracking-wider text-muted-foreground">
+      <span className="min-w-0 text-caption font-bold uppercase leading-snug tracking-wider text-muted-foreground">
         {label}
       </span>
       <span className={`shrink-0 rounded-md border p-1 ${TONE_CLASS[tone]}`}>
@@ -179,7 +179,7 @@ const ProgressRow = ({
       />
     </div>
     {detail ? (
-      <p className="text-[11px] text-muted-foreground">{detail}</p>
+      <p className="text-caption text-muted-foreground">{detail}</p>
     ) : null}
   </div>
 );
@@ -634,7 +634,7 @@ const KnowledgeOpsCard = ({
                         {v.issueSubtitle(issue.minutes_since_update)}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-md border border-border/70 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="shrink-0 rounded-md border border-border/70 px-2 py-1 text-badge font-bold uppercase tracking-wider text-muted-foreground">
                       {issue.status}
                     </span>
                   </div>
