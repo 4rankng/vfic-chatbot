@@ -55,6 +55,27 @@ def _parse_candidate_json(value) -> dict:
 
 class CandidateExtractionService:
     @staticmethod
+    async def persist_explicit_name(
+        db: AsyncSession,
+        chat_id: str,
+        user_text: str,
+    ) -> str | None:
+        """Persist an unambiguous self-introduced name on the inbound path.
+
+        This intentionally does not wait for the deferred LLM extraction job.
+        The latter still enriches the rest of the candidate profile and can
+        overwrite this value only when it has a non-empty extracted name.
+        """
+        name = extract_self_reported_name(user_text)
+        if not name:
+            return None
+        lead_patch = normalize_lead({"name": name}, chat_id)
+        if lead_patch is None:
+            return None
+        await CandidateExtractionService.upsert_lead(db, lead_patch)
+        return name
+
+    @staticmethod
     async def extract(
         extractor: Extractor,
         user_text: str,

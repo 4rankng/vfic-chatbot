@@ -310,7 +310,8 @@ class ConversationRepository:
         excluded.  Only ``WORKER`` (never processed), ``BOT/PENDING`` (turn
         started but never completed), ``BOT/SENDING`` (claimed but never confirmed
         — a worker crash after the POST; reconciled as sent-but-unconfirmed), or
-        ``BOT/FAILED`` (Zalo rejected delivery) qualify.
+        ``BOT/FAILED`` (Zalo rejected delivery) qualify, except for the two
+        channel-qualified recipient rejections that Zalo reports as permanent.
 
         A conversation whose per-chat lock is still live but whose owner heartbeat
         is older than ``stale_lock_seconds`` (the RQ job-timeout horizon) is also
@@ -359,7 +360,22 @@ class ConversationRepository:
                                   m.sender = 'WORKER'
                                   OR (
                                       m.sender = 'BOT'
-                                      AND m.delivery_status IN ('PENDING', 'SENDING', 'FAILED')
+                                      AND m.delivery_status IN ('PENDING', 'SENDING', 'FAILED', 'SEND_UNKNOWN')
+                                      AND NOT (
+                                          m.delivery_status = 'FAILED'
+                                          AND (
+                                              (
+                                                  c.zalo_channel = 'oa'
+                                                  AND lower(COALESCE(m.external_error, ''))
+                                                      LIKE '%user_id is invalid%'
+                                              )
+                                              OR (
+                                                  c.zalo_channel = 'bot'
+                                                  AND lower(COALESCE(m.external_error, ''))
+                                                      LIKE 'chunk % failed: not found'
+                                              )
+                                          )
+                                      )
                                   )
                               )
                               AND m.created_at < :now_minus_grace

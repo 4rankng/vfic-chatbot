@@ -75,7 +75,9 @@ export interface PerfMetrics {
   by_outcome: Record<string, number>;
   slow_turns: PerfSlowTurn[];
   trend: PerfTrendBucket[];
-  reliability: PerfReliability;
+  // Optional for deploy-order safety: a stale Redis cache hit (30s TTL) during
+  // a rolling deploy may serve a payload written by the pre-reliability backend.
+  reliability?: PerfReliability;
 }
 
 export const usePerformanceStats = (window = "24h") =>

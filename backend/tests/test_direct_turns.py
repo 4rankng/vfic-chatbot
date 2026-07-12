@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import MagicMock
 
 import pytest
 
+from app.workers import chatbot_worker
 from app.workers.chatbot_worker import run_chat_turn_job, start_direct_chat_turn
 
 
@@ -40,3 +42,22 @@ def test_rq_entrypoint_preserves_queued_execution_source(monkeypatch) -> None:
     run_chat_turn_job(job)
 
     assert observed == [(job, "queued")]
+
+
+@pytest.mark.asyncio
+async def test_trace_context_setup_failure_does_not_mask_original_error(monkeypatch) -> None:
+    trace_context = MagicMock()
+    trace_context.set.side_effect = RuntimeError("trace setup failed")
+    monkeypatch.setattr(chatbot_worker, "trace_id_ctx", trace_context)
+
+    with pytest.raises(RuntimeError, match="trace setup failed"):
+        await chatbot_worker._run_job_async_inner(
+            {
+                "conversation_id": "00000000-0000-0000-0000-000000000001",
+                "version_at_start": 1,
+                "user_text": "xin chào",
+            },
+            source="direct",
+        )
+
+    trace_context.reset.assert_not_called()

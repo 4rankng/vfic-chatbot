@@ -17,7 +17,10 @@ is a contract violation, and signature introspection is the direct assertion.
 from __future__ import annotations
 
 import inspect
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
+from app.models.conversation import DeliveryStatus
 from app.services.conversation import ConversationService
 from app.services.conversation.state import ConversationState
 
@@ -33,6 +36,9 @@ REQUIRED_KWARGS = {
     "zalo_message_id",
     "stage_timings",
     "lock_owner",
+    "delivery_status",
+    "trace_id",
+    "outcome_metadata",
 }
 
 
@@ -66,4 +72,39 @@ def test_state_impl_record_bot_outcome_accepts_every_caller_kwarg():
     assert not missing, (
         f"ConversationState.record_bot_outcome no longer accepts {sorted(missing)} "
         f"that the turn callers pass — this drift crashes turns at finalization."
+    )
+
+
+async def test_public_record_bot_outcome_forwards_extended_outcome_fields():
+    service = ConversationService(MagicMock())
+    service.state.record_bot_outcome = AsyncMock(return_value=MagicMock())
+    conversation = MagicMock()
+    started_at = datetime.now(timezone.utc)
+    outcome_metadata = {"faq_id": "faq-1"}
+
+    await service.record_bot_outcome(
+        conversation,
+        version_at_start=3,
+        reply="Chào bạn",
+        started_at=started_at,
+        sent=False,
+        delivery_status=DeliveryStatus.SEND_UNKNOWN,
+        trace_id="trace-123",
+        outcome_metadata=outcome_metadata,
+    )
+
+    service.state.record_bot_outcome.assert_awaited_once_with(
+        conversation,
+        version_at_start=3,
+        reply="Chào bạn",
+        started_at=started_at,
+        sent=False,
+        pending_message_id=None,
+        external_error=None,
+        zalo_message_id=None,
+        stage_timings=None,
+        lock_owner=None,
+        delivery_status=DeliveryStatus.SEND_UNKNOWN,
+        trace_id="trace-123",
+        outcome_metadata=outcome_metadata,
     )

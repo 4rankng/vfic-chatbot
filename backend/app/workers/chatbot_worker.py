@@ -270,7 +270,6 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
     # Contextvars do not cross processes, so re-stash it here so every structured
     # log line inside the turn carries the originating request's id.
     trace_id = str(job.get("trace_id") or "")
-    _trace_token = trace_id_ctx.set(trace_id or "-")
     state = BotRunState(
         conversation_id=job["conversation_id"],
         version_at_start=int(job["version_at_start"]),
@@ -299,7 +298,12 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
         bridge_task = asyncio.create_task(
             _bridge_typing(job["zalo_chat_id"], job.get("zalo_bot_token"))
         )
+    _trace_token = None
     try:
+        # Set the trace contextvar inside the try so the finally always resets
+        # it — if set before the try and BotRunState/bridge setup raised, the
+        # token would leak into the next job on this worker process.
+        _trace_token = trace_id_ctx.set(trace_id or "-")
         async with worker_session() as db:
             deps = await build_deps(db, session_factory=worker_session_factory())
             deps.persist = _enqueue_persist  # wire candidate extraction on SENT
@@ -389,4 +393,5 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
             bridge_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await bridge_task
-        trace_id_ctx.reset(_trace_token)
+        if _trace_token is not None:
+            trace_id_ctx.reset(_trace_token)

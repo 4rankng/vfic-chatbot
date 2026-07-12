@@ -52,3 +52,20 @@ def classify_transport_error(exc: BaseException) -> str:
 AMBIGUOUS_SEND_CLASSES = frozenset(
     {"read_timeout", "remote_protocol_error", "read_error", "unknown"}
 )
+
+
+def delivery_status_for_send_error(error_class: str | None, ok: bool):
+    """Return the DeliveryStatus override for a failed send, or None if FAILED.
+
+    Conservative: when ``ok`` is False and ``error_class`` is in
+    ``AMBIGUOUS_SEND_CLASSES``, return ``DeliveryStatus.SEND_UNKNOWN`` (non-
+    retriable — the request may have reached Zalo). Otherwise return None so
+    the caller falls back to the default FAILED (retryable).
+
+    Late import of DeliveryStatus avoids a model import at module top level
+    (the graph layer imports ports, not models).
+    """
+    if ok or error_class not in AMBIGUOUS_SEND_CLASSES:
+        return None
+    from app.models.conversation import DeliveryStatus
+    return DeliveryStatus.SEND_UNKNOWN

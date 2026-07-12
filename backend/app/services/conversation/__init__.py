@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         Conversation,
         ConversationMode,
         ConversationStatus,
+        DeliveryStatus,
         Message,
     )
     from app.models.user import User
@@ -189,6 +190,9 @@ class ConversationService:
         zalo_message_id: str | None = None,
         stage_timings: dict | None = None,
         lock_owner: uuid.UUID | str | None = None,
+        delivery_status: DeliveryStatus | None = None,
+        trace_id: str | None = None,
+        outcome_metadata: dict | None = None,
     ) -> Message:
         return await self.state.record_bot_outcome(
             conv,
@@ -201,6 +205,9 @@ class ConversationService:
             zalo_message_id=zalo_message_id,
             stage_timings=stage_timings,
             lock_owner=lock_owner,
+            delivery_status=delivery_status,
+            trace_id=trace_id,
+            outcome_metadata=outcome_metadata,
         )
 
     async def record_bot_pending(

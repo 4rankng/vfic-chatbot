@@ -36,7 +36,7 @@ from app.graph.safety import (
     fast_safety_filter,
     retry_exhausted_fallback,
 )
-from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES
+from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES, delivery_status_for_send_error
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.models.conversation import DeliveryStatus, Message
 
@@ -228,6 +228,11 @@ async def _finish_terminal_reply(
         else:
             send_result = await zalo.send_message(conv.zalo_chat_id, text)
     _stamp_end_to_end(state, stage_timings)
+    # Classify transport errors (same conservative logic as run_turn): a timeout
+    # after the request may have reached Zalo → SEND_UNKNOWN (non-retriable), so
+    # the error-reply path cannot produce a duplicate on reconcile recovery.
+    _error_class = send_result.error_class if (send_result and not send_result.ok) else None
+    _override = delivery_status_for_send_error(_error_class, ok=bool(send_result and send_result.ok))
     await svc.record_bot_outcome(
         conv,
         version_at_start=state.version_at_start,
@@ -240,8 +245,14 @@ async def _finish_terminal_reply(
         stage_timings=stage_timings,
         lock_owner=lock_owner,
         trace_id=state.trace_id or None,
+        delivery_status=_override,
     )
-    outcome = base_outcome if (send_result is None or send_result.ok) else "send_failed"
+    if send_result is None or send_result.ok:
+        outcome = base_outcome
+    elif _override is not None and _override.value == "SEND_UNKNOWN":
+        outcome = "send_unknown"
+    else:
+        outcome = "send_failed"
     return {"outcome": outcome, "reply": text}
 
 

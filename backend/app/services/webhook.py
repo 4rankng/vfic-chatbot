@@ -125,6 +125,33 @@ class ZaloWebhookService:
             zalo_message_id=norm.msg_id,
         )  # persists candidate message; stamps last_inbound_at; bumps unread if HUMAN
 
+        # An explicit introduction ("mình tên …") is deterministic data, not
+        # something that should wait behind the best-effort LLM extraction job.
+        # The later job still enriches the rest of the candidate profile.
+        try:
+            from app.services.candidate_extraction import CandidateExtractionService
+
+            await CandidateExtractionService.persist_explicit_name(
+                db,
+                norm.zalo_chat_id,
+                norm.user_text,
+            )
+        except Exception as exc:
+            # The inbound message is already durable. Do not turn a CRM-profile
+            # write failure into a failed webhook delivery. Error text can carry
+            # DB-bound candidate values, so log only the exception class.
+            try:
+                await db.rollback()
+            except Exception as rollback_exc:
+                logger.error(
+                    "explicit candidate name persistence rollback failed error_type=%s",
+                    type(rollback_exc).__name__,
+                )
+            logger.error(
+                "explicit candidate name persistence failed error_type=%s",
+                type(exc).__name__,
+            )
+
         # reload to read committed mode/version
         conv = await svc.get(conv.id)
 

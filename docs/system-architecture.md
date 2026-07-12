@@ -74,9 +74,9 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
                             ▼
   ┌──────────────────────────────────────────────────────────┐
   │ 1. Verify secret (hmac.compare_digest / OA signature)    │
-  │ 2. Persist inbound + acquire owner-token DB lock         │
+  │ 2. Persist inbound + capture explicit name + acquire lock│
   │ 3. Enqueue on webhook_high (503 if enqueue fails)        │
-  │ 4. ACK 200 in <1s                                       │
+  │ 4. ACK 200 in <1s                                        │
   └──────────────────────────────────────────────────────────┘
                             │ RQ job (per-chat DB lease)
                             ▼
@@ -102,7 +102,7 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
           ┌─────────────────┼──────────────────┐
           ▼                 ▼                  ▼
    persistence_low    Socket.IO emit     Recruiter console
-   (lead extraction)  (conv:<id> room)   (realtime thread update)
+   (LLM enrichment)   (conv:<id> room)   (realtime thread update)
 ```
 
 ### Sequence — "candidate sends a Zalo message"
@@ -171,6 +171,8 @@ sequenceDiagram
     H->>DB: ensure conversation (upsert Conversation)
     H->>DB: record_inbound → Message WORKER row<br/>bump unread, opt-out check
     H-->>RT: message.created + conversation.updated
+    H->>DB: capture explicit self-reported name<br/>existing lead upsert; no LLM or queue
+    H-->>RT: lead.updated (when captured)
 
     rect rgb(245, 235, 235)
     Note over H,DB: ── mode policy guard layer 1/4 ──
@@ -239,7 +241,7 @@ sequenceDiagram
         WK->>DB: record_bot_outcome → Message SENT/FAILED<br/>+ BotRun row (stage_timings JSONB)<br/>clear per-chat lock
         WK-->>RT: message.created + conversation.updated
         Z-->>U: bot reply
-        WK->>RQ: enqueue persistence_low (lead extract, fire-and-forget)
+        WK->>RQ: enqueue persistence_low (LLM lead/memory enrichment, fire-and-forget)
     else not owned (takeover won the race)
         WK->>DB: record_bot_outcome → SUPPRESSED
     end
@@ -263,7 +265,7 @@ sequenceDiagram
 | `apply mode policy` (one step) | Four layers: webhook gate, lock, recheck, atomic `claim_send` (`webhook.py:130`, `:134`, `runner.py:273`, `state.py:329`) |
 | `worker: retrieve → generate → policy` | Ten stages incl. two no-LLM fast paths (template + FAQ bypass), routing, lead context, grounding, safety (`runner.py:259-515`) |
 | `enqueue → Zalo OA Send Message API` | Worker sends directly (no outbox); Bot and OA are distinct APIs; OA has token-refresh retry (`zalo_sender.py:21`, `zalo_oa_service.py:110`) |
-| (missing) | Reconcile worker re-enqueues FAILED turns (~60s); stale SENDING → SENT on worker crash (`reconcile_worker.py`) |
+| (missing) | Reconcile worker re-enqueues retryable FAILED turns (~60s); known permanent recipient rejections are excluded, and stale SENDING → SENT on worker crash (`reconcile_worker.py`) |
 
 ---
 
@@ -309,7 +311,7 @@ load_conversation_state -> typing -> agent
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
 | `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Interactive and recovered chat turns. |
-| `persistence_low` | `worker-chatbot` (same containers) | — | — | Lead / memory extraction after SENT replies. |
+| `persistence_low` | `worker-chatbot` (same containers) | — | — | LLM-derived lead and memory enrichment after SENT replies. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up + reconcile sweep. |
 

@@ -154,6 +154,133 @@ async def test_failed_rq_enqueue_releases_webhook_lock(monkeypatch):
     service.release_lock.assert_awaited_once_with(conv, lock_owner=lock_owner)
 
 
+@pytest.mark.asyncio
+async def test_webhook_persists_explicit_name_before_queuing_turn(monkeypatch):
+    import uuid
+
+    from app.services.webhook import ZaloWebhookService
+
+    events: list[str] = []
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=1,
+        mode="BOT",
+    )
+    service = MagicMock()
+
+    async def record_inbound(*_args, **_kwargs):
+        events.append("inbound")
+
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = record_inbound
+    service.get = AsyncMock(return_value=conv)
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(return_value=uuid.uuid4())
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim",
+        AsyncMock(return_value=True),
+    )
+    async def persist_name(*_args, **_kwargs):
+        events.append("profile")
+        return "LiteQA"
+
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        persist_name,
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    def enqueue(_job):
+        events.append("enqueue")
+        return True
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {
+            "message": {
+                "message_id": "msg-1",
+                "chat": {"id": "bot-user-1"},
+                "text": "mình tên LiteQA",
+            }
+        },
+        enqueue=enqueue,
+    )
+
+    assert result == {"status": "processing", "conversation_id": str(conv.id)}
+    assert events == ["inbound", "profile", "enqueue"]
+
+
+@pytest.mark.asyncio
+async def test_webhook_rolls_back_profile_failure_then_queues_turn(monkeypatch, caplog):
+    import uuid
+
+    from app.services.webhook import ZaloWebhookService
+
+    events: list[str] = []
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=1,
+        mode="BOT",
+    )
+    service = MagicMock()
+
+    async def record_inbound(*_args, **_kwargs):
+        events.append("inbound")
+
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = record_inbound
+    service.get = AsyncMock(return_value=conv)
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(return_value=uuid.uuid4())
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim",
+        AsyncMock(return_value=True),
+    )
+
+    async def persist_name(*_args, **_kwargs):
+        events.append("profile")
+        raise RuntimeError("LiteQA confidential detail")
+
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        persist_name,
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    async def rollback():
+        events.append("rollback")
+
+    db.rollback = rollback
+
+    def enqueue(_job):
+        events.append("enqueue")
+        return True
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {
+            "message": {
+                "message_id": "msg-1",
+                "chat": {"id": "bot-user-1"},
+                "text": "mình tên LiteQA",
+            }
+        },
+        enqueue=enqueue,
+    )
+
+    assert result == {"status": "processing", "conversation_id": str(conv.id)}
+    assert events == ["inbound", "profile", "rollback", "enqueue"]
+    assert "LiteQA" not in caplog.text
+
+
 def test_zalo_oa_signature_verifier_accepts_documented_digest():
     from app.services.zalo_oa_signature import verify_signature
 

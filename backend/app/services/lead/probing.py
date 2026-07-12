@@ -44,7 +44,9 @@ def lead_collection_instruction(*, question: str) -> str:
         "- Sau khi trả lời nội dung chính, hãy kết thúc bằng câu hỏi thu thập "
         "(hoặc lồng ghép tự nhiên vào câu trả lời):\n"
         f"  → {question}\n"
-        "- Chỉ hỏi 1 trường trong tin nhắn này, ưu tiên giữ mạch hội thoại tự nhiên."
+        "- KHÔNG hỏi lại cùng một thông tin hai lần trong một tin nhắn. "
+        "Nếu đã hỏi rồi (bằng bất kỳ cách nào), không hỏi lại nữa.\n"
+        "- Ưu tiên giữ mạch hội thoại tự nhiên."
     )
 
 
@@ -109,13 +111,52 @@ def _compact_for_match(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").casefold()).strip()
 
 
+# Per-field keyword fingerprints. If the model's reply already mentions any of
+# these, the field is considered "already asked" — the canonical question is
+# NOT appended (prevents the model asking in its own words + the system asking
+# again in one message). Keys mirror ASKABLE_FIELDS.
+_ALREADY_ASKED_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "name": ("tên", "xưng hô"),
+    "phone": ("số điện thoại", "sđt", "điện thoại", "số phone", "liên hệ"),
+    "desired_job": ("vị trí", "công việc", "ứng tuyển vị trí", "muốn làm"),
+    "region": ("tỉnh", "thành", "khu vực muốn", "làm việc ở"),
+    "living_area": ("sinh sống", "đang ở", "đang sống"),
+    "expected_salary": ("lương", "triệu"),
+}
+
+
+def _field_for_question(question: str) -> str | None:
+    """Reverse-lookup which ASKABLE_FIELDS entry a canonical question belongs to."""
+    lowered = (question or "").casefold()
+    for field, q in ASKABLE_FIELDS:
+        if _compact_for_match(q.rstrip("?")) == _compact_for_match(lowered.rstrip("?")):
+            return field
+    return None
+
+
+def _reply_already_asks(reply: str, field: str) -> bool:
+    """True if the reply already asks for ``field`` in any wording."""
+    keywords = _ALREADY_ASKED_KEYWORDS.get(field)
+    if not keywords:
+        return False
+    lowered = _compact_for_match(reply)
+    return any(kw in lowered for kw in keywords)
+
+
 def ensure_lead_collection_question(reply: str, question: str) -> str:
     if not question:
         return reply
     text = (reply or "").strip()
     if not text:
         return question
+    # Exact-string match (legacy): model echoed the canonical question verbatim.
     if _compact_for_match(question.rstrip("?")) in _compact_for_match(text):
         return text
-    # Always append — never replace the model's last paragraph.
+    # Semantic match: model asked for the same field in different wording.
+    # Do NOT append — appending would produce two asks for the same field in one
+    # message (the model's + the canonical one).
+    field = _field_for_question(question)
+    if field and _reply_already_asks(text, field):
+        return text
+    # Otherwise append — never replace the model's last paragraph.
     return f"{text}\n\n{question}"

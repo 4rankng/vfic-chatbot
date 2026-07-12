@@ -4,6 +4,7 @@ No database, no API keys — only deterministic pure functions and simple mocks.
 Matches the project convention: plain pytest, no heavy fixtures.
 """
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -25,7 +26,6 @@ from app.services.memory_service import greeting_gate
 # ---------------------------------------------------------------------------
 # parse_lead_json
 # ---------------------------------------------------------------------------
-
 class TestParseLeadJson:
     def test_valid_json_dict(self):
         assert parse_lead_json({"name": "Dũng"}) == {"name": "Dũng"}
@@ -52,7 +52,6 @@ class TestParseLeadJson:
 # ---------------------------------------------------------------------------
 # _pick
 # ---------------------------------------------------------------------------
-
 class TestPick:
     def test_none(self):
         assert _pick(None) is None
@@ -73,7 +72,6 @@ class TestPick:
 # ---------------------------------------------------------------------------
 # normalize_phone
 # ---------------------------------------------------------------------------
-
 class TestNormalizePhone:
     def test_standard_10_digit(self):
         assert normalize_phone("0987654321") == "0987654321"
@@ -110,7 +108,6 @@ class TestNormalizePhone:
 # ---------------------------------------------------------------------------
 # normalize_integer
 # ---------------------------------------------------------------------------
-
 class TestNormalizeInteger:
     def test_valid(self):
         assert normalize_integer("25", 15, 80) == 25
@@ -131,7 +128,6 @@ class TestNormalizeInteger:
 # ---------------------------------------------------------------------------
 # normalize_lead_score — G4 fix: honor LLM verdict, no phone override
 # ---------------------------------------------------------------------------
-
 class TestNormalizeLeadScore:
     def test_hot_verdict_honored(self):
         assert normalize_lead_score("hot") == "hot"
@@ -165,7 +161,6 @@ class TestNormalizeLeadScore:
 # ---------------------------------------------------------------------------
 # normalize_lead — notes routing and full output
 # ---------------------------------------------------------------------------
-
 class TestNormalizeLead:
     def test_full_extraction(self):
         raw = '{"name": "Dũng", "phone": "0357210887", "desired_job": "công nhân", "region": "Hải Phòng"}'
@@ -205,7 +200,6 @@ class TestNormalizeLead:
 # ---------------------------------------------------------------------------
 # extract_self_reported_name — deterministic fallback for "tôi tên ..."
 # ---------------------------------------------------------------------------
-
 class TestExtractSelfReportedName:
     @pytest.mark.parametrize(
         ("text", "expected"),
@@ -224,6 +218,49 @@ class TestExtractSelfReportedName:
 
 
 class TestCandidateExtractionService:
+    @pytest.mark.asyncio
+    async def test_skips_non_name_text_without_upserting(self, monkeypatch):
+        upsert = AsyncMock()
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "upsert_lead",
+            upsert,
+        )
+
+        saved_name = await CandidateExtractionService.persist_explicit_name(
+            object(),
+            "zalo_1",
+            "mình là công nhân",
+        )
+
+        assert saved_name is None
+        upsert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_persists_explicit_name_without_waiting_for_llm_extraction(self, monkeypatch):
+        saved: list[dict] = []
+
+        async def save_name(_db, lead_patch):
+            saved.append(lead_patch)
+            return 1
+
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "upsert_lead",
+            staticmethod(save_name),
+        )
+
+        saved_name = await CandidateExtractionService.persist_explicit_name(
+            object(),
+            "zalo_1",
+            "mình tên LiteQA",
+        )
+
+        assert saved_name == "LiteQA"
+        assert len(saved) == 1
+        assert saved[0]["zalo_id"] == "zalo_1"
+        assert saved[0]["name"] == "LiteQA"
+
     @pytest.mark.asyncio
     async def test_extracts_lead_patch_and_memory_facts_from_one_llm_call(self):
         calls = 0
@@ -269,7 +306,6 @@ class TestCandidateExtractionService:
 # ---------------------------------------------------------------------------
 # lead_profile_text — 7-field rendering
 # ---------------------------------------------------------------------------
-
 class TestLeadProfileText:
     def test_none_lead_shows_all_missing(self):
         text = lead_profile_text(None)
@@ -310,7 +346,6 @@ class TestLeadProfileText:
 # ---------------------------------------------------------------------------
 # greeting_gate (reused from memory_service for lead extraction)
 # ---------------------------------------------------------------------------
-
 class TestGreetingGate:
     @pytest.mark.parametrize("text", ["ok", "okie", "dạ", "vâng", "cảm ơn", "hi", "hello", "👍", "😊"])
     def test_skips_greetings(self, text):
@@ -339,7 +374,6 @@ class TestGreetingGate:
 # ---------------------------------------------------------------------------
 # lead_collection_question — priority + same-turn guards
 # ---------------------------------------------------------------------------
-
 class TestLeadCollectionQuestion:
     """Tests for the probing question selection."""
 
@@ -411,7 +445,6 @@ class TestLeadCollectionQuestion:
 # ---------------------------------------------------------------------------
 # ensure_lead_collection_question — append-only
 # ---------------------------------------------------------------------------
-
 class TestEnsureLeadCollectionQuestion:
     _ensure = staticmethod(ensure_lead_collection_question)
 
@@ -436,3 +469,60 @@ class TestEnsureLeadCollectionQuestion:
         result = self._ensure(reply, "Bạn cho tôi xin tên?")
         assert "vị trí nào?" in result
         assert "tên" in result
+
+    # --- semantic dedup: model asked the same field in different wording ---
+    # Regression: previously the system would append the canonical phone question
+    # even when the LLM had just asked for phone (or name+phone) in its own words,
+    # producing two asks for the same field in one message.
+    def test_model_asks_phone_in_own_words_no_append(self):
+        reply = "Bạn cho mình xin số điện thoại nhé?"
+        result = self._ensure(
+            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+        )
+        assert result == reply  # no duplicate append
+
+    def test_prod_example_1_liteqa_no_double_phone(self):
+        """Prod Example 1 verbatim: name-ack 'LiteQA' + phone ask in para 2.
+        System must NOT append the canonical phone question a second time."""
+        reply = (
+            "Dạ LiteQA, mình đã ghi nhận tên của bạn rồi nhé! 😊\n\n"
+            "VFIC cần số điện thoại để nhân viên liên hệ tư vấn và hỗ trợ bạn "
+            "ứng tuyển. Bạn cho mình xin số điện thoại được không? 📱"
+        )
+        result = self._ensure(
+            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+        )
+        assert result == reply  # phone asked once in para 2 → no append
+
+    def test_model_asks_name_and_phone_no_phone_append(self):
+        """Prod Example 2: model asked 'tên và số điện thoại' together — that's
+        ALLOWED. The bug is that the system would then append the canonical
+        phone question, making PHONE asked twice. Assert no append."""
+        reply = "Bạn ơi, cho mình xin tên và số điện thoại để VFIC liên hệ nhé?"
+        result = self._ensure(
+            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+        )
+        assert result == reply  # phone already asked → no append
+
+    def test_model_asks_sdt_abbreviation_no_append(self):
+        reply = "Cho tôi xin SĐT nhé?"
+        result = self._ensure(
+            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+        )
+        assert result == reply
+
+    def test_model_asks_name_in_own_words_no_append(self):
+        reply = "Bạn xưng hô là gì vậy?"
+        result = self._ensure(reply, "Bạn cho tôi xin tên để tiện hỗ trợ nhé?")
+        assert result == reply
+
+    def test_model_asks_different_field_still_appends(self):
+        """If the model asks about job but the canonical question is phone,
+        still append the phone question."""
+        reply = "Bạn muốn ứng tuyển vị trí nào?"
+        result = self._ensure(
+            reply, "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+        )
+        assert result.endswith(
+            "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"
+        )

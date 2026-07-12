@@ -481,7 +481,7 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         />
       </section>
 
-      <ReliabilityPanel reliability={data.reliability} />
+      {data.reliability && <ReliabilityPanel reliability={data.reliability} />}
 
       <SlowestTurnsTable slow_turns={data.slow_turns} />
     </>

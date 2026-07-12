@@ -29,7 +29,7 @@ a human.
 |---|---|
 | **Inbound chatbot** | Zalo Bot Platform + Official Account webhooks → <1s ack → async turn pipeline → grounded reply. |
 | **Bot-turn pipeline** | Agent (MiniMax M2.7) → fast safety filter → LLM safety check (MiniMax M2.5) → pre-send guard → Zalo send. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
-| **Lead extraction** | After each SENT reply, a `persistence_low` job mines the conversation for name/phone/role/stage and updates the lead. |
+| **Lead extraction** | An explicit self-reported name is captured during inbound webhook handling; after each SENT reply, a `persistence_low` job enriches remaining/ambiguous lead fields and memory. |
 | **Lead kanban** | Stages, tags, assignee, follow-up tasks, AI-assisted actions, chatops shortcuts from the lead card. |
 | **Human inbox** | Realtime Socket.IO push, per-conversation rooms, take-over / release / semi-auto / close / reopen, virtualized thread (`virtua`). |
 | **Proactive follow-up** | 6h / 24h / 46h cadence, cap 3, 48h-Zalo-rule-safe (47h margin), Vietnamese opt-out phrase matching. |
@@ -90,7 +90,8 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 - **FR-3.2** Persist every outbound as SENT or SUPPRESSED with reason.
 
 ### FR-4 Lead pipeline
-- **FR-4.1** Auto-extract lead fields from conversation after each SENT reply
+- **FR-4.1** Capture an explicit self-reported name during inbound webhook handling.
+  Auto-extract remaining/ambiguous lead fields and memory after each SENT reply
   (`persistence_low` queue).
 - **FR-4.2** Kanban supports stage PATCH, assign, tag, follow-up tasks,
   chatops actions.
