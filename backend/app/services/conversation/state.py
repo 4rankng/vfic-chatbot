@@ -268,9 +268,7 @@ class ConversationState:
         await self.db.commit()
         return res.rowcount == 1
 
-    async def break_stale_lock(
-        self, conv_id: uuid.UUID, *, stale_after_seconds: int
-    ) -> bool:
+    async def break_stale_lock(self, conv_id: uuid.UUID, *, stale_after_seconds: int) -> bool:
         """Force-clear a per-chat mutex whose owner heartbeat is stale (older than
         ``stale_after_seconds``), so a crashed/killed worker does not stall the
         conversation until ``bot_lock_ttl`` expires.
@@ -422,12 +420,16 @@ class ConversationState:
         outcome = (
             BotRunOutcome.ERROR
             if external_error
-            else BotRunOutcome.SENT if sent else BotRunOutcome.SUPPRESSED
+            else BotRunOutcome.SENT
+            if sent
+            else BotRunOutcome.SUPPRESSED
         )
         delivery_status = (
             DeliveryStatus.FAILED
             if external_error
-            else DeliveryStatus.SENT if sent else DeliveryStatus.SUPPRESSED
+            else DeliveryStatus.SENT
+            if sent
+            else DeliveryStatus.SUPPRESSED
         )
         run = BotRun(
             conversation_id=conv.id,
@@ -447,8 +449,7 @@ class ConversationState:
                 pending_msg is not None
                 and pending_msg.conversation_id == conv.id
                 and pending_msg.sender == MessageSender.BOT
-                and pending_msg.delivery_status
-                in (DeliveryStatus.PENDING, DeliveryStatus.SENDING)
+                and pending_msg.delivery_status in (DeliveryStatus.PENDING, DeliveryStatus.SENDING)
             ):
                 pending_msg.body = reply
                 pending_msg.bot_run_id = run.id
@@ -891,29 +892,55 @@ class ConversationState:
         ``version`` or ``unread_count`` — a receipt must not invalidate an
         in-flight bot turn's optimistic-lock recheck. Returns whether a row moved.
         """
-        if not zalo_message_id:
-            return False
+        moved = await self.apply_delivery_receipt_batch(
+            conv,
+            zalo_message_ids=[zalo_message_id] if zalo_message_id else [],
+            delivered=delivered,
+            seen=seen,
+        )
+        return moved > 0
+
+    async def apply_delivery_receipt_batch(
+        self,
+        conv: Conversation,
+        *,
+        zalo_message_ids: list[str],
+        delivered: bool = False,
+        seen: bool = False,
+    ) -> int:
+        """Advance delivery_status for multiple outbound messages in one pass.
+
+        ``user_seen_message`` carries an array of message ids (a user can see
+        several messages at once); this advances every matched Message row with a
+        single commit + a single realtime emit. Forward-only, no ``version`` or
+        ``unread_count`` touch (see :meth:`apply_delivery_receipt`). Returns the
+        number of rows that moved.
+        """
+        ids = [mid for mid in zalo_message_ids if mid]
+        if not ids:
+            return 0
         if seen:
             target = DeliveryStatus.READ
         elif delivered:
             target = DeliveryStatus.DELIVERED
         else:
-            return False
-        msg = await self.db.scalar(
+            return 0
+        result = await self.db.scalars(
             select(Message).where(
                 Message.conversation_id == conv.id,
-                Message.zalo_message_id == zalo_message_id,
+                Message.zalo_message_id.in_(ids),
                 Message.sender.in_([MessageSender.BOT, MessageSender.RECRUITER]),
             )
         )
-        if msg is None:
-            return False
-        if _DELIVERY_RANK.get(msg.delivery_status, 0) >= _DELIVERY_RANK[target]:
-            return False
-        msg.delivery_status = target
-        await self.db.commit()
-        await self.events.conversation_updated(conv)
-        return True
+        moved = 0
+        for msg in result.all():
+            if _DELIVERY_RANK.get(msg.delivery_status, 0) < _DELIVERY_RANK[target]:
+                msg.delivery_status = target
+                moved += 1
+        if moved:
+            await self.db.commit()
+            await self.events.conversation_updated(conv)
+        return moved
 
     async def record_system_note(self, conv: Conversation, *, body: str) -> Message:
         """Persist an informational SYSTEM message (button click, follow/unfollow).

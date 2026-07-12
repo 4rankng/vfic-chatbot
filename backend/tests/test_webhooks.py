@@ -1,4 +1,5 @@
 """Webhook edge-case tests."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -268,23 +269,28 @@ async def test_oa_user_seen_message_advances_delivery_to_read(monkeypatch):
     conv = SimpleNamespace(id=uuid.uuid4())
     svc = MagicMock()
     svc.ensure = AsyncMock(return_value=conv)
-    svc.apply_delivery_receipt = AsyncMock(return_value=True)
+    svc.apply_delivery_receipt_batch = AsyncMock(return_value=1)
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
 
+    # user_seen_message carries msg_ids as an ARRAY (a user sees several messages
+    # at once). Sender is the OA, recipient is the user (inverted from text).
     payload = {
         "event_name": "user_seen_message",
-        "sender": {"id": "user-123"},
-        "message": {"msg_id": "oa-msg-1"},
+        "sender": {"id": "oa-1"},
+        "recipient": {"id": "user-123"},
+        "message": {"msg_ids": ["oa-msg-1", "oa-msg-2"]},
     }
     result = await ZaloWebhookService.handle(
         MagicMock(), payload, enqueue=lambda _j: True, channel="oa"
     )
 
     assert result == {"status": "receipt"}
+    # Receipts scope to the recipient (the user), not the sender (the OA).
     svc.ensure.assert_awaited_once_with("oa:user-123", zalo_channel="oa")
-    svc.apply_delivery_receipt.assert_awaited_once()
-    kwargs = svc.apply_delivery_receipt.call_args.kwargs
-    assert kwargs["zalo_message_id"] == "oa-msg-1"
+    svc.apply_delivery_receipt_batch.assert_awaited_once()
+    kwargs = svc.apply_delivery_receipt_batch.call_args.kwargs
+    # Every id in the batch is forwarded so all matched messages advance to READ.
+    assert kwargs["zalo_message_ids"] == ["oa-msg-1", "oa-msg-2"]
     assert kwargs["seen"] is True
     assert kwargs["delivered"] is False
 
@@ -300,12 +306,13 @@ async def test_oa_user_received_message_advances_to_delivered(monkeypatch):
     conv = SimpleNamespace(id=uuid.uuid4())
     svc = MagicMock()
     svc.ensure = AsyncMock(return_value=conv)
-    svc.apply_delivery_receipt = AsyncMock(return_value=True)
+    svc.apply_delivery_receipt_batch = AsyncMock(return_value=1)
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
 
     payload = {
         "event_name": "user_received_message",
-        "sender": {"id": "user-123"},
+        "sender": {"id": "oa-1"},
+        "recipient": {"id": "user-123"},
         "message": {"msg_id": "oa-msg-1"},
     }
     result = await ZaloWebhookService.handle(
@@ -313,7 +320,8 @@ async def test_oa_user_received_message_advances_to_delivered(monkeypatch):
     )
 
     assert result == {"status": "receipt"}
-    kwargs = svc.apply_delivery_receipt.call_args.kwargs
+    kwargs = svc.apply_delivery_receipt_batch.call_args.kwargs
+    assert kwargs["zalo_message_ids"] == ["oa-msg-1"]
     assert kwargs["delivered"] is True
     assert kwargs["seen"] is False
 
@@ -334,7 +342,7 @@ async def test_oa_follow_ensures_and_applies_follow(monkeypatch):
 
     result = await ZaloWebhookService.handle(
         MagicMock(),
-        {"event_name": "follow", "sender": {"id": "user-123"}},
+        {"event_name": "follow", "follower": {"id": "user-123"}},
         enqueue=lambda _j: True,
         channel="oa",
     )
@@ -362,7 +370,7 @@ async def test_oa_unfollow_opted_out_and_records_system_note(monkeypatch):
 
     result = await ZaloWebhookService.handle(
         MagicMock(),
-        {"event_name": "unfollow", "sender": {"id": "user-123"}},
+        {"event_name": "unfollow", "follower": {"id": "user-123"}},
         enqueue=lambda _j: True,
         channel="oa",
     )

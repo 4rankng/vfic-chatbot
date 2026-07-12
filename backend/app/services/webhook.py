@@ -197,12 +197,12 @@ async def handle_oa_side_event(db: AsyncSession, event) -> dict:
     svc = ConversationService(db)
 
     if kind in ("user_seen", "user_received"):
-        if not event.message_id or not event.sender_id:
+        if not event.message_ids or not event.sender_id:
             return {"status": "ignored"}
         conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
-        await svc.apply_delivery_receipt(
+        await svc.apply_delivery_receipt_batch(
             conv,
-            zalo_message_id=event.message_id,
+            zalo_message_ids=list(event.message_ids),
             delivered=(kind == "user_received"),
             seen=(kind == "user_seen"),
         )
@@ -216,17 +216,13 @@ async def handle_oa_side_event(db: AsyncSession, event) -> dict:
     if kind == "unfollow":
         conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
         await svc.apply_unfollow(conv)
-        await svc.record_system_note(
-            conv, body="Người dùng đã bỏ quan tâm (unfollow) OA."
-        )
+        await svc.record_system_note(conv, body="Người dùng đã bỏ quan tâm (unfollow) OA.")
         return {"status": "unfollow"}
 
     if kind == "click_to_message":
         conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
         title = _event_button_title(event.raw)
-        body = (
-            f"👤 Người dùng đã nhấn nút: {title}" if title else "👤 Người dùng đã nhấn nút."
-        )
+        body = f"👤 Người dùng đã nhấn nút: {title}" if title else "👤 Người dùng đã nhấn nút."
         await svc.record_system_note(conv, body=body)
         return {"status": "button_click"}
 

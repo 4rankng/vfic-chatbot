@@ -56,17 +56,13 @@ class ConversationService:
     async def get(self, conv_id: uuid.UUID) -> Conversation | None:
         return await self.repo.get(conv_id)
 
-    async def get_visible(
-        self, conv_id: uuid.UUID, *, viewer: User
-    ) -> Conversation | None:
+    async def get_visible(self, conv_id: uuid.UUID, *, viewer: User) -> Conversation | None:
         return await self.repo.get_visible(conv_id, viewer=viewer)
 
     async def get_by_zalo(self, zalo_chat_id: str) -> Conversation | None:
         return await self.repo.get_by_zalo(zalo_chat_id)
 
-    async def last_messages_batch(
-        self, *, viewer: User, ids_str: str
-    ) -> dict[str, str]:
+    async def last_messages_batch(self, *, viewer: User, ids_str: str) -> dict[str, str]:
         return await self.repo.last_messages_batch(viewer=viewer, ids_str=ids_str)
 
     async def list(
@@ -99,9 +95,7 @@ class ConversationService:
     async def needs_attention_count(self, *, viewer: User) -> int:
         return await self.repo.needs_attention_count(viewer=viewer)
 
-    async def last_messages(
-        self, conv: Conversation, limit: int = 50
-    ) -> list[Message]:
+    async def last_messages(self, conv: Conversation, limit: int = 50) -> list[Message]:
         return await self.repo.last_messages(conv, limit)
 
     async def latest_message(self, conv: Conversation) -> Message | None:
@@ -117,15 +111,11 @@ class ConversationService:
     ) -> list[Message]:
         return await self.repo.messages_since(conv, since_id, limit)
 
-    async def latest_unanswered_worker_message(
-        self, conv: Conversation
-    ) -> Message | None:
+    async def latest_unanswered_worker_message(self, conv: Conversation) -> Message | None:
         return await self.repo.latest_unanswered_worker_message(conv)
 
     # --- mutations (delegate to state) ---
-    async def ensure(
-        self, zalo_chat_id: str, *, zalo_channel: str = "bot"
-    ) -> Conversation:
+    async def ensure(self, zalo_chat_id: str, *, zalo_channel: str = "bot") -> Conversation:
         return await self.state.ensure(zalo_chat_id, zalo_channel=zalo_channel)
 
     def run_start_guard(self, conv: Conversation) -> bool:
@@ -141,9 +131,7 @@ class ConversationService:
         body: str,
         zalo_message_id: str | None = None,
     ) -> Message:
-        return await self.state.record_inbound(
-            conv, body=body, zalo_message_id=zalo_message_id
-        )
+        return await self.state.record_inbound(conv, body=body, zalo_message_id=zalo_message_id)
 
     async def acquire_lock(
         self,
@@ -161,9 +149,7 @@ class ConversationService:
     async def renew_lock(
         self, conv_id: uuid.UUID, *, lock_owner: uuid.UUID | str, ttl_seconds: int | None = None
     ) -> bool:
-        return await self.state.renew_lock(
-            conv_id, lock_owner=lock_owner, ttl_seconds=ttl_seconds
-        )
+        return await self.state.renew_lock(conv_id, lock_owner=lock_owner, ttl_seconds=ttl_seconds)
 
     async def recheck_ownership(
         self,
@@ -222,17 +208,13 @@ class ConversationService:
     ) -> Message:
         return await self.state.record_bot_pending(conv, body=body)
 
-    async def take_over(
-        self, conv: Conversation, recruiter: User
-    ) -> Conversation:
+    async def take_over(self, conv: Conversation, recruiter: User) -> Conversation:
         return await self.state.take_over(conv, recruiter)
 
     async def release(self, conv: Conversation, actor: User) -> Conversation:
         return await self.state.release(conv, actor)
 
-    async def semi_auto(
-        self, conv: Conversation, recruiter: User
-    ) -> Conversation:
+    async def semi_auto(self, conv: Conversation, recruiter: User) -> Conversation:
         return await self.state.semi_auto(conv, recruiter)
 
     async def close(self, conv: Conversation, actor: User) -> Conversation:
@@ -241,9 +223,7 @@ class ConversationService:
     async def reopen(self, conv: Conversation, actor: User) -> Conversation:
         return await self.state.reopen(conv, actor)
 
-    async def clear_history(
-        self, conv: Conversation, actor: User
-    ) -> Conversation:
+    async def clear_history(self, conv: Conversation, actor: User) -> Conversation:
         return await self.state.clear_history(conv, actor)
 
     async def mark_read(self, conv: Conversation) -> Conversation:
@@ -281,9 +261,22 @@ class ConversationService:
             seen=seen,
         )
 
-    async def record_system_note(
-        self, conv: Conversation, *, body: str
-    ) -> Message:
+    async def apply_delivery_receipt_batch(
+        self,
+        conv: Conversation,
+        *,
+        zalo_message_ids: list[str],
+        delivered: bool = False,
+        seen: bool = False,
+    ) -> int:
+        return await self.state.apply_delivery_receipt_batch(
+            conv,
+            zalo_message_ids=zalo_message_ids,
+            delivered=delivered,
+            seen=seen,
+        )
+
+    async def record_system_note(self, conv: Conversation, *, body: str) -> Message:
         return await self.state.record_system_note(conv, body=body)
 
     async def apply_follow(self, conv: Conversation) -> Conversation:

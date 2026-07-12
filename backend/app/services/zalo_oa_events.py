@@ -59,10 +59,24 @@ class ZaloOAWebhookEvent:
     text: str
     timestamp: str
     raw: dict[str, Any]
+    # All message ids referenced by the event. Zalo sends a single ``msg_id``
+    # for most events but an array ``msg_ids`` for ``user_seen_message`` (a user
+    # can see several messages at once). Kept as a list so the receipt handler
+    # can advance delivery_status for every message in one batch; ``message_id``
+    # above remains the first id for backward compatibility.
+    message_ids: tuple[str, ...] = ()
 
     @property
     def scoped_chat_id(self) -> str:
-        return f"oa:{self.sender_id}" if self.sender_id else ""
+        # Receipt events (user_received_message / user_seen_message) invert the
+        # sender/recipient roles: Zalo puts the OA under ``sender`` and the user
+        # under ``recipient``. Every other event identifies the user as the
+        # sender (or ``follower`` for follow/unfollow). The conversation is
+        # always keyed by the user's id, so receipts must scope to recipient.
+        user_id = (
+            self.recipient_id if self.kind in ("user_received", "user_seen") else self.sender_id
+        )
+        return f"oa:{user_id}" if user_id else ""
 
     @property
     def can_start_bot_turn(self) -> bool:
@@ -88,7 +102,10 @@ def parse_oa_webhook_event(payload: dict[str, Any]) -> ZaloOAWebhookEvent | None
 
     event_name = str(payload.get("event_name") or payload.get("event") or "").strip()
     message = _as_dict(payload.get("message"))
-    sender = _as_dict(payload.get("sender") or payload.get("from"))
+    # Follow/unfollow events identify the user under ``follower`` (not ``sender``);
+    # every other event uses ``sender``. Check both so a genuine lifecycle event
+    # resolves its user id regardless of which key Zalo populated.
+    sender = _as_dict(payload.get("sender") or payload.get("from") or payload.get("follower"))
     recipient = _as_dict(payload.get("recipient") or payload.get("to"))
 
     text = _first_text(message.get("text"), payload.get("text"))
@@ -106,6 +123,22 @@ def parse_oa_webhook_event(payload: dict[str, Any]) -> ZaloOAWebhookEvent | None
         payload.get("msg_id"),
         payload.get("message_id"),
     )
+    # user_seen_message sends an array of ids under ``msg_ids``; every other
+    # event sends a single id (captured above as ``message_id``). Normalize both
+    # into ``message_ids`` so the receipt handler can advance every matched
+    # Message row in one pass. Dedup while preserving order.
+    raw_ids: list[str] = []
+    msg_ids_value = message.get("msg_ids")
+    if isinstance(msg_ids_value, list):
+        raw_ids.extend(str(mid) for mid in msg_ids_value if str(mid).strip())
+    if message_id:
+        raw_ids.append(message_id)
+    seen_ids: set[str] = set()
+    message_ids_list: list[str] = []
+    for mid in raw_ids:
+        if mid not in seen_ids:
+            seen_ids.add(mid)
+            message_ids_list.append(mid)
     timestamp = _first_text(
         payload.get("timestamp"),
         payload.get("timeStamp"),
@@ -122,6 +155,7 @@ def parse_oa_webhook_event(payload: dict[str, Any]) -> ZaloOAWebhookEvent | None
         text=text,
         timestamp=timestamp,
         raw=payload,
+        message_ids=tuple(message_ids_list),
     )
 
 
