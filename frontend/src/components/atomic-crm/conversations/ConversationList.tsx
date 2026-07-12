@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
 import conversationEmptyIllustration from "@/assets/empty-states/conversation-empty-illustration.png";
+import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
 import {
   AlertTriangle,
   Inbox,
@@ -298,6 +299,7 @@ const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
     },
     error: {
       icon: AlertTriangle,
+      image: conversationLoadErrorIllustration,
       title: "Không thể tải hội thoại",
       description: "Kiểm tra kết nối và thử lại.",
       action: "Thử lại",
@@ -307,9 +309,13 @@ const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
 
   return (
     <div className={`empty-state list-empty-state is-${kind}`} role="status">
-      <span className="list-empty-state-icon" aria-hidden="true">
-        <Icon />
-      </span>
+      {content.image ? (
+        <img className="list-empty-state-image" src={content.image} alt="" />
+      ) : (
+        <span className="list-empty-state-icon" aria-hidden="true">
+          <Icon />
+        </span>
+      )}
       <div className="list-empty-state-copy">
         <p>{content.title}</p>
         <span>{content.description}</span>
@@ -727,7 +733,9 @@ const ConversationListContent = () => {
     >
       <InboxIcons />
       <div
-        className={`app ${detailOpen ? "detail-open has-selected-conversation" : ""}`}
+        className={`app ${detailOpen ? "detail-open" : ""} ${
+          selected ? "has-selected-conversation" : ""
+        }`}
         id="app"
       >
         <ConversationListPanel

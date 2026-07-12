@@ -75,7 +75,10 @@ async def test_oa_webhook_accepts_unsigned_empty_registration_probe(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_oa_webhook_rejects_unsigned_real_event(monkeypatch):
+async def test_oa_webhook_processes_unsigned_real_event_non_blocking(monkeypatch):
+    """Signature verification is currently non-blocking: a mismatch is recorded to
+    the health badge but the event is still dispatched (otherwise a wrong/stale OA
+    secret drops every real event, including user_seen_message receipts)."""
     from app.api import webhooks
 
     cfg = SimpleNamespace(oa_secret_key="oa-secret", oa_app_id="app-1")
@@ -94,8 +97,8 @@ async def test_oa_webhook_rejects_unsigned_real_event(monkeypatch):
 
     response = await webhooks.zalo_oa_webhook(FakeRequest(raw), db=AsyncMock())
 
-    assert response.status_code == 401
-    handle.assert_not_awaited()
+    assert response.status_code == 200
+    handle.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -98,6 +98,13 @@
   stroke-width: 1.75;
 }
 
+.inbox-bg-container .list-empty-state-image {
+  width: 64px;
+  height: 64px;
+  display: block;
+  object-fit: contain;
+}
+
 .inbox-bg-container .list-empty-state.is-error .list-empty-state-icon {
   color: var(--workspace-warning);
   background: color-mix(in srgb, var(--workspace-warning) 10%, white);
