@@ -1,6 +1,21 @@
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState, type ComponentType } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Cpu,
+  Database,
+  RefreshCw,
+  Send,
+  Server,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -55,6 +70,22 @@ const WINDOWS = [
   { key: "24h", label: "24 giờ" },
   { key: "7d", label: "7 ngày" },
 ] as const;
+const CANDIDATE_STAGES = new Set(["webhook_to_pickup", "total", "end_to_end"]);
+const STAGE_TARGETS: Record<string, number> = {
+  webhook_to_pickup: 200,
+  preamble: 5000,
+  lead: 2000,
+  system_prompt: 2000,
+  llm_queue: 5000,
+  llm_model: 10000,
+  db: 2000,
+  send: 1000,
+  total: 10000,
+  end_to_end: 10000,
+};
+
+type Tone = "neutral" | "success" | "warning" | "danger";
+type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 
 const fmtMs = (value: number | null | undefined): string =>
   value == null
@@ -63,531 +94,190 @@ const fmtMs = (value: number | null | undefined): string =>
       ? `${(value / 1000).toFixed(1)} giây`
       : `${value} ms`;
 
-const Metric = ({
-  label,
-  value,
-  hint,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "neutral" | "success" | "warning";
-}) => (
+const fmtShortMs = (value: number | null | undefined): string =>
+  value == null ? "—" : value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${value}ms`;
+
+const formatStartedAt = (value: string | null): string =>
+  value ? value.replace("T", " ").slice(0, 19) : "Chưa có";
+
+const getStageTone = (key: string, p95: number | null | undefined): Tone => {
+  const target = STAGE_TARGETS[key];
+  if (p95 == null || target == null) return "neutral";
+  if (p95 > target * 1.5) return "danger";
+  if (p95 > target) return "warning";
+  return "success";
+};
+
+const getSlowTurnTone = (turn: PerfSlowTurn): Tone => {
+  if (turn.outcome === "ERROR" || turn.degraded || (turn.total_ms ?? 0) > 20_000) {
+    return "danger";
+  }
+  if (turn.retried_429 || (turn.total_ms ?? 0) > 10_000) return "warning";
+  return "neutral";
+};
+
+const likelyBottleneck = (turn: PerfSlowTurn): string => {
+  const stages = [
+    ["LLM xử lý", turn.llm_model_ms],
+    ["LLM chờ slot", turn.llm_queue_ms],
+    ["Cơ sở dữ liệu", turn.db_ms],
+    ["Gửi Zalo", turn.faq_bypass_ms],
+  ] as const;
+  const candidate = stages.reduce<(typeof stages)[number]>(
+    (largest, stage) => (stage[1] ?? 0) > (largest[1] ?? 0) ? stage : largest,
+    stages[0],
+  );
+  return candidate[1] == null ? "Chưa xác định" : `${candidate[0]} (${fmtShortMs(candidate[1])})`;
+};
+
+const Status = ({ tone, children }: { tone: Tone; children: string }) => {
+  const StatusIcon = tone === "danger" ? AlertCircle : tone === "warning" ? TriangleAlert : tone === "success" ? CheckCircle2 : Activity;
+  return (
+    <span className={`performance-status is-${tone}`}>
+      <StatusIcon aria-hidden="true" />
+      {children}
+    </span>
+  );
+};
+
+const Metric = ({ label, value, hint, tone, icon: Icon }: { label: string; value: string; hint: string; tone: Tone; icon: Icon }) => (
   <article className={`performance-metric is-${tone}`}>
-    <p>{label}</p>
+    <div className="performance-metric-heading">
+      <Icon aria-hidden={true} />
+      <p>{label}</p>
+    </div>
     <strong>{value}</strong>
-    {hint ? <small>{hint}</small> : null}
+    <small>{hint}</small>
   </article>
 );
 
 const PerformanceLoading = () => (
-  <div
-    className="performance-skeletons"
-    aria-label="Đang tải số liệu hiệu suất"
-  >
-    {Array.from({ length: 8 }, (_, index) => (
-      <span key={index} className={index > 3 ? "is-panel" : undefined} />
-    ))}
+  <div className="performance-skeletons" aria-label="Đang tải số liệu hiệu suất">
+    {Array.from({ length: 8 }, (_, index) => <span key={index} className={index > 4 ? "is-panel" : undefined} />)}
   </div>
 );
 
 const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
   const navigate = useNavigate();
-
   return (
     <section className="performance-state" role="status" aria-live="polite">
       <AlertCircle aria-hidden="true" />
       <h2>Không tải được số liệu hiệu suất</h2>
-      <p>
-        Kiểm tra kết nối rồi thử lại. Dữ liệu vận hành không thay đổi khi bạn
-        tải lại trang này.
-      </p>
+      <p>Kiểm tra kết nối rồi thử lại. Dữ liệu vận hành không thay đổi khi bạn tải lại trang này.</p>
       <div>
-        <Button onClick={onRetry}>
-          <RefreshCw className="size-4" />
-          Thử lại
-        </Button>
-        <Button variant="outline" onClick={() => navigate("/")}>
-          Về Tổng quan
-        </Button>
+        <Button onClick={onRetry}><RefreshCw className="size-4" />Thử lại</Button>
+        <Button variant="outline" onClick={() => navigate("/")}>Về Tổng quan</Button>
       </div>
     </section>
   );
 };
 
-/**
- * CSS-only trend chart (no charting library in package.json).
- * Each bucket is one vertical bar; height ∝ p95 latency. Error buckets get the
- * destructive color so a spike in failures is visible at a glance.
- */
-const TrendChart = ({
-  trend,
-  window,
-}: {
-  trend: PerfTrendBucket[];
-  window: PerfMetrics["window"];
-}) => {
-  const maxP95 = Math.max(1, ...trend.map((b) => b.p95_ms ?? 0));
-  const totalErrors = trend.reduce((sum, b) => sum + b.errors, 0);
-  const includesDate = window === "7d";
-  const axisTicks = getTrendAxisTicks(trend, includesDate);
-
+const TrendChart = ({ trend, window }: { trend: PerfTrendBucket[]; window: PerfMetrics["window"] }) => {
+  const maxP95 = Math.max(10_000, ...trend.map((bucket) => bucket.p95_ms ?? 0));
+  const totalErrors = trend.reduce((sum, bucket) => sum + bucket.errors, 0);
+  const axisTicks = getTrendAxisTicks(trend, window === "7d");
   return (
-    <section className="performance-panel">
-      <h2>Xu hướng độ trễ</h2>
-      <p className="performance-panel-intro">
-        Mỗi cột là 5 phút (p95). Cột đỏ có lượt lỗi. Tổng{" "}
-        {totalErrors} lượt lỗi trong khoảng đã chọn.
-      </p>
-      {trend.length === 0 ? (
-        <p className="performance-empty">Chưa có dữ liệu xu hướng.</p>
-      ) : (
-        <>
-          <div
-            className="performance-trend"
-            role="img"
-            aria-label="Xu hướng độ trễ p95 theo từng 5 phút"
-          >
-            {trend.map((b, i) => {
-              const heightPct = Math.max(
-                2,
-                ((b.p95_ms ?? 0) / maxP95) * 100,
-              );
-              const hasError = b.errors > 0;
-              const tooltip = `${formatTrendBucket(b.bucket, true)} · p95 ${fmtMs(b.p95_ms)} · ${b.turns} lượt · ${b.errors} lỗi`;
-              return (
-                <div
-                  className={`performance-trend-bar${hasError ? " is-error" : ""}`}
-                  key={`${b.bucket ?? i}`}
-                  style={{ height: `${heightPct}%` }}
-                  title={tooltip}
-                />
-              );
-            })}
-          </div>
-          <div className="performance-trend-axis" aria-hidden="true">
-            {axisTicks.map((tick) => {
-              const position =
-                trend.length > 1 ? (tick.index / (trend.length - 1)) * 100 : 0;
-              const edgeClass =
-                tick.index === 0
-                  ? "is-first"
-                  : tick.index === trend.length - 1
-                    ? "is-last"
-                    : "";
-
-              return (
-                <span
-                  className={edgeClass}
-                  key={tick.index}
-                  style={{ left: `${position}%` }}
-                >
-                  {tick.label}
-                </span>
-              );
-            })}
-          </div>
-        </>
-      )}
+    <section className="performance-panel performance-trend-panel">
+      <div className="performance-section-heading">
+        <div><h2>Xu hướng độ trễ ứng viên chờ</h2><p>p95 theo từng 5 phút. Mục tiêu candidate-visible: ≤ 10 giây.</p></div>
+        <div className="performance-legend" aria-label="Chú giải biểu đồ"><span><i className="is-line" />p95</span><span><i className="is-target" />Mục tiêu 10 giây</span></div>
+      </div>
+      {trend.length === 0 ? <p className="performance-empty">Chưa có dữ liệu xu hướng.</p> : <>
+        <div className="performance-trend" role="img" aria-label={`Xu hướng độ trễ p95; ${totalErrors} lượt lỗi trong khoảng đã chọn`}>
+          <span className="performance-target-line" style={{ bottom: `${Math.min(96, (10_000 / maxP95) * 100)}%` }}><b>10 giây</b></span>
+          {trend.map((bucket, index) => {
+            const height = Math.max(2, ((bucket.p95_ms ?? 0) / maxP95) * 100);
+            const tooltip = `${formatTrendBucket(bucket.bucket, true)} · p95 ${fmtMs(bucket.p95_ms)} · ${bucket.turns} lượt · ${bucket.errors} lỗi`;
+            return <button className={`performance-trend-bar${bucket.errors > 0 ? " is-error" : ""}`} key={`${bucket.bucket ?? index}`} style={{ height: `${height}%` }} title={tooltip} aria-label={tooltip} type="button" />;
+          })}
+        </div>
+        <div className="performance-trend-axis" aria-hidden="true">{axisTicks.map((tick) => <span key={tick.index} style={{ left: `${trend.length > 1 ? (tick.index / (trend.length - 1)) * 100 : 0}%` }} className={tick.index === 0 ? "is-first" : tick.index === trend.length - 1 ? "is-last" : ""}>{tick.label}</span>)}</div>
+        <p className="performance-chart-note"><TriangleAlert aria-hidden="true" /> {totalErrors > 0 ? `${totalErrors} lượt lỗi cần đối chiếu với các phiên vượt ngưỡng.` : "Không ghi nhận lượt lỗi trong khoảng đã chọn."}</p>
+      </>}
     </section>
   );
 };
 
-const TurnBadges = ({ turn }: { turn: PerfSlowTurn }) => (
-  <div className="performance-badges">
-    {turn.degraded ? (
-      <span className="performance-badge is-destructive">Suy giảm</span>
-    ) : null}
-    {turn.retried_429 ? (
-      <span className="performance-badge is-warning">Retry 429</span>
-    ) : null}
-  </div>
-);
+type Signal = { id: string; tone: Tone; title: string; detail: string; value: string; icon: Icon };
 
-const TurnDetail = ({ turn }: { turn: PerfSlowTurn }) => (
-  <div className="performance-row-detail">
-    <div>
-      <strong>Lượt gọi LLM (model ms)</strong>
-      <ul>
-        {turn.llm_call_ms?.length
-          ? turn.llm_call_ms.map((ms, i) => (
-              <li key={i}>
-                Lần {i + 1}: <code>{ms} ms</code>
-              </li>
-            ))
-          : null}
-      </ul>
-    </div>
-    <div>
-      <strong>Chi tiết tool</strong>
-      <dl>
-        {turn.tool_breakdown && Object.keys(turn.tool_breakdown).length > 0
-          ? Object.entries(turn.tool_breakdown).map(([name, ms]) => (
-              <div key={name}>
-                <dt>{name}</dt>
-                <dd>{ms} ms</dd>
-              </div>
-            ))
-          : null}
-      </dl>
-    </div>
-    <div>
-      <strong>DB & bypass</strong>
-      <p>
-        DB tổng: <code>{turn.db_ms ?? "—"} ms</code>
-        {turn.faq_bypass_ms != null ? (
-          <> · FAQ bypass: <code>{turn.faq_bypass_ms} ms</code></>
-        ) : null}
-      </p>
-      {turn.db_breakdown && Object.keys(turn.db_breakdown).length > 0 ? (
-        <dl>
-          {Object.entries(turn.db_breakdown).map(([name, ms]) => (
-            <div key={name}>
-              <dt>{name}</dt>
-              <dd>{ms} ms</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-    </div>
-    <div>
-      <strong>Token & ngữ cảnh</strong>
-      <p>
-        Prompt: {turn.prompt_tokens ?? "—"} · Completion:{" "}
-        {turn.completion_tokens ?? "—"} · Cached: {turn.cached_tokens ?? "—"}
-      </p>
-      <p>
-        Model: <code>{turn.model_tier ?? "—"}</code> · Prompt cache:{" "}
-        {turn.system_prompt_cache_hit == null
-          ? "—"
-          : turn.system_prompt_cache_hit
-            ? "hit"
-            : "miss"}
-      </p>
-      {turn.llm_backoff_ms ? (
-        <p>
-          Backoff 429: <code>{turn.llm_backoff_ms} ms</code>
-        </p>
-      ) : null}
-      {turn.dark_time_ms != null && turn.total_ms != null ? (
-        <p>
-          Dark time: <code>{turn.dark_time_ms} ms</code> ·{" "}
-          {turn.total_ms > 0
-            ? `${Math.round((turn.dark_time_ms / turn.total_ms) * 100)}%`
-            : "—"}{" "}
-          (tổng trừ các giai đoạn đã đo)
-        </p>
-      ) : null}
-    </div>
-  </div>
-);
-
-const SlowestTurnsTable = ({ slow_turns }: { slow_turns: PerfSlowTurn[] }) => {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-
+const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
+  const endToEnd = data.percentiles.end_to_end?.p95;
+  const delivery = data.reliability;
+  const signals: Signal[] = [];
+  if (endToEnd != null && endToEnd > STAGE_TARGETS.end_to_end) signals.push({ id: "latency", tone: getStageTone("end_to_end", endToEnd), title: "Độ trễ p95 vượt mục tiêu", detail: "Ứng viên có thể phải chờ phản hồi lâu hơn kỳ vọng.", value: fmtMs(endToEnd), icon: Clock3 });
+  if (data.live.minimax_429s_last_1m > 0) signals.push({ id: "rate-limit", tone: "warning", title: "LLM có phản hồi 429", detail: "Đã có retry hoặc nguy cơ làm chậm các lượt mới.", value: `${data.live.minimax_429s_last_1m} trong 1 phút`, icon: Cpu });
+  if ((delivery?.failed_count ?? 0) > 0) signals.push({ id: "failed", tone: "danger", title: "Có lượt gửi thất bại", detail: "Kiểm tra các lượt chậm để xác nhận việc giao tin nhắn.", value: String(delivery?.failed_count), icon: Send });
+  if ((delivery?.send_unknown_count ?? 0) > 0) signals.push({ id: "unknown", tone: "warning", title: "Có lượt gửi không xác định", detail: "Zalo có thể đã nhận tin; không tự động gửi lại để tránh trùng.", value: String(delivery?.send_unknown_count), icon: ShieldAlert });
+  if (data.live.total_workers > 0 && data.live.busy_workers >= data.live.total_workers) signals.push({ id: "capacity", tone: "warning", title: "Worker đang dùng hết công suất", detail: "Theo dõi hàng đợi để phát hiện áp lực xử lý tăng.", value: `${data.live.busy_workers}/${data.live.total_workers}`, icon: Server });
+  if (signals.length === 0) signals.push({ id: "stable", tone: "success", title: "Chưa có tín hiệu cần xử lý", detail: "Dữ liệu hiện tại không cho thấy áp lực giao gửi hay xử lý bất thường.", value: "Ổn định", icon: CheckCircle2 });
   return (
-    <section className="performance-panel">
-      <h2>Các lượt chậm nhất</h2>
-      {slow_turns.length === 0 ? (
-        <p className="performance-empty">
-          Chưa có lượt nào được ghi nhận trong khoảng thời gian này.
-        </p>
-      ) : (
-        <div
-          className="performance-table-wrap"
-          role="region"
-          aria-label="Bảng các lượt chậm nhất"
-          tabIndex={0}
-        >
-          <table>
-            <thead>
-              <tr>
-                <th aria-label="Mở rộng" />
-                <th>Thời gian</th>
-                <th>Luồng</th>
-                <th>Ý định</th>
-                <th>LLM xử lý</th>
-                <th>Chờ slot</th>
-                <th>Lượt LLM</th>
-                <th>Lượt tool</th>
-                <th>Token</th>
-                <th>Tổng</th>
-                <th>Hàng đợi</th>
-                <th>Cờ</th>
-                <th>Kết quả</th>
-              </tr>
-            </thead>
-            <tbody>
-              {slow_turns.map((turn) => {
-                const isOpen = expandedId === turn.id;
-                const totalTokens =
-                  (turn.prompt_tokens ?? 0) + (turn.completion_tokens ?? 0);
-                return (
-                  <Fragment key={turn.id}>
-                    <tr>
-                      <td>
-                        <button
-                          type="button"
-                          className="performance-expand"
-                          aria-expanded={isOpen}
-                          aria-label={isOpen ? "Thu gọn" : "Mở rộng chi tiết"}
-                          onClick={() =>
-                            setExpandedId(isOpen ? null : turn.id)
-                          }
-                        >
-                          {isOpen ? (
-                            <ChevronDown className="size-4" />
-                          ) : (
-                            <ChevronRight className="size-4" />
-                          )}
-                        </button>
-                      </td>
-                      <td>
-                        {turn.started_at
-                          ? turn.started_at.replace("T", " ").slice(0, 19)
-                          : "Chưa có"}
-                      </td>
-                      <td>
-                        {LANE_LABELS[turn.lane ?? ""] ??
-                          turn.lane ??
-                          "Không rõ"}
-                      </td>
-                      <td>{turn.intent ?? "Chưa có"}</td>
-                      <td>{fmtMs(turn.llm_model_ms)}</td>
-                      <td>{fmtMs(turn.llm_queue_ms)}</td>
-                      <td>{turn.llm_calls ?? "Chưa có"}</td>
-                      <td>{turn.tool_calls ?? "Chưa có"}</td>
-                      <td>{totalTokens > 0 ? totalTokens.toLocaleString() : "—"}</td>
-                      <td>
-                        <strong>{fmtMs(turn.total_ms)}</strong>
-                      </td>
-                      <td>{turn.queue_depth ?? "Chưa có"}</td>
-                      <td>
-                        <TurnBadges turn={turn} />
-                      </td>
-                      <td>
-                        {OUTCOME_LABELS[turn.outcome] ??
-                          turn.outcome ??
-                          "Không rõ"}
-                      </td>
-                    </tr>
-                    {isOpen ? (
-                      <tr className="performance-detail-row">
-                        <td colSpan={13}>
-                          <TurnDetail turn={turn} />
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <section className="performance-panel performance-attention-panel">
+      <div className="performance-section-heading"><div><h2>Tín hiệu cần xử lý <span>{signals.filter((signal) => signal.tone !== "success").length}</span></h2><p>Ưu tiên theo mức độ ảnh hưởng tới ứng viên và giao gửi.</p></div></div>
+      <ul className="performance-signal-list">{signals.slice(0, 5).map((signal) => { const SignalIcon = signal.icon; return <li key={signal.id} className={`is-${signal.tone}`}><SignalIcon aria-hidden={true} /><div><strong>{signal.title}</strong><small>{signal.detail}</small></div><b>{signal.value}</b><a href="#slow-turns" aria-label={`Xem lượt liên quan đến ${signal.title}`}><ArrowRight aria-hidden="true" /></a></li>; })}</ul>
     </section>
   );
+};
+
+const StageMatrix = ({ data }: { data: PerfMetrics }) => {
+  const percentiles = data.percentiles ?? {};
+  const rows = STAGE_ORDER.filter((key) => percentiles[key]?.p50 != null || percentiles[key]?.p95 != null || percentiles[key]?.p99 != null);
+  const renderRow = (key: string) => {
+    const stage = percentiles[key];
+    const tone = getStageTone(key, stage?.p95);
+    const target = STAGE_TARGETS[key];
+    return <tr key={key}><td><strong>{STAGE_LABELS[key]}</strong>{key === "end_to_end" ? <small>Độ trễ ứng viên thực sự chờ</small> : null}</td><td>{fmtMs(stage?.p50)}</td><td><b>{fmtMs(stage?.p95)}</b></td><td>{fmtMs(stage?.p99)}</td><td>{target == null ? "—" : `≤ ${fmtMs(target)}`}</td><td><Status tone={tone}>{tone === "danger" ? "Vượt ngưỡng" : tone === "warning" ? "Cần cải thiện" : tone === "success" ? "Đạt" : "Chưa có mục tiêu"}</Status></td></tr>;
+  };
+  const candidate = rows.filter((key) => CANDIDATE_STAGES.has(key));
+  const internal = rows.filter((key) => !CANDIDATE_STAGES.has(key));
+  return <section className="performance-panel performance-matrix"><div className="performance-section-heading"><div><h2>Chẩn đoán độ trễ</h2><p>p50 · p95 · p99; các điểm đo nội bộ là chi tiết chẩn đoán, không cộng dồn.</p></div></div>{rows.length === 0 ? <p className="performance-empty">Chưa có lượt xử lý nào để phân tích độ trễ.</p> : <div className="performance-table-wrap" role="region" aria-label="Bảng chẩn đoán độ trễ" tabIndex={0}><table><thead><tr><th>Giai đoạn</th><th>p50</th><th>p95</th><th>p99</th><th>Mục tiêu</th><th>Trạng thái</th></tr></thead><tbody>{candidate.length > 0 ? <tr className="performance-group-row"><th colSpan={6}>Chờ ứng viên</th></tr> : null}{candidate.map(renderRow)}{internal.length > 0 ? <tr className="performance-group-row"><th colSpan={6}>Chẩn đoán nội bộ</th></tr> : null}{internal.map(renderRow)}</tbody></table></div>}</section>;
+};
+
+const TurnDetail = ({ turn }: { turn: PerfSlowTurn }) => <div className="performance-row-detail"><div><strong>Điều phối</strong><p>Hàng đợi: <code>{turn.queue_depth ?? "—"}</code> · Chờ slot: <code>{fmtMs(turn.llm_queue_ms)}</code></p><p>Độ trễ chưa phân bổ: <code>{fmtMs(turn.dark_time_ms)}</code></p></div><div><strong>LLM & tool</strong><p>{turn.llm_calls ?? "—"} lượt LLM · {turn.tool_calls ?? "—"} lượt tool</p><p>Model: <code>{turn.model_tier ?? "—"}</code>{turn.retried_429 ? " · Đã retry 429" : ""}</p></div><div><strong>Dữ liệu & token</strong><p>DB: <code>{fmtMs(turn.db_ms)}</code> · Tool: <code>{fmtMs(turn.tool_ms)}</code></p><p>Prompt: {turn.prompt_tokens ?? "—"} · Completion: {turn.completion_tokens ?? "—"}</p></div><div><strong>Trace</strong><p><code>{turn.conversation_id}</code></p><p>Intent: {turn.intent ?? "Chưa có"}</p></div></div>;
+
+const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  return <section className="performance-panel performance-slow-turns" id="slow-turns"><div className="performance-section-heading"><div><h2>Lượt cần xem <span>{slowTurns.length}</span></h2><p>Ưu tiên những lượt ảnh hưởng tới phản hồi hoặc giao gửi.</p></div></div>{slowTurns.length === 0 ? <p className="performance-empty">Chưa có lượt nào được ghi nhận trong khoảng thời gian này.</p> : <><div className="performance-table-wrap" role="region" aria-label="Bảng lượt cần xem" tabIndex={0}><table><thead><tr><th>Mức độ</th><th>Thời gian</th><th>Tổng</th><th>Nút thắt nhiều khả năng</th><th>Luồng</th><th>Kết quả giao gửi</th><th aria-label="Mở rộng" /></tr></thead><tbody>{slowTurns.map((turn) => { const tone = getSlowTurnTone(turn); const isOpen = expandedId === turn.id; return <Fragment key={turn.id}><tr className={isOpen ? "is-open" : undefined}><td><Status tone={tone}>{tone === "danger" ? "Cao" : tone === "warning" ? "Trung bình" : "Thấp"}</Status></td><td>{formatStartedAt(turn.started_at)}</td><td><b>{fmtMs(turn.total_ms)}</b></td><td>{likelyBottleneck(turn)}</td><td>{LANE_LABELS[turn.lane ?? ""] ?? turn.lane ?? "Không rõ"}</td><td><Status tone={turn.outcome === "ERROR" ? "danger" : "success"}>{OUTCOME_LABELS[turn.outcome] ?? turn.outcome ?? "Không rõ"}</Status></td><td><button type="button" className="performance-expand" aria-expanded={isOpen} aria-label={isOpen ? "Thu gọn chi tiết" : "Mở rộng chi tiết"} onClick={() => setExpandedId(isOpen ? null : turn.id)}>{isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}</button></td></tr>{isOpen ? <tr className="performance-detail-row"><td colSpan={7}><TurnDetail turn={turn} /></td></tr> : null}</Fragment>; })}</tbody></table></div><div className="performance-turn-cards">{slowTurns.map((turn) => { const tone = getSlowTurnTone(turn); return <article key={turn.id} className={`is-${tone}`}><div><Status tone={tone}>{tone === "danger" ? "Cao" : tone === "warning" ? "Trung bình" : "Thấp"}</Status><time>{formatStartedAt(turn.started_at)}</time></div><strong>{fmtMs(turn.total_ms)}</strong><p>{likelyBottleneck(turn)}</p><button type="button" aria-expanded={expandedId === turn.id} onClick={() => setExpandedId(expandedId === turn.id ? null : turn.id)}>{expandedId === turn.id ? "Thu gọn chi tiết" : "Xem chi tiết"}<ChevronRight aria-hidden="true" /></button>{expandedId === turn.id ? <TurnDetail turn={turn} /> : null}</article>; })}</div></> }</section>;
+};
+
+const SupportingStats = ({ data }: { data: PerfMetrics }) => {
+  const total = Object.values(data.by_outcome).reduce((sum, value) => sum + value, 0);
+  const sent = data.by_outcome.SENT ?? 0;
+  const sendRate = total > 0 ? `${Math.round((sent / total) * 100)}%` : "—";
+  const lanes = Object.entries(data.by_lane).sort(([, a], [, b]) => b - a);
+  return <section className="performance-supporting" aria-label="Chỉ số hỗ trợ"><article><div><Send aria-hidden="true" /><h2>Độ tin cậy giao gửi</h2></div><strong>{sendRate}</strong><p>{sent.toLocaleString()} đã gửi · {data.reliability?.failed_count ?? 0} thất bại · {data.reliability?.send_unknown_count ?? 0} không xác định</p></article><article><div><Activity aria-hidden="true" /><h2>Phân bố theo lane</h2></div>{lanes.length === 0 ? <p>Chưa có dữ liệu.</p> : <ul>{lanes.slice(0, 3).map(([lane, value]) => <li key={lane}><span>{LANE_LABELS[lane] ?? lane}</span><b>{value.toLocaleString()}</b></li>)}</ul>}</article><article><div><Database aria-hidden="true" /><h2>Độ đầy đủ dữ liệu</h2></div><strong>{data.trend.length > 0 ? "Có dữ liệu" : "Chưa đủ"}</strong><p>{data.trend.length > 0 ? `${data.trend.length} điểm xu hướng trong khoảng đã chọn.` : "Chưa có bucket thời gian để kiểm tra."}</p></article></section>;
 };
 
 const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
-  const percentiles = data.percentiles ?? {};
-  const hasLatencyData = STAGE_ORDER.some((key) => {
-    const stage = percentiles[key];
-    return stage?.p50 != null || stage?.p95 != null || stage?.p99 != null;
-  });
-  const maxP95 = Math.max(
-    1,
-    ...STAGE_ORDER.map((key) => percentiles[key]?.p95 ?? 0),
-  );
-
-  return (
-    <>
-      <section className="performance-metrics" aria-label="Tình trạng hệ thống">
-        <Metric
-          label="Hàng đợi"
-          value={String(data.live.queue_depth)}
-          hint="webhook đang chờ"
-          tone="neutral"
-        />
-        <Metric
-          label="Worker đang bận"
-          value={`${data.live.busy_workers}/${data.live.total_workers}`}
-          tone="success"
-          hint="trên tổng worker"
-        />
-        <Metric
-          label="LLM 429"
-          value={String(data.live.minimax_429s_last_1m)}
-          hint="trong 1 phút"
-          tone={data.live.minimax_429s_last_1m > 0 ? "warning" : "success"}
-        />
-        <Metric
-          label="Độ trễ LLM TB"
-          value={fmtMs(data.live.llm_avg_latency_ms)}
-          hint={`${data.live.llm_invokes_last_2m} lượt trong 2 phút`}
-          tone="neutral"
-        />
-      </section>
-
-      <TrendChart trend={data.trend ?? []} window={data.window} />
-
-      <section className="performance-panel">
-        <h2>Độ trễ theo giai đoạn</h2>
-        <p className="performance-panel-intro">
-          p50 · p95 · p99. “Tổng từ webhook” là độ trễ ứng viên thực sự chờ;
-          thanh thể hiện p95.
-        </p>
-        {hasLatencyData ? STAGE_ORDER.map((key) => {
-          const stage = percentiles[key] ?? { p50: null, p95: null, p99: null };
-          const width = Math.max(2, ((stage.p95 ?? 0) / maxP95) * 100);
-          const isLlmStage = key === "llm_queue" || key === "llm_model";
-
-          return (
-            <div className="performance-stage" key={key}>
-              <div className="performance-stage-heading">
-                <strong>{STAGE_LABELS[key]}</strong>
-                <div className="performance-stage-values">
-                  <span>p50 <b>{fmtMs(stage.p50)}</b></span>
-                  <span className="is-benchmark">p95 <b>{fmtMs(stage.p95)}</b></span>
-                  <span>p99 <b>{fmtMs(stage.p99)}</b></span>
-                </div>
-              </div>
-              <div className="performance-bar" aria-hidden="true">
-                <i
-                  className={isLlmStage ? "is-llm" : ""}
-                  style={{ width: `${width}%` }}
-                />
-              </div>
-            </div>
-          );
-        }) : (
-          <p className="performance-empty">
-            Chưa có lượt xử lý nào để phân tích độ trễ.
-          </p>
-        )}
-      </section>
-
-      <section className="performance-counts">
-        <CountCard
-          title="Theo luồng"
-          data={data.by_lane}
-          labels={LANE_LABELS}
-        />
-        <CountCard
-          title="Theo kết quả"
-          data={data.by_outcome}
-          labels={OUTCOME_LABELS}
-        />
-      </section>
-
-      {data.reliability && <ReliabilityPanel reliability={data.reliability} />}
-
-      <SlowestTurnsTable slow_turns={data.slow_turns} />
-    </>
-  );
+  const endToEnd = data.percentiles.end_to_end?.p95;
+  const workerTone: Tone = data.live.total_workers > 0 && data.live.busy_workers >= data.live.total_workers ? "warning" : "success";
+  const deliveryTone: Tone = (data.reliability?.failed_count ?? 0) > 0 ? "danger" : (data.reliability?.send_unknown_count ?? 0) > 0 ? "warning" : "success";
+  return <>
+    <section className="performance-metrics" aria-label="Tình trạng hệ thống">
+      <Metric label="Hàng đợi" value={String(data.live.queue_depth)} hint="webhook đang chờ" tone={data.live.queue_depth > 0 ? "warning" : "neutral"} icon={Server} />
+      <Metric label="Sức chứa worker" value={`${data.live.busy_workers}/${data.live.total_workers}`} hint="worker đang bận" tone={workerTone} icon={Cpu} />
+      <Metric label="Độ trễ p95" value={fmtMs(endToEnd)} hint="tổng từ webhook · mục tiêu ≤ 10 giây" tone={getStageTone("end_to_end", endToEnd)} icon={Clock3} />
+      <Metric label="LLM 429" value={String(data.live.minimax_429s_last_1m)} hint="trong 1 phút gần nhất" tone={data.live.minimax_429s_last_1m > 0 ? "warning" : "success"} icon={ShieldAlert} />
+      <Metric label="Giao gửi rủi ro" value={String((data.reliability?.failed_count ?? 0) + (data.reliability?.send_unknown_count ?? 0))} hint="thất bại + không xác định" tone={deliveryTone} icon={Send} />
+      <Metric label="Lượt xử lý" value={Object.values(data.by_outcome).reduce((sum, value) => sum + value, 0).toLocaleString()} hint={`trong ${data.window === "1h" ? "1 giờ" : data.window === "7d" ? "7 ngày" : "24 giờ"}`} tone="neutral" icon={Activity} />
+    </section>
+    <section className="performance-primary-grid"><TrendChart trend={data.trend ?? []} window={data.window} /><AttentionQueue data={data} /></section>
+    <StageMatrix data={data} />
+    <SlowestTurns slowTurns={data.slow_turns} />
+    <SupportingStats data={data} />
+  </>;
 };
-
-const ReliabilityPanel = ({
-  reliability,
-}: {
-  reliability: {
-    send_unknown_count: number;
-    suppressed_count: number;
-    failed_count: number;
-  };
-}) => (
-  <section className="performance-panel">
-    <h2>Độ tin cậy giao gửi</h2>
-    <div className="performance-reliability">
-      <div className="reliability-stat">
-        <span className="reliability-value">{reliability.send_unknown_count}</span>
-        <span className="reliability-label">Gửi không xác định</span>
-        <span className="reliability-hint">
-          Timeout sau khi Zalo có thể đã nhận — không thử lại
-        </span>
-      </div>
-      <div className="reliability-stat">
-        <span className="reliability-value">{reliability.suppressed_count}</span>
-        <span className="reliability-label">Bị chặn</span>
-        <span className="reliability-hint">Recruiter tiếp quản giữa lượt</span>
-      </div>
-      <div className="reliability-stat">
-        <span className="reliability-value">{reliability.failed_count}</span>
-        <span className="reliability-label">Thất bại</span>
-        <span className="reliability-hint">Lỗi gửi — sẽ thử lại</span>
-      </div>
-    </div>
-  </section>
-);
-
-const CountCard = ({
-  title,
-  data,
-  labels,
-}: {
-  title: string;
-  data: Record<string, number>;
-  labels: Record<string, string>;
-}) => (
-  <section className="performance-panel">
-    <h2>{title}</h2>
-    {Object.keys(data).length === 0 ? (
-      <p className="performance-empty">
-        Chưa có dữ liệu cho khoảng thời gian này.
-      </p>
-    ) : (
-      <dl className="performance-count-list">
-        {Object.entries(data).map(([key, value]) => (
-          <div key={key}>
-            <dt>{labels[key] ?? key}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-    )}
-  </section>
-);
 
 const PerformancePanel = () => {
   const [windowKey, setWindowKey] = useState<"1h" | "24h" | "7d">("24h");
-  const { data, isPending, isError, refetch } = usePerformanceStats(windowKey);
+  const { data, isPending, isError, refetch, dataUpdatedAt } = usePerformanceStats(windowKey);
+  const freshness = useMemo(() => dataUpdatedAt ? new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(dataUpdatedAt) : null, [dataUpdatedAt]);
   const hasError = isError || !data;
-
-  return (
-    <div className="performance-page" aria-busy={isPending || undefined}>
-      <header className="performance-header">
-        <div>
-          <p className="performance-kicker">Vận hành</p>
-          <h1>Hiệu suất chatbot</h1>
-          <p>
-            {isPending
-              ? "Đang tải số liệu cho khoảng thời gian đã chọn."
-              : "Theo dõi độ trễ và các lượt xử lý chậm trong khoảng thời gian đã chọn."}
-          </p>
-        </div>
-        <div className="performance-window" aria-label="Khoảng thời gian">
-          {WINDOWS.map((window) => (
-            <button
-              key={window.key}
-              type="button"
-              aria-pressed={windowKey === window.key}
-              onClick={() => setWindowKey(window.key)}
-            >
-              {window.label}
-            </button>
-          ))}
-        </div>
-      </header>
-      {isPending ? <PerformanceLoading /> : null}
-      {!isPending && hasError ? (
-        <PerformanceError onRetry={() => void refetch()} />
-      ) : null}
-      {!isPending && !hasError && data ? (
-        <PerformanceMetrics data={data} />
-      ) : null}
-    </div>
-  );
+  return <div className="performance-page" aria-busy={isPending || undefined}>
+    <header className="performance-header"><div><p className="performance-kicker">Vận hành</p><h1>Hiệu suất chatbot</h1><p>{isPending ? "Đang tải số liệu cho khoảng thời gian đã chọn." : "Theo dõi trải nghiệm ứng viên, năng lực xử lý và độ tin cậy giao gửi."}</p></div><div className="performance-header-actions"><div className="performance-window" aria-label="Khoảng thời gian">{WINDOWS.map((window) => <button key={window.key} type="button" aria-pressed={windowKey === window.key} onClick={() => setWindowKey(window.key)}>{window.label}</button>)}</div><button type="button" className="performance-refresh" onClick={() => void refetch()} disabled={isPending}><RefreshCw className={isPending ? "is-spinning" : undefined} aria-hidden="true" />{freshness ? `Cập nhật lúc ${freshness}` : "Cập nhật dữ liệu"}</button></div></header>
+    {isPending ? <PerformanceLoading /> : null}
+    {!isPending && hasError ? <PerformanceError onRetry={() => void refetch()} /> : null}
+    {!isPending && !hasError && data ? <PerformanceMetrics data={data} /> : null}
+  </div>;
 };
 
 export const PerformancePage = () => <PerformancePanel />;

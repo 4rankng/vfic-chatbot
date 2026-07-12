@@ -379,7 +379,7 @@ export const ConversationShowContent = ({
       <Confirm
         isOpen={deleteOpen}
         loading={isDeleting}
-        title="Xóa vĩnh viễn hội thoại?"
+        title="Xóa hội thoại?"
         content="Toàn bộ tin nhắn và lượt xử lý chatbot của hội thoại này sẽ bị xóa. Hành động này không thể hoàn tác."
         confirm="Xóa vĩnh viễn"
         confirmColor="warning"

@@ -46,7 +46,6 @@
   font-size: 14px;
   line-height: 20px;
 }
-.dashboard-refresh,
 .dashboard-inline-error button,
 .dashboard-empty-list button {
   min-height: 40px;
@@ -61,13 +60,9 @@
   font-size: 14px;
   font-weight: 600;
 }
-.dashboard-refresh:hover,
 .dashboard-empty-list button:hover {
   border-color: var(--workspace-action, var(--primary));
   background: var(--accent);
-}
-.dashboard-refresh:disabled {
-  opacity: 0.6;
 }
 .dashboard-inline-error {
   display: flex;
@@ -206,9 +201,6 @@ button.dashboard-candidate-row:hover {
   .dashboard-inline-error {
     align-items: stretch;
     flex-direction: column;
-  }
-  .dashboard-refresh {
-    justify-content: center;
   }
   .recruiting-two-column {
     grid-template-columns: 1fr;

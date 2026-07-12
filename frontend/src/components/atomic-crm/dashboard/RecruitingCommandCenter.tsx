@@ -1,4 +1,4 @@
-import { MessageCircle, Phone, RefreshCw, UserRound } from "lucide-react";
+import { MessageCircle, Phone, UserRound } from "lucide-react";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
@@ -199,15 +199,6 @@ export const RecruitingCommandCenter = ({
               : "Đang tải các hàng đợi tuyển dụng"}
           </p>
         </div>
-        <button
-          type="button"
-          className="dashboard-refresh"
-          onClick={() => void refetch()}
-          disabled={isPending}
-        >
-          <RefreshCw className="size-4" aria-hidden="true" />
-          Làm mới
-        </button>
       </header>
 
       {data && (data.attentionError || data.contactsError) ? (
