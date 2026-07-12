@@ -272,11 +272,15 @@ async def _llm_call_percentiles(db: AsyncSession, interval: timedelta) -> dict:
     concurrently in ``_compute``). Both keys use the ``{p50,p95,p99}`` shape and
     are merged into the ``percentiles`` dict alongside the stage keys.
     """
+    # jsonb_array_elements_text yields ``text``; percentile_cont needs a numeric
+    # sort expression or Postgres rejects the overload
+    # (``function percentile_cont(numeric, text) does not exist``). Cast to int,
+    # matching the (stage_timings->>'<k>_ms')::int convention used in _percentiles.
     sql = text(
         "SELECT "
-        "percentile_cont(0.5) WITHIN GROUP (ORDER BY call_ms) AS llm_call_per_p50, "
-        "percentile_cont(0.95) WITHIN GROUP (ORDER BY call_ms) AS llm_call_per_p95, "
-        "percentile_cont(0.99) WITHIN GROUP (ORDER BY call_ms) AS llm_call_per_p99 "
+        "percentile_cont(0.5) WITHIN GROUP (ORDER BY call_ms::int) AS llm_call_per_p50, "
+        "percentile_cont(0.95) WITHIN GROUP (ORDER BY call_ms::int) AS llm_call_per_p95, "
+        "percentile_cont(0.99) WITHIN GROUP (ORDER BY call_ms::int) AS llm_call_per_p99 "
         "FROM bot_runs, "
         "jsonb_array_elements_text(stage_timings->'llm_call_ms') AS call_ms "
         "WHERE started_at >= now() - (:interval)::interval "

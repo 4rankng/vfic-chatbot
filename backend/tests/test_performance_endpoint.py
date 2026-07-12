@@ -311,6 +311,29 @@ async def test_performance_bundle_shape(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_llm_call_latency_sql_casts_call_ms_to_numeric(monkeypatch):
+    """Regression for production 500: percentile_cont over jsonb_array_elements_text.
+
+    ``jsonb_array_elements_text`` returns ``text``, but ``percentile_cont`` needs a
+    numeric sort expression. Without an explicit cast Postgres rejects the function
+    overload with ``function percentile_cont(numeric, text) does not exist`` (HTTP
+    500 on every cache miss). The fake-session harness can't catch this because it
+    routes by SQL keyword and never asks Postgres to compile the statement — so pin
+    the SQL shape directly: the emitted statement must cast ``call_ms`` to numeric.
+    """
+    stubs = _install_compute_stubs(monkeypatch)
+    await performance("24h", _admin=SimpleNamespace())
+
+    latency_query = next(
+        q for q in stubs.queries if _ROUTE_LLM_CALL_LATENCY in q
+    )
+    # Every percentile_cont in this query must ORDER BY call_ms::int (or ::numeric).
+    # The buggy form was `ORDER BY call_ms` — bare text, rejected by Postgres.
+    assert "ORDER BY call_ms::int" in latency_query, latency_query
+    assert "ORDER BY call_ms)" not in latency_query, latency_query
+
+
+@pytest.mark.asyncio
 async def test_performance_empty_window_returns_nulls(monkeypatch):
     """No instrumented turns in the window -> null percentiles, empty aggregates."""
     routes = [
