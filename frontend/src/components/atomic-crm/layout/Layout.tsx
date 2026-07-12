@@ -53,7 +53,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
       <WorkspaceFrame
         contentClassName={cn(
           isFullHeightWorkspace
-            ? "h-full min-h-0 max-w-none overflow-hidden p-0"
+            ? "md:h-full md:min-h-0 max-w-none md:overflow-hidden p-0"
             : "max-w-none overflow-y-auto p-0",
           isConversationWorkspace && "workspace-frame-content--conversation",
         )}

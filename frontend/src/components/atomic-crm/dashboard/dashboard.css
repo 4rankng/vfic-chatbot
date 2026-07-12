@@ -295,8 +295,20 @@ button.dashboard-candidate-row:active {
 }
 
 @media (max-width: 767px) {
+  /* The mobile dashboard participates in the document flow. Keeping the
+     desktop height/overflow pair here creates a nested scroll container that
+     can trap touch scrolling before the second queue becomes reachable. */
+  .dashboard-workspace {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+    overscroll-behavior: auto;
+    touch-action: pan-y;
+  }
+
   .dashboard-workspace-content {
     padding: 20px 16px calc(5.75rem + env(safe-area-inset-bottom));
+    touch-action: pan-y;
   }
   .recruiting-hero,
   .dashboard-inline-error {
