@@ -1,7 +1,7 @@
 """Add bot_runs.outcome_metadata JSONB for FAQ-bypass provenance + abstention.
 
 Revision ID: 0032_bot_run_outcome_metadata
-Revises: 0031_conversation_seq_and_trace_id
+Revises: 0031_conversation_seq_trace
 Create Date: 2026-07-12
 
 Adds a nullable ``outcome_metadata`` JSONB column to ``bot_runs``. Phase 4 of the
@@ -28,7 +28,7 @@ from typing import Sequence, Union
 from alembic import op
 
 revision: str = "0032_bot_run_outcome_metadata"
-down_revision: Union[str, None] = "0031_conversation_seq_and_trace_id"
+down_revision: Union[str, None] = "0031_conversation_seq_trace"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

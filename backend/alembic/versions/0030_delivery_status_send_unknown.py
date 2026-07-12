@@ -1,6 +1,6 @@
 """Add SEND_UNKNOWN value to the delivery_status enum.
 
-Revision ID: 0030_delivery_status_send_unknown
+Revision ID: 0030_send_unknown
 Revises: 0029_delivery_status_sending
 Create Date: 2026-07-12
 
@@ -19,7 +19,7 @@ unused if the application rolls back).
 
 from alembic import op
 
-revision = "0030_delivery_status_send_unknown"
+revision = "0030_send_unknown"
 down_revision = "0029_delivery_status_sending"
 branch_labels = None
 depends_on = None

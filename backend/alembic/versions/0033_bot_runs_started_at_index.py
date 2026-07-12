@@ -1,7 +1,7 @@
 """bot_runs.started_at standalone index for the performance dashboard.
 
-Revision ID: 0032_bot_runs_started_at_index
-Revises: 0031_conversation_seq_and_trace_id
+Revision ID: 0033_bot_runs_started_at_index
+Revises: 0032_bot_run_outcome_metadata
 Create Date: 2026-07-12
 
 Adds ``bot_runs_started_at_idx`` on ``(started_at DESC)`` so the five dashboard
@@ -33,8 +33,8 @@ from typing import Sequence, Union
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "0032_bot_runs_started_at_index"
-down_revision: Union[str, None] = "0031_conversation_seq_and_trace_id"
+revision: str = "0033_bot_runs_started_at_index"
+down_revision: Union[str, None] = "0032_bot_run_outcome_metadata"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

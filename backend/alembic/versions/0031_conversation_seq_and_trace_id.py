@@ -1,7 +1,7 @@
 """Add conversation_seq + bot_runs.trace_id for end-to-end tracing.
 
-Revision ID: 0031_conversation_seq_and_trace_id
-Revises: 0030_delivery_status_send_unknown
+Revision ID: 0031_conversation_seq_trace
+Revises: 0030_send_unknown
 Create Date: 2026-07-12
 
 Two additive columns, both for observability only (no behavior change):
@@ -25,8 +25,8 @@ from typing import Sequence, Union
 
 from alembic import op
 
-revision: str = "0031_conversation_seq_and_trace_id"
-down_revision: Union[str, None] = "0030_delivery_status_send_unknown"
+revision: str = "0031_conversation_seq_trace"
+down_revision: Union[str, None] = "0030_send_unknown"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

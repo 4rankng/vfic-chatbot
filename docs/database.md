@@ -34,7 +34,8 @@ Default (local dev): `postgresql+asyncpg://vfic:vfic@localhost:5432/vfic`
 
 - **Config:** `backend/alembic.ini` (note: `sqlalchemy.url` is NOT set in INI — injected from `config.py:database_url_sync` in `alembic/env.py`)
 - **Env:** `backend/alembic/env.py` — imports all models via `import app.models`, sets `target_metadata = Base.metadata`
-- **Versions:** `backend/alembic/versions/` — 30 migration revisions (0001–0029, with revision 0013 branched into two files) plus one merge file (`091e`), totaling 31 `.py` files
+- **Versions:** `backend/alembic/versions/` — hand-written revisions with one
+  historical merge (`091e`). Alembic revision IDs must not exceed 32 characters.
 
 ### Key rules
 - **Migrations are hand-written.** ORM models mirror the schema but do **not** auto-generate migrations.

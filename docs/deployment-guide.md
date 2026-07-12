@@ -95,8 +95,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0023_kb_versioned_ingestion` (7 Jul 2026). 23 migrations + 1
-  merge head.
+- **HEAD:** `0033_bot_runs_started_at_index` (12 Jul 2026).
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.
@@ -109,10 +108,8 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
   cd backend && .venv/bin/python -m alembic upgrade head
   ```
 
-> **Known issue:** two revision IDs exceed `VARCHAR(32)` —
-> `091e7edc9f76_merge_0013_password_reset_otps_0013_` (49 chars) and
-> `0005_remove_knowledge_approval_gate` (35 chars). See
-> [project-roadmap.md](./project-roadmap.md) K-2.
+> Alembic stores revision IDs in `VARCHAR(32)`. Revision identifiers must stay
+> within that limit; filenames may be longer.
 
 ---
 
