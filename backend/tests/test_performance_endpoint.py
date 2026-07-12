@@ -348,6 +348,50 @@ async def test_performance_cache_hit_short_circuits(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_performance_cache_hit_preserves_key_order(monkeypatch):
+    """Plan criterion: cache hit serves identical key order, not just key set.
+
+    The frontend maps positions, so a reordered dict would silently break the
+    panel. Pins the exact insertion order produced by ``_compute``.
+    """
+    expected_keys = [
+        "window",
+        "live",
+        "percentiles",
+        "by_lane",
+        "by_outcome",
+        "slow_turns",
+        "trend",
+        "reliability",
+    ]
+    cached_payload = {
+        k: {} if not isinstance(k, str) or k in ("slow_turns", "trend") else None
+        for k in expected_keys
+    }
+    cached_payload["window"] = "24h"
+    cached_payload["slow_turns"] = []
+    cached_payload["trend"] = []
+    factory, queries = _make_session_factory(_standard_routes())
+    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
+
+    async def _hit(_key):
+        return cached_payload
+
+    monkeypatch.setattr(perf_mod, "cache_get_json", _hit)
+
+    async def _set(_key, _value, ttl_seconds):
+        return None
+
+    monkeypatch.setattr(perf_mod, "cache_set_json", _set)
+
+    out = await performance("24h", _admin=SimpleNamespace())
+
+    assert list(out.keys()) == expected_keys
+    assert queries == []
+
+
+@pytest.mark.asyncio
 async def test_performance_cache_miss_populates_cache(monkeypatch):
     """Cache miss computes the payload and writes it under the window-scoped key."""
     stubs = _install_compute_stubs(monkeypatch)
@@ -387,6 +431,33 @@ async def test_performance_cache_failure_falls_through(monkeypatch):
     assert out["live"] == {"queue_depth": 0}
     assert out["percentiles"]["llm_model"]["p95"] == 500
     assert out["reliability"]["send_unknown_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_performance_cache_hit_serves_falsy_value(monkeypatch):
+    """A cached falsy-but-not-None value (e.g. ``{}``) is served, not recomputed.
+
+    Pins the handler's ``if cached is not None`` check against a future
+    regression to ``if cached`` (which would silently recompute on empty payloads).
+    """
+    factory, queries = _make_session_factory(_standard_routes())
+    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
+
+    async def _hit(_key):
+        return {}  # falsy but not None
+
+    monkeypatch.setattr(perf_mod, "cache_get_json", _hit)
+
+    async def _set(_key, _value, ttl_seconds):
+        return None
+
+    monkeypatch.setattr(perf_mod, "cache_set_json", _set)
+
+    out = await performance("24h", _admin=SimpleNamespace())
+
+    assert out == {}  # the falsy cached value was served verbatim
+    assert queries == []  # compute did not run
 
 
 @pytest.mark.asyncio

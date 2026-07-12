@@ -4,19 +4,25 @@ Aggregates ``BotRun.stage_timings`` (captured by ``app.graph.runner.run_turn``) 
 p50/p95/p99 per stage, plus by-lane/outcome counts and the slowest recent turns.
 Live tiles reuse the ``/health/queue`` snapshot via ``collect_queue_health``. Admin-only.
 
-Latency strategy (migration 0032 + concurrent reads + Redis cache):
+Latency strategy (migration 0033 + concurrent reads + Redis cache):
 - The five time-windowed reads (``_percentiles``, ``_lane_outcome_counts``,
   ``_slow_turns``, ``_trend``, ``_reliability``) run concurrently via
   ``asyncio.gather``, each on its own ``AsyncSession`` (a single session is not
   safe for concurrent use). Pool ``pool_size=10`` has ample headroom for 5 reads.
 - The assembled payload is cached in Redis for 30 s (``_CACHE_TTL_SECONDS``),
   matching the frontend ``staleTime``. Auth always runs before the cache lookup.
+- Cache tradeoff: on a hit, the ``live`` tile (queue depth / worker saturation)
+  is served from the 30 s-old snapshot rather than re-read from Redis. This is
+  acceptable for an admin trends view and matches the frontend's existing
+  ``staleTime: 30s`` treatment of the whole payload.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
+from typing import TypeVar
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -148,7 +154,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
     live, percentiles, (by_lane, by_outcome), slow_turns, trend, reliability = await asyncio.gather(
         asyncio.to_thread(collect_queue_health),
         _with_session(_percentiles, interval),
-        _with_session_tuple(_lane_outcome_counts, interval),
+        _with_session(_lane_outcome_counts, interval),
         _with_session(_slow_turns, interval),
         _with_session(_trend, interval),
         _with_session(_reliability, interval),
@@ -165,18 +171,17 @@ async def _compute(interval: timedelta, window: str) -> dict:
     }
 
 
-async def _with_session(coro_fn, interval: timedelta):
+_T = TypeVar("_T")
+
+
+async def _with_session(
+    coro_fn: Callable[[AsyncSession, timedelta], Awaitable[_T]], interval: timedelta
+) -> _T:
     """Open a short-lived session and run ``coro_fn(session, interval)``.
 
     Per-read sessions make ``asyncio.gather`` safe (one ``AsyncSession`` may not
     serve two concurrent operations).
     """
-    async with async_session() as session:
-        return await coro_fn(session, interval)
-
-
-async def _with_session_tuple(coro_fn, interval: timedelta):
-    """Same as ``_with_session`` for helpers that return a tuple (lane/outcome)."""
     async with async_session() as session:
         return await coro_fn(session, interval)
 
