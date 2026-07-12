@@ -316,6 +316,17 @@ button.dashboard-candidate-row:active {
   .recruiting-panel-header {
     padding-inline: 16px;
   }
+
+  /* The desktop .recruiting-panel uses overflow:hidden to keep the rounded
+     card corners clean. On mobile that same rule traps touch events inside
+     the panel, so swiping a candidate row never bubbles up to scroll the
+     document. The card stays a solid block (border-radius still works on a
+     flat background with no overflowing children) — flip to visible so the
+     body owns the scroll. */
+  .dashboard-workspace .recruiting-panel,
+  .recruiting-panel {
+    overflow: visible;
+  }
 }
 
 /* The dashboard shares a few class names with the richer recruiting workspace.

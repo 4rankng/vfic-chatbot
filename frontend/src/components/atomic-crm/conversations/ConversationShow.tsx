@@ -309,7 +309,7 @@ export const ConversationShowContent = ({
                     }}
                   >
                     <Trash2 className="size-4" aria-hidden="true" />
-                    Xóa vĩnh viễn hội thoại
+                    Xoá hội thoại
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

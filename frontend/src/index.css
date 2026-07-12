@@ -356,11 +356,12 @@ input {
   cursor: text;
 }
 
-/* Prevent mobile zoom on input focus by ensuring 16px minimum font size */
+/* Prevent mobile zoom on input focus by ensuring 16px minimum font size.
+   Root font-size stays at 16px on mobile so design tokens (which use
+   --text-* rem roles defined in @theme) match desktop exactly. Only the
+   input/textarea/select min-size is forced, purely to prevent iOS Safari
+   from zooming the viewport on focus. */
 @media screen and (max-width: 767px) {
-  html {
-    font-size: 17px;
-  }
   input,
   textarea,
   select {

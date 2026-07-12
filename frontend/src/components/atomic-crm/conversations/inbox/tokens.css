@@ -168,26 +168,14 @@
   --workspace-active: #1777ff;
 }
 
+/* Mobile design tokens stay identical to desktop — visual parity is a hard
+   requirement. We only override the touch-target control height on mobile
+   (44px is the iOS/Android WCAG minimum and is functional, not a token value).
+   The previous 30/17/16/15/16/16/14/13/16/14/16 mobile bump fragmented the
+   design system and broke "consistent with desktop" parity. */
 @media (max-width: 767px) {
   :root {
-    --chat-fs-page-title: 24px;
-    --crm-fs-display: 30px;
-    --crm-fs-page-title: 24px;
-    --crm-fs-section-title: 17px;
-    --crm-fs-card-title: 16px;
-    --crm-fs-row-title: 15px;
-    --crm-fs-message: 16px;
-    --crm-fs-body: 16px;
-    --crm-fs-body-sm: 14px;
-    --crm-fs-meta: 13px;
-    --chat-fs-list-title: 16px;
-    --chat-fs-list-preview: 14px;
-    --chat-fs-message: 16px;
-    --crm-fs-input: 16px;
     --crm-control-height-md: var(--crm-control-height-touch);
-    --crm-fs-value-xl: 30px;
-    --crm-fs-value-lg: 22px;
-    --crm-fs-value-md: 20px;
   }
 }
 
