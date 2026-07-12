@@ -100,24 +100,24 @@ const getAttentionLabel = (
 // every render (defeats React.memo). These have no per-row variance.
 const UNREAD_BADGE_DOT_STYLE: React.CSSProperties = {
   position: "absolute",
-  top: 0,
-  right: 0,
+  top: -3,
+  right: -3,
   width: 12,
   height: 12,
   borderRadius: 9999,
-  background: "var(--ember)",
+  background: "var(--workspace-action)",
   boxShadow: "0 0 0 2px var(--card)",
 } as const;
 
 const UNREAD_BADGE_COUNT_STYLE: React.CSSProperties = {
   position: "absolute",
-  top: -1,
-  right: -1,
+  top: -5,
+  right: -5,
   minWidth: 18,
   height: 18,
   padding: "0 4px",
   borderRadius: 9999,
-  background: "var(--ember)",
+  background: "var(--workspace-action)",
   color: "var(--primary-foreground)",
   fontSize: 10,
   fontWeight: 700,
@@ -199,7 +199,7 @@ const ConversationListItem = memo(
           needsAttention ? "needs-attention" : ""
         }`}
         onClick={() => onSelect(conversation)}
-        aria-label={`Mở hội thoại với ${name}`}
+        aria-label={`Mở hội thoại với ${name}${attentionLabel ? `, ${attentionLabel}` : ""}`}
         aria-current={isActive ? "page" : undefined}
         aria-pressed={isActive}
       >

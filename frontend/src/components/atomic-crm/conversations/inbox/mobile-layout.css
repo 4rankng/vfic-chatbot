@@ -246,6 +246,54 @@
     justify-content: flex-start;
     flex-wrap: wrap;
   }
+
+  /* Mobile inbox: a compact, scan-first queue. Keep one consistent avatar
+     treatment and two text lines; status is announced through the row label
+     instead of repeating chips under every conversation. */
+  .inbox-bg-container .conversation {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 11px;
+    min-height: 60px;
+    padding: 10px 2px;
+    border-bottom-color: #e7ecf2;
+  }
+
+  .inbox-bg-container .conversation.needs-attention {
+    background: transparent;
+  }
+
+  .inbox-bg-container .avatar,
+  .inbox-bg-container .conversation.needs-attention .avatar {
+    width: 38px;
+    height: 38px;
+    background: #eef4ff !important;
+    color: var(--workspace-action) !important;
+    box-shadow: inset 0 0 0 1px #dbe7fb;
+  }
+
+  .inbox-bg-container .conv-name {
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .inbox-bg-container .conv-time {
+    font-size: 12px;
+  }
+
+  .inbox-bg-container .conv-preview {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .inbox-bg-container .conv-preview-icon {
+    width: 12px;
+    height: 12px;
+    flex-basis: 12px;
+  }
+
+  .inbox-bg-container .conv-meta-row {
+    display: none;
+  }
   /* List: in-flow, full-width, visible by default. */
   .inbox-bg-container .left-panel {
     position: relative;

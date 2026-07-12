@@ -76,7 +76,9 @@ export function LeadAvatar({
     "--avatar-bg": bg,
     "--avatar-ink": ink,
     position: "relative",
-    overflow: "hidden",
+    // The image retains its own inherited radius; overlays such as unread
+    // indicators need room to sit beyond that circular crop.
+    overflow: children ? "visible" : "hidden",
     ...style,
   } as React.CSSProperties;
 
