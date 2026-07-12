@@ -23,7 +23,15 @@ import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
-import { AlertTriangle, Reply, UserRound } from "lucide-react";
+import conversationEmptyIllustration from "@/assets/empty-states/conversation-empty-illustration.png";
+import {
+  AlertTriangle,
+  Inbox,
+  RefreshCw,
+  Reply,
+  SearchX,
+  UserRound,
+} from "lucide-react";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
@@ -233,7 +241,10 @@ const ConversationListItem = memo(
                   }`}
                 >
                   {conversation.needs_human ? (
-                    <AlertTriangle aria-hidden="true" className="conv-state-icon" />
+                    <AlertTriangle
+                      aria-hidden="true"
+                      className="conv-state-icon"
+                    />
                   ) : null}
                   {attentionLabel}
                 </span>
@@ -267,6 +278,84 @@ const ConversationListItemSkeleton = () => (
   </div>
 );
 
+type ListEmptyStateProps = {
+  kind: "empty" | "filtered" | "error";
+  onAction?: () => void;
+};
+
+const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
+  const content = {
+    empty: {
+      icon: Inbox,
+      title: "Chưa có cuộc trò chuyện",
+      description: "Các cuộc trò chuyện mới từ ứng viên sẽ xuất hiện tại đây.",
+    },
+    filtered: {
+      icon: SearchX,
+      title: "Không tìm thấy hội thoại",
+      description: "Thử xoá từ khoá tìm kiếm hoặc bộ lọc để xem thêm.",
+      action: "Xoá tìm kiếm và bộ lọc",
+    },
+    error: {
+      icon: AlertTriangle,
+      title: "Không thể tải hội thoại",
+      description: "Kiểm tra kết nối và thử lại.",
+      action: "Thử lại",
+    },
+  }[kind];
+  const Icon = content.icon;
+
+  return (
+    <div className={`empty-state list-empty-state is-${kind}`} role="status">
+      <span className="list-empty-state-icon" aria-hidden="true">
+        <Icon />
+      </span>
+      <div className="list-empty-state-copy">
+        <p>{content.title}</p>
+        <span>{content.description}</span>
+      </div>
+      {content.action && onAction ? (
+        <button type="button" className="list-retry" onClick={onAction}>
+          {kind === "error" ? <RefreshCw aria-hidden="true" /> : null}
+          {content.action}
+        </button>
+      ) : null}
+    </div>
+  );
+};
+
+const WorkspaceEmptyState = () => {
+  return (
+    <>
+      <header
+        className="chat-header chat-header-placeholder"
+        aria-hidden="true"
+      >
+        <span className="chat-header-placeholder-avatar" />
+        <span className="chat-header-placeholder-copy">
+          <i />
+          <i />
+        </span>
+        <span className="chat-header-placeholder-action" />
+      </header>
+      <div className="workspace-empty-state" role="status">
+        <img
+          className="workspace-empty-illustration"
+          src={conversationEmptyIllustration}
+          alt=""
+        />
+        <div className="workspace-empty-copy">
+          <h2>Chọn một cuộc trò chuyện</h2>
+          <p>
+            Chọn một cuộc trò chuyện từ danh sách để xem tin nhắn và thông tin
+            ứng viên.
+          </p>
+        </div>
+      </div>
+    </>
+  );
+};
+
 const ConversationListPanel = ({
   selectedId,
   onSelect,
@@ -288,6 +377,10 @@ const ConversationListPanel = ({
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const clearSearchAndFilters = useCallback(() => {
+    setQuery("");
+    setQueueFilter("all");
+  }, []);
   // Defer the query used for filtering so fast typing never blocks the input;
   // the immediate `query` still drives the search box value.
   const deferredQuery = useDeferredValue(query);
@@ -473,22 +566,14 @@ const ConversationListPanel = ({
             <ConversationListItemSkeleton key={i} />
           ))
         ) : error ? (
-          <div className="empty-state" role="status">
-            <span>Không tải được danh sách hội thoại.</span>
-            <button
-              type="button"
-              className="list-retry"
-              onClick={() => void refetch()}
-            >
-              Thử lại
-            </button>
-          </div>
+          <ListEmptyState kind="error" onAction={() => void refetch()} />
         ) : rows.length === 0 ? (
-          <div className="empty-state" role="status">
-            {query || queueFilter !== "all"
-              ? "Không tìm thấy hội thoại phù hợp."
-              : "Chưa có hội thoại để hiển thị."}
-          </div>
+          <ListEmptyState
+            kind={query || queueFilter !== "all" ? "filtered" : "empty"}
+            onAction={
+              query || queueFilter !== "all" ? clearSearchAndFilters : undefined
+            }
+          />
         ) : (
           rows.map((c) => (
             <ConversationListItem
@@ -660,9 +745,7 @@ const ConversationListContent = () => {
           </RecordContextProvider>
         ) : (
           <section className="panel center-panel">
-            <div className="empty-state" role="status">
-              Vui lòng chọn một cuộc trò chuyện từ danh sách.
-            </div>
+            <WorkspaceEmptyState />
           </section>
         )}
 

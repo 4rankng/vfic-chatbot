@@ -673,7 +673,11 @@
   border: 0;
   border-bottom: 1px solid var(--workspace-blue-line);
   border-radius: 0;
-  background: color-mix(in srgb, var(--surface-solid) 78%, var(--surface-hover));
+  background: color-mix(
+    in srgb,
+    var(--surface-solid) 78%,
+    var(--surface-hover)
+  );
 }
 
 .inbox-bg-container .candidate-info-row.filled {
@@ -735,7 +739,9 @@
   align-items: start;
 }
 
-.inbox-bg-container .candidate-info-row[data-field="notes"] .candidate-info-copy {
+.inbox-bg-container
+  .candidate-info-row[data-field="notes"]
+  .candidate-info-copy {
   padding-block: 2px;
 }
 
@@ -806,4 +812,94 @@
   font-size: var(--chat-fs-body);
   font-weight: var(--chat-fw-medium);
   text-align: center;
+}
+
+.inbox-bg-container .workspace-empty-state {
+  width: min(360px, calc(100% - 48px));
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 18px;
+  margin: auto;
+  padding: 32px 0 48px;
+  text-align: center;
+}
+
+.inbox-bg-container .workspace-empty-illustration {
+  width: min(154px, 46vw);
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+.inbox-bg-container .workspace-empty-copy {
+  display: grid;
+  max-width: 350px;
+  gap: 5px;
+}
+
+.inbox-bg-container .workspace-empty-copy h2 {
+  margin: 0;
+  color: var(--workspace-ink);
+  font-size: 16px;
+  font-weight: var(--chat-fw-semibold);
+  line-height: 1.25;
+}
+
+.inbox-bg-container .workspace-empty-copy > p:last-child {
+  margin: 0;
+  color: var(--workspace-muted);
+  font-size: 13px;
+  font-weight: var(--chat-fw-regular);
+  line-height: 1.55;
+}
+
+.inbox-bg-container .chat-header-placeholder {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding-inline: 16px;
+  pointer-events: none;
+}
+
+.inbox-bg-container .chat-header-placeholder-avatar,
+.inbox-bg-container .chat-header-placeholder-action,
+.inbox-bg-container .chat-header-placeholder-copy i {
+  display: block;
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--workspace-blue-line) 54%,
+    var(--workspace-bg)
+  );
+}
+
+.inbox-bg-container .chat-header-placeholder-avatar {
+  width: 34px;
+  height: 34px;
+}
+
+.inbox-bg-container .chat-header-placeholder-copy {
+  display: grid;
+  gap: 6px;
+  width: 116px;
+}
+
+.inbox-bg-container .chat-header-placeholder-copy i {
+  height: 7px;
+  border-radius: 999px;
+}
+
+.inbox-bg-container .chat-header-placeholder-copy i:last-child {
+  width: 64%;
+}
+
+.inbox-bg-container .chat-header-placeholder-action {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
 }

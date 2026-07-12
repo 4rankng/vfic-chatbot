@@ -163,6 +163,26 @@
     background: var(--surface-solid);
   }
 
+  .inbox-bg-container .list-empty-state {
+    min-height: 300px;
+    padding: 44px 24px 120px;
+  }
+
+  .inbox-bg-container .workspace-empty-state {
+    width: min(100% - 40px, 360px);
+    gap: 16px;
+    padding: 28px 0 44px;
+    text-align: center;
+  }
+
+  .inbox-bg-container .workspace-empty-illustration {
+    width: min(148px, 48vw);
+  }
+
+  .inbox-bg-container .workspace-empty-copy h2 {
+    font-size: 16px;
+  }
+
   .inbox-bg-container .conversation {
     grid-template-columns: 48px minmax(0, 1fr);
     align-items: start;
