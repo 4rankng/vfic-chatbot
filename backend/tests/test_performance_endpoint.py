@@ -90,12 +90,15 @@ def _make_session_factory(routes: list[tuple[str, _FakeResult]]):
 # NOTE: the trend SQL also contains "percentile_cont" (for its p95/p50 buckets),
 # so _ROUTE_TREND must be checked before _ROUTE_PERCENTILES in the routes list
 # (see _standard_routes + the empty-window routes). Otherwise the trend query
-# would incorrectly match the percentiles route.
+# would incorrectly match the percentiles route. The same applies to the two
+# llm_call percentile queries (both contain percentile_cont).
 _ROUTE_PERCENTILES = "percentile_cont"
 _ROUTE_LANE_OUTCOME = "GROUP BY 1, 2"
 _ROUTE_SLOW_TURNS = "LIMIT 20"
 _ROUTE_TREND = "to_timestamp"
 _ROUTE_RELIABILITY = "messages m"
+_ROUTE_LLM_CALL_LATENCY = "jsonb_array_elements_text"
+_ROUTE_LLM_CALL_COUNT = "llm_calls_per_p50"
 
 
 def _percentile_row() -> SimpleNamespace:
@@ -181,6 +184,20 @@ def _standard_routes() -> list[tuple[str, _FakeResult]]:
                 ]
             ),
         ),
+        (
+            _ROUTE_LLM_CALL_LATENCY,
+            _FakeResult(
+                one=SimpleNamespace(
+                    llm_call_per_p50=4000, llm_call_per_p95=7000, llm_call_per_p99=9000
+                )
+            ),
+        ),
+        (
+            _ROUTE_LLM_CALL_COUNT,
+            _FakeResult(
+                one=SimpleNamespace(llm_calls_per_p50=1, llm_calls_per_p95=2, llm_calls_per_p99=3)
+            ),
+        ),
         (_ROUTE_PERCENTILES, _FakeResult(one=_percentile_row())),
     ]
 
@@ -223,6 +240,13 @@ async def test_performance_bundle_shape(monkeypatch):
     # percentiles reshaped per stage; llm_model p95 surfaced distinctly
     assert out["percentiles"]["llm_model"] == {"p50": 100, "p95": 500, "p99": 900}
     assert out["percentiles"]["send"]["p50"] == 10
+    # Per-LLM-call latency (unnested llm_call_ms) + call-count distribution.
+    # Distinct from llm_model, which ACCUMULATES across the agent loop; these
+    # answer "is one model call slow?" (llm_call_per) and "how many calls per
+    # turn?" (llm_calls_per) — together they decompose llm_model into its two
+    # factors (per-call latency × call count).
+    assert out["percentiles"]["llm_call_per"] == {"p50": 4000, "p95": 7000, "p99": 9000}
+    assert out["percentiles"]["llm_calls_per"] == {"p50": 1, "p95": 2, "p99": 3}
     # counts aggregated by lane and by outcome
     assert out["by_lane"] == {"agent": 5, "fast_lane": 3}
     assert out["by_outcome"] == {"SENT": 8}
@@ -268,8 +292,9 @@ async def test_performance_bundle_shape(monkeypatch):
     assert t["p50_ms"] == 1500
     assert t["turns"] == 10
     assert t["errors"] == 1
-    # five distinct SQL statements issued (percentiles / counts / slow turns / trend / reliability)
-    assert len(queries) == 5
+    # seven distinct SQL statements issued (stage percentiles / llm_call latency
+    # unnest / llm_call count / lane-outcome counts / slow turns / trend / reliability)
+    assert len(queries) == 7
     # reliability section: SEND_UNKNOWN + suppressed + failed counts.
     assert out["reliability"]["send_unknown_count"] == 2
     assert out["reliability"]["suppressed_count"] == 5
@@ -289,6 +314,14 @@ async def test_performance_bundle_shape(monkeypatch):
 async def test_performance_empty_window_returns_nulls(monkeypatch):
     """No instrumented turns in the window -> null percentiles, empty aggregates."""
     routes = [
+        (
+            _ROUTE_LLM_CALL_LATENCY,
+            _FakeResult(one=None),
+        ),  # no llm_call_ms rows -> one_or_none() returns None
+        (
+            _ROUTE_LLM_CALL_COUNT,
+            _FakeResult(one=None),
+        ),  # no llm_calls rows -> one_or_none() returns None
         (
             _ROUTE_PERCENTILES,
             _FakeResult(one=_percentile_row()),
@@ -311,7 +344,11 @@ async def test_performance_empty_window_returns_nulls(monkeypatch):
     assert out["trend"] == []
     assert out["reliability"] == {"send_unknown_count": 0, "suppressed_count": 0, "failed_count": 0}
     # _percentile_row had real ints, so just confirm shape keys exist for every stage
-    assert set(out["percentiles"]) == set(perf_mod._STAGE_KEYS)
+    # (the llm_call extras are merged in separately — asserted just below).
+    assert set(perf_mod._STAGE_KEYS).issubset(out["percentiles"])
+    # llm_call extras return null percentiles when there are no turns.
+    assert out["percentiles"]["llm_call_per"] == {"p50": None, "p95": None, "p99": None}
+    assert out["percentiles"]["llm_calls_per"] == {"p50": None, "p95": None, "p99": None}
 
 
 @pytest.mark.asyncio

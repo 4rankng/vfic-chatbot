@@ -177,13 +177,47 @@ button.dashboard-candidate-row:hover {
   text-align: right;
 }
 .dashboard-empty-list {
+  min-height: 236px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 20px 12px 24px;
+  text-align: center;
+}
+.dashboard-empty-illustration {
+  width: clamp(112px, 28vw, 140px);
+  height: auto;
+  max-height: 112px;
+  display: block;
+}
+.dashboard-empty-copy {
+  max-width: 290px;
+  display: grid;
+  gap: 4px;
+}
+.dashboard-empty-copy p {
+  margin: 0;
+  color: var(--workspace-ink, var(--foreground));
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.dashboard-empty-copy span {
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-size: 12px;
+  line-height: 18px;
+}
+.dashboard-queue-error {
+  min-height: 128px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
-  min-height: 128px;
   padding: 20px 4px;
   color: var(--workspace-muted, var(--muted-foreground));
+  text-align: left;
   font-size: 14px;
 }
 .dashboard-empty-list button {
@@ -228,7 +262,9 @@ button.dashboard-candidate-row:hover {
   font-weight: 600;
   line-height: 18px;
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
 }
 .attention-counter-btn:hover:not(:disabled) {
   border-color: var(--workspace-action, var(--primary));
@@ -250,8 +286,7 @@ button.dashboard-candidate-row:hover {
     #fff
   );
   color: var(--workspace-action-strong, var(--primary));
-  box-shadow: inset 0 0 0 1px
-    var(--workspace-action, var(--primary));
+  box-shadow: inset 0 0 0 1px var(--workspace-action, var(--primary));
 }
 .attention-counter-count {
   min-width: 22px;

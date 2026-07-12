@@ -21,6 +21,7 @@ tradeoff is isolation: a crashing job can take the worker down (no fork
 boundary), so ``_run_job_async`` wraps the turn in a top-level catch and the
 direct/ASGI turn path (already no-fork) is the trusted precedent.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,7 +34,9 @@ def main(queues: list[str]) -> None:
     # Configure root logging before RQ's work() sets up its handlers, so a
     # preload failure below is visible in structured logs rather than lost to
     # stderr (the previous silent-degradation path).
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     from rq import SimpleWorker
     from app.core.redis import get_redis_sync
@@ -56,6 +59,24 @@ def main(queues: list[str]) -> None:
         logger.error(
             "preload_imports FAILED — every turn will pay the full cold-import "
             "cost (~5-7s/turn). Fix the import error below.",
+            exc_info=True,
+        )
+
+    # Warm the LLM client cache: build the ChatOpenAI + embedder clients now so
+    # the first real candidate turn hits _client_cache instead of paying the
+    # ~5-7s cold-construction cost (the source of the preamble_ms p95 tail after
+    # every restart). Runs on the same event loop as jobs (run_async reuses
+    # async_runner's singleton loop) so the DB engine + _client_cache_lock
+    # created here are the ones every subsequent turn reuses.
+    try:
+        from app.workers.async_runner import run_async
+        from app.workers.chatbot_worker import warm_llm_client_cache
+
+        run_async(warm_llm_client_cache())
+    except Exception:
+        logger.error(
+            "llm client cache warm-start FAILED — the first turn will pay the "
+            "full cold-construction cost (~5-7s). Fix the error below.",
             exc_info=True,
         )
 

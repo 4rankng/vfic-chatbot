@@ -1,4 +1,5 @@
 """Chat-turn execution plus the RQ recovery adapter."""
+
 from __future__ import annotations
 
 import asyncio
@@ -115,9 +116,6 @@ async def _bridge_typing(chat_id: str, bot_token: str | None = None) -> None:
         await asyncio.sleep(interval)
 
 
-
-
-
 def enqueue_chat_run(job: dict) -> bool:
     """Enqueue a bot turn onto the webhook_high RQ queue.
 
@@ -170,6 +168,7 @@ def preload_imports() -> None:
     import app.graph.clients  # noqa: F401  — client wrappers; SDKs stay lazy
     import app.graph.tools  # noqa: F401
     import app.graph.context  # noqa: F401
+
     # Client construction imports these lazily. Import them explicitly so the
     # first turn does not pay the multi-second SDK import cost.
     import langchain_core.messages  # noqa: F401
@@ -180,6 +179,33 @@ def preload_imports() -> None:
 
     elapsed = _time.monotonic() - t0
     logger.info("worker preload_imports completed in %.1fs", elapsed)
+
+
+async def warm_llm_client_cache() -> None:
+    """Build the process-wide LLM clients once, before the work loop.
+
+    ``preload_imports`` warms the module imports; this finishes the job by
+    constructing the ChatOpenAI + embedder clients into ``_client_cache``, so
+    the first real candidate turn skips the ~5-7s cold-construction cost that
+    otherwise dominates the ``preamble_ms`` p95 tail after every worker restart.
+
+    Must run on the same event loop as jobs (``run_async`` from
+    ``async_runner`` reuses the process-local singleton loop), so the lazily
+    created DB engine and the loop-bound ``_client_cache_lock`` are shared with
+    every subsequent turn — see ``factories._build_cached_clients``. Uses
+    ``_build_cached_clients`` directly (not ``build_deps``): startup only needs
+    the expensive client construction, not the per-turn Zalo/retrieval/lead
+    wiring, which is cheap and resolved fresh each turn anyway.
+
+    Failures here are non-fatal: ``run_worker`` wraps the call in a try/except
+    and logs at ERROR, then proceeds to ``w.work()`` — the first turn rebuilds
+    on demand. This mirrors the ``preload_imports`` degradation contract.
+    """
+    from app.workers._db import worker_session
+    from app.graph.factories import _build_cached_clients
+
+    async with worker_session() as db:
+        await _build_cached_clients(db)
 
 
 def _enqueue_persist(persist_job: dict) -> None:
@@ -284,9 +310,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
         execution_source=source,
         trace_id=trace_id,
     )
-    heartbeat_task = (
-        asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
-    )
+    heartbeat_task = asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
     # Bridge the Bot typing indicator across the preamble. The webhook's one-shot
     # typing expires after ~3-5s; without this, the indicator vanishes during
     # build_deps and the user perceives a long "no status" gap. The bridge pulses
@@ -315,7 +339,10 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                 await run_turn(state, deps)
             except LLMThrottled:
                 # LLM is throttled — send a static reply without another model call.
-                logger.warning("llm_throttled: sending degradation reply for %s", job.get("conversation_id", "?"))
+                logger.warning(
+                    "llm_throttled: sending degradation reply for %s",
+                    job.get("conversation_id", "?"),
+                )
                 try:
                     from app.services.conversation import ConversationService
 

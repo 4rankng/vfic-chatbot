@@ -36,6 +36,7 @@ const STAGE_LABELS: Record<string, string> = {
   faq_bypass: "FAQ bypass",
   llm_queue: "LLM — chờ slot",
   llm_model: "LLM — xử lý model",
+  llm_call_per: "LLM — mỗi lượt gọi",
   db: "Cơ sở dữ liệu",
   send: "Gửi Zalo",
   total: "Xử lý sau khởi tạo",
@@ -60,6 +61,7 @@ const STAGE_ORDER = [
   "faq_bypass",
   "llm_queue",
   "llm_model",
+  "llm_call_per",
   "db",
   "send",
   "total",
@@ -78,6 +80,7 @@ const STAGE_TARGETS: Record<string, number> = {
   system_prompt: 2000,
   llm_queue: 5000,
   llm_model: 10000,
+  llm_call_per: 10000,
   db: 2000,
   send: 1000,
   total: 10000,
@@ -225,7 +228,8 @@ const StageMatrix = ({ data }: { data: PerfMetrics }) => {
     const stage = percentiles[key];
     const tone = getStageTone(key, stage?.p95);
     const target = STAGE_TARGETS[key];
-    return <tr key={key}><td><strong>{STAGE_LABELS[key]}</strong>{key === "end_to_end" ? <small>Độ trễ ứng viên thực sự chờ</small> : null}</td><td>{fmtMs(stage?.p50)}</td><td><b>{fmtMs(stage?.p95)}</b></td><td>{fmtMs(stage?.p99)}</td><td>{target == null ? "—" : `≤ ${fmtMs(target)}`}</td><td><Status tone={tone}>{tone === "danger" ? "Vượt ngưỡng" : tone === "warning" ? "Cần cải thiện" : tone === "success" ? "Đạt" : "Chưa có mục tiêu"}</Status></td></tr>;
+    const callsP95 = percentiles.llm_calls_per?.p95;
+    return <tr key={key}><td><strong>{STAGE_LABELS[key]}</strong>{key === "llm_model" && callsP95 != null ? <small>~{callsP95} lượt/turn — cộng dồn</small> : key === "end_to_end" ? <small>Độ trễ ứng viên thực sự chờ</small> : null}</td><td>{fmtMs(stage?.p50)}</td><td><b>{fmtMs(stage?.p95)}</b></td><td>{fmtMs(stage?.p99)}</td><td>{target == null ? "—" : `≤ ${fmtMs(target)}`}</td><td><Status tone={tone}>{tone === "danger" ? "Vượt ngưỡng" : tone === "warning" ? "Cần cải thiện" : tone === "success" ? "Đạt" : "Chưa có mục tiêu"}</Status></td></tr>;
   };
   const candidate = rows.filter((key) => CANDIDATE_STAGES.has(key));
   const internal = rows.filter((key) => !CANDIDATE_STAGES.has(key));

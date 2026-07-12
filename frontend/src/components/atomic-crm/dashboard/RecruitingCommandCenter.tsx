@@ -1,10 +1,4 @@
-import {
-  AlertTriangle,
-  Inbox,
-  MessageCircle,
-  Phone,
-  UserRound,
-} from "lucide-react";
+import { AlertTriangle, Inbox, MessageCircle, Phone } from "lucide-react";
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
@@ -31,6 +25,7 @@ import {
   showContinuation,
   type CounterKey,
 } from "./recruitingCommandCenterLogic";
+import { DashboardEmptyIllustration } from "./DashboardEmptyIllustration";
 
 type RecruitingCommandCenterProps = {
   variant?: "desktop" | "mobile";
@@ -320,12 +315,26 @@ const AttentionPanel = ({
           </>
         ) : (
           <EmptyDashboardList
-            label={
+            content={
               state.selectedCounter
-                ? "Không có mục nào trong nhóm đã chọn."
+                ? {
+                    title: "Không có mục nào trong nhóm đã chọn",
+                    description:
+                      "Hàng đợi này hiện không có công việc cần theo dõi.",
+                    illustration: secondary ? "calendar" : "inbox",
+                  }
                 : secondary
-                  ? "Không có việc cần xử lý hôm nay."
-                  : "Không có ứng viên cần xử lý ngay. Mọi cuộc trò chuyện đang được xử lý."
+                  ? {
+                      title: "Không có việc cần xử lý hôm nay",
+                      description:
+                        "Bạn đã hoàn thành tất cả công việc cần theo dõi.",
+                      illustration: "calendar",
+                    }
+                  : {
+                      title: "Không có ứng viên cần xử lý ngay",
+                      description: "Mọi cuộc trò chuyện hiện đã được xử lý.",
+                      illustration: "inbox",
+                    }
             }
           />
         )}
@@ -497,10 +506,21 @@ const AttentionRow = ({
   );
 };
 
-const EmptyDashboardList = ({ label }: { label: string }) => (
+const EmptyDashboardList = ({
+  content,
+}: {
+  content: {
+    title: string;
+    description: string;
+    illustration: "inbox" | "calendar";
+  };
+}) => (
   <div className="dashboard-empty-list">
-    <UserRound className="size-4" />
-    <span>{label}</span>
+    <DashboardEmptyIllustration kind={content.illustration} />
+    <div className="dashboard-empty-copy">
+      <p>{content.title}</p>
+      <span>{content.description}</span>
+    </div>
   </div>
 );
 
@@ -511,7 +531,7 @@ const DashboardQueueError = ({
   label: string;
   onRetry: () => void;
 }) => (
-  <div className="dashboard-empty-list" role="status">
+  <div className="dashboard-empty-list dashboard-queue-error" role="status">
     <AlertTriangle className="size-4" aria-hidden="true" />
     <span>{label}</span>
     <button type="button" onClick={() => void onRetry()}>

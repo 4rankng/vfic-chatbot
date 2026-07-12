@@ -151,14 +151,24 @@ async def _compute(interval: timedelta, window: str) -> dict:
     cannot be shared across concurrent ``gather`` coroutines). Queue health is a
     sync Redis call run via ``asyncio.to_thread`` and is gathered with the rest.
     """
-    live, percentiles, (by_lane, by_outcome), slow_turns, trend, reliability = await asyncio.gather(
+    (
+        live,
+        percentiles,
+        llm_call_pct,
+        (by_lane, by_outcome),
+        slow_turns,
+        trend,
+        reliability,
+    ) = await asyncio.gather(
         asyncio.to_thread(collect_queue_health),
         _with_session(_percentiles, interval),
+        _with_session(_llm_call_percentiles, interval),
         _with_session(_lane_outcome_counts, interval),
         _with_session(_slow_turns, interval),
         _with_session(_trend, interval),
         _with_session(_reliability, interval),
     )
+    percentiles.update(llm_call_pct)
     return {
         "window": window,
         "live": live,
@@ -239,6 +249,63 @@ async def _percentiles(db: AsyncSession, interval: timedelta) -> dict:
             "p99": _int(getattr(row, f"{key}_p99")),
         }
         for key in _STAGE_KEYS
+    }
+
+
+async def _llm_call_percentiles(db: AsyncSession, interval: timedelta) -> dict:
+    """Per-LLM-call latency + per-turn call-count percentiles.
+
+    These are conceptually distinct from the stage percentiles in ``_percentiles``:
+    - ``llm_call_per`` — latency of an INDIVIDUAL model call, computed by
+      unnesting ``stage_timings->'llm_call_ms'`` (a JSON array) so each element
+      is one call, not one turn. A 2-call agent turn contributes 2 samples.
+      This is the number that answers "is the model itself slow?" and is the
+      fair comparison to the ≤10s target — unlike ``llm_model_ms``, which
+      ACCUMULATES across the agent loop and so conflates "slow model" with
+      "many calls".
+    - ``llm_calls_per`` — how many LLM calls a single turn makes
+      (p50/p95/p99 of the integer counter). Surfaces the multi-call distribution
+      so the dashboard can annotate the ``llm_model`` row with "~N lượt/turn".
+
+    Runs as its own query (set-returning ``jsonb_array_elements_text`` can't
+    share the scalar percentile SELECT) and its own session (gathered
+    concurrently in ``_compute``). Both keys use the ``{p50,p95,p99}`` shape and
+    are merged into the ``percentiles`` dict alongside the stage keys.
+    """
+    sql = text(
+        "SELECT "
+        "percentile_cont(0.5) WITHIN GROUP (ORDER BY call_ms) AS llm_call_per_p50, "
+        "percentile_cont(0.95) WITHIN GROUP (ORDER BY call_ms) AS llm_call_per_p95, "
+        "percentile_cont(0.99) WITHIN GROUP (ORDER BY call_ms) AS llm_call_per_p99 "
+        "FROM bot_runs, "
+        "jsonb_array_elements_text(stage_timings->'llm_call_ms') AS call_ms "
+        "WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings IS NOT NULL"
+    )
+    call_row = (await db.execute(sql, {"interval": interval})).one_or_none()
+    sql2 = text(
+        "SELECT "
+        "percentile_cont(0.5) WITHIN GROUP (ORDER BY (stage_timings->>'llm_calls')::int) "
+        "AS llm_calls_per_p50, "
+        "percentile_cont(0.95) WITHIN GROUP (ORDER BY (stage_timings->>'llm_calls')::int) "
+        "AS llm_calls_per_p95, "
+        "percentile_cont(0.99) WITHIN GROUP (ORDER BY (stage_timings->>'llm_calls')::int) "
+        "AS llm_calls_per_p99 "
+        "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings IS NOT NULL"
+    )
+    count_row = (await db.execute(sql2, {"interval": interval})).one_or_none()
+    return {
+        "llm_call_per": {
+            "p50": _int(getattr(call_row, "llm_call_per_p50", None)) if call_row else None,
+            "p95": _int(getattr(call_row, "llm_call_per_p95", None)) if call_row else None,
+            "p99": _int(getattr(call_row, "llm_call_per_p99", None)) if call_row else None,
+        },
+        "llm_calls_per": {
+            "p50": _int(getattr(count_row, "llm_calls_per_p50", None)) if count_row else None,
+            "p95": _int(getattr(count_row, "llm_calls_per_p95", None)) if count_row else None,
+            "p99": _int(getattr(count_row, "llm_calls_per_p99", None)) if count_row else None,
+        },
     }
 
 
