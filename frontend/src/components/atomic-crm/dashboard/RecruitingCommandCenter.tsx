@@ -6,13 +6,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import {
   ATTENTION_QUERY_KEY,
-  REASON_LABELS,
   type AttentionDashboard,
   type AttentionItem,
-  type AttentionQueue,
   fetchAttentionDashboard,
   formatElapsed,
-  reasonLabelForQueue,
 } from "./attentionDashboard";
 import { deriveCacheDiscriminators } from "./recruitingCommandCenterLogic";
 import { DashboardEmptyIllustration } from "./DashboardEmptyIllustration";
@@ -39,17 +36,6 @@ const formatClock = (value: string | null | undefined): string => {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-};
-
-/** Map a raw lead_stage code to a short Vietnamese chip label. */
-const stageLabel = (stage: string): string => {
-  const map: Record<string, string> = {
-    NEW: "Mới",
-    CONTACTING: "Đang liên hệ",
-    REGISTERED: "Đã đăng ký",
-    SKIPPED: "Bỏ qua",
-  };
-  return map[stage] ?? stage;
 };
 
 type Navigate = ReturnType<typeof useNavigate>;
@@ -227,12 +213,7 @@ const AttentionPanel = ({
           />
         ) : state.hasRows ? (
           rows.map((row) => (
-            <AttentionRow
-              key={row.key}
-              row={row}
-              navigate={navigate}
-              queue={secondary ? "today" : "immediate"}
-            />
+            <AttentionRow key={row.key} row={row} navigate={navigate} />
           ))
         ) : (
           <EmptyDashboardList
@@ -266,18 +247,13 @@ const CandidateAvatar = () => (
 const AttentionRow = ({
   row,
   navigate,
-  queue,
 }: {
   row: AttentionItem;
   navigate: Navigate;
-  queue: AttentionQueue;
 }) => {
   const name = candidateName(row);
   const onClick = rowOnClick(row, navigate);
   const elapsed = formatElapsed(row.urgency_at);
-  const reasonLabel = REASON_LABELS[row.reason] ?? row.reason;
-  const visibleReasonLabel = reasonLabelForQueue(row.reason, queue);
-  const stage = normalizeText(row.lead_stage);
   const desiredJob = normalizeText(row.desired_job);
   const phone = normalizeText(row.phone);
   // The whole row is a single button (OPEN_CONVERSATION) so there are no
@@ -300,16 +276,10 @@ const AttentionRow = ({
   const candidateTitle = (
     <span className="dashboard-candidate-title">
       <strong>{name}</strong>
-      {stage ? (
-        <span className="dashboard-stage-chip">{stageLabel(stage)}</span>
-      ) : null}
     </span>
   );
   const meta = (
     <span className="dashboard-candidate-meta">
-      {visibleReasonLabel ? (
-        <span className="dashboard-reason-label">{visibleReasonLabel}</span>
-      ) : null}
       {elapsed ? <small>{elapsed}</small> : null}
     </span>
   );
@@ -319,9 +289,7 @@ const AttentionRow = ({
         type="button"
         className="dashboard-candidate-row"
         onClick={onClick}
-        aria-label={`Mở hội thoại với ${name}. ${reasonLabel}${
-          elapsed ? `, ${elapsed}` : ""
-        }`}
+        aria-label={`Mở hội thoại với ${name}${elapsed ? `, ${elapsed}` : ""}`}
       >
         <CandidateAvatar />
         <span className="dashboard-candidate-main">
@@ -336,9 +304,9 @@ const AttentionRow = ({
   return (
     <div
       className="dashboard-candidate-row is-static"
-      aria-label={`${name}. ${reasonLabel}${
-        elapsed ? `, ${elapsed}` : ""
-      }${phone ? `, số điện thoại ${phone}` : ""}`}
+      aria-label={`${name}${elapsed ? `, ${elapsed}` : ""}${
+        phone ? `, số điện thoại ${phone}` : ""
+      }`}
     >
       <CandidateAvatar />
       <span className="dashboard-candidate-main">

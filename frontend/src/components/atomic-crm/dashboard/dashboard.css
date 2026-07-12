@@ -88,7 +88,6 @@
   border: 1px solid var(--workspace-border, var(--border));
   border-radius: 10px;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 .recruiting-panel-header {
   display: flex;
@@ -134,16 +133,13 @@
   background: transparent;
   color: inherit;
   text-align: left;
-  transition:
-    background-color var(--motion-fast, 160ms) ease-out,
-    box-shadow var(--motion-fast, 160ms) ease-out;
+  transition: background-color var(--motion-fast, 160ms) ease-out;
 }
 .dashboard-candidate-row:last-child {
   border-bottom: 0;
 }
 button.dashboard-candidate-row:hover {
   background: var(--workspace-teal-soft, var(--accent));
-  box-shadow: inset 3px 0 0 var(--workspace-action, var(--primary));
 }
 button.dashboard-candidate-row:focus-visible {
   background: var(--workspace-teal-soft, var(--accent));
@@ -264,7 +260,7 @@ button.dashboard-candidate-row:active {
 /* Attention dashboard additions
  * ------------------------------------------------------------------
  * - .dashboard-candidate-sub / .dashboard-candidate-meta: extra row slots
- *   for the stage chip, desired job, and last-4 phone hint.
+ *   for the desired job, phone hint, and elapsed time.
  * - .attention-refetch-indicator: polite background-refetch affordance.
  */
 .attention-refetch-indicator {
@@ -280,16 +276,6 @@ button.dashboard-candidate-row:active {
   gap: 6px;
   overflow: hidden;
 }
-.dashboard-stage-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--workspace-surface-muted, var(--secondary));
-  color: var(--workspace-ink, var(--foreground));
-  font-size: 11px;
-  font-weight: 600;
-}
 .dashboard-job {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -301,9 +287,6 @@ button.dashboard-candidate-row:active {
   gap: 3px;
   color: var(--workspace-muted, var(--muted-foreground));
   font-variant-numeric: tabular-nums;
-}
-.dashboard-reason-label {
-  font-weight: 600;
 }
 @media (prefers-reduced-motion: reduce) {
   .dashboard-candidate-row {
