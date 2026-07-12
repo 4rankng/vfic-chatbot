@@ -82,6 +82,9 @@ class ZaloChannelTestOut(BaseModel):
     ``getWebhookInfo``); they are ``None`` for the OA probe. Zalo never returns
     the registered secret_token, so a registered URL does not prove the secret
     matches — only a real inbound does.
+
+    OA-specific diagnostics (``oa_secret_valid``, ``oa_refresh_ok``,
+    ``oa_token_expired``) are ``None`` for Bot probes.
     """
 
     configured: bool
@@ -90,6 +93,10 @@ class ZaloChannelTestOut(BaseModel):
     errors: list[str] = Field(default_factory=list)
     webhook_registered: bool | None = None
     webhook_url: str | None = None
+    # OA-only diagnostics — None for Bot channel probes.
+    oa_secret_valid: bool | None = None
+    oa_refresh_ok: bool | None = None
+    oa_token_expired: bool | None = None
 
 
 class ZaloOaSignatureVerifyRequest(BaseModel):

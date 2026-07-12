@@ -3,7 +3,10 @@ import { useNotify, usePermissions, useTranslate } from "ra-core";
 import {
   Bot,
   ChevronDown,
+  Copy,
   Cpu,
+  Eye,
+  EyeOff,
   Menu,
   MessageCircle,
   PlugZap,
@@ -127,6 +130,10 @@ type ZaloChannelTestResult = {
   connected: boolean;
   missing: string[];
   errors: string[];
+  // OA-only diagnostics
+  oa_secret_valid?: boolean | null;
+  oa_refresh_ok?: boolean | null;
+  oa_token_expired?: boolean | null;
 };
 
 type IntegrationConfigTestResult = {
@@ -247,6 +254,69 @@ const SETTINGS_VIEW_COPY: Record<
   },
 };
 
+const SecretField = ({
+  id,
+  label,
+  status,
+  value,
+  placeholder,
+  onValueChange,
+}: {
+  id: string;
+  label: string;
+  status: SecretStatus;
+  value: string;
+  placeholder: string;
+  onValueChange: (value: string) => void;
+}) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <div className="settings-field">
+      <div className="settings-field-label-row">
+        <Label htmlFor={id}>{label}</Label>
+        <span className={status.configured ? "is-configured" : ""}>
+          {status.configured ? "Đã lưu" : "Chưa cấu hình"}
+        </span>
+      </div>
+      <div className="settings-sensitive-input">
+        <Input
+          id={id}
+          type={isVisible ? "text" : "password"}
+          autoComplete="off"
+          value={value}
+          placeholder={
+            status.preview ? `Hiện tại: ${status.preview}` : placeholder
+          }
+          className="settings-input"
+          onChange={(event) => onValueChange(event.target.value)}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="settings-input-action md:hidden"
+          aria-label={isVisible ? `Ẩn ${label}` : `Hiện ${label}`}
+          onClick={() => setIsVisible((visible) => !visible)}
+        >
+          {isVisible ? <EyeOff /> : <Eye />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="settings-input-action md:hidden"
+          aria-label={`Sao chép ${label}`}
+          disabled={!value}
+          onClick={() => void navigator.clipboard.writeText(value)}
+        >
+          <Copy />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 const SecretInput = ({
   id,
   label,
@@ -260,22 +330,14 @@ const SecretInput = ({
   value: string;
   onChange: (key: keyof FormState, value: string) => void;
 }) => (
-  <div className="settings-field">
-    <div className="flex items-center justify-between gap-3">
-      <Label htmlFor={id}>{label}</Label>
-    </div>
-    <Input
-      id={id}
-      type="password"
-      autoComplete="off"
-      value={value}
-      placeholder={
-        status.preview ? `Hiện tại: ${status.preview}` : "Nhập giá trị"
-      }
-      className="settings-input"
-      onChange={(event) => onChange(id, event.target.value)}
-    />
-  </div>
+  <SecretField
+    id={id}
+    label={label}
+    status={status}
+    value={value}
+    placeholder="Nhập giá trị"
+    onValueChange={(nextValue) => onChange(id, nextValue)}
+  />
 );
 
 const MinimaxSecretInput = ({
@@ -291,22 +353,14 @@ const MinimaxSecretInput = ({
   value: string;
   onChange: (key: keyof MinimaxFormState, value: string) => void;
 }) => (
-  <div className="settings-field">
-    <div className="flex items-center justify-between gap-3">
-      <Label htmlFor={id}>{label}</Label>
-    </div>
-    <Input
-      id={id}
-      type="password"
-      autoComplete="off"
-      value={value}
-      placeholder={
-        status.preview ? `Hiện tại: ${status.preview}` : "Dán token Minimax"
-      }
-      className="settings-input"
-      onChange={(event) => onChange(id, event.target.value)}
-    />
-  </div>
+  <SecretField
+    id={id}
+    label={label}
+    status={status}
+    value={value}
+    placeholder="Dán token Minimax"
+    onValueChange={(nextValue) => onChange(id, nextValue)}
+  />
 );
 
 const OpenRouterSecretInput = ({
@@ -322,22 +376,14 @@ const OpenRouterSecretInput = ({
   value: string;
   onChange: (key: keyof OpenRouterFormState, value: string) => void;
 }) => (
-  <div className="settings-field">
-    <div className="flex items-center justify-between gap-3">
-      <Label htmlFor={id}>{label}</Label>
-    </div>
-    <Input
-      id={id}
-      type="password"
-      autoComplete="off"
-      value={value}
-      placeholder={
-        status.preview ? `Hiện tại: ${status.preview}` : "Dán token OpenRouter"
-      }
-      className="settings-input"
-      onChange={(event) => onChange(id, event.target.value)}
-    />
-  </div>
+  <SecretField
+    id={id}
+    label={label}
+    status={status}
+    value={value}
+    placeholder="Dán token OpenRouter"
+    onValueChange={(nextValue) => onChange(id, nextValue)}
+  />
 );
 
 const ProviderSwitchField = ({
@@ -396,6 +442,7 @@ const SettingsCard = ({
   meta,
   children,
   className = "",
+  defaultOpen = false,
 }: {
   id?: string;
   title: string;
@@ -404,8 +451,10 @@ const SettingsCard = ({
   meta?: ReactNode;
   children: ReactNode;
   className?: string;
-}) => (
-  <section className={`settings-card ${className}`} id={id}>
+  defaultOpen?: boolean;
+}) => {
+  const isMobile = useIsMobile();
+  const header = (
     <div className="settings-card-header">
       <div className="settings-card-title-group">
         <div className="settings-card-icon">{icon}</div>
@@ -418,9 +467,31 @@ const SettingsCard = ({
       </div>
       {meta ? <div className="settings-card-meta">{meta}</div> : null}
     </div>
-    <div className="settings-card-content">{children}</div>
-  </section>
-);
+  );
+
+  if (isMobile) {
+    return (
+      <details
+        className={`settings-card settings-mobile-card ${className}`}
+        id={id}
+        open={defaultOpen}
+      >
+        <summary className="settings-mobile-card-summary">
+          {header}
+          <ChevronDown aria-hidden="true" />
+        </summary>
+        <div className="settings-card-content">{children}</div>
+      </details>
+    );
+  }
+
+  return (
+    <section className={`settings-card ${className}`} id={id}>
+      {header}
+      <div className="settings-card-content">{children}</div>
+    </section>
+  );
+};
 
 const SettingsSectionPanel = ({
   id,
@@ -826,7 +897,19 @@ export const ZaloIntegrationPage = () => {
         method: "POST",
       });
       if (result.connected) {
-        notify(`Kết nối ${label} thành công`, { type: "success" });
+        // Show OA-specific warnings even when connected (e.g. secret key
+        // invalid but access token still works — will break on next refresh).
+        const warnings: string[] = [];
+        if (result.oa_secret_valid === false) {
+          warnings.push("⚠️ Secret Key không hợp lệ — sẽ lỗi khi làm mới token");
+        }
+        if (warnings.length > 0) {
+          notify(`Kết nối ${label} thành công, nhưng: ${warnings.join("; ")}`, {
+            type: "warning",
+          });
+        } else {
+          notify(`Kết nối ${label} thành công`, { type: "success" });
+        }
         return;
       }
       if (result.missing.length > 0) {
@@ -834,6 +917,21 @@ export const ZaloIntegrationPage = () => {
           .map((key) => ZALO_TEST_FIELD_LABELS[key] ?? key)
           .join(", ");
         notify(`Thiếu cấu hình: ${missing}`, { type: "warning" });
+        return;
+      }
+      // Show the most specific error from the new diagnostics
+      if (result.oa_secret_valid === false) {
+        notify(
+          "❌ Secret Key không hợp lệ! Lấy từ Zalo OA dashboard → Cài đặt → API",
+          { type: "error" },
+        );
+        return;
+      }
+      if (result.oa_refresh_ok === false && result.oa_token_expired) {
+        notify(
+          "❌ Token hết hạn và không thể làm mới. Kiểm tra Secret Key và Refresh Token",
+          { type: "error" },
+        );
         return;
       }
       notify(result.errors.join("; ") || `Không kết nối được ${label}`, {
@@ -910,6 +1008,9 @@ export const ZaloIntegrationPage = () => {
     SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
     SETTINGS_NAV_ITEMS[0];
   const headerCopy = SETTINGS_VIEW_COPY[activeItem.itemId];
+  const webhookHealth = describeOaSignatureHealth(
+    settings?.zalo_oa_webhook_signature ?? null,
+  );
 
   const selectSettingsItem = (itemId: SettingsItemId) => {
     setActiveItemId(itemId);
@@ -963,6 +1064,7 @@ export const ZaloIntegrationPage = () => {
             <SettingsCard
               title="Zalo Chatbot"
               icon={<PlugZap className="size-4" />}
+              defaultOpen
             >
               <SecretInput
                 id="zalo_bot_token"
@@ -1013,6 +1115,19 @@ export const ZaloIntegrationPage = () => {
                       setValue("zalo_oa_app_id", event.target.value)
                     }
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="settings-copy-app-id md:hidden"
+                    aria-label="Sao chép Zalo App ID"
+                    disabled={!form.zalo_oa_app_id}
+                    onClick={() =>
+                      void navigator.clipboard.writeText(form.zalo_oa_app_id)
+                    }
+                  >
+                    <Copy />
+                  </Button>
                 </div>
 
                 <SecretInput
@@ -1056,10 +1171,17 @@ export const ZaloIntegrationPage = () => {
                     {testingOa ? "Đang kiểm tra" : "Lưu & kiểm tra"}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Trạng thái chữ ký webhook sẽ hiển thị dưới dạng thông báo khi
-                  bạn bấm <strong>Lưu &amp; kiểm tra</strong>.
-                </p>
+                <details className="settings-advanced settings-webhook-health">
+                  <summary className="settings-advanced-summary">
+                    Webhook
+                  </summary>
+                  <p
+                    className={`settings-webhook-message is-${webhookHealth.type}`}
+                    role="status"
+                  >
+                    {webhookHealth.message}
+                  </p>
+                </details>
               </div>
             </SettingsCard>
           </div>

@@ -155,10 +155,15 @@ async def test_zalo_oa(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ZaloChannelTestOut:
-    """Probe ONLY the Zalo Official Account channel (openapi.zalo.me).
+    """Full diagnostic of the Zalo OA channel — checks 4 layers:
 
-    Hits ``getoa`` with the configured OA access token. Independent of the Bot
-    Platform channel.
+    1. All credentials configured (app_id, secret_key, access_token, refresh_token)
+    2. Access token valid (getoa probe) — if expired, tries auto-refresh
+    3. Secret key valid (refresh probe) — the most common silent failure
+    4. Token refresh works (calls oauth.zaloapp.com/v4/oa/access_token)
+
+    Returns granular diagnostics so the admin knows exactly which credential
+    is broken, instead of a generic "not connected" with no actionable info.
     """
     settings_service = IntegrationSettingsService(db)
     cfg = await settings_service.resolve_zalo()
@@ -175,26 +180,91 @@ async def test_zalo_oa(
     configured = not missing
     connected = False
     errors: list[str] = []
+    oa_secret_valid: bool | None = None
+    oa_refresh_ok: bool | None = None
+    oa_token_expired: bool | None = None
+
     if configured:
+        # Layer 1: probe access token
         result = await ZaloOASender(
             settings=settings_service.settings,
             access_token=cfg.oa_access_token,
             refresh=settings_service.refresh_oa_access_token,
         ).get_oa_info()
         connected = result.ok
-        if not result.ok:
-            errors.append(
-                _safe_probe_error(
-                    "zalo_oa",
-                    result,
-                    [cfg.oa_access_token, cfg.oa_refresh_token, cfg.oa_secret_key],
-                )
+
+        if result.ok:
+            # Access token works — but also check if the secret key is valid
+            # (it's needed for refresh, which will be needed when the token expires)
+            oa_token_expired = False
+        else:
+            # Access token failed — check if it's expired
+            err_text = _safe_probe_error(
+                "zalo_oa", result,
+                [cfg.oa_access_token, cfg.oa_refresh_token, cfg.oa_secret_key],
             )
+            is_expired = "expired" in err_text.lower() or "-216" in err_text
+            oa_token_expired = is_expired
+
+            if is_expired:
+                # Layer 2: try the refresh flow
+                new_token = await settings_service.refresh_oa_access_token()
+                if new_token:
+                    oa_refresh_ok = True
+                    # Re-probe with the refreshed token
+                    result2 = await ZaloOASender(
+                        settings=settings_service.settings,
+                        access_token=new_token,
+                        refresh=settings_service.refresh_oa_access_token,
+                    ).get_oa_info()
+                    connected = result2.ok
+                    if not result2.ok:
+                        errors.append(
+                            "Token refreshed but still fails: "
+                            + _safe_probe_error("zalo_oa", result2, [new_token])
+                        )
+                else:
+                    oa_refresh_ok = False
+                    # Layer 3: diagnose WHY refresh failed — test the secret key directly
+                    import httpx
+                    try:
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            resp = await client.post(
+                                "https://oauth.zaloapp.com/v4/oa/access_token",
+                                data={
+                                    "grant_type": "refresh_token",
+                                    "refresh_token": cfg.oa_refresh_token,
+                                    "app_id": cfg.oa_app_id,
+                                },
+                                headers={"secret_key": cfg.oa_secret_key} if cfg.oa_secret_key else {},
+                            )
+                        data = resp.json()
+                        if isinstance(data, dict) and "access_token" in data:
+                            oa_secret_valid = True
+                            errors.append("Secret key valid but refresh returned no token — check app_id")
+                        elif isinstance(data, dict) and data.get("error") == -14004:
+                            oa_secret_valid = False
+                            errors.append("❌ OA Secret Key is INVALID — refresh cannot work. Update it from the Zalo OA dashboard.")
+                        else:
+                            oa_secret_valid = False
+                            errors.append(
+                                f"Refresh failed: {data.get('error_name', 'unknown')} "
+                                f"({data.get('error', '?')}) — {data.get('error_description', '')}"
+                            )
+                    except Exception as exc:
+                        oa_secret_valid = None
+                        errors.append(f"Refresh check failed: {exc}")
+            else:
+                errors.append(err_text)
+
     return ZaloChannelTestOut(
         configured=configured,
         connected=connected,
         missing=missing,
         errors=errors,
+        oa_secret_valid=oa_secret_valid,
+        oa_refresh_ok=oa_refresh_ok,
+        oa_token_expired=oa_token_expired,
     )
 
 
