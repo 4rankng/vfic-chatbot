@@ -29,6 +29,7 @@ db:
 		echo "==> Created backend/.env from .env.example (localhost dev URLs). Set API keys to exercise the bot."; \
 	fi
 	@echo "==> Applying Alembic baseline (idempotent)..."
+	@$(PY) -m scripts.widen_alembic_version || echo "  (widen skipped — ensure backend/.venv exists: pip install -e .[dev])"
 	@$(PY) -m alembic upgrade head || echo "  (alembic skipped — ensure backend/.venv exists: pip install -e .[dev])"
 	@$(PY) -m scripts.create_admin --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true
 	@echo "==> Dev DB ready. Adminer: http://localhost:8082 (server: postgres, db: vfic, user/pass: vfic/vfic)"
@@ -119,7 +120,7 @@ deploy:
 	done; [ $$ok -eq 1 ] || echo "  Postgres slow to come up"
 	@echo "==> Applying Alembic baseline (retries transient SSH refusals)..."
 	@ok=0; for i in 1 2 3 4 5; do \
-		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web alembic upgrade head" && { ok=1; break; }; \
+		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
 		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
 	done; [ $$ok -eq 1 ]
 	@echo "==> Creating bootstrap admin (idempotent)..."
@@ -152,7 +153,7 @@ deploy-restart:
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull web"
 	@echo "==> Applying Alembic migrations (idempotent)..."
 	@ok=0; for i in 1 2 3 4 5; do \
-		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web alembic upgrade head" && { ok=1; break; }; \
+		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
 		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
 	done; [ $$ok -eq 1 ]
 	@echo "==> Recreating backend containers..."

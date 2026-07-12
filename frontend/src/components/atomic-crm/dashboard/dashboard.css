@@ -193,6 +193,176 @@ button.dashboard-candidate-row:hover {
   pointer-events: none;
 }
 
+/* Phase 2 attention dashboard additions
+ * ------------------------------------------------------------------
+ * - .attention-counter-strip: horizontal row of five drill-down counters.
+ *   Mobile scrolls horizontally with snap so all five stay reachable on a
+ *   320px viewport; desktop wraps onto one line within the panel width.
+ * - .attention-counter-btn: compact touch target (>=44px) with a numeric
+ *   badge and a Vietnamese label. [aria-pressed="true"] is the selected
+ *   state — urgency is never colour-only (focus ring + weight reinforce it).
+ * - .dashboard-candidate-sub / .dashboard-candidate-meta: extra row slots
+ *   for the stage chip, desired job, and last-4 phone hint.
+ * - .dashboard-continuation: the "Mở hộp thư" drill-in link.
+ * - .attention-refetch-indicator: polite background-refetch affordance.
+ */
+.attention-counter-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attention-counter-btn {
+  flex: 1 1 auto;
+  min-height: 44px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--workspace-border, var(--border));
+  border-radius: 10px;
+  background: #fff;
+  color: var(--workspace-ink, var(--foreground));
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.attention-counter-btn:hover:not(:disabled) {
+  border-color: var(--workspace-action, var(--primary));
+  background: var(--workspace-surface-muted, var(--accent));
+}
+.attention-counter-btn:focus-visible {
+  outline: 2px solid var(--workspace-action, var(--primary));
+  outline-offset: 2px;
+}
+.attention-counter-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.attention-counter-btn[aria-pressed="true"] {
+  border-color: var(--workspace-action, var(--primary));
+  background: color-mix(
+    in srgb,
+    var(--workspace-action, var(--primary)) 12%,
+    #fff
+  );
+  color: var(--workspace-action-strong, var(--primary));
+  box-shadow: inset 0 0 0 1px
+    var(--workspace-action, var(--primary));
+}
+.attention-counter-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--workspace-surface-muted, var(--secondary));
+  color: var(--workspace-ink, var(--foreground));
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.attention-counter-btn[aria-pressed="true"] .attention-counter-count {
+  background: var(--workspace-action, var(--primary));
+  color: var(--primary-foreground, #fff);
+}
+.attention-counter-label {
+  white-space: nowrap;
+}
+.attention-refetch-indicator {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--workspace-muted, var(--muted-foreground));
+  font-size: 12px;
+}
+.dashboard-candidate-sub {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+.dashboard-stage-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--workspace-surface-muted, var(--secondary));
+  color: var(--workspace-ink, var(--foreground));
+  font-size: 11px;
+  font-weight: 600;
+}
+.dashboard-job {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dashboard-phone-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--workspace-muted, var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+.dashboard-reason-label {
+  font-weight: 600;
+}
+.dashboard-continuation {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--workspace-border, var(--border));
+  border-radius: 8px;
+  background: #fff;
+  color: var(--workspace-action, var(--primary));
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dashboard-continuation:hover {
+  border-color: var(--workspace-action, var(--primary));
+  background: var(--workspace-surface-muted, var(--accent));
+}
+.dashboard-continuation:focus-visible {
+  outline: 2px solid var(--workspace-action, var(--primary));
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  /* Counter strip: horizontal scroll with snap so all five stay reachable on
+   * narrow phones (320px/390px). Touch targets stay >=44px tall. */
+  .attention-counter-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .attention-counter-btn {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+  .dashboard-continuation {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention-counter-btn,
+  .dashboard-continuation {
+    transition: none;
+  }
+}
+
 @media (max-width: 767px) {
   .dashboard-workspace-content {
     padding: 20px 16px calc(5.75rem + env(safe-area-inset-bottom));

@@ -2,6 +2,7 @@
 
 Passwords are hashed with argon2; every create/disable/enable/delete is audited.
 """
+
 import uuid
 
 from sqlalchemy import func, select
@@ -36,9 +37,7 @@ class UserProvisioningService:
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
         rows = (
             await self.db.scalars(
-                base.order_by(User.created_at.desc())
-                .offset((page - 1) * per_page)
-                .limit(per_page)
+                base.order_by(User.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
             )
         ).all()
         return list(rows), int(total or 0)
@@ -111,9 +110,7 @@ class UserProvisioningService:
         if removes_enabled_admin and await self._other_enabled_admin_count(user.id) == 0:
             raise ValueError("Không thể xóa quản trị viên cuối cùng đang hoạt động")
 
-    async def update(
-        self, user_id: uuid.UUID, data: UserUpdate, *, actor_id: uuid.UUID
-    ) -> User:
+    async def update(self, user_id: uuid.UUID, data: UserUpdate, *, actor_id: uuid.UUID) -> User:
         user = await self.db.get(User, user_id)
         if user is None:
             raise LookupError("user not found")
@@ -179,6 +176,35 @@ class UserProvisioningService:
             target_type="user",
             target_id=str(user.id),
             payload={"disabled": disabled},
+        )
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def reset_password(
+        self, user_id: uuid.UUID, new_password: str, *, actor_id: uuid.UUID
+    ) -> User:
+        """Admin-initiated password set: argon2-hash + revoke all sessions.
+
+        No email / OTP — the new password is applied directly. ``token_version``
+        is bumped so every previously-issued JWT for this user is invalidated.
+        The plaintext password is never persisted or audited.
+        """
+        user = await self.db.get(User, user_id)
+        if user is None:
+            raise LookupError("user not found")
+        if user.disabled:
+            raise ValueError("Không thể đặt lại mật khẩu cho tài khoản đã vô hiệu hóa")
+
+        user.password_hash = await hash_password(new_password)
+        user.token_version += 1  # revoke all existing sessions
+        await record_audit(
+            self.db,
+            action="reset_user_password",
+            actor_id=actor_id,
+            target_type="user",
+            target_id=str(user.id),
+            payload={"email": user.email},  # never log the plaintext password
         )
         await self.db.commit()
         await self.db.refresh(user)

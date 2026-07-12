@@ -15,6 +15,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   KeyRound,
   MoreHorizontal,
   Pencil,
@@ -22,9 +32,8 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
-import { requestPasswordResetOtp } from "../login/passwordRecoveryService";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 
@@ -37,7 +46,8 @@ export const UserActions = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
-  const resetPendingRef = useRef(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   if (!record) return null;
 
   const editPath = createPath({
@@ -76,20 +86,31 @@ export const UserActions = () => {
     }
   };
 
-  const requestPasswordReset = async () => {
-    if (record.disabled || resetPendingRef.current) return;
-    resetPendingRef.current = true;
+  const closeResetDialog = () => {
+    setResetOpen(false);
+    setPassword("");
+    setConfirmPassword("");
+  };
+
+  const resetPassword = async () => {
+    if (record.disabled || resetPending) return;
+    if (password.length < 8) {
+      notify("Mật khẩu phải có ít nhất 8 ký tự.", { type: "error" });
+      return;
+    }
+    if (password !== confirmPassword) {
+      notify("Mật khẩu xác nhận không khớp.", { type: "error" });
+      return;
+    }
     setResetPending(true);
     try {
-      await requestPasswordResetOtp(record.email);
-      notify("Nếu tài khoản đủ điều kiện, email đặt lại mật khẩu sẽ được gửi.", {
-        type: "success",
-      });
-      setResetOpen(false);
+      await dataProvider.resetUserPassword(record.id, { password });
+      notify("Đã đặt lại mật khẩu.", { type: "success" });
+      closeResetDialog();
+      refresh();
     } catch (e) {
       notify((e as Error).message, { type: "error" });
     } finally {
-      resetPendingRef.current = false;
       setResetPending(false);
     }
   };
@@ -152,7 +173,7 @@ export const UserActions = () => {
                 }}
               >
                 <KeyRound className="size-4" />
-                Gửi email đặt lại mật khẩu
+                Đổi mật khẩu
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuSeparator />
@@ -170,18 +191,74 @@ export const UserActions = () => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <Confirm
-        isOpen={resetOpen}
-        loading={resetPending}
-        title="Gửi email đặt lại mật khẩu?"
-        content={`Hệ thống sẽ gửi mã xác thực đặt lại mật khẩu đến ${record.email}. Quản trị viên không thể xem hoặc đặt mật khẩu của tài khoản này.`}
-        confirm={resetPending ? "Đang gửi…" : "Gửi email"}
-        ConfirmIcon={KeyRound}
-        onClose={() => {
-          if (!resetPending) setResetOpen(false);
+      <Dialog
+        open={resetOpen}
+        onOpenChange={(open) => {
+          if (!resetPending) {
+            if (open) setResetOpen(true);
+            else closeResetDialog();
+          }
         }}
-        onConfirm={() => void requestPasswordReset()}
-      />
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="size-5" />
+              Đổi mật khẩu
+            </DialogTitle>
+            <DialogDescription>
+              Đặt mật khẩu mới cho {record.email}. Người dùng sẽ cần đăng nhập
+              lại bằng mật khẩu mới.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void resetPassword();
+            }}
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="reset-password-new">Mật khẩu mới</Label>
+              <Input
+                id="reset-password-new"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={8}
+                required
+                autoFocus
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="reset-password-confirm">Xác nhận mật khẩu</Label>
+              <Input
+                id="reset-password-confirm"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                minLength={8}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={resetPending}
+                onClick={closeResetDialog}
+              >
+                Hủy
+              </Button>
+              <Button type="submit" disabled={resetPending}>
+                {resetPending ? "Đang đặt lại…" : "Đặt mật khẩu"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Confirm
         isOpen={deleteOpen}
         title="Xóa vĩnh viễn tài khoản?"

@@ -30,6 +30,21 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Widen Alembic's own version-tracking column. Alembic creates
+    # alembic_version.version_num as VARCHAR(32); this project's descriptive
+    # revision IDs exceed that and abort `alembic upgrade head` on the
+    # version-row UPDATE. The version table exists by the time the first
+    # migration runs, and widening a VARCHAR is metadata-only in Postgres
+    # (no rewrite, no long lock). Idempotent; guarded for safety.
+    op.execute(
+        """
+        DO $$ BEGIN
+            ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128);
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END $$;
+        """
+    )
+
     # -------------------------------------------------------------------------
     # 1. Schemas + extensions
     # -------------------------------------------------------------------------

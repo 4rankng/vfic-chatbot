@@ -297,6 +297,16 @@ const getDataProviderWithCustomMethods = () => ({
     );
   },
 
+  async resetUserPassword(userId: string, body: { password: string }) {
+    return apiJson<void>(
+      `${BASE}/users/${encodeURIComponent(userId)}/reset-password`,
+      {
+        method: "POST",
+        body,
+      },
+    );
+  },
+
   // Sign-up is disabled. VFIC accounts are provisioned out-of-band by an admin.
   async signUp(_body: {
     email: string;

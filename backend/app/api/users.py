@@ -1,4 +1,5 @@
 """User routes — self-service /me + admin CRUD (require_admin-gated)."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,6 +9,7 @@ from app.api.dependencies import get_current_user, require_admin
 from app.core.db import get_db
 from app.models.user import Role, User
 from app.schemas.user import (
+    AdminPasswordReset,
     SelfProfileUpdate,
     UserCreate,
     UserListResponse,
@@ -121,6 +123,22 @@ async def enable_user(
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     return await _set_disabled(user_id=user_id, disabled=False, actor=admin, db=db)
+
+
+@router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_user_password(
+    user_id: uuid.UUID,
+    body: AdminPasswordReset,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    svc = UserProvisioningService(db)
+    try:
+        await svc.reset_password(user_id, body.password, actor_id=admin.id)
+    except LookupError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

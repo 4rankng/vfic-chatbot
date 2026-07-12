@@ -2,6 +2,7 @@
 
 Emails are normalised to lowercase on write; the DB unique index is on lower(email).
 """
+
 import uuid
 from datetime import datetime
 
@@ -48,6 +49,14 @@ class UserOut(BaseModel):
     disabled: bool
     created_at: datetime
     updated_at: datetime
+
+
+class AdminPasswordReset(BaseModel):
+    """Admin-initiated password reset (no email/OTP, direct set)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=8)
 
 
 class UserListResponse(BaseModel):

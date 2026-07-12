@@ -23,6 +23,10 @@ import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
+import {
+  isAttentionReason,
+  type QueueFilter,
+} from "../dashboard/attentionDashboard";
 import conversationEmptyIllustration from "@/assets/empty-states/conversation-empty-illustration.png";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
 import {
@@ -40,7 +44,11 @@ type ConversationRow = Conversation & {
   _snippet?: string;
 };
 
-type QueueFilter = "all" | "attention" | "priority";
+// Re-export so existing importers (`import { QueueFilter } from
+// ".../ConversationList"`) keep compiling after FIX 3 moved the type into
+// attentionDashboard.ts. Prefer importing QueueFilter from
+// attentionDashboard.ts directly in new code.
+export type { QueueFilter };
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 
@@ -382,6 +390,9 @@ const ConversationListPanel = ({
   const [leads, setLeads] = useState<Record<string, Lead | null>>({});
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  // The chip always starts on "all". A `?reason=` deep link filters
+  // server-side (via `InfiniteListBase filter`), NOT via this chip — see the
+  // note in `ConversationList`. The user may still pick a chip on top.
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const clearSearchAndFilters = useCallback(() => {
     setQuery("");
@@ -636,6 +647,14 @@ const ConversationListContent = () => {
   }, [conversationIdsKey]);
 
   const urlId = searchParams.get("id");
+  // BLOCKER #1: the `?reason=` URL param is now consumed at the
+  // `<ConversationList>` mount (passed to `InfiniteListBase filter`) so the
+  // backend `list_by_attention_reason` filter runs and the server returns the
+  // filtered set. The client-side queue chip is intentionally NOT seeded from
+  // the reason here — the chip would fight the backend filter (chip semantics
+  // are `attention`/`priority`, which don't map 1:1 to the nine reason enums,
+  // e.g. `FOLLOWUP_TODAY` has no matching chip). The chip stays on "all" while a
+  // `?reason=` is active; the user may still pick a chip on top.
   // On mobile the detail pane is shown iff a conversation id is in the URL, so
   // the browser back button naturally returns to the list. Desktop always shows
   // the detail alongside the list.
@@ -763,11 +782,33 @@ const ConversationListContent = () => {
   );
 };
 
-export const ConversationList = () => (
-  // Infinite pagination keeps the inbox light while removing visible page
-  // controls. Row previews come from /conversations/last-messages/batch for the
-  // loaded rows only.
-  <InfiniteListBase perPage={25} sort={CONVERSATION_LIST_SORT}>
-    <ConversationListContent />
-  </InfiniteListBase>
-);
+export const ConversationList = () => {
+  // BLOCKER #1 fix: read `?reason=` HERE (at the InfiniteListBase mount) and
+  // forward it as the list's permanent `filter` so react-admin emits
+  // `?reason=<enum>` in the data-provider call, which the backend
+  // `list_conversations` then delegates to `list_by_attention_reason`. Reading
+  // it at the content level (useListContext child) would be too late — the
+  // request has already fired.
+  const [searchParams] = useSearchParams();
+  const reasonParam = searchParams.get("reason");
+  const reasonFilter = isAttentionReason(reasonParam)
+    ? { reason: reasonParam }
+    : undefined;
+  // When the reason changes (or clears), remount cleanly so no stale rows from
+  // the previous reason linger and react-admin's permanent-filter bookkeeping
+  // resets. Acceptable per the spec note.
+  const listKey = reasonFilter ? `reason:${reasonFilter.reason}` : "all";
+  return (
+    // Infinite pagination keeps the inbox light while removing visible page
+    // controls. Row previews come from /conversations/last-messages/batch for
+    // the loaded rows only.
+    <InfiniteListBase
+      key={listKey}
+      perPage={25}
+      sort={CONVERSATION_LIST_SORT}
+      filter={reasonFilter}
+    >
+      <ConversationListContent />
+    </InfiniteListBase>
+  );
+};
