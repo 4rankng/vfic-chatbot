@@ -29,13 +29,11 @@ import {
 } from "./useKnowledgeSourceFilters";
 import { ProjectPicker } from "./ProjectPicker";
 import { InboxIcons } from "../conversations/InboxIcons";
-import { useIsMobile } from "@/hooks/use-mobile";
 import "../conversations/inbox.css";
 import type { KnowledgeSource } from "../types";
 
 const KnowledgeSourceListContent = () => {
   const refresh = useRefresh();
-  const isMobile = useIsMobile();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const {
@@ -91,7 +89,7 @@ const KnowledgeSourceListContent = () => {
               <BookOpen className="size-5" />
             </div>
             <div className="min-w-0">
-              <p className="ops-kicker">Knowledge center</p>
+              <p className="ops-kicker">Trung tâm kiến thức</p>
               <h1>Quản lý kiến thức</h1>
               <p>
                 Theo dõi tài liệu theo từng dự án, trạng thái xử lý, và nguồn
@@ -210,8 +208,6 @@ const KnowledgeSourceListContent = () => {
     </div>
   );
 
-  if (isMobile) return content;
-
   return (
     <div className="inbox-bg-container knowledge-workspace">
       <InboxIcons />
@@ -241,7 +237,7 @@ const SourceSelector = ({
       <div className="ops-panel-header knowledge-selector-header">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <div className="ops-panel-title">
-            <p className="ops-panel-eyebrow">Source in focus</p>
+            <p className="ops-panel-eyebrow">Tài liệu đang xem</p>
             <h2>Nguồn đang xem</h2>
           </div>
           <Badge variant="outline" className="border-border bg-background/70">

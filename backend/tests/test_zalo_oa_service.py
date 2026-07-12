@@ -483,7 +483,7 @@ async def test_oa_sender_send_anonymous_uses_phone_recipient(
 async def test_get_user_detail_encodes_data_param_and_parses_avatars(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Successful lookup URL-encodes the JSON data param and picks avatars.240."""
+    """Successful lookup passes compact JSON to httpx (which URL-encodes once)."""
     captured: dict[str, Any] = {}
 
     class _FakeResp:
@@ -532,8 +532,10 @@ async def test_get_user_detail_encodes_data_param_and_parses_avatars(
     assert profile.display_name == "Nguyễn Văn An"
     assert captured["url"] == "https://openapi.zalo.me/v3.0/oa/user/detail"
     assert captured["headers"] == {"access_token": "oa-token"}
-    # The data param is a compact-JSON, URL-encoded string carrying user_id.
-    assert captured["params"]["data"] == "%7B%22user_id%22%3A%22user-abc%22%7D"
+    # The data param is compact JSON passed raw — httpx URL-encodes it once
+    # when building the query string. Pre-encoding here caused double-encoding
+    # (Zalo saw %257B instead of %7B) and every lookup failed with -201.
+    assert captured["params"]["data"] == '{"user_id":"user-abc"}'
 
 
 async def test_get_user_detail_falls_back_to_avatar_when_no_240(

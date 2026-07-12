@@ -37,7 +37,7 @@ describe("workspace navigation", () => {
   it("keeps desktop-only admin destinations reachable through mobile overflow", () => {
     expect(
       getWorkspaceOverflowDestinations("admin").map(({ label }) => label),
-    ).toEqual(["Hiệu suất"]);
+    ).toEqual(["Hiệu suất", "Tài khoản"]);
     expect(getWorkspaceOverflowDestinations("recruiter")).toEqual([]);
   });
 

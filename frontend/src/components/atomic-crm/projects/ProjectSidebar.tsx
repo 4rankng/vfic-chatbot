@@ -49,7 +49,7 @@ const ProjectActionsMenu = ({
         <Button
           variant="ghost"
           size="icon"
-          className="size-9 opacity-80 transition-opacity hover:opacity-100"
+          className="size-11 opacity-80 transition-opacity hover:opacity-100 md:size-9"
           aria-label={`Mở thao tác cho ${project.name}`}
         >
           <MoreHorizontal className="size-4" />
@@ -119,7 +119,7 @@ const SelectedProjectSummary = ({
               variant="outline"
               size="sm"
               onClick={onEdit}
-              className="h-9"
+              className="h-11 md:h-9"
             >
               <Pencil className="size-4" />
               Sửa

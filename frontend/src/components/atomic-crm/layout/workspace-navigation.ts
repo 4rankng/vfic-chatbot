@@ -118,9 +118,10 @@ export const getWorkspaceDestinations = (
   );
 
 /**
- * Mobile keeps four primary destinations visible. This helper exposes the
- * remaining allowed desktop destinations through the mobile overflow surface,
- * so compact navigation never removes a capability.
+ * Mobile keeps four primary destinations visible. This helper exposes every
+ * remaining destination through the overflow surface, including Account for
+ * administrators. Account owns profile and logout, so it must stay reachable
+ * even though it does not occupy a fixed admin navigation slot.
  */
 export const getWorkspaceOverflowDestinations = (
   role: WorkspaceRole,
@@ -129,7 +130,10 @@ export const getWorkspaceOverflowDestinations = (
     getWorkspaceDestinations(role, "mobile").map(({ id }) => id),
   );
 
-  return getWorkspaceDestinations(role, "rail").filter(
-    ({ id }) => !primaryIds.has(id),
+  return WORKSPACE_DESTINATIONS.filter(
+    (destination) =>
+      (destination.rail || destination.mobile) &&
+      (!destination.roles || destination.roles.includes(role)) &&
+      !primaryIds.has(destination.id),
   );
 };

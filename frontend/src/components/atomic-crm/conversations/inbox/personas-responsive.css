@@ -101,6 +101,12 @@
     padding: 14px;
   }
 
+  .knowledge-workspace-content,
+  .project-workspace-content {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+
   .settings-workspace-content {
     padding-bottom: calc(112px + env(safe-area-inset-bottom));
     scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
@@ -109,7 +115,8 @@
   .persona-workspace-content {
     max-height: calc(100dvh - 68px);
     overflow-y: auto;
-    padding-bottom: 84px;
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
     -webkit-overflow-scrolling: touch;
   }
 
@@ -219,9 +226,39 @@
   }
 
   .persona-channel-header .persona-create-action {
-    min-height: 40px;
-    height: 40px;
+    min-height: 44px;
+    height: 44px;
     font-size: var(--crm-fs-action);
+  }
+
+  .persona-page-shell .persona-studio-command,
+  .persona-page-shell .persona-studio-command input,
+  .persona-page-shell .persona-studio-topbar .persona-create-action,
+  .persona-page-shell .persona-studio-profile-actions [data-slot="button"],
+  .persona-page-shell .persona-studio-section-title [data-slot="button"],
+  .persona-page-shell .persona-scope-row [data-slot="button"] {
+    min-height: 44px;
+    height: 44px;
+  }
+
+  .persona-directory-status-actions {
+    gap: 18px;
+  }
+
+  .persona-directory-main {
+    padding-right: 82px;
+  }
+
+  .persona-directory-status-icon,
+  .persona-directory-info-icon {
+    position: relative;
+  }
+
+  .persona-directory-status-icon::after,
+  .persona-directory-info-icon::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
   }
 
   .ops-command-mark {

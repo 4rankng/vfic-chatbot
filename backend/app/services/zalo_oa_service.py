@@ -6,7 +6,6 @@ import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
-from urllib.parse import quote
 
 import httpx
 
@@ -321,12 +320,17 @@ class ZaloOASender:
         user_id = (user_id or "").strip()
         if not user_id:
             return None
-        data_param = quote(json.dumps({"user_id": user_id}, separators=(",", ":")))
+        # Pass raw JSON; httpx URL-encodes it once via params=. Previously we
+        # pre-encoded with urllib.parse.quote, which httpx then encoded AGAIN
+        # (turning %7B into %257B) — Zalo decoded once, saw still-encoded garbage,
+        # and rejected every lookup with -201 "Data is not json format".
+        data_param = json.dumps({"user_id": user_id}, separators=(",", ":"))
         envelope = await self._get_with_refresh("/v3.0/oa/user/detail", params={"data": data_param})
         if not isinstance(envelope, dict) or envelope.get("error") not in (0, "0", None):
             logger.info(
-                "zalo OA user-detail lookup failed error=%s",
+                "zalo OA user-detail lookup failed error=%s message=%s",
                 envelope.get("error") if isinstance(envelope, dict) else "non-dict",
+                envelope.get("message") if isinstance(envelope, dict) else None,
             )
             return None
         data = envelope.get("data")

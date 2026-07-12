@@ -191,7 +191,7 @@ const TrendChart = ({ trend, window }: { trend: PerfTrendBucket[]; window: PerfM
           {trend.map((bucket, index) => {
             const height = Math.max(2, ((bucket.p95_ms ?? 0) / maxP95) * 100);
             const tooltip = `${formatTrendBucket(bucket.bucket, true)} · p95 ${fmtMs(bucket.p95_ms)} · ${bucket.turns} lượt · ${bucket.errors} lỗi`;
-            return <button className={`performance-trend-bar${bucket.errors > 0 ? " is-error" : ""}`} key={`${bucket.bucket ?? index}`} style={{ height: `${height}%` }} title={tooltip} aria-label={tooltip} type="button" />;
+            return <span className={`performance-trend-bar${bucket.errors > 0 ? " is-error" : ""}`} key={`${bucket.bucket ?? index}`} style={{ height: `${height}%` }} title={tooltip} aria-label={tooltip} />;
           })}
         </div>
         <div className="performance-trend-axis" aria-hidden="true">{axisTicks.map((tick) => <span key={tick.index} style={{ left: `${trend.length > 1 ? (tick.index / (trend.length - 1)) * 100 : 0}%` }} className={tick.index === 0 ? "is-first" : tick.index === trend.length - 1 ? "is-last" : ""}>{tick.label}</span>)}</div>

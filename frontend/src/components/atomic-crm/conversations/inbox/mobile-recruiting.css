@@ -98,34 +98,37 @@
 }
 
 .inbox-bg-container .kb-scope {
-  --background: #f5f6f1;
-  --foreground: #15201c;
-  --card: #ffffff;
-  --card-foreground: #15201c;
-  --popover: #ffffff;
-  --popover-foreground: #15201c;
-  --primary: #15201c;
-  --primary-foreground: #f5f6f1;
-  --secondary: #eceee5;
-  --secondary-foreground: #15201c;
-  --muted: #eceee5;
-  --muted-foreground: #5c6760;
-  --accent: #e3f0ea;
-  --accent-foreground: #1f6f54;
-  --destructive: #b23a2e;
+  /* Knowledge is a console workspace, not a legacy warm-paper island. Keep
+     its semantic utilities aligned with the shared blue shell on every
+     breakpoint, including the mobile wrapper. */
+  --background: var(--workspace-canvas);
+  --foreground: var(--workspace-ink);
+  --card: var(--workspace-surface);
+  --card-foreground: var(--workspace-ink);
+  --popover: var(--workspace-surface);
+  --popover-foreground: var(--workspace-ink);
+  --primary: var(--workspace-action);
+  --primary-foreground: #ffffff;
+  --secondary: var(--workspace-surface-muted);
+  --secondary-foreground: var(--workspace-ink);
+  --muted: var(--workspace-surface-muted);
+  --muted-foreground: var(--workspace-ink-muted);
+  --accent: var(--workspace-teal-soft);
+  --accent-foreground: var(--workspace-teal-strong);
+  --destructive: var(--workspace-danger);
   --destructive-foreground: #ffffff;
-  --border: #dee2d8;
-  --input: #dee2d8;
-  --ring: #1f6f54;
-  --kb-teal: #1f6f54;
-  --kb-teal-soft: #e3f0ea;
-  --kb-rust: #b23a2e;
-  --kb-rust-soft: #f8e7e4;
-  --kb-ochre: #8a5a14;
-  --kb-ochre-soft: #f4ecda;
-  --kb-ink-700: #33403a;
-  --kb-ink-300: #9ca59c;
-  --kb-line-strong: #c7cdbc;
+  --border: var(--workspace-border);
+  --input: var(--workspace-border);
+  --ring: var(--workspace-focus);
+  --kb-teal: var(--workspace-action);
+  --kb-teal-soft: var(--workspace-teal-soft);
+  --kb-rust: var(--workspace-danger);
+  --kb-rust-soft: #fce8e9;
+  --kb-ochre: var(--workspace-warning);
+  --kb-ochre-soft: #fff4dc;
+  --kb-ink-700: var(--workspace-ink);
+  --kb-ink-300: var(--workspace-ink-muted);
+  --kb-line-strong: var(--workspace-border);
   color: var(--foreground);
 }
 

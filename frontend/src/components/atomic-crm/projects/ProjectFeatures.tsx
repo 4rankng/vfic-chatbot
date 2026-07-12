@@ -185,7 +185,7 @@ export const ProjectFeatures = ({
               size="sm"
               onClick={onExtract}
               disabled={extracting}
-              className="project-feature-extract h-9"
+              className="project-feature-extract h-11 md:h-9"
               title="Trích xuất lại các đặc điểm từ tin tuyển dụng (chạy LLM, ~5-10s)"
             >
               <Sparkles className="size-4" />

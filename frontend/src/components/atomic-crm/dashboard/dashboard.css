@@ -317,3 +317,60 @@ button.dashboard-candidate-row:active {
     padding-inline: 16px;
   }
 }
+
+/* The dashboard shares a few class names with the richer recruiting workspace.
+   Keep its compact operations composition scoped so a late-loaded workspace
+   stylesheet cannot turn a phone or narrow tablet into two squeezed columns. */
+.dashboard-workspace .recruiting-hero {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.dashboard-workspace .dashboard-candidate-row {
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 1023px) {
+  .dashboard-workspace .recruiting-two-column {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .dashboard-workspace .recruiting-panel:nth-child(2) {
+    order: 2;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-workspace .dashboard-workspace-content {
+    padding: 20px 16px calc(5.75rem + env(safe-area-inset-bottom));
+  }
+
+  .dashboard-workspace .recruiting-command {
+    gap: 16px;
+  }
+
+  .dashboard-workspace .recruiting-panel-header {
+    padding: 16px;
+  }
+
+  .dashboard-workspace .dashboard-candidate-list {
+    padding: 4px 16px 12px;
+  }
+
+  .dashboard-workspace .dashboard-candidate-row {
+    min-height: 72px;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 12px 0;
+  }
+
+  .dashboard-workspace .dashboard-candidate-avatar {
+    width: 42px;
+    height: 42px;
+  }
+}

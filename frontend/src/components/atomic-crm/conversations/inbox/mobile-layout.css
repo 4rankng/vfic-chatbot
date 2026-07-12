@@ -95,6 +95,17 @@
    default pane; tapping a row pushes ?id=<conv> (detail-open) and the detail
    slides in from the right; the browser back button / in-app back clears it. */
 @media (max-width: 767px) {
+  /* Workspace pages share the inbox surface for tokens and component rules.
+     The desktop frame normally gives that surface a percentage height; in the
+     document-flow mobile frame that percentage resolves to zero. Give the
+     shared surface a real viewport height so its internal scroll pane remains
+     visible for knowledge, projects, and personas. */
+  .workspace-frame-content > .inbox-bg-container {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
   .inbox-bg-container {
     /* Conversation routes own the full mobile viewport; no global top/bottom app bar. */
     padding: 0;
@@ -184,11 +195,11 @@
   }
 
   .inbox-bg-container .conversation {
-    grid-template-columns: 48px minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: center;
     gap: 12px;
-    min-height: 68px;
-    padding: 10px 0;
+    min-height: 70px;
+    padding: 11px 2px;
     border-radius: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   }
@@ -206,14 +217,24 @@
     background: #d8ecff;
   }
 
+  .inbox-bg-container .conversation.needs-attention {
+    box-shadow: none;
+    background: transparent;
+    padding-left: 2px;
+  }
+
   .inbox-bg-container .conversation.needs-attention::after {
     display: none;
   }
 
   .inbox-bg-container .avatar {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     font-size: var(--chat-fs-section-title);
+  }
+
+  .inbox-bg-container .conversation.needs-attention .avatar {
+    box-shadow: inset 0 0 0 2px #e5a429;
   }
 
   .inbox-bg-container .conv-top {
@@ -221,9 +242,9 @@
   }
 
   .inbox-bg-container .conv-name {
-    font-size: var(--chat-fs-list-title);
+    font-size: 15px;
     font-weight: var(--chat-fw-bold);
-    line-height: var(--chat-lh-title);
+    line-height: 1.25;
   }
 
   .inbox-bg-container .conv-time {
@@ -234,63 +255,18 @@
   }
 
   .inbox-bg-container .conv-preview {
-    font-size: var(--chat-fs-list-preview);
-    line-height: var(--chat-lh-body);
+    font-size: 14px;
+    line-height: 1.35;
   }
 
   .inbox-bg-container .conv-bottom {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 4px;
-  }
-  .inbox-bg-container .conv-meta-row {
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    row-gap: 3px;
   }
 
-  /* Mobile inbox: a compact, scan-first queue. Keep one consistent avatar
-     treatment and two text lines; status is announced through the row label
-     instead of repeating chips under every conversation. */
-  .inbox-bg-container .conversation {
-    grid-template-columns: 38px minmax(0, 1fr);
-    gap: 11px;
-    min-height: 60px;
-    padding: 10px 2px;
-    border-bottom-color: #e7ecf2;
-  }
-
-  .inbox-bg-container .conversation.needs-attention {
-    background: transparent;
-  }
-
-  .inbox-bg-container .avatar,
-  .inbox-bg-container .conversation.needs-attention .avatar {
-    width: 38px;
-    height: 38px;
-    background: #eef4ff !important;
-    color: var(--workspace-action) !important;
-    box-shadow: inset 0 0 0 1px #dbe7fb;
-  }
-
-  .inbox-bg-container .conv-name {
-    font-size: 14px;
-    line-height: 1.25;
-  }
-
-  .inbox-bg-container .conv-time {
-    font-size: 12px;
-  }
-
-  .inbox-bg-container .conv-preview {
-    font-size: 13px;
-    line-height: 1.35;
-  }
-
-  .inbox-bg-container .conv-preview-icon {
-    width: 12px;
-    height: 12px;
-    flex-basis: 12px;
-  }
-
+  /* A conversation row is a scan-first queue item, not a stack of badges.
+     Urgency is carried by the avatar treatment and announced to screen
+     readers; status and priority are available in the conversation itself. */
   .inbox-bg-container .conv-meta-row {
     display: none;
   }
@@ -329,6 +305,29 @@
     transform: translateX(0);
     visibility: visible;
   }
+
+  /* Only the conversation master/detail view uses an off-canvas center pane.
+     Operations workspaces reuse the same shell for tokens and scrolling, but
+     their sole pane is the page itself and must never inherit the hidden
+     conversation-detail transform. */
+  .inbox-bg-container
+    .app:is(
+      .dashboard-app,
+      .knowledge-app,
+      .settings-app,
+      .profile-app,
+      .persona-app,
+      .project-app
+    )
+    .center-panel {
+    position: relative;
+    inset: auto;
+    min-height: 0;
+    height: 100%;
+    transform: none;
+    visibility: visible;
+  }
+
   .inbox-bg-container .app.detail-open .backdrop {
     display: block;
     position: absolute;

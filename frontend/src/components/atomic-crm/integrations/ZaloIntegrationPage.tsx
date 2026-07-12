@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNotify, usePermissions, useTranslate } from "ra-core";
 import {
   Bot,
+  ChevronDown,
   Cpu,
+  Menu,
   MessageCircle,
   PlugZap,
   Settings,
@@ -23,6 +25,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { apiJson } from "../providers/rest/api";
 import {
   buildZaloUpdatePayload,
@@ -478,6 +487,71 @@ const SettingsSideNav = ({
     </div>
   </aside>
 );
+
+const MobileSettingsNav = ({
+  activeItemId,
+  onItemSelect,
+}: {
+  activeItemId: SettingsItemId;
+  onItemSelect: (itemId: SettingsItemId) => void;
+}) => {
+  const activeItem =
+    SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
+    SETTINGS_NAV_ITEMS[0];
+
+  return (
+    <div className="settings-mobile-topbar">
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="settings-mobile-drawer-trigger"
+            aria-label="Mở danh mục cài đặt"
+          >
+            <Menu className="size-5" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-left">
+              <span className="settings-mobile-drawer-label">Cài đặt</span>
+              <span className="settings-mobile-drawer-current">
+                {activeItem.label}
+              </span>
+            </span>
+            <ChevronDown className="size-4" aria-hidden="true" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="settings-mobile-drawer">
+          <SheetTitle className="settings-mobile-drawer-title">
+            Cài đặt
+          </SheetTitle>
+          <p className="settings-mobile-drawer-description">
+            Chọn khu vực bạn muốn cấu hình.
+          </p>
+          <nav className="settings-mobile-drawer-list" aria-label="Mục cài đặt">
+            {SETTINGS_NAV_ITEMS.map((item) => {
+              const active = item.itemId === activeItemId;
+
+              return (
+                <SheetClose asChild key={item.itemId}>
+                  <button
+                    type="button"
+                    className={`settings-mobile-drawer-item${active ? " is-active" : ""}`}
+                    onClick={() => onItemSelect(item.itemId)}
+                  >
+                    <SettingsNavLinkContent
+                      label={item.label}
+                      description={item.description}
+                      Icon={item.Icon}
+                    />
+                  </button>
+                </SheetClose>
+              );
+            })}
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+};
 
 const formatRelativeEpoch = (epoch: number | null): string => {
   if (!epoch) return "";
@@ -1125,10 +1199,17 @@ export const ZaloIntegrationPage = () => {
     <div className="settings-workspace-content text-foreground">
       <div className="ops-page-shell settings-page-shell">
         <div className="settings-console">
-          <SettingsSideNav
-            activeItemId={activeItemId}
-            onItemSelect={selectSettingsItem}
-          />
+          {isMobile ? (
+            <MobileSettingsNav
+              activeItemId={activeItemId}
+              onItemSelect={selectSettingsItem}
+            />
+          ) : (
+            <SettingsSideNav
+              activeItemId={activeItemId}
+              onItemSelect={selectSettingsItem}
+            />
+          )}
 
           <div className="settings-main">
             <header className="ops-command-header settings-command-header">
