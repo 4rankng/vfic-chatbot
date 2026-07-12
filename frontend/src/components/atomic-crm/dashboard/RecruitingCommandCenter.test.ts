@@ -42,7 +42,7 @@ const row = (
   conversation_id: `conv-${key}`,
   lead_id: null,
   name: `Ứng viên ${key}`,
-  phone_last4: null,
+  phone: null,
   desired_job: null,
   lead_stage: null,
   lead_score: null,

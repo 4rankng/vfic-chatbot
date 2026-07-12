@@ -4,7 +4,7 @@ Pure-unit (mock-based, no DB) — mirrors the project's test_viewer_scope /
 test_conversation_release pattern. The repository SQL is exercised by
 integration tests; here we pin the SERVICE logic: cache hit/miss, viewer-scope
 mapping, snapshot-consistency transaction wiring, response assembly, key/action
-derivation, and the strict Pydantic contract (extra="forbid", PII minimization).
+derivation, and the strict Pydantic response contract (extra="forbid").
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _row(**over) -> dict:
         "conversation_id": UID,
         "lead_id": None,
         "name": "Nguyen Van A",
-        "phone_last4": "1234",
+        "phone": "0901234567",
         "desired_job": "Lái xe",
         "lead_stage": "CONTACTING",
         "lead_score": "hot",
@@ -125,27 +125,27 @@ def test_attention_item_rejects_extra_fields():
         )
 
 
-def test_attention_item_rejects_full_phone_field():
-    """PII minimization: only phone_last4 is allowed, never full ``phone``."""
+def test_attention_item_accepts_phone_field():
+    """Authenticated recruiter dashboard rows include the contact number."""
+    item = AttentionItemOut(
+        key="k",
+        reason="REPLY_OVERDUE",
+        urgency_at=datetime.now(timezone.utc),
+        action="OPEN_CONVERSATION",
+        phone="0901234567",
+    )
+    assert item.phone == "0901234567"
+
+
+def test_attention_item_rejects_legacy_phone_last4_field():
     with pytest.raises(ValidationError):
         AttentionItemOut(
             key="k",
             reason="REPLY_OVERDUE",
             urgency_at=datetime.now(timezone.utc),
             action="OPEN_CONVERSATION",
-            phone="0901234567",
+            phone_last4="4567",
         )
-
-
-def test_attention_item_accepts_phone_last4_only():
-    item = AttentionItemOut(
-        key="k",
-        reason="REPLY_OVERDUE",
-        urgency_at=datetime.now(timezone.utc),
-        action="OPEN_CONVERSATION",
-        phone_last4="4567",
-    )
-    assert item.phone_last4 == "4567"
 
 
 def test_attention_item_has_no_latest_message_field():
@@ -358,7 +358,7 @@ async def test_conversation_anchored_row_gets_open_conversation_action(monkeypat
     assert item.action is AttentionAction.OPEN_CONVERSATION
     assert item.reason is AttentionReason.REPLY_OVERDUE
     assert item.conversation_id == UID
-    assert item.phone_last4 == "1234"
+    assert item.phone == "0901234567"
     assert item.lead_stage == "CONTACTING"
 
 
@@ -404,13 +404,14 @@ async def test_delivery_review_row_carries_delivery_status(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_round_trip_payload_has_no_pii_beyond_phone_last4(monkeypatch):
+async def test_round_trip_payload_includes_phone_but_not_message_text(monkeypatch):
     _patch_service(monkeypatch)
     db = _fake_db()
     out = await service_mod.DashboardService(db).attention(_viewer(Role.admin))
     dumped = out.model_dump(mode="json")
     for item in dumped["immediate"] + dumped["today"]:
-        assert "phone" not in item or item.get("phone") is None
+        assert item["phone"] == "0901234567"
+        assert "phone_last4" not in item
         assert "latest_message" not in item
         assert "body" not in item
 
@@ -501,3 +502,11 @@ async def test_lead_anchored_left_join_is_outer_so_null_conversation_is_kept():
     + key='lead:<id>'. Pin that the join keyword is LEFT JOIN (not JOIN)."""
     sql = await _captured_attention_sql(str(UID), "immediate")
     assert "LEFT JOIN conversations c ON c.zalo_chat_id = l.zalo_id" in sql
+
+
+@pytest.mark.asyncio
+async def test_attention_rows_select_full_phone_for_recruiter_follow_up():
+    sql = await _captured_attention_sql(str(UID), "immediate")
+    assert "el.name, el.phone, el.desired_job" in sql
+    assert "SELECT l.name, l.phone, l.desired_job" in sql
+    assert "right(l.phone, 4)" not in sql

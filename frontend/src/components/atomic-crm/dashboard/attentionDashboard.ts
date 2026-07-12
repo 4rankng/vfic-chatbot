@@ -6,9 +6,8 @@
 // formatting, and the reason→counter / reason→queueFilter maps used by the
 // dashboard UI and the `?reason=` deep link into the inbox.
 //
-// PII is minimized server-side: rows expose `phone_last4` only and never the
-// full phone or the `latest_message` body. The frontend must not imply full
-// message text is available.
+// Authenticated recruiters receive an anchor lead's full phone number for
+// follow-up, but never the `latest_message` body.
 //
 // NOTE: this module intentionally does NOT consume `useDashboardStats.ts`,
 // which remains live for `KnowledgeIngestPanel` and `usePerformanceStats`.
@@ -52,8 +51,8 @@ export interface AttentionItem {
   conversation_id: string | null;
   lead_id: number | null;
   name: string | null;
-  /** Last 4 digits of the anchor phone only — never the full phone. */
-  phone_last4: string | null;
+  /** Full phone number of the anchor lead, when one has been captured. */
+  phone: string | null;
   desired_job: string | null;
   lead_stage: string | null;
   lead_score: string | null;

@@ -2,6 +2,10 @@
 
 > Testing approach for the ChatBot (VFIC miniCRM) platform.
 > See [`../AGENTS.md`](../AGENTS.md) §8 for test commands, [`../standards/definition-of-done.md`](../standards/definition-of-done.md) for the completion gate.
+>
+> **Manual + scripted QA of the dev environment** (visual, functional, perf) is
+> covered in [`qa-runbook.md`](qa-runbook.md). The per-feature manual checklist
+> lives in [`../frontend/qa/TEST_PLAN.md`](../frontend/qa/TEST_PLAN.md).
 
 ## Testing Pyramid
 

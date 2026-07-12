@@ -1,8 +1,8 @@
 """Recruiter attention dashboard response schemas.
 
-Strict Pydantic v2 models for ``GET /api/v1/dashboard/attention``. PII is
-minimized: rows expose ``phone_last4`` only (server-side ``right(phone,4)``)
-and never the full phone or the ``latest_message`` body — candidate-authored
+Strict Pydantic v2 models for ``GET /api/v1/dashboard/attention``. Authenticated
+recruiters can see an anchor lead's full ``phone`` to contact the candidate;
+the endpoint never exposes the ``latest_message`` body — candidate-authored
 free text may carry third-party PII and is not needed to prioritize work.
 
 ``AttentionReason`` values are stable machine enums; Vietnamese labels are
@@ -56,8 +56,8 @@ class AttentionItemOut(BaseModel):
 
     ``key`` is the stable dedup key: ``str(conversation_id)`` when a
     conversation exists, else ``"lead:{lead_id}"``. ``urgency_at`` is the
-    timestamp the row is sorted by (oldest first within a reason). PII fields
-    (``name``, ``phone_last4``) come from the anchor table only.
+    timestamp the row is sorted by (oldest first within a reason). Contact
+    fields (``name``, ``phone``) come from the anchor lead only.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -68,7 +68,7 @@ class AttentionItemOut(BaseModel):
     conversation_id: uuid.UUID | None = None
     lead_id: int | None = None
     name: str | None = None
-    phone_last4: str | None = None
+    phone: str | None = None
     desired_job: str | None = None
     lead_stage: str | None = None
     lead_score: str | None = None

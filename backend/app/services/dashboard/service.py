@@ -127,8 +127,8 @@ class DashboardService:
         One Redis read on hit (prod-only); on miss, exactly 3 DB round-trips
         (counters + immediate rows + today rows) inside one transaction so all
         reads share a single snapshot (Phase 1 Read-transaction requirement).
-        PII is minimized: rows carry ``phone_last4`` only, never the message
-        body, so the cached payload is safe to store in Redis.
+        Rows include the full phone number for authenticated recruiters to
+        contact candidates, but never the message body.
         """
         settings = get_settings()
         cache_enabled = settings.dashboard_cache_enabled and settings.app_env == "production"
@@ -227,7 +227,7 @@ class DashboardService:
             conversation_id=conversation_id,
             lead_id=lead_id,
             name=row.get("name"),
-            phone_last4=row.get("phone_last4"),
+            phone=row.get("phone"),
             desired_job=row.get("desired_job"),
             lead_stage=row.get("lead_stage"),
             lead_score=row.get("lead_score"),

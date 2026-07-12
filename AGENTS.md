@@ -345,6 +345,7 @@ Existing documentation in `docs/`:
 | [docs/project-overview-pdr.md](docs/project-overview-pdr.md) | Product development requirements (FR-1–FR-8, NFR-1–NFR-11) |
 | [docs/project-roadmap.md](docs/project-roadmap.md) | Current state, near-term priorities, tech debt register |
 | [docs/testing.md](docs/testing.md) | Testing strategy (unit → integration → API → E2E → perf) |
+| [docs/qa-runbook.md](docs/qa-runbook.md) | **Manual + scripted QA of the dev env** (login `admin@vfic.dev`): visual/UI-UX, functional, latency/perf |
 | [docs/api.md](docs/api.md) | API reference (routes, auth, response envelope) |
 | [docs/database.md](docs/database.md) | DB reference (Postgres + pgvector, Alembic, Redis roles) |
 | [docs/design-tokens-graphite-cloud.md](docs/design-tokens-graphite-cloud.md) | Current design token system (graphite/cloud/emerald) |
@@ -404,3 +405,12 @@ Knowledge base in `lessons/`:
 3. **Backup** production (`make backup`) before any schema change.
 4. **Use fast-track** (`make deploy-backend` / `make deploy-frontend`) for code-only changes.
 5. **Never deploy** without human approval (see §13).
+
+### When QA-testing the dev environment
+1. **Read** [`docs/qa-runbook.md`](docs/qa-runbook.md) in full — it is the single source of truth.
+2. **Bring up the stack** with `make dev`; verify `/health` and `localhost:5173`.
+3. **Login** with `admin@vfic.dev` / `admin123` (see [`docs/qa-runbook.md`](docs/qa-runbook.md) §2 for more accounts + data-safety rules).
+4. **Visual sweep** every route in §3 of the runbook, desktop + 390×844 mobile.
+5. **Functional sweep** via the `frontend/qa/*.cjs` scripts + domain-logic checks (runbook §5).
+6. **Perf sweep** — route timing + API latency (runbook §6).
+7. **Record findings** under `plans/qa-<date>/report.md` using the ISSUE template; never auto-fix during QA (runbook §8).

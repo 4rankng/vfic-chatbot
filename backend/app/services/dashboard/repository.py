@@ -447,7 +447,7 @@ class DashboardRepository:
         # The lateral lead pick uses MAX(l.updated_at) per the existing
         # _conversation_for_lead helper (lead/service.py:340-347) tie-break.
 
-        # Conversation-anchored reasons. Enrichment (name/phone_last4/stage)
+        # Conversation-anchored reasons. Enrichment (name/phone/stage)
         # comes from the latest-updated lead matching c.zalo_chat_id, with lead
         # viewer scope applied independently (Join & Dedup Contract: if the
         # conversation and lead disagree on ownership, the row is dropped).
@@ -590,20 +590,20 @@ class DashboardRepository:
             "  FROM (" + union_sql + ") u)"
         )
 
-        # Enrichment: for each surviving candidate, pull name/phone_last4/
+        # Enrichment: for each surviving candidate, pull name/phone/
         # desired_job/stage/score from the matching lead. Conversation-anchored
         # rows match via leads.zalo_id = c.zalo_chat_id (latest updated_at wins,
         # tie-break per Join & Dedup Contract); lead-anchored rows already have
         # the lead_id. viewer_scope applied to the enrichment lead independently.
-        # phone_last4 = right(phone,4) server-side (PII minimization).
+        # The recruiter dashboard needs the full phone number for follow-up.
         sql = (
             "WITH " + ", ".join(ctes + [dedup_sql]) + " "
             "SELECT cand.reason, cand.urgency_at, cand.conversation_id, cand.lead_id, "
-            "el.name, el.phone_last4, el.desired_job, el.lead_stage, el.lead_score, "
+            "el.name, el.phone, el.desired_job, el.lead_stage, el.lead_score, "
             "cand.last_inbound_at, cand.due_at, cand.delivery_status "
             "FROM candidates cand "
             "LEFT JOIN LATERAL ("
-            "  SELECT l.name, right(l.phone, 4) AS phone_last4, l.desired_job, "
+            "  SELECT l.name, l.phone, l.desired_job, "
             "  l.lead_stage::text AS lead_stage, l.lead_score::text AS lead_score "
             "  FROM leads l "
             + self._enrichment_join(c_scope, l_scope)

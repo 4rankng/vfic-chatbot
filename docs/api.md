@@ -148,9 +148,10 @@ share a single snapshot — no badge/queue disagreement under concurrent webhook
 **Performance budget:** ≤ 3 DB round-trips per request (1 counters query + 2 bounded
 queue reads), backed by a per-viewer Redis cache (~30s TTL, `dashboard:attention:{scope}`).
 
-**PII minimization:** each row returns `phone_last4` only (never the full phone), and
-**no `latest_message` body** (candidate-authored free text may contain third-party PII
-and is not needed to prioritize work). Use `last_inbound_at` for elapsed-time display.
+**Contact information:** each row returns the lead's full `phone` so the authenticated
+recruiter can follow up directly. The response contains **no `latest_message` body**
+(candidate-authored free text may contain third-party PII and is not needed to
+prioritize work). Use `last_inbound_at` for elapsed-time display.
 
 **Response contract** (`app/schemas/dashboard.py`):
 
@@ -171,7 +172,7 @@ and is not needed to prioritize work). Use `last_inbound_at` for elapsed-time di
 
 Each queue is bounded to 8 rows; counters cover the full filtered set. Each
 `AttentionItem` carries `key`, `reason`, `urgency_at`, `conversation_id?`, `lead_id?`,
-`name?`, `phone_last4?`, `desired_job?`, `lead_stage?`, `lead_score?`,
+`name?`, `phone?`, `desired_job?`, `lead_stage?`, `lead_score?`,
 `last_inbound_at?`, `due_at?`, `delivery_status?`, and `action`
 (`OPEN_CONVERSATION` | `CALL`). A candidate appears once, under its highest-priority reason.
 

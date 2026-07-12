@@ -27,8 +27,8 @@ const normalizeText = (value: string | null | undefined): string =>
 const candidateName = (row: AttentionItem): string => {
   const name = normalizeText(row.name);
   if (name) return name;
-  const suffix = row.phone_last4 ?? row.conversation_id?.slice(-4) ?? "";
-  return suffix ? `Ứng viên ${suffix}` : "Ứng viên chưa định danh";
+  const phone = normalizeText(row.phone);
+  return phone ? `Ứng viên ${phone}` : "Ứng viên chưa định danh";
 };
 
 const formatClock = (value: string | null | undefined): string => {
@@ -57,8 +57,7 @@ type Navigate = ReturnType<typeof useNavigate>;
 /**
  * One primary action per row (no nested interactive controls — spec Risks).
  * `OPEN_CONVERSATION` navigates to the conversation; `CALL` only displays the
- * last-4 (we do not have a full phone to dial, so a `tel:` link would dial a
- * wrong number). Returns `null` for the static (CALL) variant.
+ * Returns `null` for the static (CALL) variant.
  */
 const rowOnClick = (
   row: AttentionItem,
@@ -280,22 +279,20 @@ const AttentionRow = ({
   const visibleReasonLabel = reasonLabelForQueue(row.reason, queue);
   const stage = normalizeText(row.lead_stage);
   const desiredJob = normalizeText(row.desired_job);
-  const phoneHint = normalizeText(row.phone_last4)
-    ? `••• ${row.phone_last4}`
-    : "";
+  const phone = normalizeText(row.phone);
   // The whole row is a single button (OPEN_CONVERSATION) so there are no
-  // nested interactive controls; for CALL rows (no dialable phone) we render a
-  // static row that still displays the last-4 identifier hint.
+  // nested interactive controls; CALL rows remain static even when a contact
+  // number is available.
   const sub = (
     <span className="dashboard-candidate-sub">
       {desiredJob ? <span className="dashboard-job">{desiredJob}</span> : null}
-      {phoneHint ? (
+      {phone ? (
         <span
           className="dashboard-phone-hint"
-          aria-label="Số điện thoại cuối 4 số"
+          aria-label={`Số điện thoại ${phone}`}
         >
           <Phone className="size-3" aria-hidden="true" />
-          {phoneHint}
+          {phone}
         </span>
       ) : null}
     </span>
@@ -335,13 +332,13 @@ const AttentionRow = ({
       </button>
     );
   }
-  // CALL row — last-4 only, no dial action (we don't have a full phone).
+  // CALL row — displayed as a static row; it does not add a nested dial action.
   return (
     <div
       className="dashboard-candidate-row is-static"
       aria-label={`${name}. ${reasonLabel}${
         elapsed ? `, ${elapsed}` : ""
-      }${phoneHint ? `, số cuối ${row.phone_last4}` : ""}`}
+      }${phone ? `, số điện thoại ${phone}` : ""}`}
     >
       <CandidateAvatar />
       <span className="dashboard-candidate-main">
