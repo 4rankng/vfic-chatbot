@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections import OrderedDict
 from hashlib import sha256
 from typing import Any
@@ -148,6 +149,8 @@ async def search_knowledge(
     query: str,
     project_slug: str | None = None,
     top_k: int = 25,
+    *,
+    metrics: dict | None = None,
 ) -> str:
     """Project-scoped semantic search over usable knowledge (the `documents` VIEW).
 
@@ -156,6 +159,11 @@ async def search_knowledge(
 
     FAQ-first pre-pass: canonical FAQ chunks (``category='faq'``) are retrieved with a
     higher similarity floor and prepended so the agent leads with curated answers.
+
+    When ``metrics`` is provided, RAG cache hit/miss + lookup latency are recorded
+    under ``metrics["rag_cache"]`` (``exact_hit``, ``semantic_hit``, ``semantic_sim``)
+    and ``metrics["rag_cache_lookup_ms"]`` so the release gate can evaluate whether
+    caching pays for itself from existing ``BotRun.stage_timings`` rows.
     """
     repo = retrieval
     project_ids: list[str] | None = None
@@ -169,10 +177,37 @@ async def search_knowledge(
     cache_key = (
         f"rag:knowledge:{_cache_digest(query, project_slug, top_k, project_ids, knowledge_version)}"
     )
+
+    # --- Cache-read window: wrap exact + semantic lookup together so the
+    # lookup timer answers "is the cache paying for itself?" without including
+    # the DB retrieval that follows. ---
+    cache_t0 = time.monotonic()
+
+    def _record_cache(
+        *,
+        exact_hit: bool | None = None,
+        semantic_hit: bool | None = None,
+        semantic_sim: float | None = None,
+    ) -> None:
+        if metrics is None:
+            return
+        metrics["rag_cache_lookup_ms"] = int(round((time.monotonic() - cache_t0) * 1000))
+        bucket = metrics.setdefault("rag_cache", {})
+        if exact_hit is not None:
+            bucket["exact_hit"] = exact_hit
+        if semantic_hit is not None:
+            bucket["semantic_hit"] = semantic_hit
+        if semantic_sim is not None:
+            bucket["semantic_sim"] = round(semantic_sim, 3)
+
     if s.rag_cache_enabled:
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
+            _record_cache(exact_hit=True, semantic_hit=False)
             return cached
+        _record_cache(exact_hit=False)
+    else:
+        _record_cache(exact_hit=False)
 
     raw_emb = await _cached_embed(embedder, query)
     emb = vec_literal(raw_emb)
@@ -186,7 +221,13 @@ async def search_knowledge(
         sem_hit = await semantic_cache_get(raw_emb)
         if sem_hit is not None:
             logger.debug("search_knowledge semantic cache hit (sim=%.3f)", sem_hit.similarity)
+            _record_cache(semantic_hit=True, semantic_sim=sem_hit.similarity)
             return sem_hit.result
+        _record_cache(semantic_hit=False)
+    elif metrics is not None and not getattr(s, "semantic_cache_enabled", False):
+        # Semantic cache disabled — record the miss explicitly so dashboard
+        # queries can distinguish "disabled" from "enabled-and-missed".
+        metrics.setdefault("rag_cache", {})["semantic_hit"] = False
 
     # FAQ-first pre-pass: prepend canonical FAQ answers when a strong match exists.
     faq_rows = await repo.match_faq(emb, top_k=3, project_ids=project_ids)

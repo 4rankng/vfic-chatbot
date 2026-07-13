@@ -12,7 +12,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import bump_cache_version
+from app.core.cache import bump_kb_caches
 from app.core.vector import vec_literal
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.models.user import User
@@ -117,7 +117,7 @@ class ProjectFaqService:
             target_id=str(chunk.id),
         )
         await self.db.commit()
-        await bump_cache_version("knowledge")
+        await bump_kb_caches()
         await self.db.refresh(chunk)
         return self._faq_out(
             {
@@ -206,7 +206,7 @@ class ProjectFaqService:
             target_id=str(chunk_id),
         )
         await self.db.commit()
-        await bump_cache_version("knowledge")
+        await bump_kb_caches()
         await self.db.refresh(chunk)
         return self._faq_out(
             {
@@ -235,7 +235,7 @@ class ProjectFaqService:
             target_id=str(chunk_id),
         )
         await self.db.commit()
-        await bump_cache_version("knowledge")
+        await bump_kb_caches()
 
     async def _embed_faq_chunk(
         self,

@@ -488,3 +488,104 @@ async def _const(value):
 
 async def _none():
     return None
+
+
+# ---------------------------------------------------------------------------
+# search_knowledge — RAG cache telemetry (metrics threading)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cache_enabled_io(monkeypatch):
+    """Enable RAG exact-hash caching with controllable fakes (no live Redis).
+
+    Mirrors ``no_cache_io`` but flips ``rag_cache_enabled = True`` and lets the
+    test inject the exact-cache return value via ``exact_cache_value``.
+    """
+
+    class _S:
+        rag_cache_enabled = True
+        semantic_cache_enabled = False
+        embedding_provider = "openrouter"
+        openrouter_embedding_model = "openai/text-embedding-3-large"
+        gemini_embedding_model = "gemini-embedding-2"
+        embedding_dim = 8
+        embedding_cache_ttl_seconds = 60
+        rag_result_cache_ttl_seconds = 60
+
+    monkeypatch.setattr(tools, "get_settings", lambda: _S())
+
+    state = {"exact": None}
+
+    async def _fake_get(key):
+        return state["exact"]
+
+    async def _noop_set(*a, **k):
+        return None
+
+    async def _noop_version(*a, **k):
+        return "0"
+
+    monkeypatch.setattr(tools, "cache_get_json", _fake_get)
+    monkeypatch.setattr(tools, "cache_set_json", _noop_set)
+    monkeypatch.setattr(tools, "cache_version", _noop_version)
+    return state
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_records_exact_cache_hit(cache_enabled_io):
+    """When the exact-hash RAG cache returns a string, telemetry records the hit."""
+    cache_enabled_io["exact"] = "Lương cơ bản 15 triệu/tháng."
+    repo = _make_repo()
+    embedder = _FakeEmbedder()
+    metrics: dict = {}
+
+    out = await search_knowledge(
+        retrieval=repo, embedder=embedder, query="lương", metrics=metrics
+    )
+
+    assert out == "Lương cơ bản 15 triệu/tháng."
+    assert metrics["rag_cache"]["exact_hit"] is True
+    assert metrics["rag_cache"]["semantic_hit"] is False
+    assert metrics["rag_cache_lookup_ms"] >= 0
+    # Embedder must NOT be called on an exact-cache hit (the whole point).
+    assert embedder.calls == []
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_records_cache_miss_when_disabled(no_cache_io):
+    """With caching disabled, telemetry records explicit misses (not absence).
+
+    An explicit ``False`` lets dashboard queries distinguish "no lookup" from
+    "lookup missed"; absence is ambiguous.
+    """
+    repo = _make_repo(
+        match_faq=lambda self, emb, *, top_k, project_ids: _const([]),
+        match_documents=lambda self, emb, top_k, *_a, **_k: _const([]),
+    )
+    metrics: dict = {}
+
+    out = await search_knowledge(
+        retrieval=repo, embedder=_FakeEmbedder(), query="lương", metrics=metrics
+    )
+
+    assert "Không tìm thấy" in out
+    assert metrics["rag_cache"]["exact_hit"] is False
+    assert metrics["rag_cache"]["semantic_hit"] is False
+    assert metrics["rag_cache_lookup_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_no_metrics_is_backward_compatible(no_cache_io):
+    """Omitting ``metrics`` must not raise and must not change the return value."""
+    repo = _make_repo(
+        match_faq=lambda self, emb, *, top_k, project_ids: _const([]),
+        match_documents=lambda self, emb, top_k, *_a, **_k: _const([]),
+    )
+
+    out = await search_knowledge(
+        retrieval=repo, embedder=_FakeEmbedder(), query="lương"
+    )
+
+    assert "Không tìm thấy" in out
+

@@ -493,12 +493,6 @@ button.dashboard-candidate-row:active {
     line-height: 16px;
   }
 
-  .dashboard-workspace .dashboard-candidate-chevron {
-    width: 16px;
-    height: 16px;
-    color: var(--workspace-ink-muted, var(--muted-foreground));
-  }
-
   .dashboard-workspace .dashboard-empty-list {
     min-height: 88px;
     grid-template-columns: 32px minmax(0, 1fr);

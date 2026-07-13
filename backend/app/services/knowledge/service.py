@@ -22,7 +22,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import bump_cache_version
+from app.core.cache import bump_kb_caches
 from app.core.vector import vec_literal
 from app.models.company import Project
 from app.models.knowledge import (
@@ -259,7 +259,7 @@ class KnowledgeService:
             {"pid": str(project_id), "vid": str(version_id)},
         )
         await self.db.commit()
-        await bump_cache_version("knowledge")
+        await bump_kb_caches()
         await self.db.refresh(version)
         return version
 
@@ -424,9 +424,7 @@ class KnowledgeService:
         doc.status = KnowledgeStatus.PUBLISHED
         doc.stage = "PUBLISHED"
         await self.db.commit()
-        from app.core.cache import bump_cache_version
-
-        await bump_cache_version("knowledge")
+        await bump_kb_caches()
         # rebuild the structured bus graph from the `documents` VIEW (best-effort;
         # never block ingest). The repo helper owns the SQL + commit.
         try:
@@ -446,9 +444,7 @@ class KnowledgeService:
             target_id=str(doc.id),
         )
         await self.db.commit()
-        from app.core.cache import bump_cache_version
-
-        await bump_cache_version("knowledge")
+        await bump_kb_caches()
         await self.db.refresh(doc)
         return doc
 

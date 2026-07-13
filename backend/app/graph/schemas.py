@@ -183,12 +183,17 @@ def filter_tool_schemas(allowed: tuple[str, ...] | None) -> list[dict]:
     return [s for s in TOOL_SCHEMAS if s["function"]["name"] in wanted]
 
 
-async def _dispatch_tool(retrieval, embedder, name: str, args: dict) -> str:
+async def _dispatch_tool(
+    retrieval, embedder, name: str, args: dict, *, metrics: dict | None = None
+) -> str:
     """Route a named tool call to its function.
 
     Errors are caught and returned as strings so the LLM sees the failure in the
     ToolMessage and can self-correct (retry, try a different tool, or answer from
     context) instead of crashing the entire agent loop.
+
+    ``metrics`` is forwarded to tools that record cache/lookup telemetry
+    (currently only ``search_knowledge``); other tools ignore it.
     """
     import time
 
@@ -202,7 +207,11 @@ async def _dispatch_tool(retrieval, embedder, name: str, args: dict) -> str:
             )
         elif name == "search_knowledge":
             result = await search_knowledge(
-                retrieval, embedder, args.get("query", ""), args.get("project_slug")
+                retrieval,
+                embedder,
+                args.get("query", ""),
+                args.get("project_slug"),
+                metrics=metrics,
             )
         elif name == "list_active_projects":
             result = await list_active_projects(retrieval)

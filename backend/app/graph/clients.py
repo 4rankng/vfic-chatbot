@@ -101,7 +101,7 @@ async def _prefetch_tool(
     if metrics is not None:
         metrics["prefetch_calls"] = metrics.get("prefetch_calls", 0) + 1
     try:
-        result = await _dispatch_tool(retrieval, embedder, name, args)
+        result = await _dispatch_tool(retrieval, embedder, name, args, metrics=metrics)
     except Exception:  # noqa: BLE001 — caller retains the normal tool loop
         logger.warning("%s prefetch failed", name, exc_info=True)
         result = ""
@@ -367,6 +367,7 @@ class MiniMaxAgent:
                 "tool_ms",
                 "prefetch_calls",
                 "prefetch_ms",
+                "rag_cache_lookup_ms",
             ):
                 metrics.setdefault(key, 0)
             metrics.setdefault("llm_call_ms", [])
@@ -387,6 +388,7 @@ class MiniMaxAgent:
                     embedder,
                     "search_knowledge",
                     {"query": effective_query},
+                    metrics=metrics,
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("Contact knowledge prefetch failed", exc_info=True)
@@ -523,14 +525,16 @@ class MiniMaxAgent:
                     if make_retrieval is not None:
                         try:
                             async with make_retrieval() as fresh_retrieval:
-                                return await _dispatch_tool(fresh_retrieval, embedder, name, args)
+                                return await _dispatch_tool(
+                                    fresh_retrieval, embedder, name, args, metrics=metrics
+                                )
                         except Exception:  # noqa: BLE001 — session setup failed → shared
                             logger.warning(
                                 "isolated retrieval for tool %s failed, using shared",
                                 name,
                                 exc_info=True,
                             )
-                    return await _dispatch_tool(retrieval, embedder, name, args)
+                    return await _dispatch_tool(retrieval, embedder, name, args, metrics=metrics)
                 finally:
                     if metrics is not None:
                         breakdown = metrics.setdefault("tool_breakdown", {})

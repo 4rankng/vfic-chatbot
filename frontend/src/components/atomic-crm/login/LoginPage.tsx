@@ -80,7 +80,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
           className="relative hidden min-h-svh overflow-hidden bg-[var(--workspace-shell)] lg:block"
         >
           <img
-            src="/login-recruiting-workspace.png"
+            src="/login-recruiting-workspace.jpg"
             alt=""
             aria-hidden="true"
             decoding="async"
@@ -126,7 +126,15 @@ export const LoginPage = (props: { redirectTo?: string }) => {
 
         <section className="relative flex min-h-svh min-w-0 items-center bg-[var(--workspace-canvas)] px-5 py-8 sm:px-8 lg:px-12 xl:px-20">
           <div className="absolute inset-x-0 top-0 h-1 bg-[var(--workspace-action)] lg:hidden" />
-          <div className="absolute left-5 top-7 flex items-center gap-2.5 sm:left-8 lg:hidden">
+          <img
+            src="/login-mobile-workspace.jpg"
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full select-none object-cover object-center lg:hidden"
+          />
+          <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(241,243,246,0.08)_0%,rgba(241,243,246,0.34)_52%,rgba(241,243,246,0.12)_100%)] lg:hidden" />
+          <div className="absolute left-5 top-7 z-10 flex items-center gap-2.5 sm:left-8 lg:hidden">
             <img
               src="/ttsoft-logo.png"
               alt=""
@@ -138,7 +146,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
             </span>
           </div>
 
-          <section className="mx-auto w-full max-w-[28rem] pt-16 sm:pt-14 lg:pt-0">
+          <section className="relative z-10 mx-auto w-full max-w-[28rem] pt-16 sm:pt-14 lg:pt-0">
             <div className="mb-7 border-l-4 border-[var(--workspace-action)] pl-4 sm:mb-8">
               <p className="mb-2 text-xs font-semibold tracking-[0.12em] text-[var(--workspace-action)]">
                 KHU VỰC LÀM VIỆC

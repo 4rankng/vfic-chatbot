@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   MessageCircle,
   Phone,
   UserRound,
@@ -301,10 +300,6 @@ const AttentionRow = ({
           {sub}
         </span>
         {meta}
-        <ChevronRight
-          className="dashboard-candidate-chevron"
-          aria-hidden="true"
-        />
       </button>
     );
   }

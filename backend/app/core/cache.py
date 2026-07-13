@@ -51,3 +51,16 @@ async def bump_cache_version(namespace: str) -> None:
         await get_redis().incr(key)
     except Exception:  # noqa: BLE001
         logger.debug("cache version bump failed for namespace %s", namespace, exc_info=True)
+
+
+async def bump_kb_caches() -> None:
+    """Invalidate both KB-backed caches together on any KB content mutation.
+
+    The exact-hash RAG cache (``rag:knowledge:{...}``) reads the ``knowledge``
+    version namespace; the semantic RAG cache reads ``semantic_cache``. A KB
+    write must bump both so a future enablement of the semantic cache cannot
+    serve stale facts. Best-effort like the underlying helpers: a Redis failure
+    is logged at debug and never surfaces to the caller.
+    """
+    await bump_cache_version("knowledge")
+    await bump_cache_version("semantic_cache")

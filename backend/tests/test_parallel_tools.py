@@ -258,7 +258,7 @@ async def test_timetable_route_prefetches_and_removes_duplicate_tool(monkeypatch
 
     dispatched: list[tuple[str, dict]] = []
 
-    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
         dispatched.append((name, args))
         return "- LG Display • Tuyến A: Hào Quang 05:30"
 
@@ -316,7 +316,7 @@ async def test_timetable_prefetch_miss_keeps_tool_available(monkeypatch):
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
-    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
         return "Không tìm thấy lịch xe phù hợp."
 
     monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
@@ -359,7 +359,7 @@ async def test_faq_detail_prefetches_grounded_context_without_tool_round(monkeyp
 
     dispatched: list[tuple[str, dict]] = []
 
-    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
         dispatched.append((name, args))
         return "Lương cơ bản 8 triệu. Nguồn: tin tuyển dụng LG Display."
 
@@ -390,7 +390,7 @@ async def test_faq_detail_prefetch_miss_preserves_scoped_tools(monkeypatch):
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
-    async def fake_dispatch(retrieval, embedder, name, args):  # noqa: ARG001
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
         return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
 
     monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)

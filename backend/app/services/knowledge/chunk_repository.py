@@ -8,7 +8,7 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import bump_cache_version
+from app.core.cache import bump_kb_caches
 from app.core.vector import vec_literal
 from app.services.knowledge.text_ingestion import (
     chunk_type_from_metadata,
@@ -69,7 +69,7 @@ class KnowledgeChunkRepo:
                 },
             )
         await self.db.commit()
-        await bump_cache_version("knowledge")
+        await bump_kb_caches()
 
     async def clear_version(self, kb_version_id: uuid.UUID) -> None:
         """Delete every chunk generated for a KB version before rebuilding it."""

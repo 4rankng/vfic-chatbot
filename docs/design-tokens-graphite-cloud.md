@@ -32,3 +32,9 @@ Use console blue for the global topbar, icon rail, focus, selection, and primary
 actions. Keep the conversation queue and information panel white, and reserve
 the warm neutral canvas for message history. Green outgoing bubbles indicate
 messages sent by Ting Ting Soft; green is not a global brand color.
+
+The login entry point follows the same console roles rather than introducing a
+separate marketing palette. On desktop it pairs the blue shell with the
+`ttsoft-logo.png` lockup and a subdued recruitment-workspace illustration; on
+mobile it uses a dedicated, low-contrast recruitment-workspace backdrop behind
+the blue top rule, compact logo lockup, and form.

@@ -80,3 +80,42 @@ def test_semantic_cache_hit_is_frozen():
     assert hit.similarity == 0.96
     with pytest.raises(Exception):  # frozen dataclass
         hit.result = "y"
+
+
+# --- bump_semantic_cache_version -------------------------------------------
+
+
+async def test_bump_semantic_cache_version_delegates_to_bump(monkeypatch):
+    """The standalone bump helper must delegate to bump_cache_version('semantic_cache').
+
+    This is the helper KB-write paths could call directly; the production path
+    goes through bump_kb_caches() (tested in test_core_cache.py), but this guard
+    pins the delegation so a refactor cannot silently drop the namespace.
+    """
+    bumped: list[str] = []
+
+    async def _fake_bump(namespace: str) -> None:
+        bumped.append(namespace)
+
+    # The import happens inside the function, so patch at the source module.
+    import app.core.cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, "bump_cache_version", _fake_bump)
+
+    await sc.bump_semantic_cache_version()
+
+    assert bumped == ["semantic_cache"]
+
+
+async def test_bump_semantic_cache_version_swallows_errors(monkeypatch):
+    """A Redis/cache failure must return None, never raise (best-effort contract)."""
+    import app.core.cache as cache_mod
+
+    async def _boom(namespace: str) -> None:
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(cache_mod, "bump_cache_version", _boom)
+
+    # Must not raise.
+    await sc.bump_semantic_cache_version()
+
