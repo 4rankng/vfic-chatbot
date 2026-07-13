@@ -1064,12 +1064,20 @@ body {
    fold. The fixed bottom-nav stays put; the conversation detail shell is
    exactly 100dvh and does not overflow, so it is unaffected. */
 @media (max-width: 767px) {
-  body:has(.workspace-frame),
-  body:has(.workspace-frame) #root {
+  body:has(.workspace-frame) {
     width: 100%;
     height: auto;
     min-height: 100dvh;
     overflow-y: auto;
+  }
+
+  /* Keep the document as the only vertical scroll owner on mobile. A second
+     auto-scrolling #root traps touch gestures in Chromium mobile emulation. */
+  body:has(.workspace-frame) #root {
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 }
 

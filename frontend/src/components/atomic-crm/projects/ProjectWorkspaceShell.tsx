@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { InboxIcons } from "../conversations/InboxIcons";
 import "../conversations/inbox.css";
+import "./projects.css";
 
 type ProjectWorkspaceShellProps = {
   children: ReactNode;

@@ -119,10 +119,11 @@ const SelectedProjectSummary = ({
               variant="outline"
               size="sm"
               onClick={onEdit}
-              className="h-11 md:h-9"
+              className="project-edit-action h-11 md:h-9"
+              aria-label={`Chỉnh sửa ${project.name}`}
             >
               <Pencil className="size-4" />
-              Sửa
+              <span>Sửa</span>
             </Button>
           )}
           {isAdmin && (
@@ -131,18 +132,30 @@ const SelectedProjectSummary = ({
         </div>
       </div>
 
-      <div className="project-health-row">
+      <div className="project-health-row" aria-label="Tình trạng dự án">
         <ProjectStatusBadge active={project.is_active} />
-        <Badge variant="outline" className="border-border bg-muted/35">
-          {project.default_persona_id ? "Có agent" : "Chưa gắn agent"}
-        </Badge>
+      </div>
+
+      <div className="project-quick-stats" aria-label="Chỉ số nhanh">
         <span>
           <FileText className="size-3.5" />
-          {project.knowledge_document_count ?? 0} tài liệu
+          <small>Tài liệu</small>
+          <strong>{project.knowledge_document_count ?? 0}</strong>
+        </span>
+        <span>
+          <Boxes className="size-3.5" />
+          <small>Kiến thức</small>
+          <strong>{readinessText}</strong>
         </span>
         <span>
           <CheckCircle2 className="size-3.5" />
-          {readinessText} sẵn sàng
+          <small>Agent</small>
+          <strong>{project.default_persona_id ? "Có" : "Chưa"}</strong>
+        </span>
+        <span>
+          <CheckCircle2 className="size-3.5" />
+          <small>Sẵn sàng</small>
+          <strong>{readinessText}</strong>
         </span>
       </div>
 

@@ -1,6 +1,26 @@
-.settings-header-actions { display: grid; justify-items: end; gap: .35rem; }
-.settings-save-status { max-width: 20rem; margin: 0; color: var(--muted-foreground); font-size: var(--fs-meta); line-height: var(--lh-snug); text-align: right; }
-@media (max-width: 767px) { .settings-header-actions { width: 100%; justify-items: stretch; }.settings-save-status { max-width: none; text-align: left; } }
+.settings-header-actions {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+}
+.settings-save-status {
+  max-width: 20rem;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-snug);
+  text-align: right;
+}
+@media (max-width: 767px) {
+  .settings-header-actions {
+    width: 100%;
+    justify-items: stretch;
+  }
+  .settings-save-status {
+    max-width: none;
+    text-align: left;
+  }
+}
 
 @media (max-width: 767px) {
   .settings-mobile-topbar {
@@ -107,5 +127,178 @@
   .settings-mobile-drawer-item .settings-side-nav-icon {
     width: 32px;
     height: 32px;
+  }
+
+  .settings-workspace-content {
+    padding: 24px 16px calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .settings-mobile-topbar {
+    margin: -24px -16px 16px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  }
+
+  .settings-mobile-drawer-trigger {
+    min-height: 52px;
+    border-radius: 16px;
+  }
+
+  .settings-command-header {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .settings-command-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 32px;
+  }
+
+  .settings-command-header p:not(.ops-kicker) {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
+
+  .settings-main {
+    gap: 12px;
+  }
+
+  .settings-section-panel,
+  .settings-grid {
+    gap: 12px;
+  }
+
+  .settings-card {
+    border-radius: 16px;
+    background: var(--settings-elevated);
+    box-shadow: 0 2px 12px rgb(15 23 42 / 4%);
+  }
+
+  .settings-mobile-card-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    align-items: center;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .settings-mobile-card-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .settings-mobile-card-summary > svg {
+    width: 20px;
+    height: 20px;
+    margin-right: 16px;
+    color: var(--ink-muted);
+    transition: transform 180ms ease;
+  }
+
+  .settings-mobile-card[open] .settings-mobile-card-summary > svg {
+    transform: rotate(180deg);
+  }
+
+  .settings-mobile-card .settings-card-header {
+    min-height: 68px;
+    padding: 16px;
+    border-bottom: 0;
+  }
+
+  .settings-mobile-card[open] .settings-card-header {
+    border-bottom: 1px solid var(--settings-border);
+  }
+
+  .settings-mobile-card .settings-card-content {
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .settings-field-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .settings-field-label-row > span {
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .settings-field-label-row > span.is-configured {
+    color: var(--settings-accent);
+  }
+
+  .settings-sensitive-input {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    gap: 4px;
+  }
+
+  .settings-sensitive-input .settings-input {
+    min-width: 0;
+  }
+
+  .settings-input-action,
+  .settings-copy-app-id {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    border: 1px solid var(--settings-border);
+    border-radius: 12px;
+  }
+
+  .settings-input-action svg,
+  .settings-copy-app-id svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .settings-oa-fields > .settings-field:first-child {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: end;
+    column-gap: 8px;
+  }
+
+  .settings-oa-fields > .settings-field:first-child > .flex {
+    grid-column: 1 / -1;
+  }
+
+  .settings-card .settings-test-button {
+    width: 100%;
+    min-height: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .settings-oa-actions {
+    justify-content: stretch;
+    padding-top: 0;
+  }
+
+  .settings-webhook-health {
+    grid-column: 1 / -1;
+  }
+
+  .settings-webhook-message {
+    margin: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    color: var(--ink-muted);
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
+
+  .settings-webhook-message.is-success {
+    color: var(--settings-accent-strong);
+  }
+
+  .settings-webhook-message.is-warning {
+    color: var(--warning, #a16207);
   }
 }

@@ -1,4 +1,11 @@
-import { AlertTriangle, MessageCircle, Phone, UserRound } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  MessageCircle,
+  Phone,
+  UserRound,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 
@@ -12,7 +19,6 @@ import {
   formatElapsed,
 } from "./attentionDashboard";
 import { deriveCacheDiscriminators } from "./recruitingCommandCenterLogic";
-import { DashboardEmptyIllustration } from "./DashboardEmptyIllustration";
 
 type RecruitingCommandCenterProps = {
   variant?: "desktop" | "mobile";
@@ -223,12 +229,10 @@ const AttentionPanel = ({
                     title: "Không có việc cần xử lý hôm nay",
                     description:
                       "Bạn đã hoàn thành tất cả công việc cần theo dõi.",
-                    illustration: "calendar",
                   }
                 : {
                     title: "Không có ứng viên cần xử lý ngay",
                     description: "Mọi cuộc trò chuyện hiện đã được xử lý.",
-                    illustration: "inbox",
                   }
             }
           />
@@ -297,6 +301,10 @@ const AttentionRow = ({
           {sub}
         </span>
         {meta}
+        <ChevronRight
+          className="dashboard-candidate-chevron"
+          aria-hidden="true"
+        />
       </button>
     );
   }
@@ -324,11 +332,12 @@ const EmptyDashboardList = ({
   content: {
     title: string;
     description: string;
-    illustration: "inbox" | "calendar";
   };
 }) => (
   <div className="dashboard-empty-list">
-    <DashboardEmptyIllustration kind={content.illustration} />
+    <span className="dashboard-empty-icon" aria-hidden="true">
+      <CheckCircle2 />
+    </span>
     <div className="dashboard-empty-copy">
       <p>{content.title}</p>
       <span>{content.description}</span>

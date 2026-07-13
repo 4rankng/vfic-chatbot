@@ -396,4 +396,152 @@ button.dashboard-candidate-row:active {
     width: 42px;
     height: 42px;
   }
+
+  .dashboard-workspace .dashboard-workspace-content {
+    padding: 24px 16px calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .dashboard-workspace .recruiting-command {
+    gap: 12px;
+  }
+
+  .dashboard-workspace .recruiting-eyebrow {
+    color: var(--workspace-action, var(--primary));
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+
+  .dashboard-workspace .recruiting-hero h1 {
+    margin: 4px 0;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+  .dashboard-workspace .recruiting-hero p {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
+
+  .dashboard-workspace .recruiting-panel {
+    overflow: hidden;
+    border-color: color-mix(
+      in srgb,
+      var(--workspace-border, var(--border)) 82%,
+      transparent
+    );
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgb(15 23 42 / 4%);
+  }
+
+  .dashboard-workspace .recruiting-panel-header {
+    min-height: 64px;
+    padding: 12px 16px;
+    border-bottom-color: color-mix(
+      in srgb,
+      var(--workspace-border, var(--border)) 70%,
+      transparent
+    );
+  }
+
+  .dashboard-workspace .recruiting-panel-header h2 {
+    margin: 2px 0 0;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 24px;
+  }
+
+  .dashboard-workspace .dashboard-panel-count {
+    min-width: 28px;
+    height: 28px;
+    background: color-mix(
+      in srgb,
+      var(--workspace-action, var(--primary)) 10%,
+      white
+    );
+    color: var(--workspace-action, var(--primary));
+  }
+
+  .dashboard-workspace .dashboard-candidate-list {
+    padding: 0 16px;
+  }
+
+  .dashboard-workspace .dashboard-candidate-row {
+    min-height: 72px;
+    grid-template-columns: 40px minmax(0, 1fr) auto 16px;
+    gap: 12px;
+    padding: 12px 0;
+  }
+
+  .dashboard-workspace .dashboard-candidate-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .dashboard-workspace .dashboard-candidate-main strong {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 20px;
+  }
+
+  .dashboard-workspace .dashboard-candidate-main span,
+  .dashboard-workspace .dashboard-candidate-meta {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+  }
+
+  .dashboard-workspace .dashboard-candidate-chevron {
+    width: 16px;
+    height: 16px;
+    color: var(--workspace-ink-muted, var(--muted-foreground));
+  }
+
+  .dashboard-workspace .dashboard-empty-list {
+    min-height: 88px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    gap: 12px;
+    padding: 16px 0;
+    text-align: left;
+  }
+
+  .dashboard-workspace .dashboard-empty-icon {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: color-mix(
+      in srgb,
+      var(--workspace-action, var(--primary)) 12%,
+      white
+    );
+    color: var(--workspace-action, var(--primary));
+  }
+
+  .dashboard-workspace .dashboard-empty-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .dashboard-workspace .dashboard-empty-copy {
+    max-width: none;
+    gap: 4px;
+  }
+
+  .dashboard-workspace .dashboard-empty-copy p {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 20px;
+  }
+
+  .dashboard-workspace .dashboard-empty-copy span {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
 }

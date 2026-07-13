@@ -13,6 +13,7 @@ import {
 
 import { useRoleActions } from "../hooks/useRoleActions";
 import { useNotifications } from "./topbar/useNotifications";
+import "./mobile-workspace.css";
 import Header from "./Header";
 import {
   getWorkspaceDestinations,
