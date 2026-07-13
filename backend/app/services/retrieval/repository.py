@@ -12,6 +12,7 @@ Row lists/scalars exactly as the inline ``db.execute(...).all()`` calls did.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -72,6 +73,10 @@ class RetrievalRepository:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        # Per-call degradation flag (read by callers after match_documents to
+        # stamp the reason into stage_timings). Reset at the start of every
+        # match_documents call; None when no degradation occurred.
+        self.last_match_degraded: str | None = None
 
     @staticmethod
     def _ann_enabled() -> bool:
@@ -282,41 +287,140 @@ class RetrievalRepository:
         *,
         project_ids: list[str] | None = None,
         query_text: str | None = None,
+        deadline=None,
     ) -> list:
         """Top-k usable knowledge rows directly from chunks + documents.
 
         The old path called the ``documents`` compatibility view. Migration 0010 removes
         that view, so the app now owns the explicit query and returns namespaced
         metadata for citations/effective-date handling.
+
+        Retrieval arms run CONCURRENTLY (Tech-Lead Directive §4): vector + lexical
+        execute via ``asyncio.gather`` so the wall-clock cost is max(vector, lexical),
+        not sum. If the vector arm raises or exceeds its budget, the turn degrades
+        gracefully to lexical-only (the directive's "if vector search times out, use
+        lexical + structured results"). ``deadline`` is an optional
+        ``app.graph.deadlines.TurnDeadline``; when None (tests / legacy callers) the
+        arms run unbounded, matching pre-existing behaviour.
+
+        Degradation is observable: the caller can read ``self.last_match_degraded``
+        after this returns to stamp the reason into ``stage_timings`` (see runner.py).
         """
         project_clause = ""
         if project_ids:
             project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
-        vector_rows = await self._match_document_vector_rows(
-            emb=emb,
-            top_k=top_k,
-            filter_json=filter_json,
-            project_clause=project_clause,
-            project_ids=project_ids,
-        )
-        logger.debug(
-            "match_documents vector branch: %d rows (floor=%.2f)",
-            len(vector_rows),
-            self.SIMILARITY_FLOOR,
-        )
         terms = self._lexical_terms(query_text)
+        # Reset the per-call degradation flag (callers read it after return).
+        self.last_match_degraded: str | None = None
+
+        # No lexical terms → vector-only path (legacy fast exit, no gather overhead).
         if not terms:
-            return vector_rows
+            vector_rows = await self._run_vector_arm(
+                emb, top_k, filter_json, project_clause, project_ids, deadline
+            )
+            return self._finalize_retrieval([], vector_rows, top_k, query_text or "")
 
-        lexical_rows = await self._match_document_lexical_rows(
-            emb=emb,
-            top_k=top_k,
-            filter_json=filter_json,
-            project_clause=project_clause,
-            project_ids=project_ids,
-            terms=terms,
+        # Run both arms concurrently. Each arm is individually time-boxed against
+        # the retrieval budget so a slow vector arm doesn't gate the lexical arm.
+        # ``return_exceptions=True`` lets the surviving arm win on a single-arm
+        # failure rather than propagating the error up to abort the turn.
+        vector_task = asyncio.ensure_future(
+            self._run_vector_arm(emb, top_k, filter_json, project_clause, project_ids, deadline)
         )
+        lexical_task = asyncio.ensure_future(
+            self._match_document_lexical_rows(
+                emb=emb,
+                top_k=top_k,
+                filter_json=filter_json,
+                project_clause=project_clause,
+                project_ids=project_ids,
+                terms=terms,
+            )
+        )
+        results = await asyncio.gather(vector_task, lexical_task, return_exceptions=True)
+        vector_result, lexical_result = results
 
+        vector_rows: list = []
+        lexical_rows: list = []
+        if isinstance(vector_result, Exception):
+            # Vector arm failed (timeout or error). Degrade to lexical-only.
+            self.last_match_degraded = "retrieval_vector_failed"
+            logger.warning(
+                "match_documents vector arm failed; degrading to lexical-only",
+                exc_info=vector_result,
+            )
+        else:
+            vector_rows = vector_result
+        if isinstance(lexical_result, Exception):
+            # Lexical arm failed. If vector also failed, we have nothing — return []
+            # and let the agent answer from prompt context (the grounding policy
+            # handles empty evidence). Otherwise vector-only is fine.
+            if not vector_rows:
+                self.last_match_degraded = "retrieval_both_arms_failed"
+                return []
+            self.last_match_degraded = self.last_match_degraded or "retrieval_lexical_failed"
+            logger.warning(
+                "match_documents lexical arm failed; using vector-only",
+                exc_info=lexical_result,
+            )
+        else:
+            lexical_rows = lexical_result
+
+        return self._finalize_retrieval(lexical_rows, vector_rows, top_k, query_text or "")
+
+    async def _run_vector_arm(
+        self, emb, top_k, filter_json, project_clause, project_ids, deadline
+    ) -> list:
+        """Vector arm, time-boxed against ``deadline.retrieval`` when set."""
+        if deadline is None or deadline.overall <= 0:
+            return await self._match_document_vector_rows(
+                emb=emb,
+                top_k=top_k,
+                filter_json=filter_json,
+                project_clause=project_clause,
+                project_ids=project_ids,
+            )
+        budget = deadline.budget_for("retrieval")
+        if budget is None:
+            return await self._match_document_vector_rows(
+                emb=emb,
+                top_k=top_k,
+                filter_json=filter_json,
+                project_clause=project_clause,
+                project_ids=project_ids,
+            )
+        try:
+            return await asyncio.wait_for(
+                self._match_document_vector_rows(
+                    emb=emb,
+                    top_k=top_k,
+                    filter_json=filter_json,
+                    project_clause=project_clause,
+                    project_ids=project_ids,
+                ),
+                timeout=budget,
+            )
+        except TimeoutError:
+            # Propagate as a generic exception so gather's return_exceptions
+            # buckets it with the error path; the caller degrades to lexical.
+            raise
+
+    def _finalize_retrieval(
+        self, lexical_rows: list, vector_rows: list, top_k: int, query_text: str
+    ) -> list:
+        """Fuse + rerank the two arms. Handles single-arm fallbacks."""
+        if not lexical_rows and not vector_rows:
+            return []
+        if not lexical_rows:
+            # Vector-only (no lexical terms, or lexical arm failed).
+            from app.services.retrieval.reranker import rerank_if_enabled
+
+            return rerank_if_enabled(vector_rows, query_text=query_text)
+        if not vector_rows:
+            # Lexical-only fallback (vector arm timed out / failed).
+            from app.services.retrieval.reranker import rerank_if_enabled
+
+            return rerank_if_enabled(lexical_rows, query_text=query_text)
         merged = reciprocal_rank_fuse(
             vector_rows,
             lexical_rows,
@@ -332,7 +436,7 @@ class RetrievalRepository:
         )
         from app.services.retrieval.reranker import rerank_if_enabled
 
-        return rerank_if_enabled(merged, query_text=query_text or "")
+        return rerank_if_enabled(merged, query_text=query_text)
 
     async def match_faq(
         self,

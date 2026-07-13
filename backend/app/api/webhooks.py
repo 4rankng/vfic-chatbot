@@ -16,6 +16,7 @@ import asyncio
 import hmac
 import json
 import logging
+import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -24,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.services.integration_settings import IntegrationSettingsService
+from app.services.slo_service import record_webhook_ack_ms
 from app.services.webhook import ZaloWebhookService
 from app.services.zalo_oa_health import record_oa_signature
 from app.services.zalo_oa_signature import verify_signature
@@ -34,8 +36,19 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 _settings = get_settings()
 
 
+async def _stamp_ack(t0: float, status_code: int) -> None:
+    """Sample webhook-ack latency into the SLO sliding window (best-effort).
+
+    Only samples successful (2xx) acks — 4xx/5xx are rejection paths with
+    different latency characteristics and would skew the SLO.
+    """
+    if 200 <= status_code < 300:
+        await record_webhook_ack_ms((time.time() - t0) * 1000.0)
+
+
 @router.post("/zalo/chatbot")
 async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    t0 = time.time()  # webhook_ack SLO (Directive §1) — sampled on success
     # Read the RAW body so logging shows the exact bytes Zalo sent.
     raw = await request.body()
     if _settings.app_env == "development":
@@ -50,6 +63,7 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
+        await _stamp_ack(t0, 400)
         return JSONResponse({"detail": "invalid JSON body"}, status_code=400)
 
     cfg = await IntegrationSettingsService(db).resolve_zalo()
@@ -58,9 +72,11 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
         # Bot Platform: shared-secret echo (X-Bot-Api-Secret-Token).
         token = request.headers.get("x-bot-api-secret-token") or ""
         if not hmac.compare_digest(token, bot_secret):
+            await _stamp_ack(t0, 401)
             return JSONResponse({"detail": "invalid secret token"}, status_code=401)
     elif _settings.app_env != "development":
         # No secret configured in non-dev -> refuse rather than accept blind.
+        await _stamp_ack(t0, 503)
         return JSONResponse({"detail": "webhook verification not configured"}, status_code=503)
     # else: dev/test with no secret -> accept unchanged (ergonomics).
 
@@ -70,11 +86,13 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
         db, payload, enqueue=enqueue_chat_run, bot_token=cfg.bot_token
     )
     code = 503 if result.get("status") == "start_failed" else 200
+    await _stamp_ack(t0, code)
     return JSONResponse(result, status_code=code)
 
 
 @router.post("/zalo/oa")
 async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    t0 = time.time()  # webhook_ack SLO (Directive §1) — sampled on success
     raw = await request.body()
     if _settings.app_env == "development":
         logger.info(
@@ -88,6 +106,7 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
+        await _stamp_ack(t0, 400)
         return JSONResponse({"detail": "invalid JSON body"}, status_code=400)
 
     # Zalo verifies a newly configured OA webhook URL with an unsigned POST whose
@@ -95,6 +114,7 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     # URL. Accept only that side-effect-free probe; every real event below still
     # requires X-ZEvent-Signature verification.
     if payload == {} and not request.headers.get("x-zevent-signature"):
+        await _stamp_ack(t0, 200)
         return JSONResponse({"status": "verified"}, status_code=200)
 
     cfg = await IntegrationSettingsService(db).resolve_zalo()
@@ -137,6 +157,7 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             )
             asyncio.create_task(record_oa_signature(ok=False))
     elif _settings.app_env != "development":
+        await _stamp_ack(t0, 503)
         return JSONResponse(
             {"detail": "OA webhook verification not configured"},
             status_code=503,
@@ -149,4 +170,5 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         channel="oa",
     )
     code = 503 if result.get("status") == "start_failed" else 200
+    await _stamp_ack(t0, code)
     return JSONResponse(result, status_code=code)

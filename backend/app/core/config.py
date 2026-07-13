@@ -235,6 +235,13 @@ class Settings(BaseSettings):
     agent_max_seconds: float = 8.5
     send_margin_seconds: float = 1.0
     soft_fallback_remaining: float = 2.0
+    # Per-stage turn budgets (Tech-Lead Directive §4 "Use hard deadlines"). These
+    # bound the CHEAP, derived stages only — retrieval (vector + lexical arms),
+    # rerank. The agent LLM generation is deliberately NOT bounded here; see
+    # app/graph/deadlines.py docstring for the production rationale. Defaults
+    # leave headroom under sla_seconds for the uncapped agent + send.
+    turn_retrieval_budget_seconds: float = 1.2
+    turn_rerank_budget_seconds: float = 0.6
     # Active-status signal (Priority #1 — the psychological bridge). typing_heartbeat_seconds
     # pulses send_chat_action("typing") (real on the Bot channel; a logged no-op on OA).
     typing_heartbeat_seconds: float = 3.5

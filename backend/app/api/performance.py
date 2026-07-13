@@ -144,6 +144,39 @@ async def performance(
     return payload
 
 
+@router.get("/slos")
+async def performance_slos(
+    window: str = Query("24h", pattern="^(1h|24h|7d)$"),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    """Latency + reliability SLOs (Tech-Lead Directive §1).
+
+    Returns the 7 named SLOs with target + actual p50/p95 + green/amber/red
+    status. SLO computation reuses ``BotRun.stage_timings`` via
+    ``app.services.slo_service.compute_slos``; the ``webhook_ack`` SLO reads
+    from a Redis sliding window sampled at webhook ack time (no BotRun row
+    exists that early). Cached 30 s to match the main dashboard.
+    """
+    interval = _WINDOWS[window]
+    key = _cache_key(f"slos:{window}")
+    try:
+        cached = await cache_get_json(key)
+    except Exception:  # noqa: BLE001
+        cached = None
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+    from app.services.slo_service import compute_slos
+
+    async with async_session() as session:
+        slos = await compute_slos(session, interval)
+    payload = {"window": window, "slos": [s.to_dict() for s in slos]}
+    try:
+        await cache_set_json(key, payload, ttl_seconds=_CACHE_TTL_SECONDS)
+    except Exception:  # noqa: BLE001
+        pass
+    return payload
+
+
 async def _compute(interval: timedelta, window: str) -> dict:
     """Run all dashboard reads concurrently and assemble the response payload.
 
