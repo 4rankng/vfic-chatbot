@@ -411,6 +411,8 @@ class ConversationState:
         delivery_status: DeliveryStatus | None = None,
         trace_id: str | None = None,
         outcome_metadata: dict | None = None,
+        outbox_channel: str | None = None,
+        outbox_payload: dict | None = None,
     ) -> Message:
         """Log a bot_run + BOT message; clears the lock.
 
@@ -427,6 +429,12 @@ class ConversationState:
         (webhook_to_pickup / preamble / lane / lead / llm / safety / send /
         total). Persisted onto the BotRun for the performance dashboard; None
         on paths that don't instrument (e.g. legacy callers).
+
+        ``outbox_channel`` + ``outbox_payload``: when both provided, an
+        ``outbound_outbox`` row is written in THIS transaction (Tech-Lead
+        Directive §14) so the outbox reflects the committed send outcome
+        atomically. The channel is ``zalo_bot`` / ``zalo_oa``; the payload is
+        the Zalo send body. Best-effort — outbox failures never block the turn.
         """
         outcome = (
             BotRunOutcome.ERROR
@@ -510,6 +518,31 @@ class ConversationState:
         # touches conv in Python below; the owner branch bumped via SQL above.
         if owner is None:
             conv.conversation_seq = (conv.conversation_seq or 1) + 1
+        # Transactional outbox (Tech-Lead Directive §14): record the dispatch
+        # outcome in the same transaction as the message. Best-effort — outbox
+        # failures never block the turn (logged in outbox_service).
+        if outbox_channel is not None and outbox_payload is not None and msg.id is not None:
+            from app.models.outbox import OutboxStatus
+            from app.services.outbox_service import enqueue_outbox
+
+            outbox_status = (
+                OutboxStatus.SENT
+                if delivery_status == DeliveryStatus.SENT
+                else OutboxStatus.SEND_UNKNOWN
+                if delivery_status == DeliveryStatus.SEND_UNKNOWN
+                else OutboxStatus.FAILED
+                if delivery_status == DeliveryStatus.FAILED
+                else OutboxStatus.SUPPRESSED
+            )
+            await enqueue_outbox(
+                self.db,
+                message_id=msg.id,
+                channel=outbox_channel,
+                payload=outbox_payload,
+                status=outbox_status,
+                zalo_message_id=zalo_message_id,
+                last_error=external_error,
+            )
         await self.db.commit()
         await self.db.refresh(msg)
         await self.events.message_created(msg, conv)

@@ -63,6 +63,34 @@ def _zalo_for_conversation(deps: GraphDeps, conv):
     return deps.zalo
 
 
+def _detect_channel(zalo) -> str:
+    """Infer the outbox channel name (``zalo_bot`` / ``zalo_oa``) from the sender.
+
+    Falls back to ``zalo_bot`` when the sender type is unrecognized (the Bot
+    Platform is the default). The outbox row records which Zalo API the send
+    targeted so the dispatcher/reconcile know which client to re-dispatch with.
+    """
+    cls_name = type(zalo).__name__
+    if "OA" in cls_name:
+        return "zalo_oa"
+    return "zalo_bot"
+
+
+def _build_outbox_payload(
+    chat_id: str, text: str, quote_message_id: str | None
+) -> dict:
+    """Build the Zalo send payload recorded in the outbox.
+
+    Captures the exact body sent to Zalo so a re-dispatch (from the sweep) can
+    reconstruct the call without re-running the turn. ``quote_message_id`` is
+    the OA CS-reply field (None on the Bot channel).
+    """
+    payload: dict = {"chat_id": chat_id, "text": text}
+    if quote_message_id:
+        payload["quote_message_id"] = quote_message_id
+    return payload
+
+
 def _stamp_end_to_end(state: BotRunState, timings: dict | None) -> None:
     """Record candidate-visible latency from webhook receipt through completion."""
     if timings is None or state.received_at_epoch <= 0:
@@ -251,6 +279,8 @@ async def _finish_terminal_reply(
         lock_owner=lock_owner,
         trace_id=state.trace_id or None,
         delivery_status=_override,
+        outbox_channel=_detect_channel(zalo),
+        outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
     )
     if send_result is None or send_result.ok:
         outcome = base_outcome
@@ -560,6 +590,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 delivery_status=override_status,
                 trace_id=state.trace_id or None,
                 outcome_metadata=faq_metadata,
+                outbox_channel=_detect_channel(zalo),
+                outbox_payload=_build_outbox_payload(conv.zalo_chat_id, candidate, state.reply_to_message_id),
             )
             _stamp_db(timings, "record_bot_outcome", db_t0)
             if not send_result.ok:

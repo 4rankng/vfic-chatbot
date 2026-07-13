@@ -13,12 +13,13 @@ the embedding (a graph-layer concern) + the Vietnamese formatting only.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 from collections import OrderedDict
 from hashlib import sha256
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
@@ -209,6 +210,106 @@ async def search_knowledge(
     else:
         _record_cache(exact_hit=False)
 
+    # --- Single-flight request coalescing (Tech-Lead Directive §6) ---
+    # When N concurrent turns ask the same uncached question, only one process
+    # calls the model; the others await the same result. Coalesce ONLY non-
+    # personalized, non-scoped lookups (project_slug is the personalization
+    # axis here; scoped lookups are already narrow). Gated by config so it can
+    # be disabled without a redeploy if it misbehaves.
+    coalesce_enabled = getattr(s, "singleflight_enabled", False) and not project_slug
+    if coalesce_enabled:
+        result = await _search_knowledge_coalesced(
+            cache_key=cache_key,
+            compute=lambda: _search_knowledge_compute(
+                embedder=embedder,
+                query=query,
+                repo=repo,
+                top_k=top_k,
+                project_ids=project_ids,
+                project_slug=project_slug,
+                cache_key=cache_key,
+                s=s,
+                metrics=metrics,
+                _record_cache=_record_cache,
+            ),
+        )
+        if result is not None:
+            return result
+        # Single-flight unavailable (Redis down) → fall through to direct compute.
+
+    result = await _search_knowledge_compute(
+        embedder=embedder,
+        query=query,
+        repo=repo,
+        top_k=top_k,
+        project_ids=project_ids,
+        project_slug=project_slug,
+        cache_key=cache_key,
+        s=s,
+        metrics=metrics,
+        _record_cache=_record_cache,
+    )
+    return result
+
+
+async def _search_knowledge_coalesced(
+    *, cache_key: str, compute: Callable[[], Awaitable[str]]
+) -> str | None:
+    """Try single-flight coalescing around ``compute``. Returns None if unavailable.
+
+    Leader: runs ``compute`` and publishes the result.
+    Follower: awaits the leader's result via pub/sub (with a cache re-check).
+    Returns ``None`` when Redis is unavailable so the caller falls back to a
+    plain ``compute()`` call without coalescing.
+    """
+    from app.core import singleflight
+
+    # Single-flight key is the same as the cache key — turns asking the same
+    # question share one computation. The cache_key already encodes query +
+    # project + knowledge_version, so it's the correct coalescing axis.
+    sf_key = cache_key
+    leader_id = await singleflight.acquire(sf_key)
+    if leader_id is not None:
+        # We're the leader — compute and publish.
+        try:
+            return await singleflight.run_as_leader(sf_key, leader_id, compute)
+        except Exception:  # noqa: BLE001 — leader error: fall back to direct compute
+            logger.warning("singleflight leader compute failed; falling back", exc_info=True)
+            return None
+
+    # We're a follower — await the leader's result.
+    async def _cache_read():
+        cached = await cache_get_json(cache_key)
+        return cached if isinstance(cached, str) else None
+
+    try:
+        return await singleflight.await_result(sf_key, cache_read=_cache_read, timeout=8.0)
+    except asyncio.TimeoutError:
+        logger.info("singleflight follower timed out; falling back to direct compute")
+        return None
+    except singleflight.SingleFlightError:
+        logger.info("singleflight leader errored; follower falling back to direct compute")
+        return None
+
+
+async def _search_knowledge_compute(
+    *,
+    embedder,
+    query: str,
+    repo,
+    top_k: int,
+    project_ids: list[str] | None,
+    project_slug: str | None,
+    cache_key: str,
+    s,
+    metrics: dict | None,
+    _record_cache,
+) -> str:
+    """The expensive slice of search_knowledge: embed + retrieval + format + cache writes.
+
+    Extracted so it can be wrapped by single-flight coalescing. The leader runs
+    this directly; followers await its result via pub/sub.
+    """
     raw_emb = await _cached_embed(embedder, query)
     emb = vec_literal(raw_emb)
 

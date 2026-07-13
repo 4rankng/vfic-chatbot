@@ -242,6 +242,12 @@ class Settings(BaseSettings):
     # leave headroom under sla_seconds for the uncapped agent + send.
     turn_retrieval_budget_seconds: float = 1.2
     turn_rerank_budget_seconds: float = 0.6
+    # Single-flight request coalescing (Tech-Lead Directive §6): when N concurrent
+    # turns ask the same uncached question, only one process calls the model; the
+    # others await the same result via Redis pub/sub. Applies ONLY to non-
+    # personalized, non-scoped search_knowledge lookups. Off by default — enable
+    # after confirming no cross-topic false-positive coalescing on the gold set.
+    singleflight_enabled: bool = False
     # Active-status signal (Priority #1 — the psychological bridge). typing_heartbeat_seconds
     # pulses send_chat_action("typing") (real on the Bot channel; a logged no-op on OA).
     typing_heartbeat_seconds: float = 3.5

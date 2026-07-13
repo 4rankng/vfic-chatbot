@@ -30,6 +30,7 @@ from app.models.conversation import (
     Message,
     MessageSender,
 )
+from app.models.outbox import OutboxStatus, OutboundOutbox
 from app.models.user import Role, User
 
 __all__ = [
@@ -66,4 +67,6 @@ __all__ = [
     "DeliveryStatus",
     "BotRun",
     "BotRunOutcome",
+    "OutboundOutbox",
+    "OutboxStatus",
 ]

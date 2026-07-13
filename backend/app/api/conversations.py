@@ -297,3 +297,69 @@ async def send_recruiter_message(
     msg, delivered = await ConversationService(db).deliver_recruiter_message(conv, user, body.body)
     response.status_code = status.HTTP_201_CREATED if delivered else status.HTTP_502_BAD_GATEWAY
     return MessageOut.model_validate(msg)
+
+
+@router.post("/{conv_id}/web-chat-turn")
+async def web_chat_turn(
+    conv_id: uuid.UUID,
+    body: SendMessageRequest,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Run a bot turn INLINE (not via RQ) for recruiter-side bot testing.
+
+    Tech-Lead Directive §0: "For web chat, execute the turn directly in the
+    async API and stream the response." This endpoint lets a recruiter submit a
+    candidate-style message and see the bot's reply without enqueuing through
+    RQ. Reuses every existing safety/grounding/ownership guard.
+
+    Semantics:
+    - Admin-only (require_admin). The recruiter is explicitly invoking the bot.
+    - Bypasses takeover suppression: an admin testing the bot in a taken-over
+      conversation still gets a bot reply (the recruiter CHOSE to invoke it).
+    - Respects the per-conversation lock: a concurrent Zalo turn in flight
+      returns 409 (don't run two turns on one conversation).
+    - No streaming (option A from the plan) — returns the final reply as JSON.
+      Streaming (option B) deferred until the LLM client supports it cheaply.
+
+    The endpoint is for INTERNAL bot testing, not candidate-facing web chat
+    (candidates chat via Zalo). A candidate-facing web-chat surface would need
+    a different architecture (WebSocket-first, not HTTP).
+    """
+    import time
+
+    conv = await _load(conv_id, db, user)
+    # Build the BotRunState. execution_source="web_chat" so the turn stamps it
+    # into stage_timings and the SLO dashboard can filter it out of the
+    # candidate-facing latency SLOs (web-chat turns are recruiter-initiated,
+    # not candidate-visible).
+    from app.core.config import get_settings
+    from app.graph.factories import build_deps
+    from app.graph.runner import run_turn
+    from app.graph.types import BotRunState
+
+    settings = get_settings()
+    now = time.time()
+    state = BotRunState(
+        conversation_id=str(conv_id),
+        version_at_start=conv.version,
+        user_text=body.body,
+        user_name="",
+        reply_to_message_id="",
+        lock_owner="web_chat",
+        received_at_epoch=now,
+        deadline_at_epoch=now + settings.sla_seconds,
+        preamble_start_epoch=now,
+        queue_depth=None,
+        execution_source="web_chat",
+        trace_id=f"webchat-{user.id.hex}-{int(now)}",
+    )
+    try:
+        outcome = await run_turn(state, deps=await build_deps(db))
+    except Exception as exc:  # noqa: BLE001 — surface as 500 with detail
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+    return {
+        "outcome": outcome.get("outcome"),
+        "reply": outcome.get("reply"),
+        "conversation_id": str(conv_id),
+    }
