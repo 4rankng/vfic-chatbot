@@ -19,6 +19,7 @@ import {
   requestPasswordResetOtp,
   resetPasswordWithOtp,
 } from "./passwordRecoveryService";
+import { useResendCooldown } from "./useResendCooldown";
 
 type Step = "email" | "otp";
 
@@ -28,6 +29,13 @@ export const ForgotPasswordPage = () => {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const {
+    cooldownLeft,
+    isResending,
+    canResend,
+    startCooldown,
+    resend: resendOtp,
+  } = useResendCooldown(notify);
 
   const submitEmail: SubmitHandler<FieldValues> = async (values) => {
     const nextEmail = String(values.email ?? "")
@@ -42,6 +50,9 @@ export const ForgotPasswordPage = () => {
       await requestPasswordResetOtp(nextEmail);
       setEmail(nextEmail);
       setStep("otp");
+      // Arm the resend cooldown so the user can't immediately re-request and
+      // burn the backend's 3-requests-per-email-per-15-min budget.
+      startCooldown();
       notify("Nếu email hợp lệ, mã OTP đã được gửi.", { type: "success" });
     } catch (e) {
       notify((e as Error).message, { type: "error" });
@@ -164,11 +175,17 @@ export const ForgotPasswordPage = () => {
                   type="button"
                   variant="outline"
                   className="h-12 w-full rounded-md text-sm font-semibold"
-                  disabled={loading}
-                  onClick={() => setStep("email")}
+                  disabled={loading || !canResend}
+                  onClick={() => resendOtp(email)}
                 >
-                  <RotateCcw className="size-4" />
-                  Gửi lại mã
+                  {isResending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="size-4" />
+                  )}
+                  {cooldownLeft > 0
+                    ? `Gửi lại mã (${cooldownLeft}s)`
+                    : "Gửi lại mã"}
                 </Button>
               </Form>
             )}
