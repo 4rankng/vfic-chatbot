@@ -1,4 +1,5 @@
 import {
+  Bot,
   Boxes,
   CheckCircle2,
   FileText,
@@ -109,7 +110,7 @@ const SelectedProjectSummary = ({
     <aside className="project-selected-summary">
       <div className="project-selected-main">
         <div className="min-w-0">
-          <div className="project-selected-eyebrow">Dự án đang chọn</div>
+          <div className="project-selected-eyebrow">Tổng quan dự án</div>
           <h2>{project.name}</h2>
           <div className="project-selected-slug">{project.slug}</div>
         </div>
@@ -136,28 +137,29 @@ const SelectedProjectSummary = ({
         <ProjectStatusBadge active={project.is_active} />
       </div>
 
-      <div className="project-quick-stats" aria-label="Chỉ số nhanh">
-        <span>
-          <FileText className="size-3.5" />
-          <small>Tài liệu</small>
-          <strong>{project.knowledge_document_count ?? 0}</strong>
-        </span>
-        <span>
-          <Boxes className="size-3.5" />
-          <small>Kiến thức</small>
-          <strong>{readinessText}</strong>
-        </span>
-        <span>
-          <CheckCircle2 className="size-3.5" />
-          <small>Agent</small>
-          <strong>{project.default_persona_id ? "Có" : "Chưa"}</strong>
-        </span>
-        <span>
-          <CheckCircle2 className="size-3.5" />
-          <small>Sẵn sàng</small>
-          <strong>{readinessText}</strong>
-        </span>
-      </div>
+      <dl className="project-fact-row" aria-label="Tóm tắt dự án">
+        <div>
+          <dt>
+            <FileText className="size-3.5" />
+            Tài liệu
+          </dt>
+          <dd>{project.knowledge_document_count ?? 0}</dd>
+        </div>
+        <div>
+          <dt>
+            <CheckCircle2 className="size-3.5" />
+            Thông tin đủ
+          </dt>
+          <dd>{readinessText}</dd>
+        </div>
+        <div>
+          <dt>
+            <Bot className="size-3.5" />
+            Agent
+          </dt>
+          <dd>{project.default_persona_id ? "Đã chọn" : "Chưa chọn"}</dd>
+        </div>
+      </dl>
 
       {(project.summary || project.index_card?.summary) && (
         <p className="project-selected-summary-text">
@@ -189,85 +191,97 @@ export const ProjectOperationsPanel = ({
   onEdit: () => void;
   onDeleted: () => void;
 }) => {
+  const hasProjectChoice = projects.length > 1;
+
   return (
-    <section className="project-ops-panel">
-      <div className="project-selector-column">
-        <div className="project-section-heading">
-          <span>Danh mục dự án</span>
-          <strong>{projects.length} mục</strong>
-        </div>
-        <div className="project-directory-list">
-          {isPending ? (
-            <div className="project-directory-loading">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="project-directory-skeleton">
-                  <Skeleton className="size-10 rounded-[10px]" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-44" />
-                    <Skeleton className="h-3 w-64 max-w-full" />
+    <section
+      className={cn(
+        "project-ops-panel",
+        !hasProjectChoice && !isPending && "is-single-project",
+      )}
+    >
+      {(hasProjectChoice || isPending || projects.length === 0) && (
+        <div className="project-selector-column">
+          <div className="project-section-heading">
+            <span>Danh mục dự án</span>
+            <strong>{projects.length} mục</strong>
+          </div>
+          <div className="project-directory-list">
+            {isPending ? (
+              <div className="project-directory-loading">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="project-directory-skeleton">
+                    <Skeleton className="size-10 rounded-[10px]" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-44" />
+                      <Skeleton className="h-3 w-64 max-w-full" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : projects.length > 0 ? (
-            projects.map((project) => (
-              <button
-                key={project.id}
-                type="button"
-                className={cn(
-                  "project-directory-row",
-                  String(project.id) === selectedId && "is-active",
-                )}
-                onClick={() => onSelect(String(project.id))}
-                aria-pressed={String(project.id) === selectedId}
-              >
-                <div className="project-directory-avatar">
-                  <Boxes className="size-4" />
-                </div>
-                <div className="project-directory-copy">
-                  <div className="project-directory-title-line">
-                    <div className="min-w-0">
-                      <span className="project-directory-name">
-                        {project.name}
+                ))}
+              </div>
+            ) : projects.length > 0 ? (
+              projects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  className={cn(
+                    "project-directory-row",
+                    String(project.id) === selectedId && "is-active",
+                  )}
+                  onClick={() => onSelect(String(project.id))}
+                  aria-pressed={String(project.id) === selectedId}
+                >
+                  <div className="project-directory-avatar">
+                    <Boxes className="size-4" />
+                  </div>
+                  <div className="project-directory-copy">
+                    <div className="project-directory-title-line">
+                      <div className="min-w-0">
+                        <span className="project-directory-name">
+                          {project.name}
+                        </span>
+                        <span className="project-directory-slug">
+                          {project.slug}
+                        </span>
+                      </div>
+                      <ProjectStatusBadge active={project.is_active} short />
+                    </div>
+                    <div className="project-directory-meta">
+                      <span>
+                        <FileText className="size-3.5" />
+                        {project.knowledge_document_count ?? 0} tài liệu
                       </span>
-                      <span className="project-directory-slug">
-                        {project.slug}
+                      <span>
+                        <CheckCircle2 className="size-3.5" />
+                        {typeof project.feature_readiness?.ready === "number"
+                          ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16}`
+                          : "Chưa đo"}
                       </span>
                     </div>
-                    <ProjectStatusBadge active={project.is_active} short />
                   </div>
-                  <div className="project-directory-meta">
-                    <span>
-                      <FileText className="size-3.5" />
-                      {project.knowledge_document_count ?? 0} tài liệu
-                    </span>
-                    <span>
-                      <CheckCircle2 className="size-3.5" />
-                      {typeof project.feature_readiness?.ready === "number"
-                        ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16}`
-                        : "Chưa đo"}
-                    </span>
-                  </div>
-                </div>
-              </button>
-            ))
-          ) : (
-            <EmptyState
-              icon={<Boxes className="size-6" />}
-              title="Chưa có dự án"
-              description="Tạo dự án mới để gom kiến thức và đặc điểm tư vấn."
-              className="project-empty-state"
-            />
-          )}
+                </button>
+              ))
+            ) : (
+              <EmptyState
+                icon={<Boxes className="size-6" />}
+                title="Chưa có dự án"
+                description="Tạo dự án mới để gom kiến thức và đặc điểm tư vấn."
+                className="project-empty-state"
+              />
+            )}
+          </div>
         </div>
-      </div>
-      <SelectedProjectSummary
-        project={selectedProject}
-        isAdmin={isAdmin}
-        canEdit={canEdit}
-        onEdit={onEdit}
-        onDeleted={onDeleted}
-      />
+      )}
+
+      {selectedProject && (
+        <SelectedProjectSummary
+          project={selectedProject}
+          isAdmin={isAdmin}
+          canEdit={canEdit}
+          onEdit={onEdit}
+          onDeleted={onDeleted}
+        />
+      )}
     </section>
   );
 };

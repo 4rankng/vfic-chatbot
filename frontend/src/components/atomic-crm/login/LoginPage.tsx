@@ -24,8 +24,8 @@ import { SSOAuthButton } from "./SSOAuthButton";
  * Automatically shown when an unauthenticated user tries to access a protected route.
  * Handles login via authProvider.login() and displays error notifications on failure.
  *
- * Layout follows the VFIC knowledge-center visual language: paper surface,
- * dark ink actions, and a transparent product illustration.
+ * Layout follows the Ting Ting operations console: a blue application shell,
+ * a cool workspace canvas, and the same crisp panel geometry used after sign-in.
  *
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/loginpage LoginPage documentation}
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/security Security documentation}
@@ -73,38 +73,94 @@ export const LoginPage = (props: { redirectTo?: string }) => {
   const showDivider = showEmailPassword && showSso;
 
   return (
-    <div className="kb-scope login-paper min-h-svh overflow-hidden text-foreground">
-      <main className="mx-auto flex min-h-svh w-full max-w-[620px] items-center justify-center px-5 py-8 sm:px-8">
-        <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
-          <div className="mb-6 space-y-3 text-center sm:mb-8">
-            <div className="flex items-center justify-center gap-4">
+    <div className="min-h-svh overflow-hidden bg-[var(--workspace-shell)] text-[var(--workspace-ink)]">
+      <main className="grid min-h-svh lg:grid-cols-[minmax(24rem,0.88fr)_minmax(36rem,1.12fr)]">
+        <aside
+          aria-labelledby="login-brand-title"
+          className="relative hidden min-h-svh overflow-hidden bg-[var(--workspace-shell)] lg:block"
+        >
+          <img
+            src="/login-recruiting-workspace.png"
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover object-[68%_center] opacity-55"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(160deg,rgba(57,79,121,0.9)_0%,rgba(80,110,174,0.8)_42%,rgba(80,110,174,0.46)_100%)]" />
+
+          <div className="relative flex min-h-svh flex-col p-10 xl:p-14">
+            <div className="flex items-center gap-3 text-white">
               <img
                 src="/ttsoft-logo.png"
                 alt=""
                 aria-hidden="true"
-                className="size-12 shrink-0 rounded-md object-contain"
+                className="size-11 shrink-0 rounded-full object-contain ring-1 ring-white/45"
               />
-              <p className="text-xl font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
+              <span className="text-[1.125rem] font-semibold tracking-[-0.02em]">
                 Ting Ting Soft
+              </span>
+            </div>
+
+            <div className="my-auto max-w-md pt-20">
+              <p className="mb-5 font-mono text-xs font-semibold tracking-[0.16em] text-white/70">
+                TRUNG TÂM TUYỂN DỤNG
+              </p>
+              <h1
+                id="login-brand-title"
+                className="max-w-sm text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.04em] text-white xl:text-5xl"
+              >
+                Giữ từng cuộc trò chuyện ứng viên trong tầm tay.
+              </h1>
+              <p className="mt-6 max-w-[29rem] text-pretty text-base leading-7 text-white/78">
+                Một không gian làm việc rõ ràng để đội ngũ tuyển dụng theo dõi,
+                phản hồi và hoàn thiện hồ sơ đúng lúc.
               </p>
             </div>
-            <div className="space-y-3">
-              <h1 className="kb-display text-balance text-display leading-none text-foreground">
+
+            <div className="max-w-md border-t border-white/25 pt-5 text-sm leading-6 text-white/75">
+              <p className="font-medium text-white">Tuyển dụng có ngữ cảnh</p>
+              <p className="mt-1">Tin nhắn, hồ sơ và công việc cùng một nhịp xử lý.</p>
+            </div>
+          </div>
+        </aside>
+
+        <section className="relative flex min-h-svh min-w-0 items-center bg-[var(--workspace-canvas)] px-5 py-8 sm:px-8 lg:px-12 xl:px-20">
+          <div className="absolute inset-x-0 top-0 h-1 bg-[var(--workspace-action)] lg:hidden" />
+          <div className="absolute left-5 top-7 flex items-center gap-2.5 sm:left-8 lg:hidden">
+            <img
+              src="/ttsoft-logo.png"
+              alt=""
+              aria-hidden="true"
+              className="size-9 rounded-full object-contain ring-1 ring-[var(--workspace-border)]"
+            />
+            <span className="text-[1rem] font-semibold tracking-[-0.02em] text-[var(--workspace-ink)]">
+              Ting Ting Soft
+            </span>
+          </div>
+
+          <section className="mx-auto w-full max-w-[28rem] pt-16 sm:pt-14 lg:pt-0">
+            <div className="mb-7 border-l-4 border-[var(--workspace-action)] pl-4 sm:mb-8">
+              <p className="mb-2 text-xs font-semibold tracking-[0.12em] text-[var(--workspace-action)]">
+                KHU VỰC LÀM VIỆC
+              </p>
+              <h2 className="text-balance text-[clamp(1.875rem,1.55rem+1.1vw,2.35rem)] font-semibold leading-[1.08] tracking-[-0.035em] text-[var(--workspace-ink)]">
                 {translate("crm.auth.welcome_back", {
                   _: "Chào mừng bạn trở lại!",
                 })}
-              </h1>
+              </h2>
+              <p className="mt-3 text-[0.9375rem] leading-6 text-[var(--workspace-ink-muted)]">
+                Đăng nhập để tiếp tục xử lý ứng viên và cuộc trò chuyện của bạn.
+              </p>
             </div>
-          </div>
 
-          <div className="rounded-md border border-border bg-card/92 p-4 shadow-xs backdrop-blur sm:p-6">
+          <div className="border border-[var(--workspace-border)] bg-white p-5 shadow-[0_16px_34px_rgba(48,64,98,0.1)] sm:p-7">
             {showEmailPassword ? (
               <Form className="space-y-4" onSubmit={handleSubmit}>
                 <EmailField />
                 <PasswordField disabled={loading} />
                 <Button
                   type="submit"
-                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-sm font-semibold"
+                  className="mt-3 h-12 w-full cursor-pointer rounded-[var(--workspace-radius-control)] bg-[var(--workspace-action)] text-sm font-semibold text-white shadow-none transition-[background-color,transform] duration-200 hover:bg-[var(--workspace-action-strong)] active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--workspace-focus)] focus-visible:ring-offset-2"
                   disabled={loading}
                 >
                   {loading ? (
@@ -124,8 +180,8 @@ export const LoginPage = (props: { redirectTo?: string }) => {
 
             {showDivider ? (
               <div className="relative py-5">
-                <Separator />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                <Separator className="bg-[var(--workspace-border)]" />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-[var(--workspace-ink-muted)]">
                   {translate("crm.auth.or_divider", { _: "hoặc" })}
                 </span>
               </div>
@@ -133,7 +189,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
 
             {showSso ? (
               <SSOAuthButton
-                className="h-12 w-full rounded-md"
+                className="h-12 w-full rounded-[var(--workspace-radius-control)] border-[var(--workspace-border)] bg-white text-[var(--workspace-ink)] shadow-none transition-[background-color,transform] duration-200 hover:bg-[var(--workspace-surface-muted)] active:scale-[0.99]"
                 domain={googleWorkplaceDomain!}
               >
                 <GoogleMark />
@@ -144,13 +200,13 @@ export const LoginPage = (props: { redirectTo?: string }) => {
             ) : null}
 
             {showEmailPassword ? (
-              <p className="pt-5 text-center text-sm text-muted-foreground">
+              <p className="pt-5 text-center text-sm text-[var(--workspace-ink-muted)]">
                 {translate("ra-auth.auth.forgot_password", {
                   _: "Quên mật khẩu?",
                 })}{" "}
                 <Link
                   to="/forgot-password"
-                  className="font-semibold text-foreground underline-offset-4 hover:underline"
+                  className="font-semibold text-[var(--workspace-action-strong)] underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--workspace-focus)]"
                 >
                   {translate("crm.auth.recover_now", {
                     _: "Khôi phục ngay",
@@ -160,12 +216,13 @@ export const LoginPage = (props: { redirectTo?: string }) => {
             ) : null}
           </div>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
+          <p className="mt-6 text-center text-xs text-[var(--workspace-ink-muted)]">
             &copy; {new Date().getFullYear()}{" "}
             {translate("crm.auth.footer_tagline", {
               _: "Giải pháp phần mềm Ting Ting",
             })}
           </p>
+        </section>
         </section>
       </main>
       <Notification />
@@ -182,21 +239,21 @@ const EmailField = () => {
   const translate = useTranslate();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id} className="font-semibold text-muted-foreground">
+      <Label htmlFor={id} className="font-semibold text-[var(--workspace-ink)]">
         {translate("ra.auth.email", { _: "Email" })}
       </Label>
       <div className="relative">
         <Mail
           aria-hidden
-          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[var(--workspace-ink-muted)]"
         />
         <Input
           id={id}
           type="email"
           autoComplete="email"
           required={isRequired}
-          placeholder="you@example.com"
-          className="h-12 rounded-md bg-background/70 pl-11 text-base shadow-none placeholder:text-muted-foreground/70"
+          placeholder="ten@congty.vn"
+          className="h-12 rounded-[var(--workspace-radius-control)] border-[var(--workspace-border)] bg-white pl-11 text-base text-[var(--workspace-ink)] shadow-none placeholder:text-[var(--workspace-ink-muted)]/75 focus-visible:border-[var(--workspace-focus)] focus-visible:ring-[var(--workspace-focus)]"
           {...field}
         />
       </div>
@@ -215,28 +272,28 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
   const Icon = show ? EyeOff : Eye;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id} className="font-semibold text-muted-foreground">
+      <Label htmlFor={id} className="font-semibold text-[var(--workspace-ink)]">
         {translate("ra.auth.password", { _: "Mật khẩu" })}
       </Label>
       <div className="relative">
         <Lock
           aria-hidden
-          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[var(--workspace-ink-muted)]"
         />
         <Input
           id={id}
           type={show ? "text" : "password"}
           autoComplete="current-password"
           required={isRequired}
-          className="h-12 rounded-md bg-background/70 pl-11 pr-11 text-base shadow-none"
+          className="h-12 rounded-[var(--workspace-radius-control)] border-[var(--workspace-border)] bg-white pl-11 pr-11 text-base text-[var(--workspace-ink)] shadow-none focus-visible:border-[var(--workspace-focus)] focus-visible:ring-[var(--workspace-focus)]"
           {...field}
           disabled={disabled}
         />
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
-          aria-label={show ? "Hide password" : "Show password"}
-          className="absolute right-2.5 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          className="absolute right-2.5 top-1/2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-[var(--workspace-radius-control)] text-[var(--workspace-ink-muted)] transition-colors hover:bg-[var(--workspace-surface-muted)] hover:text-[var(--workspace-ink)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--workspace-focus)]"
         >
           <Icon className="size-4" />
         </button>

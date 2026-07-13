@@ -108,27 +108,30 @@ const ProjectListContent = () => {
             </section>
           )}
 
-          <ProjectOperationsPanel
-            projects={projects}
-            selectedId={selectedId}
-            selectedProject={selectedProject}
-            isPending={isPending}
-            isAdmin={isAdmin}
-            canEdit={canEdit}
-            onSelect={setSelectedId}
-            onEdit={() =>
-              selectedProject &&
-              redirect("edit", "projects", selectedProject.id)
-            }
-            onDeleted={() => refresh()}
-          />
-
-          {selectedProject ? (
-            <ProjectDetailPanel
-              project={selectedProject}
-              isAdmin={isAdmin}
-              canEdit={canEdit}
-            />
+          {selectedProject || isPending ? (
+            <>
+              <ProjectOperationsPanel
+                projects={projects}
+                selectedId={selectedId}
+                selectedProject={selectedProject}
+                isPending={isPending}
+                isAdmin={isAdmin}
+                canEdit={canEdit}
+                onSelect={setSelectedId}
+                onEdit={() =>
+                  selectedProject &&
+                  redirect("edit", "projects", selectedProject.id)
+                }
+                onDeleted={() => refresh()}
+              />
+              {selectedProject && (
+                <ProjectDetailPanel
+                  project={selectedProject}
+                  isAdmin={isAdmin}
+                  canEdit={canEdit}
+                />
+              )}
+            </>
           ) : (
             <EmptyState
               icon={<Boxes className="size-6" />}
