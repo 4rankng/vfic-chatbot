@@ -8,7 +8,7 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-PASSWORD_RESET_FROM_EMAIL = "vficbot@1stop.app"
+# Resend endpoint (code constant — not admin-editable).
 RESEND_EMAILS_URL = "https://api.resend.com/emails"
 
 
@@ -19,15 +19,16 @@ class EmailDeliveryError(RuntimeError):
 async def send_password_reset_otp(*, to_email: str, otp: str) -> str | None:
     """Send a password reset OTP through Resend.
 
-    The sender is intentionally a code constant, per product requirement, and
-    the Resend API key remains backend-only configuration.
+    The sender address is configurable via ``RESEND_FROM_EMAIL`` (defaults to
+    ``TingTing <noreply@tingting.vip>``). The Resend API key remains
+    backend-only configuration.
     """
     settings = get_settings()
     if not settings.resend_api_key:
         raise EmailDeliveryError("RESEND_API_KEY is not configured")
 
     payload = {
-        "from": PASSWORD_RESET_FROM_EMAIL,
+        "from": settings.resend_from_email,
         "to": [to_email],
         "subject": "Ting Ting — Mã khôi phục mật khẩu",
         "text": (

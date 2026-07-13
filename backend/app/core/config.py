@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 14
     resend_api_key: str = ""
+    # Sender (From) address for outbound transactional email via Resend.
+    # The domain MUST be verified in your Resend account, otherwise Resend
+    # rejects the send with 422. Use the RFC 5322 display form or bare address.
+    resend_from_email: str = "TingTing <noreply@tingting.vip>"
     password_reset_otp_ttl_minutes: int = 10
     password_reset_otp_attempt_limit: int = 5
     # Server-side key for encrypting admin-managed integration secrets at rest.
