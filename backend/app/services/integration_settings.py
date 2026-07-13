@@ -403,7 +403,6 @@ class IntegrationSettingsService:
         the new access_token, or ``None`` on any failure — the caller then
         surfaces the original send error.
         """
-        import httpx
 
         from app.core.redis import get_redis
 
@@ -438,10 +437,19 @@ class IntegrationSettingsService:
                 "app_id": cfg.oa_app_id,
             }
             try:
-                async with httpx.AsyncClient(
-                    timeout=self.settings.zalo_bot_request_timeout
-                ) as client:
-                    resp = await client.post(ZALO_OA_TOKEN_URL, data=body, headers=headers)
+                # Reuse the process-scoped OA-token-refresh client (Tech-Lead
+                # Directive §4). Kept separate from the main OA client because
+                # the token endpoint lives on a different host (oauth.zaloapp.com
+                # vs openapi.zalo.me) and uses a different auth shape (secret_key
+                # header, not access_token). secret_key is passed per-request.
+                from app.core.http import get_http_client
+
+                client = await get_http_client(
+                    "zalo_oa_token",
+                    timeout=self.settings.zalo_bot_request_timeout,
+                    settings=self.settings,
+                )
+                resp = await client.post(ZALO_OA_TOKEN_URL, data=body, headers=headers)
                 data = resp.json()
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA token refresh transport error", exc_info=True)

@@ -2,7 +2,6 @@
 
 import logging
 
-import httpx
 
 from app.core.config import get_settings
 
@@ -106,8 +105,13 @@ async def send_password_reset_otp(*, to_email: str, otp: str) -> str | None:
         "Authorization": f"Bearer {settings.resend_api_key}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.post(RESEND_EMAILS_URL, json=payload, headers=headers)
+    # Reuse the process-scoped Resend client (Tech-Lead Directive §4). Auth
+    # (Bearer) is passed per-request so a rotated Resend key takes effect on
+    # the next call without rebuilding the client.
+    from app.core.http import get_http_client
+
+    client = await get_http_client("resend", timeout=10, settings=settings)
+    response = await client.post(RESEND_EMAILS_URL, json=payload, headers=headers)
     if response.status_code >= 400:
         logger.warning(
             "resend password reset email failed status=%s body=%s",

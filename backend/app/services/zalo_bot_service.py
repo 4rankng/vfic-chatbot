@@ -27,7 +27,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal
 
-import httpx
 
 from app.core.config import Settings, ZALO_BOT_API_BASE, get_settings
 
@@ -155,8 +154,19 @@ async def _post(
         body = {}
     url = _method_url(settings, method, resolved_token)
     try:
-        async with httpx.AsyncClient(timeout=settings.zalo_bot_request_timeout) as client:
-            resp = await client.post(url, json=body)
+        # Reuse the process-scoped Zalo Bot Platform client (Tech-Lead
+        # Directive §4) — fresh TLS handshakes per send were ~100-300 ms of
+        # pure overhead on every candidate reply. The full URL (with token in
+        # path) is passed here because the client is constructed without a
+        # base_url; auth rides the path, never a header.
+        from app.core.http import get_http_client
+
+        client = await get_http_client(
+            "zalo_bot",
+            timeout=settings.zalo_bot_request_timeout,
+            settings=settings,
+        )
+        resp = await client.post(url, json=body)
         data = resp.json()
     except Exception as exc:  # noqa: BLE001
         return {

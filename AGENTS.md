@@ -18,6 +18,8 @@ curation, personas, and proactive follow-up.
 
 **Production:** `bot.tingting.vip` (DigitalOcean 2 vCPU droplet).
 
+> **New here?** Start with [`TECH.md`](TECH.md) — the single-page tech-stack + high-level-design summary.
+
 For full product requirements, see [`docs/project-overview-pdr.md`](docs/project-overview-pdr.md).
 
 ---
@@ -337,6 +339,7 @@ Existing documentation in `docs/`:
 
 | Document | Purpose |
 |---|---|
+| [TECH.md](TECH.md) | **Start here** — single-page tech-stack + high-level-design summary |
 | [docs/code-standards.md](docs/code-standards.md) | Detailed backend + frontend coding conventions |
 | [docs/system-architecture.md](docs/system-architecture.md) | Runtime architecture, request lifecycle, queue model, data layer |
 | [docs/HLD.md](docs/HLD.md) | High-level design: retrieval, recommendation, deployment strategy |

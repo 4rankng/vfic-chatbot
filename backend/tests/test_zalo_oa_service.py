@@ -7,6 +7,8 @@ import pytest
 from app.core.config import Settings
 from app.services.zalo_oa_service import ZaloOASender
 
+from tests.helpers.http_fake import register_fake_client
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -18,24 +20,13 @@ async def test_oa_sender_uses_openapi_message_endpoint(monkeypatch: pytest.Monke
             return {"error": 0, "data": {"message_id": "oa-m1"}}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(self, url: str, *, json=None, headers=None, **kw):
             captured["url"] = url
             captured["json"] = json
             captured["headers"] = headers
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -63,23 +54,12 @@ async def test_oa_sender_get_oa_info_uses_read_only_profile_endpoint(
             return {"error": 0, "data": {"oa_id": "oa-1"}}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def get(self, url: str, *, headers=None, **kw):
             captured["url"] = url
             captured["headers"] = headers
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -105,24 +85,13 @@ async def test_oa_sender_get_oa_info_refreshes_invalid_token_once(
             return self._data
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def get(self, url: str, *, headers=None, **kw):
             calls.append({"url": url, "headers": headers})
             if len(calls) == 1:
                 return _FakeResp({"error": -216, "message": "Access token is invalid"})
             return _FakeResp({"error": 0, "data": {"oa_id": "oa-1"}})
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     refresh_calls: list[int] = []
 
     async def refresh() -> str | None:
@@ -161,22 +130,11 @@ async def test_oa_sender_get_oa_info_returns_original_error_when_refresh_raises(
             return {"error": -216, "message": "Access token is invalid"}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def get(self, url: str, *, headers=None, **kw):
             get_calls.append(1)
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
 
     async def refresh() -> str | None:
         raise RuntimeError("redis unavailable")
@@ -204,24 +162,13 @@ async def test_oa_sender_send_media_uses_cs_media_template(
             return {"error": 0, "data": {"message_id": "oa-media-1"}}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(self, url: str, *, json=None, headers=None, **kw):
             captured["url"] = url
             captured["json"] = json
             captured["headers"] = headers
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -268,24 +215,13 @@ async def test_oa_sender_send_buttons_builds_button_template_payload(
             return {"error": 0, "data": {"message_id": "oa-btn-1"}}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(self, url: str, *, json=None, headers=None, **kw):
             captured["url"] = url
             captured["json"] = json
             captured["headers"] = headers
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -316,15 +252,6 @@ async def test_oa_sender_send_retries_once_after_token_refresh(
             return self._data
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(self, url: str, *, json=None, headers=None, **kw):
             calls.append({"headers": headers})
             data = (
@@ -334,9 +261,7 @@ async def test_oa_sender_send_retries_once_after_token_refresh(
             )
             return _FakeResp(data)
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
 
     refresh_calls: list[int] = []
 
@@ -370,22 +295,11 @@ async def test_oa_sender_send_returns_original_error_when_refresh_raises(
             return {"error": -216, "message": "Access token is invalid"}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(self, url: str, *, json=None, headers=None, **kw):
             calls.append(1)
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
 
     async def refresh() -> str | None:
         raise RuntimeError("redis unavailable")
@@ -411,21 +325,10 @@ async def test_oa_sender_without_refresh_returns_error_on_token_invalid(
             return {"error": -216, "message": "Access token invalid"}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(self, *a: Any, **kw):
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="old-token",
@@ -447,23 +350,12 @@ async def test_oa_sender_send_anonymous_uses_phone_recipient(
             return {"error": 0, "data": {"message_id": "oa-anon-1"}}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(self, url: str, *, json=None, headers=None, **kw):
             captured["json"] = json
             captured["headers"] = headers
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -501,24 +393,13 @@ async def test_get_user_detail_encodes_data_param_and_parses_avatars(
             }
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def get(self, url: str, *, params=None, headers=None, **kw):
             captured["url"] = url
             captured["params"] = params
             captured["headers"] = headers
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -552,21 +433,10 @@ async def test_get_user_detail_falls_back_to_avatar_when_no_240(
             }
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def get(self, url: str, *, params=None, headers=None, **kw):
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -588,21 +458,10 @@ async def test_get_user_detail_returns_none_on_permission_denied(
             return {"error": -201, "message": "permission denied"}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def get(self, url: str, *, params=None, headers=None, **kw):
             return _FakeResp()
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -629,9 +488,7 @@ async def test_get_user_detail_returns_none_on_transport_error(
         async def get(self, url: str, *, params=None, headers=None, **kw):
             raise ConnectionError("network down")
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     sender = ZaloOASender(
         settings=Settings(app_env="development", zalo_bot_request_timeout=5),
         access_token="oa-token",
@@ -673,9 +530,7 @@ async def test_get_user_detail_refreshes_token_once(
                 {"error": 0, "data": {"display_name": "X", "avatar": "https://z/x.jpg"}}
             )
 
-    import app.services.zalo_oa_service as svc
-
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    register_fake_client("zalo_oa", _FakeClient())
     refresh_calls: list[int] = []
 
     async def refresh() -> str | None:

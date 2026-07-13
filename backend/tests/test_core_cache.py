@@ -90,3 +90,47 @@ async def test_cache_version_returns_string_default(monkeypatch):
     # Reflects bumps.
     await cache_mod.bump_cache_version("known")
     assert await cache_mod.cache_version("known") == "1"
+
+
+# ── KB content mutation → cache invalidation contract ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_bump_kb_caches_invalidates_both_cache_namespaces(monkeypatch):
+    """A KB mutation must invalidate BOTH the exact-hash RAG cache and the
+    semantic cache.
+
+    The exact-hash RAG cache key embeds ``cache_version("knowledge")``; the
+    semantic cache namespace reads ``cache_version("semantic_cache")``. After a
+    KB write, both versions must have advanced so neither cache can serve a
+    stale FAQ/knowledge answer. This pins the Phase 1.5 correctness gate:
+    'KB updates cannot serve a stale FAQ answer'.
+    """
+    redis = _FakeRedis()
+    monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
+
+    # Establish a real baseline by bumping both once (simulating a prior KB
+    # write). Without this, the default version ("1") is indistinguishable
+    # from the value after the first incr (also "1").
+    await cache_mod.bump_kb_caches()
+    kv_before = await cache_mod.cache_version("knowledge")
+    sv_before = await cache_mod.cache_version("semantic_cache")
+
+    # Simulate a NEW KB content mutation (FAQ create/update/delete, doc ingest,
+    # version activate, archive — all now call bump_kb_caches()).
+    await cache_mod.bump_kb_caches()
+
+    kv_after = await cache_mod.cache_version("knowledge")
+    sv_after = await cache_mod.cache_version("semantic_cache")
+
+    # Both must advance — a stale version on either namespace would let the
+    # corresponding cache serve pre-mutation content.
+    assert int(kv_after) > int(kv_before), (
+        f"knowledge version did not advance after KB mutation ({kv_before} → {kv_after}); "
+        "the exact-hash RAG cache could serve stale answers"
+    )
+    assert int(sv_after) > int(sv_before), (
+        f"semantic_cache version did not advance after KB mutation ({sv_before} → {sv_after}); "
+        "the semantic RAG cache could serve stale answers"
+    )
+

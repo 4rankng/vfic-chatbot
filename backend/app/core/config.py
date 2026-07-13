@@ -83,6 +83,16 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30  # seconds to wait for a free connection before raising
     db_pool_recycle: int = 1800  # recycle connections every 30 min
 
+    # Process-scoped httpx client pool (Tech-Lead Directive §4 "Reuse
+    # connections"). Per-name clients live in app.core.http; these limits size
+    # each client's pool. Conservative defaults for the 2-vCPU droplet: enough
+    # keepalive slots to avoid handshakes on burst, small enough to stay under
+    # the global file-descriptor budget alongside the DB pool.
+    http_max_keepalive_connections: int = 10
+    http_max_connections: int = 20
+    http_keepalive_expiry: int = 30  # seconds an idle keepalive conn is held
+    http_default_timeout: float = 30.0  # fallback; callers pass per-request timeouts
+
     # Redis (RQ broker + per-chat mutex + pub/sub)
     redis_url: str = "redis://localhost:6379/0"
 

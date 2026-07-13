@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -91,15 +90,6 @@ async def test_url_contract_token_in_path_not_header(
             return {"ok": True, "result": {"message_id": "m1", "date": 1700000000000}}
 
     class _FakeClient:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        async def __aenter__(self) -> "_FakeClient":
-            return self
-
-        async def __aexit__(self, *a: Any) -> None:
-            return None
-
         async def post(
             self,
             url: str,
@@ -115,7 +105,9 @@ async def test_url_contract_token_in_path_not_header(
             captured["body"] = json
             return _FakeResp()
 
-    monkeypatch.setattr(svc.httpx, "AsyncClient", _FakeClient)
+    from tests.helpers.http_fake import register_fake_client
+
+    register_fake_client("zalo_bot", _FakeClient())
     sender = svc.ZaloBotSender(settings=settings)
     result = await sender.send_message("chat-1", "hello")
 
@@ -539,34 +531,33 @@ async def test_aggregate_chunked_send_handles_ok_without_msg_id() -> None:
 
 async def test_post_transport_error_returns_envelope(settings: Settings) -> None:
     """Network/HTTP exception must surface as ``ok=False``, never raise."""
-    with patch.object(svc.httpx.AsyncClient, "post", side_effect=RuntimeError("boom")):
-        result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", "hi")
+    from tests.helpers.http_fake import FakeHttpClient, register_fake_client
+
+    fake = FakeHttpClient(side_effect=RuntimeError("boom"))
+    register_fake_client("zalo_bot", fake)
+    result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", "hi")
     assert result.ok is False
     assert "boom" in (result.error or "")
 
 
 async def test_post_non_json_envelope(settings: Settings) -> None:
     """Non-dict JSON (e.g. a bare list) is treated as a malformed envelope."""
+    from tests.helpers.http_fake import FakeHttpClient, register_fake_client
 
-    class _Resp:
-        def json(self) -> list[Any]:
-            return [1, 2, 3]
-
-    with patch.object(svc.httpx.AsyncClient, "post", return_value=_Resp()):
-        result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", "hi")
+    fake = FakeHttpClient(responses=[[1, 2, 3]])
+    register_fake_client("zalo_bot", fake)
+    result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", "hi")
     assert result.ok is False
     assert "non-JSON" in (result.error or "") or "missing 'ok'" in (result.error or "")
 
 
 async def test_post_missing_ok_field(settings: Settings) -> None:
     """``{}`` (no ``ok`` key) → malformed envelope error path."""
+    from tests.helpers.http_fake import FakeHttpClient, register_fake_client
 
-    class _Resp:
-        def json(self) -> dict[str, Any]:
-            return {"weird": "shape"}
-
-    with patch.object(svc.httpx.AsyncClient, "post", return_value=_Resp()):
-        result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", "hi")
+    fake = FakeHttpClient(responses=[{"weird": "shape"}])
+    register_fake_client("zalo_bot", fake)
+    result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", "hi")
     assert result.ok is False
     assert "missing 'ok'" in (result.error or "")
 

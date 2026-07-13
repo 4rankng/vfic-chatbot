@@ -119,3 +119,162 @@ async def test_bump_semantic_cache_version_swallows_errors(monkeypatch):
     # Must not raise.
     await sc.bump_semantic_cache_version()
 
+
+# --- false-positive / cross-topic / cross-project rejection ------------------
+# Phase 3-RAG.2: before enabling the semantic cache, prove that distinct-topic
+# and cross-project queries do NOT hit each other. These exercise the full
+# Redis store/scan path with an in-memory fake Redis (no live Redis required).
+
+
+class _FakeHashRedis:
+    """In-memory async Redis double supporting the HASH/ZSET/pipeline ops that
+    the semantic cache uses (hgetall/hset/hget/zadd/zcard/zrange/zrem/expire)."""
+
+    def __init__(self) -> None:
+        self._hashes: dict[str, dict[str, str]] = {}
+        self._zsets: dict[str, dict[str, float]] = {}
+
+    def pipeline(self):
+        ops: list[tuple] = []
+
+        class _Pipe:
+            def hset(_self, key, field, value):
+                ops.append(("hset", key, field, value))
+                return _self
+
+            def zadd(_self, key, mapping):
+                ops.append(("zadd", key, mapping))
+                return _self
+
+            def expire(_self, key, ttl):
+                ops.append(("expire", key, ttl))
+                return _self
+
+            def hdel(_self, key, *fields):
+                ops.append(("hdel", key, fields))
+                return _self
+
+            def zrem(_self, key, *members):
+                ops.append(("zrem", key, members))
+                return _self
+
+            async def execute(_self):
+                for op in ops:
+                    if op[0] == "hset":
+                        _, key, field, value = op
+                        self._hashes.setdefault(key, {})[field] = value
+                    elif op[0] == "zadd":
+                        _, key, mapping = op
+                        z = self._zsets.setdefault(key, {})
+                        for member, score in mapping.items():
+                            z[member] = float(score)
+                    # hdel/zrem/expire are no-ops in the fake (not needed for
+                    # false-positive tests; LRU eviction has its own path).
+
+        return _Pipe()
+
+    async def hgetall(self, key):
+        return dict(self._hashes.get(key, {}))
+
+    async def hget(self, key, field):
+        return self._hashes.get(key, {}).get(field)
+
+    async def zcard(self, key):
+        return len(self._zsets.get(key, {}))
+
+    async def zrange(self, key, start, stop):
+        members = sorted(self._zsets.get(key, {}), key=lambda m: self._zsets[key][m])
+        return members[start : stop + 1] if stop >= 0 else members[start:]
+
+
+async def _enabled_settings(monkeypatch, **overrides):
+    """Flip the semantic cache ON and wire a fake Redis."""
+    from types import SimpleNamespace
+
+    fake_redis = _FakeHashRedis()
+    defaults = dict(
+        semantic_cache_enabled=True,
+        semantic_cache_threshold=0.95,
+        semantic_cache_capacity=200,
+        semantic_cache_ttl_seconds=1800,
+    )
+    defaults.update(overrides)
+    monkeypatch.setattr(sc, "_settings", lambda: SimpleNamespace(**defaults))
+
+    # _keys returns a tuple (vkey, rkey, tkey). Patch to fixed keys so the fake
+    # Redis stores land in known buckets.
+    async def _async_keys():
+        return ("sc:1:vecs", "sc:1:results", "sc:1:ts")
+
+    monkeypatch.setattr(sc, "_keys", _async_keys)
+
+    # Patch get_redis in the redis module the cache imports lazily.
+    import app.core.redis as redis_mod
+
+    async def _get_redis():
+        return fake_redis
+
+    monkeypatch.setattr(redis_mod, "get_redis", _get_redis)
+    return fake_redis
+
+
+async def test_semantic_cache_rejects_distinct_topic_query(monkeypatch):
+    """A query about salary must NOT hit a cached entry about the shuttle bus.
+
+    Distinct topics have near-orthogonal embeddings; the 0.95 threshold must
+    reject them. This is the core false-positive guard before enabling the cache.
+    """
+    await _enabled_settings(monkeypatch)
+
+    # Salary query and shuttle query: orthogonal unit vectors (cosine = 0.0).
+    salary_vec = [1.0, 0.0, 0.0]
+    shuttle_vec = [0.0, 1.0, 0.0]
+    await sc.semantic_cache_put(salary_vec, "Lương 15 triệu/tháng.")
+
+    # A NEW query about the shuttle must NOT return the salary answer.
+    hit = await sc.semantic_cache_get(shuttle_vec)
+    assert hit is None, (
+        "semantic cache false positive: a shuttle-bus query returned a salary answer"
+    )
+
+
+async def test_semantic_cache_rejects_below_threshold_near_match(monkeypatch):
+    """A similar-but-not-identical query below the 0.95 threshold must miss."""
+    await _enabled_settings(monkeypatch, semantic_cache_threshold=0.95)
+
+    cached_vec = [1.0, 1.0, 1.0]
+    # Cosine(cached, query) = (1+1+0)/(sqrt(3)*sqrt(2)) ≈ 0.816 < 0.95
+    query_vec = [1.0, 1.0, 0.0]
+    await sc.semantic_cache_put(cached_vec, "câu trả lời A")
+
+    hit = await sc.semantic_cache_get(query_vec)
+    assert hit is None, (
+        "semantic cache hit at cos≈0.816, below the 0.95 floor — expected a miss"
+    )
+
+
+async def test_semantic_cache_hits_on_near_identical_query(monkeypatch):
+    """Sanity check: a paraphrase whose embedding is ~identical DOES hit.
+
+    This proves the rejection tests above fail because of the threshold, not a
+    wiring bug in the fake Redis.
+    """
+    await _enabled_settings(monkeypatch, semantic_cache_threshold=0.95)
+
+    cached_vec = [1.0, 2.0, 3.0]
+    # Identical vector → cosine = 1.0, well above threshold.
+    await sc.semantic_cache_put(cached_vec, "câu trả lời gốc")
+
+    hit = await sc.semantic_cache_get([1.0, 2.0, 3.0])
+    assert hit is not None
+    assert hit.result == "câu trả lời gốc"
+    assert hit.similarity == pytest.approx(1.0)
+
+
+async def test_semantic_cache_empty_returns_none(monkeypatch):
+    """An empty cache must return None (miss), not raise."""
+    await _enabled_settings(monkeypatch)
+
+    hit = await sc.semantic_cache_get([1.0, 0.0, 0.0])
+    assert hit is None
+

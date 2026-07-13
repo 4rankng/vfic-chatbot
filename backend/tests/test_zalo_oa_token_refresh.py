@@ -131,7 +131,9 @@ async def test_refresh_persists_new_token_and_rotates_refresh_token(monkeypatch)
     service = IntegrationSettingsService(db, settings=_Settings())
 
     fake_client = _FakeClient({"access_token": "at-new", "refresh_token": "rt-2"})
-    monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_client)
+    from tests.helpers.http_fake import register_fake_client as _reg_fake
+
+    _reg_fake("zalo_oa_token", fake_client)
     fake_redis = _FakeRedis(set_ok=True)
     monkeypatch.setattr("app.core.redis.get_redis", lambda: fake_redis)
 
@@ -157,7 +159,9 @@ async def test_refresh_returns_stored_token_when_lock_held(monkeypatch):
     service = IntegrationSettingsService(db, settings=_Settings())
 
     fake_client = _FakeClient({"access_token": "at-new"})
-    monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_client)
+    from tests.helpers.http_fake import register_fake_client as _reg_fake
+
+    _reg_fake("zalo_oa_token", fake_client)
     monkeypatch.setattr("app.core.redis.get_redis", lambda: _FakeRedis(set_ok=False))
     monkeypatch.setattr("asyncio.sleep", AsyncMockNoop())
 
@@ -183,7 +187,9 @@ async def test_refresh_returns_none_when_refresh_token_missing(monkeypatch):
     service = IntegrationSettingsService(db, settings=_Settings())
 
     fake_client = _FakeClient({"access_token": "at-new"})
-    monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_client)
+    from tests.helpers.http_fake import register_fake_client as _reg_fake
+
+    _reg_fake("zalo_oa_token", fake_client)
 
     token = await service.refresh_oa_access_token()
 
@@ -198,7 +204,9 @@ async def test_refresh_returns_none_on_zalo_error(monkeypatch):
     service = IntegrationSettingsService(db, settings=_Settings())
 
     fake_client = _FakeClient({"error": -1, "message": "invalid refresh_token"})
-    monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_client)
+    from tests.helpers.http_fake import register_fake_client as _reg_fake
+
+    _reg_fake("zalo_oa_token", fake_client)
     monkeypatch.setattr("app.core.redis.get_redis", lambda: _FakeRedis(set_ok=True))
 
     token = await service.refresh_oa_access_token()

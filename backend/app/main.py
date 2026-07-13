@@ -84,6 +84,13 @@ async def lifespan(app: FastAPI):
 
     yield
     await engine.dispose()
+    # Close persistent HTTP clients AFTER engine.dispose so any final DB-driven
+    # send completes against a warm connection (Tech-Lead Directive §4). RQ
+    # workers don't run this lifespan; they call aclose_all() from their own
+    # shutdown hook (process exit reaps the sockets regardless).
+    from app.core.http import aclose_all
+
+    await aclose_all()
     logger.info("vfic backend stopped")
 
 

@@ -264,8 +264,6 @@ class OpenRouterEmbedder:
         if not self.api_key:
             raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter embeddings")
 
-        import httpx
-
         url = f"{self.s.openrouter_base_url.rstrip('/')}/embeddings"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -279,8 +277,18 @@ class OpenRouterEmbedder:
                 "input": chunk,
                 "dimensions": self.s.embedding_dim,
             }
-            async with httpx.AsyncClient(timeout=self.s.openrouter_embedding_timeout) as client:
-                resp = await client.post(url, headers=headers, json=payload)
+            # Reuse the process-scoped OpenRouter embedding client (Tech-Lead
+            # Directive §4) — embedding calls are the highest-volume HTTP path
+            # in retrieval, and per-call TLS handshakes were a measurable tax
+            # on every RAG turn. Auth (Bearer) is passed per-request.
+            from app.core.http import get_http_client
+
+            client = await get_http_client(
+                "openrouter_embed",
+                timeout=self.s.openrouter_embedding_timeout,
+                settings=self.s,
+            )
+            resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             body = resp.json()
             rows = sorted(body.get("data", []), key=lambda row: row.get("index", 0))

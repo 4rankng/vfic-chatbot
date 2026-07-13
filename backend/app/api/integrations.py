@@ -200,7 +200,8 @@ async def test_zalo_oa(
         else:
             # Access token failed — check if it's expired
             err_text = _safe_probe_error(
-                "zalo_oa", result,
+                "zalo_oa",
+                result,
                 [cfg.oa_access_token, cfg.oa_refresh_token, cfg.oa_secret_key],
             )
             is_expired = "expired" in err_text.lower() or "-216" in err_text
@@ -225,26 +226,34 @@ async def test_zalo_oa(
                         )
                 else:
                     oa_refresh_ok = False
-                    # Layer 3: diagnose WHY refresh failed — test the secret key directly
-                    import httpx
+                    # Layer 3: diagnose WHY refresh failed — test the secret key directly.
+                    # Reuse the process-scoped OA-token diagnostic client (Tech-Lead
+                    # Directive §4) — a different oauth host from the runtime refresh,
+                    # so a distinct name. Per-request secret_key header (admin-entered).
+                    from app.core.http import get_http_client
+
                     try:
-                        async with httpx.AsyncClient(timeout=10) as client:
-                            resp = await client.post(
-                                "https://oauth.zaloapp.com/v4/oa/access_token",
-                                data={
-                                    "grant_type": "refresh_token",
-                                    "refresh_token": cfg.oa_refresh_token,
-                                    "app_id": cfg.oa_app_id,
-                                },
-                                headers={"secret_key": cfg.oa_secret_key} if cfg.oa_secret_key else {},
-                            )
+                        client = await get_http_client("zalo_oa_oauth_diag", timeout=10)
+                        resp = await client.post(
+                            "https://oauth.zaloapp.com/v4/oa/access_token",
+                            data={
+                                "grant_type": "refresh_token",
+                                "refresh_token": cfg.oa_refresh_token,
+                                "app_id": cfg.oa_app_id,
+                            },
+                            headers={"secret_key": cfg.oa_secret_key} if cfg.oa_secret_key else {},
+                        )
                         data = resp.json()
                         if isinstance(data, dict) and "access_token" in data:
                             oa_secret_valid = True
-                            errors.append("Secret key valid but refresh returned no token — check app_id")
+                            errors.append(
+                                "Secret key valid but refresh returned no token — check app_id"
+                            )
                         elif isinstance(data, dict) and data.get("error") == -14004:
                             oa_secret_valid = False
-                            errors.append("❌ OA Secret Key is INVALID — refresh cannot work. Update it from the Zalo OA dashboard.")
+                            errors.append(
+                                "❌ OA Secret Key is INVALID — refresh cannot work. Update it from the Zalo OA dashboard."
+                            )
                         else:
                             oa_secret_valid = False
                             errors.append(

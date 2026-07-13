@@ -302,26 +302,35 @@ def _event_button_title(raw: dict) -> str:
 async def _fire_typing(chat_id: str, bot_token: str | None = None) -> None:
     """Fire-and-forget Zalo typing indicator from the webhook process.
 
-    Uses a one-shot httpx call to avoid importing the heavy ZaloBotSender class
-    into the webhook hot path. ``bot_token`` is the DB-resolved live token passed
-    in from the router; it falls back to ``settings.zalo_bot_token`` (stale in
-    prod) only when a caller omits it. Errors are logged but never propagate.
+    Uses the process-scoped ``zalo_bot_typing`` httpx client (Tech-Lead Directive
+    §4) — a short-timeout connection reused across all typing pulses — rather
+    than importing the heavier ``ZaloBotSender`` class into the webhook hot path.
+    ``bot_token`` is the DB-resolved live token passed in from the router; it
+    falls back to ``settings.zalo_bot_token`` (stale in prod) only when a caller
+    omits it. Errors are logged but never propagate.
     """
     try:
-        import httpx
-
-        from app.core.config import get_settings
+        from app.core.config import ZALO_BOT_API_BASE, get_settings
+        from app.core.http import get_http_client
 
         s = get_settings()
         token = bot_token or s.zalo_bot_token
         if not token:
             return
-        base = s.zalo_bot_api_base.rstrip("/")
-        async with httpx.AsyncClient(timeout=3) as client:
-            await client.post(
-                f"{base}/bot{token}/sendChatAction",
-                json={"chat_id": chat_id, "action": "typing"},
-            )
+        # NOTE: this previously read ``s.zalo_bot_api_base``, which does not
+        # exist on Settings (only the module-level ZALO_BOT_API_BASE constant
+        # does) — so the typing indicator silently raised AttributeError and
+        # was swallowed by the best-effort except. Using the constant fixes it.
+        base = ZALO_BOT_API_BASE.rstrip("/")
+        client = await get_http_client(
+            "zalo_bot_typing",
+            timeout=3,
+            settings=s,
+        )
+        await client.post(
+            f"{base}/bot{token}/sendChatAction",
+            json={"chat_id": chat_id, "action": "typing"},
+        )
     except Exception:  # noqa: BLE001 — typing is best-effort
         logger.debug("failed to send typing indicator for %s", chat_id, exc_info=True)
 

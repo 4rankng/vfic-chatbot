@@ -7,7 +7,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-import httpx
 
 from app.core.config import Settings, ZALO_OA_API_BASE, get_settings
 from app.services.zalo_bot_service import (
@@ -62,12 +61,23 @@ class ZaloOASender:
         if not token:
             return {"error": -1, "message": "zalo_oa_access_token not configured"}
         try:
-            async with httpx.AsyncClient(timeout=self._settings.zalo_bot_request_timeout) as client:
-                resp = await client.post(
-                    f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
-                    json=body,
-                    headers={"access_token": token},
-                )
+            # Reuse the process-scoped Zalo OA client (Tech-Lead Directive §4).
+            # access_token is passed per-request (it rotates on refresh); the
+            # client itself is auth-header-free so a refreshed token is always
+            # picked up. The full URL is passed (no base_url) so the connection
+            # pool is keyed on host while keeping the call shape unchanged.
+            from app.core.http import get_http_client
+
+            client = await get_http_client(
+                "zalo_oa",
+                timeout=self._settings.zalo_bot_request_timeout,
+                settings=self._settings,
+            )
+            resp = await client.post(
+                f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
+                json=body,
+                headers={"access_token": token},
+            )
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
             return {
@@ -84,12 +94,18 @@ class ZaloOASender:
         if not token:
             return {"error": -1, "message": "zalo_oa_access_token not configured"}
         try:
-            async with httpx.AsyncClient(timeout=self._settings.zalo_bot_request_timeout) as client:
-                resp = await client.get(
-                    f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
-                    params=params,
-                    headers={"access_token": token},
-                )
+            from app.core.http import get_http_client
+
+            client = await get_http_client(
+                "zalo_oa",
+                timeout=self._settings.zalo_bot_request_timeout,
+                settings=self._settings,
+            )
+            resp = await client.get(
+                f"{ZALO_OA_API_BASE.rstrip('/')}{path}",
+                params=params,
+                headers={"access_token": token},
+            )
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
             return {"error": -1, "message": f"transport error: {exc}"}
