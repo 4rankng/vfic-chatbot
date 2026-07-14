@@ -23,6 +23,90 @@ const doc = (id: string) =>
 const proj = (id: string) =>
   `${BASE}/knowledge/projects/${encodeURIComponent(id)}`;
 
+export type IngestionTemplate = {
+  id: string;
+  template_key: string;
+  name: string;
+  vertical: string;
+  created_at: string;
+};
+
+export type IngestionTemplateVersion = {
+  id: string;
+  template_id: string;
+  version_no: number;
+  status: "DRAFT" | "PUBLISHED" | "DEPRECATED" | "REVOKED";
+  definition: Record<string, unknown>;
+  checksum?: string | null;
+  revision: number;
+};
+
+export type IngestionPreview = {
+  checksum: string;
+  records: Record<string, unknown>[];
+  issues: { severity: string; code: string; message: string }[];
+};
+
+export const listIngestionTemplates = () =>
+  apiJson<IngestionTemplate[]>(`${BASE}/knowledge/ingestion-templates`);
+
+export const createIngestionTemplate = (body: {
+  template_key: string;
+  name: string;
+  vertical: string;
+  definition: Record<string, unknown>;
+}) =>
+  apiJson<IngestionTemplateVersion>(`${BASE}/knowledge/ingestion-templates`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const listIngestionTemplateVersions = (templateId: string) =>
+  apiJson<IngestionTemplateVersion[]>(
+    `${BASE}/knowledge/ingestion-templates/${encodeURIComponent(templateId)}/versions`,
+  );
+
+export const updateIngestionTemplateDraft = (
+  versionId: string,
+  definition: Record<string, unknown>,
+  revision: number,
+) =>
+  apiJson<IngestionTemplateVersion>(
+    `${BASE}/knowledge/ingestion-template-versions/${encodeURIComponent(versionId)}`,
+    { method: "PATCH", body: JSON.stringify({ definition, revision }) },
+  );
+
+export const previewIngestionTemplate = (versionId: string, sourceText: string) =>
+  apiJson<IngestionPreview>(
+    `${BASE}/knowledge/ingestion-template-versions/${encodeURIComponent(versionId)}/preview`,
+    { method: "POST", body: JSON.stringify({ source_text: sourceText }) },
+  );
+
+export const previewNewIngestionTemplate = (
+  definition: Record<string, unknown>,
+  sourceText: string,
+) =>
+  apiJson<IngestionPreview>(`${BASE}/knowledge/ingestion-templates/preview`, {
+    method: "POST",
+    body: JSON.stringify({ definition, source_text: sourceText }),
+  });
+
+export const publishIngestionTemplate = (versionId: string) =>
+  apiJson<IngestionTemplateVersion>(
+    `${BASE}/knowledge/ingestion-template-versions/${encodeURIComponent(versionId)}/publish`,
+    { method: "POST" },
+  );
+
+export const assignIngestionTemplate = (
+  projectId: string,
+  templateVersionId: string,
+  revision: number,
+) =>
+  apiJson(`${proj(projectId)}/ingestion-template-assignment`, {
+    method: "PUT",
+    body: JSON.stringify({ template_version_id: templateVersionId, revision }),
+  });
+
 export type KnowledgeUnit = {
   id: string;
   chunk_index: number;

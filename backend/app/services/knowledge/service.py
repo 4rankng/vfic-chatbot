@@ -82,11 +82,15 @@ class KnowledgeService:
             )
             or 1
         )
+        from app.services.ingestion.template_service import TemplateService
+
+        template = await TemplateService(self.db).pinned_version_for_project(project_id)
         version = KBVersion(
             project_id=project_id,
             version_no=next_version,
             status=KBVersionStatus.DRAFT,
             created_by=actor.id,
+            template_version_id=template.id,
         )
         self.db.add(version)
         await self.db.commit()
@@ -221,8 +225,12 @@ class KnowledgeService:
                     source_text=text_file.normalized_text,
                 )
                 await self.db.commit()
-            version.status = KBVersionStatus.READY
+            from app.services.ingestion.template_ingestion import TemplateIngestionService
+
+            run = await TemplateIngestionService(self.db).materialize_version(version)
             version.error_message = None
+            if run.status == "READY":
+                version.status = KBVersionStatus.READY
             await self.db.commit()
         except Exception as exc:
             version.status = KBVersionStatus.FAILED

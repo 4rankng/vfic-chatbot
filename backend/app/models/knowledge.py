@@ -31,6 +31,7 @@ class KnowledgeStatus(str, enum.Enum):
 class KBVersionStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     INDEXING = "INDEXING"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
     READY = "READY"
     ACTIVE = "ACTIVE"
     ARCHIVED = "ARCHIVED"
@@ -46,6 +47,10 @@ class KBVersion(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
+    template_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingestion_template_versions.id", ondelete="RESTRICT")
+    )
+    release_manifest_sha256: Mapped[str | None] = mapped_column(String(64))
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[KBVersionStatus] = mapped_column(
         Enum(KBVersionStatus, name="kb_version_status", create_type=False),
@@ -77,6 +82,9 @@ class KBTextFile(Base):
     )
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="SET NULL")
+    )
+    source_document_id: Mapped[int | None] = mapped_column(
+        ForeignKey("source_document.id", ondelete="SET NULL")
     )
     filename: Mapped[str] = mapped_column(String, nullable=False)
     mime_type: Mapped[str] = mapped_column(

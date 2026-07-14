@@ -55,7 +55,7 @@ def test_extract_benefit_returns_none_when_no_money():
 
 
 def test_extract_working_hours_from_time_range():
-    env = extract_working_hours("Giờ làm: 8:00 - 17:00")
+    env = extract_working_hours("Giờ làm thứ 2 đến thứ 6: 8:00 - 17:00")
     assert env is not None
     assert env.data.start_time == "08:00:00"  # zero-padded HH:MM:SS
     assert env.data.end_time == "17:00:00"
@@ -63,7 +63,7 @@ def test_extract_working_hours_from_time_range():
 
 
 def test_extract_working_hours_midnight_crossing_detected():
-    env = extract_working_hours("Ca đêm: 22:00 - 06:00")
+    env = extract_working_hours("Ca đêm thứ 2: 22:00 - 06:00")
     assert env is not None
     assert env.data.crosses_midnight is True
 
@@ -95,7 +95,7 @@ def test_extract_job_requirement_infers_experience_category():
 
 
 def test_extract_for_section_dispatches_benefit():
-    env = extract_for_section("benefit", "Phụ cấp: 500k")
+    env = extract_for_section("benefit", "Phụ cấp: 500k/tháng")
     assert env is not None
     assert env.data.entity_type == "benefit"
 
@@ -120,7 +120,7 @@ def test_extract_for_section_swallows_exceptions():
 
 def test_extracted_envelope_carries_evidence():
     """Directive §11: every material field has provenance."""
-    env = extract_benefit("Phụ cấp: 500,000 VND")
+    env = extract_benefit("Phụ cấp: 500,000 VND/tháng")
     assert env is not None
     assert len(env.evidence) >= 1
     ev = env.evidence[0]

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KnowledgeUpload } from "./KnowledgeUpload";
+import { IngestionTemplateBuilder } from "./IngestionTemplateBuilder";
 import {
   flaggedCount,
   isPipelineActive,
@@ -104,14 +105,17 @@ const KnowledgeSourceListContent = () => {
             </div>
           </div>
           {hasSources && (
-            <Button
-              type="button"
-              onClick={() => setUploadOpen(true)}
-              className="h-10 w-full rounded-[9px] sm:w-fit"
-            >
-              <Upload className="size-4" />
-              Thêm tệp
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-fit sm:flex-row">
+              <IngestionTemplateBuilder />
+              <Button
+                type="button"
+                onClick={() => setUploadOpen(true)}
+                className="h-10 w-full rounded-[9px] sm:w-fit"
+              >
+                <Upload className="size-4" />
+                Thêm tệp
+              </Button>
+            </div>
           )}
         </header>
 

@@ -61,6 +61,38 @@ def extract_key_value_lines(text: str) -> dict[str, str]:
 _MONEY_PATTERN = re.compile(r"(\d[\d.,]*)\s*(VND|vnd|đồng|trieu|triệu|k)?")
 
 
+def _cadence_from_source(text: str) -> str | None:
+    lowered = text.lower()
+    if any(item in lowered for item in ("/tháng", "mỗi tháng", "hàng tháng")):
+        return "monthly"
+    if any(item in lowered for item in ("/ngày", "mỗi ngày", "hàng ngày")):
+        return "daily"
+    if any(item in lowered for item in ("/giờ", "mỗi giờ", "hàng giờ")):
+        return "hourly"
+    if any(item in lowered for item in ("/năm", "mỗi năm", "hàng năm")):
+        return "annual"
+    if any(item in lowered for item in ("một lần", "1 lần")):
+        return "one_time"
+    return None
+
+
+def _days_from_source(text: str) -> list[str]:
+    """Return only days explicitly present in source text; never infer a workweek."""
+    lowered = text.lower()
+    days = [
+        ("thứ 2", "MON"), ("thứ hai", "MON"), ("thứ 3", "TUE"),
+        ("thứ ba", "TUE"), ("thứ 4", "WED"), ("thứ tư", "WED"),
+        ("thứ 5", "THU"), ("thứ năm", "THU"), ("thứ 6", "FRI"),
+        ("thứ sáu", "FRI"), ("thứ 7", "SAT"), ("thứ bảy", "SAT"),
+        ("chủ nhật", "SUN"),
+    ]
+    result: list[str] = []
+    for marker, code in days:
+        if marker in lowered and code not in result:
+            result.append(code)
+    return result
+
+
 def extract_money(text: str) -> tuple[float, str] | None:
     """Extract (amount, currency) from text. Returns None on no match."""
     m = _MONEY_PATTERN.search(text)
@@ -102,9 +134,16 @@ def extract_benefit(
         if money:
             value = money[0]
             name = text.strip()[:64]  # use the fragment text as the name
-    if name is None and value is None:
+    if name is None or value is None:
         return None  # cannot extract deterministically
     evidence = [
+        Evidence(
+            field_path="data.name",
+            value=name,
+            source=SourceRef(fragment_id=fragment_id),
+            method="regex",
+            confidence=0.85,
+        ),
         Evidence(
             field_path="data.value",
             value=value,
@@ -113,17 +152,20 @@ def extract_benefit(
             confidence=0.85 if value is not None else 0.5,
         )
     ]
+    cadence = _cadence_from_source(text)
+    if cadence is None:
+        return None
     return ExtractionEnvelope(
         schema_version="1.0",
         scope=Scope(type="global"),
         validity=Validity(),
         data=BenefitEnvelopeData(
             entity_type="benefit",
-            name=name or "Unknown benefit",
+            name=name,
             category="OTHER",
             value=value,
             currency="VND" if value is not None else None,
-            cadence="monthly" if value is not None else None,
+            cadence=cadence,
         ),
         evidence=evidence,
         warnings=[],
@@ -143,6 +185,9 @@ def extract_working_hours(
     start_time = _normalize_time_str(start_time)
     end_time = _normalize_time_str(end_time)
     crosses_midnight = _is_midnight_crossing(start_time, end_time)
+    days = _days_from_source(text)
+    if not days:
+        return None
     return ExtractionEnvelope(
         schema_version="1.0",
         scope=Scope(type="global"),
@@ -150,7 +195,7 @@ def extract_working_hours(
         data=WorkingHoursEnvelopeData(
             entity_type="working_hours",
             schedule_type="FIXED",
-            days=["MON", "TUE", "WED", "THU", "FRI", "SAT"],  # default; refine in P2-5
+            days=days,
             start_time=start_time,
             end_time=end_time,
             crosses_midnight=crosses_midnight,

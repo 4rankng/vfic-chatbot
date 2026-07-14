@@ -49,6 +49,16 @@ from app.models.provenance import (
     WorkingHours,
     WorkingHoursException,
 )
+from app.models.ingestion_template import (
+    IngestionTemplate,
+    IngestionTemplateAssignment,
+    IngestionTemplateVersion,
+    IngestionRunStatus,
+    KBIngestionFileRun,
+    KBIngestionRun,
+    StructuredFact,
+    TemplateVersionStatus,
+)
 from app.models.user import Role, User
 
 __all__ = [
@@ -103,4 +113,12 @@ __all__ = [
     "PublishedStatus",
     "WorkingHours",
     "WorkingHoursException",
+    "IngestionTemplate",
+    "IngestionTemplateVersion",
+    "IngestionTemplateAssignment",
+    "KBIngestionRun",
+    "KBIngestionFileRun",
+    "StructuredFact",
+    "TemplateVersionStatus",
+    "IngestionRunStatus",
 ]

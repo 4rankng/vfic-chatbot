@@ -84,6 +84,8 @@ class KBVersionOut(BaseModel):
 
     id: uuid.UUID
     project_id: uuid.UUID
+    template_version_id: uuid.UUID | None = None
+    release_manifest_sha256: str | None = None
     version_no: int
     status: KBVersionStatus
     created_by: uuid.UUID | None = None
