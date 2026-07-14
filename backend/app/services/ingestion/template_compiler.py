@@ -11,7 +11,7 @@ import json
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 COMPILER_VERSION = "1"
 MAX_RECORD_TYPES = 24
@@ -70,6 +70,7 @@ class RecordDefinition(BaseModel):
     fields: list[FieldDefinition]
     natural_key_fields: list[str]
     scope_type: Literal["global", "company", "location", "job_posting", "campaign"] = "global"
+    scope_id_field: str | None = None
 
     @field_validator("key")
     @classmethod
@@ -93,6 +94,17 @@ class RecordDefinition(BaseModel):
         if not value or len(value) > 8 or not set(value).issubset(field_keys):
             raise ValueError("natural_key_fields must refer to declared fields")
         return value
+
+    @model_validator(mode="after")
+    def valid_scope_id(self) -> "RecordDefinition":
+        field_keys = {field.key for field in self.fields}
+        if self.scope_type != "global" and (
+            self.scope_id_field is None or self.scope_id_field not in field_keys
+        ):
+            raise ValueError("non-global scopes require a declared scope_id_field")
+        if self.scope_id_field is not None and self.scope_id_field not in field_keys:
+            raise ValueError("scope_id_field must refer to a declared field")
+        return self
 
 
 class TemplateDefinition(BaseModel):
@@ -123,19 +135,3 @@ def compile_template(definition: dict) -> tuple[dict, str]:
     }
     canonical = json.dumps(artifact, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     return artifact, hashlib.sha256(canonical.encode()).hexdigest()
-
-
-BUILTIN_RECRUITMENT_DEFINITION = {
-    "schema_version": "1",
-    "record_types": [
-        {
-            "key": "recruitment_note",
-            "display_name": "Recruitment knowledge note",
-            "natural_key_fields": ["title"],
-            "fields": [
-                {"key": "title", "type": "string", "aliases": ["title", "tiêu đề", "tieu de"], "required": True},
-                {"key": "content", "type": "string", "aliases": ["content", "nội dung", "noi dung"], "required": True},
-            ],
-        }
-    ],
-}

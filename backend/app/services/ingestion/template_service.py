@@ -14,14 +14,15 @@ from app.models.ingestion_template import (
     IngestionTemplateVersion,
     TemplateVersionStatus,
 )
+from app.models.company import Project
 from app.models.user import User
 from app.services.audit_service import record_audit
 from app.services.errors import NotFoundError
 from app.services.ingestion.template_compiler import (
-    BUILTIN_RECRUITMENT_DEFINITION,
     COMPILER_VERSION,
     compile_template,
 )
+from app.services.ingestion.reference_templates import RECRUITMENT_FACTORY
 
 
 class TemplateConflictError(ValueError):
@@ -89,6 +90,8 @@ class TemplateService:
         if version.status != TemplateVersionStatus.DRAFT:
             raise TemplateConflictError("only DRAFT template versions can be published")
         artifact, checksum = compile_template(version.definition)
+        if version.preview_checksum != checksum:
+            raise TemplateConflictError("a successful preview of this exact draft is required")
         version.compiled_artifact = artifact
         version.checksum = checksum
         version.compiler_version = COMPILER_VERSION
@@ -99,6 +102,21 @@ class TemplateService:
         await self.db.commit()
         await self.db.refresh(version)
         return version
+
+    async def record_preview(self, version_id: uuid.UUID, *, source_text: str, actor: User) -> tuple[str, list[dict], list[dict]]:
+        version = await self.get_version(version_id)
+        if version.status != TemplateVersionStatus.DRAFT:
+            raise TemplateConflictError("only DRAFT template versions can be previewed")
+        from app.services.ingestion.template_ingestion import TemplateIngestionService
+
+        checksum, records, issues = await TemplateIngestionService(self.db).preview(
+            version.definition, source_text
+        )
+        version.preview_checksum = checksum
+        version.previewed_at = datetime.now(UTC)
+        await record_audit(self.db, action="ingestion_template_previewed", actor_id=actor.id, target_type="ingestion_template_version", target_id=str(version.id), payload={"checksum": checksum, "record_count": len(records), "issue_count": len(issues)})
+        await self.db.commit()
+        return checksum, records, issues
 
     async def create_draft_from(self, template_id: uuid.UUID, *, actor: User) -> IngestionTemplateVersion:
         versions = await self.list_versions(template_id)
@@ -114,6 +132,8 @@ class TemplateService:
         return draft
 
     async def assign(self, project_id: uuid.UUID, *, template_version_id: uuid.UUID, revision: int, actor: User) -> IngestionTemplateAssignment:
+        if await self.db.get(Project, project_id) is None:
+            raise NotFoundError("project not found")
         version = await self.get_version(template_version_id)
         if version.status != TemplateVersionStatus.PUBLISHED:
             raise TemplateConflictError("only published template versions can be assigned")
@@ -146,9 +166,9 @@ class TemplateService:
         version = await self.db.scalar(select(IngestionTemplateVersion).where(IngestionTemplateVersion.template_id == template.id, IngestionTemplateVersion.status == TemplateVersionStatus.PUBLISHED).order_by(IngestionTemplateVersion.version_no.desc()).limit(1))
         if version is not None:
             return version
-        artifact, checksum = compile_template(BUILTIN_RECRUITMENT_DEFINITION)
+        artifact, checksum = compile_template(RECRUITMENT_FACTORY)
         version_no = int(await self.db.scalar(select(func.coalesce(func.max(IngestionTemplateVersion.version_no), 0) + 1).where(IngestionTemplateVersion.template_id == template.id)) or 1)
-        version = IngestionTemplateVersion(template_id=template.id, version_no=version_no, status=TemplateVersionStatus.PUBLISHED, definition=BUILTIN_RECRUITMENT_DEFINITION, compiled_artifact=artifact, checksum=checksum, compiler_version=COMPILER_VERSION, published_at=datetime.now(UTC))
+        version = IngestionTemplateVersion(template_id=template.id, version_no=version_no, status=TemplateVersionStatus.PUBLISHED, definition=RECRUITMENT_FACTORY, compiled_artifact=artifact, checksum=checksum, compiler_version=COMPILER_VERSION, published_at=datetime.now(UTC))
         self.db.add(version)
         await self.db.commit()
         await self.db.refresh(version)

@@ -67,7 +67,11 @@ def _norm(s: str) -> str:
 
 
 async def publish_contract(
-    db: AsyncSession, envelope: ExtractionEnvelope, *, job_id: str | None = None
+    db: AsyncSession,
+    envelope: ExtractionEnvelope,
+    *,
+    job_id: str | None = None,
+    kb_version_id: str | None = None,
 ) -> PublishingResult:
     """Validate + version + persist ``envelope`` to the authoritative tables.
 
@@ -78,13 +82,13 @@ async def publish_contract(
     scope = envelope.scope
 
     if entity_type == "faq":
-        return await _publish_faq(db, data, scope, envelope)
+        return await _publish_faq(db, data, scope, envelope, kb_version_id)
     if entity_type == "benefit":
-        return await _publish_benefit(db, data, scope, envelope, job_id)
+        return await _publish_benefit(db, data, scope, envelope, job_id, kb_version_id)
     if entity_type == "working_hours":
-        return await _publish_working_hours(db, data, scope, envelope)
+        return await _publish_working_hours(db, data, scope, envelope, kb_version_id)
     if entity_type == "job_requirement":
-        return await _publish_job_requirement(db, data, job_id, envelope)
+        return await _publish_job_requirement(db, data, job_id, envelope, kb_version_id)
     raise PublishingError(f"unsupported entity_type: {entity_type}")
 
 
@@ -124,8 +128,10 @@ def _content_equal(row: Any, data: Any, entity_type: str) -> bool:
     return False
 
 
-async def _publish_faq(db, data: FaqEnvelopeData, scope, envelope) -> PublishingResult:
+async def _publish_faq(db, data: FaqEnvelopeData, scope, envelope, kb_version_id) -> PublishingResult:
     nk = {"scope_type": scope.type, "normalized_question": _norm(data.canonical_question)}
+    if kb_version_id is not None:
+        nk["kb_version_id"] = kb_version_id
     current = await _find_current_published(db, FaqEntry, nk)
     if current and _content_equal(current, data, "faq"):
         return PublishingResult("faq", current.version, no_op=True, diff_fields=[])
@@ -135,6 +141,7 @@ async def _publish_faq(db, data: FaqEnvelopeData, scope, envelope) -> Publishing
     else:
         new_version = 1
     row = FaqEntry(
+        kb_version_id=kb_version_id,
         scope_type=scope.type,
         scope_id=scope.id,
         canonical_question=data.canonical_question,
@@ -155,8 +162,10 @@ async def _publish_faq(db, data: FaqEnvelopeData, scope, envelope) -> Publishing
     return PublishingResult("faq", new_version, no_op=False, diff_fields=diff)
 
 
-async def _publish_benefit(db, data, scope, envelope, job_id) -> PublishingResult:
+async def _publish_benefit(db, data, scope, envelope, job_id, kb_version_id) -> PublishingResult:
     nk = {"scope_type": scope.type, "name": data.name}
+    if kb_version_id is not None:
+        nk["kb_version_id"] = kb_version_id
     current = await _find_current_published(db, JobBenefit, nk)
     if current and _content_equal(current, data, "benefit"):
         return PublishingResult("benefit", current.version, no_op=True, diff_fields=[])
@@ -166,6 +175,7 @@ async def _publish_benefit(db, data, scope, envelope, job_id) -> PublishingResul
     else:
         new_version = 1
     row = JobBenefit(
+        kb_version_id=kb_version_id,
         job_id=job_id,
         scope_type=scope.type,
         scope_id=scope.id,
@@ -187,7 +197,7 @@ async def _publish_benefit(db, data, scope, envelope, job_id) -> PublishingResul
     return PublishingResult("benefit", new_version, no_op=False, diff_fields=diff)
 
 
-async def _publish_working_hours(db, data, scope, envelope) -> PublishingResult:
+async def _publish_working_hours(db, data, scope, envelope, kb_version_id) -> PublishingResult:
     from datetime import time as dt_time
 
     def _parse_t(s: str) -> dt_time:
@@ -195,6 +205,8 @@ async def _publish_working_hours(db, data, scope, envelope) -> PublishingResult:
         return dt_time(int(h), int(m), int(s))
 
     nk = {"scope_type": scope.type}
+    if kb_version_id is not None:
+        nk["kb_version_id"] = kb_version_id
     current = await _find_current_published(db, WorkingHours, nk)
     if current and _content_equal(current, data, "working_hours"):
         return PublishingResult("working_hours", current.version, no_op=True, diff_fields=[])
@@ -204,6 +216,7 @@ async def _publish_working_hours(db, data, scope, envelope) -> PublishingResult:
     else:
         new_version = 1
     row = WorkingHours(
+        kb_version_id=kb_version_id,
         scope_type=scope.type,
         scope_id=scope.id,
         schedule_type=data.schedule_type,
@@ -224,7 +237,7 @@ async def _publish_working_hours(db, data, scope, envelope) -> PublishingResult:
     return PublishingResult("working_hours", new_version, no_op=False, diff_fields=diff)
 
 
-async def _publish_job_requirement(db, data, job_id, envelope) -> PublishingResult:
+async def _publish_job_requirement(db, data, job_id, envelope, kb_version_id) -> PublishingResult:
     if not job_id:
         raise PublishingError("job_requirement requires job_id")
     import uuid
@@ -237,12 +250,14 @@ async def _publish_job_requirement(db, data, job_id, envelope) -> PublishingResu
                 JobRequirement.job_id == uuid.UUID(job_id),
                 JobRequirement.status == PublishedStatus.PUBLISHED.value,
                 JobRequirement.requirement_text == data.text,
+                JobRequirement.kb_version_id == kb_version_id,
             )
         )
     ).scalars().first()
     if existing:
         return PublishingResult("job_requirement", existing.version, no_op=True, diff_fields=[])
     row = JobRequirement(
+        kb_version_id=kb_version_id,
         job_id=uuid.UUID(job_id),
         requirement_text=data.text,
         category=data.category,

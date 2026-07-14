@@ -23,6 +23,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   saveKnowledgeTemplate,
+  createKnowledgeBaseVersion,
+  ingestKnowledgeBaseVersion,
+  uploadKnowledgeBaseVersionFile,
   uploadKnowledgeFile,
 } from "@/lib/vfic/knowledgeService";
 import { cn } from "@/lib/utils";
@@ -58,6 +61,7 @@ export const KnowledgeUpload = ({
   const [pasteText, setPasteText] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [versionedIngestion, setVersionedIngestion] = useState(false);
 
   const effectiveProjectId = lockProject ? (initialProjectId ?? "") : projectId;
   const canSubmit =
@@ -76,6 +80,7 @@ export const KnowledgeUpload = ({
     setMode("file");
     setProjectId(initialProjectId ?? "");
     setValidationErrors([]);
+    setVersionedIngestion(false);
   };
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
@@ -126,9 +131,21 @@ export const KnowledgeUpload = ({
     setBusy(true);
     setValidationErrors([]);
     try {
-      await uploadKnowledgeFile(payload, effectiveProjectId);
+      if (versionedIngestion) {
+        if (payload.type.includes("word")) {
+          notify("Ingest theo mẫu hiện hỗ trợ Markdown hoặc TXT.", { type: "warning" });
+          return;
+        }
+        const version = await createKnowledgeBaseVersion(effectiveProjectId);
+        await uploadKnowledgeBaseVersionFile(effectiveProjectId, version.id, payload);
+        await ingestKnowledgeBaseVersion(effectiveProjectId, version.id);
+      } else {
+        await uploadKnowledgeFile(payload, effectiveProjectId);
+      }
       notify(
-        "Đã tải lên. Đang huấn luyện + trích xuất đặc điểm (chạy ở nền).",
+        versionedIngestion
+          ? "Đã tạo phiên bản KB theo mẫu và đưa vào hàng đợi. Hãy xem lại rồi xuất bản khi sẵn sàng."
+          : "Đã tải lên. Đang huấn luyện + trích xuất đặc điểm (chạy ở nền).",
         {
           type: "success",
         },
@@ -205,6 +222,24 @@ export const KnowledgeUpload = ({
               />
             </div>
           )}
+
+          <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-3">
+            <div>
+              <p className="text-sm font-medium">Ingest theo mẫu đã gán</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tạo một phiên bản KB riêng, ghim mẫu hiện tại và yêu cầu xem lại trước khi xuất bản.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={versionedIngestion ? "default" : "outline"}
+              size="sm"
+              onClick={() => setVersionedIngestion((value) => !value)}
+              disabled={busy}
+            >
+              {versionedIngestion ? "Đang dùng" : "Dùng mẫu"}
+            </Button>
+          </div>
 
           <Tabs
             value={mode}

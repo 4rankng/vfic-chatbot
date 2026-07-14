@@ -344,6 +344,20 @@ def _faq_should_abstain(bypass, settings) -> bool:
     return (bypass.score - bypass.runner_up_score) < margin
 
 
+_FAQ_BYPASS_VOLATILE_MARKERS = (
+    "lương", "thu nhập", "ca làm", "giờ làm", "tăng ca", "phụ cấp",
+    "xe đưa đón", "tuyến xe", "xe lúc", "xe mấy", "đón xe",
+    "số điện thoại", "hotline", "liên hệ",
+    "đang tuyển", "còn tuyển", "còn vị trí",
+)
+
+
+def _faq_bypass_allowed(user_text: str) -> bool:
+    """Volatile claims must use structured/live authority, never FAQ prose."""
+    normalized = user_text.casefold()
+    return not any(marker in normalized for marker in _FAQ_BYPASS_VOLATILE_MARKERS)
+
+
 async def _vacancy_reply(user_text: str, recent_messages: list[Message], retrieval) -> tuple[str, str] | None:
     """Resolve explicit hiring questions before any FAQ or LLM answer path.
 
@@ -447,7 +461,12 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # through to the agent unchanged. Time-boxed so a cold embed can never burn
         # the turn deadline. None in graph unit tests (no bypass wired).
         bypass = None
-        if vacancy is None and fast is None and deps.faq_bypass is not None:
+        if (
+            vacancy is None
+            and fast is None
+            and deps.faq_bypass is not None
+            and _faq_bypass_allowed(state.user_text)
+        ):
             try:
                 # Bound the bypass by both the soft cap and the propagated turn
                 # deadline (minus the send margin) so a cold-embed bypass can

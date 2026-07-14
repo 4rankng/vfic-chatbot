@@ -32,6 +32,12 @@ from app.graph.types import BotRunState, GraphDeps
 CONV_ID = "00000000-0000-0000-0000-000000000001"
 
 
+def test_faq_bypass_refuses_volatile_operational_questions():
+    assert runner._faq_bypass_allowed("Hồ sơ cần những gì?") is True
+    assert runner._faq_bypass_allowed("Lương vị trí này bao nhiêu?") is False
+    assert runner._faq_bypass_allowed("Bên mình còn tuyển không?") is False
+
+
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------

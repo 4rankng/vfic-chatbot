@@ -72,7 +72,8 @@ class KnowledgeService:
         return await self.db.get(KBVersion, version_id)
 
     async def create_version(self, project_id: uuid.UUID, *, actor: User) -> KBVersion:
-        if await self.db.get(Project, project_id) is None:
+        project = await self.db.scalar(select(Project).where(Project.id == project_id).with_for_update())
+        if project is None:
             raise NotFoundError("project not found")
         next_version = int(
             await self.db.scalar(
@@ -193,9 +194,13 @@ class KnowledgeService:
         *,
         llm_json: LLMJson,
     ) -> KBVersion:
+        from app.services.ingestion.template_ingestion import TemplateIngestionService
+
         files = await self.list_version_files(version.id)
         if not files:
             raise ValueError("KB version has no uploaded text files.")
+        ingestion = TemplateIngestionService(self.db)
+        run = await ingestion.start_run(version)
         version.status = KBVersionStatus.INDEXING
         version.error_message = None
         await self.db.commit()
@@ -225,9 +230,7 @@ class KnowledgeService:
                     source_text=text_file.normalized_text,
                 )
                 await self.db.commit()
-            from app.services.ingestion.template_ingestion import TemplateIngestionService
-
-            run = await TemplateIngestionService(self.db).materialize_version(version)
+            run = await ingestion.materialize_version(version, run=run)
             version.error_message = None
             if run.status == "READY":
                 version.status = KBVersionStatus.READY
@@ -241,6 +244,13 @@ class KnowledgeService:
         return version
 
     async def publish_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
+        # Serialize concurrent publishes per project so the archive-others-then-
+        # activate pair cannot race the unique partial index on ACTIVE versions.
+        locked_project = await self.db.scalar(
+            select(Project).where(Project.id == project_id).with_for_update()
+        )
+        if locked_project is None:
+            raise NotFoundError("project not found")
         version = await self._require_version(project_id, version_id)
         if version.status not in {KBVersionStatus.READY, KBVersionStatus.ACTIVE}:
             raise ValueError("Only READY KB versions can be published.")

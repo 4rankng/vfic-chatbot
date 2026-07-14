@@ -193,6 +193,9 @@ class FaqEntry(Base):
     scope_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True, comment="UUID of the scope entity (project/job/company)"
     )
+    kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")
+    )
     canonical_question: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
@@ -222,6 +225,9 @@ class JobRequirement(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")
     )
     requirement_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str | None] = mapped_column(
@@ -256,6 +262,9 @@ class JobBenefit(Base):
         UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True,
         comment="NULL when scope_type != job_posting"
     )
+    kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")
+    )
     scope_type: Mapped[str] = mapped_column(String(16), nullable=False, default="job_posting")
     scope_id: Mapped[str | None] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -287,6 +296,9 @@ class JobShift(Base):
     job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False
     )
+    kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")
+    )
     schedule_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="FIXED", comment="FIXED|ROTATING|SHIFT"
     )
@@ -312,6 +324,9 @@ class JobLocation(Base):
     job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False
     )
+    kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")
+    )
     address: Mapped[str | None] = mapped_column(Text)
     locality: Mapped[str | None] = mapped_column(String(128), comment="City/district")
     region: Mapped[str | None] = mapped_column(String(128), comment="Province")
@@ -336,6 +351,9 @@ class WorkingHours(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     scope_type: Mapped[str] = mapped_column(String(16), nullable=False, default="global")
     scope_id: Mapped[str | None] = mapped_column(String(64))
+    kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")
+    )
     schedule_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="FIXED", comment="FIXED|ROTATING|SHIFT"
     )

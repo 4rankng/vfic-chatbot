@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("template_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("version_no", sa.Integer(), nullable=False),
-        sa.Column("status", sa.Enum(name="ingestion_template_version_status", create_type=False), nullable=False, server_default="DRAFT"),
+        sa.Column("status", postgresql.ENUM(name="ingestion_template_version_status", create_type=False), nullable=False, server_default="DRAFT"),
         sa.Column("definition", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column("compiled_artifact", postgresql.JSONB(), nullable=True),
         sa.Column("checksum", sa.String(64), nullable=True),
@@ -81,7 +81,7 @@ def upgrade() -> None:
         sa.Column("kb_version_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("template_version_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("attempt_no", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column("status", sa.Enum(name="kb_ingestion_run_status", create_type=False), nullable=False, server_default="PENDING"),
+        sa.Column("status", postgresql.ENUM(name="kb_ingestion_run_status", create_type=False), nullable=False, server_default="PENDING"),
         sa.Column("manifest_sha256", sa.String(64), nullable=False),
         sa.Column("fencing_token", sa.BigInteger(), nullable=False, server_default="1"),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
@@ -139,6 +139,16 @@ def upgrade() -> None:
         sa.UniqueConstraint("kb_version_id", "record_type_key", "natural_key_hash", name="uq_structured_fact_release_key"),
     )
     op.create_index("ix_structured_facts_active_lookup", "structured_facts", ["project_id", "kb_version_id", "record_type_key"])
+    # Historical databases may contain more than one ACTIVE row from pre-pointer
+    # releases. Keep the newest version and archive the rest before enforcing the
+    # invariant, so this additive migration is deployable on real data.
+    op.execute(
+        "WITH ranked AS ("
+        " SELECT id, row_number() OVER (PARTITION BY project_id ORDER BY version_no DESC, created_at DESC) AS rn"
+        " FROM kb_versions WHERE status = 'ACTIVE'"
+        ") UPDATE kb_versions SET status = 'ARCHIVED'"
+        " WHERE id IN (SELECT id FROM ranked WHERE rn > 1)"
+    )
     op.execute("CREATE UNIQUE INDEX uq_active_kb_version_per_project ON kb_versions(project_id) WHERE status = 'ACTIVE'")
 
 

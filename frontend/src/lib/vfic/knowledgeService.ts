@@ -107,6 +107,11 @@ export const assignIngestionTemplate = (
     body: JSON.stringify({ template_version_id: templateVersionId, revision }),
   });
 
+export const getIngestionTemplateAssignment = (projectId: string) =>
+  apiJson<{ revision: number; template_version_id: string } | null>(
+    `${proj(projectId)}/ingestion-template-assignment`,
+  );
+
 export type KnowledgeUnit = {
   id: string;
   chunk_index: number;
@@ -188,6 +193,77 @@ export const uploadKnowledgeFile = async (
   }
   return (await response.json()) as ApiRecord;
 };
+
+export type KnowledgeBaseVersion = {
+  id: string;
+  project_id: string;
+  template_version_id?: string | null;
+  status: string;
+  version_no: number;
+};
+
+export type KnowledgeIngestionRun = {
+  id: string;
+  kb_version_id: string;
+  status: string;
+  attempt_no: number;
+  issues: { severity: string; code: string; message: string }[];
+};
+
+export const createKnowledgeBaseVersion = (projectId: string) =>
+  apiJson<KnowledgeBaseVersion>(
+    `${proj(projectId)}/kb/versions`,
+    { method: "POST" },
+  );
+
+export const uploadKnowledgeBaseVersionFile = async (
+  projectId: string,
+  versionId: string,
+  file: File,
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await apiRequest(
+    `${proj(projectId)}/kb/versions/${encodeURIComponent(versionId)}/files`,
+    { method: "POST", body: form },
+  );
+  if (!response.ok) {
+    throw new ApiError(response.status, "Không tải được tệp vào phiên bản KB.");
+  }
+  return response.json() as Promise<ApiRecord>;
+};
+
+export const ingestKnowledgeBaseVersion = (projectId: string, versionId: string) =>
+  apiJson<{ job_id: string; status: string; kb_version_id: string }>(
+    `${proj(projectId)}/kb/versions/${encodeURIComponent(versionId)}/ingest`,
+    { method: "POST" },
+  );
+
+export const listKnowledgeBaseVersions = (projectId: string) =>
+  apiJson<{ data: KnowledgeBaseVersion[]; total: number }>(
+    `${proj(projectId)}/kb/versions`,
+  );
+
+export const publishKnowledgeBaseVersion = (projectId: string, versionId: string) =>
+  apiJson<KnowledgeBaseVersion>(
+    `${proj(projectId)}/kb/versions/${encodeURIComponent(versionId)}/publish`,
+    { method: "POST" },
+  );
+
+export const listKnowledgeBaseVersionRuns = (projectId: string, versionId: string) =>
+  apiJson<KnowledgeIngestionRun[]>(
+    `${proj(projectId)}/kb/versions/${encodeURIComponent(versionId)}/ingestion-runs`,
+  );
+
+export const reviewKnowledgeIngestionRun = (
+  runId: string,
+  decision: "approve" | "reject",
+  comment: string,
+) =>
+  apiJson<KnowledgeIngestionRun>(
+    `${BASE}/knowledge/ingestion-runs/${encodeURIComponent(runId)}/${decision}`,
+    { method: "POST", body: JSON.stringify({ comment }) },
+  );
 
 export const downloadKnowledgeTemplate = async (
   kind: "knowledge" | "faq" = "knowledge",

@@ -130,13 +130,26 @@ async def test_path_b_dynamic_faq_signals_cannot_handle(monkeypatch):
         AsyncMock(return_value=MagicMock(found=True, data=[{"answer": "", "resolution_type": "tool", "tool_name": "get_next_bus"}])),
     )
     outcome = await path_b_faq(
-        user_text="xe lúc mấy giờ",
-        normalized_question="xe lúc mấy giờ",
+        user_text="cho mình xin thêm thông tin",
+        normalized_question="cho mình xin thêm thông tin",
         db=MagicMock(),
         budget=TurnBudget(),
     )
     assert outcome.cannot_handle is True
     assert outcome.outcome_label == "faq_dynamic"
+
+
+async def test_path_b_volatile_question_bypasses_static_faq():
+    db = MagicMock()
+    outcome = await path_b_faq(
+        user_text="Lương vị trí này bao nhiêu?",
+        normalized_question="lương vị trí này bao nhiêu",
+        db=db,
+        budget=TurnBudget(),
+    )
+    assert outcome.cannot_handle is True
+    assert outcome.outcome_label == "faq_volatile"
+    db.execute.assert_not_called()
 
 
 # ─── Path C: retrieval ───────────────────────────────────────────────────────

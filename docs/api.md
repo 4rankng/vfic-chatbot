@@ -224,6 +224,32 @@ The frontend dataProvider (`frontend/src/components/atomic-crm/providers/rest/da
 | `getConfiguration` | Get app configuration |
 | `updateConfiguration` | Update app configuration |
 
+## Knowledge ingestion templates
+
+All endpoints below are admin-only and live below `/api/v1/knowledge`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /ingestion-template-starter-packs` | Read built-in recruitment, shopping, and logistics starter definitions. |
+| `GET, POST /ingestion-templates` | List templates or create a template with its first draft version. |
+| `POST /ingestion-templates/preview` | Validate a proposed definition against supplied text without persisting a template. |
+| `GET /ingestion-templates/{template_id}/versions` | List template versions. |
+| `POST /ingestion-templates/{template_id}/drafts` | Clone the current published version into a mutable draft. |
+| `PATCH /ingestion-template-versions/{version_id}` | Update a draft using its current `revision`. A stale revision returns `409`. |
+| `POST /ingestion-template-versions/{version_id}/preview` | Preview a persisted draft. Publishing requires the exact preview checksum. |
+| `POST /ingestion-template-versions/{version_id}/publish` | Compile and immutably publish a draft. |
+| `POST /ingestion-template-versions/{version_id}/deprecate` | Stop future assignment of a published version. |
+| `GET, PUT /projects/{project_id}/ingestion-template-assignment` | Read or append a project's template assignment. The PUT requires the next assignment revision. |
+| `GET /ingestion-runs/{run_id}` | Inspect a KB-version ingestion run. |
+| `GET /projects/{project_id}/kb/versions/{version_id}/ingestion-runs` | List reviewable runs for one KB version. |
+| `POST /ingestion-runs/{run_id}/approve` | Approve a run requiring review. |
+| `POST /ingestion-runs/{run_id}/reject` | Reject a run without exposing its facts. |
+| `GET /projects/{project_id}/structured-facts` | Read generic facts from the project’s active KB release only. |
+
+Template previews are validation/extraction simulations. They do not activate a KB
+release or expose candidate-facing answers. Validation failures return `422`; stale
+draft or assignment revisions and invalid lifecycle transitions return `409`.
+
 ### Resource path mapping
 | react-admin resource | API path |
 |---|---|

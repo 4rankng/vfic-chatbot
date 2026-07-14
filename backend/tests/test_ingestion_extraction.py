@@ -54,6 +54,10 @@ def test_extract_benefit_returns_none_when_no_money():
     assert env is None
 
 
+def test_extract_benefit_does_not_invent_cadence():
+    assert extract_benefit("Phụ cấp: 500,000 VND") is None
+
+
 def test_extract_working_hours_from_time_range():
     env = extract_working_hours("Giờ làm thứ 2 đến thứ 6: 8:00 - 17:00")
     assert env is not None
@@ -66,6 +70,10 @@ def test_extract_working_hours_midnight_crossing_detected():
     env = extract_working_hours("Ca đêm thứ 2: 22:00 - 06:00")
     assert env is not None
     assert env.data.crosses_midnight is True
+
+
+def test_extract_working_hours_does_not_invent_work_days():
+    assert extract_working_hours("Giờ làm: 8:00 - 17:00") is None
 
 
 def test_extract_faq_from_q_a_markers():

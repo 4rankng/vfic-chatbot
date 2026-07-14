@@ -62,6 +62,7 @@ async def _resolve_scoped_rows(
     company_id: str | None = None,
     location_id: str | None = None,
     valid_today: str | None = None,
+    active_kb_version_id: str | None = None,
 ) -> tuple[list, str]:
     """Try each scope level in precedence order; return (rows, scope_used).
 
@@ -83,7 +84,19 @@ async def _resolve_scoped_rows(
         )
         if scope_id:
             stmt = stmt.where(model.scope_id == str(scope_id))
-        rows = (await db.execute(stmt)).scalars().all()
+        if active_kb_version_id is not None:
+            rows = (
+                await db.execute(stmt.where(model.kb_version_id == active_kb_version_id))
+            ).scalars().all()
+            # Legacy content is a compatibility fallback only when this scope
+            # has no row in the active structured release. It never mixes with
+            # an active release row.
+            if not rows:
+                rows = (
+                    await db.execute(stmt.where(model.kb_version_id.is_(None)))
+                ).scalars().all()
+        else:
+            rows = (await db.execute(stmt.where(model.kb_version_id.is_(None)))).scalars().all()
         if rows:
             return list(rows), scope
     return [], "global"
@@ -97,10 +110,15 @@ async def get_benefits(
     *,
     job_id: str | None = None,
     company_id: str | None = None,
+    active_kb_version_id: str | None = None,
 ) -> ToolResult:
     """Query job_benefit for the resolved scope. Zero LLM calls."""
     rows, scope = await _resolve_scoped_rows(
-        db, JobBenefit, job_id=job_id, company_id=company_id
+        db,
+        JobBenefit,
+        job_id=job_id,
+        company_id=company_id,
+        active_kb_version_id=active_kb_version_id,
     )
     if not rows:
         return ToolResult(found=False, scope_used=scope)
@@ -126,10 +144,15 @@ async def get_working_hours(
     *,
     job_id: str | None = None,
     company_id: str | None = None,
+    active_kb_version_id: str | None = None,
 ) -> ToolResult:
     """Query working_hours for the resolved scope."""
     rows, scope = await _resolve_scoped_rows(
-        db, WorkingHours, job_id=job_id, company_id=company_id
+        db,
+        WorkingHours,
+        job_id=job_id,
+        company_id=company_id,
+        active_kb_version_id=active_kb_version_id,
     )
     if not rows:
         return ToolResult(found=False, scope_used=scope)
@@ -152,6 +175,7 @@ async def get_job_requirements(
     db: AsyncSession,
     *,
     job_id: str,
+    active_kb_version_id: str | None = None,
 ) -> ToolResult:
     """Query job_requirement for one job. job_id is required (requirements are per-job)."""
     rows = (
@@ -159,9 +183,20 @@ async def get_job_requirements(
             select(JobRequirement).where(
                 JobRequirement.job_id == job_id,
                 JobRequirement.status == PublishedStatus.PUBLISHED.value,
+                JobRequirement.kb_version_id == active_kb_version_id,
             )
         )
     ).scalars().all()
+    if not rows and active_kb_version_id is not None:
+        rows = (
+            await db.execute(
+                select(JobRequirement).where(
+                    JobRequirement.job_id == job_id,
+                    JobRequirement.status == PublishedStatus.PUBLISHED.value,
+                    JobRequirement.kb_version_id.is_(None),
+                )
+            )
+        ).scalars().all()
     if not rows:
         return ToolResult(found=False)
     data = [
@@ -178,15 +213,37 @@ async def get_job_requirements(
     return ToolResult(found=True, data=data)
 
 
-async def get_job_locations(db: AsyncSession, *, job_id: str) -> ToolResult:
+async def get_job_locations(
+    db: AsyncSession,
+    *,
+    job_id: str,
+    active_kb_version_id: str | None = None,
+) -> ToolResult:
+    """Query locations from the active structured release for one job.
+
+    Existing unscoped rows remain a compatibility fallback only when the active
+    release has no location for the job. This keeps a rollback from combining
+    the new release's chunks with a location fact from a different release.
+    """
     rows = (
         await db.execute(
             select(JobLocation).where(
                 JobLocation.job_id == job_id,
                 JobLocation.status == PublishedStatus.PUBLISHED.value,
+                JobLocation.kb_version_id == active_kb_version_id,
             )
         )
     ).scalars().all()
+    if not rows and active_kb_version_id is not None:
+        rows = (
+            await db.execute(
+                select(JobLocation).where(
+                    JobLocation.job_id == job_id,
+                    JobLocation.status == PublishedStatus.PUBLISHED.value,
+                    JobLocation.kb_version_id.is_(None),
+                )
+            )
+        ).scalars().all()
     if not rows:
         return ToolResult(found=False)
     data = [
@@ -207,10 +264,15 @@ async def get_faq_entry(
     normalized_question: str,
     job_id: str | None = None,
     company_id: str | None = None,
+    active_kb_version_id: str | None = None,
 ) -> ToolResult:
     """Exact-match FAQ lookup on the canonical normalized question."""
     rows, scope = await _resolve_scoped_rows(
-        db, FaqEntry, job_id=job_id, company_id=company_id
+        db,
+        FaqEntry,
+        job_id=job_id,
+        company_id=company_id,
+        active_kb_version_id=active_kb_version_id,
     )
     for r in rows:
         if r.normalized_question == normalized_question:

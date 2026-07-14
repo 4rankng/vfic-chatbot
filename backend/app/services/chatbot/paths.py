@@ -22,6 +22,26 @@ from app.services.chatbot.budget import BudgetExhausted, CallKind, TurnBudget
 
 logger = logging.getLogger(__name__)
 
+_VOLATILE_FACT_MARKERS = (
+    "lương",
+    "thu nhập",
+    "ca làm",
+    "giờ làm",
+    "tăng ca",
+    "phụ cấp",
+    "xe đưa đón",
+    "tuyến xe",
+    "xe lúc",
+    "xe mấy",
+    "đón xe",
+    "số điện thoại",
+    "hotline",
+    "liên hệ",
+    "đang tuyển",
+    "còn tuyển",
+    "còn vị trí",
+)
+
 
 @dataclass(frozen=True)
 class PathOutcome:
@@ -67,19 +87,31 @@ async def path_a_structured(
     )
 
     if intent == "benefit_lookup":
-        result = await get_benefits(db, job_id=entities.get("job_id"))
+        result = await get_benefits(
+            db,
+            job_id=entities.get("job_id"),
+            active_kb_version_id=entities.get("active_kb_version_id"),
+        )
         if not result.found:
             return PathOutcome(reply="", outcome_label="structured_miss", cannot_handle=True)
         return PathOutcome(reply=format_benefits(result), outcome_label="structured")
     if intent == "working_hours_lookup":
-        result = await get_working_hours(db, job_id=entities.get("job_id"))
+        result = await get_working_hours(
+            db,
+            job_id=entities.get("job_id"),
+            active_kb_version_id=entities.get("active_kb_version_id"),
+        )
         if not result.found:
             return PathOutcome(reply="", outcome_label="structured_miss", cannot_handle=True)
         return PathOutcome(reply=format_working_hours(result), outcome_label="structured")
     if intent == "requirement_lookup":
         if not entities.get("job_id"):
             return PathOutcome(reply="", outcome_label="structured_miss", cannot_handle=True)
-        result = await get_job_requirements(db, job_id=entities["job_id"])
+        result = await get_job_requirements(
+            db,
+            job_id=entities["job_id"],
+            active_kb_version_id=entities.get("active_kb_version_id"),
+        )
         if not result.found:
             return PathOutcome(reply="", outcome_label="structured_miss", cannot_handle=True)
         return PathOutcome(reply=format_job_requirements(result), outcome_label="structured")
@@ -96,15 +128,23 @@ async def path_b_faq(
     normalized_question: str,
     db,
     budget: TurnBudget,
+    active_kb_version_id: str | None = None,
 ) -> PathOutcome:
     """Directive §2 Path B: FAQ lookup, zero LLM calls.
 
     Exact normalized-question match → stored answer. Dynamic FAQs (resolution_type='tool')
     signal cannot_handle so the runner routes to Path A's tool instead.
     """
+    if any(marker in user_text.casefold() for marker in _VOLATILE_FACT_MARKERS):
+        return PathOutcome(reply="", outcome_label="faq_volatile", cannot_handle=True)
+
     from app.services.knowledge.tools.domain_tools import format_faq, get_faq_entry
 
-    result = await get_faq_entry(db, normalized_question=normalized_question)
+    result = await get_faq_entry(
+        db,
+        normalized_question=normalized_question,
+        active_kb_version_id=active_kb_version_id,
+    )
     if not result.found:
         return PathOutcome(reply="", outcome_label="faq_miss", cannot_handle=True)
     if result.data[0].get("resolution_type") == "tool":

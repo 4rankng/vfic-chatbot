@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -28,6 +28,7 @@ from app.models.provenance import ExtractionRun, FieldEvidence, SourceDocument, 
 from app.services.ingestion.extraction import extract_key_value_lines
 from app.services.ingestion.template_compiler import compile_template
 from app.services.ingestion.template_service import TemplateService
+from app.services.audit_service import record_audit
 
 
 class IngestionRunConflict(ValueError):
@@ -51,6 +52,8 @@ class TemplateIngestionService:
         locked = await self.db.scalar(select(KBVersion).where(KBVersion.id == version.id).with_for_update())
         if locked is None:
             raise IngestionRunConflict("KB version no longer exists")
+        if locked.status in {KBVersionStatus.READY, KBVersionStatus.ACTIVE}:
+            raise IngestionRunConflict("READY or ACTIVE KB versions are immutable; create a new KB version")
         if locked.template_version_id is None:
             raise IngestionRunConflict("KB version has no pinned template")
         files = list((await self.db.scalars(select(KBTextFile).where(KBTextFile.kb_version_id == locked.id).order_by(KBTextFile.id))).all())
@@ -63,8 +66,20 @@ class TemplateIngestionService:
             if active.manifest_sha256 != manifest:
                 raise IngestionRunConflict("an active ingestion run has a different frozen manifest")
             if active.status in {IngestionRunStatus.PENDING, IngestionRunStatus.RUNNING}:
-                raise IngestionRunConflict("KB version already has an active ingestion run")
-            return active
+                if active.lease_expires_at is None or active.lease_expires_at > datetime.now(UTC):
+                    raise IngestionRunConflict("KB version already has an active ingestion run")
+                active.status = IngestionRunStatus.FAILED
+                active.finished_at = datetime.now(UTC)
+                active.issues = [
+                    *active.issues,
+                    {
+                        "severity": "warning",
+                        "code": "lease_expired",
+                        "message": "worker lease expired before completion",
+                    },
+                ]
+            else:
+                return active
         attempt_no = int(await self.db.scalar(select(func.coalesce(func.max(KBIngestionRun.attempt_no), 0) + 1).where(KBIngestionRun.kb_version_id == locked.id)) or 1)
         run = KBIngestionRun(kb_version_id=locked.id, template_version_id=template.id, attempt_no=attempt_no, status=IngestionRunStatus.RUNNING, manifest_sha256=manifest, fencing_token=attempt_no, lease_expires_at=datetime.now(UTC) + timedelta(minutes=30), started_at=datetime.now(UTC))
         locked.release_manifest_sha256 = manifest
@@ -76,22 +91,29 @@ class TemplateIngestionService:
         await self.db.refresh(run)
         return run
 
-    async def materialize_version(self, version: KBVersion) -> KBIngestionRun:
-        run = await self.start_run(version)
+    async def materialize_version(
+        self, version: KBVersion, *, run: KBIngestionRun | None = None
+    ) -> KBIngestionRun:
+        run = run or await self.start_run(version)
         if run.status == IngestionRunStatus.REVIEW_REQUIRED:
             return run
+        if run.status != IngestionRunStatus.RUNNING:
+            raise IngestionRunConflict("ingestion run is no longer active")
+        if run.lease_expires_at is not None and run.lease_expires_at <= datetime.now(UTC):
+            raise IngestionRunConflict("ingestion run lease expired")
         template = await TemplateService(self.db).get_version(run.template_version_id)
         artifact = template.compiled_artifact or {}
-        # The compatibility template intentionally delegates all recruitment parsing
-        # to the legacy canonical pipeline until its typed adapter is migrated.
-        if template.compiler_version and artifact.get("record_types") == [{"key": "recruitment_note", "display_name": "Recruitment knowledge note", "natural_key_fields": ["title"], "fields": [{"key": "title", "type": "string", "aliases": ["title", "tiêu đề", "tieu de"], "required": True, "enum_values": [], "source_mode": "sourced_fact", "constant": None}, {"key": "content", "type": "string", "aliases": ["content", "nội dung", "noi dung"], "required": True, "enum_values": [], "source_mode": "sourced_fact", "constant": None}], "scope_type": "global"}]:
+        template_family = await TemplateService(self.db).get_template(template.template_id)
+        # The compatibility template intentionally delegates recruitment parsing
+        # to the canonical pipeline until its typed adapter is fully migrated.
+        if template_family.template_key == "recruitment_factory_builtin":
             run.status = IngestionRunStatus.READY
             run.finished_at = datetime.now(UTC)
             run.stats = {"facts": 0, "compatibility": "recruitment_builtin"}
             await self.db.commit()
             return run
         files = list((await self.db.scalars(select(KBTextFile).where(KBTextFile.kb_version_id == version.id))).all())
-        await self.db.execute(StructuredFact.__table__.delete().where(StructuredFact.run_id == run.id))
+        await self.db.execute(StructuredFact.__table__.delete().where(StructuredFact.kb_version_id == version.id))
         all_issues: list[dict] = []
         fact_count = 0
         seen: set[tuple[str, str]] = set()
@@ -116,7 +138,7 @@ class TemplateIngestionService:
                     continue
                 seen.add(key)
                 evidence = await self._persist_evidence(extraction.id, source_doc.id, record)
-                self.db.add(StructuredFact(project_id=version.project_id, kb_version_id=version.id, template_version_id=template.id, run_id=run.id, file_id=file.id, record_type_key=record["record_type_key"], source_mode=record["source_mode"], natural_key=record["natural_key"], natural_key_hash=record["natural_key_hash"], payload=record["payload"], evidence=evidence, scope_type=record["scope_type"]))
+                self.db.add(StructuredFact(project_id=version.project_id, kb_version_id=version.id, template_version_id=template.id, run_id=run.id, file_id=file.id, record_type_key=record["record_type_key"], source_mode=record["source_mode"], natural_key=record["natural_key"], natural_key_hash=record["natural_key_hash"], payload=record["payload"], evidence=evidence, scope_type=record["scope_type"], scope_id=record["scope_id"]))
                 fact_count += 1
         requires_review = bool(all_issues)
         run.issues = all_issues
@@ -140,6 +162,14 @@ class TemplateIngestionService:
         version = await self.db.get(KBVersion, run.kb_version_id)
         if version is not None:
             version.status = KBVersionStatus.READY
+        await record_audit(
+            self.db,
+            action="kb_ingestion_review_approved",
+            actor_id=reviewer_id,
+            target_type="kb_ingestion_run",
+            target_id=str(run.id),
+            payload={"comment": comment, "manifest": run.manifest_sha256},
+        )
         await self.db.commit()
         return run
 
@@ -154,6 +184,14 @@ class TemplateIngestionService:
         if version is not None:
             version.status = KBVersionStatus.FAILED
             version.error_message = "Ingestion review rejected"
+        await record_audit(
+            self.db,
+            action="kb_ingestion_review_rejected",
+            actor_id=reviewer_id,
+            target_type="kb_ingestion_run",
+            target_id=str(run.id),
+            payload={"comment": comment, "manifest": run.manifest_sha256},
+        )
         await self.db.commit()
         return run
 
@@ -191,18 +229,30 @@ class TemplateIngestionService:
         for record_type in artifact.get("record_types", []):
             payload: dict[str, Any] = {}
             evidence_fields: set[str] = set()
+            record_invalid = False
+            found_any_source_value = False
             for field in record_type["fields"]:
                 source_value = self._value_for_field(values, field)
                 if source_value is None and field.get("constant") is not None:
                     source_value = field["constant"]
                 if source_value is None:
-                    if field["required"]:
-                        issues.append({"severity": "error", "code": "missing_required_field", "message": f"{record_type['key']}.{field['key']} has no source value", "field_path": f"{record_type['key']}.{field['key']}"})
                     continue
-                payload[field["key"]] = source_value
+                found_any_source_value = True
+                try:
+                    payload[field["key"]] = self._coerce_value(source_value, field)
+                except ValueError as exc:
+                    issues.append({"severity": "error", "code": "invalid_field_type", "message": f"{record_type['key']}.{field['key']}: {exc}", "field_path": f"{record_type['key']}.{field['key']}"})
+                    record_invalid = True
+                    continue
                 if field.get("constant") is None:
                     evidence_fields.add(field["key"])
-            if not payload:
+            if not found_any_source_value:
+                continue
+            for field in record_type["fields"]:
+                if field["required"] and field["key"] not in payload:
+                    issues.append({"severity": "error", "code": "missing_required_field", "message": f"{record_type['key']}.{field['key']} has no source value", "field_path": f"{record_type['key']}.{field['key']}"})
+                    record_invalid = True
+            if not payload or record_invalid:
                 continue
             missing_key = [key for key in record_type["natural_key_fields"] if key not in payload]
             if missing_key:
@@ -212,7 +262,12 @@ class TemplateIngestionService:
             source_modes = {field.get("source_mode", "sourced_fact") for field in record_type["fields"] if field["key"] in payload}
             if "narrative" in source_modes:
                 continue
-            records.append({"record_type_key": record_type["key"], "source_mode": "derived" if source_modes == {"derived"} else "sourced_fact", "natural_key": natural_key, "natural_key_hash": _sha(natural_key), "payload": payload, "evidence_fields": evidence_fields, "scope_type": record_type["scope_type"], "source_text": source_text})
+            scope_id_field = record_type.get("scope_id_field")
+            # scope_id_field may point at an optional field that had no source
+            # value and is therefore absent from payload; subscripting would
+            # crash the whole ingestion run with an uncaught KeyError.
+            scope_id = str(payload[scope_id_field]) if scope_id_field and scope_id_field in payload else None
+            records.append({"record_type_key": record_type["key"], "source_mode": "derived" if source_modes == {"derived"} else "sourced_fact", "natural_key": natural_key, "natural_key_hash": _sha(natural_key), "payload": payload, "evidence_fields": evidence_fields, "scope_type": record_type["scope_type"], "scope_id": scope_id, "source_text": source_text})
         return records, issues
 
     @staticmethod
@@ -223,3 +278,29 @@ class TemplateIngestionService:
             if value:
                 return value
         return None
+
+    @staticmethod
+    def _coerce_value(value: Any, field: dict) -> Any:
+        value_type = field["type"]
+        if value_type == "string":
+            return str(value)
+        if value_type == "number":
+            return float(str(value).replace(",", ""))
+        if value_type == "integer":
+            return int(str(value).replace(",", ""))
+        if value_type == "boolean":
+            normalized = str(value).strip().lower()
+            if normalized in {"true", "yes", "có", "co", "1"}:
+                return True
+            if normalized in {"false", "no", "không", "khong", "0"}:
+                return False
+            raise ValueError("must be a boolean")
+        if value_type == "date":
+            return date.fromisoformat(str(value)).isoformat()
+        if value_type == "time":
+            return time.fromisoformat(str(value)).isoformat()
+        if value_type == "enum":
+            if value not in field["enum_values"]:
+                raise ValueError("must match an allowed enum value")
+            return value
+        raise ValueError("unsupported field type")

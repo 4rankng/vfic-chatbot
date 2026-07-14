@@ -56,6 +56,8 @@ class IngestionTemplateVersion(Base):
     compiled_artifact: Mapped[dict | None] = mapped_column(JSONB)
     checksum: Mapped[str | None] = mapped_column(String(64))
     compiler_version: Mapped[str | None] = mapped_column(String(32))
+    preview_checksum: Mapped[str | None] = mapped_column(String(64))
+    previewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

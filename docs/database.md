@@ -70,10 +70,31 @@ Path: `backend/app/models/`
 | `integration.py` | `IntegrationSetting` | Integration credentials (Zalo, OpenRouter, etc.) |
 | `password_reset.py` | `PasswordResetOtp` | Password reset OTP tokens |
 | `worker_feature.py` | `WorkerFeatureCatalog`, `JobFeatureValue` | Worker feature flags + job feature values |
+| `ingestion_template.py` | `IngestionTemplate`, `IngestionTemplateVersion`, `IngestionTemplateAssignment`, `KBIngestionRun`, `KBIngestionFileRun`, `StructuredFact` | Declarative ingestion templates, durable runs, and facts scoped to a KB release |
 
 ### Embeddings
 - `KnowledgeChunk` stores embeddings as `vector(3072)` (pgvector) — dim 3072 via OpenRouter/Gemini.
 - HNSW index for ANN search (enabled when `rag_ann_enabled = true`).
+
+### Versioned template ingestion
+
+Knowledge ingestion can use a published, declarative template version pinned to a
+`KBVersion`. A template describes record types, typed fields, natural keys, scope,
+allowed source aliases, constraints, and constants; it cannot execute code, define
+tools, or replace live operational resolvers. `KBTextFile` remains the source-file
+occurrence for a KB release, while ingestion runs record the frozen manifest and
+per-file processing state.
+
+`StructuredFact` is release-scoped: readers must join it through
+`Project.active_kb_version_id`. This makes a KB activation or rollback switch prose
+chunks and generic sourced facts together. It does not supersede code-owned live
+facts, such as active recruitment vacancies, stock, tracking, or ETA.
+
+Newly materialized typed recruitment authority rows can also carry
+`kb_version_id`. Their readers prefer rows from the active release and fall back
+to legacy unversioned rows only when that active release has no value for the
+requested scope; this prevents a release-scoped fact from being mixed with an
+older one during activation or rollback.
 
 ## Redis
 

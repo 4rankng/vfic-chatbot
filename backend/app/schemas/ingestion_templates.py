@@ -44,6 +44,7 @@ class TemplateVersionOut(BaseModel):
     compiled_artifact: dict[str, Any] | None = None
     checksum: str | None = None
     compiler_version: str | None = None
+    preview_checksum: str | None = None
     revision: int
     created_at: datetime
     updated_at: datetime
@@ -90,3 +91,8 @@ class PreviewOut(BaseModel):
     checksum: str
     records: list[dict[str, Any]]
     issues: list[dict[str, Any]]
+
+
+class ReviewDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    comment: str = Field(min_length=1, max_length=2000)
