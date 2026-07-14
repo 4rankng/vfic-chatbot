@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from inspect import iscoroutinefunction
 import contextlib
 import logging
 import time
@@ -357,6 +358,20 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             lock_owner=lock_owner,
                             pending_message_id=state.pending_message_id,
                             reply=DEGRADATION_REPLY,
+                            outbox_channel=(
+                                "zalo_oa"
+                                if getattr(conv, "zalo_channel", "bot") == "oa"
+                                else "zalo_bot"
+                            ),
+                            outbox_payload={
+                                "chat_id": conv.zalo_chat_id,
+                                "text": DEGRADATION_REPLY,
+                                **(
+                                    {"quote_message_id": state.reply_to_message_id}
+                                    if state.reply_to_message_id
+                                    else {}
+                                ),
+                            },
                         )
                         sent = False
                         external_error: str | None = None
@@ -368,7 +383,10 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                                 if hasattr(deps.zalo, "for_conversation")
                                 else deps.zalo
                             )
-                            if state.reply_to_message_id:
+                            dispatch = getattr(svc, "dispatch_outbound_message", None)
+                            if callable(dispatch) and iscoroutinefunction(dispatch):
+                                send_result = await dispatch(message_id=state.pending_message_id)
+                            elif state.reply_to_message_id:
                                 send_result = await sender.send_message(
                                     conv.zalo_chat_id,
                                     DEGRADATION_REPLY,
@@ -377,6 +395,13 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             else:
                                 send_result = await sender.send_message(
                                     conv.zalo_chat_id, DEGRADATION_REPLY
+                                )
+                            if send_result is None:
+                                from app.services.zalo_bot_service import SendResult
+
+                                send_result = SendResult(
+                                    ok=False,
+                                    error="outbound command was not available for dispatch",
                                 )
                             sent = send_result.ok
                             external_error = None if send_result.ok else send_result.error

@@ -22,6 +22,7 @@ from app.models.conversation import (
     MessageSender,
 )
 from app.models.user import Role, User
+from app.models.outbox import OutboundOutbox
 from app.services.viewer_scope import viewer_scope_filter, viewer_scope_sql
 
 # Whitelist of sortable conversation columns. Unknown / absent sort keys fall
@@ -196,13 +197,49 @@ class ConversationRepository:
                 .limit(limit)
             )
         ).all()
-        return list(reversed(rows))
+        messages = list(reversed(rows))
+        await self._attach_delivery_attempts(messages)
+        return messages
+
+    async def _attach_delivery_attempts(self, messages: list[Message]) -> None:
+        """Attach outbox attempts for API/realtime serialization without N+1 queries."""
+        ids = [message.id for message in messages if message.id is not None]
+        if not ids:
+            return
+        rows = (
+            await self.db.execute(
+                select(OutboundOutbox.message_id, OutboundOutbox.attempts).where(
+                    OutboundOutbox.message_id.in_(ids)
+                )
+            )
+        ).all()
+        attempts_by_id = {int(row.message_id): int(row.attempts or 0) for row in rows}
+        for message in messages:
+            message._delivery_attempts = attempts_by_id.get(int(message.id), 0)
 
     async def latest_message(self, conv: Conversation) -> Message | None:
         return (
             await self.db.scalars(
                 select(Message)
                 .where(Message.conversation_id == conv.id)
+                .order_by(desc(Message.created_at), desc(Message.id))
+                .limit(1)
+            )
+        ).first()
+
+    async def latest_worker_message(self, conv: Conversation) -> Message | None:
+        """Return the latest inbound Zalo message for a conversation.
+
+        Zalo OA consultation replies must quote an inbound message id, even if
+        a prior bot or recruiter reply has already answered that message.
+        """
+        return (
+            await self.db.scalars(
+                select(Message)
+                .where(
+                    Message.conversation_id == conv.id,
+                    Message.sender == MessageSender.WORKER,
+                )
                 .order_by(desc(Message.created_at), desc(Message.id))
                 .limit(1)
             )
@@ -236,7 +273,9 @@ class ConversationRepository:
                 )
             )
         rows = (await self.db.scalars(stmt)).all()
-        return list(reversed(rows))
+        messages = list(reversed(rows))
+        await self._attach_delivery_attempts(messages)
+        return messages
 
     async def messages_since(
         self, conv: Conversation, since_id: int | None = None, limit: int = 200
@@ -264,7 +303,9 @@ class ConversationRepository:
                     .limit(limit)
                 )
                 rows = (await self.db.scalars(stmt)).all()
-                return list(reversed(rows))
+                messages = list(reversed(rows))
+                await self._attach_delivery_attempts(messages)
+                return messages
             stmt = stmt.where(
                 or_(
                     Message.created_at > cursor.created_at,
@@ -275,7 +316,9 @@ class ConversationRepository:
                 )
             )
         rows = (await self.db.scalars(stmt)).all()
-        return list(rows)
+        messages = list(rows)
+        await self._attach_delivery_attempts(messages)
+        return messages
 
     async def latest_unanswered_worker_message(self, conv: Conversation) -> Message | None:
         """Return the latest Zalo user message if no successful outbound follows it."""

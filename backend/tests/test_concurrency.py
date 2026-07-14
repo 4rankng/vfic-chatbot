@@ -5,6 +5,7 @@ Pure unit tests with mocked DB sessions — no live database or Redis required.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -227,6 +228,11 @@ async def test_record_bot_pending_does_not_bump_version():
     assert msg.sender == MessageSender.BOT
     assert msg.delivery_status == DeliveryStatus.PENDING
     assert conv.version == 7
+    # record_bot_pending defers realtime emits onto a background task (the
+    # post-commit fan-out is fire-and-forget so it stays off the webhook-ack /
+    # db_ms hot path). Pump the loop to let that task run before asserting the
+    # events were published.
+    await asyncio.sleep(0)
     events.message_created.assert_awaited_once()
     events.conversation_updated.assert_awaited_once()
 
@@ -437,21 +443,19 @@ async def test_break_stale_lock_reports_whether_a_stale_lock_broke():
 
 
 @pytest.mark.asyncio
-async def test_resolve_unconfirmed_sending_flips_to_sent_and_stamps_outbound():
-    """A stuck SENDING row (crash after POST, before SENT) is flipped to SENT
-    (at-most-once: assume delivered). last_outbound_at is stamped only when a row
-    moved, keeping the conversation's attention state coherent."""
+async def test_resolve_unconfirmed_sending_marks_delivery_unknown_without_retrying():
+    """A stuck SENDING row becomes SEND_UNKNOWN, never silently SENT or retried."""
     conv = _make_conv()
     db = AsyncMock()
     db.commit = AsyncMock()
     state = ConversationState(db, MagicMock(), AsyncMock())
 
-    # A SENDING row moved → message UPDATE + last_outbound_at stamp (2 executes).
+    # A SENDING row moved → message UPDATE + matching outbox terminal update.
     db.execute = AsyncMock(return_value=FakeResult(rowcount=1))
     assert await state.resolve_unconfirmed_sending(conv.id) == 1
     assert db.execute.await_count == 2
 
-    # No SENDING row → only the message UPDATE (no outbound stamp).
+    # No SENDING row → only the message UPDATE.
     db.execute = AsyncMock(return_value=FakeResult(rowcount=0))
     assert await state.resolve_unconfirmed_sending(conv.id) == 0
     assert db.execute.await_count == 1

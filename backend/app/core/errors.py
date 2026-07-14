@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.services.errors import (
     ConflictError,
+    DeliveryEligibilityError,
     ForbiddenError,
     NotFoundError,
     UpstreamError,
@@ -23,6 +24,7 @@ _STATUS_MAP: dict[type[Exception], int] = {
     ConflictError: 409,
     ForbiddenError: 403,
     UpstreamError: 502,
+    DeliveryEligibilityError: 422,
 }
 
 

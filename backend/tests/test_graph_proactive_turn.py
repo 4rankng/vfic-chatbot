@@ -211,6 +211,44 @@ async def test_clean_decision_is_sent(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_clean_decision_persists_then_dispatches_without_direct_send(monkeypatch):
+    svc, recorded = _stub_svc()
+    _patch_lazy_helpers(monkeypatch)
+    agent = _FakeAgent('{"send": true, "message": "Mình hỗ trợ thêm nhé?", "reason": "warm"}')
+    zalo = _FakeZalo()
+    conv = _FakeConv()
+    prepared: list[dict] = []
+
+    async def prepare_proactive_message(conv, *, body, channel, payload):
+        prepared.append({"body": body, "channel": channel, "payload": payload})
+        return type("Pending", (), {"id": 99})()
+
+    async def dispatch_outbound_message(*, message_id):
+        assert message_id == 99
+        return _SendResult()
+
+    async def record_durable(conv, *, message, result, lock_owner=None, **kwargs):
+        recorded.append({"message": message, "ok": result.ok, **kwargs})
+
+    svc.prepare_proactive_message = prepare_proactive_message
+    svc.dispatch_outbound_message = dispatch_outbound_message
+    svc.state.record_proactive_outcome = record_durable
+
+    res = await run_proactive_turn(conv, _deps(agent, zalo, conversation=svc))
+
+    assert res["outcome"] == "sent"
+    assert zalo.sent == []
+    assert prepared == [
+        {
+            "body": "Mình hỗ trợ thêm nhé?",
+            "channel": "zalo_bot",
+            "payload": {"chat_id": "z1", "text": "Mình hỗ trợ thêm nhé?"},
+        }
+    ]
+    assert recorded[0]["pending_message_id"] == 99
+
+
+@pytest.mark.asyncio
 async def test_send_exception_is_reported_as_send_failed(monkeypatch):
     svc, recorded = _stub_svc()
     _patch_lazy_helpers(monkeypatch)

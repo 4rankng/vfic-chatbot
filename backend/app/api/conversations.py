@@ -299,6 +299,36 @@ async def send_recruiter_message(
     return MessageOut.model_validate(msg)
 
 
+@router.post("/{conv_id}/messages/{message_id}/retry", response_model=MessageOut)
+async def retry_recruiter_message(
+    conv_id: uuid.UUID,
+    message_id: int,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageOut:
+    """Retry one definite recruiter delivery failure without adding a message row."""
+    conv = await _load(conv_id, db, user)
+    owns = conv.assigned_recruiter_id == user.id
+    allowed = conv.mode in (ConversationMode.HUMAN, ConversationMode.SEMI_AUTO) and (
+        owns or user.role == Role.admin
+    )
+    if not allowed:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Bạn cần tiếp nhận hội thoại trước khi trả lời"
+        )
+    msg, delivered = await ConversationService(db).retry_recruiter_message(
+        conv, message_id=message_id
+    )
+    if msg is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Tin nhắn này không còn ở trạng thái có thể thử lại.",
+        )
+    response.status_code = status.HTTP_201_CREATED if delivered else status.HTTP_502_BAD_GATEWAY
+    return MessageOut.model_validate(msg)
+
+
 @router.post("/{conv_id}/web-chat-turn")
 async def web_chat_turn(
     conv_id: uuid.UUID,

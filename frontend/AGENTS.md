@@ -42,7 +42,7 @@ origin `/api/v1`); see `src/lib/vfic/config.ts`.
 - **Admin layer**: react-admin (ra-core) + shadcn-admin-kit (vendored, mutable)
 - **UI**: Shadcn UI + Radix UI, **Tailwind CSS v4**
 - **Data**: TanStack Query (via react-admin) against the FastAPI REST API
-- **Realtime**: Server-Sent Events (`EventSource`) at `/realtime/events`
+- **Realtime**: Socket.IO (WebSocket + polling fallback) at `/socket.io/`
 - **Auth**: JWT (access + refresh) held in `localStorage`; see
   `src/components/atomic-crm/providers/rest/authProvider.ts`
 - **Testing**: Vitest

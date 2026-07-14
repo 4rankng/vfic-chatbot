@@ -36,6 +36,24 @@ class ZaloChannelSender:
             return _BoundSender(self._oa, external_chat_id(conv))
         return _BoundSender(self._bot, external_chat_id(conv))
 
+    async def send_payload(self, channel: str, payload: dict[str, Any]) -> SendResult:
+        """Dispatch one immutable outbox payload without consulting live state."""
+        chat_id = str(payload.get("chat_id") or "")
+        text = str(payload.get("text") or "")
+        if not chat_id or not text:
+            return SendResult(ok=False, error="outbound payload is missing chat_id or text")
+        if channel == "zalo_oa":
+            if chat_id.startswith("oa:"):
+                chat_id = chat_id.removeprefix("oa:")
+            return await self._oa.send_message(
+                chat_id,
+                text,
+                quote_message_id=str(payload.get("quote_message_id") or ""),
+            )
+        if channel == "zalo_bot":
+            return await self._bot.send_message(chat_id, text)
+        return SendResult(ok=False, error=f"unsupported outbound channel: {channel}")
+
 
 class _BoundSender:
     def __init__(self, sender, chat_id: str) -> None:

@@ -15,6 +15,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta
+from inspect import iscoroutinefunction
 from typing import TypedDict
 
 from app.graph.ports import SendOutcome
@@ -223,6 +224,9 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         return _outcome("suppressed", reason="locked")
     lock_owner = None if acquired is True else acquired
     version_at_start = conv.version
+    pending_message_id: int | None = None
+    outbox_channel: str | None = None
+    outbox_payload: dict | None = None
 
     try:
         # 5. Build context
@@ -322,13 +326,51 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             await deps.db.commit()
             return _outcome("suppressed", reason="48h_window_post_generation")
 
-        # 10. Send
-        sender = (
-            deps.zalo.for_conversation(conv)
-            if hasattr(deps.zalo, "for_conversation")
-            else deps.zalo
+        # 10. Persist the command, then dispatch it.  The production service
+        # always takes this durable path; the direct branch retains pure graph
+        # unit-test fakes that intentionally have no persistence facade.
+        outbox_channel = "zalo_oa" if getattr(conv, "zalo_channel", "bot") == "oa" else "zalo_bot"
+        quote_message_id = next(
+            (
+                item.zalo_message_id
+                for item in reversed(recent_messages)
+                if item.sender == MessageSender.WORKER and item.zalo_message_id
+            ),
+            None,
         )
-        result = await sender.send_message(conv.zalo_chat_id, candidate)
+        if outbox_channel == "zalo_oa" and not quote_message_id:
+            result = SendOutcome(ok=False, error="zalo_oa_requires_inbound_message_id")
+        else:
+            outbox_payload = {"chat_id": conv.zalo_chat_id, "text": candidate}
+            if quote_message_id:
+                outbox_payload["quote_message_id"] = quote_message_id
+            prepare = getattr(svc, "prepare_proactive_message", None)
+            dispatch = getattr(svc, "dispatch_outbound_message", None)
+            if (
+                callable(prepare)
+                and iscoroutinefunction(prepare)
+                and callable(dispatch)
+                and iscoroutinefunction(dispatch)
+            ):
+                pending = await prepare(
+                    conv,
+                    body=candidate,
+                    channel=outbox_channel,
+                    payload=outbox_payload,
+                )
+                pending_message_id = pending.id
+                result = await dispatch(message_id=pending_message_id)
+                if result is None:
+                    result = SendOutcome(
+                        ok=False, error="outbound command was not available for dispatch"
+                    )
+            else:
+                sender = (
+                    deps.zalo.for_conversation(conv)
+                    if hasattr(deps.zalo, "for_conversation")
+                    else deps.zalo
+                )
+                result = await sender.send_message(conv.zalo_chat_id, candidate)
 
     except Exception as exc:
         logger.warning("proactive turn error: conversation=%s error=%s", conv.zalo_chat_id, exc)
@@ -337,7 +379,16 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
 
     # 11. Persist (always — clears lock, records SENT/FAILED message,
     #     handles cadence count)
-    await svc.state.record_proactive_outcome(
-        conv, message=candidate, result=result, lock_owner=lock_owner
-    )
+    record_kwargs = {
+        "message": candidate,
+        "result": result,
+        "lock_owner": lock_owner,
+    }
+    if pending_message_id is not None:
+        record_kwargs.update(
+            pending_message_id=pending_message_id,
+            outbox_channel=outbox_channel,
+            outbox_payload=outbox_payload,
+        )
+    await svc.state.record_proactive_outcome(conv, **record_kwargs)
     return {"outcome": "sent" if result.ok else "send_failed", "reply": candidate}

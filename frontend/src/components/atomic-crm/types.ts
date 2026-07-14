@@ -137,7 +137,15 @@ export type Message = {
   conversation_id: string;
   type: "inbound" | "outbound" | "system";
   content: string;
-  delivery_status?: "pending" | "sent" | "failed" | "suppressed";
+  delivery_status?:
+    | "pending"
+    | "sending"
+    | "sent"
+    | "failed"
+    | "send_unknown"
+    | "suppressed";
+  /** Number of delivery attempts made for this outbound message. */
+  delivery_attempts?: number;
   // Backend `data` jsonb. Carries recruiter_id on recruiter-sent messages
   // (the direction discriminator read in ChatThread). Narrowed from `any`.
   data: { recruiter_id?: string | null } | null;

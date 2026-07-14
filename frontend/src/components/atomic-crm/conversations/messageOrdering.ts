@@ -26,6 +26,7 @@ export const sameMessage = (a: Message, b: Message) =>
   a.content === b.content &&
   a.type === b.type &&
   a.delivery_status === b.delivery_status &&
+  a.delivery_attempts === b.delivery_attempts &&
   a.created_at === b.created_at &&
   a.data?.recruiter_id === b.data?.recruiter_id;
 

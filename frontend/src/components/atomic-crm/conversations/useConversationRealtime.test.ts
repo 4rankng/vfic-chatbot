@@ -40,7 +40,7 @@ type Deferred<T> = {
   resolve: (value: T) => void;
 };
 
-const deferred = <T,>(): Deferred<T> => {
+const deferred = <T>(): Deferred<T> => {
   let reject!: (reason?: unknown) => void;
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((res, rej) => {
@@ -166,9 +166,9 @@ describe("useConversationRealtime", () => {
       });
       await nextPage.promise;
     });
-    expect(hook.result.current.messages.map((message) => message.content)).toEqual([
-      "next-conversation message 2",
-    ]);
+    expect(
+      hook.result.current.messages.map((message) => message.content),
+    ).toEqual(["next-conversation message 2"]);
 
     await hook.act(async () => {
       oldPage.resolve({
@@ -178,16 +178,18 @@ describe("useConversationRealtime", () => {
       await oldPage.promise;
     });
 
-    expect(hook.result.current.messages.map((message) => message.content)).toEqual([
-      "next-conversation message 2",
-    ]);
+    expect(
+      hook.result.current.messages.map((message) => message.content),
+    ).toEqual(["next-conversation message 2"]);
   });
 
   it("ignores messages whose conversation_id does not match the active thread", async () => {
     const activePage = deferred<MessagesPage>();
     let pushRealtime: ((messages: Message[]) => void) | undefined;
 
-    mockChatRepository.getConversationMessages.mockReturnValue(activePage.promise);
+    mockChatRepository.getConversationMessages.mockReturnValue(
+      activePage.promise,
+    );
     mockChatRepository.subscribeToMessages.mockImplementation(
       (...args: unknown[]) => {
         pushRealtime = args[1] as (messages: Message[]) => void;
@@ -218,16 +220,18 @@ describe("useConversationRealtime", () => {
     await hook.act(async () => {
       pushRealtime?.([msg(3, "active-conversation")]);
     });
-    expect(hook.result.current.messages.map((message) => message.content)).toEqual([
-      "active-conversation message 3",
-    ]);
+    expect(
+      hook.result.current.messages.map((message) => message.content),
+    ).toEqual(["active-conversation message 3"]);
   });
 
   it("removes a pending optimistic human reply when the server echo has a new id and timestamp", async () => {
     const activePage = deferred<MessagesPage>();
     let pushRealtime: ((messages: Message[]) => void) | undefined;
 
-    mockChatRepository.getConversationMessages.mockReturnValue(activePage.promise);
+    mockChatRepository.getConversationMessages.mockReturnValue(
+      activePage.promise,
+    );
     mockChatRepository.subscribeToMessages.mockImplementation(
       (...args: unknown[]) => {
         pushRealtime = args[1] as (messages: Message[]) => void;
@@ -272,6 +276,61 @@ describe("useConversationRealtime", () => {
     expect(hook.result.current.messages[0].delivery_status).toBe("sent");
   });
 
+  it("replaces a locally failed optimistic reply when its server echo arrives", async () => {
+    const activePage = deferred<MessagesPage>();
+    let pushRealtime: ((messages: Message[]) => void) | undefined;
+
+    mockChatRepository.getConversationMessages.mockReturnValue(
+      activePage.promise,
+    );
+    mockChatRepository.subscribeToMessages.mockImplementation(
+      (...args: unknown[]) => {
+        pushRealtime = args[1] as (messages: Message[]) => void;
+        return () => {
+          /* cleanup */
+        };
+      },
+    );
+
+    const hook = await renderHook(() =>
+      useConversationRealtime("active-conversation"),
+    );
+    await hook.act(async () => {
+      activePage.resolve({ messages: [], hasMore: false });
+      await activePage.promise;
+    });
+
+    let tempId = "";
+    await hook.act(async () => {
+      tempId = hook.result.current.insertOptimistic("chào bạn", "recruiter-1");
+      hook.result.current.markOptimisticFailed(tempId);
+    });
+    expect(hook.result.current.messages[0].delivery_status).toBe("failed");
+
+    await hook.act(async () => {
+      pushRealtime?.([
+        {
+          id: "server-101",
+          zalo_message_id: "zalo-101",
+          conversation_id: "active-conversation",
+          type: "outbound",
+          content: "chào bạn",
+          delivery_status: "failed",
+          delivery_attempts: 2,
+          data: { recruiter_id: "recruiter-1" },
+          created_at: new Date(Date.now() + 1000).toISOString(),
+        },
+      ]);
+    });
+
+    expect(hook.result.current.messages).toHaveLength(1);
+    expect(hook.result.current.messages[0]).toMatchObject({
+      id: "server-101",
+      delivery_status: "failed",
+      delivery_attempts: 2,
+    });
+  });
+
   it("discards middle-mount late resolve in a 3-way rapid switch (A→B→C, resolve C→A→B)", async () => {
     const pageA = deferred<MessagesPage>();
     const pageB = deferred<MessagesPage>();
@@ -297,10 +356,12 @@ describe("useConversationRealtime", () => {
 
     // Earlier requests must be aborted
     expect(
-      mockChatRepository.getConversationMessages.mock.calls[0]?.[1]?.signal?.aborted,
+      mockChatRepository.getConversationMessages.mock.calls[0]?.[1]?.signal
+        ?.aborted,
     ).toBe(true);
     expect(
-      mockChatRepository.getConversationMessages.mock.calls[1]?.[1]?.signal?.aborted,
+      mockChatRepository.getConversationMessages.mock.calls[1]?.[1]?.signal
+        ?.aborted,
     ).toBe(true);
 
     // Resolve in out-of-order: C first

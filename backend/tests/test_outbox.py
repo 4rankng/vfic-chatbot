@@ -37,6 +37,14 @@ def test_outbox_status_values_match_migration_check_constraint():
     }
 
 
+def test_dispatch_result_matches_graph_sender_result_contract():
+    """Durable dispatches expose the same provider id field as direct sends."""
+    from app.services.outbox_service import DispatchResult
+
+    result = DispatchResult(outbox_id=1, message_id=2, ok=True, zalo_message_id="zalo-1")
+    assert result.msg_id == "zalo-1"
+
+
 # ─── enqueue_outbox ──────────────────────────────────────────────────────────
 
 
@@ -52,7 +60,7 @@ async def test_enqueue_outbox_calls_insert_with_correct_fields(monkeypatch):
 
     class _FakeDB:
         async def execute(self, stmt):
-        # We don't assert the SQL text (fragile); we just verify it doesn't raise.
+            # We don't assert the SQL text (fragile); we just verify it doesn't raise.
             captured["executed"] = True
             return _FakeResult()
 
@@ -131,6 +139,39 @@ async def test_claim_stale_sending_swallows_db_errors():
     assert candidates == []
 
 
+async def test_stale_sending_outbox_ids_returns_only_ids():
+    from app.services import outbox_service
+
+    class _Rows:
+        def all(self):
+            return [7, 11]
+
+    class _FakeDB:
+        async def scalars(self, stmt):
+            return _Rows()
+
+    ids = await outbox_service.stale_sending_outbox_ids(_FakeDB(), stale_after_seconds=30, limit=10)
+    assert ids == [7, 11]
+
+
+async def test_claim_stale_sending_unknown_returns_none_when_a_live_worker_finished():
+    """The stale-sweep conditional claim cannot overwrite a fresh SENT result."""
+    from app.services import outbox_service
+
+    class _Result:
+        def one_or_none(self):
+            return None
+
+    class _FakeDB:
+        async def execute(self, stmt):
+            return _Result()
+
+    claimed = await outbox_service.claim_stale_sending_unknown(
+        _FakeDB(), outbox_id=7, stale_after_seconds=30
+    )
+    assert claimed is None
+
+
 # ─── count_by_status ─────────────────────────────────────────────────────────
 
 
@@ -151,9 +192,7 @@ async def test_count_by_status_groups_correctly():
         async def execute(self, sql, params):
             return _FakeResult()
 
-    counts = await outbox_service.count_by_status(
-        _FakeDB(), since=datetime.now(timezone.utc)
-    )
+    counts = await outbox_service.count_by_status(_FakeDB(), since=datetime.now(timezone.utc))
     assert counts == {"SENT": 100, "FAILED": 3, "SEND_UNKNOWN": 1}
 
 

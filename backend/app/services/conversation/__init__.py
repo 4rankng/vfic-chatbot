@@ -154,6 +154,9 @@ class ConversationService:
     async def latest_message(self, conv: Conversation) -> Message | None:
         return await self.repo.latest_message(conv)
 
+    async def latest_worker_message(self, conv: Conversation) -> Message | None:
+        return await self.repo.latest_worker_message(conv)
+
     async def messages_page(
         self, conv: Conversation, limit: int = 50, before_id: int | None = None
     ) -> list[Message]:
@@ -220,6 +223,8 @@ class ConversationService:
         lock_owner: uuid.UUID | str | None,
         pending_message_id: int | None,
         reply: str,
+        outbox_channel: str | None = None,
+        outbox_payload: dict | None = None,
     ) -> bool:
         return await self.state.claim_send(
             conv,
@@ -227,6 +232,34 @@ class ConversationService:
             lock_owner=lock_owner,
             pending_message_id=pending_message_id,
             reply=reply,
+            outbox_channel=outbox_channel,
+            outbox_payload=outbox_payload,
+        )
+
+    async def dispatch_outbound_message(self, *, message_id: int):
+        from app.services.outbox_service import dispatch_message_outbox
+
+        return await dispatch_message_outbox(self.db, message_id=message_id)
+
+    async def finalize_outbound_dispatch(
+        self,
+        conv: Conversation,
+        *,
+        message_id: int,
+        outbox_id: int,
+        delivered: bool,
+        zalo_message_id: str | None = None,
+        external_error: str | None = None,
+        error_class: str | None = None,
+    ) -> Message:
+        return await self.state.finalize_outbound_dispatch(
+            conv,
+            message_id=message_id,
+            outbox_id=outbox_id,
+            delivered=delivered,
+            zalo_message_id=zalo_message_id,
+            external_error=external_error,
+            error_class=error_class,
         )
 
     async def record_bot_outcome(
@@ -307,9 +340,30 @@ class ConversationService:
         message: str,
         result: SendResult,
         lock_owner: uuid.UUID | str | None = None,
+        pending_message_id: int | None = None,
+        outbox_channel: str | None = None,
+        outbox_payload: dict | None = None,
     ) -> Message:
         return await self.state.record_proactive_outcome(
-            conv, message=message, result=result, lock_owner=lock_owner
+            conv,
+            message=message,
+            result=result,
+            lock_owner=lock_owner,
+            pending_message_id=pending_message_id,
+            outbox_channel=outbox_channel,
+            outbox_payload=outbox_payload,
+        )
+
+    async def prepare_proactive_message(
+        self,
+        conv: Conversation,
+        *,
+        body: str,
+        channel: str,
+        payload: dict,
+    ) -> Message:
+        return await self.state.prepare_proactive_message(
+            conv, body=body, channel=channel, payload=payload
         )
 
     async def apply_delivery_receipt(
@@ -354,24 +408,63 @@ class ConversationService:
     async def deliver_recruiter_message(
         self, conv: Conversation, recruiter: User, body: str
     ) -> tuple[Message, bool]:
-        """Send a recruiter reply via Zalo + record it. Returns ``(message, delivered_ok)``.
+        """Persist then immediately dispatch a recruiter reply via the shared outbox."""
+        from app.services.errors import DeliveryEligibilityError
+        from app.services.outbox_service import build_outbox_payload, dispatch_outbox
 
-        Owns the ``ZaloBotSender`` instantiation so the router stays free of the external
-        client. The sender is imported lazily to keep the web-process import path free of
-        httpx/external deps at module load. ``record_recruiter_message`` (state) stays a
-        decoupled, testable pure-persist that takes the send result as a param.
-        """
-        from app.services.integration_settings import IntegrationSettingsService
-        from app.services.zalo_sender import ZaloChannelSender
+        quote_message_id = None
+        is_oa = (getattr(conv, "zalo_channel", None) or "bot") == "oa"
+        if is_oa:
+            latest_inbound = await self.latest_worker_message(conv)
+            quote_message_id = latest_inbound.zalo_message_id if latest_inbound else None
+            if not quote_message_id:
+                raise DeliveryEligibilityError(
+                    "Không thể gửi tin Zalo vì chưa có tin nhắn của ứng viên để phản hồi."
+                )
+        msg, outbox_id = await self.state.prepare_recruiter_message(
+            conv,
+            recruiter,
+            body=body,
+            channel="zalo_oa" if is_oa else "zalo_bot",
+            payload=build_outbox_payload(conv.zalo_chat_id, body, quote_message_id),
+        )
+        attempt = await dispatch_outbox(self.db, outbox_id=outbox_id)
+        if attempt is None:
+            return msg, False
+        msg = await self.state.finalize_recruiter_delivery(
+            conv,
+            message_id=attempt.message_id,
+            outbox_id=attempt.outbox_id,
+            delivered=attempt.ok,
+            zalo_message_id=attempt.zalo_message_id,
+            external_error=attempt.error,
+            error_class=attempt.error_class,
+        )
+        return msg, attempt.ok
 
-        integration_settings = IntegrationSettingsService(self.db)
-        cfg = await integration_settings.resolve_zalo()
-        sender = ZaloChannelSender(
-            cfg, refresh=lambda: integration_settings.refresh_oa_access_token()
-        ).for_conversation(conv)
-        result = await sender.send_message(conv.zalo_chat_id, body)
-        msg = await self.state.record_recruiter_message(conv, recruiter, body, result)
-        return msg, result.ok
+    async def retry_recruiter_message(
+        self, conv: Conversation, *, message_id: int
+    ) -> tuple[Message | None, bool]:
+        """Retry one known failed recruiter message without creating a new row."""
+        from app.models.conversation import Message
+        from app.services.outbox_service import dispatch_outbox
+
+        outbox_id = await self.state.retry_recruiter_message(conv, message_id=message_id)
+        if outbox_id is None:
+            return None, False
+        attempt = await dispatch_outbox(self.db, outbox_id=outbox_id)
+        if attempt is None:
+            return await self.db.get(Message, message_id), False
+        msg = await self.state.finalize_recruiter_delivery(
+            conv,
+            message_id=attempt.message_id,
+            outbox_id=attempt.outbox_id,
+            delivered=attempt.ok,
+            zalo_message_id=attempt.zalo_message_id,
+            external_error=attempt.error,
+            error_class=attempt.error_class,
+        )
+        return msg, attempt.ok
 
     async def release_and_enqueue_unanswered(
         self,

@@ -26,6 +26,9 @@ export const vietnameseCrmMessages = {
         forbidden: "Tài khoản không có quyền gửi tin nhắn.",
         conflict:
           "Hội thoại đang được người khác tiếp quản. Hãy Tiếp nhận trước khi trả lời.",
+        unavailable:
+          "Không thể gửi tin qua Zalo lúc này. Hãy chờ ứng viên nhắn lại rồi thử lại.",
+        provider: "Zalo chưa nhận được tin nhắn. Bạn có thể thử lại ngay trên bong bóng tin nhắn.",
         network: "Không kết nối được đến máy chủ. Vui lòng thử lại.",
         error: "Gửi tin nhắn thất bại.",
       },

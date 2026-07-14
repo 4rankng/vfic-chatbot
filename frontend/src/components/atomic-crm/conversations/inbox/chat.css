@@ -576,7 +576,6 @@
     flex: 0 0 auto;
     gap: 6px;
   }
-
 }
 
 @container (max-width: 640px) {
@@ -974,6 +973,20 @@
 .inbox-bg-container .delivery-status {
   font-weight: var(--chat-fw-semibold);
   color: var(--ink-faint);
+}
+
+.inbox-bg-container .delivery-retry-count {
+  color: var(--muted-foreground);
+}
+.inbox-bg-container .delivery-retry-button {
+  color: var(--inbox-accent);
+  font: inherit;
+  font-weight: var(--chat-fw-semibold);
+  text-decoration: underline;
+}
+.inbox-bg-container .delivery-retry-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 .inbox-bg-container .delivery-status.pending {
   color: var(--inbox-accent);

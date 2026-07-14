@@ -50,6 +50,7 @@ class MessageOut(BaseModel):
     delivery_status: DeliveryStatus
     zalo_message_id: str | None = None
     external_error: str | None = None
+    delivery_attempts: int = 0
     created_at: datetime
 
 

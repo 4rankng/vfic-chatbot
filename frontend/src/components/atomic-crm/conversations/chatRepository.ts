@@ -34,6 +34,13 @@ const OUTBOUND_SENDERS = new Set([
   "HUMAN",
 ]);
 
+const asPositiveInteger = (value: unknown): number | undefined => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    return undefined;
+  }
+  return value;
+};
+
 // Map a typed backend MessageOut to the CRM's Message view model.
 //   sender WORKER/CANDIDATE/USER/LEAD/APPLICANT -> inbound (candidate)
 //   sender BOT/RECRUITER/ADMIN/AGENT/HUMAN      -> outbound
@@ -60,10 +67,8 @@ const toMessage = (row: ApiRecord): Message => {
     type,
     content: String(row.body ?? ""),
     delivery_status: String(row.delivery_status ?? "sent").toLowerCase() as
-      | "pending"
-      | "sent"
-      | "failed"
-      | "suppressed",
+      "pending" | "sent" | "failed" | "suppressed",
+    delivery_attempts: asPositiveInteger(row.delivery_attempts),
     data: { recruiter_id: recruiterId },
     created_at: String(row.created_at ?? new Date().toISOString()),
   };

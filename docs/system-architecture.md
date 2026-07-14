@@ -251,7 +251,7 @@ sequenceDiagram
     rect rgb(245, 245, 220)
     Note over RQ,WK: ── reconcile recovery (every ~60s) ──
     RQ->>WK: run_reconcile_tick
-    WK->>DB: sweep conversations with newest BOT/FAILED<br/>also resolve stale SENDING → SENT (at-most-once)
+    WK->>DB: sweep conversations with newest BOT/FAILED<br/>also resolve stale SENDING → SEND_UNKNOWN (never auto-resend)
     WK->>RQ: re-enqueue fresh turn (full re-run, not just HTTP POST)
     end
 ```
@@ -264,8 +264,22 @@ sequenceDiagram
 | `verify signature (HMAC)` | Two schemes: Bot = shared-secret compare; OA = SHA256 HMAC (`zalo_oa_signature.py:58`) |
 | `apply mode policy` (one step) | Four layers: webhook gate, lock, recheck, atomic `claim_send` (`webhook.py:130`, `:134`, `runner.py:273`, `state.py:329`) |
 | `worker: retrieve → generate → policy` | Ten stages incl. two no-LLM fast paths (template + FAQ bypass), routing, lead context, grounding, safety (`runner.py:259-515`) |
-| `enqueue → Zalo OA Send Message API` | Worker sends directly (no outbox); Bot and OA are distinct APIs; OA has token-refresh retry (`zalo_sender.py:21`, `zalo_oa_service.py:110`) |
-| (missing) | Reconcile worker re-enqueues retryable FAILED turns (~60s); only the permanent OA `user_id is invalid` recipient error is excluded (Bot `Not Found` remains retryable), while terminal `SEND_UNKNOWN` is not a candidate; stale SENDING → SENT on worker crash (`reconcile_worker.py`) |
+| `enqueue → Zalo Send API` | Bot, OA, proactive, and recruiter replies first persist one immutable outbox command, then dispatch it. OA commands retain the inbound quote id; a retry reuses the original message and command. |
+| (missing) | The outbound dispatcher recovers PENDING commands (~60s). Retryable failures may be explicitly retried from the same recruiter bubble; terminal `SEND_UNKNOWN` is never resent, including a stale SENDING command after a worker crash. |
+
+### Durable outbound delivery states
+
+The message delivery state and its one-to-one outbox command advance together:
+`PENDING → SENDING → SENT | FAILED | SEND_UNKNOWN`. `SUPPRESSED` is a terminal
+Bot-policy outcome that makes no provider call.
+
+| State | Meaning and permitted follow-up |
+| --- | --- |
+| `PENDING` | The message and immutable command committed before provider I/O. The caller may dispatch immediately; the scheduled outbound dispatcher also claims leftover commands every 60 seconds. |
+| `SENDING` | One dispatcher has atomically claimed the command and incremented its attempt count. A stale row becomes `SEND_UNKNOWN`, never another send attempt. |
+| `SENT` | Zalo confirmed the submission; terminal. |
+| `FAILED` | Zalo definitely rejected the submission. A recruiter can explicitly retry this same command from its existing message bubble; the retry returns it to `PENDING` and never inserts a second message. |
+| `SEND_UNKNOWN` | The provider result was ambiguous (including a crash after submission). Treat as terminal for delivery: investigate if necessary, but do not automatically or manually replay it. |
 
 ---
 
@@ -313,7 +327,7 @@ load_conversation_state -> typing -> agent
 | `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Interactive and recovered chat turns. |
 | `persistence_low` | `worker-persistence` (×1) | — | — | LLM-derived lead and memory enrichment after SENT replies; isolated from the interactive queue. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
-| `followup` | `worker-followup` (×1) | — | — | Proactive follow-up + reconcile sweep. |
+| `followup` | `worker-followup` (×1) | — | — | Proactive follow-up, reconcile, and outbound-dispatch sweeps. |
 
 - Container entrypoint: `app/workers/run_worker.py` → calls
   `Worker.clean_registries()` on startup (requeues stuck jobs). It preloads the
@@ -322,8 +336,8 @@ load_conversation_state -> typing -> agent
 - Async bridge: `workers/async_runner.py` — one persistent event loop per
   worker process.
 - rq-scheduler runs in its own container; the FastAPI lifespan also registers
-  two unique ticks via `register_unique_tick`:
-  `run_proactive_followup_tick` (1800s) and `run_reconcile_tick` (60s).
+  unique ticks via `register_unique_tick`: `run_proactive_followup_tick` (1800s),
+  `run_reconcile_tick` (60s), and `run_outbound_dispatch_tick` (60s).
 
 ---
 

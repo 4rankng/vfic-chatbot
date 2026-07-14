@@ -1,14 +1,12 @@
 // VFIC runtime configuration.
 //
-// The CRM talks to a self-hosted REST + SSE backend (FastAPI). Source
+// The CRM talks to a self-hosted REST + Socket.IO backend (FastAPI). Source
 // precedence: window.__VFIC__ (injected into index.html at deploy time)
 // overrides VITE_* build-time env (used for local dev). `apiBaseUrl` is the
-// backend origin (empty = same-origin); `realtimeUrl` is the SSE endpoint and
-// defaults to <apiBaseUrl>/realtime/events.
+// backend origin (empty = same-origin); `socketUrl` is the Socket.IO origin.
 
 type VficWindowConfig = {
   API_BASE?: string;
-  REALTIME_URL?: string;
   SOCKET_URL?: string;
 };
 
@@ -29,19 +27,11 @@ export const vficConfig = {
   get apiBaseUrl(): string {
     return trailing(win.API_BASE ?? env.VITE_API_BASE ?? "");
   },
-  /** SSE endpoint for realtime events. Defaults to <apiBaseUrl>/realtime/events. */
-  get realtimeUrl(): string {
-    return (
-      win.REALTIME_URL ??
-      env.VITE_REALTIME_URL ??
-      `${this.apiBaseUrl}/realtime/events`
-    );
-  },
   /**
-   * Socket.IO origin for realtime chat (replaces the SSE EventSource). Defaults
-   * to the backend origin (apiBaseUrl; empty = same-origin, co-served by Caddy);
-   * the socket path is the server default /socket.io/. Socket.IO prefers
-   * WebSocket and falls back to HTTP long-polling automatically.
+   * Socket.IO origin for realtime chat. Defaults to the backend origin
+   * (apiBaseUrl; empty = same-origin, co-served by Caddy); the socket path is
+   * the server default /socket.io/. Socket.IO prefers WebSocket and falls back
+   * to HTTP long-polling automatically.
    */
   get socketUrl(): string {
     return win.SOCKET_URL ?? env.VITE_SOCKET_URL ?? this.apiBaseUrl;

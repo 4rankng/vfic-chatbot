@@ -35,3 +35,11 @@ class UpstreamError(Exception):
     def __init__(self, message: str = "Upstream service error") -> None:
         self.message = message
         super().__init__(message)
+
+
+class DeliveryEligibilityError(Exception):
+    """The channel cannot accept an outbound message yet (→ 422)."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)

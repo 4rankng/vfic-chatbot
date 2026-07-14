@@ -20,7 +20,10 @@ import {
 } from "ra-core";
 import type { Conversation, Message } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
-import { HumanReplyError } from "@/lib/vfic/humanReplyService";
+import {
+  HumanReplyError,
+  retryHumanReply,
+} from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
 import { useConversationMessages, useConversationFlags } from "./messageStore";
@@ -71,13 +74,22 @@ type ChatMessageRowProps = {
   kind: MessageKind;
   isGrouped: boolean;
   candidateAvatarUrl?: string | null;
+  isRetrying?: boolean;
+  onRetry?: (messageId: string) => void;
 };
 
 const deliveryStatusLabel = (status?: Message["delivery_status"]) => {
   if (status === "failed") return "Gửi lỗi";
+  if (status === "send_unknown") return "Chưa xác nhận gửi";
   if (status === "suppressed") return "Đã chặn";
   if (status === "sent") return "Đã gửi";
   return "";
+};
+
+const deliveryRetryLabel = (attempts?: number) => {
+  if (attempts == null || attempts <= 1) return "";
+  const retries = attempts - 1;
+  return `Đã thử lại ${retries} lần`;
 };
 
 const splitLongTextLine = (line: string) => {
@@ -131,7 +143,14 @@ const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 ChatItemList.displayName = "ChatItemList";
 
 const ChatMessageRow = memo(
-  ({ message: m, kind, isGrouped, candidateAvatarUrl }: ChatMessageRowProps) => {
+  ({
+    message: m,
+    kind,
+    isGrouped,
+    candidateAvatarUrl,
+    isRetrying = false,
+    onRetry,
+  }: ChatMessageRowProps) => {
     const textBlocks = useMemo(
       () => splitMessageTextBlocks(m.content),
       [m.content],
@@ -147,10 +166,7 @@ const ChatMessageRow = memo(
 
     if (kind === "event") {
       return (
-        <div
-          className="system-event"
-          data-message-id={m.id}
-        >
+        <div className="system-event" data-message-id={m.id}>
           <Sparkles className="icon" />
           <span>{m.content}</span>
         </div>
@@ -158,6 +174,11 @@ const ChatMessageRow = memo(
     }
 
     const deliveryLabel = deliveryStatusLabel(m.delivery_status);
+    const retryLabel = deliveryRetryLabel(m.delivery_attempts);
+    const canRetry =
+      kind === "agent" &&
+      m.delivery_status === "failed" &&
+      !m.id.startsWith("optimistic-");
     const avatar =
       kind === "user" ? (
         !isGrouped ? (
@@ -200,6 +221,19 @@ const ChatMessageRow = memo(
                 {deliveryLabel}
               </span>
             ) : null}
+            {kind !== "user" && retryLabel ? (
+              <span className="delivery-retry-count">{retryLabel}</span>
+            ) : null}
+            {canRetry ? (
+              <button
+                type="button"
+                className="delivery-retry-button"
+                disabled={isRetrying}
+                onClick={() => onRetry?.(m.id)}
+              >
+                {isRetrying ? "Đang thử lại…" : "Thử lại"}
+              </button>
+            ) : null}
             <span className="bubble-time-inline">
               {formatTime(m.created_at)}
             </span>
@@ -218,7 +252,9 @@ const ChatMessageRow = memo(
             {avatar}
             {bubble}
           </>
-        ) : bubble}
+        ) : (
+          bubble
+        )}
       </div>
     );
   },
@@ -255,14 +291,20 @@ export const ChatThread = ({
   const messages = useConversationMessages(conversationId);
   const { isLoading, isLoadingMore, hasMore, initialError, historyError } =
     useConversationFlags(conversationId);
-  const { loadMore, insertOptimistic, markOptimisticFailed, retryInitial, retryHistory } =
-    useConversationRealtime(conversationId);
+  const {
+    loadMore,
+    insertOptimistic,
+    markOptimisticFailed,
+    retryInitial,
+    retryHistory,
+  } = useConversationRealtime(conversationId);
   const dataProvider = useDataProvider<CrmDataProvider>();
   const { identity } = useGetIdentity();
   const notify = useNotify();
   const translate = useTranslate();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
 
   // Keep scroll state in refs so scroll handlers stay synchronous and avoid
   // triggering re-renders.
@@ -467,12 +509,37 @@ export const ChatThread = ({
         type: "error",
       });
       if (tempId) markOptimisticFailed(tempId);
-      setReply(sentText);
+      // A 502 means the API persisted a failed delivery command. Keep its
+      // bubble as the single retry target instead of placing duplicate text in
+      // the composer. Other failures did not establish that durable message.
+      if (!(err instanceof HumanReplyError && err.httpStatus === 502)) {
+        setReply(sentText);
+      }
     } finally {
       isSendingRef.current = false;
       setIsSending(false);
     }
   };
+
+  const handleRetryMessage = useCallback(
+    async (messageId: string) => {
+      if (messageId.startsWith("optimistic-") || retryingMessageId) return;
+      setRetryingMessageId(messageId);
+      try {
+        await retryHumanReply({ conversationId, messageId });
+      } catch (err: unknown) {
+        const status = err instanceof HumanReplyError ? err.status : "error";
+        notify(translate(`resources.conversations.reply.${status}`), {
+          type: "error",
+        });
+      } finally {
+        setRetryingMessageId((current) =>
+          current === messageId ? null : current,
+        );
+      }
+    },
+    [conversationId, notify, retryingMessageId, translate],
+  );
 
   // --- Render ---
 
@@ -489,10 +556,12 @@ export const ChatThread = ({
           kind={kind}
           isGrouped={isGrouped}
           candidateAvatarUrl={candidateAvatarUrl}
+          isRetrying={retryingMessageId === m.id}
+          onRetry={handleRetryMessage}
         />
       );
     },
-    [messages, candidateAvatarUrl],
+    [candidateAvatarUrl, handleRetryMessage, messages, retryingMessageId],
   );
 
   return (
@@ -535,15 +604,22 @@ export const ChatThread = ({
           {historyError && messages.length > 0 ? (
             <div className="chat-history-error" role="status">
               <span>Không tải được tin nhắn cũ hơn.</span>
-              <button type="button" onClick={() => retryHistory(messages[0].id)}>
+              <button
+                type="button"
+                onClick={() => retryHistory(messages[0].id)}
+              >
                 Thử lại
               </button>
             </div>
           ) : null}
           {messages.length === 0 && initialError ? (
             <div className="chat-empty chat-load-error" role="status">
-              <span>Không thể tải tin nhắn. Nội dung chưa được xác nhận là trống.</span>
-              <button type="button" onClick={retryInitial}>Thử lại</button>
+              <span>
+                Không thể tải tin nhắn. Nội dung chưa được xác nhận là trống.
+              </span>
+              <button type="button" onClick={retryInitial}>
+                Thử lại
+              </button>
             </div>
           ) : messages.length === 0 && isLoading ? (
             <LoadingState className="min-h-full" label="Đang tải tin nhắn…" />

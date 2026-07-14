@@ -21,7 +21,6 @@ from app.api import (
     performance,
     personas,
     projects,
-    realtime,
     users,
     webhooks,
 )
@@ -52,7 +51,7 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("startup seeder failed (non-fatal)")
 
-    # Register the two periodic ticks in rq-scheduler. Each is registered through
+    # Register the periodic ticks in rq-scheduler. Each is registered through
     # register_unique_tick so exactly ONE recurring job exists per tick — earlier
     # boots stacked random-id duplicates that over-fired both ticks ~12x.
     try:
@@ -60,6 +59,7 @@ async def lifespan(app: FastAPI):
 
         from app.core.redis import get_redis_sync
         from app.workers.followup_worker import run_proactive_followup_tick
+        from app.workers.outbound_dispatch_worker import run_outbound_dispatch_tick
         from app.workers.reconcile_worker import run_reconcile_tick
 
         sched = Scheduler(connection=get_redis_sync(), queue_name="followup")
@@ -79,6 +79,16 @@ async def lifespan(app: FastAPI):
             )
         except Exception:  # noqa: BLE001
             logger.exception("reconcile scheduler registration failed (non-fatal)")
+        try:
+            register_unique_tick(
+                sched, run_outbound_dispatch_tick, settings.reconcile_interval_seconds
+            )
+            logger.info(
+                "outbound dispatcher tick registered: interval=%ds",
+                settings.reconcile_interval_seconds,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("outbound dispatcher scheduler registration failed (non-fatal)")
     except Exception:  # noqa: BLE001
         logger.exception("rq-scheduler setup failed (non-fatal)")
 
@@ -118,7 +128,6 @@ app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
 app.include_router(performance.router, prefix=API_V1_PREFIX)
 app.include_router(integrations.router, prefix=API_V1_PREFIX)
-app.include_router(realtime.router, prefix="/realtime")
 app.include_router(webhooks.router)
 
 

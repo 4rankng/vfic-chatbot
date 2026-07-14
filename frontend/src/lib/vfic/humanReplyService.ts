@@ -17,6 +17,8 @@ export type HumanReplyStatus =
   | "unauthorized"
   | "forbidden"
   | "conflict"
+  | "unavailable"
+  | "provider"
   | "network"
   | "error";
 
@@ -29,6 +31,8 @@ export class HumanReplyError extends Error {
   constructor(
     public readonly status: HumanReplyStatus,
     message: string,
+    /** Present for HTTP failures; absent when the request never reached the API. */
+    public readonly httpStatus?: number,
   ) {
     super(message);
     this.name = "HumanReplyError";
@@ -39,7 +43,8 @@ const statusFor = (httpStatus: number): HumanReplyStatus => {
   if (httpStatus === 401) return "unauthorized";
   if (httpStatus === 403) return "forbidden";
   if (httpStatus === 409) return "conflict";
-  if (httpStatus >= 500) return "network";
+  if (httpStatus === 422) return "unavailable";
+  if (httpStatus >= 500) return "provider";
   return "error";
 };
 
@@ -63,8 +68,39 @@ export const sendHumanReply = async ({
       throw new HumanReplyError(
         statusFor(error.status),
         `Reply endpoint returned ${error.status}`,
+        error.status,
       );
     }
     throw new HumanReplyError("network", "Network error calling reply endpoint");
+  }
+};
+
+/**
+ * Optional forward-compatible hook for the durable-delivery retry action.
+ * The service intentionally treats the endpoint response as empty: the
+ * authoritative message state arrives through the existing REST/realtime
+ * message feed, so no speculative response contract is introduced here.
+ */
+export const retryHumanReply = async ({
+  conversationId,
+  messageId,
+}: {
+  conversationId: string;
+  messageId: string;
+}): Promise<void> => {
+  try {
+    await apiJson<void>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/retry`,
+      { method: "POST" },
+    );
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      throw new HumanReplyError(
+        statusFor(error.status),
+        `Reply retry endpoint returned ${error.status}`,
+        error.status,
+      );
+    }
+    throw new HumanReplyError("network", "Network error calling reply retry endpoint");
   }
 };

@@ -200,3 +200,12 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+    @property
+    def delivery_attempts(self) -> int:
+        """Best-known number of sends for this message's durable command.
+
+        The outbox owns this operational value. Repository and state code attach
+        it when available; inbound and legacy messages intentionally report 0.
+        """
+        return int(getattr(self, "_delivery_attempts", 0) or 0)

@@ -24,6 +24,7 @@ import logging
 import time
 import uuid
 from contextlib import suppress
+from inspect import iscoroutinefunction
 
 from app.core.config import get_settings
 from app.graph import fast_lane
@@ -63,22 +64,17 @@ def _zalo_for_conversation(deps: GraphDeps, conv):
     return deps.zalo
 
 
+def _channel_for_conversation(conv) -> str:
+    """Return the persisted delivery channel, never inferring it from a wrapper."""
+    return "zalo_oa" if getattr(conv, "zalo_channel", "bot") == "oa" else "zalo_bot"
+
+
 def _detect_channel(zalo) -> str:
-    """Infer the outbox channel name (``zalo_bot`` / ``zalo_oa``) from the sender.
-
-    Falls back to ``zalo_bot`` when the sender type is unrecognized (the Bot
-    Platform is the default). The outbox row records which Zalo API the send
-    targeted so the dispatcher/reconcile know which client to re-dispatch with.
-    """
-    cls_name = type(zalo).__name__
-    if "OA" in cls_name:
-        return "zalo_oa"
-    return "zalo_bot"
+    """Compatibility helper for legacy callers without a Conversation row."""
+    return "zalo_oa" if "OA" in type(zalo).__name__ else "zalo_bot"
 
 
-def _build_outbox_payload(
-    chat_id: str, text: str, quote_message_id: str | None
-) -> dict:
+def _build_outbox_payload(chat_id: str, text: str, quote_message_id: str | None) -> dict:
     """Build the Zalo send payload recorded in the outbox.
 
     Captures the exact body sent to Zalo so a re-dispatch (from the sweep) can
@@ -89,6 +85,29 @@ def _build_outbox_payload(
     if quote_message_id:
         payload["quote_message_id"] = quote_message_id
     return payload
+
+
+async def _dispatch_claimed_message(
+    svc,
+    zalo,
+    conv,
+    *,
+    message_id: int | None,
+    text: str,
+    quote_message_id: str | None,
+):
+    """Send an already-persisted command, retaining fake-port compatibility."""
+    dispatch = getattr(svc, "dispatch_outbound_message", None)
+    if callable(dispatch) and iscoroutinefunction(dispatch):
+        result = await dispatch(message_id=message_id)
+        if result is not None:
+            return result
+        from app.services.zalo_bot_service import SendResult
+
+        return SendResult(ok=False, error="outbound command was not available for dispatch")
+    if quote_message_id:
+        return await zalo.send_message(conv.zalo_chat_id, text, quote_message_id=quote_message_id)
+    return await zalo.send_message(conv.zalo_chat_id, text)
 
 
 def _stamp_end_to_end(state: BotRunState, timings: dict | None) -> None:
@@ -249,15 +268,19 @@ async def _finish_terminal_reply(
         lock_owner=lock_owner,
         pending_message_id=state.pending_message_id,
         reply=text,
+        outbox_channel=_channel_for_conversation(conv),
+        outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
     )
     send_result = None
     if owned:
-        if state.reply_to_message_id:
-            send_result = await zalo.send_message(
-                conv.zalo_chat_id, text, quote_message_id=state.reply_to_message_id
-            )
-        else:
-            send_result = await zalo.send_message(conv.zalo_chat_id, text)
+        send_result = await _dispatch_claimed_message(
+            svc,
+            zalo,
+            conv,
+            message_id=state.pending_message_id,
+            text=text,
+            quote_message_id=state.reply_to_message_id,
+        )
     _stamp_end_to_end(state, stage_timings)
     # Classify transport errors (same conservative logic as run_turn): a timeout
     # after the request may have reached Zalo → SEND_UNKNOWN (non-retriable), so
@@ -279,7 +302,7 @@ async def _finish_terminal_reply(
         lock_owner=lock_owner,
         trace_id=state.trace_id or None,
         delivery_status=_override,
-        outbox_channel=_detect_channel(zalo),
+        outbox_channel=_channel_for_conversation(conv),
         outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
     )
     if send_result is None or send_result.ok:
@@ -554,17 +577,23 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             lock_owner=lock_owner,
             pending_message_id=state.pending_message_id,
             reply=candidate,
+            outbox_channel=_channel_for_conversation(conv),
+            outbox_payload=_build_outbox_payload(
+                conv.zalo_chat_id, candidate, state.reply_to_message_id
+            ),
         )
         _stamp_db(timings, "claim_send", db_t0)
         if owned:
             await _cancel_status_task(status_task)
             send_t0 = time.monotonic()
-            if state.reply_to_message_id:
-                send_result = await zalo.send_message(
-                    conv.zalo_chat_id, candidate, quote_message_id=state.reply_to_message_id
-                )
-            else:
-                send_result = await zalo.send_message(conv.zalo_chat_id, candidate)
+            send_result = await _dispatch_claimed_message(
+                svc,
+                zalo,
+                conv,
+                message_id=state.pending_message_id,
+                text=candidate,
+                quote_message_id=state.reply_to_message_id,
+            )
             timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
             timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
             _stamp_end_to_end(state, timings)
@@ -590,8 +619,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 delivery_status=override_status,
                 trace_id=state.trace_id or None,
                 outcome_metadata=faq_metadata,
-                outbox_channel=_detect_channel(zalo),
-                outbox_payload=_build_outbox_payload(conv.zalo_chat_id, candidate, state.reply_to_message_id),
+                outbox_channel=_channel_for_conversation(conv),
+                outbox_payload=_build_outbox_payload(
+                    conv.zalo_chat_id, candidate, state.reply_to_message_id
+                ),
             )
             _stamp_db(timings, "record_bot_outcome", db_t0)
             if not send_result.ok:

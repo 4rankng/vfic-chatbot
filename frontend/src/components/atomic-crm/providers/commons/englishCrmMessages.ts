@@ -13,6 +13,9 @@ export const englishCrmMessages = {
         forbidden: "Your account is not allowed to send replies.",
         conflict:
           "Someone else has taken over this conversation. Take over before replying.",
+        unavailable:
+          "Zalo cannot accept a reply yet. Wait for the candidate to message again, then retry.",
+        provider: "Zalo did not accept the reply. You can retry it from the message bubble.",
         network: "Could not reach the reply service. Please try again.",
         error: "Failed to send the reply.",
       },

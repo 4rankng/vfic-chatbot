@@ -65,7 +65,7 @@ const findConfirmedOptimisticIds = (
     for (const tempId of pending) {
       if (matchedTempIds.has(tempId)) continue;
       const temp = conv.byId.get(tempId);
-      if (!temp || temp.delivery_status === "failed") continue;
+      if (!temp) continue;
       if (temp.content !== confirmed.content) continue;
       if (temp.type !== confirmed.type) continue;
       if (temp.data?.recruiter_id !== confirmed.data?.recruiter_id) continue;
@@ -289,7 +289,10 @@ export const useConversationRealtime = (conversationId?: string) => {
           newestId,
         );
         if (missed.length === 0) return;
-        for (const tempId of findConfirmedOptimisticIds(conversationId, missed)) {
+        for (const tempId of findConfirmedOptimisticIds(
+          conversationId,
+          missed,
+        )) {
           removeMessage(conversationId, tempId);
         }
         upsertMessages(conversationId, missed);
@@ -339,7 +342,10 @@ export const useConversationRealtime = (conversationId?: string) => {
         ) {
           return;
         }
-        const older = keepConversationMessages(loadedOlder, activeConversationId);
+        const older = keepConversationMessages(
+          loadedOlder,
+          activeConversationId,
+        );
         setHasMore(activeConversationId, apiHasMore);
         setHistoryError(activeConversationId, null);
         if (older.length > 0) {
@@ -352,7 +358,9 @@ export const useConversationRealtime = (conversationId?: string) => {
         ) {
           setHistoryError(
             activeConversationId,
-            error instanceof Error ? error.message : "Không tải được tin nhắn cũ.",
+            error instanceof Error
+              ? error.message
+              : "Không tải được tin nhắn cũ.",
           );
         }
       } finally {
@@ -368,7 +376,13 @@ export const useConversationRealtime = (conversationId?: string) => {
         }
       }
     },
-    [conversationId, setHasMore, setHistoryError, setLoadingMore, upsertMessages],
+    [
+      conversationId,
+      setHasMore,
+      setHistoryError,
+      setLoadingMore,
+      upsertMessages,
+    ],
   );
 
   // Insert an optimistic temp message. Returns the temp id.
@@ -394,24 +408,13 @@ export const useConversationRealtime = (conversationId?: string) => {
     [addPendingOptimistic, conversationId, upsertMessages],
   );
 
-  // Mark an optimistic message as failed (keep visible with failed badge).
+  // Mark an optimistic message as failed (keep visible with failed badge). It
+  // deliberately remains eligible for reconciliation: an HTTP failure can be
+  // returned after the server has already persisted and broadcast the message.
   const markOptimisticFailed = useCallback(
     (tempId: string) => {
       if (!conversationId) return;
       patchMessage(conversationId, tempId, { delivery_status: "failed" });
-      // No longer pending (it's now a failed real-visible row).
-      const pending = useMessageStore
-        .getState()
-        .pendingOptimistic.get(conversationId);
-      if (pending?.has(tempId)) {
-        const next = new Set(pending);
-        next.delete(tempId);
-        useMessageStore.setState((s) => {
-          const m = new Map(s.pendingOptimistic);
-          m.set(conversationId, next);
-          return { pendingOptimistic: m };
-        });
-      }
     },
     [conversationId, patchMessage],
   );

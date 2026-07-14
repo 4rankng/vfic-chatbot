@@ -35,14 +35,17 @@ const stubJson = (
   let url = "";
   let init: RequestInit | undefined;
   const fn = vi.fn(
-    async (input: RequestInfo | URL, requestInit?: RequestInit): Promise<Response> => {
-    url = typeof input === "string" ? input : (input as URL).toString();
-    init = requestInit;
-    return {
-      ok: true,
-      status: 200,
-      json: json as () => Promise<unknown>,
-    } as unknown as Response;
+    async (
+      input: RequestInfo | URL,
+      requestInit?: RequestInit,
+    ): Promise<Response> => {
+      url = typeof input === "string" ? input : (input as URL).toString();
+      init = requestInit;
+      return {
+        ok: true,
+        status: 200,
+        json: json as () => Promise<unknown>,
+      } as unknown as Response;
     },
   );
   return {
@@ -68,7 +71,7 @@ describe("chatRepository.getConversationMessages", () => {
     vi.restoreAllMocks();
   });
 
-  it("sorts API messages chronologically, maps sender->type, and flags hasMore on a full page", async () => {
+  it("sorts API messages chronologically, maps delivery attempts and sender->type, and flags hasMore on a full page", async () => {
     const { fetch } = stubJson(async () => ({
       // Guard against a scrambled page: visible time must move forward
       // top-to-bottom even when id order would put 02:15 before 01:22.
@@ -78,6 +81,7 @@ describe("chatRepository.getConversationMessages", () => {
           conversation_id: "c1",
           body: "b",
           sender: "BOT",
+          delivery_attempts: 3,
           created_at: "2026-06-29T02:15:00.000Z",
         },
         {
@@ -108,6 +112,7 @@ describe("chatRepository.getConversationMessages", () => {
     // Mapping: SYSTEM->system, BOT->outbound, WORKER->inbound.
     expect(messages[0].type).toBe("system"); // id2 SYSTEM (oldest)
     expect(messages[1].type).toBe("outbound"); // id1 BOT
+    expect(messages[1].delivery_attempts).toBe(3);
     expect(messages[2].type).toBe("inbound"); // id3 WORKER (newest)
     expect(hasMore).toBe(true); // full page (3 >= 3)
   });

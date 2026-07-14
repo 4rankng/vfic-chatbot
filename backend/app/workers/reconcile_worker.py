@@ -140,15 +140,15 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                 # buried) — a worker crash after the pre-send claim left them. A
                 # conv only becomes a candidate once its newest message is older
                 # than reconcile_grace_seconds, so any SENDING row here is past the
-                # RQ job timeout and definitively stale. At-most-once: assume
-                # delivered and do NOT re-enqueue (would duplicate). Resolving
-                # BEFORE reading newest means a formerly-SENDING newest becomes SENT
+                # RQ job timeout and definitively stale. At-most-once: preserve the
+                # ambiguous result and do NOT re-enqueue (would duplicate). Resolving
+                # BEFORE reading newest means a formerly-SENDING newest becomes SEND_UNKNOWN
                 # and naturally falls through to the release-and-continue path below.
                 resolved = await svc.state.resolve_unconfirmed_sending(conv_fresh.id)
                 if resolved:
                     unknown_send_outcome += resolved
                     logger.warning(
-                        "reconcile: resolved %d unconfirmed SENDING row(s) as sent "
+                        "reconcile: resolved %d unconfirmed SENDING row(s) as unknown "
                         "(at-most-once) conversation=%s",
                         resolved,
                         conv_fresh.zalo_chat_id,

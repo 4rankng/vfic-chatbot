@@ -10,15 +10,10 @@ transaction as the message write. The outbox row is the authoritative
   threshold; SEND_UNKNOWN rows are NEVER re-dispatched (Zalo may have accepted).
 - A unique constraint on message_id prevents double-enqueue.
 
-Conservative design — preserves the inline-send behavior:
-- ``runner.py`` still calls ``zalo.send_message`` inline (battle-tested, low
-  latency).
-- ``enqueue_outbox`` writes the row with the FINAL status (SENT / FAILED /
-  SEND_UNKNOWN / SUPPRESSED) in the same transaction as
-  ``record_bot_outcome``. The "PENDING→SENDING→SENT" progression happens
-  inline; the table records the outcome.
-- A sweep (``claim_stale_sending``) finds rows left in SENDING by a crash and
-  re-dispatches them. This is the safety net; the inline path is the norm.
+The runtime writes ``PENDING`` before every provider call, atomically claims it
+as ``SENDING``, then finalizes the same message/outbox pair.  A process crash
+leaves either PENDING (safe to dispatch later) or SENDING (terminally
+SEND_UNKNOWN; retrying could duplicate a candidate-visible message).
 """
 
 from __future__ import annotations
@@ -28,7 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.outbox import OutboxStatus, OutboundOutbox
@@ -44,6 +39,215 @@ class DispatchCandidate:
     message_id: int
     channel: str
     payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DispatchResult:
+    """One provider attempt for an already-persisted outbound command."""
+
+    outbox_id: int
+    message_id: int
+    ok: bool
+    zalo_message_id: str | None = None
+    error: str | None = None
+    error_class: str | None = None
+
+    @property
+    def msg_id(self) -> str | None:
+        """Match the sender result contract consumed by the graph pipeline."""
+        return self.zalo_message_id
+
+
+def build_outbox_payload(
+    chat_id: str, text: str, quote_message_id: str | None = None
+) -> dict[str, str]:
+    """Create the immutable provider payload stored with an outbound command."""
+    payload = {"chat_id": chat_id, "text": text}
+    if quote_message_id:
+        payload["quote_message_id"] = quote_message_id
+    return payload
+
+
+async def create_pending_outbox(
+    db: AsyncSession,
+    *,
+    message_id: int,
+    channel: str,
+    payload: dict[str, Any],
+) -> OutboundOutbox:
+    """Persist a command before provider I/O in the caller's transaction.
+
+    Unlike the legacy outcome recorder this deliberately does not swallow an
+    insert error: acknowledging a reply without its durable command would make
+    crash recovery impossible.
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    now = datetime.now(timezone.utc)
+    stmt = (
+        pg_insert(OutboundOutbox)
+        .values(
+            message_id=message_id,
+            channel=channel,
+            payload=payload,
+            status=OutboxStatus.PENDING.value,
+            updated_at=now,
+        )
+        .on_conflict_do_nothing(index_elements=["message_id"])
+        .returning(OutboundOutbox)
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is not None:
+        return row
+    existing = await db.scalar(
+        select(OutboundOutbox).where(OutboundOutbox.message_id == message_id)
+    )
+    if existing is None:
+        raise RuntimeError(f"failed to persist outbound command for message {message_id}")
+    return existing
+
+
+async def claim_pending_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchCandidate | None:
+    """Atomically claim a single PENDING command for one provider attempt."""
+    now = datetime.now(timezone.utc)
+    stmt = (
+        update(OutboundOutbox)
+        .where(
+            OutboundOutbox.id == outbox_id,
+            OutboundOutbox.status == OutboxStatus.PENDING.value,
+        )
+        .values(
+            status=OutboxStatus.SENDING.value,
+            attempts=OutboundOutbox.attempts + 1,
+            updated_at=now,
+        )
+        .returning(
+            OutboundOutbox.id,
+            OutboundOutbox.message_id,
+            OutboundOutbox.channel,
+            OutboundOutbox.payload,
+        )
+    )
+    row = (await db.execute(stmt)).one_or_none()
+    if row is None:
+        return None
+    return DispatchCandidate(
+        outbox_id=row.id,
+        message_id=row.message_id,
+        channel=row.channel,
+        payload=row.payload if isinstance(row.payload, dict) else {},
+    )
+
+
+async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult | None:
+    """Claim and send an immutable command; caller persists the final state."""
+    candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
+    if candidate is None:
+        return None
+    await db.commit()
+
+    from app.services.integration_settings import IntegrationSettingsService
+    from app.services.zalo_sender import ZaloChannelSender
+
+    integration_settings = IntegrationSettingsService(db)
+    cfg = await integration_settings.resolve_zalo()
+    sender = ZaloChannelSender(cfg, refresh=lambda: integration_settings.refresh_oa_access_token())
+    result = await sender.send_payload(candidate.channel, candidate.payload)
+    return DispatchResult(
+        outbox_id=candidate.outbox_id,
+        message_id=candidate.message_id,
+        ok=result.ok,
+        zalo_message_id=result.msg_id,
+        error=result.error,
+        error_class=result.error_class,
+    )
+
+
+async def dispatch_message_outbox(db: AsyncSession, *, message_id: int) -> DispatchResult | None:
+    """Dispatch the single durable command belonging to ``message_id``."""
+    outbox_id = await db.scalar(
+        select(OutboundOutbox.id).where(OutboundOutbox.message_id == message_id)
+    )
+    if outbox_id is None:
+        return None
+    return await dispatch_outbox(db, outbox_id=int(outbox_id))
+
+
+async def pending_outbox_ids(db: AsyncSession, *, limit: int = 25) -> list[int]:
+    """Return a bounded oldest-first batch for the dispatcher sweep."""
+    rows = (
+        await db.scalars(
+            select(OutboundOutbox.id)
+            .where(OutboundOutbox.status == OutboxStatus.PENDING.value)
+            .order_by(OutboundOutbox.created_at)
+            .limit(limit)
+        )
+    ).all()
+    return [int(row) for row in rows]
+
+
+async def stale_sending_outbox_ids(
+    db: AsyncSession, *, stale_after_seconds: int, limit: int = 25
+) -> list[int]:
+    """Return commands whose provider attempt ended without a persisted receipt.
+
+    They are terminally marked ``SEND_UNKNOWN`` by the dispatcher rather than
+    retried, because Zalo may already have accepted the original request.
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=stale_after_seconds)
+    rows = (
+        await db.scalars(
+            select(OutboundOutbox.id)
+            .where(
+                OutboundOutbox.status == OutboxStatus.SENDING.value,
+                OutboundOutbox.updated_at < threshold,
+            )
+            .order_by(OutboundOutbox.updated_at)
+            .limit(limit)
+        )
+    ).all()
+    return [int(row) for row in rows]
+
+
+async def claim_stale_sending_unknown(
+    db: AsyncSession, *, outbox_id: int, stale_after_seconds: int
+) -> DispatchCandidate | None:
+    """Atomically terminalize one still-stale command as ``SEND_UNKNOWN``.
+
+    The ID list used by a sweep is only a snapshot.  This conditional update is
+    therefore required before finalization: a live worker may have persisted
+    ``SENT`` after the snapshot, and the stale sweep must never overwrite it.
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=stale_after_seconds)
+    row = (
+        await db.execute(
+            update(OutboundOutbox)
+            .where(
+                OutboundOutbox.id == outbox_id,
+                OutboundOutbox.status == OutboxStatus.SENDING.value,
+                OutboundOutbox.updated_at < threshold,
+            )
+            .values(
+                status=OutboxStatus.SEND_UNKNOWN.value,
+                updated_at=datetime.now(timezone.utc),
+                last_error="outbound dispatch interrupted before receipt",
+            )
+            .returning(
+                OutboundOutbox.id,
+                OutboundOutbox.message_id,
+                OutboundOutbox.channel,
+                OutboundOutbox.payload,
+            )
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    return DispatchCandidate(
+        outbox_id=row.id,
+        message_id=row.message_id,
+        channel=row.channel,
+        payload=row.payload if isinstance(row.payload, dict) else {},
+    )
 
 
 async def enqueue_outbox(
@@ -159,8 +363,6 @@ async def mark_status(
 ) -> None:
     """Update an outbox row's status after a dispatch attempt."""
     try:
-        from sqlalchemy import update
-
         values: dict[str, Any] = {
             "status": status.value if isinstance(status, OutboxStatus) else status,
             "updated_at": datetime.now(timezone.utc),
@@ -172,14 +374,14 @@ async def mark_status(
                 values["zalo_message_id"] = zalo_message_id
         if last_error is not None:
             values["last_error"] = last_error[:500]
-        await db.execute(update(OutboundOutbox).where(OutboundOutbox.id == outbox_id).values(**values))
+        await db.execute(
+            update(OutboundOutbox).where(OutboundOutbox.id == outbox_id).values(**values)
+        )
     except Exception:  # noqa: BLE001
         logger.warning("outbox mark_status failed for id=%s", outbox_id, exc_info=True)
 
 
-async def count_by_status(
-    db: AsyncSession, *, since: datetime
-) -> dict[str, int]:
+async def count_by_status(db: AsyncSession, *, since: datetime) -> dict[str, int]:
     """Count outbox rows by status since ``since`` (for the duplicate-outbound SLO)."""
     try:
         rows = (

@@ -8,6 +8,7 @@ Reads live in ``repository.py``; realtime publishing in ``events.py``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -101,6 +102,35 @@ async def _fetch_owner_name(db, conv: Conversation) -> str | None:
         select(UserModel.full_name).where(UserModel.id == conv.assigned_recruiter_id)
     )
     return owner_row or None
+
+
+def _schedule_realtime(events, msg, conv) -> None:
+    """Fire-and-forget the post-commit realtime publishes for a new message.
+
+    Realtime is best-effort by contract (``publish_event`` swallows all errors),
+    so deferring the two emits onto a background task is semantics-preserving
+    for the caller: the message is already committed, and a swallowed publish
+    failure behaves identically whether awaited or not. Scheduling off the
+    calling coroutine keeps the realtime fan-out off the webhook-ack / ``db_ms``
+    hot path — ``record_bot_pending`` sits between the webhook preamble and LLM
+    inference, so an inline await there charged Redis+Socket.IO latency to the
+    "database" dashboard tile (production db_ms p95 of 2.4s traced to this emit,
+    not to DB I/O). Matches the fire-and-forget pattern already used in
+    ``webhook.py`` and ``password_reset_service.py``.
+
+    The task is created but never awaited by the caller. If no running loop is
+    present (a sync test path), the emits are skipped rather than raising.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    async def _emit() -> None:
+        await events.message_created(msg, conv)
+        await events.conversation_updated(conv)
+
+    loop.create_task(_emit())
 
 
 class ConversationState:
@@ -335,6 +365,8 @@ class ConversationState:
         lock_owner: uuid.UUID | str | None,
         pending_message_id: int | None,
         reply: str,
+        outbox_channel: str | None = None,
+        outbox_payload: dict | None = None,
     ) -> bool:
         """Atomically claim the outbound send: flip the pending BOT row
         PENDING→SENDING (and stamp the real ``reply`` onto it) only if the
@@ -392,6 +424,15 @@ class ConversationState:
                 "reply": reply,
             },
         )
+        if res.rowcount == 1 and outbox_channel is not None and outbox_payload is not None:
+            from app.services.outbox_service import create_pending_outbox
+
+            await create_pending_outbox(
+                self.db,
+                message_id=pending_message_id,
+                channel=outbox_channel,
+                payload=outbox_payload,
+            )
         await self.db.commit()
         return res.rowcount == 1
 
@@ -521,6 +562,7 @@ class ConversationState:
         # Transactional outbox (Tech-Lead Directive §14): record the dispatch
         # outcome in the same transaction as the message. Best-effort — outbox
         # failures never block the turn (logged in outbox_service).
+        outbox_attempts = 0
         if outbox_channel is not None and outbox_payload is not None and msg.id is not None:
             from app.models.outbox import OutboxStatus
             from app.services.outbox_service import enqueue_outbox
@@ -534,7 +576,7 @@ class ConversationState:
                 if delivery_status == DeliveryStatus.FAILED
                 else OutboxStatus.SUPPRESSED
             )
-            await enqueue_outbox(
+            outbox = await enqueue_outbox(
                 self.db,
                 message_id=msg.id,
                 channel=outbox_channel,
@@ -543,8 +585,11 @@ class ConversationState:
                 zalo_message_id=zalo_message_id,
                 last_error=external_error,
             )
+            if outbox is not None:
+                outbox_attempts = int(outbox.attempts or 0)
         await self.db.commit()
         await self.db.refresh(msg)
+        msg._delivery_attempts = outbox_attempts
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
         return msg
@@ -565,8 +610,11 @@ class ConversationState:
         self.db.add(msg)
         await self.db.commit()
         await self.db.refresh(msg)
-        await self.events.message_created(msg, conv)
-        await self.events.conversation_updated(conv)
+        # Realtime fan-out is deferred (fire-and-forget) rather than awaited:
+        # this method sits on the webhook hot path between preamble and LLM
+        # inference, and an inline await here charged the Redis+Socket.IO
+        # round-trips to the ``db_ms`` dashboard tile in production.
+        _schedule_realtime(self.events, msg, conv)
         return msg
 
     async def mark_stale_pending_failed(self, conv_id: uuid.UUID) -> int:
@@ -591,15 +639,12 @@ class ConversationState:
         return res.rowcount
 
     async def resolve_unconfirmed_sending(self, conv_id: uuid.UUID) -> int:
-        """Flip a stuck BOT/SENDING row → SENT for a conversation whose send is
-        unconfirmed (worker crashed after the Zalo POST, before recording SENT).
+        """Resolve a stale BOT/SENDING row as ``SEND_UNKNOWN``.
 
-        At-most-once: assume the attempted send was delivered rather than risk a
-        duplicate by re-sending. There is at most one in-flight SENDING row per
-        conversation (the per-chat lock serializes turns). Returns rows updated.
-        ``last_outbound_at`` is stamped so the conversation's attention state is
-        coherent with "treat this as a completed send"; the reconcile counter +
-        WARN log are the observability surface for these rare events.
+        A worker crash can happen either before or after Zalo accepts the POST.
+        Retrying might duplicate the candidate-visible message, while declaring it
+        sent would be false when the crash happened before the POST.  The terminal
+        unknown state preserves that distinction and is never automatically retried.
         """
         res = await self.db.execute(
             update(Message)
@@ -608,14 +653,25 @@ class ConversationState:
                 Message.sender == MessageSender.BOT,
                 Message.delivery_status == DeliveryStatus.SENDING,
             )
-            .values(delivery_status=DeliveryStatus.SENT)
+            .values(delivery_status=DeliveryStatus.SEND_UNKNOWN)
             .execution_options(synchronize_session=False)
         )
         if res.rowcount:
+            from app.models.outbox import OutboxStatus, OutboundOutbox
+
             await self.db.execute(
-                update(Conversation)
-                .where(Conversation.id == conv_id)
-                .values(last_outbound_at=utcnow())
+                update(OutboundOutbox)
+                .where(
+                    OutboundOutbox.message_id.in_(
+                        select(Message.id).where(
+                            Message.conversation_id == conv_id,
+                            Message.sender == MessageSender.BOT,
+                            Message.delivery_status == DeliveryStatus.SEND_UNKNOWN,
+                        )
+                    ),
+                    OutboundOutbox.status == OutboxStatus.SENDING.value,
+                )
+                .values(status=OutboxStatus.SEND_UNKNOWN.value, updated_at=utcnow())
                 .execution_options(synchronize_session=False)
             )
         await self.db.commit()
@@ -630,6 +686,9 @@ class ConversationState:
         message: str,
         result: SendResult,
         lock_owner: uuid.UUID | str | None = None,
+        pending_message_id: int | None = None,
+        outbox_channel: str | None = None,
+        outbox_payload: dict | None = None,
     ) -> Message:
         """Persist a proactive BOT message (no BotRun). Handles success/failure + cadence.
 
@@ -638,15 +697,28 @@ class ConversationState:
         ``last_followup_attempt_at`` only (cadence budget is NOT consumed).
         Always clears the lock and fires realtime events.
         """
-        msg = Message(
-            conversation_id=conv.id,
-            sender=MessageSender.BOT,
-            body=message,
-            delivery_status=DeliveryStatus.SENT if result.ok else DeliveryStatus.FAILED,
-            zalo_message_id=result.msg_id,
-            external_error=None if result.ok else result.error,
-        )
-        self.db.add(msg)
+        delivery_status = DeliveryStatus.SENT if result.ok else DeliveryStatus.FAILED
+        msg = await self.db.get(Message, pending_message_id) if pending_message_id else None
+        if (
+            msg is None
+            or msg.conversation_id != conv.id
+            or msg.sender != MessageSender.BOT
+            or msg.delivery_status not in (DeliveryStatus.PENDING, DeliveryStatus.SENDING)
+        ):
+            msg = Message(
+                conversation_id=conv.id,
+                sender=MessageSender.BOT,
+                body=message,
+                delivery_status=delivery_status,
+                zalo_message_id=result.msg_id,
+                external_error=None if result.ok else result.error,
+            )
+            self.db.add(msg)
+        else:
+            msg.body = message
+            msg.delivery_status = delivery_status
+            msg.zalo_message_id = result.msg_id
+            msg.external_error = None if result.ok else result.error
         owner = _normalize_lock_owner(lock_owner)
         if owner is None:
             conv.bot_locked_until = None
@@ -675,10 +747,56 @@ class ConversationState:
             conv.conversation_seq += 1
         else:
             conv.last_followup_attempt_at = utcnow()
+        if outbox_channel is not None and outbox_payload is not None and msg.id is not None:
+            from app.models.outbox import OutboxStatus
+            from app.services.outbox_service import enqueue_outbox
+
+            outbox = await enqueue_outbox(
+                self.db,
+                message_id=msg.id,
+                channel=outbox_channel,
+                payload=outbox_payload,
+                status=OutboxStatus.SENT if result.ok else OutboxStatus.FAILED,
+                zalo_message_id=result.msg_id,
+                last_error=None if result.ok else result.error,
+            )
+            if outbox is not None:
+                msg._delivery_attempts = outbox.attempts
         await self.db.commit()
         await self.db.refresh(msg)
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
+        return msg
+
+    async def prepare_proactive_message(
+        self,
+        conv: Conversation,
+        *,
+        body: str,
+        channel: str,
+        payload: dict,
+    ) -> Message:
+        """Commit a proactive BOT message and command before provider I/O."""
+        from app.services.outbox_service import create_pending_outbox
+
+        msg = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.BOT,
+            body=body,
+            delivery_status=DeliveryStatus.PENDING,
+        )
+        self.db.add(msg)
+        await self.db.flush()
+        await create_pending_outbox(
+            self.db,
+            message_id=msg.id,
+            channel=channel,
+            payload=payload,
+        )
+        await self.db.commit()
+        await self.db.refresh(msg)
+        msg._delivery_attempts = 0
+        await self.events.message_created(msg, conv)
         return msg
 
     # --- recruiter-side state transitions ---
@@ -955,6 +1073,177 @@ class ConversationState:
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
         return msg
+
+    async def prepare_recruiter_message(
+        self,
+        conv: Conversation,
+        recruiter: User,
+        *,
+        body: str,
+        channel: str,
+        payload: dict,
+    ) -> tuple[Message, int]:
+        """Commit one recruiter message and its PENDING command before sending.
+
+        A retry reuses this message/outbox pair; this method is intentionally
+        called only for a new human reply, never for a provider retry.
+        """
+        from app.services.outbox_service import create_pending_outbox
+
+        msg = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.RECRUITER,
+            recruiter_id=recruiter.id,
+            body=body,
+            delivery_status=DeliveryStatus.PENDING,
+        )
+        self.db.add(msg)
+        await self.db.flush()
+        outbox = await create_pending_outbox(
+            self.db,
+            message_id=msg.id,
+            channel=channel,
+            payload=payload,
+        )
+        conv.taken_over_at = utcnow()
+        conv.version += 1
+        conv.conversation_seq += 1
+        await record_audit(
+            self.db,
+            action="send_recruiter_message",
+            actor_id=recruiter.id,
+            target_type="conversation",
+            target_id=str(conv.id),
+            payload={"message_id": msg.id, "delivered": False},
+        )
+        await self.db.commit()
+        await self.db.refresh(msg)
+        msg._delivery_attempts = 0
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
+        return msg, outbox.id
+
+    async def finalize_recruiter_delivery(
+        self,
+        conv: Conversation,
+        *,
+        message_id: int,
+        outbox_id: int,
+        delivered: bool,
+        zalo_message_id: str | None = None,
+        external_error: str | None = None,
+        error_class: str | None = None,
+    ) -> Message:
+        """Finalize one persisted recruiter command without creating a bubble."""
+        from app.graph.send_classification import delivery_status_for_send_error
+        from app.models.outbox import OutboxStatus, OutboundOutbox
+
+        msg = await self.db.get(Message, message_id)
+        outbox = await self.db.get(OutboundOutbox, outbox_id)
+        if msg is None or msg.conversation_id != conv.id or outbox is None:
+            raise RuntimeError("outbound message disappeared before delivery finalization")
+        delivery_status = delivery_status_for_send_error(error_class, ok=delivered)
+        if delivery_status is None:
+            delivery_status = DeliveryStatus.SENT if delivered else DeliveryStatus.FAILED
+        msg.delivery_status = delivery_status
+        msg.zalo_message_id = zalo_message_id
+        msg.external_error = None if delivered else external_error
+        outbox.status = (
+            OutboxStatus.SENT.value
+            if delivered
+            else OutboxStatus.SEND_UNKNOWN.value
+            if delivery_status == DeliveryStatus.SEND_UNKNOWN
+            else OutboxStatus.FAILED.value
+        )
+        outbox.zalo_message_id = zalo_message_id
+        outbox.last_error = None if delivered else external_error
+        outbox.updated_at = utcnow()
+        if delivered:
+            outbox.sent_at = utcnow()
+            conv.last_outbound_at = utcnow()
+        await self.db.commit()
+        await self.db.refresh(msg)
+        msg._delivery_attempts = outbox.attempts
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
+        return msg
+
+    async def finalize_outbound_dispatch(
+        self,
+        conv: Conversation,
+        *,
+        message_id: int,
+        outbox_id: int,
+        delivered: bool,
+        zalo_message_id: str | None = None,
+        external_error: str | None = None,
+        error_class: str | None = None,
+    ) -> Message:
+        """Finalize a recovered command for any outbound sender without a new row."""
+        from app.graph.send_classification import delivery_status_for_send_error
+        from app.models.outbox import OutboxStatus, OutboundOutbox
+
+        msg = await self.db.get(Message, message_id)
+        outbox = await self.db.get(OutboundOutbox, outbox_id)
+        if msg is None or msg.conversation_id != conv.id or outbox is None:
+            raise RuntimeError("outbound message disappeared before dispatch finalization")
+        delivery_status = delivery_status_for_send_error(error_class, ok=delivered)
+        if delivery_status is None:
+            delivery_status = DeliveryStatus.SENT if delivered else DeliveryStatus.FAILED
+        msg.delivery_status = delivery_status
+        msg.zalo_message_id = zalo_message_id
+        msg.external_error = None if delivered else external_error
+        outbox.status = (
+            OutboxStatus.SENT.value
+            if delivered
+            else OutboxStatus.SEND_UNKNOWN.value
+            if delivery_status == DeliveryStatus.SEND_UNKNOWN
+            else OutboxStatus.FAILED.value
+        )
+        outbox.zalo_message_id = zalo_message_id
+        outbox.last_error = None if delivered else external_error
+        outbox.updated_at = utcnow()
+        if delivered:
+            outbox.sent_at = utcnow()
+            conv.last_outbound_at = utcnow()
+        if msg.sender == MessageSender.BOT:
+            conv.bot_locked_until = None
+            conv.bot_lock_owner = None
+            conv.bot_lock_heartbeat_at = None
+        await self.db.commit()
+        await self.db.refresh(msg)
+        msg._delivery_attempts = outbox.attempts
+        await self.events.message_created(msg, conv)
+        await self.events.conversation_updated(conv)
+        return msg
+
+    async def retry_recruiter_message(self, conv: Conversation, *, message_id: int) -> int | None:
+        """Make an existing definite failure dispatchable again, without a new message."""
+        from app.models.outbox import OutboxStatus, OutboundOutbox
+
+        msg = await self.db.get(Message, message_id)
+        if (
+            msg is None
+            or msg.conversation_id != conv.id
+            or msg.sender != MessageSender.RECRUITER
+            or msg.delivery_status != DeliveryStatus.FAILED
+        ):
+            return None
+        outbox = await self.db.scalar(
+            select(OutboundOutbox).where(OutboundOutbox.message_id == message_id)
+        )
+        if outbox is None or outbox.status != OutboxStatus.FAILED.value:
+            return None
+        outbox.status = OutboxStatus.PENDING.value
+        outbox.last_error = None
+        outbox.updated_at = utcnow()
+        msg.delivery_status = DeliveryStatus.PENDING
+        msg.external_error = None
+        await self.db.commit()
+        await self.db.refresh(msg)
+        msg._delivery_attempts = outbox.attempts
+        await self.events.message_created(msg, conv)
+        return outbox.id
 
     # --- OA webhook side events (receipts / lifecycle / interaction signals) ---
 
