@@ -248,6 +248,27 @@ class Settings(BaseSettings):
     # personalized, non-scoped search_knowledge lookups. Off by default — enable
     # after confirming no cross-topic false-positive coalescing on the gold set.
     singleflight_enabled: bool = False
+    # ── P3-2 retrieval tuning (Tech-Lead Directive §12 + §16 P3) ──
+    # RRF fusion weights + rerank conditionality. Defaults are starting points;
+    # P3-2's benchmark harness (scripts/eval_retrieval.py) measures quality at
+    # each config and picks the winner against the golden dataset (P3-1).
+    # RRF rank constant: higher favors top ranks from each arm.
+    rag_lexical_weight: float = 1.0  # multiplier on lexical arm rank in fusion
+    rag_vector_weight: float = 1.0  # multiplier on vector arm rank in fusion
+    # Conditional reranking (directive §12): skip the reranker when the candidate
+    # set is unambiguous.Off by default; the score-blend reranker stays disabled
+    # (rag_rerank_enabled above) until P3-2 demonstrates a precision lift.
+    rag_rerank_conditional: bool = True
+    rag_rerank_skip_on_single_match: bool = True  # skip when only 1 candidate
+    rag_rerank_skip_on_exact_id: bool = True  # skip when an exact job code / route matched
+    # ── P3-3 release gates (Tech-Lead Directive §16 P3) ──
+    # Toggle whether the deploy pipeline blocks on SLO regressions. The CI job
+    # runs the golden dataset + a short load-test; these flags gate its verdict.
+    release_gate_correctness_enabled: bool = True
+    release_gate_latency_slo_enabled: bool = True
+    # Per-SLO deploy-blocking thresholds (matched against /admin/performance/slos).
+    release_gate_full_answer_p95_ms: int = 4000
+    release_gate_error_rate_pct: float = 1.0
     # Active-status signal (Priority #1 — the psychological bridge). typing_heartbeat_seconds
     # pulses send_chat_action("typing") (real on the Bot channel; a logged no-op on OA).
     typing_heartbeat_seconds: float = 3.5

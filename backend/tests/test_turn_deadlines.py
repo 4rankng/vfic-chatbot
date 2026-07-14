@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.graph.deadlines import TurnDeadline
+from app.services.chatbot.deadlines import TurnDeadline
 
 
 # ─── TurnDeadline primitive ──────────────────────────────────────────────────

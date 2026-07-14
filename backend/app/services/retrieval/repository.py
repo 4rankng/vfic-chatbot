@@ -300,7 +300,7 @@ class RetrievalRepository:
         not sum. If the vector arm raises or exceeds its budget, the turn degrades
         gracefully to lexical-only (the directive's "if vector search times out, use
         lexical + structured results"). ``deadline`` is an optional
-        ``app.graph.deadlines.TurnDeadline``; when None (tests / legacy callers) the
+        ``app.services.chatbot.deadlines.TurnDeadline``; when None (tests / legacy callers) the
         arms run unbounded, matching pre-existing behaviour.
 
         Degradation is observable: the caller can read ``self.last_match_degraded``

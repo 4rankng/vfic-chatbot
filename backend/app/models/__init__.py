@@ -31,6 +31,24 @@ from app.models.conversation import (
     MessageSender,
 )
 from app.models.outbox import OutboxStatus, OutboundOutbox
+from app.models.provenance import (
+    DocumentStatus,
+    ExtractionRun,
+    ExtractionRunStatus,
+    FaqEntry,
+    FaqResolutionType,
+    FieldEvidence,
+    JobBenefit,
+    JobLocation,
+    JobRequirement,
+    JobShift,
+    KnowledgeScope,
+    PublishedStatus,
+    SourceDocument,
+    SourceFragment,
+    WorkingHours,
+    WorkingHoursException,
+)
 from app.models.user import Role, User
 
 __all__ = [
@@ -69,4 +87,20 @@ __all__ = [
     "BotRunOutcome",
     "OutboundOutbox",
     "OutboxStatus",
+    "SourceDocument",
+    "SourceFragment",
+    "ExtractionRun",
+    "FieldEvidence",
+    "DocumentStatus",
+    "ExtractionRunStatus",
+    "FaqEntry",
+    "FaqResolutionType",
+    "JobBenefit",
+    "JobLocation",
+    "JobRequirement",
+    "JobShift",
+    "KnowledgeScope",
+    "PublishedStatus",
+    "WorkingHours",
+    "WorkingHoursException",
 ]

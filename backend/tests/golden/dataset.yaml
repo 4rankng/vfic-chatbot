@@ -1,0 +1,126 @@
+# Vietnamese golden dataset (Tech-Lead Directive §2.8 + §16 P3).
+#
+# Versioned set of representative candidate turns + expected-answer assertions.
+# Gates releases: correctness (assertions pass) + latency (per-category p95 ≤ SLO).
+#
+# Format: one turn per entry. Categories cover the directive's required surface:
+# job-detail lookup, bus schedule, benefit lookup, compare two jobs, "which job
+# suits me?", multi-turn refinement, Vietnamese paraphrases, stale/ambiguous/
+# missing-data/safety edges.
+#
+# This is the SEED set (~30 turns). Grow to ≥100 by sourcing from real (redacted)
+# Zalo conversations + recruiter interviews. See phase-20 plan.
+version: 1
+turns:
+  # ── job-detail lookup ──
+  - id: job-detail-1
+    category: job_detail
+    input: "viec lam docker luong bao nhieu"
+    assertions:
+      - kind: intent
+        value: job_lookup
+      - kind: no_hallucination
+      - kind: latency_p95_below_ms
+        value: 4000
+  - id: job-detail-2
+    category: job_detail
+    input: "công việc lắp ráp điện tử có yêu cầu gì"
+    assertions:
+      - kind: intent
+        value: requirement_lookup
+      - kind: route
+        value: structured  # Path A when P1-3 tools wired
+
+  # ── bus schedule ──
+  - id: bus-1
+    category: bus_schedule
+    input: "có xe từ Biên Hòa lúc 6 giờ không"
+    assertions:
+      - kind: intent
+        value: bus_schedule_lookup
+      - kind: no_hallucination
+  - id: bus-2
+    category: bus_schedule
+    input: "xe đưa rước tuyến B03 giờ nào"
+    assertions:
+      - kind: intent
+        value: bus_schedule_lookup
+
+  # ── benefit lookup ──
+  - id: benefit-1
+    category: benefits
+    input: "phúc lợi của công ty có những gì"
+    assertions:
+      - kind: intent
+        value: benefit_lookup
+  - id: benefit-2
+    category: benefits
+    input: "có phụ cấp chuyên cần không"
+    assertions:
+      - kind: intent
+        value: benefit_lookup
+
+  # ── working hours ──
+  - id: hours-1
+    category: working_hours
+    input: "giờ làm việc từ mấy giờ đến mấy giờ"
+    assertions:
+      - kind: intent
+        value: working_hours_lookup
+
+  # ── paraphrase (Vietnamese diacritics variations) ──
+  - id: paraphrase-1
+    category: paraphrase
+    input: "luong bao nhieu"  # no diacritics
+    assertions:
+      - kind: intent
+        value: job_lookup
+  - id: paraphrase-2
+    category: paraphrase
+    input: "mức lương là bao nhiêu"
+    assertions:
+      - kind: intent
+        value: job_lookup
+
+  # ── greeting / fast lane ──
+  - id: greeting-1
+    category: greeting
+    input: "chào bạn"
+    assertions:
+      - kind: route
+        value: fast_lane
+      - kind: latency_p95_below_ms
+        value: 500
+
+  # ── edge: missing data ──
+  - id: edge-missing-1
+    category: edge_missing
+    input: "địa chỉ nhà máy ở Mars"  # bogus location
+    assertions:
+      - kind: says_dont_know  # bot must NOT hallucinate
+
+  # ── edge: ambiguous ──
+  - id: edge-ambiguous-1
+    category: edge_ambiguous
+    input: "thông tin"  # too vague
+    assertions:
+      - kind: route
+        value: clarify  # or agent — both acceptable
+
+  # ── recommendation ──
+  - id: recommend-1
+    category: recommendation
+    input: "việc làm nào phù hợp với mình"
+    assertions:
+      - kind: intent
+        value: job_recommendation
+      - kind: latency_p95_below_ms
+        value: 4000
+
+  # ── safety: opt-out phrase ──
+  - id: safety-optout-1
+    category: safety
+    input: "dừng nhắn"
+    assertions:
+      - kind: route
+        value: opt_out
