@@ -39,6 +39,7 @@ _RECOMMEND_STOPWORDS = {
     "con",
     "cua",
     "duoc",
+    "dung",
     "em",
     "goi",
     "hoi",
@@ -49,6 +50,7 @@ _RECOMMEND_STOPWORDS = {
     "muon",
     "nao",
     "toi",
+    "tuyen",
     "ung",
     "viec",
     "voi",
@@ -420,24 +422,35 @@ async def recommend_projects(
         return "Hiện chưa có dự án/sản phẩm nào đang hoạt động để gợi ý."
 
     terms = _recommend_terms(query)
+    if not terms:
+        return "Bạn cho tôi biết vị trí hoặc khu vực mong muốn để gợi ý dự án phù hợp."
     scored: list[tuple[float, list[str], object]] = []
     for row in rows:
         haystack, roles, location = _project_haystack(row)
-        matched = [term for term in terms if term in haystack]
+        haystack_tokens = set(haystack.split())
+        matched = [term for term in terms if term in haystack_tokens]
         score = len(matched) / max(len(terms), 1)
         reasons: list[str] = []
         if matched:
             reasons.append("khớp nhu cầu: " + ", ".join(matched[:5]))
-        if location and any(term in normalize_vietnamese_text(location) for term in terms):
+        location_tokens = set(normalize_vietnamese_text(location).split())
+        if location and any(term in location_tokens for term in terms):
             reasons.append(f"địa điểm: {location}")
         role_hits = [
-            role for role in roles if any(term in normalize_vietnamese_text(role) for term in terms)
+            role
+            for role in roles
+            if any(term in set(normalize_vietnamese_text(role).split()) for term in terms)
         ]
         if role_hits:
             reasons.append("vị trí: " + ", ".join(role_hits[:3]))
-        if not reasons:
-            reasons.append("dự án đang hoạt động trong danh mục VFIC")
-        scored.append((score, reasons, row))
+        if score > 0:
+            scored.append((score, reasons, row))
+
+    if not scored:
+        return (
+            "Không có dự án trong danh mục phù hợp với yêu cầu này. "
+            "Danh mục dự án không phải bằng chứng rằng vị trí đang tuyển."
+        )
 
     scored.sort(key=lambda item: (-item[0], str(getattr(item[2], "name", ""))))
     lines = [
@@ -451,8 +464,7 @@ async def recommend_projects(
         if summary:
             line += f": {summary}"
         line += f"; lý do: {'; '.join(reasons)}"
-        if score > 0:
-            line += f"; điểm khớp: {score:.2f}"
+        line += f"; điểm khớp: {score:.2f}"
         lines.append(line)
     lines.append(
         "Sau khi chọn dự án/slug phù hợp, gọi get_product_features(project_slug) "
@@ -572,22 +584,29 @@ async def recommend_jobs(
     # by the memory:{chat_id} version (bumped on profile/memory writes). The TTL
     # is a safety net; the version key keeps recommendations fresh after updates.
     memory_version = await cache_version(f"memory:{chat_id}") if s.rag_cache_enabled else "0"
-    cache_key = f"rag:recommend_jobs:{_cache_digest(chat_id, k, province, memory_version)}"
+    jobs_version = await cache_version("jobs") if s.rag_cache_enabled else "0"
+    cache_key = f"rag:recommend_jobs:v3:{_cache_digest(chat_id, k, province, memory_version, jobs_version)}"
     if s.rag_cache_enabled:
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
             return cached
     try:
-        scored = await retrieval.match_jobs_for_lead(chat_id, top_k=k, province=province)
+        recommendation = await retrieval.recommend_jobs_for_lead(
+            chat_id, top_k=k, province=province
+        )
     except Exception:
         logger.warning("recommend_jobs failed for chat_id=%s", chat_id, exc_info=True)
-        scored = []
+        recommendation = None
+    if recommendation is None or getattr(recommendation, "status", "") == "unavailable":
+        return "Hiện chưa thể tra cứu việc làm phù hợp. Bạn vui lòng thử lại sau nhé."
+    status = getattr(recommendation, "status", "")
+    if status == "insufficient_profile":
+        return "Chưa đủ thông tin hồ sơ để gợi ý việc phù hợp. Bạn cho tôi biết vị trí hoặc khu vực mong muốn nhé."
+    if status == "no_match":
+        return "Hiện chưa có việc làm ACTIVE phù hợp với hồ sơ này."
+    scored = tuple(getattr(recommendation, "jobs", ()) or ())
     if not scored:
-        return (
-            "Chưa có thông tin hồ sơ (lương mong muốn, khu vực, vị trí) để gợi ý việc "
-            "phù hợp, hoặc chưa có việc làm ACTIVE khớp. Hãy hỏi ứng viên thêm về khu "
-            "vực / lương mong muốn, hoặc dùng recommend_projects để gợi ý theo dự án."
-        )
+        return "Hiện chưa thể tra cứu việc làm phù hợp. Bạn vui lòng thử lại sau nhé."
     lines = ["GỢI Ý VIỆC LÀM PHÙ HỢP (dựa trên hồ sơ ứng viên):"]
     for item in scored:
         job = item.job

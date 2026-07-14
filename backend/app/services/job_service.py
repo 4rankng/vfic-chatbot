@@ -7,6 +7,7 @@ from typing import Awaitable, Callable
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import bump_cache_version
 from app.core.vector import vec_literal
 from app.models.job import Job, JobStatus
 from app.services.retrieval import RetrievalRepository
@@ -39,6 +40,7 @@ class JobService:
         job = Job(**data)
         self.db.add(job)
         await self.db.commit()
+        await bump_cache_version("jobs")
         await self.db.refresh(job)
         return job
 
@@ -47,6 +49,7 @@ class JobService:
             if hasattr(job, k):
                 setattr(job, k, v)
         await self.db.commit()
+        await bump_cache_version("jobs")
         await self.db.refresh(job)
         return job
 

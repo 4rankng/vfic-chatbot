@@ -108,7 +108,7 @@ class _FakeSafety:
         return self._raw
 
 
-def _stub_svc(*, conv=None, owned: bool = True):
+def _stub_svc(*, conv=None, owned: bool = True, messages: list | None = None):
     """Build a stub ConversationPort; return ``(svc, recorded_outcomes)``."""
     recorded: list[dict] = []
 
@@ -117,7 +117,7 @@ def _stub_svc(*, conv=None, owned: bool = True):
             return conv
 
         async def last_messages(self, c, limit):
-            return []
+            return messages or []
 
         async def record_bot_pending(self, c):
             return SimpleNamespace(id=777)
@@ -214,6 +214,181 @@ async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
     assert persisted == [
         {"chat_id": "z1", "user_text": "tôi muốn tìm việc lái xe", "bot_output": "Chào bạn!"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_explicit_unmatched_vacancy_bypasses_agent_and_faq(monkeypatch):
+    """KB/FAQ text cannot authorize a role when no ACTIVE job matches it."""
+    from app.graph.vacancy import NO_ACTIVE_JOB_REPLY
+
+    class _Lookup:
+        async def find_active_jobs(self, query):
+            assert "thợ hàn" in query.lower()
+            return SimpleNamespace(status="no_match", jobs=())
+
+    class _MustNotBypass:
+        async def try_answer(self, user_text):  # noqa: ARG002
+            raise AssertionError("FAQ bypass must not run before vacancy lookup")
+
+    async def _must_not_run(*args, **kwargs):
+        raise AssertionError("agent must not run for an unmatched vacancy question")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    state = BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        user_text="bên bạn tuyển thợ hàn CO2 đúng ko?",
+    )
+    deps = _deps(zalo, conversation=svc, faq_bypass=_MustNotBypass())
+    deps.retrieval = _Lookup()
+
+    result = await run_turn(state, deps)
+
+    assert result == {"outcome": "vacancy_lookup", "reply": NO_ACTIVE_JOB_REPLY}
+    assert zalo.sent == [("z1", NO_ACTIVE_JOB_REPLY)]
+    assert recorded[0]["stage_timings"]["lane"] == "vacancy_lookup"
+    assert recorded[0]["stage_timings"]["vacancy_lookup_status"] == "no_match"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "user_text",
+    [
+        "bên bạn có nhận thợ hàn không?",
+        "còn lao động phổ thông không",
+        "còn lái xe không",
+        "còn công nhân không",
+        "bên bạn nhận công nhân không?",
+    ],
+)
+async def test_common_vacancy_phrases_bypass_agent_and_faq(monkeypatch, user_text):
+    class _Lookup:
+        async def find_active_jobs(self, query):
+            assert query == user_text
+            return SimpleNamespace(status="no_match", jobs=())
+
+    class _MustNotBypass:
+        async def try_answer(self, user_text):  # noqa: ARG002
+            raise AssertionError("FAQ bypass must not run before vacancy lookup")
+
+    async def _must_not_run(*args, **kwargs):
+        raise AssertionError("agent must not run for a vacancy question")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    deps = _deps(_FakeZalo(), conversation=svc, faq_bypass=_MustNotBypass())
+    deps.retrieval = _Lookup()
+    state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=user_text)
+
+    result = await run_turn(state, deps)
+
+    assert result["outcome"] == "vacancy_lookup"
+
+
+@pytest.mark.asyncio
+async def test_vacancy_lookup_failure_never_sends_no_hiring_claim(monkeypatch):
+    """DB/retrieval failure is unavailable, not a negative business claim."""
+
+    class _Lookup:
+        async def find_active_jobs(self, query):  # noqa: ARG002
+            raise RuntimeError("db down")
+
+    async def _must_not_run(*args, **kwargs):
+        raise AssertionError("agent must not run when the vacancy lookup is unavailable")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    state = BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        user_text="bên bạn tuyển thợ hàn CO2 đúng ko?",
+    )
+    deps = _deps(zalo, conversation=svc)
+    deps.retrieval = _Lookup()
+
+    result = await run_turn(state, deps)
+
+    assert "chưa thể kiểm tra" in result["reply"].lower()
+    assert "chưa tuyển" not in result["reply"].lower()
+
+
+@pytest.mark.asyncio
+async def test_active_job_vacancy_reply_uses_only_matched_job_facts(monkeypatch):
+    """A positive recruiting reply is rendered from one ACTIVE job evidence bundle."""
+
+    class _Lookup:
+        async def find_active_jobs(self, query):  # noqa: ARG002
+            return SimpleNamespace(
+                status="matched",
+                jobs=(
+                    SimpleNamespace(
+                        id="job-a",
+                        title="Thợ hàn CO2",
+                        company_name="Công ty A",
+                        factory_name="Nhà máy A",
+                        province="Hải Phòng",
+                        salary_min=10_000_000,
+                        salary_max=14_000_000,
+                    ),
+                ),
+            )
+
+    async def _must_not_run(*args, **kwargs):
+        raise AssertionError("agent must not rewrite structured vacancy evidence")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    state = BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        user_text="bên bạn tuyển thợ hàn CO2 đúng ko?",
+    )
+    deps = _deps(zalo, conversation=svc)
+    deps.retrieval = _Lookup()
+
+    result = await run_turn(state, deps)
+
+    assert "Thợ hàn CO2" in result["reply"]
+    assert "Công ty A" in result["reply"]
+    assert "10-14 triệu" in result["reply"]
+
+
+@pytest.mark.asyncio
+async def test_salary_followup_rechecks_recent_vacancy_question(monkeypatch):
+    """The third production-style turn cannot answer salary from unrelated FAQ text."""
+    from app.graph.vacancy import NO_ACTIVE_JOB_REPLY
+
+    class _Lookup:
+        async def find_active_jobs(self, query):
+            assert "thợ hàn" in query.lower()
+            return SimpleNamespace(status="no_match", jobs=())
+
+    async def _must_not_run(*args, **kwargs):
+        raise AssertionError("agent must not answer a rejected role's salary from FAQ data")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    history = [
+        SimpleNamespace(sender="WORKER", body="bên bạn tuyển thợ hàn CO2 đúng ko?"),
+        SimpleNamespace(sender="BOT", body=NO_ACTIVE_JOB_REPLY),
+    ]
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, messages=history)
+    zalo = _FakeZalo()
+    state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="lương bao nhiêu?")
+    deps = _deps(zalo, conversation=svc)
+    deps.retrieval = _Lookup()
+
+    result = await run_turn(state, deps)
+
+    assert result["reply"] == NO_ACTIVE_JOB_REPLY
 
 
 @pytest.mark.asyncio

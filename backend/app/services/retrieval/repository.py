@@ -769,7 +769,9 @@ class RetrievalRepository:
         Loads the lead by ``chat_id`` (zalo_id), builds a :class:`LeadProfile`,
         and runs the two-stage ranker (:class:`RecommendationRepository`).
         Returns :class:`ScoredJob` objects (job + score + matched reasons).
-        Empty list on any failure (no lead, no jobs, query error) — never raises.
+        Deprecated compatibility method. New callers should use
+        :meth:`recommend_jobs_for_lead`, which keeps no-match, missing-profile,
+        and unavailable states distinct.
         """
         from app.services.lead.repository import LeadRepository
         from app.services.recommendation import RecommendationRepository, LeadProfile
@@ -785,6 +787,38 @@ class RetrievalRepository:
         except Exception:
             logger.warning("match_jobs_for_lead failed for chat_id=%s", chat_id, exc_info=True)
             return []
+
+    async def recommend_jobs_for_lead(
+        self, chat_id: str, *, top_k: int = 5, province: str | None = None
+    ):
+        """Return a typed profile-based job recommendation outcome."""
+        from app.services.lead.repository import LeadRepository
+        from app.services.recommendation import LeadJobRecommendation, LeadProfile, RecommendationRepository
+
+        try:
+            lead = await LeadRepository(self.db).by_zalo_id(chat_id)
+            profile = LeadProfile.from_lead(lead)
+        except Exception:
+            logger.warning("lead lookup failed for chat_id=%s", chat_id, exc_info=True)
+            return LeadJobRecommendation("unavailable")
+        if not profile.has_any_signal:
+            return LeadJobRecommendation("insufficient_profile")
+        try:
+            jobs = await RecommendationRepository(self.db).match_jobs(
+                profile, top_k=top_k, province=province
+            )
+        except Exception:
+            logger.warning("recommendation lookup failed for chat_id=%s", chat_id, exc_info=True)
+            return LeadJobRecommendation("unavailable")
+        if not jobs:
+            return LeadJobRecommendation("no_match")
+        return LeadJobRecommendation("matched", tuple(jobs))
+
+    async def find_active_jobs(self, query: str, *, top_k: int = 3):
+        """Resolve an explicit role query against currently open jobs only."""
+        from app.services.recommendation import RecommendationRepository
+
+        return await RecommendationRepository(self.db).find_active_jobs(query, top_k=top_k)
 
 
 __all__ = ["RetrievalRepository"]

@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-10
+**Last updated:** 2026-07-14
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -204,6 +204,22 @@ sequenceDiagram
     WK-->>RT: message.created + conversation.updated
     WK->>Z: typing heartbeat (every 4s, bot channel)
 
+    rect rgb(235, 242, 255)
+    Note over WK,DB: ── deterministic vacancy guard ──
+    alt explicit vacancy question or factual follow-up
+        WK->>DB: find_active_jobs (ACTIVE + vacancy_count > 0)
+        alt matched
+            WK->>WK: render facts from the matching job record
+        else no match
+            WK->>WK: deterministic "currently not recruiting" reply
+        else lookup unavailable
+            WK->>WK: availability-error reply; never assert no vacancy
+        end
+    else other message
+        Note over WK: continue to normal response lanes
+    end
+    end
+
     rect rgb(230, 245, 235)
     Note over WK: ── no-LLM fast path (zero model calls) ──
     alt template fast lane (greetings/thanks/help)
@@ -292,13 +308,12 @@ functions composed by hand — "LangGraph-style" in shape only. Document it
 honestly as such.
 
 ```
-load_conversation_state -> typing -> agent
-  agent (error) -> error_reply
-  agent (ok)    -> fast_safety_filter -> needs_llm_safety?
-                     no  -> combine_for_presend
-                     yes -> llm_safety_check -> safe_to_send?
-                               yes -> combine_for_presend
-                               no  -> retry_rewrite? (attempt<1) -> agent | combine_for_presend
+load_conversation_state -> typing -> vacancy_lookup?
+  vacancy_lookup (explicit question/follow-up) -> ACTIVE job match
+      matched / no_match / unavailable -> deterministic reply -> combine_for_presend
+  vacancy_lookup (not applicable) -> fast lane / FAQ bypass / agent
+      agent (error) -> error_reply
+      agent (ok)    -> fast_safety_filter -> combine_for_presend
   combine_for_presend -> pre_send_guard -> ownership_ok?
                             yes -> send_message -> log_sent
                             no  -> log_suppressed
@@ -308,6 +323,14 @@ load_conversation_state -> typing -> agent
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
+- **Vacancy authority:** before every fast lane, FAQ bypass, or agent turn,
+  direct hiring-existence questions (and factual follow-ups to one) use the
+  typed active-job lookup. Only a `jobs` record with `status=ACTIVE` and
+  `vacancy_count > 0` may support a current-hiring, company, location, or
+  salary claim. `no_match` receives the deterministic no-active-job reply;
+  lookup failures receive an availability-error reply rather than a negative
+  hiring assertion. Project cards and KB/FAQ retrieval may add context to a
+  resolved job, but never establish that a vacancy exists.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
   `_dispatch_tool` dispatch by name. The deterministic router prefetches
   `search_bus_timetable` for high-confidence timetable turns and

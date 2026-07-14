@@ -163,6 +163,12 @@ class RetrievalPort(Protocol):
         self, chat_id: str, *, top_k: int = 5, province: str | None = None
     ) -> list[Any]: ...
 
+    async def recommend_jobs_for_lead(
+        self, chat_id: str, *, top_k: int = 5, province: str | None = None
+    ) -> Any: ...
+
+    async def find_active_jobs(self, query: str, *, top_k: int = 3) -> Any: ...
+
 
 class FaqBypassPort(Protocol):
     """Deterministic, non-LLM FAQ short-circuit that runs before the agent node.

@@ -27,6 +27,7 @@ _RUNTIME_RETRIEVAL_RULES = """
 - Với câu hỏi về liên hệ, admin, số điện thoại, hotline, Zalo, hoặc "đến công ty liên hệ ai": phải tra search_knowledge trước khi kết luận.
 - Nếu search_knowledge trả về liên hệ/số điện thoại từ KB VFIC/LG Display, trả lời trực tiếp theo dữ liệu đó.
 - Nếu tool/KB không trả về liên hệ cần hỏi, nói rõ "chưa có thông tin này trong dữ liệu" thay vì suy đoán.
+- Danh mục dự án và KB chỉ hỗ trợ điều hướng/thông tin; chúng không chứng minh một vị trí đang tuyển. Chỉ khẳng định "đang tuyển" khi có kết quả việc làm ACTIVE cụ thể.
 - GỌI TOOL SONG SONG: Khi cần nhiều tool không phụ thuộc nhau (ví dụ recommend_jobs + get_product_features, hoặc search_knowledge + list_active_projects), hãy gọi TẤT CẢ trong cùng một lượt trả lời thay vì gọi từng cái một. Điều này giúp trả lời nhanh hơn rất nhiều.
 """.strip()
 

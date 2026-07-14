@@ -9,7 +9,8 @@ Mirrors the research (MiniMax §7.2 hybrid scoring, Google two-stage retrieve+ra
 ChatGPT "machine-readable matched reasons") on the data columns VFIC already has.
 """
 
-from app.services.recommendation.repository import RecommendationRepository
+from app.services.recommendation.availability import ActiveJob, ActiveJobLookup, select_matching_active_jobs
+from app.services.recommendation.repository import LeadJobRecommendation, RecommendationRepository
 from app.services.recommendation.scoring import (
     JobCandidate,
     LeadProfile,
@@ -20,6 +21,10 @@ from app.services.recommendation.scoring import (
 
 __all__ = [
     "RecommendationRepository",
+    "ActiveJob",
+    "ActiveJobLookup",
+    "LeadJobRecommendation",
+    "select_matching_active_jobs",
     "JobCandidate",
     "LeadProfile",
     "ScoredJob",

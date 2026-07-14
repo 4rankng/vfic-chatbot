@@ -12,12 +12,16 @@ All data columns already exist on ``jobs`` (``job.py``); this module only reads 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.company import Company
+from app.models.job import Job
 from app.models.job import JobStatus
+from app.services.recommendation.availability import ActiveJob, ActiveJobLookup, select_matching_active_jobs
 from app.services.recommendation.scoring import JobCandidate, LeadProfile, ScoredJob, score_job
 
 logger = logging.getLogger(__name__)
@@ -73,13 +77,64 @@ class RecommendationRepository:
             "province": gate,
             "limit": self.CANDIDATE_LIMIT,
         }
-        try:
-            result = await self.db.execute(_MATCH_SQL, params)
-            rows = [dict(r._mapping) for r in result.fetchall()]
-        except Exception:
-            logger.warning("recommendation match_jobs query failed", exc_info=True)
-            return []
+        result = await self.db.execute(_MATCH_SQL, params)
+        rows = [dict(r._mapping) for r in result.fetchall()]
 
         scored = [score_job(lead, JobCandidate.from_row(row)) for row in rows]
         scored.sort(key=lambda s: (-s.score, s.job.title))
         return scored[: max(1, min(top_k, 10))]
+
+    async def find_active_jobs(self, query: str, *, top_k: int = 3) -> ActiveJobLookup:
+        """Find currently open jobs for an explicit vacancy-existence question.
+
+        This is intentionally separate from profile-based recommendations: no lead
+        data is required, and database failures remain distinguishable from a genuine
+        no-match result.
+        """
+        try:
+            rows = (
+                await self.db.execute(
+                    select(Job, Company.name)
+                    .join(Company, Job.company_id == Company.id)
+                    .where(
+                        Job.status == JobStatus.ACTIVE,
+                        func.coalesce(Job.vacancy_count, 0) > 0,
+                    )
+                    .order_by(Job.updated_at.desc())
+                    .limit(self.CANDIDATE_LIMIT)
+                )
+            ).all()
+        except Exception:
+            logger.warning("active-job availability lookup failed", exc_info=True)
+            try:
+                await self.db.rollback()
+            except Exception:  # noqa: BLE001 — preserve the candidate-facing unavailable reply
+                logger.debug("active-job availability rollback failed", exc_info=True)
+            return ActiveJobLookup("unavailable")
+
+        jobs = [
+            ActiveJob(
+                id=str(job.id),
+                title=job.title,
+                company_name=str(company_name),
+                factory_name=job.factory_name or "",
+                province=job.province or "",
+                district=job.district or "",
+                salary_min=job.salary_min,
+                salary_max=job.salary_max,
+                vacancy_count=job.vacancy_count,
+            )
+            for job, company_name in rows
+        ]
+        return select_matching_active_jobs(query, jobs, top_k=top_k)
+
+
+LeadRecommendationStatus = Literal["matched", "no_match", "insufficient_profile", "unavailable"]
+
+
+@dataclass(frozen=True)
+class LeadJobRecommendation:
+    """Typed profile-based recommendation outcome for the graph tool."""
+
+    status: LeadRecommendationStatus
+    jobs: tuple[ScoredJob, ...] = ()

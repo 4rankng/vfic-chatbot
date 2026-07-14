@@ -40,6 +40,7 @@ from app.graph.safety import (
 )
 from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES, delivery_status_for_send_error
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
+from app.graph.vacancy import VACANCY_LOOKUP_UNAVAILABLE_REPLY, format_vacancy_lookup, vacancy_lookup_query
 from app.models.conversation import DeliveryStatus, Message
 
 logger = logging.getLogger(__name__)
@@ -343,6 +344,23 @@ def _faq_should_abstain(bypass, settings) -> bool:
     return (bypass.score - bypass.runner_up_score) < margin
 
 
+async def _vacancy_reply(user_text: str, recent_messages: list[Message], retrieval) -> tuple[str, str] | None:
+    """Resolve explicit hiring questions before any FAQ or LLM answer path.
+
+    The lookup is deliberately before the fast/FAQ lanes: project catalog and
+    knowledge-base text cannot establish that a role has an open vacancy.
+    """
+    query = vacancy_lookup_query(user_text, recent_messages)
+    if query is None:
+        return None
+    try:
+        lookup = await retrieval.find_active_jobs(query)
+    except Exception:  # noqa: BLE001 — an outage must not become a no-vacancy claim
+        logger.warning("active-job vacancy lookup failed", exc_info=True)
+        return VACANCY_LOOKUP_UNAVAILABLE_REPLY, "unavailable"
+    return format_vacancy_lookup(lookup), str(getattr(lookup, "status", "unavailable"))
+
+
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome."""
     timings: dict = {"execution_source": state.execution_source}
@@ -402,12 +420,25 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         outcome_label = "sent"
         faq_metadata: dict | None = None
 
+        vacancy_t0 = time.monotonic()
+        vacancy = await _vacancy_reply(state.user_text, recent_messages, deps.retrieval)
+        if vacancy is not None:
+            candidate, vacancy_status = vacancy
+            timings["vacancy_lookup_ms"] = int(round((time.monotonic() - vacancy_t0) * 1000))
+            timings["vacancy_lookup_status"] = vacancy_status
+            timings["lane"] = "vacancy_lookup"
+            outcome_label = "vacancy_lookup"
+
         # --- FAQ / template fast lane (zero LLM calls) ---
         # Greetings / thanks / goodbye / help return instant tôi/bạn templates with
         # no LLM call. Factual questions are never templated — they fall through
         # here, then through the FAQ-bypass cascade below, before reaching the
         # RAG + agent path.
-        fast = fast_lane.match(state.user_text) if settings.faq_fast_lane_enabled else None
+        fast = (
+            fast_lane.match(state.user_text)
+            if vacancy is None and settings.faq_fast_lane_enabled
+            else None
+        )
 
         # --- deterministic FAQ-bypass cascade (zero LLM calls) ---
         # Runs only for non-template traffic. On a high-confidence hit it answers
@@ -416,7 +447,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # through to the agent unchanged. Time-boxed so a cold embed can never burn
         # the turn deadline. None in graph unit tests (no bypass wired).
         bypass = None
-        if fast is None and deps.faq_bypass is not None:
+        if vacancy is None and fast is None and deps.faq_bypass is not None:
             try:
                 # Bound the bypass by both the soft cap and the propagated turn
                 # deadline (minus the send margin) so a cold-embed bypass can
@@ -473,7 +504,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
             bypass = None
 
-        if fast is not None:
+        if vacancy is not None:
+            pass
+        elif fast is not None:
             timings["lane"] = "fast_lane"
             candidate = fast.reply
             outcome_label = "faq_cache"

@@ -132,7 +132,9 @@ async def test_zalo_oa_redacts_token_in_error(monkeypatch):
             assert callable(refresh)
 
         async def get_oa_info(self) -> SendResult:
-            return SendResult(ok=False, error="expired oa-token")
+            # A non-expiry failure stays on the local probe path. Expiry/refresh
+            # diagnostics are covered below and intentionally use an OAuth call.
+            return SendResult(ok=False, error="invalid oa-token")
 
     monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
     monkeypatch.setattr(integrations, "ZaloOASender", _OAClient)
@@ -148,7 +150,7 @@ async def test_zalo_oa_redacts_token_in_error(monkeypatch):
     assert result.configured is True
     assert result.connected is False
     assert result.missing == []
-    assert result.errors == ["zalo_oa: expired [redacted]"]
+    assert result.errors == ["zalo_oa: invalid [redacted]"]
 
 
 async def test_zalo_oa_reports_connected_after_successful_probe(monkeypatch):

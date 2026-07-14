@@ -1,6 +1,6 @@
 # Project Roadmap
 
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-14
 **Production:** `bot.tingting.vip` — stable, serving candidates over Zalo.
 
 ---
@@ -12,6 +12,10 @@ chatbot loop is live:
 
 - Zalo Bot Platform inbound + outbound, <1s webhook ack, async turn pipeline.
 - MiniMax M2.7 agent + M2.5 safety, selectable OpenRouter provider, pgvector RAG.
+- Explicit vacancy questions now take a deterministic active-job path before
+  FAQ/RAG/LLM handling. Only `ACTIVE` jobs with positive vacancies can support
+  a current-hiring claim; a true no-match and a lookup outage produce distinct
+  candidate-facing replies.
 - Recruiter console (React Admin, Vietnamese-only) with realtime Socket.IO
   inbox, lead kanban, knowledge base, personas, projects.
 - Proactive follow-up worker (6h/24h/46h cadence, Zalo-48h-safe).

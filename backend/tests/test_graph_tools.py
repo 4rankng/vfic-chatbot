@@ -284,6 +284,25 @@ async def test_recommend_projects_ranks_by_catalog_terms(no_cache_io):
     assert "get_product_features(project_slug)" in out
 
 
+@pytest.mark.asyncio
+async def test_recommend_projects_rejects_substring_only_matches(no_cache_io):
+    """`tho`/`han` must not match unrelated `thong`/`nhan` catalog text."""
+    rows = [
+        SimpleNamespace(
+            slug="lg-display",
+            name="LG Display",
+            summary="Lao động phổ thông",
+            index_card={"key_roles": ["lao động phổ thông", "nhân viên sản xuất"]},
+        )
+    ]
+    repo = _make_repo(active_projects_with_card=lambda self: _const(rows))
+
+    out = await recommend_projects(retrieval=repo, query="bên bạn tuyển thợ hàn CO2 đúng ko?")
+
+    assert out.startswith("Không có dự án trong danh mục phù hợp")
+    assert "đang tuyển" in out
+
+
 # ---------------------------------------------------------------------------
 # search_knowledge — unknown slug short-circuits before embeddings/cache
 # ---------------------------------------------------------------------------
@@ -426,11 +445,16 @@ async def test_search_bus_timetable_no_rows_returns_notice(no_cache_io):
 
 @pytest.mark.asyncio
 async def test_recommend_jobs_empty_returns_fallback_notice(no_cache_io):
-    """No lead profile or no matching jobs → guided fallback message."""
-    repo = _make_repo(match_jobs_for_lead=lambda self, chat_id, **k: _empty())
+    """Missing profile is distinct from no ACTIVE match and an outage."""
+    from app.services.recommendation import LeadJobRecommendation
+
+    repo = _make_repo(
+        recommend_jobs_for_lead=lambda self, chat_id, **k: _const(
+            LeadJobRecommendation("insufficient_profile")
+        )
+    )
     out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
-    assert "Chưa có thông tin hồ sơ" in out
-    assert "recommend_projects" in out  # points the agent to the keyword fallback
+    assert "Chưa đủ thông tin hồ sơ" in out
 
 
 @pytest.mark.asyncio
@@ -451,7 +475,13 @@ async def test_recommend_jobs_formats_scored_results_with_reasons(no_cache_io):
             reasons=["vị trí khớp mong muốn", "lương 10-14 triệu phù hợp"],
         ),
     ]
-    repo = _make_repo(match_jobs_for_lead=lambda self, chat_id, **k: _const(scored))
+    from app.services.recommendation import LeadJobRecommendation
+
+    repo = _make_repo(
+        recommend_jobs_for_lead=lambda self, chat_id, **k: _const(
+            LeadJobRecommendation("matched", tuple(scored))
+        )
+    )
     out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
     assert "GỢI Ý VIỆC LÀM PHÙ HỢP" in out
     assert "Nhân viên kho" in out
@@ -463,14 +493,28 @@ async def test_recommend_jobs_formats_scored_results_with_reasons(no_cache_io):
 
 @pytest.mark.asyncio
 async def test_recommend_jobs_exception_returns_fallback_not_crash(no_cache_io):
-    """A retrieval failure must not crash the tool — guided fallback instead."""
+    """A retrieval failure must never be represented as a missing vacancy."""
 
     async def _boom(self, chat_id, **k):
         raise RuntimeError("db down")
 
-    repo = _make_repo(match_jobs_for_lead=_boom)
+    repo = _make_repo(recommend_jobs_for_lead=_boom)
     out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
-    assert "Chưa có thông tin hồ sơ" in out
+    assert "chưa thể tra cứu" in out.lower()
+    assert "chưa có việc" not in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_recommend_jobs_no_match_is_distinct_from_unavailable(no_cache_io):
+    from app.services.recommendation import LeadJobRecommendation
+
+    repo = _make_repo(
+        recommend_jobs_for_lead=lambda self, chat_id, **k: _const(LeadJobRecommendation("no_match"))
+    )
+
+    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
+
+    assert out == "Hiện chưa có việc làm ACTIVE phù hợp với hồ sơ này."
 
 
 # ---------------------------------------------------------------------------
@@ -588,4 +632,3 @@ async def test_search_knowledge_no_metrics_is_backward_compatible(no_cache_io):
     )
 
     assert "Không tìm thấy" in out
-
