@@ -18,6 +18,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 
+def test_only_webhook_workers_warm_chatbot_dependencies():
+    from app.workers.run_worker import _is_interactive_worker
+
+    assert _is_interactive_worker(["webhook_high"])
+    assert _is_interactive_worker(["webhook_high", "persistence_low"])
+    assert not _is_interactive_worker(["persistence_low"])
+
+
 @pytest.mark.asyncio
 async def test_warm_llm_client_cache_builds_clients_once():
     """The warm-start opens one worker session and builds clients exactly once."""

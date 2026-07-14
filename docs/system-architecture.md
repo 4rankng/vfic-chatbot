@@ -311,7 +311,7 @@ load_conversation_state -> typing -> agent
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
 | `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Interactive and recovered chat turns. |
-| `persistence_low` | `worker-chatbot` (same containers) | — | — | LLM-derived lead and memory enrichment after SENT replies. |
+| `persistence_low` | `worker-persistence` (×1) | — | — | LLM-derived lead and memory enrichment after SENT replies; isolated from the interactive queue. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up + reconcile sweep. |
 

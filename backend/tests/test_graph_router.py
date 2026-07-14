@@ -29,6 +29,14 @@ def test_route_bare_shift_pay_question_stays_job_detail():
     assert route.tools == ("get_product_features", "search_knowledge")
 
 
+def test_route_housing_question_uses_grounded_faq_detail_path():
+    route = route_turn("làm chỗ bạn có nhà trọ không?")
+
+    assert route.intent == "faq_detail"
+    assert route.strategy == "knowledge_lookup"
+    assert route.tools == ("get_product_features", "search_knowledge")
+
+
 def test_route_contact_requires_knowledge_lookup():
     route = route_turn("Đến công ty thì liên hệ admin nào?")
 

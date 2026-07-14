@@ -30,6 +30,11 @@ import sys
 logger = logging.getLogger(__name__)
 
 
+def _is_interactive_worker(queues: list[str]) -> bool:
+    """Whether this process consumes candidate-visible chatbot turns."""
+    return "webhook_high" in queues
+
+
 def main(queues: list[str]) -> None:
     # Configure root logging before RQ's work() sets up its handlers, so a
     # preload failure below is visible in structured logs rather than lost to
@@ -51,16 +56,17 @@ def main(queues: list[str]) -> None:
     #
     # Not fatal (jobs still run, just slower), but a silent preload failure is
     # exactly what causes a chronically slow preamble — log at ERROR, not stderr.
-    try:
-        from app.workers.chatbot_worker import preload_imports
+    if _is_interactive_worker(queues):
+        try:
+            from app.workers.chatbot_worker import preload_imports
 
-        preload_imports()
-    except Exception:
-        logger.error(
-            "preload_imports FAILED — every turn will pay the full cold-import "
-            "cost (~5-7s/turn). Fix the import error below.",
-            exc_info=True,
-        )
+            preload_imports()
+        except Exception:
+            logger.error(
+                "preload_imports FAILED — every turn will pay the full cold-import "
+                "cost (~5-7s/turn). Fix the import error below.",
+                exc_info=True,
+            )
 
     # Warm the LLM client cache: build the ChatOpenAI + embedder clients now so
     # the first real candidate turn hits _client_cache instead of paying the
@@ -68,17 +74,18 @@ def main(queues: list[str]) -> None:
     # every restart). Runs on the same event loop as jobs (run_async reuses
     # async_runner's singleton loop) so the DB engine + _client_cache_lock
     # created here are the ones every subsequent turn reuses.
-    try:
-        from app.workers.async_runner import run_async
-        from app.workers.chatbot_worker import warm_llm_client_cache
+    if _is_interactive_worker(queues):
+        try:
+            from app.workers.async_runner import run_async
+            from app.workers.chatbot_worker import warm_llm_client_cache
 
-        run_async(warm_llm_client_cache())
-    except Exception:
-        logger.error(
-            "llm client cache warm-start FAILED — the first turn will pay the "
-            "full cold-construction cost (~5-7s). Fix the error below.",
-            exc_info=True,
-        )
+            run_async(warm_llm_client_cache())
+        except Exception:
+            logger.error(
+                "llm client cache warm-start FAILED — the first turn will pay the "
+                "full cold-construction cost (~5-7s). Fix the import error below.",
+                exc_info=True,
+            )
 
     # Requeue any jobs stuck in StartedJobRegistry from a prior hard kill
     # (OOM, SIGKILL, docker --force-recreate).  This is the standard RQ

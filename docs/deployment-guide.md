@@ -22,7 +22,8 @@ remote recreate over ~9 sequential SSH calls (ControlMaster multiplexed).
 | `postgres` | `pgvector/pgvector:pg16` | 1 | Source of truth. `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
 | `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
 | `web` | `franknguyenvd/vfic-backend:latest` | 1 | FastAPI (uvicorn, 1 worker, `web_concurrency`=2 default). Expose 8000. Volume `vfic_kb_uploads:/data/kb_uploads`. Healthcheck `python urllib /health`. |
-| `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queues `webhook_high`, `persistence_low`. `stop_grace_period: 180s` (let ≤60s turns finish on SIGTERM). Mem limit 512M. |
+| `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queue `webhook_high` only. Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit. |
+| `worker-persistence` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
 | `worker-ingest` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
 | `worker-followup` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
 | `scheduler` | `franknguyenvd/vfic-backend:latest` | 1 | `rqscheduler`. |
@@ -74,14 +75,16 @@ All targets live in the root `Makefile` (delegates to `backend/Makefile`).
      (idempotent bootstrap admin).
    - `docker compose up -d`.
 4. Operator fills third-party keys in `/opt/vfic/.env`, then
-   `docker compose up -d --force-recreate web worker-chatbot worker-ingest scheduler`.
+   `docker compose up -d --force-recreate web worker-chatbot worker-persistence worker-ingest scheduler`.
 5. Flip the Zalo Chatbot webhook in the Zalo console →
    `https://bot.tingting.vip/webhooks/zalo/chatbot`.
 
 ### Fast-track backend (`make deploy-backend`)
 Rebuild + push backend image → `deploy-restart`: pull `web`, apply Alembic,
-recreate `web worker-chatbot worker-ingest worker-followup scheduler`. No
-compose sync, no bootstrap.
+recreate `web worker-chatbot worker-ingest worker-followup scheduler`. No compose
+sync, no bootstrap. A new worker service such as `worker-persistence` requires a
+human-approved full deployment (or an equivalent manually reviewed Compose rollout)
+before it can be recreated by this path.
 
 ### Fast-track frontend (`make deploy-frontend`)
 Rebuild + push frontend image → `deploy-restart-frontend`: pull `frontend`,

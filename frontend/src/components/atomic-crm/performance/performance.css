@@ -311,10 +311,11 @@
 }
 .performance-target-line {
   position: absolute;
-  z-index: 1;
+  z-index: 3;
   right: 0;
   left: 0;
   border-top: 1px dashed var(--danger);
+  pointer-events: none;
 }
 .performance-target-line b {
   position: absolute;

@@ -46,14 +46,15 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # RQ worker: interactive/recovery turns + lead/memory persistence.
+  # RQ worker: interactive/recovery turns only. It stays isolated from
+  # post-send enrichment so a slow persistence job cannot delay a webhook.
   worker-chatbot:
     image: franknguyenvd/vfic-backend:latest
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    command: ["python", "-m", "app.workers.run_worker", "webhook_high", "persistence_low"]
+    command: ["python", "-m", "app.workers.run_worker", "webhook_high"]
     stop_grace_period: 180s  # let rq finish the ≤60s turn on SIGTERM before SIGKILL
     deploy:
       replicas: 1
@@ -65,6 +66,29 @@ services:
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
       # redis-py is present transitively via rq; python is on PATH in the image.
+      test: ["CMD-SHELL", "python -c \"import os,redis; redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=3, socket_timeout=3).ping()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # RQ worker: best-effort lead/memory enrichment after a reply is sent.
+  # It deliberately does not warm the chatbot graph or consume webhook_high.
+  worker-persistence:
+    image: franknguyenvd/vfic-backend:latest
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["python", "-m", "app.workers.run_worker", "persistence_low"]
+    stop_grace_period: 180s
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
       test: ["CMD-SHELL", "python -c \"import os,redis; redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=3, socket_timeout=3).ping()\""]
       interval: 30s
       timeout: 10s

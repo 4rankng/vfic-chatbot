@@ -40,6 +40,8 @@ REQUIRED_KWARGS = {
     "delivery_status",
     "trace_id",
     "outcome_metadata",
+    "outbox_channel",
+    "outbox_payload",
 }
 
 
@@ -108,4 +110,42 @@ async def test_public_record_bot_outcome_forwards_extended_outcome_fields():
         delivery_status=DeliveryStatus.SEND_UNKNOWN,
         trace_id="trace-123",
         outcome_metadata=outcome_metadata,
+        outbox_channel=None,
+        outbox_payload=None,
+    )
+
+
+def test_facade_methods_mirror_impl_keywords():
+    """Every method on ConversationService (facade) that also exists on
+    ConversationState (impl) must declare the SAME keyword parameters.
+
+    The facade forwards to the impl via an explicit keyword list (not
+    ``**kwargs``), so any param added to the impl + a caller but missed on the
+    facade raises ``TypeError`` at the call boundary — the exact drift that
+    crashed every chat turn on 2026-07-14 (``outbox_channel``). A hand-maintained
+    ``REQUIRED_KWARGS`` list only guards methods someone remembers to list (and
+    it was that list's staleness that let the bug ship). This generic parity
+    check covers ALL delegating methods with zero manual maintenance.
+    """
+    facade_methods = {
+        n: m for n, m in vars(ConversationService).items()
+        if inspect.isfunction(m) and not n.startswith("__")
+    }
+    state_methods = {
+        n: m for n, m in vars(ConversationState).items()
+        if inspect.isfunction(m) and not n.startswith("__")
+    }
+    problems = []
+    for name in sorted(set(facade_methods) & set(state_methods)):
+        facade_kw = _keyword_params(facade_methods[name])
+        impl_kw = _keyword_params(state_methods[name])
+        if facade_kw != impl_kw:
+            problems.append(
+                f"{name}: facade={sorted(facade_kw)} impl={sorted(impl_kw)}"
+            )
+    assert not problems, (
+        "ConversationService facade / ConversationState impl keyword-param "
+        "drift — the facade must mirror the impl's keywords or turns crash at "
+        "the call boundary (2026-07-14 outbox_channel class):\n  "
+        + "\n  ".join(problems)
     )
