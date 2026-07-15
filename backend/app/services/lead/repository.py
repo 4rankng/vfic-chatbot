@@ -47,11 +47,39 @@ _UPSQL = text(
         lead_score = COALESCE(EXCLUDED.lead_score, leads.lead_score),
         notes = CASE
             WHEN EXCLUDED.notes IS NULL OR EXCLUDED.notes = '' THEN leads.notes
-            WHEN leads.notes IS NULL THEN EXCLUDED.notes
-            WHEN position(lower(EXCLUDED.notes) IN lower(leads.notes)) > 0
-                 OR position(lower(EXCLUDED.notes) IN lower(leads.notes)) > 0
-            THEN leads.notes
-            ELSE leads.notes || E'\n' || EXCLUDED.notes
+            WHEN leads.notes IS NULL OR leads.notes = '' THEN EXCLUDED.notes
+            ELSE concat_ws(
+                E'\n',
+                leads.notes,
+                (
+                    SELECT string_agg(incoming.note, E'\n' ORDER BY incoming.line_order)
+                    FROM (
+                        SELECT btrim(split.line) AS note, split.line_order
+                        FROM regexp_split_to_table(EXCLUDED.notes, chr(10))
+                             WITH ORDINALITY AS split(line, line_order)
+                    ) AS incoming
+                    WHERE incoming.note <> ''
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM regexp_split_to_table(leads.notes, chr(10)) AS stored(line)
+                          WHERE lower(
+                              regexp_replace(
+                                  regexp_replace(btrim(stored.line), '[[:space:]]+', ' ', 'g'),
+                                  '[.!?;:,]+$',
+                                  '',
+                                  'g'
+                              )
+                          ) = lower(
+                              regexp_replace(
+                                  regexp_replace(incoming.note, '[[:space:]]+', ' ', 'g'),
+                                  '[.!?;:,]+$',
+                                  '',
+                                  'g'
+                              )
+                          )
+                      )
+                )
+            )
         END,
         version = leads.version + 1,
         updated_at = now()

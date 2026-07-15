@@ -1,0 +1,57 @@
+{
+  "customer": {
+    "display_name": "Doanh nghiệp Tuyển dụng Kiểm thử",
+    "locale": "vi-VN",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "currency": "VND"
+  },
+  "pack": "recruitment",
+  "capabilities": ["candidate_intake", "job_advisory"],
+  "persona": {
+    "name": "Trợ lý tuyển dụng kiểm thử",
+    "voice": "rõ ràng và tôn trọng",
+    "authority": "none"
+  },
+  "template": {
+    "schema_version": "1",
+    "record_types": [
+      {
+        "key": "job_posting",
+        "display_name": "Tin tuyển dụng",
+        "natural_key_fields": ["job_reference"],
+        "scope_type": "job_posting",
+        "scope_id_field": "job_reference",
+        "fields": [
+          {
+            "key": "job_reference",
+            "type": "string",
+            "aliases": ["mã việc làm"],
+            "required": true
+          },
+          {
+            "key": "title",
+            "type": "string",
+            "aliases": ["vị trí"],
+            "required": true
+          }
+        ]
+      }
+    ]
+  },
+  "golden_turns": [
+    {
+      "kind": "route",
+      "user_text": "tôi muốn tìm việc lái xe",
+      "expected_strategy": "recommendation",
+      "expected_tools": ["recommend_jobs", "recommend_projects", "get_product_features"]
+    },
+    {
+      "kind": "reply",
+      "user_text": "bên bạn tuyển thợ hàn CO2 đúng ko?",
+      "lookup_status": "no_match",
+      "expected_outcome": "vacancy_lookup",
+      "expected_reply_contract": "no_active_job"
+    }
+  ],
+  "integrations": []
+}

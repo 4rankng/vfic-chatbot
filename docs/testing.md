@@ -10,13 +10,13 @@
 ## Testing Pyramid
 
 ```
-Unit (pure, no infra)         ← Backend: 65 files | Frontend: 10 files (app project, excluding screenshots)
+Unit (pure, no infra)         ← Backend pytest + frontend Vitest app suites
     ↓
-Integration (service + repo)  ← Via Protocol fakes (backend)
+Integration (selected lane)   ← PostgreSQL 16 + pgvector, migrated to Alembic head
     ↓
 API (route + auth)            ← Via FastAPI TestClient (limited — most tests are pure unit)
     ↓
-E2E (Playwright)              ← Config exists, not yet widely adopted
+E2E (Playwright)              ← Test-only FastAPI/PostgreSQL/Redis/JWT harness
     ↓
 Performance (RAG benchmark)   ← test_rag_benchmark.py
 ```
@@ -28,14 +28,22 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
 - **Config:** `backend/pyproject.toml` → `asyncio_mode = "auto"` (all async tests auto-detected)
 - **Conftest:** `backend/tests/conftest.py`
   - Auto-use fixture `_isolate_redis` monkeypatches both Redis singletons to a no-op double.
-  - **No live DB, no Redis, no external services.** All tests are pure unit.
+  - The default unit lane uses no live DB, Redis, or external services.
+- **Selected integration lane:** `backend/tests/integration/`
+  - Uses a real local PostgreSQL 16 + pgvector database and is marked `integration`.
+  - The fixture creates a unique `vfic_integration_*` database, migrates it to
+    Alembic head, rebinds FastAPI's real database dependency, supplies a
+    rollback-scoped async session, and drops the database after the session.
+  - Selecting this lane is mandatory validation, not an optional best-effort
+    check. Missing PostgreSQL/pgvector fails setup with an actionable error;
+    the tests never silently skip.
 
 ### Testing Patterns
 - **Protocol-backed fakes.** The graph layer depends on Protocol interfaces (`ports.py`: `ConversationPort`, `RetrievalPort`, `LeadContextPort`, `FaqBypassPort`). Tests inject fakes — no real LLM, DB, or Redis.
 - **Worker tests** call async functions directly (via `asyncio_mode = "auto"`), not through RQ.
 - **No HTTP client tests** for most routes — the API layer is thin (delegates to services), so testing services directly is preferred. A few integration tests exist (`test_integrations_api.py`, `test_webhooks.py`).
 
-### Test Organization (65 files)
+### Test Organization (representative files)
 | Area | Example files |
 |---|---|
 | Graph pipeline | `test_graph_router.py`, `test_graph_runner_turn.py`, `test_graph_clients.py`, `test_graph_factories.py`, `test_graph_safety.py`, `test_graph_proactive_*.py`, `test_graph_import_guard.py` |
@@ -51,12 +59,35 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
 
 ### Commands (from `backend/`)
 ```bash
-.venv/bin/pytest                                    # All tests
+.venv/bin/pytest -m "not integration"              # Unit suite, no infrastructure
+.venv/bin/pytest -m integration tests/integration/test_harness_smoke.py  # Required PostgreSQL lane
+.venv/bin/pytest                                    # Full suite; requires local PostgreSQL
 .venv/bin/pytest tests/test_graph_runner_turn.py    # Single file
 .venv/bin/pytest -k "test_fast_lane"                # By keyword
 .venv/bin/pytest --tb=short                         # Short tracebacks
 .venv/bin/pytest -x                                 # Stop on first failure
 ```
+
+Start the local database before the selected integration lane:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d postgres
+```
+
+### PostgreSQL Integration Safety Contract
+
+- Async and sync database URLs must identify the exact same endpoint, and the
+  host must be loopback-only (`127.0.0.1`, `localhost`, or `::1`).
+- The fixture owns only uniquely prefixed integration databases. It verifies
+  migration state, pgvector availability, transaction rollback, and FastAPI
+  dependency rebinding against that disposable database.
+- Both raw sockets and HTTP requests to non-loopback hosts are rejected for
+  the selected lane, so tests cannot reach Zalo, LLM providers, or other
+  external services.
+- A database migrated to the current head is expected to contain no business
+  rows except **17 legacy `worker_feature_catalog` rows** seeded by the
+  historical migration chain. That count is a migration oracle, not an
+  approved clean-install default or evidence that the runtime is universal.
 
 ## Frontend Tests
 
@@ -66,7 +97,7 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
   - **`app`** project: Headless Chromium environment. React/DOM unit tests. 80% coverage threshold (lines/functions/branches/statements) for `src/components/atomic-crm/**`.
   - **`claude`** project: Node.js environment. Claude Code hook integration tests in `.claude/hooks/test/`.
 
-### Test Organization (app project — 10 files, excluding `__screenshots__/` auto-generated tests)
+### Test Organization (representative app-project files)
 | Location | Tests |
 |---|---|
 | `conversations/` | `chatRepository.test.ts`, `chatOpsWorkspace.test.ts`, `useConversationRealtime.test.ts` |
@@ -84,23 +115,60 @@ npm run test:unit:app -- --ui   # Vitest UI
 ```
 
 ### E2E
-- Playwright config exists at `frontend/playwright.config.ts`.
-- E2E build mode: `npm run build:e2e` (vite build --mode e2e).
+- Playwright config lives at `frontend/playwright.config.ts` and starts both a
+  Vite server and the test-only FastAPI controller in
+  `backend/tests/e2e_harness.py`.
+- Each run uses a run-specific loopback database ending in `_e2e`, local Redis
+  database 15, an E2E-only JWT secret, and an E2E-only admin account. Tests log
+  in through the real FastAPI auth endpoint.
+- Database resets and teardown require ownership markers. The controller
+  refuses remote or mismatched database URLs, non-`_e2e` names, shared Redis
+  databases, non-empty unowned Redis state, and destructive actions against
+  an unowned database.
+- Provider credentials are scrubbed from the FastAPI process. A process-wide
+  socket guard blocks backend egress, and the Playwright fixture blocks
+  browser requests outside loopback.
+- The harness replaces retired Supabase provisioning. It is not imported by
+  production code and exposes no reset endpoint in the application.
+- E2E build mode: `npm run build:e2e` (`vite build --mode e2e`).
 - Install browsers: `make install-playwright-browsers` (from `frontend/`).
+
+Start local PostgreSQL and Redis, then run Playwright:
+
+```bash
+docker compose -f ../backend/docker-compose.dev.yml up -d postgres redis
+npx playwright test --project=chromium
+npx playwright test --project="Mobile Chrome"
+npx playwright test                         # All functional + visual projects
+```
+
+The controller prepares and resets its owned stores automatically and drops
+the E2E database during global teardown.
 
 ## Mock vs. Real Dependencies
 
 | Layer | Strategy |
 |---|---|
-| Backend DB | No live DB. Tests use fakes/mocks. Protocol interfaces enable this. |
-| Backend Redis | Auto-use `_isolate_redis` fixture replaces Redis with no-op double. |
+| Backend DB | Unit tests use fakes/mocks. The selected integration lane uses an isolated, migrated local PostgreSQL 16 + pgvector database. |
+| Backend Redis | Unit/integration tests isolate Redis with a no-op double; Playwright uses owned loopback Redis database 15. |
 | Backend LLM | No real LLM calls. `graph/clients.py` is mocked or faked. |
-| Frontend API | Custom mocks for dataProvider / authProvider. `testI18nProvider` available. |
-| Frontend realtime | Socket.IO mocked in `useConversationRealtime.test.ts`. |
+| Frontend API | Unit tests use custom dataProvider/authProvider mocks; Playwright uses the test-only FastAPI server and real JWT login. |
+| Frontend realtime | Unit tests mock Socket.IO in `useConversationRealtime.test.ts`. |
 
 ## Regression Policy
 
 - **Never delete a test to make it pass.** If a test fails, fix the code or update the test with a documented reason.
 - **Run the full suite before declaring done** (`.venv/bin/pytest` + `npm run test:unit:app`).
+  The backend full suite includes the required PostgreSQL integration lane, so
+  local PostgreSQL + pgvector must be available.
 - **If you touch a shared contract** (Pydantic schema, Protocol interface, API response shape), run tests in all modules that import it — not just the module you changed.
 - **Coverage threshold:** Frontend app project requires 80% lines/functions/branches/statements on `src/components/atomic-crm/**` (excluding `types.ts`).
+
+## Phase 1 Characterization Boundary
+
+The Phase 1 baseline adds explicit empty/recruitment/product-advisory fixtures,
+runtime-surface and fallback inventories, migration-oracle tests, the selected
+PostgreSQL lane, and the Playwright harness described above. These artifacts
+freeze current recruitment behavior for later refactoring; they do **not**
+change production code or runtime semantics, activate another industry, or
+establish that the platform is universal.

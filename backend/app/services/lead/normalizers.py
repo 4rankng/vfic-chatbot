@@ -10,6 +10,10 @@ import re
 from datetime import datetime
 
 
+_NOTE_PREFIX_RE = re.compile(r"^(?:(?:[-*•–—])\s*|(?:\d+[.)])\s+)")
+_NOTE_TRAILING_PUNCTUATION_RE = re.compile(r"[.!?;:,]+$")
+
+
 def parse_lead_json(value) -> dict:
     if isinstance(value, dict):
         return value
@@ -33,6 +37,34 @@ def _pick(value) -> str | None:
         return None
     t = re.sub(r"\s+", " ", str(value)).strip()
     return t or None
+
+
+def _note_identity(note: str) -> str:
+    normalized = re.sub(r"\s+", " ", note).strip().lower()
+    return _NOTE_TRAILING_PUNCTUATION_RE.sub("", normalized).strip()
+
+
+def normalize_notes(value) -> str | None:
+    """Return newline-separated, normalized, unique candidate note facts.
+
+    The extractor owns semantic atomization. This deterministic boundary removes
+    presentation prefixes and exact normalized duplicates without fuzzy matching,
+    which could otherwise discard distinct candidate facts.
+    """
+    if value is None:
+        return None
+
+    seen: set[str] = set()
+    notes: list[str] = []
+    for raw_line in str(value).splitlines():
+        note = _NOTE_PREFIX_RE.sub("", raw_line.strip())
+        note = re.sub(r"\s+", " ", note).strip()
+        identity = _note_identity(note)
+        if not identity or identity in seen:
+            continue
+        seen.add(identity)
+        notes.append(note)
+    return "\n".join(notes) or None
 
 
 def normalize_phone(value) -> str | None:
@@ -123,7 +155,7 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
     ext = parse_lead_json(raw)
     phone = normalize_phone(ext.get("phone"))
 
-    notes = _pick(ext.get("notes"))
+    notes = normalize_notes(ext.get("notes"))
 
     return {
         "zalo_id": chat_id,

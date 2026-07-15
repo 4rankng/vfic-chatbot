@@ -37,8 +37,21 @@ class CandidateExtraction:
     memory_facts: list[str]
 
 
-def candidate_turn(user_text: str, bot_output: str) -> str:
-    return f"Tin nhắn người dùng: {user_text or ''}\n\nPhản hồi của bot: {bot_output or ''}"
+def candidate_turn(
+    user_text: str,
+    bot_output: str,
+    *,
+    existing_notes: str | None = None,
+) -> str:
+    saved_notes = (
+        existing_notes.strip() if existing_notes and existing_notes.strip() else "(chưa có)"
+    )
+    return (
+        f"Tin nhắn người dùng: {user_text or ''}\n\n"
+        f"Phản hồi của bot: {bot_output or ''}\n\n"
+        "GHI CHÚ ĐÃ LƯU (chỉ để đối chiếu, không được sao chép, tóm tắt hoặc "
+        f"diễn đạt lại):\n{saved_notes}"
+    )
 
 
 def _parse_candidate_json(value) -> dict:
@@ -87,10 +100,12 @@ class CandidateExtractionService:
         user_text: str,
         bot_output: str,
         chat_id: str,
+        *,
+        existing_notes: str | None = None,
     ) -> CandidateExtraction:
         raw = await extractor(
             CANDIDATE_EXTRACT_SYSTEM_PROMPT,
-            candidate_turn(user_text, bot_output),
+            candidate_turn(user_text, bot_output, existing_notes=existing_notes),
         )
         parsed = _parse_candidate_json(raw)
         lead_patch = normalize_lead(parsed.get("lead_patch"), chat_id)
@@ -131,7 +146,15 @@ class CandidateExtractionService:
             logger.debug("candidate extraction skipped by greeting_gate: '%s'", user_text[:80])
             return CandidateExtraction(lead_patch=None, memory_facts=[])
 
-        result = await CandidateExtractionService.extract(extractor, user_text, bot_output, chat_id)
+        existing_lead = await LeadRepository(db).by_zalo_id(chat_id)
+        existing_notes = existing_lead.get("notes") if existing_lead else None
+        result = await CandidateExtractionService.extract(
+            extractor,
+            user_text,
+            bot_output,
+            chat_id,
+            existing_notes=existing_notes,
+        )
         await CandidateExtractionService.upsert_lead(db, result.lead_patch)
 
         if result.memory_facts:

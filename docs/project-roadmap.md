@@ -1,6 +1,6 @@
 # Project Roadmap
 
-**Last updated:** 2026-07-14
+**Last updated:** 2026-07-15
 **Production:** `bot.tingting.vip` — stable, serving candidates over Zalo.
 
 ---
@@ -27,6 +27,14 @@ chatbot loop is live:
 
 Zalo Official Account integration is implemented in the working tree and
 documented here; verify maturity before relying on it in prod.
+
+### Phase 1 baseline milestone (2026-07-15)
+
+Phase 1 established test-only characterization fixtures, fallback/runtime
+inventories, a mandatory selected PostgreSQL + pgvector integration lane, and
+an isolated FastAPI/JWT/Playwright harness. It freezes current recruitment
+behavior without changing production runtime code; the platform remains
+recruitment-specific and is **not** yet a universal-industry platform.
 
 ---
 

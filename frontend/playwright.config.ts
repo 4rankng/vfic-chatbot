@@ -1,28 +1,36 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-import dotenv from "dotenv";
+import { randomUUID } from "node:crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, ".env.e2e") });
 
 /**
- * The app is served from the e2e production build (`npm run build:e2e` → dist/).
- * `vite preview` provides SPA fallback so client routes (e.g. /leads) resolve.
- * The build bakes the .env.e2e values via Vite's `define`, so no runtime env is
- * needed to boot. Run `npm run build:e2e` once before `npx playwright test`.
+ * Playwright owns a disposable FastAPI/PostgreSQL backend and a Vite server.
+ * The test-only backend harness refuses non-`_e2e` databases and exposes no
+ * production reset endpoint.
  */
-const APP_URL = "http://localhost:4173";
+const APP_URL = "http://127.0.0.1:4173";
+const API_URL = "http://127.0.0.1:8000";
+const BACKEND_PYTHON =
+  process.env.VFIC_BACKEND_PYTHON ??
+  path.resolve(__dirname, "../backend/.venv/bin/python");
+const E2E_HARNESS = path.resolve(__dirname, "../backend/tests/e2e_harness.py");
+const E2E_RUN_ID =
+  process.env.VFIC_E2E_RUN_ID ?? randomUUID().replaceAll("-", "").slice(0, 12);
+process.env.VFIC_E2E_RUN_ID = E2E_RUN_ID;
+process.env.VFIC_BACKEND_PYTHON = BACKEND_PYTHON;
+process.env.VFIC_E2E_DATABASE_URL ??=
+  `postgresql+asyncpg://vfic:vfic@127.0.0.1:5432/vfic_${E2E_RUN_ID}_e2e`;
+process.env.VFIC_E2E_DATABASE_URL_SYNC ??=
+  `postgresql+psycopg://vfic:vfic@127.0.0.1:5432/vfic_${E2E_RUN_ID}_e2e`;
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
   testDir: "./e2e",
+  globalTeardown: "./e2e/global-teardown.ts",
   /* Run tests in files in parallel */
   fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -43,13 +51,24 @@ export default defineConfig({
     actionTimeout: 5000,
   },
 
-  /* Serve the e2e build before running any project. */
-  webServer: {
-    command: "npx vite preview --port 4173 --strictPort",
-    url: APP_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: `${JSON.stringify(BACKEND_PYTHON)} ${JSON.stringify(E2E_HARNESS)} serve --port 8000`,
+      url: `${API_URL}/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    {
+      command: "npx vite --mode e2e --host 127.0.0.1 --port 4173 --strictPort",
+      url: APP_URL,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        VITE_API_BASE: API_URL,
+        VITE_SOCKET_URL: API_URL,
+      },
+    },
+  ],
 
   /* Configure projects for major browsers */
   projects: [

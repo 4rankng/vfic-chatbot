@@ -24,4 +24,10 @@ describe("formatCandidateNotes", () => {
   it("ignores empty note lines", () => {
     expect(formatCandidateNotes("\n - \n\t\n")).toEqual([]);
   });
+
+  it("preserves decimal-leading facts instead of treating them as bullets", () => {
+    expect(
+      formatCandidateNotes("1.5 năm kinh nghiệm\n2.000.000 đồng phụ cấp"),
+    ).toEqual(["1.5 năm kinh nghiệm", "2.000.000 đồng phụ cấp"]);
+  });
 });

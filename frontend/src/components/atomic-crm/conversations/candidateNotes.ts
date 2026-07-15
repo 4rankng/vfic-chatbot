@@ -1,4 +1,4 @@
-const NOTE_PREFIX = /^(?:(?:[-*\u2022\u2013\u2014])|(?:\d+[.)]))\s*/u;
+const NOTE_PREFIX = /^(?:(?:[-*\u2022\u2013\u2014])\s*|(?:\d+[.)])\s+)/u;
 const TRAILING_PUNCTUATION = /[.!?;:,]+$/u;
 
 const noteIdentity = (note: string) =>

@@ -1,16 +1,15 @@
-import { test, expect, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+
+import { expect, test } from "./fixtures";
 
 /**
  * Visual regression baselines.
  *
- * The app is served from the e2e production build (`npm run build:e2e` → dist/,
- * previewed by `vite preview` via the playwright webServer). The build bakes the
- * .env.e2e values, so no live backend is required to boot.
+ * The app is served by the Playwright-owned Vite server while a disposable
+ * FastAPI/PostgreSQL backend is available for authenticated suites.
  *
  * Determinism strategy:
- *  - Telemetry + Supabase requests are short-circuited so the app never hangs on
- *    a missing local backend. The login page (StartPage → LoginPage) renders in
- *    the `isInitialized()` error branch, which is exactly what we want to baseline.
+ *  - Telemetry is short-circuited; the login page uses the real auth boundary.
  *  - Theme is driven via `page.emulateMedia({ colorScheme })` on first paint
  *    (default theme is "system") plus a forced `.dark`/`.light` class.
  *  - Service-worker registration is neutered so the PWA SW can't cache-stamp.
@@ -46,11 +45,6 @@ async function stabilize(page: Page) {
 test.beforeEach(async ({ page }) => {
   // Production builds fire the Atomic CRM telemetry pixel — block it.
   await page.route("**/atomic-crm-telemetry*", (r) => r.abort());
-  // No local Supabase in CI/headless: force a fast 500 so data calls reject
-  // instantly instead of timing out. (Login page renders in the error branch.)
-  await page.route("**/127.0.0.1:54341/**", (r) =>
-    r.fulfill({ status: 500, contentType: "application/json", body: "{}" }),
-  );
   // Defense-in-depth: block the PWA service-worker file itself, in case the
   // navigator.serviceWorker re-define below ever falls through (a future build
   // marking the prop non-configurable). Keeps the harness flake-free.

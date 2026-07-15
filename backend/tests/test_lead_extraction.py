@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.services.candidate_extraction import CandidateExtractionService
+from app.services.candidate_extraction import (
+    CandidateExtraction,
+    CandidateExtractionService,
+    candidate_turn,
+)
 from app.services.lead.normalizers import (
     _pick,
     extract_self_reported_name,
@@ -17,9 +21,11 @@ from app.services.lead.normalizers import (
     normalize_integer,
     normalize_lead,
     normalize_lead_score,
+    normalize_notes,
     normalize_phone,
     parse_lead_json,
 )
+from app.services.lead.repository import _UPSQL
 from app.services.lead.probing import lead_collection_question
 from app.services.memory_service import greeting_gate
 
@@ -68,6 +74,31 @@ class TestPick:
 
     def test_int(self):
         assert _pick(42) == "42"
+
+
+class TestNormalizeNotes:
+    def test_returns_atomic_normalized_unique_lines(self):
+        notes = """
+        - Không có trình độ
+        •  Sẵn sàng   làm bất kỳ công việc gì
+        1. Không có trình độ
+        2) Hỏi về bảo hiểm tại LG Display
+        """
+
+        assert normalize_notes(notes) == (
+            "Không có trình độ\nSẵn sàng làm bất kỳ công việc gì\nHỏi về bảo hiểm tại LG Display"
+        )
+
+    def test_deduplicates_case_and_trailing_punctuation(self):
+        assert normalize_notes("Có xe máy.\ncó xe máy\nCÓ XE MÁY!") == "Có xe máy."
+
+    def test_empty_notes_return_none(self):
+        assert normalize_notes("\n - \n\t") is None
+
+    def test_preserves_decimal_leading_facts(self):
+        assert normalize_notes("1.5 năm kinh nghiệm\n2.000.000 đồng phụ cấp") == (
+            "1.5 năm kinh nghiệm\n2.000.000 đồng phụ cấp"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +210,11 @@ class TestNormalizeLead:
         result = normalize_lead(raw, "zalo_1")
         assert result["notes"] == "xăm kín người, có xe máy"
 
+    def test_notes_are_normalized_as_individual_lines(self):
+        raw = '{"notes": "- Có xe máy\\n• Ca ngày\\n1. Có xe máy"}'
+        result = normalize_lead(raw, "zalo_1")
+        assert result["notes"] == "Có xe máy\nCa ngày"
+
     def test_no_chat_id_returns_none(self):
         assert normalize_lead('{"name": "Dũng"}', None) is None
 
@@ -219,6 +255,17 @@ class TestExtractSelfReportedName:
 
 
 class TestCandidateExtractionService:
+    def test_candidate_turn_marks_saved_notes_as_comparison_only(self):
+        turn = candidate_turn(
+            "Em làm gì cũng được",
+            "Bạn muốn làm ở đâu?",
+            existing_notes="Không có trình độ\nCó xe máy",
+        )
+
+        assert "GHI CHÚ ĐÃ LƯU" in turn
+        assert "Không có trình độ\nCó xe máy" in turn
+        assert "chỉ để đối chiếu" in turn.lower()
+
     @pytest.mark.asyncio
     async def test_skips_non_name_text_without_upserting(self, monkeypatch):
         upsert = AsyncMock()
@@ -302,6 +349,74 @@ class TestCandidateExtractionService:
         assert result.lead_patch["desired_job"] == "lao động thời vụ"
         assert result.lead_patch["lead_score"] == "warm"
         assert result.memory_facts == ["Người dùng tên là Mai", "Muốn làm thời vụ"]
+
+    @pytest.mark.asyncio
+    async def test_extract_includes_existing_notes_for_llm_deduplication(self):
+        captured_turn = ""
+
+        async def extractor(_system: str, turn: str) -> str:
+            nonlocal captured_turn
+            captured_turn = turn
+            return '{"lead_patch":{"notes":"Hỏi về bảo hiểm"},"memory_facts":[]}'
+
+        result = await CandidateExtractionService.extract(
+            extractor,
+            "Bảo hiểm thế nào?",
+            "Bạn được tham gia bảo hiểm.",
+            "zalo_1",
+            existing_notes="Không có trình độ",
+        )
+
+        assert "GHI CHÚ ĐÃ LƯU" in captured_turn
+        assert "Không có trình độ" in captured_turn
+        assert result.lead_patch["notes"] == "Hỏi về bảo hiểm"
+
+    @pytest.mark.asyncio
+    async def test_persist_supplies_saved_notes_to_extract(self, monkeypatch):
+        db = object()
+        llm_extractor = AsyncMock()
+        extract = AsyncMock(return_value=CandidateExtraction(lead_patch=None, memory_facts=[]))
+        upsert = AsyncMock(return_value=None)
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return {"notes": "Không có trình độ\nCó xe máy"}
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", extract)
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+
+        await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            llm_extractor,
+            "zalo_1",
+            "Bảo hiểm thế nào?",
+            "Bạn được tham gia bảo hiểm.",
+        )
+
+        extract.assert_awaited_once_with(
+            llm_extractor,
+            "Bảo hiểm thế nào?",
+            "Bạn được tham gia bảo hiểm.",
+            "zalo_1",
+            existing_notes="Không có trình độ\nCó xe máy",
+        )
+        upsert.assert_awaited_once_with(db, None)
+
+
+def test_lead_upsert_deduplicates_individual_note_lines_atomically():
+    sql = _UPSQL.text.lower()
+
+    assert "regexp_split_to_table" in sql
+    assert "not exists" in sql
+    assert "regexp_replace" in sql
 
 
 # ---------------------------------------------------------------------------

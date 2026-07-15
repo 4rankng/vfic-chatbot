@@ -1,0 +1,41 @@
+{
+  "customer": {
+    "display_name": "Cửa hàng Kiểm thử Trung lập",
+    "locale": "vi-VN",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "currency": "VND"
+  },
+  "pack": "product_advisory",
+  "capabilities": ["document_product_advisory"],
+  "persona": {
+    "name": "Trợ lý sản phẩm kiểm thử",
+    "voice": "ngắn gọn và trung lập",
+    "authority": "none"
+  },
+  "template": {
+    "schema_version": "1",
+    "record_types": [
+      {
+        "key": "product",
+        "display_name": "Sản phẩm",
+        "natural_key_fields": ["sku"],
+        "fields": [
+          {
+            "key": "sku",
+            "type": "string",
+            "aliases": ["mã sản phẩm"],
+            "required": true
+          },
+          {
+            "key": "name",
+            "type": "string",
+            "aliases": ["tên sản phẩm"],
+            "required": true
+          }
+        ]
+      }
+    ]
+  },
+  "golden_turns": [],
+  "integrations": []
+}
