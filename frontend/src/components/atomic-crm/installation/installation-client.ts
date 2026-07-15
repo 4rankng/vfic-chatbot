@@ -49,6 +49,8 @@ export type PackCapabilitiesDraft = {
 export type WorkflowDraft = {
   workflow_policy: {
     workflow_id: string;
+    workflow_version_id: string;
+    workflow_version_checksum: string;
     handoff_mode: "manual" | "assisted" | "automatic";
     automation_enabled: boolean;
   };
@@ -104,6 +106,15 @@ export type InstallationCatalogPack = {
   terminology_keys: string[];
 };
 
+export type InstallationCatalogAuthoredWorkflowVersion = {
+  id: string;
+  pack_key: string;
+  workflow_key: string;
+  version_no: number;
+  label: string;
+  checksum: string;
+};
+
 export type InstallationCatalog = {
   schema_version: 1;
   packs: InstallationCatalogPack[];
@@ -114,6 +125,7 @@ export type InstallationCatalog = {
     id: string;
     handoff_modes: Array<"manual" | "assisted" | "automatic">;
   }>;
+  authored_workflow_versions: InstallationCatalogAuthoredWorkflowVersion[];
   integration_keys: string[];
   authentication_methods: "email_password"[];
 };
@@ -197,6 +209,8 @@ const setupDraftPayloadSchema = z
         workflow_policy: z
           .object({
             workflow_id: identifierSchema,
+            workflow_version_id: z.string().uuid(),
+            workflow_version_checksum: sha256Schema,
             handoff_mode: z.enum(["manual", "assisted", "automatic"]),
             automation_enabled: z.boolean(),
           })
@@ -300,6 +314,20 @@ const catalogSchema = z
         })
         .strict(),
     ),
+    authored_workflow_versions: z
+      .array(
+        z
+          .object({
+            id: z.string().uuid(),
+            pack_key: identifierSchema,
+            workflow_key: identifierSchema,
+            version_no: z.number().int().positive(),
+            label: z.string(),
+            checksum: sha256Schema,
+          })
+          .strict(),
+      )
+      .default([]),
     integration_keys: z.array(identifierSchema),
     authentication_methods: z.array(z.literal("email_password")).length(1),
   })

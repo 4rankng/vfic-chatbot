@@ -64,7 +64,9 @@ const clearIdentity = (): void => {
   storage()?.removeItem(IDENTITY_KEY);
 };
 
-export const getAuthProvider = (): AuthProvider => {
+export const getAuthProvider = (
+  availableResources: ReadonlySet<string> = new Set(),
+): AuthProvider => {
   return {
     login: async (params: unknown) => {
       const { username, email, password } = params as {
@@ -148,7 +150,7 @@ export const getAuthProvider = (): AuthProvider => {
     canAccess: async (params: Parameters<typeof canAccessFn>[1]) => {
       const me = await fetchIdentity();
       if (!me) return false;
-      return canAccessFn(me.role, params);
+      return canAccessFn(me.role, params, availableResources);
     },
   };
 };

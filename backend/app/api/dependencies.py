@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.security import decode_token
 from app.models.user import Role, User
+from app.services.installation.service import ActiveInstallation, InstallationService
+from app.capabilities.registry import get_capability_registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -65,6 +67,30 @@ def require_recruiter(user: User = Depends(get_current_user)) -> User:
     if user.role not in (Role.admin, Role.recruiter):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="recruiter only")
     return user
+
+
+async def get_active_installation(
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ActiveInstallation:
+    """Resolve runtime authority only after authentication has succeeded."""
+    return await InstallationService(db).require_active()
+
+
+def require_capability(capability_id: str):
+    registry = get_capability_registry()
+    if capability_id not in {item.capability_id for item in registry.capabilities()}:
+        raise ValueError(f"unknown capability dependency: {capability_id}")
+
+    async def dependency(
+        active: ActiveInstallation = Depends(get_active_installation),
+    ) -> ActiveInstallation:
+        if capability_id not in active.revision.capability_ids:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+        return active
+
+    dependency.__name__ = f"require_capability_{capability_id.replace('.', '_')}"
+    return dependency
 
 
 def get_embedder():

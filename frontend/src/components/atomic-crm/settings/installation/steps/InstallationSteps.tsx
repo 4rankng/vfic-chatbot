@@ -1,5 +1,5 @@
 import { Check, Loader2, Plus, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,8 @@ import {
   type ZaloSecretDraft,
 } from "../../../installation/setup-authoring-client";
 import { describeInstallationIssue } from "../installation-issues";
+import { WorkflowAuthoringPage } from "../../../workflows/WorkflowAuthoringPage";
+import { listWorkflowVersions } from "../../../workflows/workflow-authoring-client";
 
 type CommonStepProps = {
   catalog: InstallationCatalog;
@@ -292,26 +294,95 @@ export const WorkflowStep = ({
 }: CommonStepProps & {
   value?: WorkflowDraft;
   selectedPackKey?: string;
-  onChange: (value: WorkflowDraft) => void;
+  onChange: (value: WorkflowDraft | undefined) => void;
 }) => {
   const initial = value?.workflow_policy;
   const [workflowId, setWorkflowId] = useState(initial?.workflow_id ?? "");
+  const [workflowVersionId, setWorkflowVersionId] = useState(
+    initial?.workflow_version_id ?? "",
+  );
+  const [authoredVersions, setAuthoredVersions] = useState(
+    catalog.authored_workflow_versions,
+  );
+  const [versionError, setVersionError] = useState<string | null>(null);
+  const retainIncompleteLocalSelection = useRef(false);
   const [handoffMode, setHandoffMode] = useState<"" | WorkflowDraft["workflow_policy"]["handoff_mode"]>(initial?.handoff_mode ?? "");
   const [automationChoice, setAutomationChoice] = useState<"" | "enabled" | "disabled">(
     initial ? (initial.automation_enabled ? "enabled" : "disabled") : "",
   );
-  const allowedIds = catalog.packs.find((pack) => pack.key === selectedPackKey)?.workflow_ids ?? [];
-  const workflows = catalog.workflows.filter((workflow) => allowedIds.includes(workflow.id));
+  const allowedIds = useMemo(
+    () => catalog.packs.find((pack) => pack.key === selectedPackKey)?.workflow_ids ?? [],
+    [catalog.packs, selectedPackKey],
+  );
+  const workflows = useMemo(
+    () => catalog.workflows.filter((workflow) => allowedIds.includes(workflow.id)),
+    [allowedIds, catalog.workflows],
+  );
   const selectedWorkflow = workflows.find((workflow) => workflow.id === workflowId);
+  useEffect(() => {
+    const policy = value?.workflow_policy;
+    if (!policy && retainIncompleteLocalSelection.current) {
+      retainIncompleteLocalSelection.current = false;
+      return;
+    }
+    const version = catalog.authored_workflow_versions.find(
+      (candidate) =>
+        candidate.id === policy?.workflow_version_id &&
+        candidate.checksum === policy.workflow_version_checksum &&
+        candidate.pack_key === selectedPackKey &&
+        candidate.workflow_key === policy.workflow_id,
+    );
+    if (!policy || !version || !allowedIds.includes(policy.workflow_id)) {
+      setWorkflowId("");
+      setWorkflowVersionId("");
+      setHandoffMode("");
+      setAutomationChoice("");
+      return;
+    }
+    setWorkflowId(policy.workflow_id);
+    setWorkflowVersionId(policy.workflow_version_id);
+    setHandoffMode(policy.handoff_mode);
+    setAutomationChoice(policy.automation_enabled ? "enabled" : "disabled");
+  }, [allowedIds, catalog.authored_workflow_versions, selectedPackKey, value]);
+  const selectableVersions = authoredVersions
+    .filter(
+      (version) =>
+        version.pack_key === selectedPackKey && version.workflow_key === workflowId,
+    )
+    .sort((left, right) => right.version_no - left.version_no);
+  const reloadVersions = async () => {
+    setVersionError(null);
+    try {
+      const versions = await listWorkflowVersions();
+      setAuthoredVersions(versions);
+    } catch (cause) {
+      setVersionError(
+        cause instanceof Error ? cause.message : "Không tải lại được phiên bản quy trình.",
+      );
+    }
+  };
   const commit = (
     nextWorkflowId: string,
+    nextWorkflowVersionId: string,
     nextHandoffMode: "" | WorkflowDraft["workflow_policy"]["handoff_mode"],
     nextAutomationChoice: "" | "enabled" | "disabled",
   ) => {
-    if (!nextWorkflowId || !nextHandoffMode || !nextAutomationChoice) return;
+    const version = authoredVersions.find(
+      (candidate) =>
+        candidate.id === nextWorkflowVersionId &&
+        candidate.pack_key === selectedPackKey &&
+        candidate.workflow_key === nextWorkflowId,
+    );
+    if (!nextWorkflowId || !version || !nextHandoffMode || !nextAutomationChoice) {
+      retainIncompleteLocalSelection.current = Boolean(value);
+      onChange(undefined);
+      return;
+    }
     onChange({
       workflow_policy: {
         workflow_id: nextWorkflowId,
+        workflow_version_id: version.id,
+        workflow_version_checksum: version.checksum,
         handoff_mode: nextHandoffMode,
         automation_enabled: nextAutomationChoice === "enabled",
       },
@@ -325,26 +396,65 @@ export const WorkflowStep = ({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2 sm:col-span-2">
           <Label htmlFor="setup-workflow">Quy trình *</Label>
-          <select id="setup-workflow" className={selectClassName} value={workflowId} onChange={(event) => { const next = event.target.value; setWorkflowId(next); setHandoffMode(""); commit(next, "", automationChoice); }} required autoFocus>
+          <select id="setup-workflow" className={selectClassName} value={workflowId} onChange={(event) => { const next = event.target.value; setWorkflowId(next); setWorkflowVersionId(""); setHandoffMode(""); commit(next, "", "", automationChoice); }} required autoFocus>
             <option value="">Chọn quy trình</option>
             {workflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.id}</option>)}
           </select>
         </div>
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="setup-workflow-version">Phiên bản đã xuất bản *</Label>
+          <select
+            id="setup-workflow-version"
+            className={selectClassName}
+            value={workflowVersionId}
+            disabled={!workflowId}
+            onChange={(event) => {
+              const next = event.target.value;
+              setWorkflowVersionId(next);
+              commit(workflowId, next, handoffMode, automationChoice);
+            }}
+            required
+          >
+            <option value="">Chọn phiên bản</option>
+            {selectableVersions.map((version) => (
+              <option key={version.id} value={version.id}>
+                {version.label} — phiên bản {version.version_no}
+              </option>
+            ))}
+          </select>
+          {workflowId && selectableVersions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Chưa có phiên bản nào. Hãy tạo và xuất bản một phiên bản bên dưới.
+            </p>
+          ) : null}
+          {versionError ? <p className="text-sm text-destructive" role="alert">{versionError}</p> : null}
+        </div>
         <div className="grid gap-2">
           <Label htmlFor="setup-handoff">Cách bàn giao *</Label>
-          <select id="setup-handoff" className={selectClassName} value={handoffMode} onChange={(event) => { const next = event.target.value as "" | WorkflowDraft["workflow_policy"]["handoff_mode"]; setHandoffMode(next); commit(workflowId, next, automationChoice); }} required>
+          <select id="setup-handoff" className={selectClassName} value={handoffMode} onChange={(event) => { const next = event.target.value as "" | WorkflowDraft["workflow_policy"]["handoff_mode"]; setHandoffMode(next); commit(workflowId, workflowVersionId, next, automationChoice); }} required>
             <option value="">Chọn cách bàn giao</option>
-            {(selectedWorkflow?.handoff_modes ?? []).map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+            {(selectedWorkflow?.handoff_modes ?? []).map((mode) => <option key={mode} value={mode}>{mode === "manual" ? "Thủ công" : mode === "assisted" ? "Có hỗ trợ" : "Tự động"}</option>)}
           </select>
         </div>
         <fieldset className="grid gap-2 sm:col-span-2">
           <legend className="text-sm font-medium">Tự động hóa *</legend>
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><input type="radio" name="setup-automation" checked={automationChoice === "enabled"} onChange={() => { setAutomationChoice("enabled"); commit(workflowId, handoffMode, "enabled"); }} />Bật tự động hóa</label>
-            <label className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><input type="radio" name="setup-automation" checked={automationChoice === "disabled"} onChange={() => { setAutomationChoice("disabled"); commit(workflowId, handoffMode, "disabled"); }} />Không bật tự động hóa</label>
+            <label className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><input type="radio" name="setup-automation" checked={automationChoice === "enabled"} onChange={() => { setAutomationChoice("enabled"); commit(workflowId, workflowVersionId, handoffMode, "enabled"); }} />Bật tự động hóa</label>
+            <label className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><input type="radio" name="setup-automation" checked={automationChoice === "disabled"} onChange={() => { setAutomationChoice("disabled"); commit(workflowId, workflowVersionId, handoffMode, "disabled"); }} />Không bật tự động hóa</label>
           </div>
         </fieldset>
       </div>
+      {selectedPackKey && workflowId ? (
+        <div className="border-t pt-5">
+          <WorkflowAuthoringPage
+            key={`${selectedPackKey}:${workflowId}`}
+            packKey={selectedPackKey}
+            workflowKey={workflowId}
+            embedded
+            onPublished={reloadVersions}
+          />
+        </div>
+      ) : null}
     </fieldset>
   );
 };

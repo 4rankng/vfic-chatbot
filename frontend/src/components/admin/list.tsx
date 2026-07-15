@@ -6,6 +6,7 @@ import {
 import type { ListBaseProps, ListControllerResult, RaRecord } from "ra-core";
 import {
   FilterContext,
+  CanAccess,
   ListBase,
   Translate,
   useGetResourceLabel,
@@ -150,7 +151,7 @@ export const ListView = <RecordType extends RaRecord = RaRecord>(
           {actions ?? (
             <div className="flex items-center gap-2">
               {filters && filters.length > 0 ? <FilterButton /> : null}
-              {hasCreate ? <CreateButton /> : null}
+              {hasCreate ? <CanAccess action="create" resource={resource}><CreateButton /></CanAccess> : null}
               {<ExportButton />}
             </div>
           )}
@@ -195,7 +196,7 @@ export const Empty = () => {
               _: inviteMessage,
             })}
           </p>
-          <CreateButton />
+          <CanAccess action="create" resource={resource}><CreateButton /></CanAccess>
         </>
       ) : null}
     </div>

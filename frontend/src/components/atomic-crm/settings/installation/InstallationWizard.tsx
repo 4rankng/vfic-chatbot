@@ -70,7 +70,28 @@ const isSectionLocallyComplete = (
     case "pack_capabilities":
       return Boolean(payload.pack_capabilities?.pack_key);
     case "workflow":
-      return Boolean(payload.workflow?.workflow_policy.workflow_id);
+      {
+        const policy = payload.workflow?.workflow_policy;
+        const selectedPackKey = payload.pack_capabilities?.pack_key;
+        const selectedPack = catalog.packs.find((pack) => pack.key === selectedPackKey);
+        const workflow = catalog.workflows.find((item) => item.id === policy?.workflow_id);
+        const version = catalog.authored_workflow_versions.find(
+          (item) =>
+            item.id === policy?.workflow_version_id &&
+            item.checksum === policy.workflow_version_checksum &&
+            item.pack_key === selectedPackKey &&
+            item.workflow_key === policy.workflow_id,
+        );
+        return Boolean(
+          policy?.workflow_id &&
+            policy.workflow_version_id &&
+            policy.workflow_version_checksum &&
+            typeof policy.automation_enabled === "boolean" &&
+            selectedPack?.workflow_ids.includes(policy.workflow_id) &&
+            workflow?.handoff_modes.includes(policy.handoff_mode) &&
+            version,
+        );
+      }
     case "knowledge_templates":
       return (payload.knowledge_templates?.template_version_refs.length ?? 0) > 0;
     case "persona":
@@ -167,6 +188,17 @@ export const InstallationWizard = () => {
       next.add("workflow");
       return next;
     });
+    setConflict(null); setFinalizedRevisionId(null);
+  };
+
+  const updateWorkflowSection = (value: InstallationSetupDraftPayload["workflow"]) => {
+    setPayload((currentPayload) => {
+      const next = { ...currentPayload };
+      if (value === undefined) delete next.workflow;
+      else next.workflow = value;
+      return next;
+    });
+    setDirtySections((currentDirty) => new Set(currentDirty).add("workflow"));
     setConflict(null); setFinalizedRevisionId(null);
   };
 
@@ -345,7 +377,7 @@ export const InstallationWizard = () => {
           {current.key === "identity_branding" ? <IdentityBrandingStep catalog={catalog} issues={currentIssues} value={payload.identity_branding} onChange={(value) => updateSection("identity_branding", value)} /> : null}
           {current.key === "regional_terminology" ? <RegionalTerminologyStep catalog={catalog} issues={currentIssues} selectedPackKey={payload.pack_capabilities?.pack_key} value={payload.regional_terminology} onChange={(value) => updateSection("regional_terminology", value)} /> : null}
           {current.key === "pack_capabilities" ? <PackCapabilitiesStep catalog={catalog} issues={currentIssues} value={payload.pack_capabilities} onChange={updatePackSection} /> : null}
-          {current.key === "workflow" ? <WorkflowStep catalog={catalog} issues={currentIssues} selectedPackKey={payload.pack_capabilities?.pack_key} value={payload.workflow} onChange={(value) => updateSection("workflow", value)} /> : null}
+          {current.key === "workflow" ? <WorkflowStep catalog={catalog} issues={currentIssues} selectedPackKey={payload.pack_capabilities?.pack_key} value={payload.workflow} onChange={updateWorkflowSection} /> : null}
           {current.key === "knowledge_templates" ? <KnowledgeTemplatesStep catalog={catalog} issues={currentIssues} value={payload.knowledge_templates} onChange={(value) => updateSection("knowledge_templates", value)} /> : null}
           {current.key === "persona" ? <PersonaStep catalog={catalog} issues={currentIssues} value={payload.persona} onChange={(value) => updateSection("persona", value)} /> : null}
           {current.key === "providers_integrations" ? <ProvidersIntegrationsStep catalog={catalog} issues={currentIssues} value={payload.providers_integrations} onChange={(value) => updateSection("providers_integrations", value)} /> : null}

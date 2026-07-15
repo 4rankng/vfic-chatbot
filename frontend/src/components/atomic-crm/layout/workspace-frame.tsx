@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 
 import { useRoleActions } from "../hooks/useRoleActions";
+import { useCompiledRuntime } from "../capabilities/runtime-context";
 import { useNotifications } from "./topbar/useNotifications";
 import "./mobile-workspace.css";
 import Header from "./Header";
@@ -38,15 +39,18 @@ const WorkspaceNavigation = ({
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const location = useLocation();
   const { isAdmin } = useRoleActions();
+  const { navigation } = useCompiledRuntime();
   const role = isAdmin ? "admin" : "recruiter";
   const routeValue =
     location.pathname === "/" && location.hash.startsWith("#/")
       ? location.hash
       : `${location.pathname}${location.search}`;
   const path = normalizeWorkspacePath(routeValue);
-  const destinations = getWorkspaceDestinations(role, surface);
+  const destinations = getWorkspaceDestinations(role, surface, navigation);
   const overflowDestinations =
-    surface === "mobile" ? getWorkspaceOverflowDestinations(role) : [];
+    surface === "mobile"
+      ? getWorkspaceOverflowDestinations(role, navigation)
+      : [];
   const isOverflowActive = overflowDestinations.some(({ isActive }) =>
     isActive(path),
   );

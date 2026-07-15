@@ -15,6 +15,7 @@ from app.models.installation import InstallationState
 from app.models.integration import IntegrationSetting
 from app.models.lead import Lead
 from app.models.persona import Persona, PersonaVersion
+from app.models.case_workflow import CaseWorkflowStage, CaseWorkflowVersion
 from app.models.user import Role, User
 from app.schemas.installation import InstallationRevisionCreate
 from app.services.errors import InstallationError
@@ -22,6 +23,7 @@ from app.services.installation.hashing import sha256_json
 from app.services.installation.service import InstallationService
 
 pytestmark = pytest.mark.integration
+_WORKFLOW_PINS: dict[uuid.UUID, tuple[uuid.UUID, str]] = {}
 
 
 def _runtime_ready_registry() -> CapabilityRegistry:
@@ -34,6 +36,7 @@ def _runtime_ready_registry() -> CapabilityRegistry:
 def _revision_body(
     persona_version_id: uuid.UUID, *, display_name: str, expected_lock_version: int = 0
 ) -> InstallationRevisionCreate:
+    workflow_version_id, workflow_version_checksum = _WORKFLOW_PINS[persona_version_id]
     return InstallationRevisionCreate(
         expected_lock_version=expected_lock_version,
         pack_key="recruitment",
@@ -52,6 +55,8 @@ def _revision_body(
         },
         workflow_policy={
             "workflow_id": "candidate_intake",
+            "workflow_version_id": workflow_version_id,
+            "workflow_version_checksum": workflow_version_checksum,
             "handoff_mode": "assisted",
             "automation_enabled": True,
         },
@@ -97,6 +102,38 @@ async def _seed_actor_and_persona(integration_session) -> tuple[User, PersonaVer
         created_by=actor.id,
     )
     integration_session.add(persona_version)
+    workflow_version = CaseWorkflowVersion(
+        pack_key="recruitment",
+        workflow_key="candidate_intake",
+        version_no=1,
+        label="Candidate intake",
+        schema_version=1,
+        case_attribute_schema={},
+        checksum=sha256_json(
+            {
+                "pack_key": "recruitment",
+                "workflow_key": "candidate_intake",
+                "version_no": 1,
+                "stages": ["new"],
+            }
+        ),
+        created_by=actor.id,
+    )
+    integration_session.add(workflow_version)
+    await integration_session.flush()
+    integration_session.add(
+        CaseWorkflowStage(
+            workflow_version_id=workflow_version.id,
+            stage_key="new",
+            label="New",
+            position=0,
+            is_initial=True,
+            is_terminal=False,
+        )
+    )
+    persona_version._test_workflow_version_id = workflow_version.id
+    persona_version._test_workflow_version_checksum = workflow_version.checksum
+    _WORKFLOW_PINS[persona_version.id] = (workflow_version.id, workflow_version.checksum)
     integration_session.add_all(
         [
             IntegrationSetting(
@@ -237,8 +274,31 @@ async def test_operational_data_created_after_draft_blocks_incompatible_first_ac
         ),
     )
     service = InstallationService(integration_session, registry=registry)
+    product_workflow = CaseWorkflowVersion(
+        pack_key="product_advisory",
+        workflow_key="candidate_intake",
+        version_no=1,
+        label="Product intake",
+        schema_version=1,
+        case_attribute_schema={},
+        checksum=sha256_json({"pack_key": "product_advisory", "version_no": 1}),
+        created_by=actor.id,
+    )
+    integration_session.add(product_workflow)
+    await integration_session.flush()
     body = _revision_body(persona_version.id, display_name="Product customer").model_copy(
-        update={"pack_key": "product_advisory", "capability_ids": ["conversation"]}
+        update={
+            "pack_key": "product_advisory",
+            "capability_ids": ["conversation"],
+            "workflow_policy": _revision_body(
+                persona_version.id, display_name="unused"
+            ).workflow_policy.model_copy(
+                update={
+                    "workflow_version_id": product_workflow.id,
+                    "workflow_version_checksum": product_workflow.checksum,
+                }
+            ),
+        }
     )
     revision = await service.create_revision(body, actor.id)
     await service.validate_revision(revision.id, actor.id)

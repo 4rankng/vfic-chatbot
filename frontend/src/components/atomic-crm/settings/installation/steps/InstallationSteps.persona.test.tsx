@@ -29,6 +29,7 @@ const catalog: InstallationCatalog = {
   locales: [],
   currencies: [],
   workflows: [],
+  authored_workflow_versions: [],
   integration_keys: [],
   authentication_methods: ["email_password"],
 };

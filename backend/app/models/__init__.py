@@ -24,6 +24,21 @@ from app.models.installation import (
     InstallationManifestValidation,
     InstallationState,
 )
+from app.models.contact import Contact, ContactChannelIdentity
+from app.models.case_workflow import (
+    CaseTagDefinition,
+    CaseWorkflowStage,
+    CaseWorkflowTransition,
+    CaseWorkflowVersion,
+)
+from app.models.case import (
+    Case,
+    CaseFollowup,
+    CaseLifecycle,
+    CaseNote,
+    CaseTagAssignment,
+    FollowupStatus as CaseFollowupStatus,
+)
 from app.models.password_reset import PasswordResetOtp
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.models.conversation import (
@@ -95,6 +110,18 @@ __all__ = [
     "InstallationManifestRevision",
     "InstallationManifestValidation",
     "InstallationState",
+    "Contact",
+    "ContactChannelIdentity",
+    "CaseWorkflowVersion",
+    "CaseWorkflowStage",
+    "CaseWorkflowTransition",
+    "CaseTagDefinition",
+    "Case",
+    "CaseLifecycle",
+    "CaseTagAssignment",
+    "CaseNote",
+    "CaseFollowup",
+    "CaseFollowupStatus",
     "PasswordResetOtp",
     "WorkerFeatureCatalog",
     "JobFeatureValue",

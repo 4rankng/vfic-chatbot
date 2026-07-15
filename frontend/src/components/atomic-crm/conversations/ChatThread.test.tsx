@@ -257,7 +257,7 @@ describe("ChatThread — mode-gated footer", () => {
     await expect
       .element(
         screen.getByText(
-          "Hội thoại đã đóng. Không thể gửi tin nhắn cho ứng viên.",
+          "Hội thoại đã đóng. Không thể gửi tin nhắn cho người trò chuyện.",
         ),
       )
       .toBeVisible();

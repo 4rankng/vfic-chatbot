@@ -18,6 +18,7 @@ from app.models.installation import (
     InstallationManifestValidation,
     InstallationState,
 )
+from app.models.case_workflow import CaseWorkflowVersion
 from app.schemas.installation import (
     InstallationAdminOut,
     InstallationRevisionCreate,
@@ -104,6 +105,23 @@ class InstallationService:
         selection_issues: list[dict[str, str | None]] = []
         if body.workflow_policy.workflow_id not in pack.workflow_ids:
             selection_issues.append(self._issue("WORKFLOW_INVALID", "workflow_policy.workflow_id"))
+        if body.workflow_policy.workflow_version_id is None:
+            selection_issues.append(
+                self._issue("WORKFLOW_VERSION_REQUIRED", "workflow_policy.workflow_version_id")
+            )
+        else:
+            workflow_version = await self.db.get(
+                CaseWorkflowVersion, body.workflow_policy.workflow_version_id
+            )
+            if (
+                workflow_version is None
+                or workflow_version.checksum != body.workflow_policy.workflow_version_checksum
+                or workflow_version.pack_key != body.pack_key
+                or workflow_version.workflow_key != body.workflow_policy.workflow_id
+            ):
+                selection_issues.append(
+                    self._issue("WORKFLOW_VERSION_MISMATCH", "workflow_policy.workflow_version_id")
+                )
         missing_terms = set(pack.terminology_keys) - set(body.terminology)
         unknown_terms = set(body.terminology) - set(pack.terminology_keys)
         if missing_terms:
@@ -241,6 +259,8 @@ class InstallationService:
             integration_requirements=data["integration_requirements"],
             authentication_policy=data["authentication_policy"],
             authentication_policy_checksum=authentication_checksum,
+            workflow_version_id=body.workflow_policy.workflow_version_id,
+            workflow_version_checksum=body.workflow_policy.workflow_version_checksum,
             created_by=actor_id,
         )
         self.db.add(revision)
@@ -287,6 +307,19 @@ class InstallationService:
         lifecycle = state.lifecycle if state else InstallationLifecycle.unconfigured.value
         revision = await self._revision_or_error(revision_id, lifecycle)
         issues: list[dict[str, str | None]] = []
+
+        if revision.workflow_version_id is None:
+            issues.append(self._issue("WORKFLOW_VERSION_REQUIRED", "workflow_version_id"))
+        else:
+            workflow_version = await self.db.get(CaseWorkflowVersion, revision.workflow_version_id)
+            if (
+                workflow_version is None
+                or revision.workflow_version_checksum is None
+                or workflow_version.checksum != revision.workflow_version_checksum
+                or workflow_version.pack_key != revision.pack_key
+                or workflow_version.workflow_key != revision.workflow_policy.get("workflow_id")
+            ):
+                issues.append(self._issue("WORKFLOW_VERSION_MISMATCH", "workflow_version_id"))
 
         try:
             pack = self.registry.get_pack(revision.pack_key)
@@ -370,6 +403,7 @@ class InstallationService:
                 "template_version_ids": sorted(expected_refs),
                 "integration_keys": required_keys,
                 "authentication_policy_checksum": revision.authentication_policy_checksum,
+                "workflow_version_checksum": revision.workflow_version_checksum,
             },
             manifest_checksum=revision.manifest_checksum,
             pack_contract_hash=revision.pack_contract_hash,
@@ -377,6 +411,7 @@ class InstallationService:
             workflow_policy_checksum=revision.workflow_policy_checksum,
             provider_policy_checksum=revision.provider_policy_checksum,
             authentication_policy_checksum=revision.authentication_policy_checksum,
+            workflow_version_checksum=revision.workflow_version_checksum,
             template_checksums=template_checksums,
             active_kb_vector=[list(item) for item in active_kb_vector],
             validated_by=actor_id,
@@ -786,6 +821,20 @@ class InstallationService:
         )
         if revision is None or persona is None:
             return False
+        if (
+            revision.workflow_version_id is None
+            or revision.workflow_version_checksum is None
+            or validation.workflow_version_checksum != revision.workflow_version_checksum
+        ):
+            return False
+        workflow_version = await self.db.get(CaseWorkflowVersion, revision.workflow_version_id)
+        if (
+            workflow_version is None
+            or workflow_version.checksum != revision.workflow_version_checksum
+            or workflow_version.pack_key != revision.pack_key
+            or workflow_version.workflow_key != revision.workflow_policy.get("workflow_id")
+        ):
+            return False
         try:
             pack = self.registry.get_pack(revision.pack_key)
             registry_current = (
@@ -832,8 +881,7 @@ class InstallationService:
             and validation.provider_policy_checksum == revision.provider_policy_checksum
             and revision.authentication_policy is not None
             and revision.authentication_policy_checksum is not None
-            and validation.authentication_policy_checksum
-            == revision.authentication_policy_checksum
+            and validation.authentication_policy_checksum == revision.authentication_policy_checksum
         )
 
     async def _find_current_validation(
@@ -856,6 +904,13 @@ class InstallationService:
         if validation.authentication_policy_checksum is None:
             raise self._error(
                 "Authentication authority must be upgraded before runtime use",
+                "INSTALLATION_VALIDATION_FAILED",
+                InstallationLifecycle.upgrade_required.value,
+                status_code=422,
+            )
+        if validation.workflow_version_checksum is None:
+            raise self._error(
+                "Workflow authority must be upgraded before runtime use",
                 "INSTALLATION_VALIDATION_FAILED",
                 InstallationLifecycle.upgrade_required.value,
                 status_code=422,
@@ -905,6 +960,8 @@ class InstallationService:
             or sha256_json(revision.authentication_policy)
             != revision.authentication_policy_checksum
         ):
+            return InstallationLifecycle.upgrade_required.value, "UPGRADE_REQUIRED"
+        if revision.workflow_version_id is None or revision.workflow_version_checksum is None:
             return InstallationLifecycle.upgrade_required.value, "UPGRADE_REQUIRED"
         try:
             pack = self.registry.get_pack(revision.pack_key)

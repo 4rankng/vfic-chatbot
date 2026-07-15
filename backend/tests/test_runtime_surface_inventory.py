@@ -19,6 +19,9 @@ ROUTE_MODULE_CLASSIFICATION = {
     "auth": "auth_setup",
     "users": "auth_setup",
     "conversations": "active_kernel",
+    "contacts": "active_kernel",
+    "cases": "active_kernel",
+    "case_workflows": "auth_setup",
     "leads": "capability.recruitment",
     "bot_runs": "active_kernel",
     "knowledge": "capability.knowledge",
@@ -42,6 +45,9 @@ EXPECTED_ROUTE_COUNTS = {
     "auth": 6,
     "bot_runs": 1,
     "conversations": 17,
+    "contacts": 5,
+    "cases": 15,
+    "case_workflows": 3,
     "dashboard": 2,
     "integrations": 11,
     # Installation setup authoring adds four admin-only endpoints; immutable
@@ -57,7 +63,7 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 2,
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "abc5d5dda7b46e43c2f01b1005342ac3e345da0f9a1514a7c34e795597c3769e"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "0e2bbaab6003af601dc20a1a2b0ae4aa0d7d62835b5d6ec5a4f1f577e1ac84fc"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 56,

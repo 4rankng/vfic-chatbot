@@ -15,19 +15,19 @@ import {
   RecordContextProvider,
 } from "ra-core";
 import { useSearchParams } from "react-router";
-import type { Conversation, Lead } from "../types";
+import type { Conversation } from "../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "./InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { chatRepository } from "./chatRepository";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
-import { getLeadPriorityChip, getLeadStatusColor } from "./conversationDisplay";
 import { LeadAvatar } from "./LeadAvatar";
 import {
-  isAttentionReason,
-  type QueueFilter,
-} from "../dashboard/attentionDashboard";
+  getGenericConversationPresentation,
+  useConversationCapabilitySlots,
+} from "./conversation-capability";
+import type { ConversationRowPresentation } from "../capabilities/types";
 import conversationEmptyIllustration from "@/assets/empty-states/conversation-empty-illustration.png";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
 import {
@@ -40,15 +40,26 @@ import {
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
-  _lead?: Lead | null;
+  _presentation: ConversationRowPresentation;
   _snippet?: string;
 };
 
-// Re-export so existing importers (`import { QueueFilter } from
-// ".../ConversationList"`) keep compiling after FIX 3 moved the type into
-// attentionDashboard.ts. Prefer importing QueueFilter from
-// attentionDashboard.ts directly in new code.
-export type { QueueFilter };
+export type QueueFilter = "all" | "attention" | "priority";
+
+const ATTENTION_REASON_KEYS = new Set([
+  "DELIVERY_REVIEW",
+  "HUMAN_ESCALATION",
+  "REPLY_OVERDUE",
+  "FOLLOWUP_OVERDUE",
+  "WAITING_REPLY",
+  "PRIORITY_NO_ACTION",
+  "FOLLOWUP_TODAY",
+  "UNREAD",
+  "STALLED",
+]);
+
+const isAttentionReason = (value: string | null): value is string =>
+  value !== null && ATTENTION_REASON_KEYS.has(value);
 
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 
@@ -172,19 +183,19 @@ const ConversationListItem = memo(
     onSelect,
     readIds,
   }: ConversationListItemProps) => {
-    const lead = conversation._lead;
+    const presentation = conversation._presentation;
     const time = getRelativeTimeString(
       conversation.last_inbound_at ?? conversation.updated_at,
     );
 
-    const name =
-      lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
-    const colors = getLeadStatusColor(lead);
+    const name = presentation.displayName;
     // Preview = latest message snippet (batched via vfic_last_messages), falling
     // back to the contact's phone when no snippet is available yet.
-    const subtitle = conversation._snippet || lead?.phone || "";
+    const subtitle = conversation._snippet || presentation.subtitle;
 
-    const priorityChip = getLeadPriorityChip(lead);
+    const priorityChip = presentation.priorityLabel
+      ? { label: presentation.priorityLabel, tone: presentation.priorityTone ?? "warm" }
+      : null;
     const needsAttention = needsVisibleAttention(conversation, readIds);
     const attentionLabel = getAttentionLabel(conversation, needsAttention);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
@@ -204,9 +215,9 @@ const ConversationListItem = memo(
         aria-pressed={isActive}
       >
         <LeadAvatar
-          src={lead?.avatar_url}
-          bg={colors.bg}
-          ink={colors.ink}
+          src={presentation.avatarUrl}
+          bg={presentation.avatarBackground}
+          ink={presentation.avatarForeground}
           iconSize={18}
           className="avatar round"
           alt={`Ảnh đại diện của ${name}`}
@@ -289,7 +300,7 @@ const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
     empty: {
       icon: Inbox,
       title: "Chưa có cuộc trò chuyện",
-      description: "Các cuộc trò chuyện mới từ ứng viên sẽ xuất hiện tại đây.",
+      description: "Các cuộc trò chuyện mới từ liên hệ sẽ xuất hiện tại đây.",
     },
     filtered: {
       icon: SearchX,
@@ -354,7 +365,7 @@ const WorkspaceEmptyState = () => {
           <h2>Chọn một cuộc trò chuyện</h2>
           <p>
             Chọn một cuộc trò chuyện từ danh sách để xem tin nhắn và thông tin
-            ứng viên.
+            liên hệ.
           </p>
         </div>
       </div>
@@ -379,7 +390,10 @@ const ConversationListPanel = ({
   } = useListContext<Conversation>();
   const { fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfinitePaginationContext();
-  const [leads, setLeads] = useState<Record<string, Lead | null>>({});
+  const slots = useConversationCapabilitySlots();
+  const [adapterPresentations, setAdapterPresentations] = useState<
+    ReadonlyMap<string, ConversationRowPresentation>
+  >(new Map());
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   // The chip always starts on "all". A `?reason=` deep link filters
@@ -400,35 +414,19 @@ const ConversationListPanel = ({
     [conversations],
   );
 
-  // Resolve contact details AND the latest message per conversation in one
-  // batched pass each (getLeadsByZaloIds + getLastMessages), replacing the old
-  // per-zalo_id N+1 lookups. Both fire concurrently.
+  // Core snippets always load from the conversation API. Optional capability
+  // enrichment is invoked only when that source-owned slot was compiled.
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
-    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
-      const zaloIds = Array.from(
-        new Set(conversations.map((c) => c.zalo_chat_id).filter(Boolean)),
-      );
       try {
-        const [all, snips] = await Promise.all([
-          chatRepository.getLeadsByZaloIds(zaloIds),
+        const [enrichment, snips] = await Promise.all([
+          slots.row?.load(conversations, controller.signal) ?? Promise.resolve(new Map()),
           chatRepository.getLastMessages(conversations),
         ]);
-        if (cancelled) return;
-        const byZalo: Record<string, Lead | null> = {};
-        for (const lead of all) {
-          const key = lead.zalo_id;
-          if (key && byZalo[key] === undefined) byZalo[key] = lead;
-        }
-        setLeads((prev) => {
-          if (
-            Object.entries(byZalo).every(([key, value]) => prev[key] === value)
-          ) {
-            return prev;
-          }
-          return { ...prev, ...byZalo };
-        });
+        if (controller.signal.aborted) return;
+        setAdapterPresentations(enrichment);
         setSnippets((prev) => {
           if (
             Object.entries(snips).every(([key, value]) => prev[key] === value)
@@ -438,22 +436,20 @@ const ConversationListPanel = ({
           return { ...prev, ...snips };
         });
       } catch {
-        // Leave previously loaded leads/snippets intact on error.
+        // Leave previously loaded enrichment/snippets intact on error.
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [conversationIdsKey, conversations]);
+    return () => controller.abort();
+  }, [conversationIdsKey, conversations, slots.row]);
 
   const rows: ConversationRow[] = useMemo(() => {
     if (!conversations) return [];
     return conversations
       .map((c) => {
-        const lead = leads[c.zalo_chat_id] ?? null;
         return {
           ...c,
-          _lead: lead,
+          _presentation:
+            adapterPresentations.get(c.id) ?? getGenericConversationPresentation(c),
           _snippet: snippets[c.zalo_chat_id] ?? "",
         };
       })
@@ -463,19 +459,14 @@ const ConversationListPanel = ({
         }
         if (
           queueFilter === "priority" &&
-          c._lead?.lead_score !== "hot" &&
-          c._lead?.lead_score !== "warm"
+          !slots.filters?.matchesPriority(c._presentation)
         ) {
           return false;
         }
         if (deferredQuery) {
           const haystack = [
             c.zalo_chat_id,
-            c._lead?.name,
-            c._lead?.phone,
-            c._lead?.desired_job,
-            c._lead?.region,
-            c._lead?.living_area,
+            c._presentation.searchText,
             c._snippet,
           ]
             .filter(Boolean)
@@ -501,7 +492,15 @@ const ConversationListPanel = ({
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
       });
-  }, [conversations, leads, snippets, deferredQuery, queueFilter, readIds]);
+  }, [
+    adapterPresentations,
+    conversations,
+    snippets,
+    deferredQuery,
+    queueFilter,
+    readIds,
+    slots.filters,
+  ]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -527,26 +526,30 @@ const ConversationListPanel = ({
         searchSlot={
           <div className="inbox-toolbar">
             <label className="search">
-              <span className="sr-only">Tìm ứng viên hoặc số điện thoại</span>
+              <span className="sr-only">
+                {slots.row ? "Tìm ứng viên hoặc số điện thoại" : "Tìm liên hệ"}
+              </span>
               <svg className="icon">
                 <use href="#i-search" />
               </svg>
               <input
                 type="search"
                 placeholder="Tìm kiếm"
-                aria-label="Tìm ứng viên hoặc số điện thoại"
+                aria-label={
+                  slots.row ? "Tìm ứng viên hoặc số điện thoại" : "Tìm liên hệ"
+                }
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </label>
             <div className="conversation-filters" aria-label="Lọc hội thoại">
-              {(
-                [
-                  ["all", "Tất cả hội thoại"],
-                  ["attention", "Cần phản hồi"],
-                  ["priority", "Ứng viên ưu tiên"],
-                ] as const
-              ).map(([value, label]) => (
+              {([
+                ["all", "Tất cả hội thoại"],
+                ["attention", "Cần phản hồi"],
+                ...(slots.filters
+                  ? [["priority", slots.filters.priorityLabel] as const]
+                  : []),
+              ] as const).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"

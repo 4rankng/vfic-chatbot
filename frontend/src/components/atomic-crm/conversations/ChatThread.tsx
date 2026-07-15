@@ -207,7 +207,7 @@ const ChatMessageRow = memo(
             src={candidateAvatarUrl}
             className="message-avatar"
             iconSize={16}
-            alt="Ảnh đại diện ứng viên"
+            alt="Ảnh đại diện người trò chuyện"
           />
         ) : (
           <span
@@ -825,7 +825,7 @@ export const ChatThread = ({
             tabIndex={-1}
           >
             <Bot className="icon" aria-hidden="true" />
-            <span>Hội thoại đã đóng. Không thể gửi tin nhắn cho ứng viên.</span>
+            <span>Hội thoại đã đóng. Không thể gửi tin nhắn cho người trò chuyện.</span>
           </div>
         )}
       </footer>

@@ -1,13 +1,39 @@
 """Code-reviewed recruitment pack definition without runtime side effects."""
 
 from app.capabilities.contracts import CapabilityDefinition, IndustryPackDefinition
+from app.capabilities.recruitment.adapter import DESCRIPTOR
 
 CAPABILITIES = (
-    CapabilityDefinition("conversation"),
-    CapabilityDefinition("knowledge", ("conversation",)),
-    CapabilityDefinition("candidate_intake", ("conversation",)),
-    CapabilityDefinition("job_advisory", ("candidate_intake", "knowledge")),
-    CapabilityDefinition("channel.zalo", ("conversation",)),
+    CapabilityDefinition(
+        "conversation",
+        api_routes=("/api/v1/conversations",),
+        frontend_resources=("conversations",),
+    ),
+    CapabilityDefinition(
+        "knowledge",
+        ("conversation",),
+        api_routes=("/api/v1/knowledge",),
+        frontend_resources=("knowledge_sources", "projects", "personas"),
+    ),
+    CapabilityDefinition(
+        "candidate_intake",
+        ("conversation",),
+        api_routes=("/api/v1/leads",),
+        conversation_slots=("row", "filters", "context", "actions"),
+        adapter_descriptor=DESCRIPTOR,
+    ),
+    CapabilityDefinition(
+        "job_advisory",
+        ("candidate_intake", "knowledge"),
+        api_routes=("/api/v1/jobs",),
+        dashboard_owner=True,
+    ),
+    CapabilityDefinition(
+        "channel.zalo",
+        ("conversation",),
+        authority_class="channel",
+        frontend_resources=("settings",),
+    ),
 )
 
 PACK = IndustryPackDefinition(

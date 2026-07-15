@@ -11,6 +11,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Integer,
     SmallInteger,
@@ -38,6 +39,20 @@ class InstallationManifestRevision(Base):
         CheckConstraint(
             "jsonb_typeof(customer_identity) = 'object'",
             name="installation_customer_identity_object",
+        ),
+        CheckConstraint(
+            "(workflow_version_id IS NULL) = (workflow_version_checksum IS NULL)",
+            name="installation_workflow_version_pair",
+        ),
+        CheckConstraint(
+            "workflow_version_checksum IS NULL OR workflow_version_checksum ~ '^[0-9a-f]{64}$'",
+            name="installation_workflow_version_checksum_sha256",
+        ),
+        ForeignKeyConstraint(
+            ["workflow_version_id", "workflow_version_checksum"],
+            ["case_workflow_versions.id", "case_workflow_versions.checksum"],
+            ondelete="RESTRICT",
+            name="fk_installation_revision_workflow_version",
         ),
         CheckConstraint("jsonb_typeof(branding) = 'object'", name="installation_branding_object"),
         CheckConstraint(
@@ -120,6 +135,8 @@ class InstallationManifestRevision(Base):
     integration_requirements: Mapped[list] = mapped_column(JSONB, nullable=False)
     authentication_policy: Mapped[dict | None] = mapped_column(JSONB)
     authentication_policy_checksum: Mapped[str | None] = mapped_column(String(64))
+    workflow_version_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    workflow_version_checksum: Mapped[str | None] = mapped_column(String(64))
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -133,6 +150,10 @@ class InstallationManifestValidation(Base):
     __table_args__ = (
         CheckConstraint(
             "jsonb_typeof(issues) = 'array'", name="installation_validation_issues_array"
+        ),
+        CheckConstraint(
+            "workflow_version_checksum IS NULL OR workflow_version_checksum ~ '^[0-9a-f]{64}$'",
+            name="installation_validation_workflow_version_sha256",
         ),
         CheckConstraint(
             "jsonb_typeof(reference_snapshot) = 'object'",
@@ -179,6 +200,7 @@ class InstallationManifestValidation(Base):
     workflow_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     authentication_policy_checksum: Mapped[str | None] = mapped_column(String(64))
+    workflow_version_checksum: Mapped[str | None] = mapped_column(String(64))
     template_checksums: Mapped[dict] = mapped_column(JSONB, nullable=False)
     active_kb_vector: Mapped[list] = mapped_column(JSONB, nullable=False)
     validated_by: Mapped[uuid.UUID | None] = mapped_column(

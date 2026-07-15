@@ -1,7 +1,11 @@
 import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
-import type { Lead, Message } from "../types";
+import type { Message } from "../types";
 import { apiJson, getAccessToken } from "../providers/rest/api";
 import { sortMessagesChronologically } from "./messageOrdering";
+import {
+  getRuntimeEpoch,
+  isRuntimeEpochCurrent,
+} from "../root/reset-runtime-state";
 
 // Chat data access over the FastAPI REST + SSE backend (replaces the Supabase
 // client + postgres_changes realtime). Conversations are keyed by their UUID
@@ -41,6 +45,17 @@ const asPositiveInteger = (value: unknown): number | undefined => {
   return value;
 };
 
+export class RuntimeEpochMismatchError extends Error {
+  constructor() {
+    super("Runtime generation changed while the request was in flight");
+    this.name = "RuntimeEpochMismatchError";
+  }
+}
+
+const requireCurrentEpoch = (epoch: number): void => {
+  if (!isRuntimeEpochCurrent(epoch)) throw new RuntimeEpochMismatchError();
+};
+
 // Map a typed backend MessageOut to the CRM's Message view model.
 //   sender WORKER/CANDIDATE/USER/LEAD/APPLICANT -> inbound (candidate)
 //   sender BOT/RECRUITER/ADMIN/AGENT/HUMAN      -> outbound
@@ -76,22 +91,6 @@ const toMessage = (row: ApiRecord): Message => {
 
 export const chatRepository = {
   /**
-   * Resolve the most recent lead per zalo id (inbox lead badges). The backend
-   * leads list honours `zalo_ids` (csv `IN`) and orders by updated_at DESC; the
-   * consumer keeps the first (newest) lead per zalo_id.
-   */
-  async getLeadsByZaloIds(zaloIds: string[]): Promise<Lead[]> {
-    const distinct = Array.from(new Set(zaloIds.filter(Boolean)));
-    if (distinct.length === 0) return [];
-    const sp = new URLSearchParams({
-      zalo_ids: distinct.join(","),
-      per_page: String(distinct.length),
-    });
-    const body = await apiJson<ListEnvelope>(`/api/v1/leads?${sp.toString()}`);
-    return body.data as unknown as Lead[];
-  },
-
-  /**
    * Latest message snippet per conversation, for inbox row previews. ONE batched
    * request (chunked at the backend's 200-id cap) instead of an N-fanout of
    * per-conversation GETs. The endpoint returns {conversation_id -> body}; we
@@ -100,6 +99,7 @@ export const chatRepository = {
   async getLastMessages(
     conversations: { id: string; zalo_chat_id: string }[],
   ): Promise<Record<string, string>> {
+    const epoch = getRuntimeEpoch();
     const out: Record<string, string> = {};
     const valid = conversations.filter((c) => c?.id && c?.zalo_chat_id);
     if (valid.length === 0) return out;
@@ -111,6 +111,7 @@ export const chatRepository = {
         const resp = await apiJson<{ snippets: Record<string, string> }>(
           `/api/v1/conversations/last-messages/batch?ids=${encodeURIComponent(chunk.join(","))}`,
         );
+        requireCurrentEpoch(epoch);
         snippets = resp?.snippets ?? {};
       } catch {
         snippets = {};
@@ -120,6 +121,7 @@ export const chatRepository = {
         if (zalo && text) out[zalo] = text;
       }
     }
+    requireCurrentEpoch(epoch);
     return out;
   },
 
@@ -135,6 +137,7 @@ export const chatRepository = {
     conversationId: string,
     options?: { limit?: number; beforeId?: string; signal?: AbortSignal },
   ): Promise<{ messages: Message[]; hasMore: boolean }> {
+    const epoch = getRuntimeEpoch();
     const limit = options?.limit ?? 10;
     const sp = new URLSearchParams({ limit: String(limit) });
     if (options?.beforeId) {
@@ -144,6 +147,7 @@ export const chatRepository = {
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${sp.toString()}`,
       { signal: options?.signal },
     );
+    requireCurrentEpoch(epoch);
     const mapped = sortMessagesChronologically(
       (body.data ?? [])
         .map(toMessage)
@@ -164,6 +168,7 @@ export const chatRepository = {
     conversationId: string,
     sinceId: string,
   ): Promise<Message[]> {
+    const epoch = getRuntimeEpoch();
     const sp = new URLSearchParams({
       since_id: String(sinceId),
       limit: "200",
@@ -171,6 +176,7 @@ export const chatRepository = {
     const body = await apiJson<ListEnvelope>(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${sp.toString()}`,
     );
+    requireCurrentEpoch(epoch);
     return sortMessagesChronologically(
       (body.data ?? [])
         .map(toMessage)
@@ -184,6 +190,7 @@ export const chatRepository = {
    * messages page total (capped at the per_page ceiling).
    */
   async getMessageCount(zaloChatId: string): Promise<number> {
+    const epoch = getRuntimeEpoch();
     if (!zaloChatId) return 0;
     const convSp = new URLSearchParams({
       zalo_chat_id: zaloChatId,
@@ -192,12 +199,14 @@ export const chatRepository = {
     const conv = await apiJson<ListEnvelope>(
       `/api/v1/conversations?${convSp.toString()}`,
     );
+    requireCurrentEpoch(epoch);
     const convId = conv.data?.[0]?.id;
     if (!convId) return 0;
     const msgSp = new URLSearchParams({ per_page: "200" });
     const msgs = await apiJson<ListEnvelope>(
       `/api/v1/conversations/${encodeURIComponent(String(convId))}/messages?${msgSp.toString()}`,
     );
+    requireCurrentEpoch(epoch);
     return msgs.total ?? msgs.data.length;
   },
 
@@ -222,13 +231,14 @@ export const chatRepository = {
       };
     }
     const socket = getRealtimeSocket();
+    const epoch = getRuntimeEpoch();
     let refreshTimer: number | undefined;
     let refreshInFlight = false;
     let refreshPending = false;
     let closed = false;
 
     const refreshLatest = () => {
-      if (closed) return;
+      if (closed || !isRuntimeEpochCurrent(epoch)) return;
       if (refreshInFlight) {
         refreshPending = true;
         return;
@@ -237,7 +247,7 @@ export const chatRepository = {
       chatRepository
         .getConversationMessages(conversationId, { limit: 25 })
         .then(({ messages }) => {
-          if (closed) return;
+          if (closed || !isRuntimeEpochCurrent(epoch)) return;
           onNewMessages(messages);
         })
         .catch(() => {
@@ -253,7 +263,7 @@ export const chatRepository = {
     };
 
     const handler = (payload: MessageCreatedPayload | undefined) => {
-      if (closed) return;
+      if (closed || !isRuntimeEpochCurrent(epoch)) return;
       // The server emits to conv:<id>, but the socket may be in several rooms,
       // so keep a defensive conversation_id check (parity with the SSE path).
       const payloadConversationId =

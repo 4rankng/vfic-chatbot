@@ -1,5 +1,12 @@
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { applyRuntimeMetadata, resetRuntimeMetadata } from "../root/runtime-metadata";
@@ -9,6 +16,8 @@ import {
   fetchRuntimeManifest,
   type PublicRuntimeManifest,
 } from "./runtime-manifest";
+import { getRuntimeKey } from "../capabilities/compile-capabilities";
+import { resetActiveRuntimeState } from "../root/reset-runtime-state";
 
 const LEGACY_CONFIGURATION_KEY = "app.configuration";
 const AUTOMATIC_ATTEMPTS = 2;
@@ -66,26 +75,46 @@ const NeutralSurface = ({
 
 export const InstallationBootstrap = ({ children }: { children: ReactNode }) => {
   const [state, setState] = useState<BootstrapState>({ status: "loading" });
+  const currentManifestRef = useRef<PublicRuntimeManifest | null>(null);
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
-    setState({ status: "loading" });
-    resetRuntimeMetadata();
-
-    let lastError: unknown;
-    for (let attempt = 0; attempt < AUTOMATIC_ATTEMPTS; attempt += 1) {
-      try {
-        const manifest = await fetchRuntimeManifest();
-        applyRuntimeMetadata(manifest);
-        setState({ status: "ready", manifest });
-        return;
-      } catch (error) {
-        lastError = error;
+    if (inFlightRef.current) return inFlightRef.current;
+    const operation = (async () => {
+      if (!currentManifestRef.current) {
+        setState({ status: "loading" });
+        resetRuntimeMetadata();
       }
+
+      let lastError: unknown;
+      for (let attempt = 0; attempt < AUTOMATIC_ATTEMPTS; attempt += 1) {
+        try {
+          const manifest = await fetchRuntimeManifest();
+          const previous = currentManifestRef.current;
+          if (previous && getRuntimeKey(previous) !== getRuntimeKey(manifest)) {
+            setState({ status: "loading" });
+            await resetActiveRuntimeState();
+          }
+          currentManifestRef.current = manifest;
+          applyRuntimeMetadata(manifest);
+          setState({ status: "ready", manifest });
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      void lastError;
+      currentManifestRef.current = null;
+      setState({ status: "error" });
+      await resetActiveRuntimeState();
+      resetRuntimeMetadata();
+    })();
+    inFlightRef.current = operation;
+    try {
+      await operation;
+    } finally {
+      inFlightRef.current = null;
     }
-    // Keep failures fail-closed. The error is intentionally not rendered because
-    // compatibility/transport details may reveal server internals before login.
-    void lastError;
-    setState({ status: "error" });
   }, []);
 
   useEffect(() => {
@@ -96,7 +125,16 @@ export const InstallationBootstrap = ({ children }: { children: ReactNode }) => 
       // still network-only and never reads this legacy key.
     }
     void load();
-    return resetRuntimeMetadata;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      resetRuntimeMetadata();
+    };
   }, [load]);
 
   const contextValue = useMemo<InstallationContextValue | null>(

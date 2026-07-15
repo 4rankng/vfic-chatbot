@@ -10,16 +10,20 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Integer,
     String,
     Text,
+    CheckConstraint,
+    Index,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.models.contact import Contact, ContactChannelIdentity
 
 
 class ConversationMode(str, enum.Enum):
@@ -69,6 +73,28 @@ class BotRunOutcome(str, enum.Enum):
 
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        CheckConstraint(
+            "channel_identity_id IS NULL OR contact_id IS NOT NULL",
+            name="conversation_identity_requires_contact",
+        ),
+        ForeignKeyConstraint(
+            ["channel_identity_id", "contact_id"],
+            ["contact_channel_identities.id", "contact_channel_identities.contact_id"],
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_conversations_contact",
+            "contact_id",
+            postgresql_where=text("contact_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_conversations_channel_identity",
+            "channel_identity_id",
+            unique=True,
+            postgresql_where=text("channel_identity_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -109,6 +135,14 @@ class Conversation(Base):
     taken_over_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     assigned_recruiter_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="RESTRICT")
+    )
+    channel_identity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    contact: Mapped["Contact | None"] = relationship(lazy="selectin", foreign_keys=[contact_id])
+    channel_identity: Mapped["ContactChannelIdentity | None"] = relationship(
+        lazy="selectin", foreign_keys=[channel_identity_id], overlaps="contact"
     )
     unread_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")

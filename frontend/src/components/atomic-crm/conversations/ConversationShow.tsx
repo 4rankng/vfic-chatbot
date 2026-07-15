@@ -1,18 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useDataProvider,
-  useGetList,
   useNotify,
   usePermissions,
   useRecordContext,
   useRefresh,
   ShowBase,
 } from "ra-core";
-import type { Conversation, Lead } from "../types";
+import type { Conversation } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { Confirm } from "@/components/admin/confirm";
-import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
-import { getLeadStatusColor, getZaloUserId } from "./conversationDisplay";
 import { LeadAvatar } from "./LeadAvatar";
 import { ChatThread } from "./ChatThread";
 import {
@@ -36,8 +33,11 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
-import { ConversationContextPanel } from "./ConversationContextPanel";
 import { useIsMobile, useIsWideDesktop } from "@/hooks/use-mobile";
+import {
+  ConversationContextAdapter,
+  useConversationCapabilitySlots,
+} from "./conversation-capability";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -51,7 +51,7 @@ const MODE_OPTIONS: Array<{
   {
     mode: "human",
     label: "Tư vấn viên",
-    title: "Tư vấn viên - chỉ nhân sự trả lời ứng viên",
+    title: "Tư vấn viên - chỉ nhân sự trả lời người trò chuyện",
     description: "Nhân viên trả lời trực tiếp",
     Icon: UserRound,
   },
@@ -93,63 +93,12 @@ export const ConversationShowContent = ({
   const notify = useNotify();
   const refresh = useRefresh();
   const { permissions } = usePermissions();
+  const slots = useConversationCapabilitySlots();
+  const CapabilityActions = slots.actions;
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const leadListParams = useMemo(
-    () => ({
-      filter: { zalo_id: record?.zalo_chat_id },
-      pagination: { page: 1, perPage: 1 },
-    }),
-    [record?.zalo_chat_id],
-  );
-  const leadListOptions = useMemo(
-    () => ({ enabled: !!record?.zalo_chat_id }),
-    [record?.zalo_chat_id],
-  );
-
-  const { data: leadData, refetch: refetchLead } = useGetList(
-    "leads",
-    leadListParams,
-    leadListOptions,
-  );
-  const lead = leadData?.[0] as Lead | undefined;
-
-  useEffect(() => {
-    if (!lead?.id) return;
-    const leadId = String(lead.id);
-    const socket = getRealtimeSocket();
-    const handleLeadUpdated = (payload: {
-      id?: string | number;
-      lead_id?: string | number;
-      zalo_id?: string | null;
-    }) => {
-      const payloadLeadId = payload?.lead_id ?? payload?.id;
-      const sameLead =
-        payloadLeadId != null && String(payloadLeadId) === leadId;
-      const sameZalo =
-        !!payload?.zalo_id && payload.zalo_id === record?.zalo_chat_id;
-      if (!sameLead && !sameZalo) return;
-      void refetchLead();
-    };
-
-    socket.on("lead.updated", handleLeadUpdated);
-    if (!socket.connected) {
-      socket.connect();
-    }
-    socket.emit("join lead", { lead_id: lead.id });
-
-    return () => {
-      socket.off("lead.updated", handleLeadUpdated);
-      socket.emit("leave lead", { lead_id: lead.id });
-    };
-  }, [lead?.id, record?.zalo_chat_id, refetchLead]);
-
-  const name =
-    lead?.name || `Ứng viên · ${(record?.zalo_chat_id || "").slice(-4)}`;
-  const zaloUserId = getZaloUserId(record?.zalo_chat_id, record?.zalo_channel);
-  const colors = getLeadStatusColor(lead);
   const {
     effectiveMode,
     isBotMode,
@@ -191,7 +140,9 @@ export const ConversationShowContent = ({
   };
 
   return (
-    <>
+    <ConversationContextAdapter conversation={record}>
+      {(context) => (
+      <>
       <section className="panel center-panel" aria-label="Nội dung trò chuyện">
         <header className="chat-header">
           <button
@@ -205,16 +156,16 @@ export const ConversationShowContent = ({
           </button>
           <div className="header-person">
             <LeadAvatar
-              src={lead?.avatar_url}
-              bg={colors.bg}
-              ink={colors.ink}
+              src={context.avatarUrl}
+              bg={context.avatarBackground}
+              ink={context.avatarForeground}
               iconSize={18}
               className="header-avatar"
-              alt={`Ảnh đại diện của ${name}`}
+              alt={context.avatarAlt}
             />
             <div className="person-copy">
               <div className="person-name-row">
-                {showWorkspacePanel ? (
+                {showWorkspacePanel && context.renderPanel ? (
                   <button
                     type="button"
                     className="person-name person-name-button"
@@ -223,14 +174,14 @@ export const ConversationShowContent = ({
                     aria-expanded={isWideDesktop || isContextOpen}
                     aria-controls="conversation-context-panel"
                   >
-                    {name}
+                    {context.displayName}
                   </button>
                 ) : (
-                  <span className="person-name">{name}</span>
+                  <span className="person-name">{context.displayName}</span>
                 )}
               </div>
-              {zaloUserId && (
-                <div className="zalo-user-id">Zalo ID: {zaloUserId}</div>
+              {context.externalIdentityLabel && (
+                <div className="zalo-user-id">{context.externalIdentityLabel}</div>
               )}
             </div>
           </div>
@@ -315,6 +266,7 @@ export const ConversationShowContent = ({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
+            {CapabilityActions ? <CapabilityActions conversation={record} /> : null}
             {activeMode === "closed" && (
               <span
                 className="chat-mode-chip"
@@ -324,15 +276,15 @@ export const ConversationShowContent = ({
                 <span>Hội thoại đã đóng</span>
               </span>
             )}
-            {!isWideDesktop ? (
+            {!isWideDesktop && context.renderPanel ? (
               <button
                 type="button"
                 className={`context-panel-trigger ${isContextOpen ? "active" : ""}`}
                 onClick={() => setIsContextOpen((open) => !open)}
                 aria-label={
                   isContextOpen
-                    ? "Đóng thông tin ứng viên"
-                    : "Mở thông tin ứng viên"
+                    ? `Đóng ${context.panelLabel}`
+                    : `Mở ${context.panelLabel}`
                 }
                 aria-expanded={isContextOpen}
                 aria-controls="conversation-context-panel"
@@ -347,14 +299,18 @@ export const ConversationShowContent = ({
           key={record?.id ?? "empty"}
           conversationId={record?.id ?? ""}
           conversation={record}
-          candidateAvatarUrl={lead?.avatar_url}
+          candidateAvatarUrl={context.avatarUrl}
           isBotModeOverride={isBotMode}
           needsClaimOverride={needsClaim}
           canHumanReplyOverride={canHumanReply}
           onTakeoverOverride={handleTakeover}
         />
 
-        {showWorkspacePanel && isContextOpen && !isMobile && !isWideDesktop && (
+        {showWorkspacePanel &&
+          context.renderPanel &&
+          isContextOpen &&
+          !isMobile &&
+          !isWideDesktop && (
           <button
             type="button"
             className="context-overlay-scrim"
@@ -363,18 +319,17 @@ export const ConversationShowContent = ({
           />
         )}
       </section>
-      {showWorkspacePanel && (
-        <ConversationContextPanel
-          lead={lead}
-          open={isWideDesktop || isContextOpen}
-          persistent={isWideDesktop}
-          onClose={() => setIsContextOpen(false)}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            contextTriggerRef.current?.focus();
-          }}
-        />
-      )}
+      {showWorkspacePanel && context.renderPanel
+        ? context.renderPanel({
+            open: isWideDesktop || isContextOpen,
+            persistent: isWideDesktop,
+            onClose: () => setIsContextOpen(false),
+            onCloseAutoFocus: (event) => {
+              event.preventDefault();
+              contextTriggerRef.current?.focus();
+            },
+          })
+        : null}
       <Confirm
         isOpen={deleteOpen}
         loading={isDeleting}
@@ -385,7 +340,9 @@ export const ConversationShowContent = ({
         onClose={() => setDeleteOpen(false)}
         onConfirm={() => void deleteConversation()}
       />
-    </>
+      </>
+      )}
+    </ConversationContextAdapter>
   );
 };
 

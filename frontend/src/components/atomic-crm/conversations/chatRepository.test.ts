@@ -15,9 +15,11 @@ const { mockSocket } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/vfic/realtimeSocket", () => ({
   getRealtimeSocket: () => mockSocket,
+  closeRealtimeSocket: vi.fn(),
 }));
 
-import { chatRepository } from "./chatRepository";
+import { chatRepository, RuntimeEpochMismatchError } from "./chatRepository";
+import { resetActiveRuntimeState } from "../root/reset-runtime-state";
 
 /**
  * chatRepository (message history + inbox snippets + realtime subscribe) had
@@ -216,6 +218,24 @@ describe("chatRepository.getConversationMessages", () => {
     });
 
     expect(messages.map((message) => message.content)).toEqual(["right"]);
+  });
+
+  it("rejects a late direct response after the runtime epoch advances", async () => {
+    let resolveJson: ((value: unknown) => void) | undefined;
+    const json = new Promise<unknown>((resolve) => {
+      resolveJson = resolve;
+    });
+    const { fetch } = stubJson(() => json);
+    globalThis.fetch = fetch;
+    const pending = chatRepository.getConversationMessages("c1");
+
+    await resetActiveRuntimeState();
+    resolveJson?.({
+      data: [{ id: 1, conversation_id: "c1", body: "stale", sender: "WORKER" }],
+      total: 1,
+    });
+
+    await expect(pending).rejects.toBeInstanceOf(RuntimeEpochMismatchError);
   });
 });
 

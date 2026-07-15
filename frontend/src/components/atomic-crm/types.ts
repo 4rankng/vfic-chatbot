@@ -129,6 +129,22 @@ export type Conversation = {
   // vfic_chat_histories_unread trigger. Reset to 0 by vfic_mark_read on open.
   // Optional: partial selects may omit it; use sites default to 0 via `?? 0`.
   unread_count?: number;
+  contact_id?: string | null;
+  channel_identity_id?: string | null;
+  contact?: {
+    id: string;
+    display_name?: string | null;
+    primary_phone?: string | null;
+    primary_email?: string | null;
+    avatar_url?: string | null;
+    locale?: string | null;
+  } | null;
+  channel_identity?: {
+    id: string;
+    provider: string;
+    account_key: string;
+    external_id: string;
+  } | null;
 } & Pick<RaRecord, "id">;
 
 export type Message = {

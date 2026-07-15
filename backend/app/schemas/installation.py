@@ -53,6 +53,14 @@ class WorkflowPolicySettings(BaseModel):
     workflow_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")
     handoff_mode: Literal["manual", "assisted", "automatic"]
     automation_enabled: bool
+    workflow_version_id: uuid.UUID | None = None
+    workflow_version_checksum: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_version_pair(self) -> "WorkflowPolicySettings":
+        if (self.workflow_version_id is None) != (self.workflow_version_checksum is None):
+            raise ValueError("workflow version id and checksum must be provided together")
+        return self
 
 
 class ProviderPolicySettings(BaseModel):
@@ -348,6 +356,8 @@ class InstallationRevisionOut(BaseModel):
     terminology: dict[str, JsonValue]
     workflow_policy: dict[str, JsonValue]
     workflow_policy_checksum: str
+    workflow_version_id: uuid.UUID | None = None
+    workflow_version_checksum: str | None = None
     capability_ids: list[str]
     persona_version_id: uuid.UUID
     template_version_refs: list[TemplateVersionReference]
@@ -372,6 +382,7 @@ class InstallationValidationOut(BaseModel):
     pack_contract_hash: str
     persona_checksum: str
     workflow_policy_checksum: str
+    workflow_version_checksum: str | None = None
     provider_policy_checksum: str
     authentication_policy_checksum: str | None
     template_checksums: dict[str, str]
@@ -451,6 +462,17 @@ class WorkflowCatalogItem(BaseModel):
     handoff_modes: list[Literal["manual", "assisted", "automatic"]]
 
 
+class AuthoredWorkflowVersionCatalogItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    pack_key: str
+    workflow_key: str
+    version_no: int
+    label: str
+    checksum: str
+
+
 class InstallationCatalogOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -460,6 +482,9 @@ class InstallationCatalogOut(BaseModel):
     locales: list[str]
     currencies: list[str]
     workflows: list[WorkflowCatalogItem]
+    authored_workflow_versions: list[AuthoredWorkflowVersionCatalogItem] = Field(
+        default_factory=list
+    )
     integration_keys: list[str]
     authentication_methods: list[Literal["email_password"]]
 

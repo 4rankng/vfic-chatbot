@@ -6,6 +6,14 @@ import {
 import { SetupApplication } from "@/components/atomic-crm/installation/SetupLayout";
 import { createI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 import { useMemo } from "react";
+import { useEffect, useState } from "react";
+import type { RuntimeGenerationBundle } from "@/components/atomic-crm/capabilities/types";
+import { ensureRuntimeGeneration } from "@/components/atomic-crm/root/reset-runtime-state";
+import { resetActiveRuntimeState } from "@/components/atomic-crm/root/reset-runtime-state";
+import { getRuntimeKey } from "@/components/atomic-crm/capabilities/compile-capabilities";
+import type { PublicRuntimeManifest } from "@/components/atomic-crm/installation/runtime-manifest";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
 /**
  * Application entry point
@@ -31,8 +39,15 @@ import { useMemo } from "react";
  *    />
  * );
  */
-const App = () => {
-  const { manifest } = useInstallationContext();
+const ReadyRuntimeApplication = ({
+  manifest,
+  refreshRuntime,
+}: {
+  manifest: PublicRuntimeManifest;
+  refreshRuntime: () => Promise<void>;
+}) => {
+  const [bundle, setBundle] = useState<RuntimeGenerationBundle | null>(null);
+  const [blocked, setBlocked] = useState(false);
   const activeI18nProvider = useMemo(
     () =>
       hasReadyActiveRuntime(manifest) && manifest.locale
@@ -40,8 +55,70 @@ const App = () => {
         : null,
     [manifest],
   );
-  return hasReadyActiveRuntime(manifest) && activeI18nProvider ? (
-    <CRM i18nProvider={activeI18nProvider} />
+
+  useEffect(() => {
+    let cancelled = false;
+    setBlocked(false);
+    void ensureRuntimeGeneration(manifest)
+      .then((nextBundle) => {
+        if (!cancelled) setBundle(nextBundle);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBundle(null);
+          setBlocked(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [manifest]);
+
+  if (blocked) {
+    return (
+      <main className="flex min-h-svh items-center justify-center bg-background p-5">
+        <section className="w-full max-w-lg rounded-xl border bg-card p-6 text-center shadow-sm">
+          <h1 className="text-xl font-semibold">Không thể mở không gian làm việc</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Cấu hình hiện tại không tương thích hoặc chưa đầy đủ. Hệ thống đã chặn dữ liệu cũ để bảo đảm an toàn.
+          </p>
+          <Button className="mt-5" onClick={() => void refreshRuntime()}>
+            Kiểm tra lại cấu hình
+          </Button>
+        </section>
+      </main>
+    );
+  }
+  if (!bundle || !activeI18nProvider) {
+    return <RuntimeCompilationLoading />;
+  }
+  return <CRM bundle={bundle} i18nProvider={activeI18nProvider} />;
+};
+
+export const RuntimeCompilationLoading = () => (
+  <main className="flex min-h-svh items-center justify-center bg-background p-5" aria-live="polite">
+    <section className="flex items-center gap-3 rounded-xl border bg-card px-5 py-4 shadow-sm" role="status">
+      <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+      <span>Đang chuẩn bị không gian làm việc</span>
+    </section>
+  </main>
+);
+
+const App = () => {
+  const { manifest, refreshRuntime } = useInstallationContext();
+  const ready = hasReadyActiveRuntime(manifest);
+  const key = getRuntimeKey(manifest);
+
+  useEffect(() => {
+    if (!ready) void resetActiveRuntimeState();
+  }, [key, ready]);
+
+  return ready ? (
+    <ReadyRuntimeApplication
+      key={key}
+      manifest={manifest}
+      refreshRuntime={refreshRuntime}
+    />
   ) : (
     <SetupApplication />
   );

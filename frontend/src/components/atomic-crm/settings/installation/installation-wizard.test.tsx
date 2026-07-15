@@ -56,7 +56,9 @@ vi.mock("./steps/InstallationSteps", () => ({
       Chọn gói khác
     </button>
   ),
-  WorkflowStep: () => <p>Quy trình</p>,
+  WorkflowStep: ({ onChange }: { onChange: (value: undefined) => void }) => (
+    <><p>Quy trình</p><button type="button" onClick={() => onChange(undefined)}>Xoá lựa chọn quy trình</button></>
+  ),
   KnowledgeTemplatesStep: () => <p>Kiến thức</p>,
   PersonaStep: () => <p>Agent</p>,
   ProvidersIntegrationsStep: () => <p>Tích hợp</p>,
@@ -93,6 +95,8 @@ const completePayload = {
   workflow: {
     workflow_policy: {
       workflow_id: "configured-workflow",
+      workflow_version_id: "00000000-0000-4000-8000-000000000021",
+      workflow_version_checksum: "c".repeat(64),
       handoff_mode: "manual" as const,
       automation_enabled: false,
     },
@@ -153,6 +157,16 @@ const catalog = {
   locales: ["vi-VN"],
   currencies: ["VND"],
   workflows: [{ id: "configured-workflow", handoff_modes: ["manual" as const] }],
+  authored_workflow_versions: [
+    {
+      id: "00000000-0000-4000-8000-000000000021",
+      pack_key: "configured-pack",
+      workflow_key: "configured-workflow",
+      version_no: 1,
+      label: "Quy trình đã cấu hình",
+      checksum: "c".repeat(64),
+    },
+  ],
   integration_keys: ["minimax", "openrouter", "zalo"],
   authentication_methods: ["email_password" as const],
 };
@@ -268,6 +282,20 @@ describe("InstallationWizard", () => {
     });
     expect(mergedPayload).not.toHaveProperty("workflow");
     expect(mocks.saveDraft).toHaveBeenLastCalledWith(mergedPayload, 5);
+  });
+
+  it("does not save a stale completed workflow after the visible selection is cleared", async () => {
+    mocks.getDraft.mockResolvedValue(draft());
+    mocks.getCatalog.mockResolvedValue(catalog);
+    mocks.getAdminStatus.mockResolvedValue(adminStatus(false));
+
+    const screen = await render(<InstallationWizard />);
+    await screen.getByRole("button", { name: /^Quy trình$/ }).click();
+    await screen.getByRole("button", { name: "Xoá lựa chọn quy trình" }).click();
+    await screen.getByRole("button", { name: "Lưu bước" }).click();
+
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+    await expect.element(screen.getByText(/chưa đủ thông tin bắt buộc/)).toBeVisible();
   });
 
   it("finalizes with both locks while activation and no-send testing stay unavailable", async () => {

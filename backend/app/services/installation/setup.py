@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.capabilities.registry import CapabilityRegistry, get_capability_registry
@@ -24,7 +24,9 @@ from app.schemas.installation import (
     InstallationSetupDraftSave,
     PackCatalogItem,
     WorkflowCatalogItem,
+    AuthoredWorkflowVersionCatalogItem,
 )
+from app.models.case_workflow import CaseWorkflowVersion
 from app.services.errors import InstallationError
 from app.services.audit_service import record_audit
 from app.services.installation.catalog import (
@@ -182,6 +184,24 @@ class InstallationSetupService:
                     status_code=422,
                     issues=[self._issue("PERSONA_CHECKSUM_MISMATCH", "persona")],
                 )
+            assert payload.workflow is not None
+            workflow_policy = payload.workflow.workflow_policy
+            if (
+                workflow_policy.workflow_version_id is None
+                or workflow_policy.workflow_version_checksum is None
+            ):
+                raise self._error(
+                    "An immutable workflow version is required before finalization",
+                    "INSTALLATION_VALIDATION_FAILED",
+                    lifecycle,
+                    status_code=422,
+                    issues=[
+                        self._issue(
+                            "WORKFLOW_VERSION_REQUIRED",
+                            "workflow.workflow_policy.workflow_version_id",
+                        )
+                    ],
+                )
 
             revision_body = payload.to_revision_create(
                 expected_lock_version=body.expected_installation_lock_version
@@ -203,6 +223,19 @@ class InstallationSetupService:
     async def catalog(self) -> InstallationCatalogOut:
         packs = self.registry.packs()
         workflows = sorted({workflow for pack in packs for workflow in pack.workflow_ids})
+        authored: list[CaseWorkflowVersion] = []
+        if isinstance(self.db, AsyncSession):
+            authored = list(
+                await self.db.scalars(
+                    select(CaseWorkflowVersion)
+                    .order_by(
+                        CaseWorkflowVersion.pack_key,
+                        CaseWorkflowVersion.workflow_key,
+                        CaseWorkflowVersion.version_no.desc(),
+                    )
+                    .limit(200)
+                )
+            )
         return InstallationCatalogOut(
             packs=[
                 PackCatalogItem(
@@ -228,6 +261,10 @@ class InstallationSetupService:
             workflows=[
                 WorkflowCatalogItem(id=workflow, handoff_modes=list(HANDOFF_MODES))
                 for workflow in workflows
+            ],
+            authored_workflow_versions=[
+                AuthoredWorkflowVersionCatalogItem.model_validate(item, from_attributes=True)
+                for item in authored
             ],
             integration_keys=list(integration_reference_ids()),
             authentication_methods=list(AUTHENTICATION_METHODS),

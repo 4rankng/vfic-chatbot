@@ -62,6 +62,8 @@ def _payload(persona_version) -> InstallationSetupDraftPayload:
             "workflow": {
                 "workflow_policy": {
                     "workflow_id": "candidate_intake",
+                    "workflow_version_id": str(persona_version._test_workflow_version_id),
+                    "workflow_version_checksum": (persona_version._test_workflow_version_checksum),
                     "handoff_mode": "assisted",
                     "automation_enabled": False,
                 }
@@ -106,6 +108,32 @@ async def test_saved_draft_without_immutable_state_projects_draft_lifecycle(inte
     assert admin.lifecycle == "DRAFT"
 
 
+async def test_legacy_workflow_id_only_draft_requires_successor_before_finalize(
+    integration_session,
+):
+    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    data = _payload(persona_version).model_dump(mode="json")
+    data["workflow"]["workflow_policy"].pop("workflow_version_id")
+    data["workflow"]["workflow_policy"].pop("workflow_version_checksum")
+    setup = InstallationSetupService(integration_session)
+    saved = await setup.save(
+        InstallationSetupDraftSave(
+            payload=InstallationSetupDraftPayload.model_validate(data),
+            expected_lock_version=0,
+        ),
+        actor.id,
+    )
+    with pytest.raises(InstallationError) as exc_info:
+        await setup.finalize(
+            InstallationSetupDraftFinalize(
+                expected_draft_lock_version=saved.lock_version,
+                expected_installation_lock_version=0,
+            ),
+            actor.id,
+        )
+    assert any(issue["code"] == "WORKFLOW_VERSION_REQUIRED" for issue in exc_info.value.issues)
+
+
 async def test_failed_finalize_rolls_back_revision_state_and_validation(
     integration_database: IntegrationDatabase,
 ):
@@ -135,12 +163,18 @@ async def test_failed_finalize_rolls_back_revision_state_and_validation(
                 )
 
             assert exc_info.value.code == "INSTALLATION_VALIDATION_FAILED"
-            assert await finalize_session.scalar(
-                select(func.count()).select_from(InstallationManifestRevision)
-            ) == 0
-            assert await finalize_session.scalar(
-                select(func.count()).select_from(InstallationManifestValidation)
-            ) == 0
+            assert (
+                await finalize_session.scalar(
+                    select(func.count()).select_from(InstallationManifestRevision)
+                )
+                == 0
+            )
+            assert (
+                await finalize_session.scalar(
+                    select(func.count()).select_from(InstallationManifestValidation)
+                )
+                == 0
+            )
             assert await finalize_session.scalar(select(InstallationState)) is None
             draft = await finalize_session.scalar(select(InstallationSetupDraft))
             assert draft is not None
@@ -176,9 +210,12 @@ async def test_finalize_uses_both_tokens_and_ends_validated_without_activation(
                     actor_id,
                 )
             assert stale.value.code == "INSTALLATION_CONFLICT"
-            assert await finalize_session.scalar(
-                select(func.count()).select_from(InstallationManifestRevision)
-            ) == 0
+            assert (
+                await finalize_session.scalar(
+                    select(func.count()).select_from(InstallationManifestRevision)
+                )
+                == 0
+            )
 
             revision = await setup.finalize(
                 InstallationSetupDraftFinalize(
@@ -269,12 +306,14 @@ async def test_finalize_rejects_mismatched_persona_checksum_without_partial_rows
                     actor_id,
                 )
             assert any(
-                issue["code"] == "PERSONA_CHECKSUM_MISMATCH"
-                for issue in exc_info.value.issues
+                issue["code"] == "PERSONA_CHECKSUM_MISMATCH" for issue in exc_info.value.issues
             )
-            assert await finalize_session.scalar(
-                select(func.count()).select_from(InstallationManifestRevision)
-            ) == 0
+            assert (
+                await finalize_session.scalar(
+                    select(func.count()).select_from(InstallationManifestRevision)
+                )
+                == 0
+            )
     finally:
         await _truncate(engine)
         await engine.dispose()
@@ -329,15 +368,20 @@ async def test_finalize_rejects_nonpublished_template_without_partial_rows(
                     actor_id,
                 )
             assert any(
-                issue["code"] == "TEMPLATE_VERSION_NOT_FOUND"
-                for issue in exc_info.value.issues
+                issue["code"] == "TEMPLATE_VERSION_NOT_FOUND" for issue in exc_info.value.issues
             )
-            assert await finalize_session.scalar(
-                select(func.count()).select_from(InstallationManifestRevision)
-            ) == 0
-            assert await finalize_session.scalar(
-                select(func.count()).select_from(InstallationManifestValidation)
-            ) == 0
+            assert (
+                await finalize_session.scalar(
+                    select(func.count()).select_from(InstallationManifestRevision)
+                )
+                == 0
+            )
+            assert (
+                await finalize_session.scalar(
+                    select(func.count()).select_from(InstallationManifestValidation)
+                )
+                == 0
+            )
     finally:
         await _truncate(engine)
         await engine.dispose()

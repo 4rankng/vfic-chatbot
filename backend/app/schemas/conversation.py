@@ -11,6 +11,7 @@ from app.models.conversation import (
     DeliveryStatus,
     MessageSender,
 )
+from app.schemas.contacts import ChannelIdentitySummaryOut, ContactSummaryOut
 
 
 class ConversationOut(BaseModel):
@@ -24,6 +25,10 @@ class ConversationOut(BaseModel):
     needs_human: bool
     version: int
     assigned_recruiter_id: uuid.UUID | None = None
+    contact_id: uuid.UUID | None = None
+    channel_identity_id: uuid.UUID | None = None
+    contact: ContactSummaryOut | None = None
+    channel_identity: ChannelIdentitySummaryOut | None = None
     taken_over_at: datetime | None = None
     unread_count: int
     bot_locked_until: datetime | None = None

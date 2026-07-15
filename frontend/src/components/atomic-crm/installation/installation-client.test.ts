@@ -99,6 +99,54 @@ describe("installation setup client", () => {
     );
   });
 
+  it("accepts a catalog that ships authored workflow versions", async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/admin/installation/catalog")) {
+        return jsonResponse({
+          schema_version: 1,
+          packs: [],
+          capabilities: [],
+          locales: [],
+          currencies: [],
+          workflows: [],
+          authored_workflow_versions: [
+            {
+              id: "00000000-0000-4000-8000-000000000010",
+              pack_key: "configured-pack",
+              workflow_key: "recruitment",
+              version_no: 1,
+              label: "Tuyển dụng mặc định",
+              checksum: "f".repeat(64),
+            },
+          ],
+          integration_keys: [],
+          authentication_methods: ["email_password"],
+        });
+      }
+      return jsonResponse({
+        payload: draftPayload,
+        lock_version: 1,
+        installation_lock_version: 1,
+        section_completion: {},
+        issues: [],
+      });
+    }) as typeof globalThis.fetch;
+
+    const catalog = await getInstallationCatalog();
+
+    expect(catalog.authored_workflow_versions).toEqual([
+      {
+        id: "00000000-0000-4000-8000-000000000010",
+        pack_key: "configured-pack",
+        workflow_key: "recruitment",
+        version_no: 1,
+        label: "Tuyển dụng mặc định",
+        checksum: "f".repeat(64),
+      },
+    ]);
+  });
+
   it("sends the submitted draft with its expected optimistic lock", async () => {
     let request: RequestInit | undefined;
     globalThis.fetch = vi.fn(async (_input, init) => {

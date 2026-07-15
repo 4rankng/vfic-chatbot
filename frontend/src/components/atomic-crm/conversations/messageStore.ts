@@ -67,6 +67,8 @@ type MessageStore = {
   setHistoryError: (convId: string, value: string | null) => void;
   /** Drop a conversation's state entirely (cleanup). */
   clear: (convId: string) => void;
+  /** Drop all generation-owned messages and optimistic state. */
+  resetAll: () => void;
 };
 
 const recomputeSorted = (byId: Map<string, Message>): Message[] => {
@@ -228,6 +230,8 @@ export const useMessageStore = create<MessageStore>((set) => ({
       pendingOptimistic.delete(convId);
       return { conversations, pendingOptimistic };
     }),
+  resetAll: () =>
+    set({ conversations: new Map(), pendingOptimistic: new Map() }),
 }));
 
 // --- Selector hooks ---
