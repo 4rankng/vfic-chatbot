@@ -28,7 +28,6 @@ from app.models.conversation import (
 )
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
-from app.services.conversation.abuse_control import AbuseReason
 from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
@@ -215,103 +214,76 @@ class ConversationState:
         await self.events.conversation_updated(conv)
         return msg
 
-    async def record_inbound_and_escalate_abuse(
+    async def escalate_extracted_intent(
         self,
         conv: Conversation,
         *,
-        body: str,
-        reason: AbuseReason,
-        zalo_message_id: str | None = None,
+        reason: str,
+        confidence: float,
+        expected_version: int,
     ) -> bool:
-        """Atomically record an inbound and move suspected abuse to human review.
+        """Move an extraction-classified contact to human-only review.
 
-        The caller keeps its dedup claim uncommitted, so this single commit makes
-        the claim, inbound message, mode transition, operator note, and audit
-        durable together. The conditional update makes concurrent positive
-        messages produce only one transition note while every inbound is kept.
+        Candidate extraction runs after the chatbot reply has already been sent.
+        This transition therefore controls future turns only. A conditional
+        update makes concurrent persistence jobs create one note and audit event,
+        while the expected version prevents stale results from overriding a newer
+        inbound or recruiter decision.
         """
-        inbound = Message(
-            conversation_id=conv.id,
-            sender=MessageSender.WORKER,
-            body=body,
-            zalo_message_id=zalo_message_id,
-        )
-        self.db.add(inbound)
-        await self.db.flush()
-
-        now = utcnow()
         target_state = and_(
             Conversation.mode == ConversationMode.HUMAN,
             Conversation.needs_human.is_(True),
         )
         transition = await self.db.execute(
             update(Conversation)
-            .where(Conversation.id == conv.id, ~target_state)
+            .where(
+                Conversation.id == conv.id,
+                Conversation.version == expected_version,
+                Conversation.status != ConversationStatus.CLOSED,
+                ~target_state,
+            )
             .values(
                 mode=ConversationMode.HUMAN,
                 status=ConversationStatus.OPEN,
                 needs_human=True,
-                last_inbound_at=now,
-                unread_count=Conversation.unread_count + 1,
                 bot_locked_until=None,
                 bot_lock_owner=None,
                 bot_lock_heartbeat_at=None,
-                version=Conversation.version + 2,
-                conversation_seq=Conversation.conversation_seq + 2,
+                version=Conversation.version + 1,
+                conversation_seq=Conversation.conversation_seq + 1,
             )
             .returning(Conversation.version)
             .execution_options(synchronize_session=False)
         )
         transitioned_version = transition.scalar_one_or_none()
-        transitioned = transitioned_version is not None
+        if transitioned_version is None:
+            await self.db.rollback()
+            return False
 
-        system_note: Message | None = None
-        if transitioned:
-            system_note = Message(
-                conversation_id=conv.id,
-                sender=MessageSender.SYSTEM,
-                body="Hội thoại được chuyển sang nhân viên để xác minh dấu hiệu không phải ứng viên.",
-            )
-            self.db.add(system_note)
-            await record_audit(
-                self.db,
-                action="auto_escalate_suspected_abuse",
-                target_type="conversation",
-                target_id=str(conv.id),
-                payload={"reason": reason, "version": transitioned_version},
-            )
-        else:
-            # Either this conversation was already at the complete target state,
-            # or another concurrent transaction reached it while this one waited.
-            # In both cases only the inbound mutation remains to be applied.
-            inbound_only = await self.db.execute(
-                update(Conversation)
-                .where(Conversation.id == conv.id, target_state)
-                .values(
-                    status=ConversationStatus.OPEN,
-                    last_inbound_at=now,
-                    unread_count=Conversation.unread_count + 1,
-                    bot_locked_until=None,
-                    bot_lock_owner=None,
-                    bot_lock_heartbeat_at=None,
-                    version=Conversation.version + 1,
-                    conversation_seq=Conversation.conversation_seq + 1,
-                )
-                .execution_options(synchronize_session=False)
-            )
-            if inbound_only.rowcount != 1:
-                raise RuntimeError("conversation abuse transition lost")
+        system_note = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.SYSTEM,
+            body="Luồng trích xuất đề nghị nhân viên xác minh ý định liên hệ.",
+        )
+        self.db.add(system_note)
+        await record_audit(
+            self.db,
+            action="extraction_intent_human_review",
+            target_type="conversation",
+            target_id=str(conv.id),
+            payload={
+                "reason": reason,
+                "confidence": round(confidence, 4),
+                "version": transitioned_version,
+            },
+        )
 
         await self.db.commit()
-        await self.db.refresh(inbound)
-        if system_note is not None:
-            await self.db.refresh(system_note)
+        await self.db.refresh(system_note)
         await self.db.refresh(conv)
-        await self.events.message_created(inbound, conv)
-        if system_note is not None:
-            await self.events.message_created(system_note, conv)
+        await self.events.message_created(system_note, conv)
         await self.events.conversation_updated(conv)
-        return transitioned
+        return True
 
     async def acquire_lock(
         self,

@@ -18,11 +18,18 @@ def _body(*, pack_key: str = "recruitment") -> InstallationRevisionCreate:
         expected_lock_version=0,
         pack_key=pack_key,
         customer_identity={"display_name": "Customer"},
-        branding={},
+        branding={"app_name": "Configured app"},
         locale="vi-VN",
         timezone="Asia/Ho_Chi_Minh",
         currency="VND",
-        terminology={},
+        terminology={
+            "application": "Application",
+            "candidate": "Candidate",
+            "conversation": "Conversation",
+            "job": "Job",
+            "lead": "Lead",
+            "organization": "Organization",
+        },
         workflow_policy={
             "workflow_id": "candidate_intake",
             "handoff_mode": "assisted",
@@ -40,6 +47,7 @@ def _body(*, pack_key: str = "recruitment") -> InstallationRevisionCreate:
             "max_output_tokens": 2048,
         },
         integration_requirements=[],
+        authentication_policy={"email_password_enabled": True},
     )
 
 
@@ -47,7 +55,9 @@ async def test_absent_state_reads_unconfigured_without_writing() -> None:
     db = AsyncMock()
     service = InstallationService(db)
     service.repo = SimpleNamespace(
-        acquire_authority_lock=AsyncMock(), get_state=AsyncMock(return_value=None)
+        acquire_authority_lock=AsyncMock(),
+        get_state=AsyncMock(return_value=None),
+        get_setup_draft=AsyncMock(return_value=None),
     )
 
     view = await service.runtime_view()
@@ -73,6 +83,17 @@ async def test_unknown_pack_is_a_typed_validation_failure_before_any_write() -> 
     assert exc_info.value.status_code == 422
     db.add.assert_not_called()
     db.commit.assert_not_awaited()
+
+
+async def test_historical_revision_without_authentication_authority_requires_upgrade() -> None:
+    service = InstallationService(AsyncMock())
+    lifecycle, readiness = await service._runtime_readiness(
+        SimpleNamespace(lifecycle="ACTIVE"),
+        SimpleNamespace(authentication_policy=None, authentication_policy_checksum=None),
+    )
+
+    assert lifecycle == "UPGRADE_REQUIRED"
+    assert readiness == "UPGRADE_REQUIRED"
 
 
 @pytest.mark.parametrize(

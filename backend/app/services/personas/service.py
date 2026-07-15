@@ -53,6 +53,9 @@ class PersonaService:
             persona._assigned_projects = []
         return persona
 
+    async def list_versions(self, persona_id: uuid.UUID) -> list[PersonaVersion]:
+        return await self.repo.list_versions(persona_id)
+
     async def list(
         self,
         *,

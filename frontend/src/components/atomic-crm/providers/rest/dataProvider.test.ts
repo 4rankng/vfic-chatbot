@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clearTokens } from "./api";
 import { getDataProvider } from "./dataProvider";
-import { defaultConfiguration } from "../../root/defaultConfiguration";
 
 /**
  * The REST dataProvider had zero tests. These cover the query-translation
@@ -171,28 +170,8 @@ describe("restProvider custom conversation actions", () => {
 });
 
 describe("legacy configuration migration oracle", () => {
-  const originalFetch = globalThis.fetch;
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
-  });
-
-  it("returns an empty object without consulting a server", async () => {
-    const fetch = vi.fn();
-    globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
-
-    await expect(provider.getConfiguration()).resolves.toEqual({});
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("echoes configuration updates without persisting them", async () => {
-    const fetch = vi.fn();
-    globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
-
-    await expect(provider.updateConfiguration(defaultConfiguration)).resolves.toEqual(
-      defaultConfiguration,
-    );
-    expect(fetch).not.toHaveBeenCalled();
+  it("does not expose browser-local business configuration methods", () => {
+    expect("getConfiguration" in provider).toBe(false);
+    expect("updateConfiguration" in provider).toBe(false);
   });
 });

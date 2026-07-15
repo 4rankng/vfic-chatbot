@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Integer,
+    SmallInteger,
     String,
     text,
 )
@@ -57,6 +58,19 @@ class InstallationManifestRevision(Base):
         CheckConstraint(
             "jsonb_typeof(integration_requirements) = 'array'",
             name="installation_integration_requirements_array",
+        ),
+        CheckConstraint(
+            "authentication_policy IS NULL OR jsonb_typeof(authentication_policy) = 'object'",
+            name="installation_authentication_policy_object",
+        ),
+        CheckConstraint(
+            "(authentication_policy IS NULL) = (authentication_policy_checksum IS NULL)",
+            name="installation_authentication_policy_pair",
+        ),
+        CheckConstraint(
+            "authentication_policy_checksum IS NULL OR "
+            "authentication_policy_checksum ~ '^[0-9a-f]{64}$'",
+            name="installation_authentication_policy_checksum_sha256",
         ),
         CheckConstraint(
             "pack_contract_hash ~ '^[0-9a-f]{64}$' "
@@ -104,6 +118,8 @@ class InstallationManifestRevision(Base):
     provider_policy: Mapped[dict] = mapped_column(JSONB, nullable=False)
     provider_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     integration_requirements: Mapped[list] = mapped_column(JSONB, nullable=False)
+    authentication_policy: Mapped[dict | None] = mapped_column(JSONB)
+    authentication_policy_checksum: Mapped[str | None] = mapped_column(String(64))
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -138,6 +154,11 @@ class InstallationManifestValidation(Base):
             "AND provider_policy_checksum ~ '^[0-9a-f]{64}$'",
             name="installation_validation_checksums_sha256",
         ),
+        CheckConstraint(
+            "authentication_policy_checksum IS NULL OR "
+            "authentication_policy_checksum ~ '^[0-9a-f]{64}$'",
+            name="installation_validation_authentication_checksum_sha256",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -157,6 +178,7 @@ class InstallationManifestValidation(Base):
     persona_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     workflow_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    authentication_policy_checksum: Mapped[str | None] = mapped_column(String(64))
     template_checksums: Mapped[dict] = mapped_column(JSONB, nullable=False)
     active_kb_vector: Mapped[list] = mapped_column(JSONB, nullable=False)
     validated_by: Mapped[uuid.UUID | None] = mapped_column(
@@ -216,6 +238,32 @@ class InstallationState(Base):
     suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     suspended_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class InstallationSetupDraft(Base):
+    """Mutable singleton authoring workspace; never runtime authority."""
+
+    __tablename__ = "installation_setup_drafts"
+    __table_args__ = (
+        CheckConstraint("singleton_id = 1", name="installation_setup_draft_singleton"),
+        CheckConstraint(
+            "jsonb_typeof(payload) = 'object'", name="installation_setup_draft_payload_object"
+        ),
+        CheckConstraint("lock_version >= 0", name="installation_setup_draft_lock_version"),
+    )
+
+    singleton_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    lock_version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

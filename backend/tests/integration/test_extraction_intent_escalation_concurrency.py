@@ -1,4 +1,4 @@
-"""PostgreSQL proof that concurrent abuse escalation creates one review event."""
+"""PostgreSQL proof that concurrent extraction handoffs create one review event."""
 
 from __future__ import annotations
 
@@ -10,7 +10,13 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.models.audit import AuditEvent
-from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
+from app.models.conversation import (
+    Conversation,
+    ConversationMode,
+    ConversationStatus,
+    Message,
+    MessageSender,
+)
 from app.models.user import Role, User
 from app.services.conversation.state import ConversationState
 from tests.integration.conftest import IntegrationDatabase
@@ -26,7 +32,7 @@ class _NoopEvents:
         return None
 
 
-async def test_concurrent_positive_messages_create_one_escalation(
+async def test_concurrent_extraction_handoffs_create_one_review_event(
     integration_database: IntegrationDatabase,
 ) -> None:
     engine = create_async_engine(integration_database.async_url, pool_pre_ping=True)
@@ -35,7 +41,7 @@ async def test_concurrent_positive_messages_create_one_escalation(
     try:
         async with sessions() as setup:
             recruiter = User(
-                email="abuse-concurrency@vfic.test",
+                email="intent-concurrency@vfic.test",
                 password_hash="not-a-real-password-hash",
                 full_name="Concurrency reviewer",
                 role=Role.recruiter,
@@ -43,7 +49,7 @@ async def test_concurrent_positive_messages_create_one_escalation(
             setup.add(recruiter)
             await setup.flush()
             conversation = Conversation(
-                zalo_chat_id="abuse-concurrency-chat",
+                zalo_chat_id="intent-concurrency-chat",
                 mode=ConversationMode.BOT,
                 assigned_recruiter_id=recruiter.id,
                 taken_over_at=taken_over_at,
@@ -53,7 +59,7 @@ async def test_concurrent_positive_messages_create_one_escalation(
             conversation_id = conversation.id
             recruiter_id = recruiter.id
 
-        async def escalate(message_id: str) -> bool:
+        async def escalate() -> bool:
             async with sessions() as session:
                 conversation = await session.get(Conversation, conversation_id)
                 assert conversation is not None
@@ -61,14 +67,14 @@ async def test_concurrent_positive_messages_create_one_escalation(
                     session,
                     repo=None,
                     events=_NoopEvents(),
-                ).record_inbound_and_escalate_abuse(
+                ).escalate_extracted_intent(
                     conversation,
-                    body="Tôi đang kiểm tra bot",
-                    zalo_message_id=message_id,
-                    reason="explicit_bot_testing",
+                    reason="bot_testing",
+                    confidence=0.99,
+                    expected_version=1,
                 )
 
-        outcomes = await asyncio.gather(escalate("abuse-1"), escalate("abuse-2"))
+        outcomes = await asyncio.gather(escalate(), escalate())
         assert sorted(outcomes) == [False, True]
 
         async with sessions() as verify:
@@ -81,9 +87,9 @@ async def test_concurrent_positive_messages_create_one_escalation(
             assert conversation.bot_locked_until is None
             assert conversation.bot_lock_owner is None
             assert conversation.bot_lock_heartbeat_at is None
-            assert conversation.unread_count == 2
-            assert conversation.version == 4
-            assert conversation.conversation_seq == 4
+            assert conversation.unread_count == 0
+            assert conversation.version == 2
+            assert conversation.conversation_seq == 2
 
             worker_count = await verify.scalar(
                 select(func.count(Message.id)).where(
@@ -99,11 +105,11 @@ async def test_concurrent_positive_messages_create_one_escalation(
             )
             audit_count = await verify.scalar(
                 select(func.count(AuditEvent.id)).where(
-                    AuditEvent.action == "auto_escalate_suspected_abuse",
+                    AuditEvent.action == "extraction_intent_human_review",
                     AuditEvent.target_id == str(conversation_id),
                 )
             )
-            assert worker_count == 2
+            assert worker_count == 0
             assert system_count == 1
             assert audit_count == 1
 
@@ -112,6 +118,73 @@ async def test_concurrent_positive_messages_create_one_escalation(
             )
             await verify.execute(delete(Conversation).where(Conversation.id == conversation_id))
             await verify.execute(delete(User).where(User.id == recruiter_id))
+            await verify.commit()
+    finally:
+        await engine.dispose()
+
+
+async def test_stale_extraction_cannot_reopen_newer_closed_state(
+    integration_database: IntegrationDatabase,
+) -> None:
+    engine = create_async_engine(integration_database.async_url, pool_pre_ping=True)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with sessions() as setup:
+            conversation = Conversation(
+                zalo_chat_id="stale-intent-closed-chat",
+                mode=ConversationMode.BOT,
+            )
+            setup.add(conversation)
+            await setup.commit()
+            conversation_id = conversation.id
+
+        async with sessions() as stale_session:
+            stale_conversation = await stale_session.get(Conversation, conversation_id)
+            assert stale_conversation is not None
+            assert stale_conversation.version == 1
+
+            async with sessions() as operator_session:
+                current = await operator_session.get(Conversation, conversation_id)
+                assert current is not None
+                current.status = ConversationStatus.CLOSED
+                current.mode = ConversationMode.HUMAN
+                current.version += 1
+                current.conversation_seq += 1
+                await operator_session.commit()
+
+            transitioned = await ConversationState(
+                stale_session,
+                repo=None,
+                events=_NoopEvents(),
+            ).escalate_extracted_intent(
+                stale_conversation,
+                reason="bot_testing",
+                confidence=0.99,
+                expected_version=1,
+            )
+            assert transitioned is False
+
+        async with sessions() as verify:
+            conversation = await verify.get(Conversation, conversation_id)
+            assert conversation is not None
+            assert conversation.status == ConversationStatus.CLOSED
+            assert conversation.mode == ConversationMode.HUMAN
+            assert conversation.version == 2
+            system_count = await verify.scalar(
+                select(func.count(Message.id)).where(
+                    Message.conversation_id == conversation_id,
+                    Message.sender == MessageSender.SYSTEM,
+                )
+            )
+            audit_count = await verify.scalar(
+                select(func.count(AuditEvent.id)).where(
+                    AuditEvent.action == "extraction_intent_human_review",
+                    AuditEvent.target_id == str(conversation_id),
+                )
+            )
+            assert system_count == 0
+            assert audit_count == 0
+            await verify.execute(delete(Conversation).where(Conversation.id == conversation_id))
             await verify.commit()
     finally:
         await engine.dispose()

@@ -40,8 +40,6 @@ class PersonaFollowupRule(BaseModel):
     @field_validator("eligible_stages")
     @classmethod
     def validate_eligible_stages(cls, value: list[LeadStage]) -> list[LeadStage]:
-        if not value:
-            raise ValueError("at least one eligible stage is required")
         deduped: list[LeadStage] = []
         for stage in value:
             if stage not in deduped:
@@ -52,6 +50,8 @@ class PersonaFollowupRule(BaseModel):
     def validate_enabled_rule_has_cadence(self) -> "PersonaFollowupRule":
         if self.enabled and not self.cadence_hours:
             raise ValueError("enabled follow-up rules require at least one cadence value")
+        if self.enabled and not self.eligible_stages:
+            raise ValueError("enabled follow-up rules require at least one eligible stage")
         return self
 
 
@@ -121,6 +121,23 @@ class PersonaOut(BaseModel):
 class PersonaListResponse(BaseModel):
     data: list[PersonaOut]
     total: int
+
+
+class PersonaVersionMetadataOut(BaseModel):
+    """Immutable selection metadata; deliberately excludes persona content."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: uuid.UUID
+    version_no: int
+    checksum: str
+    created_at: datetime
+
+
+class PersonaVersionListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[PersonaVersionMetadataOut]
 
 
 class PersonaCreate(BaseModel):

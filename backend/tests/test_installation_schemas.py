@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.installation import InstallationRevisionCreate, InstallationRuntimeOut
+from app.schemas.installation import (
+    InstallationRevisionCreate,
+    InstallationRevisionOut,
+    InstallationRuntimeOut,
+    InstallationSetupDraftPayload,
+)
 
 
 REQUIRED_BUSINESS_FIELDS = {
@@ -26,6 +32,7 @@ REQUIRED_BUSINESS_FIELDS = {
     "template_version_refs",
     "provider_policy",
     "integration_requirements",
+    "authentication_policy",
 }
 
 SAFE_RUNTIME_FIELDS = {
@@ -33,6 +40,9 @@ SAFE_RUNTIME_FIELDS = {
     "authority_generation",
     "revision_id",
     "pack_key",
+    "pack_version",
+    "pack_contract_hash",
+    "manifest_checksum",
     "customer_identity",
     "branding",
     "locale",
@@ -41,6 +51,7 @@ SAFE_RUNTIME_FIELDS = {
     "terminology",
     "capability_ids",
     "readiness_code",
+    "schema_version",
 }
 
 
@@ -50,8 +61,11 @@ def _active_runtime_payload() -> dict[str, object]:
         "authority_generation": 9,
         "revision_id": "00000000-0000-0000-0000-000000000009",
         "pack_key": "recruitment",
+        "pack_version": "1",
+        "pack_contract_hash": "a" * 64,
+        "manifest_checksum": "b" * 64,
         "customer_identity": {"display_name": "Doanh nghiệp kiểm thử"},
-        "branding": {"logo_url": "/assets/customer-logo.svg"},
+        "branding": {"app_name": "Configured app"},
         "locale": "vi-VN",
         "timezone": "Asia/Ho_Chi_Minh",
         "currency": "VND",
@@ -66,7 +80,7 @@ def _valid_revision_payload() -> dict[str, object]:
         "expected_lock_version": 0,
         "pack_key": "recruitment",
         "customer_identity": {"display_name": "Customer"},
-        "branding": {},
+        "branding": {"app_name": "Configured app"},
         "locale": "vi-VN",
         "timezone": "Asia/Ho_Chi_Minh",
         "currency": "VND",
@@ -88,6 +102,7 @@ def _valid_revision_payload() -> dict[str, object]:
             "max_output_tokens": 2048,
         },
         "integration_requirements": [],
+        "authentication_policy": {"email_password_enabled": True},
     }
 
 
@@ -177,10 +192,92 @@ def test_template_reference_requires_lowercase_sha256() -> None:
         InstallationRevisionCreate.model_validate(payload)
 
 
-def test_locale_accepts_script_and_region_bcp47_form() -> None:
+def test_conflicting_duplicate_template_checksums_are_rejected_for_every_authoring_path() -> None:
+    version_id = str(uuid.uuid4())
+    conflicting_refs = [
+        {"version_id": version_id, "checksum": "a" * 64},
+        {"version_id": version_id, "checksum": "b" * 64},
+    ]
+    revision_payload = _valid_revision_payload()
+    revision_payload["template_version_refs"] = conflicting_refs
+    with pytest.raises(ValidationError) as direct_error:
+        InstallationRevisionCreate.model_validate(revision_payload)
+    assert any(error["loc"] == ("template_version_refs",) for error in direct_error.value.errors())
+
+    with pytest.raises(ValidationError) as draft_error:
+        InstallationSetupDraftPayload.model_validate(
+            {"knowledge_templates": {"template_version_refs": conflicting_refs}}
+        )
+    assert any(
+        error["loc"] == ("knowledge_templates", "template_version_refs")
+        for error in draft_error.value.errors()
+    )
+
+
+def test_locale_rejects_well_formed_but_unshipped_catalog() -> None:
     payload = _valid_revision_payload()
     payload["locale"] = "zh-Hant-TW"
-    assert InstallationRevisionCreate.model_validate(payload).locale == "zh-Hant-TW"
+    with pytest.raises(ValidationError):
+        InstallationRevisionCreate.model_validate(payload)
+
+
+def test_branding_requires_explicit_nonblank_app_name_and_rejects_asset_urls() -> None:
+    payload = _valid_revision_payload()
+    payload["branding"] = {"app_name": "   "}
+    with pytest.raises(ValidationError):
+        InstallationRevisionCreate.model_validate(payload)
+
+    payload["branding"] = {"app_name": "Configured", "logo_url": "https://example.test/a.png"}
+    with pytest.raises(ValidationError):
+        InstallationRevisionCreate.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("support_email", "not-an-email"),
+        ("website_url", "javascript:alert(1)"),
+    ],
+)
+def test_customer_identity_matches_public_bootstrap_validation(field: str, value: str) -> None:
+    payload = _valid_revision_payload()
+    payload["customer_identity"] = {"display_name": "Customer", field: value}
+    with pytest.raises(ValidationError):
+        InstallationRevisionCreate.model_validate(payload)
+
+
+def test_historical_revision_output_accepts_null_authentication_authority() -> None:
+    payload = {
+        "id": str(uuid.uuid4()),
+        "revision_no": 1,
+        "predecessor_id": None,
+        "pack_key": "recruitment",
+        "pack_version": "1",
+        "pack_contract_hash": "a" * 64,
+        "manifest_checksum": "b" * 64,
+        "customer_identity": {"display_name": "Historical customer"},
+        "branding": {},
+        "locale": "vi-VN",
+        "timezone": "Asia/Ho_Chi_Minh",
+        "currency": "VND",
+        "terminology": {},
+        "workflow_policy": {},
+        "workflow_policy_checksum": "c" * 64,
+        "capability_ids": [],
+        "persona_version_id": str(uuid.uuid4()),
+        "template_version_refs": [],
+        "provider_policy": {},
+        "provider_policy_checksum": "d" * 64,
+        "integration_requirements": [],
+        "authentication_policy": None,
+        "authentication_policy_checksum": None,
+        "created_by": None,
+        "created_at": datetime.now(UTC),
+    }
+
+    output = InstallationRevisionOut.model_validate(payload)
+    assert output.authentication_policy is None
+    assert output.authentication_policy_checksum is None
 
 
 def test_currency_must_exist_in_current_iso4217_catalog() -> None:

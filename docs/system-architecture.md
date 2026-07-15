@@ -127,9 +127,9 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
                             ▼
   ┌──────────────────────────────────────────────────────────┐
   │ 1. Verify secret (hmac.compare_digest / OA signature)    │
-  │ 2. Classify only explicit self-declared abuse intent     │
-  │ 3. Persist inbound; abuse → HUMAN review, no automation  │
-  │ 4. Otherwise capture name, lock, and enqueue chatbot     │
+  │ 2. Normalize, deduplicate, and persist inbound            │
+  │ 3. Apply mode guard, capture explicit name, acquire lock  │
+  │ 4. Enqueue chatbot; no intent-classification work here    │
   │ 5. ACK 200 in <1s (503 on transactional/start failure)   │
   └──────────────────────────────────────────────────────────┘
                             │ RQ job (per-chat DB lease)
@@ -155,8 +155,8 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
                             │
           ┌─────────────────┼──────────────────┐
           ▼                 ▼                  ▼
-   persistence_low    Socket.IO emit     Recruiter console
-   (LLM enrichment)   (conv:<id> room)   (realtime thread update)
+   persistence_low      Socket.IO emit     Recruiter console
+   (extract + intent)   (conv:<id> room)   (realtime thread update)
 ```
 
 ### Sequence — "candidate sends a Zalo message"
@@ -219,16 +219,8 @@ sequenceDiagram
     W->>W: verify signature<br/>Bot: shared-secret compare (X-Bot-Api-Secret-Token)<br/>OA: SHA256 HMAC (X-ZEvent-Signature)
     W->>H: handle(payload)
 
-    Note over H: ── normalize and pure classification BEFORE dedup ──<br/>(msg_hash is computed during normalize)
+    Note over H: ── normalize and dedup ──<br/>(msg_hash is computed during normalize)
     H->>H: normalize → NormalizedMessage<br/>(return "ignored" if non-text)
-    H->>H: classify current user_text only<br/>bounded declarations; candidate signals veto<br/>OA escalation requires a verified signature
-    break explicit suspected abuse / non-candidate declaration
-        H->>DB: dedup.claim(commit=false) + ensure conversation
-        H->>DB: one transaction: dedup + inbound WORKER<br/>+ HUMAN/OPEN/needs_human + fixed SYSTEM note + audit
-        H-->>RT: inbound message, optional SYSTEM note,<br/>then conversation.updated
-        W-->>E: 200 ACK {status: "human_review"}
-        Note over H,RQ: no name extraction, bot lock, typing, enqueue,<br/>LLM, embeddings, or proactive follow-up
-    end
     H->>DB: dedup.claim(chat_id, msg_hash)<br/>message_dedup table, 8s window<br/>return "duplicate" if seen
     H->>DB: ensure conversation (upsert Conversation)
     H->>DB: record_inbound → Message WORKER row<br/>bump unread, opt-out check
@@ -320,7 +312,15 @@ sequenceDiagram
         WK->>DB: record_bot_outcome → Message SENT/FAILED<br/>+ BotRun row (stage_timings JSONB)<br/>clear per-chat lock
         WK-->>RT: message.created + conversation.updated
         Z-->>U: bot reply
-        WK->>RQ: enqueue persistence_low (LLM lead/memory enrichment, fire-and-forget)
+        WK->>RQ: enqueue persistence_low<br/>(one LLM call: lead + memory + contact intent)
+        RQ->>WK: extract structured contact_intent + confidence
+        alt high-confidence non-candidate / spam / bot-testing
+            WK->>DB: atomic HUMAN/OPEN/needs_human transition<br/>clear bot lease + fixed SYSTEM note + audit
+            WK-->>RT: review note + conversation.updated
+            Note over WK,RQ: skip lead/memory writes; future inbound is human-only
+        else candidate or uncertain
+            WK->>DB: persist lead patch + new memory facts
+        end
     else not owned (takeover won the race)
         WK->>DB: record_bot_outcome → SUPPRESSED
     end
@@ -335,20 +335,36 @@ sequenceDiagram
     end
 ```
 
-### 2.2 Suspected-abuse operator handoff
+### 2.2 Extraction-owned intent handoff
 
-Automatic abuse control is deliberately conservative. It examines only the
-current inbound user message, recognizes a bounded set of explicit first-person
-bot-testing, spam, or non-candidate declarations, and gives candidate signals
-priority. A generated note or earlier AI conclusion is never evidence.
+Contact intent is classified by the existing post-send candidate extraction
+call, together with `lead_patch` and `memory_facts`. The webhook/chatbot response
+path does not make a second LLM call and does not run a separate intent
+classifier. Consequently, the current message receives its normal first reply;
+the classification controls future turns only. Every successfully sent
+substantive turn is offered to this extraction flow, including FAQ-bypass and
+mixed fast-lane messages. A shared normalized pure-pleasantry gate keeps greeting,
+thanks, goodbye, and simple help phrases out of the persistence queue entirely.
 
-On a positive decision, the conversation becomes `HUMAN` + `OPEN` with
-`needs_human=true`. The inbound remains visible, a fixed PII-free system note and
-stable audit reason are stored, and all chatbot work stops. `HUMAN` is already
-excluded by the webhook start guard, reconciler, and proactive selector. An
-unassigned thread is read-only in the console until a recruiter clicks **Tiếp
-quản**. Returning it to `BOT` is rejected until it has been claimed; an authorized
-release then clears the review flag and restores chatbot processing.
+The extraction result includes the structured fields `contact_intent` and
+`intent_confidence`. Only `non_candidate`, `spam`, or `bot_testing` at confidence
+`>= 0.95` triggers review. Candidate signals take priority, ambiguous content is
+`uncertain`, and bot output or previously generated notes are never evidence for
+the classification. The intent decision is not written into candidate notes.
+
+On a positive result, one conditional transaction changes the conversation to
+`HUMAN` + `OPEN` with `needs_human=true`, clears any bot lease, and stores a fixed
+PII-free system note plus an audit event. Lead and memory writes from that
+extraction result are skipped. A deferred extraction job also rechecks the mode
+and source conversation version before its LLM call; the final transition repeats
+the source-version and non-CLOSED checks atomically. Stale work therefore cannot
+override a newer inbound or recruiter action, and work queued after a takeover,
+close, or earlier intent handoff exits without spending model tokens. `HUMAN` is
+excluded by later webhook bot starts, reconciler recovery, extraction, and
+proactive follow-up. An unassigned
+thread is read-only in the console until a recruiter clicks **Tiếp quản**.
+Returning it to `BOT` is rejected until it has been claimed; an authorized
+release clears the review flag and restores chatbot processing.
 
 **Key corrections vs naive "webhook → dedup → normalize → worker → send" sketches**
 
@@ -426,7 +442,7 @@ load_conversation_state -> typing -> vacancy_lookup?
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
 | `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Interactive and recovered chat turns. |
-| `persistence_low` | `worker-persistence` (×1) | — | — | LLM-derived lead and memory enrichment after SENT replies; isolated from the interactive queue. |
+| `persistence_low` | `worker-persistence` (×1) | — | — | One post-SENT LLM extraction for lead fields, memory facts, and contact intent; high-confidence non-candidate/spam/testing results switch future turns to HUMAN. Isolated from the interactive queue. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up, reconcile, and outbound-dispatch sweeps. |
 

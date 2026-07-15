@@ -711,16 +711,19 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     "reason": send_result.error,
                     "reply": candidate,
                 }
-            # Lead/memory extraction runs only after a real agent reply was sent (mirrors
-            # the legacy "Should Persist?" gate, which never extracted on greetings). A
-            # fast-lane template (faq_cache) or a deterministic FAQ-bypass answer
-            # (faq_bypass — canonical, already in the KB) carries no Q&A to extract.
-            if deps.persist is not None and outcome_label not in ("faq_cache", "faq_bypass"):
+            # The post-send extraction owns lead, memory, and contact intent. Enqueue
+            # every successfully sent turn; its greeting gate keeps pure pleasantries
+            # at zero extraction calls while substantive fast/FAQ turns are classified.
+            pure_fast_pleasantry = fast is not None and fast_lane.is_pure_pleasantry(
+                state.user_text
+            )
+            if deps.persist is not None and not pure_fast_pleasantry:
                 deps.persist(
                     {
                         "chat_id": conv.zalo_chat_id,
                         "user_text": state.user_text,
                         "bot_output": candidate,
+                        "conversation_version": state.version_at_start,
                     }
                 )
             return {"outcome": outcome_label, "reply": candidate}

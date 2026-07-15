@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -28,6 +29,12 @@ from app.services.audit_service import record_audit
 from app.services.errors import InstallationError
 from app.services.installation.authority import RuntimeAuthorityFingerprint
 from app.services.installation.hashing import sha256_json
+from app.services.installation.catalog import (
+    CHANNEL_CAPABILITY_REQUIREMENTS,
+    CHAT_INTEGRATION_REFERENCES,
+    EMBEDDING_INTEGRATION_REFERENCES,
+    integration_reference_ids,
+)
 from app.services.installation.repository import InstallationRepository
 from app.services.installation.runtime import (
     cache_fingerprint,
@@ -38,6 +45,10 @@ from app.services.installation.runtime import (
 
 VALIDATOR_VERSION = "1"
 logger = logging.getLogger(__name__)
+_SECRET_VALUE_PATTERN = re.compile(
+    r"^(?:sk-|xox[a-z]*-|ghp_|github_pat_|AIza)|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----",
+    re.IGNORECASE,
+)
 PUBLIC_CUSTOMER_IDENTITY_KEYS = {
     "display_name",
     "legal_name",
@@ -49,8 +60,6 @@ PUBLIC_CUSTOMER_IDENTITY_KEYS = {
 }
 PUBLIC_BRANDING_KEYS = {
     "app_name",
-    "logo_url",
-    "favicon_url",
     "primary_color",
     "secondary_color",
 }
@@ -74,7 +83,11 @@ class InstallationService:
         self.registry = registry or get_capability_registry()
 
     async def create_revision(
-        self, body: InstallationRevisionCreate, actor_id: uuid.UUID
+        self,
+        body: InstallationRevisionCreate,
+        actor_id: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> InstallationManifestRevision:
         await self.repo.acquire_authority_lock()
         state = await self.repo.get_state(for_update=True)
@@ -87,6 +100,58 @@ class InstallationService:
             raise self._error(
                 str(exc), "INSTALLATION_VALIDATION_FAILED", lifecycle, status_code=422
             ) from exc
+
+        selection_issues: list[dict[str, str | None]] = []
+        if body.workflow_policy.workflow_id not in pack.workflow_ids:
+            selection_issues.append(self._issue("WORKFLOW_INVALID", "workflow_policy.workflow_id"))
+        missing_terms = set(pack.terminology_keys) - set(body.terminology)
+        unknown_terms = set(body.terminology) - set(pack.terminology_keys)
+        if missing_terms:
+            selection_issues.append(
+                self._issue(
+                    "TERMINOLOGY_REQUIRED",
+                    "terminology",
+                    f"Missing terminology keys: {sorted(missing_terms)}",
+                )
+            )
+        if unknown_terms:
+            selection_issues.append(self._issue("TERMINOLOGY_KEY_INVALID", "terminology"))
+        if body.provider_policy.chat_integration_key not in CHAT_INTEGRATION_REFERENCES:
+            selection_issues.append(
+                self._issue("INTEGRATION_REFERENCE_INVALID", "provider_policy.chat_integration_key")
+            )
+        if body.provider_policy.embedding_integration_key not in EMBEDDING_INTEGRATION_REFERENCES:
+            selection_issues.append(
+                self._issue(
+                    "INTEGRATION_REFERENCE_INVALID", "provider_policy.embedding_integration_key"
+                )
+            )
+        integration_refs = {item.key for item in body.integration_requirements}
+        if integration_refs - set(integration_reference_ids()):
+            selection_issues.append(
+                self._issue("INTEGRATION_REFERENCE_INVALID", "integration_requirements")
+            )
+        required_refs = {
+            reference
+            for capability, reference in CHANNEL_CAPABILITY_REQUIREMENTS.items()
+            if capability in capability_ids
+        }
+        if required_refs - integration_refs:
+            selection_issues.append(
+                self._issue("INTEGRATION_REQUIRED_BY_CAPABILITY", "integration_requirements")
+            )
+        if "knowledge" in capability_ids and not body.template_version_refs:
+            selection_issues.append(
+                self._issue("TEMPLATE_REQUIRED_BY_CAPABILITY", "template_version_refs")
+            )
+        if selection_issues:
+            raise self._error(
+                "Installation settings are not valid for the selected pack",
+                "INSTALLATION_VALIDATION_FAILED",
+                lifecycle,
+                status_code=422,
+                issues=selection_issues,
+            )
 
         if state and state.active_revision_id:
             active = await self._revision_or_error(state.active_revision_id, lifecycle)
@@ -121,9 +186,14 @@ class InstallationService:
             "terminology": body.terminology,
             "workflow_policy": body.workflow_policy,
             "provider_policy": body.provider_policy,
+            "authentication_policy": body.authentication_policy,
         }
         secret_path = next(
-            (path for path, value in secret_paths.items() if self._contains_secret_key(value)),
+            (
+                path
+                for path, value in secret_paths.items()
+                if self._contains_secret_key(value) or self._contains_secret_value(value)
+            ),
             None,
         )
         if secret_path is not None:
@@ -138,6 +208,7 @@ class InstallationService:
         data = body.model_dump(mode="json", exclude_none=True, exclude={"expected_lock_version"})
         workflow_checksum = sha256_json(data["workflow_policy"])
         provider_checksum = sha256_json(data["provider_policy"])
+        authentication_checksum = sha256_json(data["authentication_policy"])
         pack_hash = self.registry.pack_contract_hash(pack.key)
         manifest_payload = {
             **data,
@@ -146,6 +217,7 @@ class InstallationService:
             "pack_contract_hash": pack_hash,
             "workflow_policy_checksum": workflow_checksum,
             "provider_policy_checksum": provider_checksum,
+            "authentication_policy_checksum": authentication_checksum,
         }
         revision = InstallationManifestRevision(
             predecessor_id=state.current_revision_id if state else None,
@@ -167,6 +239,8 @@ class InstallationService:
             provider_policy=data["provider_policy"],
             provider_policy_checksum=provider_checksum,
             integration_requirements=data["integration_requirements"],
+            authentication_policy=data["authentication_policy"],
+            authentication_policy_checksum=authentication_checksum,
             created_by=actor_id,
         )
         self.db.add(revision)
@@ -195,13 +269,18 @@ class InstallationService:
             target_id=str(revision.id),
             payload={"pack_key": pack.key, "manifest_checksum": revision.manifest_checksum},
         )
-        await self.db.commit()
-        await self._invalidate_cache_safely()
-        await self.db.refresh(revision)
+        if commit:
+            await self.db.commit()
+            await self._invalidate_cache_safely()
+            await self.db.refresh(revision)
         return revision
 
     async def validate_revision(
-        self, revision_id: uuid.UUID, actor_id: uuid.UUID
+        self,
+        revision_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> InstallationManifestValidation:
         await self.repo.acquire_authority_lock()
         state = await self.repo.get_state(for_update=True)
@@ -220,6 +299,20 @@ class InstallationService:
                 issues.append(self._issue("CAPABILITY_SELECTION_INVALID", "capability_ids"))
         except ValueError as exc:
             issues.append(self._issue("PACK_UNKNOWN", "pack_key", str(exc)))
+
+        if (
+            revision.authentication_policy is None
+            or revision.authentication_policy_checksum is None
+            or sha256_json(revision.authentication_policy)
+            != revision.authentication_policy_checksum
+        ):
+            issues.append(
+                self._issue(
+                    "AUTHENTICATION_POLICY_REQUIRED",
+                    "authentication_policy",
+                    "An explicit current authentication policy is required",
+                )
+            )
 
         persona = await self.repo.get_persona_version(revision.persona_version_id)
         if persona is None:
@@ -276,12 +369,14 @@ class InstallationService:
                 "persona_version_id": str(revision.persona_version_id),
                 "template_version_ids": sorted(expected_refs),
                 "integration_keys": required_keys,
+                "authentication_policy_checksum": revision.authentication_policy_checksum,
             },
             manifest_checksum=revision.manifest_checksum,
             pack_contract_hash=revision.pack_contract_hash,
             persona_checksum=persona_checksum,
             workflow_policy_checksum=revision.workflow_policy_checksum,
             provider_policy_checksum=revision.provider_policy_checksum,
+            authentication_policy_checksum=revision.authentication_policy_checksum,
             template_checksums=template_checksums,
             active_kb_vector=[list(item) for item in active_kb_vector],
             validated_by=actor_id,
@@ -302,9 +397,10 @@ class InstallationService:
             target_id=str(revision.id),
             payload={"is_valid": validation.is_valid, "issue_count": len(issues)},
         )
-        await self.db.commit()
-        await self._invalidate_cache_safely()
-        await self.db.refresh(validation)
+        if commit:
+            await self.db.commit()
+            await self._invalidate_cache_safely()
+            await self.db.refresh(validation)
         if issues:
             raise self._error(
                 "Installation revision validation failed",
@@ -492,11 +588,19 @@ class InstallationService:
     async def runtime_view(self) -> InstallationRuntimeOut:
         state = await self.repo.get_state()
         if state is None:
+            draft = await self.repo.get_setup_draft()
             return InstallationRuntimeOut(
-                lifecycle=InstallationLifecycle.unconfigured.value,
+                lifecycle=(
+                    InstallationLifecycle.draft.value
+                    if draft is not None
+                    else InstallationLifecycle.unconfigured.value
+                ),
                 authority_generation=0,
                 revision_id=None,
                 pack_key=None,
+                pack_version=None,
+                pack_contract_hash=None,
+                manifest_checksum=None,
                 customer_identity=None,
                 branding=None,
                 locale=None,
@@ -513,6 +617,9 @@ class InstallationService:
                 authority_generation=state.authority_generation,
                 revision_id=None,
                 pack_key=None,
+                pack_version=None,
+                pack_contract_hash=None,
+                manifest_checksum=None,
                 customer_identity=None,
                 branding=None,
                 locale=None,
@@ -529,6 +636,9 @@ class InstallationService:
             authority_generation=state.authority_generation,
             revision_id=revision.id,
             pack_key=revision.pack_key,
+            pack_version=revision.pack_version,
+            pack_contract_hash=revision.pack_contract_hash,
+            manifest_checksum=revision.manifest_checksum,
             customer_identity=self._public_mapping(
                 revision.customer_identity, PUBLIC_CUSTOMER_IDENTITY_KEYS
             ),
@@ -548,13 +658,19 @@ class InstallationService:
     async def admin_view(self) -> InstallationAdminOut:
         state = await self.repo.get_state()
         if state is None:
+            draft = await self.repo.get_setup_draft()
             return InstallationAdminOut(
-                lifecycle=InstallationLifecycle.unconfigured.value,
+                lifecycle=(
+                    InstallationLifecycle.draft.value
+                    if draft is not None
+                    else InstallationLifecycle.unconfigured.value
+                ),
                 authority_generation=0,
                 lock_version=0,
                 current_revision=None,
                 active_revision_id=None,
                 active_validation=None,
+                current_validation=None,
                 readiness_code="SETUP_REQUIRED",
             )
         current = await self._revision_or_error(state.current_revision_id, state.lifecycle)
@@ -563,6 +679,7 @@ class InstallationService:
             if state.active_validation_id
             else None
         )
+        current_validation = await self._find_current_validation(current.id)
         readiness_revision = current
         if state.active_revision_id is not None:
             readiness_revision = await self._revision_or_error(
@@ -577,6 +694,11 @@ class InstallationService:
             active_revision_id=state.active_revision_id,
             active_validation=(
                 InstallationValidationOut.model_validate(validation) if validation else None
+            ),
+            current_validation=(
+                InstallationValidationOut.model_validate(current_validation)
+                if current_validation
+                else None
             ),
             readiness_code=readiness,
         )
@@ -708,6 +830,10 @@ class InstallationService:
             and validation.persona_checksum == persona.checksum
             and validation.workflow_policy_checksum == revision.workflow_policy_checksum
             and validation.provider_policy_checksum == revision.provider_policy_checksum
+            and revision.authentication_policy is not None
+            and revision.authentication_policy_checksum is not None
+            and validation.authentication_policy_checksum
+            == revision.authentication_policy_checksum
         )
 
     async def _find_current_validation(
@@ -727,6 +853,13 @@ class InstallationService:
         write_cache: bool = True,
     ) -> ActiveInstallation:
         revision = await self._revision_or_error(validation.revision_id, state.lifecycle)
+        if validation.authentication_policy_checksum is None:
+            raise self._error(
+                "Authentication authority must be upgraded before runtime use",
+                "INSTALLATION_VALIDATION_FAILED",
+                InstallationLifecycle.upgrade_required.value,
+                status_code=422,
+            )
         fingerprint = RuntimeAuthorityFingerprint(
             authority_generation=state.authority_generation,
             revision_id=revision.id,
@@ -735,6 +868,7 @@ class InstallationService:
             persona_checksum=validation.persona_checksum,
             workflow_policy_checksum=validation.workflow_policy_checksum,
             provider_policy_checksum=validation.provider_policy_checksum,
+            authentication_policy_checksum=validation.authentication_policy_checksum,
             template_checksums=dict(validation.template_checksums),
             active_kb_vector=(
                 active_kb_vector
@@ -765,6 +899,13 @@ class InstallationService:
     async def _runtime_readiness(
         self, state: InstallationState, revision: InstallationManifestRevision
     ) -> tuple[str, str]:
+        if (
+            revision.authentication_policy is None
+            or revision.authentication_policy_checksum is None
+            or sha256_json(revision.authentication_policy)
+            != revision.authentication_policy_checksum
+        ):
+            return InstallationLifecycle.upgrade_required.value, "UPGRADE_REQUIRED"
         try:
             pack = self.registry.get_pack(revision.pack_key)
         except ValueError:
@@ -847,6 +988,16 @@ class InstallationService:
         if isinstance(value, list):
             return any(cls._contains_secret_key(item) for item in value)
         return False
+
+    @classmethod
+    def _contains_secret_value(cls, value: object) -> bool:
+        if isinstance(value, dict):
+            return any(cls._contains_secret_value(item) for item in value.values())
+        if isinstance(value, list):
+            return any(cls._contains_secret_value(item) for item in value)
+        if hasattr(value, "model_dump"):
+            return cls._contains_secret_value(value.model_dump(mode="json"))
+        return isinstance(value, str) and bool(_SECRET_VALUE_PATTERN.search(value.strip()))
 
     @staticmethod
     def _secret_like_key(key: str) -> bool:

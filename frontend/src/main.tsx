@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import "./flat-surfaces.css";
 import App from "./App.tsx";
+import { InstallationBootstrap } from "@/components/atomic-crm/installation/InstallationBootstrap";
 
 // After a new deploy, the service worker may replace its pre-cache while
 // the page still holds old chunk references. A reload picks up the new
@@ -18,6 +19,8 @@ window.addEventListener("vite:preloadError", () => {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <InstallationBootstrap>
+      <App />
+    </InstallationBootstrap>
   </StrictMode>,
 );

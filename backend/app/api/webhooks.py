@@ -118,7 +118,6 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         return JSONResponse({"status": "verified"}, status_code=200)
 
     cfg = await IntegrationSettingsService(db).resolve_zalo()
-    abuse_control_verified = not cfg.oa_secret_key and _settings.app_env == "development"
     if cfg.oa_secret_key:
         signature = request.headers.get("x-zevent-signature") or ""
         ts_header = request.headers.get("x-zevent-timestamp") or ""
@@ -134,7 +133,6 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             secret_key=cfg.oa_secret_key,
             timestamp_header=ts_header,
         )
-        abuse_control_verified = oa_result.verified
         if oa_result.verified:
             asyncio.create_task(record_oa_signature(ok=True))
         else:
@@ -170,7 +168,6 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         payload,
         enqueue=enqueue_chat_run,
         channel="oa",
-        allow_automatic_abuse_control=abuse_control_verified,
     )
     code = 503 if result.get("status") == "start_failed" else 200
     await _stamp_ack(t0, code)

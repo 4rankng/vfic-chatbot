@@ -218,7 +218,12 @@ async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
     assert res["reply"] == "Chào bạn!"
     assert zalo.sent == [("z1", "Chào bạn!")]
     assert persisted == [
-        {"chat_id": "z1", "user_text": "tôi muốn tìm việc lái xe", "bot_output": "Chào bạn!"}
+        {
+            "chat_id": "z1",
+            "user_text": "tôi muốn tìm việc lái xe",
+            "bot_output": "Chào bạn!",
+            "conversation_version": 1,
+        }
     ]
 
 
@@ -668,10 +673,9 @@ async def test_fast_turn_sends_no_filler(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_greeting_hits_fast_lane_no_llm_no_persist(monkeypatch):
+async def test_greeting_hits_fast_lane_without_enqueuing_extraction(monkeypatch):
     """A pure greeting is answered by the fast lane: GREETING_REPLY, outcome=faq_cache,
-    the agent is never called, and no candidate extraction runs (canned reply carries
-    no Q&A)."""
+    the agent is never called, and pure pleasantries never reach extraction."""
     from app.graph.fast_lane import GREETING_REPLY
 
     async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
@@ -693,6 +697,50 @@ async def test_greeting_hits_fast_lane_no_llm_no_persist(monkeypatch):
     assert persisted == []
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "user_text",
+    ["hello ban", "cảm ơn bạn nhe", "tạm biệt", "bye", "bạn giúp gì được"],
+)
+async def test_pure_fast_lane_variants_never_enqueue_extraction(monkeypatch, user_text):
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        raise AssertionError("agent must not be called for a pure fast-lane phrase")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    persisted: list[dict] = []
+
+    result = await run_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=user_text),
+        _deps(_FakeZalo(), conversation=svc, persist=persisted.append),
+    )
+
+    assert result["outcome"] == "faq_cache"
+    assert persisted == []
+
+
+@pytest.mark.asyncio
+async def test_mixed_fast_lane_message_still_enqueues_intent_extraction(monkeypatch):
+    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
+        raise AssertionError("fast-lane response should not call the agent")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    persisted: list[dict] = []
+    user_text = "Cảm ơn, tôi đang kiểm tra bot"
+
+    result = await run_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=user_text),
+        _deps(_FakeZalo(), conversation=svc, persist=persisted.append),
+    )
+
+    assert result["outcome"] == "faq_cache"
+    assert persisted[0]["user_text"] == user_text
+    assert persisted[0]["conversation_version"] == 1
+
+
 class _FakeFaqBypass:
     """FaqBypassPort stub: returns a fixed result, or raises, so the runner's
     bypass branch is pinned without any DB / embedder."""
@@ -708,9 +756,9 @@ class _FakeFaqBypass:
 
 
 @pytest.mark.asyncio
-async def test_faq_bypass_hit_sends_answer_without_agent_or_persist(monkeypatch):
+async def test_faq_bypass_hit_sends_answer_and_enqueues_intent_extraction(monkeypatch):
     """A confident FAQ-bypass hit is sent directly (outcome=faq_bypass): the agent
-    is never called, and no candidate extraction runs (the answer is canonical)."""
+    is never called, while post-send extraction still classifies contact intent."""
     from app.graph.ports import FaqBypassResult
 
     async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
@@ -734,7 +782,14 @@ async def test_faq_bypass_hit_sends_answer_without_agent_or_persist(monkeypatch)
     assert res["outcome"] == "faq_bypass"
     assert res["reply"] == "Câu trả lời FAQ"
     assert zalo.sent == [("z1", "Câu trả lời FAQ")]
-    assert persisted == []
+    assert persisted == [
+        {
+            "chat_id": "z1",
+            "user_text": "tôi muốn tìm việc lái xe",
+            "bot_output": "Câu trả lời FAQ",
+            "conversation_version": 1,
+        }
+    ]
 
 
 @pytest.mark.asyncio

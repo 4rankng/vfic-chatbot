@@ -1,9 +1,8 @@
 """ZaloWebhookService — the SYNCHRONOUS webhook handler (must ack < 1s).
 
 Flow:
-  normalize -> classify explicit abuse -> dedup -> ensure conversation
-  -> record inbound / atomically escalate to HUMAN when positive
-  -> otherwise run_start_guard -> acquire_lock -> typing -> enqueue RQ job
+  normalize -> dedup -> ensure conversation -> record inbound
+  -> run_start_guard -> acquire_lock -> typing -> enqueue RQ job
 
 A Zalo typing indicator is fired from the webhook handler (fire-and-forget) so
 the user sees immediate feedback. The turn's _status_heartbeat keeps pulsing it
@@ -26,7 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import request_id_ctx
 from app.models.conversation import ConversationMode
 from app.services.conversation import ConversationService
-from app.services.conversation.abuse_control import classify_suspected_abuse
 from app.services.dedup import MessageDedupService
 from app.services.zalo_oa_events import parse_oa_webhook_event
 
@@ -94,7 +92,6 @@ class ZaloWebhookService:
         enqueue: Callable[[dict], bool | Awaitable[bool]],
         channel: str = "bot",
         bot_token: str | None = None,
-        allow_automatic_abuse_control: bool = True,
     ) -> dict:
         """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
@@ -117,48 +114,6 @@ class ZaloWebhookService:
             norm = ZaloWebhookService.normalize_bot(payload)
             if norm is None:
                 return {"status": "ignored"}
-
-        abuse_reason = (
-            classify_suspected_abuse(norm.user_text) if allow_automatic_abuse_control else None
-        )
-        if abuse_reason is not None:
-            conv = None
-            try:
-                if not await MessageDedupService.claim(
-                    db,
-                    norm.zalo_chat_id,
-                    norm.msg_hash,
-                    commit=False,
-                ):
-                    await db.rollback()
-                    return {"status": "duplicate"}
-
-                svc = ConversationService(db)
-                conv = await svc.ensure(norm.zalo_chat_id, zalo_channel=norm.zalo_channel)
-                await db.refresh(conv)
-                await svc.record_inbound_and_escalate_abuse(
-                    conv,
-                    body=norm.user_text,
-                    zalo_message_id=norm.msg_id,
-                    reason=abuse_reason,
-                )
-                return {"status": "human_review", "conversation_id": str(conv.id)}
-            except Exception as exc:  # noqa: BLE001 — provider retry is the recovery path
-                try:
-                    await db.rollback()
-                except Exception as rollback_exc:  # noqa: BLE001
-                    logger.error(
-                        "suspected abuse rollback failed error_type=%s",
-                        type(rollback_exc).__name__,
-                    )
-                logger.error(
-                    "suspected abuse persistence failed error_type=%s",
-                    type(exc).__name__,
-                )
-                result = {"status": "start_failed"}
-                if conv is not None:
-                    result["conversation_id"] = str(conv.id)
-                return result
 
         if not await MessageDedupService.claim(db, norm.zalo_chat_id, norm.msg_hash):
             return {"status": "duplicate"}

@@ -10,10 +10,11 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Literal, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.conversation import ConversationMode, ConversationStatus
 from app.models.lead import Lead
 from app.prompts.candidate_extraction import CANDIDATE_EXTRACT_SYSTEM_PROMPT
 from app.services.lead.events import LeadEventBus
@@ -30,11 +31,48 @@ Extractor = Callable[[str, str], Awaitable[str]]
 
 logger = logging.getLogger(__name__)
 
+ContactIntent = Literal[
+    "candidate",
+    "non_candidate",
+    "spam",
+    "bot_testing",
+    "uncertain",
+]
+_CONTACT_INTENTS: frozenset[str] = frozenset(
+    {"candidate", "non_candidate", "spam", "bot_testing", "uncertain"}
+)
+_HUMAN_REVIEW_INTENTS: frozenset[str] = frozenset(
+    {"non_candidate", "spam", "bot_testing"}
+)
+HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.95
+
 
 @dataclass(frozen=True)
 class CandidateExtraction:
     lead_patch: dict | None
     memory_facts: list[str]
+    contact_intent: ContactIntent = "uncertain"
+    intent_confidence: float = 0.0
+
+    @property
+    def requires_human_review(self) -> bool:
+        return (
+            self.contact_intent in _HUMAN_REVIEW_INTENTS
+            and self.intent_confidence >= HUMAN_REVIEW_CONFIDENCE_THRESHOLD
+        )
+
+
+def _normalize_contact_intent(value, confidence) -> tuple[ContactIntent, float]:
+    intent = str(value or "").strip().lower()
+    if intent not in _CONTACT_INTENTS:
+        return "uncertain", 0.0
+    try:
+        score = float(confidence)
+    except (TypeError, ValueError):
+        return "uncertain", 0.0
+    if not 0.0 <= score <= 1.0:
+        return "uncertain", 0.0
+    return cast(ContactIntent, intent), score
 
 
 def candidate_turn(
@@ -112,13 +150,38 @@ class CandidateExtractionService:
         if lead_patch and not lead_patch.get("name"):
             lead_patch["name"] = extract_self_reported_name(user_text)
         memory_facts = parse_memory_facts(parsed.get("memory_facts"))
+        contact_intent, intent_confidence = _normalize_contact_intent(
+            parsed.get("contact_intent"),
+            parsed.get("intent_confidence"),
+        )
+        negative_intent = contact_intent in _HUMAN_REVIEW_INTENTS
+        contradictory_payload = negative_intent and (
+            any(value for key, value in (lead_patch or {}).items() if key != "zalo_id")
+            or bool(memory_facts)
+        )
+        if negative_intent:
+            # Negative intent must never become candidate notes or memory, even below
+            # the handoff threshold. Contradictory model output also cannot escalate.
+            lead_patch = None
+            memory_facts = []
+        if contradictory_payload:
+            contact_intent = "uncertain"
+            intent_confidence = 0.0
         logger.debug(
-            "candidate extract: lead=%s memory_facts=%d from user text (%d chars)",
+            "candidate extract: lead=%s memory_facts=%d intent=%s confidence=%.2f "
+            "from user text (%d chars)",
             bool(lead_patch),
             len(memory_facts),
+            contact_intent,
+            intent_confidence,
             len(user_text or ""),
         )
-        return CandidateExtraction(lead_patch=lead_patch, memory_facts=memory_facts)
+        return CandidateExtraction(
+            lead_patch=lead_patch,
+            memory_facts=memory_facts,
+            contact_intent=contact_intent,
+            intent_confidence=intent_confidence,
+        )
 
     @staticmethod
     async def upsert_lead(db: AsyncSession, lead_patch: dict | None) -> int | None:
@@ -141,9 +204,26 @@ class CandidateExtractionService:
         chat_id: str,
         user_text: str,
         bot_output: str,
+        *,
+        expected_conversation_version: int | None = None,
     ) -> CandidateExtraction:
         if not greeting_gate(user_text):
             logger.debug("candidate extraction skipped by greeting_gate: '%s'", user_text[:80])
+            return CandidateExtraction(lead_patch=None, memory_facts=[])
+
+        from app.services.conversation import ConversationService
+
+        conversation_service = ConversationService(db)
+        conversation = await conversation_service.get_by_zalo(chat_id)
+        if conversation is not None and (
+            conversation.mode == ConversationMode.HUMAN
+            or conversation.status == ConversationStatus.CLOSED
+            or (
+                expected_conversation_version is not None
+                and conversation.version != expected_conversation_version
+            )
+        ):
+            logger.debug("candidate extraction skipped because source turn is no longer current")
             return CandidateExtraction(lead_patch=None, memory_facts=[])
 
         existing_lead = await LeadRepository(db).by_zalo_id(chat_id)
@@ -155,6 +235,17 @@ class CandidateExtractionService:
             chat_id,
             existing_notes=existing_notes,
         )
+
+        if result.requires_human_review:
+            if conversation is not None and expected_conversation_version is not None:
+                await conversation_service.escalate_extracted_intent(
+                    conversation,
+                    reason=result.contact_intent,
+                    confidence=result.intent_confidence,
+                    expected_version=expected_conversation_version,
+                )
+            return result
+
         await CandidateExtractionService.upsert_lead(db, result.lead_patch)
 
         if result.memory_facts:

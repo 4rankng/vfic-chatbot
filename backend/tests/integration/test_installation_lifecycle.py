@@ -38,17 +38,24 @@ def _revision_body(
         expected_lock_version=expected_lock_version,
         pack_key="recruitment",
         customer_identity={"display_name": display_name},
-        branding={"logo_url": "/customer/logo.svg"},
+        branding={"app_name": "Configured app"},
         locale="vi-VN",
         timezone="Asia/Ho_Chi_Minh",
         currency="VND",
-        terminology={"lead": "Ứng viên"},
+        terminology={
+            "application": "Hồ sơ",
+            "candidate": "Ứng viên",
+            "conversation": "Hội thoại",
+            "job": "Việc làm",
+            "lead": "Khách tiềm năng",
+            "organization": "Doanh nghiệp",
+        },
         workflow_policy={
             "workflow_id": "candidate_intake",
             "handoff_mode": "assisted",
             "automation_enabled": True,
         },
-        capability_ids=list(PACK.capability_ids),
+        capability_ids=["conversation", "candidate_intake"],
         persona_version_id=persona_version_id,
         template_version_refs=[],
         provider_policy={
@@ -60,6 +67,7 @@ def _revision_body(
             "max_output_tokens": 2048,
         },
         integration_requirements=[{"key": "openrouter"}],
+        authentication_policy={"email_password_enabled": True},
     )
 
 
@@ -89,12 +97,19 @@ async def _seed_actor_and_persona(integration_session) -> tuple[User, PersonaVer
         created_by=actor.id,
     )
     integration_session.add(persona_version)
-    integration_session.add(
-        IntegrationSetting(
-            key="openrouter",
-            encrypted_value="encrypted-test-value",
-            updated_by=actor.id,
-        )
+    integration_session.add_all(
+        [
+            IntegrationSetting(
+                key="openrouter_api_key",
+                encrypted_value="encrypted-test-value",
+                updated_by=actor.id,
+            ),
+            IntegrationSetting(
+                key="openrouter_enable",
+                encrypted_value="true",
+                updated_by=actor.id,
+            ),
+        ]
     )
     await integration_session.flush()
     return actor, persona_version
@@ -171,7 +186,7 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
     assert "provider_policy" not in public.model_dump()
 
     await integration_session.execute(
-        delete(IntegrationSetting).where(IntegrationSetting.key == "openrouter")
+        delete(IntegrationSetting).where(IntegrationSetting.key == "openrouter_api_key")
     )
     await integration_session.commit()
     drifted = await service.runtime_view()
@@ -208,6 +223,15 @@ async def test_operational_data_created_after_draft_blocks_incompatible_first_ac
                 version="1",
                 capability_ids=("conversation",),
                 kernel_abi="1",
+                workflow_ids=("candidate_intake",),
+                terminology_keys=(
+                    "application",
+                    "candidate",
+                    "conversation",
+                    "job",
+                    "lead",
+                    "organization",
+                ),
                 runtime_ready=True,
             ),
         ),

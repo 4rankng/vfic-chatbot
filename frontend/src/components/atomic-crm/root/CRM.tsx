@@ -14,9 +14,7 @@ import {
   Component,
   lazy,
   Suspense,
-  useEffect,
   useLayoutEffect,
-  useMemo,
   useState,
 } from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -38,24 +36,7 @@ import {
   getAuthProvider as defaultAuthProviderBuilder,
   getDataProvider as defaultDataProviderBuilder,
 } from "../providers/rest";
-import {
-  CONFIGURATION_STORE_KEY,
-  type ConfigurationContextValue,
-} from "./ConfigurationContext";
 import type { CrmDataProvider } from "../providers/types";
-import {
-  defaultCompanySectors,
-  defaultCurrency,
-  defaultDarkModeLogo,
-  defaultDealCategories,
-  defaultDealPipelineStatuses,
-  defaultDealStages,
-  defaultLightModeLogo,
-  defaultNoteStatuses,
-  defaultTaskTypes,
-  defaultTitle,
-} from "./defaultConfiguration";
-import { i18nProvider as defaulti18nProvider } from "../providers/commons/i18nProvider";
 import { StartPage } from "../login/StartPage.tsx";
 import { getAccessToken } from "../providers/rest/api";
 
@@ -174,12 +155,12 @@ const AdminPerformanceRoute = () => {
 export type CRMProps = {
   dataProvider?: CrmDataProvider;
   authProvider?: AuthProvider;
-  i18nProvider?: CoreAdminProps["i18nProvider"];
+  i18nProvider: CoreAdminProps["i18nProvider"];
   disableTelemetry?: boolean;
   store?: CoreAdminProps["store"];
   dashboard?: DashboardComponent;
   layout?: LayoutComponent;
-} & Partial<ConfigurationContextValue>;
+};
 
 /**
  * CRM Component
@@ -222,23 +203,10 @@ export type CRMProps = {
  * export default App;
  */
 export const CRM = ({
-  companySectors = defaultCompanySectors,
-  currency = defaultCurrency,
-  dealCategories = defaultDealCategories,
-  dealPipelineStatuses = defaultDealPipelineStatuses,
-  dealStages = defaultDealStages,
-  darkModeLogo = defaultDarkModeLogo,
-  lightModeLogo = defaultLightModeLogo,
-  noteStatuses = defaultNoteStatuses,
-  taskTypes = defaultTaskTypes,
-  title = defaultTitle,
   dataProvider = defaultDataProvider,
   authProvider = defaultAuthProvider,
-  i18nProvider = defaulti18nProvider,
+  i18nProvider,
   store = defaultStore,
-  googleWorkplaceDomain = import.meta.env.VITE_GOOGLE_WORKPLACE_DOMAIN,
-  disableEmailPasswordAuthentication = import.meta.env
-    .VITE_DISABLE_EMAIL_PASSWORD_AUTHENTICATION === "true",
   disableTelemetry,
   layout,
   dashboard,
@@ -256,72 +224,6 @@ export const CRM = ({
     setAuthGateReady(true);
   }, [authGateReady]);
 
-  // Seed the store with CRM prop values if not already stored.
-  useEffect(() => {
-    if (!store.getItem(CONFIGURATION_STORE_KEY)) {
-      store.setItem(CONFIGURATION_STORE_KEY, {
-        companySectors,
-        currency,
-        dealCategories,
-        dealPipelineStatuses,
-        dealStages,
-        noteStatuses,
-        taskTypes,
-        title,
-        darkModeLogo,
-        lightModeLogo,
-        googleWorkplaceDomain,
-        disableEmailPasswordAuthentication,
-      } satisfies ConfigurationContextValue);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store]);
-
-  // on login, pre-fetch the configuration to avoid a flickering
-  // when accessing the app for the first time. The prefetch runs in the
-  // background so it never gates the auth round-trip — for VFIC the endpoint
-  // returns {} and useConfigurationLoader is the real source of config.
-  const wrappedAuthProvider = useMemo<AuthProvider>(() => {
-    const prefetchConfiguration = () => {
-      void (async () => {
-        try {
-          const config = await dataProvider.getConfiguration();
-          if (Object.keys(config).length > 0) {
-            store.setItem(CONFIGURATION_STORE_KEY, config);
-          }
-        } catch {
-          // Non-critical: config will load via useConfigurationLoader
-        }
-      })();
-    };
-    return {
-      ...authProvider,
-      login: async (params: any) => {
-        const result = await authProvider.login(params);
-        prefetchConfiguration();
-        return result;
-      },
-      handleCallback: async (params: any) => {
-        if (!authProvider.handleCallback) {
-          throw new Error(
-            "handleCallback is not implemented in the authProvider",
-          );
-        }
-        const result = await authProvider.handleCallback(params);
-        prefetchConfiguration();
-        return result;
-      },
-      logout: async (params: any) => {
-        try {
-          store.removeItem(CONFIGURATION_STORE_KEY);
-        } catch {
-          // Ignore
-        }
-        return authProvider.logout(params);
-      },
-    };
-  }, [authProvider, dataProvider, store]);
-
   // A single <Admin>, layout, and dashboard component are retained across
   // viewport changes. Responsive behavior belongs inside the shared frame,
   // avoiding a remount of route state while crossing the 768px boundary. The hoisted
@@ -335,7 +237,7 @@ export const CRM = ({
   return (
     <Admin
       dataProvider={dataProvider}
-      authProvider={wrappedAuthProvider}
+      authProvider={authProvider}
       i18nProvider={i18nProvider}
       store={store}
       queryClient={queryClient}

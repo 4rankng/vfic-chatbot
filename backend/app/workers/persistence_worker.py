@@ -67,6 +67,7 @@ async def _persist_candidate_async(job: dict) -> None:
                 job["chat_id"],
                 job.get("user_text", ""),
                 job.get("bot_output", ""),
+                expected_conversation_version=job.get("conversation_version"),
             )
     except Exception:
         logger.warning(

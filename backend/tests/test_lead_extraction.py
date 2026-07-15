@@ -5,7 +5,7 @@ Matches the project convention: plain pytest, no heavy fixtures.
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -333,7 +333,9 @@ class TestCandidateExtractionService:
                 "lead_score": "warm",
                 "notes": null
               },
-              "memory_facts": ["Người dùng tên là Mai", "Muốn làm thời vụ"]
+              "memory_facts": ["Người dùng tên là Mai", "Muốn làm thời vụ"],
+              "contact_intent": "candidate",
+              "intent_confidence": 0.99
             }
             """
 
@@ -349,6 +351,96 @@ class TestCandidateExtractionService:
         assert result.lead_patch["desired_job"] == "lao động thời vụ"
         assert result.lead_patch["lead_score"] == "warm"
         assert result.memory_facts == ["Người dùng tên là Mai", "Muốn làm thời vụ"]
+        assert result.contact_intent == "candidate"
+        assert result.intent_confidence == 0.99
+        assert result.requires_human_review is False
+
+    @pytest.mark.asyncio
+    async def test_extracts_high_confidence_non_candidate_intent_separately_from_notes(self):
+        async def extractor(_system: str, _turn: str) -> str:
+            return """
+            {
+              "lead_patch": null,
+              "memory_facts": [],
+              "contact_intent": "non_candidate",
+              "intent_confidence": 0.99
+            }
+            """
+
+        result = await CandidateExtractionService.extract(
+            extractor,
+            "Tôi không phải ứng viên",
+            "Tôi có thể hỗ trợ bạn tìm việc.",
+            "zalo_1",
+        )
+
+        assert result.lead_patch is None
+        assert result.memory_facts == []
+        assert result.contact_intent == "non_candidate"
+        assert result.requires_human_review is True
+
+    @pytest.mark.asyncio
+    async def test_invalid_intent_or_confidence_fails_closed_to_uncertain(self):
+        async def extractor(_system: str, _turn: str) -> str:
+            return (
+                '{"lead_patch":null,"memory_facts":[],"contact_intent":"block_user",'
+                '"intent_confidence":5}'
+            )
+
+        result = await CandidateExtractionService.extract(
+            extractor,
+            "Nội dung bất kỳ",
+            "Phản hồi",
+            "zalo_1",
+        )
+
+        assert result.contact_intent == "uncertain"
+        assert result.intent_confidence == 0.0
+        assert result.requires_human_review is False
+
+    @pytest.mark.asyncio
+    async def test_negative_intent_with_candidate_payload_cannot_escalate_or_persist(self):
+        async def extractor(_system: str, _turn: str) -> str:
+            return (
+                '{"lead_patch":{"phone":"0912345678","desired_job":"kho"},'
+                '"memory_facts":["Muốn ứng tuyển việc kho"],'
+                '"contact_intent":"bot_testing","intent_confidence":0.99}'
+            )
+
+        result = await CandidateExtractionService.extract(
+            extractor,
+            "Tôi muốn ứng tuyển kho, số điện thoại 0912345678",
+            "Tôi sẽ hỗ trợ bạn.",
+            "zalo_1",
+        )
+
+        assert result.contact_intent == "uncertain"
+        assert result.intent_confidence == 0.0
+        assert result.lead_patch is None
+        assert result.memory_facts == []
+        assert result.requires_human_review is False
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_negative_intent_never_pollutes_notes_or_memory(self):
+        async def extractor(_system: str, _turn: str) -> str:
+            return (
+                '{"lead_patch":{"notes":"Người dùng gửi nội dung kiểm tra bảo mật"},'
+                '"memory_facts":["Người dùng không phải ứng viên"],'
+                '"contact_intent":"bot_testing","intent_confidence":0.94}'
+            )
+
+        result = await CandidateExtractionService.extract(
+            extractor,
+            "Tôi đang kiểm tra bảo mật",
+            "Phản hồi",
+            "zalo_1",
+        )
+
+        assert result.contact_intent == "uncertain"
+        assert result.intent_confidence == 0.0
+        assert result.lead_patch is None
+        assert result.memory_facts == []
+        assert result.requires_human_review is False
 
     @pytest.mark.asyncio
     async def test_extract_includes_existing_notes_for_llm_deduplication(self):
@@ -385,9 +477,20 @@ class TestCandidateExtractionService:
             async def by_zalo_id(self, _chat_id: str):
                 return {"notes": "Không có trình độ\nCó xe máy"}
 
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return None
+
         monkeypatch.setattr(
             "app.services.candidate_extraction.LeadRepository",
             FakeLeadRepository,
+        )
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
         )
         monkeypatch.setattr(CandidateExtractionService, "extract", extract)
         monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
@@ -409,6 +512,173 @@ class TestCandidateExtractionService:
             existing_notes="Không có trình độ\nCó xe máy",
         )
         upsert.assert_awaited_once_with(db, None)
+
+    @pytest.mark.asyncio
+    async def test_persist_skips_llm_when_conversation_is_already_human(self, monkeypatch):
+        from app.models.conversation import ConversationMode
+
+        db = object()
+        extractor = AsyncMock()
+        lead_repository = MagicMock()
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return SimpleNamespace(
+                    mode=ConversationMode.HUMAN,
+                    status="OPEN",
+                    version=1,
+                )
+
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            lead_repository,
+        )
+
+        result = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            extractor,
+            "zalo_1",
+            "Tôi tiếp tục gửi tin sau khi đã chuyển nhân viên",
+            "Phản hồi cũ",
+        )
+
+        assert result == CandidateExtraction(lead_patch=None, memory_facts=[])
+        extractor.assert_not_awaited()
+        lead_repository.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("mode", "status", "version"),
+        [
+            ("BOT", "CLOSED", 1),
+            ("BOT", "OPEN", 2),
+        ],
+    )
+    async def test_persist_skips_llm_for_closed_or_stale_source_turn(
+        self,
+        monkeypatch,
+        mode,
+        status,
+        version,
+    ):
+        db = object()
+        extractor = AsyncMock()
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return SimpleNamespace(mode=mode, status=status, version=version)
+
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+
+        result = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            extractor,
+            "zalo_1",
+            "Tôi đang kiểm tra bot",
+            "Phản hồi cũ",
+            expected_conversation_version=1,
+        )
+
+        assert result == CandidateExtraction(lead_patch=None, memory_facts=[])
+        extractor.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_persist_escalates_high_confidence_intent_without_lead_or_memory_write(
+        self, monkeypatch
+    ):
+        db = object()
+        result = CandidateExtraction(
+            lead_patch=None,
+            memory_facts=[],
+            contact_intent="bot_testing",
+            intent_confidence=0.99,
+        )
+        extract = AsyncMock(return_value=result)
+        upsert = AsyncMock()
+        conversation = SimpleNamespace(
+            id="conversation-1",
+            mode="BOT",
+            status="OPEN",
+            version=1,
+        )
+        escalate = AsyncMock(return_value=True)
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return None
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return conversation
+
+            async def escalate_extracted_intent(
+                self,
+                selected_conversation,
+                *,
+                reason: str,
+                confidence: float,
+                expected_version: int,
+            ) -> bool:
+                return await escalate(
+                    selected_conversation,
+                    reason=reason,
+                    confidence=confidence,
+                    expected_version=expected_version,
+                )
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", extract)
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        memory_save = AsyncMock()
+        monkeypatch.setattr("app.services.candidate_extraction.MemoryService.save", memory_save)
+
+        persisted = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "zalo_1",
+            "Tôi đang kiểm tra bot",
+            "Bot đã trả lời tin nhắn đầu tiên.",
+            expected_conversation_version=1,
+        )
+
+        assert persisted is result
+        escalate.assert_awaited_once_with(
+            conversation,
+            reason="bot_testing",
+            confidence=0.99,
+            expected_version=1,
+        )
+        upsert.assert_not_awaited()
+        memory_save.assert_not_awaited()
 
 
 def test_lead_upsert_deduplicates_individual_note_lines_atomically():

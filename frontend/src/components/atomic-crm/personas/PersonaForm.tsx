@@ -285,7 +285,6 @@ const PersonaForm = ({
                 setName(e.target.value);
                 if (nameError) setNameError(null);
               }}
-              placeholder="VD: Trợ lý tuyển dụng LG Display"
               className="h-11 text-base sm:text-sm lg:max-w-xl"
             />
             {nameError ? (

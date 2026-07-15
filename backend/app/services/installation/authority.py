@@ -17,6 +17,7 @@ class RuntimeAuthorityFingerprint:
     persona_checksum: str
     workflow_policy_checksum: str
     provider_policy_checksum: str
+    authentication_policy_checksum: str
     template_checksums: dict[str, str]
     active_kb_vector: tuple[tuple[str, str], ...]
 
@@ -29,6 +30,7 @@ class RuntimeAuthorityFingerprint:
             "persona_checksum": self.persona_checksum,
             "workflow_policy_checksum": self.workflow_policy_checksum,
             "provider_policy_checksum": self.provider_policy_checksum,
+            "authentication_policy_checksum": self.authentication_policy_checksum,
             "template_checksums": dict(sorted(self.template_checksums.items())),
             "active_kb_vector": [list(item) for item in sorted(self.active_kb_vector)],
         }

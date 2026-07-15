@@ -31,7 +31,6 @@ if TYPE_CHECKING:
         Message,
     )
     from app.models.user import User
-    from app.services.conversation.abuse_control import AbuseReason
     from app.services.zalo_bot_service import SendResult
 
 __all__ = ["ConversationConflict", "ConversationService"]
@@ -190,19 +189,19 @@ class ConversationService:
     ) -> Message:
         return await self.state.record_inbound(conv, body=body, zalo_message_id=zalo_message_id)
 
-    async def record_inbound_and_escalate_abuse(
+    async def escalate_extracted_intent(
         self,
         conv: Conversation,
         *,
-        body: str,
-        reason: AbuseReason,
-        zalo_message_id: str | None = None,
+        reason: str,
+        confidence: float,
+        expected_version: int,
     ) -> bool:
-        return await self.state.record_inbound_and_escalate_abuse(
+        return await self.state.escalate_extracted_intent(
             conv,
-            body=body,
             reason=reason,
-            zalo_message_id=zalo_message_id,
+            confidence=confidence,
+            expected_version=expected_version,
         )
 
     async def acquire_lock(

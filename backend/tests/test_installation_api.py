@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import Mock
 
 from app.api import installation
 from app.api.dependencies import require_admin
@@ -26,7 +27,7 @@ def test_public_runtime_route_is_the_only_installation_route_without_admin_rbac(
         for route in installation.router.routes
         if route.path.startswith("/admin/installation")
     ]
-    assert len(admin_routes) == 7
+    assert len(admin_routes) == 11
     for route in admin_routes:
         assert any(dependency.call is require_admin for dependency in route.dependant.dependencies)
 
@@ -37,8 +38,11 @@ async def test_public_runtime_endpoint_returns_only_the_safe_projection(monkeypa
         authority_generation=3,
         revision_id=None,
         pack_key="recruitment",
+        pack_version="1",
+        pack_contract_hash="a" * 64,
+        manifest_checksum="b" * 64,
         customer_identity={"display_name": "Configured customer"},
-        branding={"logo_url": "/customer/logo.svg"},
+        branding={"app_name": "Configured app"},
         locale="vi-VN",
         timezone="Asia/Ho_Chi_Minh",
         currency="VND",
@@ -51,11 +55,14 @@ async def test_public_runtime_endpoint_returns_only_the_safe_projection(monkeypa
         return expected
 
     monkeypatch.setattr(installation.InstallationService, "runtime_view", runtime_view)
-    response = await installation.get_installation_runtime(db=object())
+    transport = Mock()
+    transport.headers = {}
+    response = await installation.get_installation_runtime(response=transport, db=object())
 
     assert response == expected
     assert "provider_policy" not in response.model_dump()
     assert "body_md" not in response.model_dump()
+    assert transport.headers["Cache-Control"] == "no-store"
 
 
 async def test_installation_error_handler_preserves_detail_and_stable_machine_fields() -> None:

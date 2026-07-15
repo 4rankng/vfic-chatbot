@@ -75,6 +75,18 @@ class PersonaRepository:
         )
         return bool(count)
 
+    async def list_versions(self, persona_id: uuid.UUID) -> list[PersonaVersion]:
+        await self.get_by_id(persona_id)
+        return list(
+            (
+                await self.db.scalars(
+                    select(PersonaVersion)
+                    .where(PersonaVersion.persona_id == persona_id)
+                    .order_by(PersonaVersion.version_no.desc())
+                )
+            ).all()
+        )
+
     async def deactivate_other_globals(self, persona_id: uuid.UUID) -> None:
         """Deactivate all other active global personas (project_id IS NULL)."""
         await self.db.execute(

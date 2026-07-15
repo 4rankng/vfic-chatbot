@@ -22,10 +22,13 @@ from app.schemas.personas import (
     PersonaListResponse,
     PersonaOut,
     PersonaUpdate,
+    PersonaVersionListResponse,
+    PersonaVersionMetadataOut,
 )
 from app.services.persona_service import PersonaService, load_persona_template
 
 router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
+versions_router = APIRouter(prefix="/personas", tags=["personas"])
 
 
 @router.get("", response_model=PersonaListResponse)
@@ -70,6 +73,18 @@ async def get_persona(
     out = PersonaOut.model_validate(persona)
     out.assigned_projects = getattr(persona, "_assigned_projects", [])
     return out
+
+
+@versions_router.get("/{persona_id}/versions", response_model=PersonaVersionListResponse)
+async def list_persona_versions(
+    persona_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PersonaVersionListResponse:
+    versions = await PersonaService(db).list_versions(persona_id)
+    return PersonaVersionListResponse(
+        data=[PersonaVersionMetadataOut.model_validate(version) for version in versions]
+    )
 
 
 @router.patch("/{persona_id}", response_model=PersonaOut)

@@ -30,8 +30,17 @@ ehthumbs.db
 .cursor/
 .codex/
 
-# --- AI agent runtime & orchestration state (local config, not source) ---
-.claude/
+# --- AI agent runtime & orchestration state ---
+# Version root shared policy/hooks/skills; keep nested and personal state local.
+**/.claude/
+!/.claude/
+/.claude/*
+!/.claude/settings.json
+!/.claude/hooks/
+!/.claude/hooks/**
+!/.claude/skills/
+!/.claude/skills/**
+/.claude/settings.local.json
 .omc/
 CLAUDE.local.md
 

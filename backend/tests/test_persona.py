@@ -16,7 +16,12 @@ from pydantic import ValidationError
 
 from app.graph.context import active_projects_index
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
-from app.schemas.personas import PersonaFollowupRule, PersonaUpdate, default_followup_rules_dict
+from app.schemas.personas import (
+    PersonaFollowupRule,
+    PersonaFollowupRules,
+    PersonaUpdate,
+    default_followup_rules_dict,
+)
 from app.services.errors import NotFoundError
 from app.services.persona_service import PersonaService
 
@@ -97,6 +102,46 @@ def test_persona_followup_rule_rejects_unsafe_cadence():
         PersonaFollowupRule(enabled=True, cadence_hours=[])
 
     assert PersonaFollowupRule(enabled=False, cadence_hours=[]).cadence_hours == []
+
+
+def test_explicit_neutral_followup_policy_has_no_recruitment_stage_fallback():
+    neutral = PersonaFollowupRules.model_validate(
+        {
+            score: {"enabled": False, "cadence_hours": [], "eligible_stages": []}
+            for score in ("hot", "warm", "not_interested")
+        }
+    )
+
+    for score in ("hot", "warm", "not_interested"):
+        rule = getattr(neutral, score)
+        assert rule.enabled is False
+        assert rule.cadence_hours == []
+        assert rule.eligible_stages == []
+
+
+def test_enabled_followup_rule_still_requires_an_eligible_stage():
+    with pytest.raises(ValidationError):
+        PersonaFollowupRule(enabled=True, cadence_hours=[10], eligible_stages=[])
+
+
+def test_neutral_policy_does_not_change_legacy_persona_defaults():
+    assert default_followup_rules_dict() == {
+        "hot": {
+            "enabled": True,
+            "cadence_hours": [10, 22, 46],
+            "eligible_stages": ["NEW"],
+        },
+        "warm": {
+            "enabled": True,
+            "cadence_hours": [22, 46],
+            "eligible_stages": ["NEW"],
+        },
+        "not_interested": {
+            "enabled": True,
+            "cadence_hours": [46],
+            "eligible_stages": ["NEW"],
+        },
+    }
 
 
 @pytest.mark.asyncio

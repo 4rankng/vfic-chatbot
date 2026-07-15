@@ -99,7 +99,6 @@ async def test_oa_webhook_processes_unsigned_real_event_non_blocking(monkeypatch
 
     assert response.status_code == 200
     handle.assert_awaited_once()
-    assert handle.await_args.kwargs["allow_automatic_abuse_control"] is False
 
 
 @pytest.mark.asyncio
@@ -133,7 +132,6 @@ async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
 
     assert response.status_code == 200
     handle.assert_awaited_once()
-    assert handle.await_args.kwargs["allow_automatic_abuse_control"] is True
 
 
 @pytest.mark.asyncio
@@ -251,181 +249,6 @@ async def test_webhook_persists_explicit_name_before_queuing_turn(monkeypatch):
 
     assert result == {"status": "processing", "conversation_id": str(conv.id)}
     assert events == ["inbound", "profile", "enqueue"]
-
-
-@pytest.mark.asyncio
-async def test_explicit_abuse_moves_conversation_to_human_without_enqueue(monkeypatch):
-    import uuid
-
-    from app.services.webhook import ZaloWebhookService
-
-    conv = SimpleNamespace(id=uuid.uuid4(), zalo_chat_id="bot-user-1", zalo_channel="bot")
-    service = MagicMock()
-    service.ensure = AsyncMock(return_value=conv)
-    service.record_inbound_and_escalate_abuse = AsyncMock(return_value=True)
-    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
-    classifier = MagicMock(return_value="explicit_bot_testing")
-    monkeypatch.setattr("app.services.webhook.classify_suspected_abuse", classifier)
-    claim = AsyncMock(return_value=True)
-    monkeypatch.setattr("app.services.webhook.MessageDedupService.claim", claim)
-    db = MagicMock()
-    db.refresh = AsyncMock()
-    enqueue = MagicMock()
-
-    result = await ZaloWebhookService.handle(
-        db,
-        {
-            "message": {
-                "message_id": "msg-abuse-1",
-                "chat": {"id": "bot-user-1"},
-                "text": "Tôi đang kiểm tra bot",
-            }
-        },
-        enqueue=enqueue,
-    )
-
-    assert result == {"status": "human_review", "conversation_id": str(conv.id)}
-    claim.assert_awaited_once_with(
-        db, "bot-user-1", result_hash := claim.await_args.args[2], commit=False
-    )
-    assert isinstance(result_hash, str)
-    service.record_inbound_and_escalate_abuse.assert_awaited_once_with(
-        conv,
-        body="Tôi đang kiểm tra bot",
-        zalo_message_id="msg-abuse-1",
-        reason="explicit_bot_testing",
-    )
-    enqueue.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_abuse_transaction_failure_rolls_back_and_allows_provider_retry(monkeypatch):
-    import uuid
-
-    from app.services.webhook import ZaloWebhookService
-
-    conv = SimpleNamespace(id=uuid.uuid4(), zalo_chat_id="bot-user-1", zalo_channel="bot")
-    service = MagicMock()
-    service.ensure = AsyncMock(return_value=conv)
-    service.record_inbound_and_escalate_abuse = AsyncMock(
-        side_effect=RuntimeError("db unavailable")
-    )
-    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
-    monkeypatch.setattr(
-        "app.services.webhook.classify_suspected_abuse",
-        MagicMock(return_value="explicit_non_candidate"),
-    )
-    claim = AsyncMock(return_value=True)
-    monkeypatch.setattr("app.services.webhook.MessageDedupService.claim", claim)
-    db = MagicMock()
-    db.refresh = AsyncMock()
-    db.rollback = AsyncMock()
-    enqueue = MagicMock()
-
-    result = await ZaloWebhookService.handle(
-        db,
-        {
-            "message": {
-                "message_id": "msg-abuse-2",
-                "chat": {"id": "bot-user-1"},
-                "text": "Tôi không phải ứng viên",
-            }
-        },
-        enqueue=enqueue,
-    )
-
-    assert result == {"status": "start_failed", "conversation_id": str(conv.id)}
-    claim.assert_awaited_once()
-    assert claim.await_args.kwargs == {"commit": False}
-    db.rollback.assert_awaited_once()
-    enqueue.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_oa_explicit_abuse_uses_the_same_human_review_branch(monkeypatch):
-    import uuid
-
-    from app.services.webhook import ZaloWebhookService
-
-    conv = SimpleNamespace(id=uuid.uuid4(), zalo_chat_id="oa:user-1", zalo_channel="oa")
-    service = MagicMock()
-    service.ensure = AsyncMock(return_value=conv)
-    service.record_inbound_and_escalate_abuse = AsyncMock(return_value=True)
-    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
-    monkeypatch.setattr(
-        "app.services.webhook.classify_suspected_abuse",
-        MagicMock(return_value="explicit_spam_intent"),
-    )
-    monkeypatch.setattr(
-        "app.services.webhook.MessageDedupService.claim",
-        AsyncMock(return_value=True),
-    )
-    db = MagicMock(refresh=AsyncMock())
-    enqueue = MagicMock()
-
-    result = await ZaloWebhookService.handle(
-        db,
-        {
-            "event_name": "user_send_text",
-            "sender": {"id": "user-1"},
-            "message": {"text": "Tôi vào đây để spam", "msg_id": "oa-msg-1"},
-        },
-        enqueue=enqueue,
-        channel="oa",
-    )
-
-    assert result == {"status": "human_review", "conversation_id": str(conv.id)}
-    service.ensure.assert_awaited_once_with("oa:user-1", zalo_channel="oa")
-    enqueue.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_unverified_oa_event_cannot_trigger_durable_abuse_escalation(monkeypatch):
-    import uuid
-
-    from app.services.webhook import ZaloWebhookService
-
-    conv = SimpleNamespace(
-        id=uuid.uuid4(),
-        zalo_chat_id="oa:user-1",
-        zalo_channel="oa",
-        mode="BOT",
-    )
-    service = MagicMock()
-    service.ensure = AsyncMock(return_value=conv)
-    service.record_inbound = AsyncMock()
-    service.record_inbound_and_escalate_abuse = AsyncMock()
-    service.get = AsyncMock(return_value=conv)
-    service.run_start_guard = MagicMock(return_value=False)
-    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
-    classifier = MagicMock(return_value="explicit_spam_intent")
-    monkeypatch.setattr("app.services.webhook.classify_suspected_abuse", classifier)
-    monkeypatch.setattr(
-        "app.services.webhook.MessageDedupService.claim",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
-        AsyncMock(),
-    )
-    db = MagicMock(refresh=AsyncMock())
-
-    result = await ZaloWebhookService.handle(
-        db,
-        {
-            "event_name": "user_send_text",
-            "sender": {"id": "user-1"},
-            "message": {"text": "Tôi vào đây để spam", "msg_id": "oa-msg-forged"},
-        },
-        enqueue=MagicMock(),
-        channel="oa",
-        allow_automatic_abuse_control=False,
-    )
-
-    assert result == {"status": "starved_human_mode", "conversation_id": str(conv.id)}
-    classifier.assert_not_called()
-    service.record_inbound.assert_awaited_once()
-    service.record_inbound_and_escalate_abuse.assert_not_awaited()
 
 
 @pytest.mark.asyncio

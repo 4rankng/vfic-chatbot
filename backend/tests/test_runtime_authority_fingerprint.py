@@ -21,6 +21,7 @@ def _fingerprint(**overrides: object) -> RuntimeAuthorityFingerprint:
         "persona_checksum": "c" * 64,
         "workflow_policy_checksum": "d" * 64,
         "provider_policy_checksum": "e" * 64,
+        "authentication_policy_checksum": "f" * 64,
         "template_checksums": {
             "template-b": "2" * 64,
             "template-a": "1" * 64,
@@ -71,6 +72,7 @@ def test_generation_change_invalidates_fingerprint_even_after_revision_rollback(
         ("persona_checksum", "f" * 64),
         ("workflow_policy_checksum", "f" * 64),
         ("provider_policy_checksum", "f" * 64),
+        ("authentication_policy_checksum", "0" * 64),
         ("template_checksums", {"template-a": "f" * 64}),
         ("active_kb_vector", (("knowledge-a", "f" * 64),)),
     ],

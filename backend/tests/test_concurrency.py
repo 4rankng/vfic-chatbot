@@ -88,6 +88,9 @@ class FakeResult:
     def scalar(self):
         return self._scalar_return
 
+    def scalar_one_or_none(self):
+        return self._scalar_return
+
     def first(self):
         return self._scalar_return
 
@@ -105,6 +108,110 @@ class FakeRefreshMixin:
 
 
 # --- ConversationState tests ---
+
+
+@pytest.mark.asyncio
+async def test_extracted_intent_handoff_is_atomic_and_emits_after_commit(monkeypatch):
+    conv = _make_conv()
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=FakeResult(_scalar_return=2))
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    db.refresh = AsyncMock()
+    audit = AsyncMock()
+    monkeypatch.setattr("app.services.conversation.state.record_audit", audit)
+    events = AsyncMock()
+
+    transitioned = await ConversationState(db, MagicMock(), events).escalate_extracted_intent(
+        conv,
+        reason="bot_testing",
+        confidence=0.98765,
+        expected_version=1,
+    )
+
+    assert transitioned is True
+    params = db.execute.await_args.args[0].compile().params
+    assert params["mode"] == ConversationMode.HUMAN
+    assert params["status"] == ConversationStatus.OPEN
+    assert params["needs_human"] is True
+    assert params["bot_locked_until"] is None
+    audit.assert_awaited_once_with(
+        db,
+        action="extraction_intent_human_review",
+        target_type="conversation",
+        target_id=str(conv.id),
+        payload={"reason": "bot_testing", "confidence": 0.9877, "version": 2},
+    )
+    db.commit.assert_awaited_once()
+    db.rollback.assert_not_awaited()
+    events.message_created.assert_awaited_once()
+    events.conversation_updated.assert_awaited_once_with(conv)
+
+
+@pytest.mark.asyncio
+async def test_extracted_intent_handoff_is_idempotent(monkeypatch):
+    conv = _make_conv(mode=ConversationMode.HUMAN)
+    conv.needs_human = True
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=FakeResult(_scalar_return=None))
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    audit = AsyncMock()
+    monkeypatch.setattr("app.services.conversation.state.record_audit", audit)
+    events = AsyncMock()
+
+    transitioned = await ConversationState(db, MagicMock(), events).escalate_extracted_intent(
+        conv,
+        reason="spam",
+        confidence=0.99,
+        expected_version=1,
+    )
+
+    assert transitioned is False
+    db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()
+    db.add.assert_not_called()
+    audit.assert_not_awaited()
+    events.message_created.assert_not_awaited()
+    events.conversation_updated.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "needs_human"),
+    [
+        (ConversationMode.BOT, True),
+        (ConversationMode.HUMAN, False),
+    ],
+)
+async def test_extracted_intent_handoff_repairs_partial_review_state(
+    monkeypatch,
+    mode,
+    needs_human,
+):
+    conv = _make_conv(mode=mode)
+    conv.needs_human = needs_human
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=FakeResult(_scalar_return=2))
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    db.refresh = AsyncMock()
+    monkeypatch.setattr("app.services.conversation.state.record_audit", AsyncMock())
+
+    transitioned = await ConversationState(
+        db, MagicMock(), AsyncMock()
+    ).escalate_extracted_intent(
+        conv,
+        reason="non_candidate",
+        confidence=0.96,
+        expected_version=1,
+    )
+
+    assert transitioned is True
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

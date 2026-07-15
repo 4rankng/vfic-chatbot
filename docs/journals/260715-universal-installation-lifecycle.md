@@ -9,9 +9,10 @@ session: universal-installation-lifecycle
 
 The universal-platform plan requires one deployable image that starts without
 customer, industry, persona, template, or sample defaults. Phase 2 established
-the database and API authority needed for that model, while intentionally
-leaving production activation disabled until later phases can consume the new
-contracts end to end.
+the immutable lifecycle authority. Phase 3 added a PostgreSQL-backed authoring
+workspace and a pre-Admin setup experience, while intentionally leaving
+production activation disabled until later phases consume the new contracts end
+to end.
 
 ## What Happened
 
@@ -40,6 +41,20 @@ contracts end to end.
   duplicate activation, tolerated cache invalidation failure after commit,
   rejected forged cache evidence, preserved append-only content when actor FKs
   are nulled, and reran contamination checks inside the activation lock.
+- Added an empty singleton setup-draft model, strict seven-section draft schema,
+  code-owned catalogs, optimistic concurrency, and atomic finalization into an
+  immutable validated revision. The migration inserts no business rows.
+- Added a direct, `no-store`, fail-closed frontend bootstrap before React Admin.
+  Pre-active states mount an account/setup-only shell with no business resources,
+  dashboard, or realtime connection.
+- Added the admin setup flow for identity, pack, regional terminology, workflow,
+  templates, persona, integrations, and review. Inputs start blank, secrets go
+  directly to encrypted integration settings, and activation remains disabled.
+- Independent frontend review found that the legacy persona-create default would
+  silently add recruitment follow-up schedules. Setup now requires an explicit
+  disabled choice and stores no cadence or eligible recruitment stage; legacy
+  create defaults remain unchanged for compatibility until the later capability
+  migration.
 
 ## Reflection
 
@@ -56,6 +71,13 @@ still consumes the legacy current-persona projection and active knowledge-base
 writers do not yet advance the installation authority. Allowing activation now
 would advertise guarantees the runtime does not yet enforce.
 
+The setup shell is intentionally separate from the active application. Hiding
+links inside the existing CRM would still mount business resources and could
+leak cached customer state. Resolving the public runtime projection before Admin
+composition gives clean installs a neutral, database-authoritative path and
+makes network or schema failure block the workspace rather than revive a browser
+fallback.
+
 ## Decisions Made
 
 | Decision | Rationale | Impact |
@@ -66,19 +88,32 @@ would advertise guarantees the runtime does not yet enforce.
 | Recompute live readiness | Referenced persona, template, integration, or KB evidence can drift after validation | Runtime/admin status does not report stale evidence as ready |
 | Lock operational tables during first activation checks | A count followed by activation otherwise races new domain writes | Compatibility evidence and pointer advancement share one database critical section |
 | Keep recruitment `runtime_ready=False` | Pinned persona and active-KB writer authority are not wired yet | Production activation fails closed until later runtime phases |
+| Use a mutable setup draft only for authoring | Incomplete wizard steps cannot be immutable runtime authority | Admins can resume setup while finalization remains atomic and audited |
+| Mount a separate pre-active Admin shell | Normal CRM resources and realtime hooks are unsafe before lifecycle resolution | Clean setup makes only auth and setup-allowlisted requests |
+| Require an explicit neutral follow-up policy | The legacy persona API otherwise injects recruitment schedules | Setup-created persona versions contain no hidden proactive behavior |
 
 ## Verification
 
-- Backend suite: 1,235 passed; 20 legacy tests skipped.
-- Disposable PostgreSQL integration lane: 11 passed with no skips, including
+- Phase 2 focused contract suite: 49 passed.
+- Phase 2 selected disposable PostgreSQL lane: 6 passed with no skips, including
   migration roundtrip, concurrency, live-readiness drift, rollback generation,
   cache failure, safe projection, and contamination cases.
+- The shared whole-worktree regression also passed 1,235 tests with 20 legacy
+  skips and 11 integration tests; those broader totals include unrelated
+  concurrent changes in the working tree.
 - Ruff passed.
+- Phase 3 backend suite: 1,222 passed with 20 legacy skips; focused setup,
+  lifecycle, concurrency, migration, and persona lanes passed, including real
+  PostgreSQL coverage. The follow-up policy correction added 11 focused passes.
+- Phase 3 frontend: lint and typecheck passed; production build passed; the full
+  browser project passed 321 tests and the Node project passed 93 tests.
+- Independent backend re-review passed after duplicate template-version
+  references were rejected before checksum normalization. Independent frontend
+  review verified the bootstrap/setup boundaries and identified the neutral
+  persona-policy correction above.
 
 ## Next
 
-- Phase 3 builds the admin Settings setup experience and removes frontend
-  business fallbacks.
 - Phase 4 composes bot behavior from the active manifest and its pinned persona
   version before activation can be enabled.
 - Phase 5 connects every active-KB publish/rollback writer to the authority

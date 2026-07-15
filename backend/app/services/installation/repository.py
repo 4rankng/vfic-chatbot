@@ -9,10 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
 from app.models.conversation import Conversation
-from app.models.ingestion_template import IngestionTemplateVersion
+from app.models.ingestion_template import IngestionTemplateVersion, TemplateVersionStatus
 from app.models.installation import (
     InstallationManifestRevision,
     InstallationManifestValidation,
+    InstallationSetupDraft,
     InstallationState,
 )
 from app.models.integration import IntegrationSetting
@@ -20,6 +21,11 @@ from app.models.job import Job
 from app.models.knowledge import KBVersion
 from app.models.lead import Lead
 from app.models.persona import PersonaVersion
+from app.services.installation.catalog import (
+    INTEGRATION_REFERENCE_ENABLE_KEYS,
+    INTEGRATION_REFERENCE_REQUIREMENTS,
+)
+from app.services.integration_settings import IntegrationSettingsCipher
 
 
 INSTALLATION_AUTHORITY_LOCK = 7_423_811_609
@@ -34,6 +40,12 @@ class InstallationRepository:
 
     async def get_state(self, *, for_update: bool = False) -> InstallationState | None:
         statement = select(InstallationState).where(InstallationState.singleton_id == 1)
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.db.scalars(statement)).one_or_none()
+
+    async def get_setup_draft(self, *, for_update: bool = False) -> InstallationSetupDraft | None:
+        statement = select(InstallationSetupDraft).where(InstallationSetupDraft.singleton_id == 1)
         if for_update:
             statement = statement.with_for_update()
         return (await self.db.scalars(statement)).one_or_none()
@@ -76,7 +88,8 @@ class InstallationRepository:
             return {}
         rows = await self.db.execute(
             select(IngestionTemplateVersion.id, IngestionTemplateVersion.checksum).where(
-                IngestionTemplateVersion.id.in_(version_ids)
+                IngestionTemplateVersion.id.in_(version_ids),
+                IngestionTemplateVersion.status == TemplateVersionStatus.PUBLISHED,
             )
         )
         return {str(version_id): checksum for version_id, checksum in rows.all()}
@@ -84,10 +97,44 @@ class InstallationRepository:
     async def configured_integrations(self, keys: list[str]) -> set[str]:
         if not keys:
             return set()
-        return set(
+        required_setting_keys = {
+            setting_key
+            for reference in keys
+            for setting_key in INTEGRATION_REFERENCE_REQUIREMENTS.get(reference, ())
+        }
+        settings = list(
             (
                 await self.db.scalars(
-                    select(IntegrationSetting.key).where(IntegrationSetting.key.in_(keys))
+                    select(IntegrationSetting).where(
+                        IntegrationSetting.key.in_(required_setting_keys)
+                    )
+                )
+            ).all()
+        )
+        cipher = IntegrationSettingsCipher()
+        values: dict[str, str] = {}
+        for setting in settings:
+            try:
+                values[setting.key] = cipher.decrypt(setting.encrypted_value).strip()
+            except Exception:  # noqa: BLE001 - invalid ciphertext is not configured authority
+                continue
+        return {
+            reference
+            for reference in keys
+            if reference in INTEGRATION_REFERENCE_REQUIREMENTS
+            and all(values.get(key) for key in INTEGRATION_REFERENCE_REQUIREMENTS[reference])
+            and (
+                reference not in INTEGRATION_REFERENCE_ENABLE_KEYS
+                or values[INTEGRATION_REFERENCE_ENABLE_KEYS[reference]].lower()
+                in {"1", "true", "yes", "on"}
+            )
+        }
+
+    async def integration_keys(self) -> list[str]:
+        return list(
+            (
+                await self.db.scalars(
+                    select(IntegrationSetting.key).order_by(IntegrationSetting.key.asc())
                 )
             ).all()
         )

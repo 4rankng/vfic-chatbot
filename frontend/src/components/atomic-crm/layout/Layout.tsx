@@ -6,11 +6,9 @@ import { Error } from "@/components/admin/error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-import { useConfigurationLoader } from "../root/useConfigurationLoader";
 import { WorkspaceFrame } from "./workspace-frame";
 
 export const Layout = ({ children }: { children: ReactNode }) => {
-  useConfigurationLoader();
   const location = useLocation();
   const hashPath =
     typeof window === "undefined"

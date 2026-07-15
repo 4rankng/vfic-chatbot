@@ -49,6 +49,7 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
                 "chat_id": "zalo_1",
                 "user_text": "tôi tên Mai",
                 "bot_output": "Chào Mai",
+                "conversation_version": 7,
             }
         )
 
@@ -59,4 +60,5 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
         "zalo_1",
         "tôi tên Mai",
         "Chào Mai",
+        expected_conversation_version=7,
     )

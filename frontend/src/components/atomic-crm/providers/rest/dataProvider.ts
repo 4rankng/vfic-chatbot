@@ -11,8 +11,6 @@ import {
   type UpdateManyParams,
   type UpdateParams,
 } from "ra-core";
-import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
-import { getIsInitialized } from "./authProvider";
 import { apiJson, ApiError } from "./api";
 import { sendHumanReply } from "@/lib/vfic/humanReplyService";
 
@@ -68,7 +66,6 @@ const normalize = (resource: string, record: ApiRecord): ApiRecord => {
 // the DataProvider methods are generic over `RecordType extends RaRecord`, and a
 // concrete `RaRecord[]` is not assignable to an invariant `RecordType[]`. This
 // matches react-admin's own loosely-typed provider seam.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toRec = (resource: string, record: ApiRecord): any =>
   normalize(resource, record);
 
@@ -182,7 +179,6 @@ const restProvider: DataProvider = {
 
   async delete(resource: string, params: DeleteParams) {
     await apiJson<void>(onePath(resource, params.id), { method: "DELETE" });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return { data: (params.previousData ?? { id: params.id }) as any };
   },
 
@@ -200,25 +196,6 @@ const restProvider: DataProvider = {
 
 const getDataProviderWithCustomMethods = () => ({
   ...restProvider,
-
-  async isInitialized() {
-    return getIsInitialized();
-  },
-
-  // VFIC has no configuration table; configuration is app-defined (seeded from
-  // <CRM> props). Return empty so useConfigurationLoader keeps the defaults
-  // instead of erroring against a missing endpoint on every load.
-  async getConfiguration(): Promise<ConfigurationContextValue> {
-    return {} as ConfigurationContextValue;
-  },
-
-  // No-op: VFIC has no configuration endpoint to write to. Kept to satisfy the
-  // data-provider interface (useConfigurationLoader invokes it on saves).
-  async updateConfiguration(
-    config: ConfigurationContextValue,
-  ): Promise<ConfigurationContextValue> {
-    return config;
-  },
 
   // Recruiter reply: ownership is established by the Bearer JWT (the backend
   // verifies the caller owns the conversation and mode=HUMAN). The body carries

@@ -20,10 +20,12 @@ import {
   resetPasswordWithOtp,
 } from "./passwordRecoveryService";
 import { useResendCooldown } from "./useResendCooldown";
+import { useInstallationContext } from "../installation/installation-context";
 
 type Step = "email" | "otp";
 
 export const ForgotPasswordPage = () => {
+  const { manifest } = useInstallationContext();
   const notify = useNotify();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("email");
@@ -36,6 +38,11 @@ export const ForgotPasswordPage = () => {
     startCooldown,
     resend: resendOtp,
   } = useResendCooldown(notify);
+  const activeName =
+    manifest.lifecycle === "ACTIVE"
+      ? manifest.branding?.app_name?.trim() ||
+        manifest.customer_identity?.display_name.trim()
+      : null;
 
   const submitEmail: SubmitHandler<FieldValues> = async (values) => {
     const nextEmail = String(values.email ?? "")
@@ -86,17 +93,9 @@ export const ForgotPasswordPage = () => {
       <main className="mx-auto flex min-h-svh w-full max-w-[620px] items-center justify-center px-5 py-8 sm:px-8">
         <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
           <div className="mb-6 space-y-3 text-center sm:mb-8">
-            <div className="flex items-center justify-center gap-4">
-              <img
-                src="/ttsoft-logo.png"
-                alt=""
-                aria-hidden="true"
-                className="size-12 shrink-0 rounded-md object-contain"
-              />
-              <p className="text-xl font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
-                Ting Ting Soft
-              </p>
-            </div>
+            <p className="text-xl font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
+              {activeName ?? "Thiết lập hệ thống"}
+            </p>
             <div className="space-y-3">
               <h1 className="kb-display text-balance text-display leading-none text-foreground">
                 Khôi phục mật khẩu
@@ -200,7 +199,7 @@ export const ForgotPasswordPage = () => {
           </div>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} Giải pháp phần mềm Ting Ting
+            Khôi phục quyền truy cập an toàn
           </p>
         </section>
       </main>

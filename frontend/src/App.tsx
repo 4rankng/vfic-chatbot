@@ -1,4 +1,11 @@
 import { CRM } from "@/components/atomic-crm/root/CRM";
+import {
+  hasReadyActiveRuntime,
+  useInstallationContext,
+} from "@/components/atomic-crm/installation/installation-context";
+import { SetupApplication } from "@/components/atomic-crm/installation/SetupLayout";
+import { createI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
+import { useMemo } from "react";
 
 /**
  * Application entry point
@@ -24,6 +31,20 @@ import { CRM } from "@/components/atomic-crm/root/CRM";
  *    />
  * );
  */
-const App = () => <CRM />;
+const App = () => {
+  const { manifest } = useInstallationContext();
+  const activeI18nProvider = useMemo(
+    () =>
+      hasReadyActiveRuntime(manifest) && manifest.locale
+        ? createI18nProvider(manifest.locale)
+        : null,
+    [manifest],
+  );
+  return hasReadyActiveRuntime(manifest) && activeI18nProvider ? (
+    <CRM i18nProvider={activeI18nProvider} />
+  ) : (
+    <SetupApplication />
+  );
+};
 
 export default App;

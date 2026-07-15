@@ -27,6 +27,7 @@ async def get_cached_fingerprint(
             persona_checksum=str(payload["persona_checksum"]),
             workflow_policy_checksum=str(payload["workflow_policy_checksum"]),
             provider_policy_checksum=str(payload["provider_policy_checksum"]),
+            authentication_policy_checksum=str(payload["authentication_policy_checksum"]),
             template_checksums={
                 str(key): str(value) for key, value in dict(payload["template_checksums"]).items()
             },

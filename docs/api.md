@@ -88,22 +88,29 @@ Returned directly (no envelope):
 
 HTTP status codes follow REST conventions: 200 (OK), 201 (Created), 204 (No Content), 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 409 (Conflict), 422 (Validation Error), 429 (Too Many Requests), 502 (Bad Gateway).
 
-## Installation lifecycle
+## Installation lifecycle and setup
 
-Phase 2 exposes one public-safe bootstrap endpoint and seven admin-only
-lifecycle endpoints. An absent `installation_state` row is returned as
-`UNCONFIGURED`; reading it does not create or infer configuration.
+Phases 2–3 expose one public-safe bootstrap endpoint, immutable lifecycle
+operations, and a PostgreSQL-backed setup workspace. An absent
+`installation_state` row is returned as `UNCONFIGURED`; reading either the
+runtime projection or setup draft does not infer business configuration or
+insert sample rows.
 
 | Method and path | Auth | Result |
 |---|---|---|
-| `GET /api/v1/installation/runtime` | Public | Safe lifecycle, branding, locale, terminology, and capability projection; no persona body, policy, integration value, or audit data. |
-| `GET /api/v1/admin/installation` | Admin | Current lifecycle, generation/lock metadata, current revision, active validation, and readiness. |
+| `GET /api/v1/installation/runtime` | Public | Schema-versioned, `no-store` lifecycle projection. Draft values stay private; active-only output may include branding, locale, terminology, and capability IDs, but never persona body, policy, integration value, or audit data. |
+| `GET /api/v1/admin/installation` | Admin | Current lifecycle, generation/lock metadata, current revision, current and active validation, and readiness. |
+| `GET /api/v1/admin/installation/catalog` | Admin | Code-owned packs, capabilities, workflows, locales, currencies, integration references, and authentication methods that Settings may select. |
+| `GET /api/v1/admin/installation/setup-draft` | Admin | Strict partial setup draft, optimistic lock tokens, per-section completion, and validation issues. The response never returns decrypted credentials. |
+| `PUT /api/v1/admin/installation/setup-draft` | Admin | Replace the typed partial draft using `expected_lock_version`; stale writes return `409 INSTALLATION_CONFLICT`. |
+| `POST /api/v1/admin/installation/setup-draft/finalize` | Admin | Atomically revalidate a complete draft and append an immutable revision using both draft and installation lock tokens. The result stops at `VALIDATED`. |
 | `POST /api/v1/admin/installation/revisions` | Admin | Append a complete immutable successor revision (`201`). The request must echo the loaded `expected_lock_version`; a stale save returns `409 INSTALLATION_CONFLICT`. |
 | `POST /api/v1/admin/installation/revisions/{revision_id}/validate` | Admin | Append checksum-pinned validation evidence; invalid input/reference evidence returns field-level issues. |
 | `POST /api/v1/admin/installation/revisions/{revision_id}/activate` | Admin | Attempt transactional activation of the current validated revision. |
 | `POST /api/v1/admin/installation/revisions/{revision_id}/rollback` | Admin | Attempt a validated same-pack rollback with a new authority generation. |
 | `POST /api/v1/admin/installation/suspend` | Admin | Suspend the active installation and advance authority generation. |
 | `POST /api/v1/admin/installation/resume` | Admin | Resume from current validation evidence and advance authority generation. |
+| `GET /api/v1/personas/{persona_id}/versions` | Admin | Immutable persona version metadata (`id`, version, checksum, timestamp) without persona content. |
 
 Installation lifecycle failures use the compatibility `detail` field plus
 stable machine-readable fields:
@@ -130,10 +137,15 @@ Admin request-shape failures use the same envelope with HTTP `422` and
 `INSTALLATION_RUNTIME_NOT_READY`. Normal missing/insufficient JWT credentials
 remain `401`/`403` through the existing auth handlers.
 
-The code-owned recruitment pack intentionally declares `runtime_ready=false`,
-so activation currently returns `409 INSTALLATION_RUNTIME_NOT_READY`. These
-contracts are a foundation for later runtime composition, not evidence that a
-universal deployment is ready.
+The code-owned packs intentionally declare `runtime_ready=false`, so activation
+currently returns `409 INSTALLATION_RUNTIME_NOT_READY`. The admin wizard can
+author and validate a clean installation without a rebuild, but these contracts
+are a foundation for later runtime composition—not evidence that a universal
+deployment is ready or authorized to send messages.
+
+Setup-authored personas must carry an explicit policy. Choosing no proactive
+follow-up stores disabled rules with no cadence or eligible stage; it never
+inherits the recruitment defaults used by the legacy persona editor.
 
 Revision input is closed rather than free-form. `workflow_policy` accepts only
 `workflow_id`, `handoff_mode`, and `automation_enabled`. `provider_policy`

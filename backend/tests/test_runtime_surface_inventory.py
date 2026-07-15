@@ -44,18 +44,20 @@ EXPECTED_ROUTE_COUNTS = {
     "conversations": 17,
     "dashboard": 2,
     "integrations": 11,
-    "installation": 8,
+    # Installation setup authoring adds four admin-only endpoints; immutable
+    # persona metadata adds one admin-only selector endpoint.
+    "installation": 12,
     "jobs": 7,
     "knowledge": 37,
     "leads": 15,
     "main": 3,
     "performance": 2,
-    "personas": 9,
+    "personas": 10,
     "projects": 14,
     "users": 10,
     "webhooks": 2,
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "5ade00ee8f3f8f5fb2b155293066689d1936b4783ede2d937c822823776adb0b"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "abc5d5dda7b46e43c2f01b1005342ac3e345da0f9a1514a7c34e795597c3769e"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 56,
@@ -154,8 +156,8 @@ def _direct_routes(tree: ast.AST) -> set[str]:
     return {record[1] for record in _decorated_routes(tree)}
 
 
-def _decorated_routes(tree: ast.AST) -> list[tuple[str, str, str]]:
-    routes: list[tuple[str, str, str]] = []
+def _decorated_routes(tree: ast.AST) -> list[tuple[str, str, str, str]]:
+    routes: list[tuple[str, str, str, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -166,40 +168,55 @@ def _decorated_routes(tree: ast.AST) -> list[tuple[str, str, str]]:
                 continue
             if not decorator.args or not isinstance(decorator.args[0], ast.Constant):
                 continue
-            routes.append((decorator.func.attr.upper(), str(decorator.args[0].value), node.name))
+            router_name = (
+                decorator.func.value.id
+                if isinstance(decorator.func.value, ast.Name)
+                else "<unknown>"
+            )
+            routes.append(
+                (decorator.func.attr.upper(), str(decorator.args[0].value), node.name, router_name)
+            )
     return routes
 
 
-def _router_prefix(tree: ast.AST) -> str:
+def _router_prefixes(tree: ast.AST) -> dict[str, str]:
+    prefixes: dict[str, str] = {}
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
             continue
-        if not isinstance(node.func, ast.Name) or node.func.id != "APIRouter":
+        if (
+            not isinstance(node.value.func, ast.Name)
+            or node.value.func.id != "APIRouter"
+            or len(node.targets) != 1
+            or not isinstance(node.targets[0], ast.Name)
+        ):
             continue
-        for keyword in node.keywords:
+        prefix = ""
+        for keyword in node.value.keywords:
             if keyword.arg == "prefix" and isinstance(keyword.value, ast.Constant):
-                return str(keyword.value.value)
-    return ""
+                prefix = str(keyword.value.value)
+        prefixes[node.targets[0].id] = prefix
+    return prefixes
 
 
 def _route_records() -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     for module, category in ROUTE_MODULE_CLASSIFICATION.items():
         tree = ast.parse((APP_DIR / "api" / f"{module}.py").read_text(encoding="utf-8"))
-        prefix = _router_prefix(tree)
+        prefixes = _router_prefixes(tree)
         api_prefix = "" if module == "webhooks" else "/api/v1"
-        for method, path, function in _decorated_routes(tree):
+        for method, path, function, router_name in _decorated_routes(tree):
             records.append(
                 {
                     "module": module,
                     "method": method,
-                    "path": f"{api_prefix}{prefix}{path}",
+                    "path": f"{api_prefix}{prefixes.get(router_name, '')}{path}",
                     "function": function,
                     "classification": category,
                 }
             )
     main_tree = ast.parse((APP_DIR / "main.py").read_text(encoding="utf-8"))
-    for method, path, function in _decorated_routes(main_tree):
+    for method, path, function, _router_name in _decorated_routes(main_tree):
         if path in DIRECT_ROUTE_CLASSIFICATION:
             records.append(
                 {

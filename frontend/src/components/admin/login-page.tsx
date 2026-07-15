@@ -5,7 +5,6 @@ import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
 import { Notification } from "@/components/admin/notification";
-import { useConfigurationContext } from "@/components/atomic-crm/root/ConfigurationContext.tsx";
 
 /**
  * Login page displayed when authentication is enabled and the user is not authenticated.
@@ -17,7 +16,6 @@ import { useConfigurationContext } from "@/components/atomic-crm/root/Configurat
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/security Security documentation}
  */
 export const LoginPage = (props: { redirectTo?: string }) => {
-  const { darkModeLogo, title } = useConfigurationContext();
   const { redirectTo } = props;
   const [loading, setLoading] = useState(false);
   const login = useLogin();
@@ -58,14 +56,13 @@ export const LoginPage = (props: { redirectTo?: string }) => {
         <div className="relative hidden h-full flex-col bg-muted p-10 text-white dark:border-r lg:flex">
           <div className="absolute inset-0 bg-zinc-900" />
           <div className="relative z-20 flex items-center text-lg font-medium">
-            <img className="h-6 mr-2" src={darkModeLogo} alt={title} />
-            {title}
+            Hệ thống quản trị
           </div>
         </div>
         <div className="flex flex-col justify-center w-full p-4 lg:p-8">
           <div className="w-full space-y-6 lg:mx-auto lg:w-[350px]">
             <div className="text-center">
-              <h1 className="text-page-title font-semibold tracking-tight">Sign in</h1>
+              <h1 className="text-page-title font-semibold tracking-tight">Đăng nhập</h1>
             </div>
             <Form className="space-y-8" onSubmit={handleSubmit}>
               <TextInput
@@ -75,7 +72,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
                 validate={required()}
               />
               <TextInput
-                label="Password"
+                label="Mật khẩu"
                 source="password"
                 type="password"
                 validate={required()}
@@ -85,7 +82,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
                 className="w-full cursor-pointer"
                 disabled={loading}
               >
-                Sign in
+                Đăng nhập
               </Button>
             </Form>
 
@@ -93,7 +90,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
               to={"/forgot-password"}
               className="block text-sm text-center hover:underline"
             >
-              Forgot your password?
+              Quên mật khẩu?
             </Link>
           </div>
         </div>

@@ -29,6 +29,9 @@ def test_candidate_extraction_prompt_is_non_empty_and_shaped():
     assert "json" in prompt.lower()
     assert "lead_patch" in prompt
     assert "memory_facts" in prompt
+    assert "contact_intent" in prompt
+    assert "intent_confidence" in prompt
+    assert "phản hồi của bot và ghi chú đã lưu không phải bằng chứng intent" in prompt.lower()
     assert "mỗi dòng đúng một sự thật" in prompt.lower()
     assert "không tóm tắt" in prompt.lower()
     assert "không diễn đạt lại" in prompt.lower()

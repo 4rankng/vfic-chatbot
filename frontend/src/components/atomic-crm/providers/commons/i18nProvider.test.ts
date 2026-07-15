@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getInitialLocale, i18nProvider } from "./i18nProvider";
+import {
+  assertSupportedRuntimeLocale,
+  getInitialLocale,
+  i18nProvider,
+} from "./i18nProvider";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -16,15 +20,17 @@ describe("i18nProvider", () => {
     expect(i18nProvider.translate("crm.profile.title")).toBe("Hồ sơ cá nhân");
   });
 
-  it("falls back to english catalog for missing keys in vietnamese", () => {
-    // crm.action.reset_password isn't in vietnameseCrmMessages, so it falls
-    // back to the English catalog value.
-    expect(i18nProvider.translate("crm.action.reset_password")).toBe(
-      "Reset Password",
+  it("does not inject an English business fallback for missing keys", () => {
+    expect(i18nProvider.translate("missing.customer.key")).toBe(
+      "missing.customer.key",
     );
   });
 
   it("always returns vi for getInitialLocale", () => {
-    expect(getInitialLocale()).toBe("vi");
+    expect(getInitialLocale("vi-VN")).toBe("vi");
+  });
+
+  it("rejects a locale whose catalog is not shipped", () => {
+    expect(() => assertSupportedRuntimeLocale("en-US")).toThrow(RangeError);
   });
 });

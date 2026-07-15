@@ -126,6 +126,24 @@ _HELP_TERMS = (
     "co the giup",
 )
 
+_PURE_HELP_PHRASES = {
+    "giup",
+    "help",
+    "ho tro",
+    "ban la ai",
+    "ban la gi",
+    "ban biet gi",
+    "ban lam duoc gi",
+    "ban co the lam gi",
+    "lam duoc gi",
+    "lam gi duoc",
+    "hoi gi duoc",
+    "hoi duoc gi",
+    "co the giup",
+    "ban giup gi duoc",
+    "giup gi duoc",
+}
+
 
 def _normalize(text: str) -> str:
     """ASCII-fold + lowercase Vietnamese (mirrors clients._normalize_query_hint)."""
@@ -143,6 +161,19 @@ def _has_any(text: str, terms: tuple[str, ...]) -> bool:
     return False
 
 
+def _clean(text: str) -> str:
+    raw = _normalize(text)
+    return re.sub(r"\s+", " ", re.sub(r"[!?.,;:~()\[\]{}\"'+\-]+", " ", raw)).strip()
+
+
+def is_pure_pleasantry(user_text: str) -> bool:
+    """Return whether a fast-lane message carries no substantive extra content."""
+    text = _clean(user_text)
+    return text in (
+        _GREETING_PHRASES | _THANKS_PHRASES | _GOODBYE_PHRASES | _PURE_HELP_PHRASES
+    )
+
+
 def match(user_text: str) -> FastLaneHit | None:
     """Return a canned reply for common non-factual traffic, else ``None`` (fall through).
 
@@ -150,11 +181,8 @@ def match(user_text: str) -> FastLaneHit | None:
     excluded when the message also carries a factual/question clause, so a real
     question ("chào bạn, lương bao nhiêu?") is never swallowed by the greeting lane.
     """
-    raw = _normalize(user_text)
-    if not raw:
-        return None
     # Strip trailing/leading punctuation and collapse whitespace for exact matching.
-    text = re.sub(r"\s+", " ", re.sub(r"[!?.,;:~()\[\]{}\"'+\-]+", " ", raw)).strip()
+    text = _clean(user_text)
     if not text:
         return None
 

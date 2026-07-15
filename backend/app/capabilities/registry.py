@@ -40,6 +40,14 @@ class CapabilityRegistry:
             raise ValueError(f"unknown industry pack: {key}") from exc
         return pack  # type: ignore[return-value]
 
+    def packs(self) -> tuple[IndustryPackDefinition, ...]:
+        return tuple(self._packs[key] for key in sorted(self._packs))  # type: ignore[return-value]
+
+    def capabilities(self) -> tuple[CapabilityDefinition, ...]:
+        return tuple(
+            self._capabilities[key] for key in sorted(self._capabilities)
+        )  # type: ignore[return-value]
+
     def validate_selection(self, pack_key: str, capability_ids: Iterable[str]) -> tuple[str, ...]:
         pack = self.get_pack(pack_key)
         selected = tuple(sorted(set(capability_ids)))
@@ -72,6 +80,8 @@ class CapabilityRegistry:
             "version": pack.version,
             "kernel_abi": pack.kernel_abi,
             "compatible_operational_data": sorted(pack.compatible_operational_data),
+            "workflow_ids": sorted(pack.workflow_ids),
+            "terminology_keys": sorted(pack.terminology_keys),
             "capabilities": capabilities,
         }
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

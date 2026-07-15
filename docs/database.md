@@ -68,6 +68,7 @@ Path: `backend/app/models/`
 | `knowledge.py` | `KnowledgeDocument`, `KnowledgeStatus`, `KnowledgeChunk`, `KBVersion`, `KBVersionStatus`, `KBTextFile` | KB documents, chunks (with vector embeddings), versioned releases |
 | `persona.py` | `Persona` | AI agent personas |
 | `integration.py` | `IntegrationSetting` | Integration credentials (Zalo, OpenRouter, etc.) |
+| `installation.py` | `InstallationManifestRevision`, `InstallationManifestValidation`, `InstallationState`, `InstallationSetupDraft` | Immutable installation authority plus the mutable admin setup workspace |
 | `password_reset.py` | `PasswordResetOtp` | Password reset OTP tokens |
 | `worker_feature.py` | `WorkerFeatureCatalog`, `JobFeatureValue` | Worker feature flags + job feature values |
 | `ingestion_template.py` | `IngestionTemplate`, `IngestionTemplateVersion`, `IngestionTemplateAssignment`, `KBIngestionRun`, `KBIngestionFileRun`, `StructuredFact` | Declarative ingestion templates, durable runs, and facts scoped to a KB release |
@@ -95,6 +96,26 @@ Newly materialized typed recruitment authority rows can also carry
 to legacy unversioned rows only when that active release has no value for the
 requested scope; this prevents a release-scoped fact from being mixed with an
 older one during activation or rollback.
+
+### Installation configuration authority
+
+Customer identity, industry-pack selection, terminology, workflow, persona and
+template references, provider policy, and authentication policy are stored in
+PostgreSQL rather than business environment variables or browser storage.
+
+- `installation_setup_drafts` is a singleton mutable authoring row. It starts
+  absent, contains only strict partial admin input and encrypted-integration
+  references, and uses `lock_version` to reject stale Settings writes.
+- Finalization validates the complete draft and appends an immutable
+  `installation_manifest_revisions` row plus checksum-pinned
+  `installation_manifest_validations` evidence in one transaction.
+- `installation_state` owns lifecycle pointers and the monotonic authority
+  generation. A validated revision is not active authority.
+- Migrations `0042` and `0043` insert no customer, industry, persona, template,
+  credential, or sample-data rows. `0043` adds the setup draft and explicit
+  authentication-policy evidence needed by the setup flow.
+- Integration secrets remain encrypted in `integration_settings`; setup drafts
+  store logical references only and reject secret-shaped values.
 
 ## Redis
 

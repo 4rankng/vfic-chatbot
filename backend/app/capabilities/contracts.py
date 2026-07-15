@@ -22,4 +22,6 @@ class IndustryPackDefinition:
     capability_ids: tuple[str, ...]
     kernel_abi: str
     compatible_operational_data: tuple[str, ...] = ()
+    workflow_ids: tuple[str, ...] = ()
+    terminology_keys: tuple[str, ...] = ()
     runtime_ready: bool = False

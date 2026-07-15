@@ -37,6 +37,17 @@ export default defineConfig({
       registerType: "autoUpdate",
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+        globIgnores: [
+          "**/appIcon/**",
+          "**/favicon*.{ico,png}",
+          "**/preview.png",
+          "**/*logo*.png",
+          "**/login-*",
+          "**/*recruit*",
+          "**/zalo_verifier*.html",
+          "**/auth-callback.html",
+        ],
+        cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB
       },
       manifest: false, // Use existing manifest.json from public/

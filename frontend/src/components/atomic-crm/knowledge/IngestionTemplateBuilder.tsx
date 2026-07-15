@@ -34,10 +34,10 @@ const cleanKey = (value: string) =>
 export const IngestionTemplateBuilder = () => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [vertical, setVertical] = useState("shopping");
-  const [recordName, setRecordName] = useState("product");
-  const [fields, setFields] = useState("sku, name, description");
-  const [sample, setSample] = useState("SKU: SP-001\nTên: Áo khoác\nMô tả: Chống nước");
+  const [vertical, setVertical] = useState("");
+  const [recordName, setRecordName] = useState("");
+  const [fields, setFields] = useState("");
+  const [sample, setSample] = useState("");
   const [projectId, setProjectId] = useState("");
   const [preview, setPreview] = useState<IngestionPreview | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export const IngestionTemplateBuilder = () => {
         {
           key: recordKey,
           display_name: recordName.trim(),
-          natural_key_fields: [fieldKeys[0] ?? "id"],
+          natural_key_fields: fieldKeys.length > 0 ? [fieldKeys[0]] : [],
           fields: fieldKeys.map((key, index) => ({
             key,
             type: "string",
@@ -69,31 +69,17 @@ export const IngestionTemplateBuilder = () => {
     };
   };
 
-  const applyStarter = (starter: "shopping" | "logistics" | "recruitment") => {
-    if (starter === "shopping") {
-      setName("Danh mục sản phẩm");
-      setVertical("shopping");
-      setRecordName("product");
-      setFields("sku, name, material, warranty");
-      setSample("SKU: SP-001\nTên sản phẩm: Áo khoác\nChất liệu: Polyester\nBảo hành: 12 tháng");
-      return;
-    }
-    if (starter === "logistics") {
-      setName("Dịch vụ vận tải");
-      setVertical("logistics");
-      setRecordName("transport_service");
-      setFields("service_code, service_name, vehicle_capability");
-      setSample("Mã dịch vụ: TRUCK-01\nTên dịch vụ: Hàng nguyên chuyến\nNăng lực xe: 15 tấn");
-      return;
-    }
-    setName("Tuyển dụng công nhân");
-    setVertical("recruitment");
-    setRecordName("job_posting");
-    setFields("job_reference, title, employer, worksite");
-    setSample("Mã việc làm: JOB-001\nVị trí: Công nhân hàn\nCông ty: VFIC\nNhà máy: Đồng Nai");
-  };
-
   const runPreview = async () => {
+    if (
+      !name.trim() ||
+      !vertical.trim() ||
+      !cleanKey(recordName) ||
+      fields.split(",").map(cleanKey).filter(Boolean).length === 0 ||
+      !sample.trim()
+    ) {
+      setError("Vui lòng nhập đầy đủ định nghĩa và dữ liệu thử của bạn.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -156,18 +142,12 @@ export const IngestionTemplateBuilder = () => {
             Khai báo các trường dữ liệu có cấu trúc. Mẫu chỉ đọc dữ liệu có bằng chứng từ tài liệu; không thể thêm lệnh, công cụ hoặc prompt.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap gap-2 border-b pb-4">
-          <span className="mr-1 self-center text-xs font-medium uppercase tracking-wide text-muted-foreground">Bắt đầu từ</span>
-          <Button type="button" size="sm" variant="outline" onClick={() => applyStarter("recruitment")}>Tuyển dụng</Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => applyStarter("shopping")}>Sản phẩm</Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => applyStarter("logistics")}>Logistics</Button>
-        </div>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <div className="grid gap-2"><Label htmlFor="template-name">Tên mẫu</Label><Input id="template-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Danh mục sản phẩm" /></div>
-          <div className="grid gap-2"><Label htmlFor="template-vertical">Lĩnh vực</Label><Input id="template-vertical" value={vertical} onChange={(event) => setVertical(event.target.value)} placeholder="shopping hoặc logistics" /></div>
-          <div className="grid gap-2"><Label htmlFor="record-name">Loại bản ghi</Label><Input id="record-name" value={recordName} onChange={(event) => setRecordName(event.target.value)} placeholder="product" /></div>
-          <div className="grid gap-2"><Label htmlFor="record-fields">Các trường (cách nhau dấu phẩy)</Label><Input id="record-fields" value={fields} onChange={(event) => setFields(event.target.value)} placeholder="sku, name, warranty" /></div>
-          <div className="grid gap-2 sm:col-span-2"><Label htmlFor="template-project">Dự án áp dụng (không bắt buộc)</Label><Input id="template-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="ID dự án — mẫu sẽ áp dụng cho các KB mới" /></div>
+          <div className="grid gap-2"><Label htmlFor="template-name">Tên mẫu</Label><Input id="template-name" value={name} onChange={(event) => setName(event.target.value)} /></div>
+          <div className="grid gap-2"><Label htmlFor="template-vertical">Lĩnh vực</Label><Input id="template-vertical" value={vertical} onChange={(event) => setVertical(event.target.value)} /></div>
+          <div className="grid gap-2"><Label htmlFor="record-name">Loại bản ghi</Label><Input id="record-name" value={recordName} onChange={(event) => setRecordName(event.target.value)} /></div>
+          <div className="grid gap-2"><Label htmlFor="record-fields">Các trường (cách nhau dấu phẩy)</Label><Input id="record-fields" value={fields} onChange={(event) => setFields(event.target.value)} /></div>
+          <div className="grid gap-2 sm:col-span-2"><Label htmlFor="template-project">Dự án áp dụng (không bắt buộc)</Label><Input id="template-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div>
           <div className="grid gap-2 sm:col-span-2"><Label htmlFor="template-sample">Dữ liệu thử</Label><Textarea id="template-sample" value={sample} onChange={(event) => setSample(event.target.value)} rows={7} /></div>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
