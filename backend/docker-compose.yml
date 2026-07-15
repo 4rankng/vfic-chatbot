@@ -43,7 +43,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      # 30s absorbs the cold-boot fork window so compose's own probe does not
+      # start firing before the single uvicorn worker has bound :8000.
+      start_period: 30s
     restart: unless-stopped
 
   # RQ worker: interactive/recovery turns only. It stays isolated from
@@ -61,7 +63,7 @@ services:
       resources:
         limits:
           # TODO: measure real RSS under load (expect ~100-150M per worker).
-          # 512M leaves room for the two web workers on a 4GB droplet.
+          # 512M leaves room for the single uvicorn web worker on the 2GB droplet.
           memory: 512M
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).

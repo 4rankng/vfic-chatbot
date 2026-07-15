@@ -62,7 +62,7 @@ def _capture_remote_script(command: str, tmp_path: Path) -> str:
 def test_deploy_health_check_preserves_remote_retry_loop(tmp_path: Path) -> None:
     remote_script = _capture_remote_script(_deploy_command("urlopen"), tmp_path)
 
-    assert "$(seq 1 30)" in remote_script
+    assert "$(seq 1 50)" in remote_script
     syntax = subprocess.run(
         ["bash", "-n", "-c", remote_script],
         capture_output=True,

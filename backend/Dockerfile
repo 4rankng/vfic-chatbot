@@ -20,6 +20,9 @@ RUN pip install --upgrade pip && pip install -e .
 # Copy application code.
 COPY . .
 
-# Default: run the web process. Workers/scheduler override the command in compose.
+# Default: run the web process. Workers/scheduler override the command in
+# compose. Single uvicorn worker — --workers 2 forks two uvicorn processes
+# which doubled cold-boot RSS and produced a multi-second listener gap on the
+# 1.9GiB host where the deploy verification probe could overshoot.
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
