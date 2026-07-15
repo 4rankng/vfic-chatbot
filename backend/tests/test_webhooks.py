@@ -169,7 +169,7 @@ async def test_zalo_webhook_returns_400_for_malformed_json():
 
 
 @pytest.mark.asyncio
-async def test_verified_webhook_acknowledges_inactive_runtime_without_calling_handler(monkeypatch):
+async def test_verified_webhook_dispatches_without_runtime_authority(monkeypatch):
     from app.api import webhooks
 
     cfg = SimpleNamespace(bot_webhook_secret="", bot_token="bot-token")
@@ -180,7 +180,7 @@ async def test_verified_webhook_acknowledges_inactive_runtime_without_calling_ha
     )
     inactive = AsyncMock(return_value=None)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", inactive)
-    handle = AsyncMock()
+    handle = AsyncMock(return_value={"status": "processing"})
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
 
     response = await webhooks.zalo_webhook(
@@ -189,9 +189,37 @@ async def test_verified_webhook_acknowledges_inactive_runtime_without_calling_ha
     )
 
     assert response.status_code == 200
-    assert response.body == b'{"status":"inactive"}'
+    assert response.body == b'{"status":"processing"}'
     inactive.assert_awaited_once()
-    handle.assert_not_called()
+    handle.assert_awaited_once()
+    assert handle.await_args.kwargs["runtime_authority"] is None
+
+
+@pytest.mark.asyncio
+async def test_oa_webhook_dispatches_without_runtime_authority(monkeypatch):
+    from app.api import webhooks
+
+    cfg = SimpleNamespace(oa_secret_key="")
+    monkeypatch.setattr(
+        webhooks,
+        "IntegrationSettingsService",
+        lambda _db: SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg)),
+    )
+    inactive = AsyncMock(return_value=None)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", inactive)
+    handle = AsyncMock(return_value={"status": "processing"})
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+
+    response = await webhooks.zalo_oa_webhook(
+        FakeRequest(json.dumps({"event_name": "user_send_text"}).encode()),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 200
+    assert response.body == b'{"status":"processing"}'
+    inactive.assert_awaited_once()
+    handle.assert_awaited_once()
+    assert handle.await_args.kwargs["runtime_authority"] is None
 
 
 @pytest.mark.asyncio

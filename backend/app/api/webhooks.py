@@ -93,9 +93,6 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
     # Pass the DB-resolved bot token so the fire-and-forget typing indicator uses
     # the live token (the env ZALO_BOT_TOKEN is stale; resolve_zalo wins).
     runtime_authority = await _runtime_authority_or_inactive(db, channel="bot")
-    if runtime_authority is None:
-        await _stamp_ack(t0, 200)
-        return JSONResponse({"status": "inactive"}, status_code=200)
     result = await ZaloWebhookService.handle(
         db,
         payload,
@@ -182,9 +179,6 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         )
 
     runtime_authority = await _runtime_authority_or_inactive(db, channel="oa")
-    if runtime_authority is None:
-        await _stamp_ack(t0, 200)
-        return JSONResponse({"status": "inactive"}, status_code=200)
     result = await ZaloWebhookService.handle(
         db,
         payload,
