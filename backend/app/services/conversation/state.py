@@ -8,7 +8,6 @@ Reads live in ``repository.py``; realtime publishing in ``events.py``.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -102,35 +101,6 @@ async def _fetch_owner_name(db, conv: Conversation) -> str | None:
         select(UserModel.full_name).where(UserModel.id == conv.assigned_recruiter_id)
     )
     return owner_row or None
-
-
-def _schedule_realtime(events, msg, conv) -> None:
-    """Fire-and-forget the post-commit realtime publishes for a new message.
-
-    Realtime is best-effort by contract (``publish_event`` swallows all errors),
-    so deferring the two emits onto a background task is semantics-preserving
-    for the caller: the message is already committed, and a swallowed publish
-    failure behaves identically whether awaited or not. Scheduling off the
-    calling coroutine keeps the realtime fan-out off the webhook-ack / ``db_ms``
-    hot path — ``record_bot_pending`` sits between the webhook preamble and LLM
-    inference, so an inline await there charged Redis+Socket.IO latency to the
-    "database" dashboard tile (production db_ms p95 of 2.4s traced to this emit,
-    not to DB I/O). Matches the fire-and-forget pattern already used in
-    ``webhook.py`` and ``password_reset_service.py``.
-
-    The task is created but never awaited by the caller. If no running loop is
-    present (a sync test path), the emits are skipped rather than raising.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
-
-    async def _emit() -> None:
-        await events.message_created(msg, conv)
-        await events.conversation_updated(conv)
-
-    loop.create_task(_emit())
 
 
 class ConversationState:
@@ -716,11 +686,11 @@ class ConversationState:
         self.db.add(msg)
         await self.db.commit()
         await self.db.refresh(msg)
-        # Realtime fan-out is deferred (fire-and-forget) rather than awaited:
-        # this method sits on the webhook hot path between preamble and LLM
-        # inference, and an inline await here charged the Redis+Socket.IO
-        # round-trips to the ``db_ms`` dashboard tile in production.
-        _schedule_realtime(self.events, msg, conv)
+        # Realtime fan-out is deferred (fire-and-forget): payloads are serialized
+        # eagerly on this coroutine (ORM attrs are expired post-commit and must
+        # not be touched from the background task) and only the Redis publishes
+        # run on it. See ConversationEventBus.schedule_realtime.
+        self.events.schedule_realtime(msg, conv)
         return msg
 
     async def mark_stale_pending_failed(self, conv_id: uuid.UUID) -> int:

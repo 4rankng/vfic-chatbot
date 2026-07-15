@@ -327,7 +327,7 @@ async def test_record_bot_pending_does_not_bump_version():
     db.add = MagicMock()
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
-    events = AsyncMock()
+    events = MagicMock()
     state = ConversationState(db, MagicMock(), events)
 
     msg = await state.record_bot_pending(conv)
@@ -335,13 +335,54 @@ async def test_record_bot_pending_does_not_bump_version():
     assert msg.sender == MessageSender.BOT
     assert msg.delivery_status == DeliveryStatus.PENDING
     assert conv.version == 7
-    # record_bot_pending defers realtime emits onto a background task (the
-    # post-commit fan-out is fire-and-forget so it stays off the webhook-ack /
-    # db_ms hot path). Pump the loop to let that task run before asserting the
-    # events were published.
+    # record_bot_pending schedules fire-and-forget realtime: payloads are
+    # serialized eagerly on this coroutine and only the Redis publishes are
+    # deferred to a background task (keeps the post-commit fan-out off the
+    # webhook-ack / db_ms hot path). schedule_realtime is synchronous, so assert
+    # the call rather than an await.
+    events.schedule_realtime.assert_called_once_with(msg, conv)
+
+
+@pytest.mark.asyncio
+async def test_schedule_realtime_publishes_prebuilt_payloads_off_greenlet(monkeypatch):
+    """Regression guard for the MissingGreenlet / PendingRollback crash.
+
+    The background task must only Redis-publish already-serialized dicts.
+    Touching the (post-commit-expired, session-bound) ORM objects from the
+    background task raises MissingGreenlet and poisons the shared session
+    (PendingRollbackError cascade). Payloads are therefore built eagerly on the
+    caller's coroutine and the task publishes those plain dicts.
+    """
+    from types import SimpleNamespace
+
+    from app.services.conversation import events as events_mod
+
+    published: list[tuple[str, object]] = []
+
+    async def fake_publish(channel, payload):
+        published.append((channel, payload))
+
+    monkeypatch.setattr(events_mod, "publish_event", fake_publish)
+    monkeypatch.setattr(events_mod, "_message_payload", lambda _msg: {"msg": "serialized"})
+    monkeypatch.setattr(events_mod, "_conv_payload", lambda _conv: {"conv": "serialized"})
+
+    bus = events_mod.ConversationEventBus(db=object())
+    msg = SimpleNamespace(id=42)
+    conv = SimpleNamespace(id="conv-7")
+
+    bus.schedule_realtime(msg, conv)
+    # Payloads are built synchronously before the task runs, so nothing is
+    # published until the loop is pumped.
+    assert published == []
     await asyncio.sleep(0)
-    events.message_created.assert_awaited_once()
-    events.conversation_updated.assert_awaited_once()
+
+    assert published == [
+        (
+            "message.created",
+            {"message_id": 42, "conversation_id": "conv-7", "message": {"msg": "serialized"}},
+        ),
+        ("conversation.updated", {"conv": "serialized"}),
+    ]
 
 
 @pytest.mark.asyncio
