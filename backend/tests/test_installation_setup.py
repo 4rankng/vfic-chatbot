@@ -52,6 +52,68 @@ def test_draft_rejects_unknown_provider_reference_before_database_write() -> Non
     assert exc_info.value.issues[0]["code"] == "INTEGRATION_REFERENCE_INVALID"
 
 
+def test_setup_allows_channel_capabilities_without_configuring_the_channel() -> None:
+    payload = InstallationSetupDraftPayload.model_validate(
+        {
+            "identity_branding": {
+                "customer_identity": {"display_name": "Customer"},
+                "branding": {"app_name": "Application"},
+            },
+            "regional_terminology": {
+                "locale": "vi-VN",
+                "timezone": "Asia/Ho_Chi_Minh",
+                "currency": "VND",
+                "terminology": {
+                    "application": "Application",
+                    "candidate": "Candidate",
+                    "conversation": "Conversation",
+                    "job": "Job",
+                    "lead": "Lead",
+                    "organization": "Organization",
+                },
+            },
+            "pack_capabilities": {
+                "pack_key": "recruitment",
+                "capability_ids": [
+                    "conversation",
+                    "knowledge",
+                    "candidate_intake",
+                    "job_advisory",
+                    "channel.zalo",
+                ],
+            },
+            "workflow": {
+                "workflow_policy": {
+                    "workflow_id": "candidate_intake",
+                    "handoff_mode": "manual",
+                    "automation_enabled": False,
+                }
+            },
+            "knowledge_templates": {"template_version_refs": []},
+            "persona": {"persona_version_id": str(uuid.uuid4()), "checksum": "a" * 64},
+            "providers_integrations": {
+                "provider_policy": {
+                    "chat_integration_key": "openrouter",
+                    "chat_model": "model-1",
+                    "embedding_integration_key": "openrouter",
+                    "embedding_model": "embedding-1",
+                    "temperature": 0.2,
+                    "max_output_tokens": 1024,
+                },
+                "integration_requirements": [],
+                "authentication_policy": {"email_password_enabled": True},
+            },
+        }
+    )
+
+    InstallationSetupService(AsyncMock())._validate_authoring_choices(
+        payload, "DRAFT", require_complete=False
+    )
+    InstallationSetupService(AsyncMock())._validate_authoring_choices(
+        payload, "DRAFT", require_complete=True
+    )
+
+
 @pytest.mark.parametrize(
     "value",
     ["sk-live-credential", "github_pat_private", "-----BEGIN PRIVATE KEY-----"],

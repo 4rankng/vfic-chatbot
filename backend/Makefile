@@ -127,8 +127,8 @@ deploy:
 	@echo "==> Bringing up full stack..."
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web frontend worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
 	@echo "==> Verifying application containers..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for i in $$(seq 1 30); do docker compose exec -T web python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=3)' && exit 0; sleep 2; done; docker compose ps; exit 1"
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for service in web frontend worker-chatbot worker-persistence worker-ingest worker-followup scheduler; do container=$$(docker compose ps -q \"$$service\"); test -n \"$$container\" && test \"$$(docker inspect --format '{{.State.Status}}' \"$$container\")\" = running || exit 1; done"
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for i in $$(seq 1 30); do docker compose exec -T web python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=3)" && exit 0; sleep 2; done; docker compose ps; exit 1'
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for service in web frontend worker-chatbot worker-persistence worker-ingest worker-followup scheduler; do container=$$(docker compose ps -q "$$service"); test -n "$$container" && test "$$(docker inspect --format "{{.State.Status}}" "$$container")" = running || exit 1; done'
 	@echo "==============================================================="
 	@echo " Deploy done."
 	@echo "   health : https://$(PROD_SERVER)/health"

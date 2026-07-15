@@ -15,7 +15,6 @@ INTEGRATION_REFERENCE_ENABLE_KEYS = {
 
 CHAT_INTEGRATION_REFERENCES = frozenset({"minimax", "openrouter"})
 EMBEDDING_INTEGRATION_REFERENCES = frozenset({"openrouter"})
-CHANNEL_CAPABILITY_REQUIREMENTS = {"channel.zalo": "zalo"}
 HANDOFF_MODES = ("manual", "assisted", "automatic")
 AUTHENTICATION_METHODS = ("email_password",)
 

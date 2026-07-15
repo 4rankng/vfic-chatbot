@@ -135,7 +135,6 @@ export const RecruitingCommandCenter = ({
 
       <section className="recruiting-two-column">
         <AttentionPanel
-          title="Ứng viên cần xử lý ngay"
           eyebrow="Cần phản hồi"
           rows={immediateRows}
           state={{
@@ -148,7 +147,6 @@ export const RecruitingCommandCenter = ({
         />
 
         <AttentionPanel
-          title="Cần xử lý hôm nay"
           eyebrow="Theo dõi hôm nay"
           rows={todayRows}
           state={{
@@ -172,7 +170,6 @@ type PanelState = {
 };
 
 type AttentionPanelProps = {
-  title: string;
   eyebrow: string;
   rows: AttentionItem[];
   state: PanelState;
@@ -182,7 +179,6 @@ type AttentionPanelProps = {
 };
 
 const AttentionPanel = ({
-  title,
   eyebrow,
   rows,
   state,
@@ -195,7 +191,6 @@ const AttentionPanel = ({
       <div className="recruiting-panel-header">
         <div>
           <span className="recruiting-eyebrow">{eyebrow}</span>
-          <h2>{title}</h2>
         </div>
         <span
           className="dashboard-panel-count"

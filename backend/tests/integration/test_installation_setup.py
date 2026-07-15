@@ -57,7 +57,13 @@ def _payload(persona_version) -> InstallationSetupDraftPayload:
             },
             "pack_capabilities": {
                 "pack_key": "recruitment",
-                "capability_ids": ["conversation"],
+                "capability_ids": [
+                    "conversation",
+                    "knowledge",
+                    "candidate_intake",
+                    "job_advisory",
+                    "channel.zalo",
+                ],
             },
             "workflow": {
                 "workflow_policy": {

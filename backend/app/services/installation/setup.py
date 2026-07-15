@@ -31,7 +31,6 @@ from app.services.errors import InstallationError
 from app.services.audit_service import record_audit
 from app.services.installation.catalog import (
     AUTHENTICATION_METHODS,
-    CHANNEL_CAPABILITY_REQUIREMENTS,
     CHAT_INTEGRATION_REFERENCES,
     EMBEDDING_INTEGRATION_REFERENCES,
     HANDOFF_MODES,
@@ -362,23 +361,6 @@ class InstallationSetupService:
                         "INTEGRATION_REFERENCE_INVALID",
                         "providers_integrations.integration_requirements",
                         f"Unknown integration references: {sorted(unknown_refs)}",
-                    )
-                )
-
-        if pack is not None and providers is not None:
-            required_refs = {
-                reference
-                for capability, reference in CHANNEL_CAPABILITY_REQUIREMENTS.items()
-                if capability in payload.pack_capabilities.capability_ids
-            }
-            selected_refs = {item.key for item in providers.integration_requirements}
-            missing_refs = required_refs - selected_refs
-            if missing_refs:
-                issues.append(
-                    self._issue(
-                        "INTEGRATION_REQUIRED_BY_CAPABILITY",
-                        "providers_integrations.integration_requirements",
-                        f"Missing integration references: {sorted(missing_refs)}",
                     )
                 )
 
