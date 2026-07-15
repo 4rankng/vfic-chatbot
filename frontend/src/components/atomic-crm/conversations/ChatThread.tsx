@@ -20,10 +20,7 @@ import {
 } from "ra-core";
 import type { Conversation, Message } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
-import {
-  HumanReplyError,
-  retryHumanReply,
-} from "@/lib/vfic/humanReplyService";
+import { HumanReplyError, retryHumanReply } from "@/lib/vfic/humanReplyService";
 import { useConversationActions } from "./useConversationActions";
 import { useConversationRealtime } from "./useConversationRealtime";
 import { useConversationMessages, useConversationFlags } from "./messageStore";
@@ -45,6 +42,30 @@ const classify = (
   if (msg.type === "inbound") return "user";
   if (msg.data?.recruiter_id) return "agent";
   return "bot";
+};
+
+/**
+ * Phase-02 unseen-content contract. The strong "Tin nhắn mới" emphasis applies
+ * only to arrivals a reader can't anticipate: candidate inbound, bot replies,
+ * and replies from *other* recruiters. The current recruiter's own optimistic
+ * send (intent to go to latest), its server echo, system events, and history
+ * prepends never qualify. Author/type is the discriminator — not id change.
+ *
+ * Exported for focused unit testing of the contract.
+ */
+export const isUnseenWorthyArrival = (
+  msg: Message,
+  currentRecruiterId: string | number | null | undefined,
+): boolean => {
+  if (msg.id.startsWith("optimistic-")) return false;
+  if (msg.type === "system") return false;
+  if (msg.type === "inbound") return true;
+  // Outbound with a recruiter_id authored by someone else qualifies; authored
+  // by the current recruiter (server echo of their own send) does not.
+  const authorId = msg.data?.recruiter_id;
+  if (!authorId) return true; // bot reply
+  if (currentRecruiterId == null) return true;
+  return String(authorId) !== String(currentRecruiterId);
 };
 
 const formatTime = (iso?: string) => {
@@ -304,7 +325,9 @@ export const ChatThread = ({
   const translate = useTranslate();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(
+    null,
+  );
 
   // Keep scroll state in refs so scroll handlers stay synchronous and avoid
   // triggering re-renders.
@@ -312,6 +335,7 @@ export const ChatThread = ({
   const scrollerElRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerWrapRef = useRef<HTMLElement>(null);
+  const closedStatusRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const isPrependingRef = useRef(false);
   const isSendingRef = useRef(false);
@@ -321,7 +345,13 @@ export const ChatThread = ({
   const [composerReserve, setComposerReserve] = useState(
     DEFAULT_COMPOSER_RESERVE_PX,
   );
-  const [hasNewerMessages, setHasNewerMessages] = useState(false);
+  // Two independent booleans — see phase-02 §Architecture. The viewport
+  // position (`isAwayFromBottom`) drives whether the latest control is shown;
+  // the author/type-aware arrival flag (`hasUnseenLatest`) drives whether it is
+  // emphasized as "Tin nhắn mới". Only threshold crossings update React state;
+  // raw scroll distance stays in refs.
+  const [isAwayFromBottom, setIsAwayFromBottom] = useState(false);
+  const [hasUnseenLatest, setHasUnseenLatest] = useState(false);
 
   const {
     isBotMode: internalIsBotMode,
@@ -331,9 +361,11 @@ export const ChatThread = ({
   const isBotMode = isBotModeOverride ?? internalIsBotMode;
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
+  // Footer is always present for a selected conversation so the bottom row is a
+  // stable boundary in every mode. Content is derived from existing state only.
   const showTakeoverNotice = showComposerTakeoverNotice && isBotMode;
-  const showComposerForm = !isBotMode;
-  const showComposerFooter = showTakeoverNotice || showComposerForm;
+  const isClosedMode = !isBotMode && !canHumanReply;
+  const showComposerForm = canHumanReply;
 
   const scrollToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollerElRef.current;
@@ -355,7 +387,8 @@ export const ChatThread = ({
     isPrependingRef.current = false;
     newestMessageIdRef.current = null;
     lastLoadMoreAtRef.current = 0;
-    setHasNewerMessages(false);
+    setIsAwayFromBottom(false);
+    setHasUnseenLatest(false);
   }, [conversationId]);
 
   // Initial snap-to-bottom when messages first arrive for a conversation.
@@ -370,9 +403,14 @@ export const ChatThread = ({
   }, [messages, scrollToNewest]);
 
   // Auto-scroll to bottom on new message IF the user is already at the bottom.
-  // If they've scrolled up, show the "new messages" jump button instead.
+  // If they've scrolled up, reveal the latest control — emphasized only when
+  // the new arrival is "unseen" (author/type-aware, per the phase-02 contract).
+  // Own optimistic sends, their server echoes, system events, and history
+  // prepends never count as unseen.
   const newestMessageId =
     messages.length > 0 ? messages[messages.length - 1].id : null;
+  const newestMessage =
+    messages.length > 0 ? messages[messages.length - 1] : null;
   useEffect(() => {
     if (!newestMessageId || !initialJumpDoneRef.current) {
       newestMessageIdRef.current = newestMessageId;
@@ -381,19 +419,66 @@ export const ChatThread = ({
     const prev = newestMessageIdRef.current;
     newestMessageIdRef.current = newestMessageId;
     if (prev === null || prev === newestMessageId) return;
-    if (isAtBottomRef.current && !isPrependingRef.current) {
-      setHasNewerMessages(false);
-      scrollToNewest();
-    } else if (!isPrependingRef.current) {
-      setHasNewerMessages(true);
+    if (isPrependingRef.current) {
+      // History prepend: keep the anchor, do not flash a false new-message cue.
+      return;
     }
-  }, [newestMessageId, scrollToNewest]);
+    const qualifiesAsUnseen =
+      !!newestMessage && isUnseenWorthyArrival(newestMessage, identity?.id);
+    if (isAtBottomRef.current) {
+      setHasUnseenLatest(false);
+      scrollToNewest();
+    } else if (qualifiesAsUnseen) {
+      setHasUnseenLatest(true);
+    }
+    // If the reader is away but the arrival is not unseen-worthy (e.g. own
+    // optimistic send), the compact latest control still reflects position; we
+    // just don't escalate to "Tin nhắn mới".
+  }, [newestMessageId, newestMessage, identity?.id, scrollToNewest]);
+
+  // Prefer reduced motion: jump instantly; otherwise smooth-scroll to latest.
+  // Reacts to runtime OS setting changes via a matchMedia listener.
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = (e: MediaQueryListEvent) =>
+      setPrefersReducedMotion(e.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  // Move focus to a stable, mode-appropriate target BEFORE the latest button
+  // can unmount, so keyboard users never lose their place.
+  const focusStableTarget = useCallback(() => {
+    if (showComposerForm) {
+      textareaRef.current?.focus({ preventScroll: true });
+    } else if (showTakeoverNotice) {
+      const btn = composerWrapRef.current?.querySelector<HTMLButtonElement>(
+        ".inline-takeover-btn",
+      );
+      btn?.focus({ preventScroll: true });
+    } else if (closedStatusRef.current) {
+      closedStatusRef.current.focus({ preventScroll: true });
+    }
+  }, [showComposerForm, showTakeoverNotice]);
 
   const handleJumpToNewest = useCallback(() => {
-    setHasNewerMessages(false);
+    setHasUnseenLatest(false);
     isAtBottomRef.current = true;
-    scrollToNewest("smooth");
-  }, [scrollToNewest]);
+    setIsAwayFromBottom(false);
+    scrollToNewest(prefersReducedMotion ? "auto" : "smooth");
+    focusStableTarget();
+  }, [scrollToNewest, prefersReducedMotion, focusStableTarget]);
 
   // --- Composer auto-grow + reserve ---
   const syncComposerTextarea = useCallback(() => {
@@ -414,24 +499,40 @@ export const ChatThread = ({
   }, [reply, canHumanReply, isBotMode, syncComposerTextarea]);
 
   useLayoutEffect(() => {
-    if (!showComposerFooter) {
-      setComposerReserve(0);
+    // Footer is always rendered for a selected conversation. Recompute its
+    // reserve (a virtua hint) on every mode/content swap and observe growth.
+    const footer = composerWrapRef.current;
+    if (!footer) {
+      setComposerReserve(DEFAULT_COMPOSER_RESERVE_PX);
       return;
     }
-    const footer = composerWrapRef.current;
-    if (!footer) return;
     const update = () => {
       const next = Math.ceil(
         footer.getBoundingClientRect().height + COMPOSER_RESERVE_GAP_PX,
       );
       setComposerReserve((cur) => (cur === next ? cur : next));
+      // A footer swap/growth shifts the scroller's clientHeight, which can move
+      // the at-bottom threshold. Recompute the viewport-position state so the
+      // latest control reflects reality without a manual scroll. Only a true
+      // crossing to at-bottom clears the flags; an away reader stays away.
+      const el = scrollerElRef.current;
+      if (el) {
+        const distanceFromBottom =
+          el.scrollHeight - el.scrollTop - el.clientHeight;
+        const atBottom = distanceFromBottom < CHAT_AT_BOTTOM_THRESHOLD_PX;
+        isAtBottomRef.current = atBottom;
+        if (atBottom) {
+          setIsAwayFromBottom(false);
+          setHasUnseenLatest(false);
+        }
+      }
     };
     update();
     if (typeof ResizeObserver === "undefined") return;
     const obs = new ResizeObserver(update);
     obs.observe(footer);
     return () => obs.disconnect();
-  }, [showComposerFooter, showTakeoverNotice]);
+  }, [showComposerForm, showTakeoverNotice, isClosedMode]);
 
   // Re-snap to bottom on non-message size changes (composer grow, image load)
   // only when the user is already at the bottom.
@@ -476,8 +577,12 @@ export const ChatThread = ({
         el.scrollHeight - el.scrollTop - el.clientHeight;
       const wasAtBottom = isAtBottomRef.current;
       isAtBottomRef.current = distanceFromBottom < CHAT_AT_BOTTOM_THRESHOLD_PX;
+      // Only threshold crossings update React state (rerender churn guard).
       if (isAtBottomRef.current && !wasAtBottom) {
-        setHasNewerMessages(false);
+        setIsAwayFromBottom(false);
+        setHasUnseenLatest(false);
+      } else if (!isAtBottomRef.current && wasAtBottom) {
+        setIsAwayFromBottom(true);
       }
       // Top load-more: virtua fires onScroll with offset; near 0 = near top.
       if (
@@ -501,6 +606,10 @@ export const ChatThread = ({
     const sentText = trimmed;
     setReply("");
     setIsSending(true);
+    // A local send signals intent to return to latest; never label it unseen.
+    setHasUnseenLatest(false);
+    isAtBottomRef.current = true;
+    setIsAwayFromBottom(false);
     try {
       await dataProvider.sendHumanReply(conversationId, sentText);
     } catch (err: unknown) {
@@ -630,71 +739,87 @@ export const ChatThread = ({
             </Fragment>
           ))}
         </VList>
-        {hasNewerMessages ? (
+        {/* Latest control: compact down arrow whenever the reader is away from
+            the bottom; escalates to the stronger "Tin nhắn mới" label only when
+            an author/type-aware unseen arrival occurred while away. */}
+        {isAwayFromBottom ? (
           <button
             type="button"
-            className="new-message-jump"
-            aria-label="Cuộn đến tin nhắn mới nhất"
+            className={`new-message-jump${hasUnseenLatest ? " has-unseen" : ""}`}
+            aria-label={
+              hasUnseenLatest
+                ? "Cuộn đến tin nhắn mới"
+                : "Cuộn đến tin nhắn mới nhất"
+            }
             onClick={handleJumpToNewest}
           >
-            <span>Tin nhắn mới</span>
-            <svg className="icon new-message-jump-icon">
+            {hasUnseenLatest ? <span>Tin nhắn mới</span> : null}
+            <svg className="icon new-message-jump-icon" aria-hidden="true">
               <use href="#i-chevron" />
             </svg>
           </button>
         ) : null}
       </div>
 
-      {showComposerFooter && (
-        <footer ref={composerWrapRef} className="composer-wrap">
-          {showTakeoverNotice && (
-            <div className="handoff-note">
-              <Bot className="icon" />
-              <span>Đang dùng ChatBot cho cuộc trò chuyện này.</span>
-              <button
-                type="button"
-                className="inline-takeover-btn"
-                onClick={handleTakeover}
-              >
-                Tiếp quản
-              </button>
-            </div>
-          )}
-          {showComposerForm && (
-            <form
-              className={`composer ${!canHumanReply ? "disabled" : ""}`}
-              onSubmit={handleSend}
+      {/* The bottom row is always rendered for a selected conversation so it is
+          a stable boundary in every mode. No position:fixed/overlay. */}
+      <footer ref={composerWrapRef} className="composer-wrap">
+        {showTakeoverNotice && (
+          <div className="handoff-note">
+            <Bot className="icon" />
+            <span>Đang dùng ChatBot cho cuộc trò chuyện này.</span>
+            <button
+              type="button"
+              className="inline-takeover-btn"
+              onClick={handleTakeover}
             >
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                placeholder={
-                  canHumanReply ? "Nhập tin nhắn..." : "Chưa sẵn sàng"
+              Tiếp quản
+            </button>
+          </div>
+        )}
+        {showComposerForm && (
+          <form
+            className={`composer ${!canHumanReply ? "disabled" : ""}`}
+            onSubmit={handleSend}
+          >
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              placeholder={canHumanReply ? "Nhập tin nhắn..." : "Chưa sẵn sàng"}
+              disabled={!canHumanReply || isSending}
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend(e);
                 }
-                disabled={!canHumanReply || isSending}
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend(e);
-                  }
-                }}
-              />
-              <button
-                type="submit"
-                className="composer-action send"
-                aria-label="Gửi tin nhắn"
-                disabled={!canHumanReply || isSending || !reply.trim()}
-              >
-                <svg className="icon">
-                  <use href="#i-send" />
-                </svg>
-              </button>
-            </form>
-          )}
-        </footer>
-      )}
+              }}
+            />
+            <button
+              type="submit"
+              className="composer-action send"
+              aria-label="Gửi tin nhắn"
+              disabled={!canHumanReply || isSending || !reply.trim()}
+            >
+              <svg className="icon" aria-hidden="true">
+                <use href="#i-send" />
+              </svg>
+            </button>
+          </form>
+        )}
+        {isClosedMode && (
+          <div
+            ref={closedStatusRef}
+            className="closed-note"
+            role="status"
+            tabIndex={-1}
+          >
+            <Bot className="icon" aria-hidden="true" />
+            <span>Hội thoại đã đóng. Không thể gửi tin nhắn cho ứng viên.</span>
+          </div>
+        )}
+      </footer>
     </>
   );
 };

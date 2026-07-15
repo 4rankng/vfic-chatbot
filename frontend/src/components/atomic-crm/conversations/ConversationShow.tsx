@@ -350,7 +350,6 @@ export const ConversationShowContent = ({
           isBotModeOverride={isBotMode}
           canHumanReplyOverride={canHumanReply}
           onTakeoverOverride={handleTakeover}
-          showComposerTakeoverNotice={false}
         />
 
         {showWorkspacePanel && isContextOpen && !isMobile && !isWideDesktop && (

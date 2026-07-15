@@ -553,10 +553,17 @@
     touch-action: pan-y;
   }
   .inbox-bg-container .new-message-jump {
-    bottom: 10px;
-    min-height: 34px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    /* Both the compact down control and the unseen pill meet the 44px touch
+       target. Width grows automatically for the labelled .has-unseen variant. */
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .inbox-bg-container .new-message-jump.has-unseen {
+    width: auto;
     max-width: calc(100% - 24px);
-    padding: 0 10px 0 12px;
+    padding: 0 14px 0 16px;
   }
   .inbox-bg-container .chat-scroller .chat-item-list {
     padding: 0 !important;
@@ -595,7 +602,7 @@
     line-height: var(--chat-lh-message);
   }
   .inbox-bg-container .composer-wrap {
-    padding: 10px 12px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   }
   .inbox-bg-container .composer {
     gap: 6px;
