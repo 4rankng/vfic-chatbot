@@ -17,7 +17,13 @@ from app.models.knowledge import (
 from app.models.lead import FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage, FollowUpTask
 from app.models.job import Job, JobStatus
 from app.models.integration import IntegrationSetting
-from app.models.persona import Persona
+from app.models.persona import Persona, PersonaVersion
+from app.models.installation import (
+    InstallationLifecycle,
+    InstallationManifestRevision,
+    InstallationManifestValidation,
+    InstallationState,
+)
 from app.models.password_reset import PasswordResetOtp
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.models.conversation import (
@@ -84,6 +90,11 @@ __all__ = [
     "JobStatus",
     "IntegrationSetting",
     "Persona",
+    "PersonaVersion",
+    "InstallationLifecycle",
+    "InstallationManifestRevision",
+    "InstallationManifestValidation",
+    "InstallationState",
     "PasswordResetOtp",
     "WorkerFeatureCatalog",
     "JobFeatureValue",

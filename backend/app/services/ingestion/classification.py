@@ -39,13 +39,65 @@ class Classification:
 # Vietnamese keyword/regex rules per section_type. Includes diacritic + accent-
 # stripped variants so "xe dua rước" matches "xe đưa rước".
 _RULES: dict[SectionType, list[str]] = {
-    "bus_timetable": ["xe đưa rước", "xe dua ruoc", "tuyến bus", "tuyen bus", "đón", "don", "b03", "b07"],
-    "benefit": ["phúc lợi", "phuc lo", "phụ cấp", "phu cap", "trợ cấp", "tro cap", "bảo hiểm", "bao hiem"],
-    "working_hours": ["giờ làm", "gio lam", "ca làm", "ca lam", "ca sáng", "ca sang", "ca chiều", "ca chieu"],
-    "job_requirements": ["yêu cầu", "yeu cau", "tiêu chuẩn", "tieu chuan", "CCCD", "cmnd", "tuổi", "tuoi"],
+    "bus_timetable": [
+        "xe đưa rước",
+        "xe dua ruoc",
+        "tuyến bus",
+        "tuyen bus",
+        "đón",
+        "don",
+        "b03",
+        "b07",
+    ],
+    "benefit": [
+        "phúc lợi",
+        "phuc lo",
+        "phụ cấp",
+        "phu cap",
+        "trợ cấp",
+        "tro cap",
+        "bảo hiểm",
+        "bao hiem",
+    ],
+    "working_hours": [
+        "giờ làm",
+        "gio lam",
+        "ca làm",
+        "ca lam",
+        "ca sáng",
+        "ca sang",
+        "ca chiều",
+        "ca chieu",
+    ],
+    "job_requirements": [
+        "yêu cầu",
+        "yeu cau",
+        "tiêu chuẩn",
+        "tieu chuan",
+        "CCCD",
+        "cmnd",
+        "tuổi",
+        "tuoi",
+    ],
     "salary": ["lương", "luong", "mức lương", "muc luong", "thu nhập", "thu nhap"],
-    "location": ["địa chỉ", "dia chi", "khu công nghiệp", "khu cong nghiep", "kcn", "nhà máy", "nha may"],
-    "application_process": ["hồ sơ", "ho so", "ứng tuyển", "ung tuyen", "đăng ký", "dang ky", "cách ứng tuyển"],
+    "location": [
+        "địa chỉ",
+        "dia chi",
+        "khu công nghiệp",
+        "khu cong nghiep",
+        "kcn",
+        "nhà máy",
+        "nha may",
+    ],
+    "application_process": [
+        "hồ sơ",
+        "ho so",
+        "ứng tuyển",
+        "ung tuyen",
+        "đăng ký",
+        "dang ky",
+        "cách ứng tuyển",
+    ],
     "faq": ["câu hỏi", "cau hoi", "q&a", "faq", "thường gặp", "thuong gap"],
     "general_policy": ["chính sách", "chinh sach", "nội quy", "noi quy", "quy định", "quy dinh"],
 }
@@ -57,9 +109,7 @@ _COMPILED: dict[SectionType, re.Pattern] = {
 }
 
 
-def classify_fragment(
-    text: str, *, heading_context: SectionType | None = None
-) -> Classification:
+def classify_fragment(text: str, *, heading_context: SectionType | None = None) -> Classification:
     """Classify one fragment by keyword rules.
 
     ``heading_context`` lets a fragment inherit its section's type when no rule

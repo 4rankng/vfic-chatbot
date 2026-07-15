@@ -76,7 +76,9 @@ def vacancy_query_terms(query: str) -> tuple[str, ...]:
     seen: set[str] = set()
     terms: list[str] = []
     for token in tokens:
-        if token in _QUERY_STOPWORDS or (len(token) < 3 and not any(char.isdigit() for char in token)):
+        if token in _QUERY_STOPWORDS or (
+            len(token) < 3 and not any(char.isdigit() for char in token)
+        ):
             continue
         if token not in seen:
             seen.add(token)
@@ -95,7 +97,9 @@ def select_matching_active_jobs(
     """
     terms = vacancy_query_terms(query)
     if not terms:
-        return ActiveJobLookup("matched", tuple(jobs[:top_k])) if jobs else ActiveJobLookup("no_match")
+        return (
+            ActiveJobLookup("matched", tuple(jobs[:top_k])) if jobs else ActiveJobLookup("no_match")
+        )
 
     matches: list[ActiveJob] = []
     required = set(terms)
@@ -114,4 +118,8 @@ def select_matching_active_jobs(
         job_tokens = set(re.findall(r"[a-z0-9]+", normalize_vietnamese_text(haystack)))
         if required <= job_tokens:
             matches.append(job)
-    return ActiveJobLookup("matched", tuple(matches[:top_k])) if matches else ActiveJobLookup("no_match")
+    return (
+        ActiveJobLookup("matched", tuple(matches[:top_k]))
+        if matches
+        else ActiveJobLookup("no_match")
+    )

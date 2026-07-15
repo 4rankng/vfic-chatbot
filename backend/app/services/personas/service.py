@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import NS_PREAMBLE
-from app.models.persona import Persona
+from app.models.persona import Persona, PersonaVersion
 from app.models.user import User
 from app.schemas.personas import PersonaCreate, PersonaUpdate, _slugify
 from app.services.audit_service import record_audit
@@ -109,17 +109,18 @@ class PersonaService:
         )
         self.db.add(persona)
         try:
-            await self.db.commit()
+            await self.db.flush()
         except Exception:  # noqa: BLE001 — unique slug collision
             await self.db.rollback()
             # retry with a uniquified slug
             persona.slug = f"{slug}-{uuid.uuid4().hex[:6]}"
             self.db.add(persona)
             try:
-                await self.db.commit()
+                await self.db.flush()
             except Exception as exc2:  # noqa: BLE001
                 await self.db.rollback()
                 raise ConflictError(f"Agent create failed: {exc2}") from exc2
+        await self._append_version(persona, admin.id)
         await record_audit(
             self.db,
             action="create_persona",
@@ -144,6 +145,8 @@ class PersonaService:
             persona.notes = body.notes
         if body.followup_rules is not None:
             persona.followup_rules = body.followup_rules.model_dump(mode="json")
+        if body.body_md is not None or body.followup_rules is not None:
+            await self._append_version(persona, admin.id)
         await record_audit(
             self.db,
             action="update_persona",
@@ -159,8 +162,8 @@ class PersonaService:
 
     async def delete(self, persona_id: uuid.UUID) -> None:
         persona = await self.repo.get_by_id(persona_id)
-        # If this was the active global persona, none remains active afterwards and
-        # resolve_persona falls back to persona.md until a new one is activated.
+        if await self.repo.has_versions(persona_id):
+            raise ConflictError("Agent has immutable versions and cannot be deleted")
         await self.db.delete(persona)
         await self.db.commit()
         await bump_cache_version(NS_PREAMBLE)
@@ -227,6 +230,7 @@ class PersonaService:
             existing.body_md = body_md
             if notes is not None:
                 existing.notes = notes
+            await self._append_version(existing, admin.id)
             await record_audit(
                 self.db,
                 action="import_persona",
@@ -242,3 +246,24 @@ class PersonaService:
         # New persona
         body = PersonaCreate(name=name, body_md=body_md, slug=slug, notes=notes)
         return await self.create(body, admin)
+
+    async def _append_version(
+        self, persona: Persona, created_by: uuid.UUID | None
+    ) -> PersonaVersion:
+        """Append immutable content while keeping the legacy persona projection current."""
+        from app.services.installation.hashing import sha256_json
+
+        await self.repo.lock_for_version_append(persona.id)
+        version = PersonaVersion(
+            persona_id=persona.id,
+            version_no=await self.repo.next_version_no(persona.id),
+            body_md=persona.body_md,
+            followup_rules=persona.followup_rules,
+            checksum=sha256_json(
+                {"body_md": persona.body_md, "followup_rules": persona.followup_rules}
+            ),
+            created_by=created_by,
+        )
+        self.db.add(version)
+        await self.db.flush()
+        return version

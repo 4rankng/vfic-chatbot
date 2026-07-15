@@ -48,9 +48,7 @@ class TurnBudget:
         cap = self.caps.get(kind, 1)
         used = self.used.get(kind, 0)
         if used >= cap:
-            raise BudgetExhausted(
-                f"turn budget exhausted for {kind.value}: {used}/{cap}"
-            )
+            raise BudgetExhausted(f"turn budget exhausted for {kind.value}: {used}/{cap}")
 
     def record_call(self, kind: CallKind) -> None:
         """Increment the counter for ``kind``. Asserts the cap first."""

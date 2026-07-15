@@ -585,7 +585,9 @@ async def recommend_jobs(
     # is a safety net; the version key keeps recommendations fresh after updates.
     memory_version = await cache_version(f"memory:{chat_id}") if s.rag_cache_enabled else "0"
     jobs_version = await cache_version("jobs") if s.rag_cache_enabled else "0"
-    cache_key = f"rag:recommend_jobs:v3:{_cache_digest(chat_id, k, province, memory_version, jobs_version)}"
+    cache_key = (
+        f"rag:recommend_jobs:v3:{_cache_digest(chat_id, k, province, memory_version, jobs_version)}"
+    )
     if s.rag_cache_enabled:
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):

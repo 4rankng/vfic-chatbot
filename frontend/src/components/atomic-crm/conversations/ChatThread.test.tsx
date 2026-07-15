@@ -84,6 +84,7 @@ vi.mock("./useConversationActions", () => ({
   useConversationActions: (_record?: Conversation) => ({
     effectiveMode: "human",
     isBotMode: false,
+    needsClaim: false,
     canHumanReply: true,
     setConversationMode: vi.fn(),
     handleTakeover: vi.fn(),
@@ -165,6 +166,7 @@ const Shell = ({ children }: { children: ReactNode }) => (
 const mountThread = async (overrides?: {
   conversation?: Conversation;
   isBotModeOverride?: boolean;
+  needsClaimOverride?: boolean;
   canHumanReplyOverride?: boolean;
 }) =>
   render(
@@ -173,6 +175,7 @@ const mountThread = async (overrides?: {
         conversationId="conv-1"
         conversation={overrides?.conversation ?? baseConversation()}
         isBotModeOverride={overrides?.isBotModeOverride}
+        needsClaimOverride={overrides?.needsClaimOverride}
         canHumanReplyOverride={overrides?.canHumanReplyOverride}
         onTakeoverOverride={vi.fn()}
       />
@@ -222,6 +225,23 @@ describe("ChatThread — mode-gated footer", () => {
     });
     await expect
       .element(screen.getByText("Đang dùng ChatBot cho cuộc trò chuyện này."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Tiếp quản" }))
+      .toBeVisible();
+    expect(screen.container.querySelector("textarea")).toBeNull();
+  });
+
+  it("requires an operator claim for an unassigned human-review conversation", async () => {
+    const screen = await mountThread({
+      isBotModeOverride: false,
+      needsClaimOverride: true,
+      canHumanReplyOverride: false,
+    });
+    await expect
+      .element(
+        screen.getByText("Hội thoại cần nhân viên xác minh trước khi trả lời."),
+      )
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Tiếp quản" }))

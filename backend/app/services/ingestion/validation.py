@@ -56,13 +56,34 @@ def _validate_benefit(data: BenefitEnvelopeData) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     # Directive §9 benefits rules: amount + currency separate, cadence explicit.
     if data.value is not None and data.currency is None:
-        issues.append(ValidationIssue("error", "missing_currency", "value set but currency missing", "data.currency"))
+        issues.append(
+            ValidationIssue(
+                "error", "missing_currency", "value set but currency missing", "data.currency"
+            )
+        )
     if data.value is not None and data.cadence is None:
-        issues.append(ValidationIssue("error", "missing_cadence", "value set but cadence missing", "data.cadence"))
+        issues.append(
+            ValidationIssue(
+                "error", "missing_cadence", "value set but cadence missing", "data.cadence"
+            )
+        )
     if data.value is not None and data.value < 0:
-        issues.append(ValidationIssue("error", "negative_value", "benefit value negative", "data.value"))
-    if data.eligibility and any(c.isdigit() for c in data.eligibility) and "VND" in data.eligibility:
-        issues.append(ValidationIssue("warning", "money_in_eligibility", "eligibility field may contain an amount", "data.eligibility"))
+        issues.append(
+            ValidationIssue("error", "negative_value", "benefit value negative", "data.value")
+        )
+    if (
+        data.eligibility
+        and any(c.isdigit() for c in data.eligibility)
+        and "VND" in data.eligibility
+    ):
+        issues.append(
+            ValidationIssue(
+                "warning",
+                "money_in_eligibility",
+                "eligibility field may contain an amount",
+                "data.eligibility",
+            )
+        )
     return issues
 
 
@@ -71,7 +92,14 @@ def _validate_working_hours(data: WorkingHoursData) -> list[ValidationIssue]:
     # Directive §9: cross-midnight must be explicit.
     if data.start_time and data.end_time:
         if data.end_time <= data.start_time and not data.crosses_midnight:
-            issues.append(ValidationIssue("error", "crosses_midnight_required", "end ≤ start requires crosses_midnight=True", "data.crosses_midnight"))
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "crosses_midnight_required",
+                    "end ≤ start requires crosses_midnight=True",
+                    "data.crosses_midnight",
+                )
+            )
     # Directive §9: days of week valid (Pydantic enforces the Literal; just check non-empty).
     if not data.days:
         issues.append(ValidationIssue("error", "empty_days", "days list empty", "data.days"))
@@ -87,7 +115,14 @@ def _validate_bus_timetable(data: BusTimetableData) -> list[ValidationIssue]:
             t = stop.departure_time or stop.arrival_time
             if t and prev_time and t < prev_time:
                 # Could be a midnight crossing; flag as warning for review.
-                issues.append(ValidationIssue("warning", "time_decrease", f"trip[{i}] time decreased {prev_time} → {t}", f"data.trips[{i}]"))
+                issues.append(
+                    ValidationIssue(
+                        "warning",
+                        "time_decrease",
+                        f"trip[{i}] time decreased {prev_time} → {t}",
+                        f"data.trips[{i}]",
+                    )
+                )
             if t:
                 prev_time = t
     return issues
@@ -97,7 +132,11 @@ def _validate_faq(data: FaqEnvelopeData) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     # Directive §9: dynamic questions reference a tool, not duplicate facts.
     if data.resolution_type == "static_answer" and not data.answer:
-        issues.append(ValidationIssue("error", "empty_answer", "static_answer requires non-empty answer", "data.answer"))
+        issues.append(
+            ValidationIssue(
+                "error", "empty_answer", "static_answer requires non-empty answer", "data.answer"
+            )
+        )
     return issues
 
 
@@ -121,7 +160,13 @@ def natural_key_for(envelope: ExtractionEnvelope) -> tuple:
     if et == "job_requirement":
         return ("job_requirement", _norm(data.text))
     if et == "working_hours":
-        return ("working_hours", scope.type, tuple(sorted(data.days)), data.start_time, data.end_time)
+        return (
+            "working_hours",
+            scope.type,
+            tuple(sorted(data.days)),
+            data.start_time,
+            data.end_time,
+        )
     return (et,)
 
 

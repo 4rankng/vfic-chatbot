@@ -43,3 +43,23 @@ class DeliveryEligibilityError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(message)
+
+
+class InstallationError(Exception):
+    """Installation lifecycle/readiness failure with a stable machine code."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        lifecycle: str,
+        status_code: int = 409,
+        issues: list[dict[str, str | None]] | None = None,
+    ) -> None:
+        self.message = message
+        self.code = code
+        self.lifecycle = lifecycle
+        self.status_code = status_code
+        self.issues = issues or []
+        super().__init__(message)

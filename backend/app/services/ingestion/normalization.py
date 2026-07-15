@@ -34,6 +34,7 @@ def normalize_times(text: str) -> str:
     """
     # "6 giờ" / "6h" → "6:00"
     text = re.sub(r"\b(\d{1,2})\s*(?:giờ|h)\b", r"\1:00", text, flags=re.IGNORECASE)
+
     # "6 giờ sáng" → morning (no change to the 6:00 we just produced)
     # "6 giờ chiều" / "6 giờ tối" → +12 (PM)
     def _pm(m: re.Match) -> str:
@@ -56,7 +57,12 @@ def normalize_money(text: str) -> str:
 
     "500k" → "500000", "1.5tr" / "1.5 triệu" → "1500000", "5 triệu" → "5000000".
     """
-    text = re.sub(r"\b(\d+(?:\.\d+)?)k\b", lambda m: str(int(float(m.group(1)) * 1000)), text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\b(\d+(?:\.\d+)?)k\b",
+        lambda m: str(int(float(m.group(1)) * 1000)),
+        text,
+        flags=re.IGNORECASE,
+    )
     text = re.sub(
         r"\b(\d+(?:[.,]\d+)?)\s*(?:tr|triệu)\b",
         lambda m: str(int(float(m.group(1).replace(",", ".")) * 1_000_000)),

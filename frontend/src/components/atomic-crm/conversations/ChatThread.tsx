@@ -293,6 +293,7 @@ export interface ChatThreadProps {
    * the parent surface so the thread never issues its own lead fetch. */
   candidateAvatarUrl?: string | null;
   isBotModeOverride?: boolean;
+  needsClaimOverride?: boolean;
   canHumanReplyOverride?: boolean;
   onTakeoverOverride?: () => void;
   showComposerTakeoverNotice?: boolean;
@@ -303,6 +304,7 @@ export const ChatThread = ({
   conversation,
   candidateAvatarUrl,
   isBotModeOverride,
+  needsClaimOverride,
   canHumanReplyOverride,
   onTakeoverOverride,
   showComposerTakeoverNotice = true,
@@ -355,16 +357,19 @@ export const ChatThread = ({
 
   const {
     isBotMode: internalIsBotMode,
+    needsClaim: internalNeedsClaim,
     canHumanReply: internalCanHumanReply,
     handleTakeover: internalHandleTakeover,
   } = useConversationActions(conversation);
   const isBotMode = isBotModeOverride ?? internalIsBotMode;
+  const needsClaim = needsClaimOverride ?? internalNeedsClaim;
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
   // Footer is always present for a selected conversation so the bottom row is a
   // stable boundary in every mode. Content is derived from existing state only.
-  const showTakeoverNotice = showComposerTakeoverNotice && isBotMode;
-  const isClosedMode = !isBotMode && !canHumanReply;
+  const showTakeoverNotice =
+    showComposerTakeoverNotice && (isBotMode || needsClaim);
+  const isClosedMode = !isBotMode && !needsClaim && !canHumanReply;
   const showComposerForm = canHumanReply;
 
   const scrollToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
@@ -767,7 +772,11 @@ export const ChatThread = ({
         {showTakeoverNotice && (
           <div className="handoff-note">
             <Bot className="icon" />
-            <span>Đang dùng ChatBot cho cuộc trò chuyện này.</span>
+            <span>
+              {needsClaim
+                ? "Hội thoại cần nhân viên xác minh trước khi trả lời."
+                : "Đang dùng ChatBot cho cuộc trò chuyện này."}
+            </span>
             <button
               type="button"
               className="inline-takeover-btn"

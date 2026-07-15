@@ -28,6 +28,7 @@ ROUTE_MODULE_CLASSIFICATION = {
     "dashboard": "capability.recruitment",
     "performance": "active_kernel",
     "integrations": "auth_setup",
+    "installation": "auth_setup",
     "webhooks": "capability.channel.zalo",
 }
 DIRECT_ROUTE_CLASSIFICATION = {
@@ -43,6 +44,7 @@ EXPECTED_ROUTE_COUNTS = {
     "conversations": 17,
     "dashboard": 2,
     "integrations": 11,
+    "installation": 8,
     "jobs": 7,
     "knowledge": 37,
     "leads": 15,
@@ -53,13 +55,13 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 2,
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "55fcd3d2b9a4437e70b065b2000961e56a4ccc74402879dc41ea1d7b2f6da543"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "5ade00ee8f3f8f5fb2b155293066689d1936b4783ede2d937c822823776adb0b"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 56,
     "queue_producer": 20,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "2562e8d35232876ef6d6ae986e1210ee038948a399990c8763b82d13123c3bd1"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "920df55e486c5347db51b631af0b5a1ffcd5063a3e91fada465d21677511128f"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
@@ -164,9 +166,7 @@ def _decorated_routes(tree: ast.AST) -> list[tuple[str, str, str]]:
                 continue
             if not decorator.args or not isinstance(decorator.args[0], ast.Constant):
                 continue
-            routes.append(
-                (decorator.func.attr.upper(), str(decorator.args[0].value), node.name)
-            )
+            routes.append((decorator.func.attr.upper(), str(decorator.args[0].value), node.name))
     return routes
 
 
@@ -256,17 +256,14 @@ def test_every_http_endpoint_matches_the_reviewed_authority_snapshot():
     assert dict(sorted(counts.items())) == EXPECTED_ROUTE_COUNTS
     assert digest == EXPECTED_ROUTE_INVENTORY_SHA256
     assert all(
-        record["classification"]
-        in {"public_ops", "auth_setup", "active_kernel"}
+        record["classification"] in {"public_ops", "auth_setup", "active_kernel"}
         or record["classification"].startswith("capability.")
         for record in records
     )
 
 
 def test_queue_outbox_and_provider_boundaries_match_the_explicit_inventory():
-    expected = json.loads(
-        (FIXTURE / "runtime_surface_inventory.json").read_text(encoding="utf-8")
-    )
+    expected = json.loads((FIXTURE / "runtime_surface_inventory.json").read_text(encoding="utf-8"))
     actual = _runtime_calls()
 
     assert actual == expected

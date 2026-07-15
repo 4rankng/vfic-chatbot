@@ -13,7 +13,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -67,5 +77,37 @@ class Persona(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PersonaVersion(Base):
+    """Immutable persona content pinned by installation revisions."""
+
+    __tablename__ = "persona_versions"
+    __table_args__ = (
+        CheckConstraint("version_no > 0", name="persona_versions_positive_version"),
+        CheckConstraint(
+            "jsonb_typeof(followup_rules) = 'object'",
+            name="persona_versions_followup_rules_object",
+        ),
+        CheckConstraint("checksum ~ '^[0-9a-f]{64}$'", name="persona_versions_checksum_sha256"),
+        UniqueConstraint("persona_id", "version_no", name="persona_versions_identity_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    persona_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("personas.id", ondelete="RESTRICT"), nullable=False
+    )
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    body_md: Mapped[str] = mapped_column(Text, nullable=False)
+    followup_rules: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

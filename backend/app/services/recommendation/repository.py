@@ -21,7 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.company import Company
 from app.models.job import Job
 from app.models.job import JobStatus
-from app.services.recommendation.availability import ActiveJob, ActiveJobLookup, select_matching_active_jobs
+from app.services.recommendation.availability import (
+    ActiveJob,
+    ActiveJobLookup,
+    select_matching_active_jobs,
+)
 from app.services.recommendation.scoring import JobCandidate, LeadProfile, ScoredJob, score_job
 
 logger = logging.getLogger(__name__)

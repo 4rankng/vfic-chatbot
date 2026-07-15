@@ -213,8 +213,6 @@ async def path_d_clarify(
         "job_lookup": "thông tin việc làm",
         "faq_lookup": "câu hỏi thường gặp",
     }
-    options = " hay ".join(
-        intent_labels.get(i, i) for i in top_intents[:2]
-    )
+    options = " hay ".join(intent_labels.get(i, i) for i in top_intents[:2])
     reply = f"Bạn đang muốn hỏi về {options} ạ? Bạn cho tôi biết chi tiết hơn để tôi hỗ trợ nhé."
     return PathOutcome(reply=reply, outcome_label="clarify")

@@ -83,7 +83,9 @@ async def list_ingestion_template_starter_packs(
     return STARTER_PACKS
 
 
-@router.post("/ingestion-templates", response_model=TemplateVersionOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/ingestion-templates", response_model=TemplateVersionOut, status_code=status.HTTP_201_CREATED
+)
 async def create_ingestion_template(
     body: TemplateCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> TemplateVersionOut:
@@ -119,7 +121,9 @@ async def preview_new_ingestion_template(
 
 @router.get("/ingestion-templates/{template_id}/versions", response_model=list[TemplateVersionOut])
 async def list_ingestion_template_versions(
-    template_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    template_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
 ) -> list[TemplateVersionOut]:
     try:
         versions = await TemplateService(db).list_versions(template_id)
@@ -128,7 +132,11 @@ async def list_ingestion_template_versions(
     return [TemplateVersionOut.model_validate(item) for item in versions]
 
 
-@router.post("/ingestion-templates/{template_id}/drafts", response_model=TemplateVersionOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/ingestion-templates/{template_id}/drafts",
+    response_model=TemplateVersionOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def clone_ingestion_template_draft(
     template_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> TemplateVersionOut:
@@ -141,10 +149,15 @@ async def clone_ingestion_template_draft(
 
 @router.patch("/ingestion-template-versions/{version_id}", response_model=TemplateVersionOut)
 async def update_ingestion_template_draft(
-    version_id: uuid.UUID, body: TemplateVersionUpdate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    version_id: uuid.UUID,
+    body: TemplateVersionUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
 ) -> TemplateVersionOut:
     try:
-        version = await TemplateService(db).update_draft(version_id, definition=body.definition, revision=body.revision, actor=admin)
+        version = await TemplateService(db).update_draft(
+            version_id, definition=body.definition, revision=body.revision, actor=admin
+        )
     except TemplateCompileError as exc:
         raise HTTPException(422, detail={"issues": exc.issues}) from exc
     except TemplateConflictError as exc:
@@ -154,7 +167,10 @@ async def update_ingestion_template_draft(
 
 @router.post("/ingestion-template-versions/{version_id}/preview", response_model=PreviewOut)
 async def preview_ingestion_template(
-    version_id: uuid.UUID, body: PreviewRequest, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    version_id: uuid.UUID,
+    body: PreviewRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
 ) -> PreviewOut:
     try:
         checksum, records, issues = await TemplateService(db).record_preview(
@@ -178,7 +194,9 @@ async def publish_ingestion_template(
     return TemplateVersionOut.model_validate(version)
 
 
-@router.post("/ingestion-template-versions/{version_id}/deprecate", response_model=TemplateVersionOut)
+@router.post(
+    "/ingestion-template-versions/{version_id}/deprecate", response_model=TemplateVersionOut
+)
 async def deprecate_ingestion_template(
     version_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> TemplateVersionOut:
@@ -189,7 +207,9 @@ async def deprecate_ingestion_template(
     return TemplateVersionOut.model_validate(version)
 
 
-@router.get("/projects/{project_id}/ingestion-template-assignment", response_model=AssignmentOut | None)
+@router.get(
+    "/projects/{project_id}/ingestion-template-assignment", response_model=AssignmentOut | None
+)
 async def get_ingestion_template_assignment(
     project_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> AssignmentOut | None:
@@ -199,10 +219,18 @@ async def get_ingestion_template_assignment(
 
 @router.put("/projects/{project_id}/ingestion-template-assignment", response_model=AssignmentOut)
 async def set_ingestion_template_assignment(
-    project_id: uuid.UUID, body: AssignmentSet, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    project_id: uuid.UUID,
+    body: AssignmentSet,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
 ) -> AssignmentOut:
     try:
-        assignment = await TemplateService(db).assign(project_id, template_version_id=body.template_version_id, revision=body.revision, actor=admin)
+        assignment = await TemplateService(db).assign(
+            project_id,
+            template_version_id=body.template_version_id,
+            revision=body.revision,
+            actor=admin,
+        )
     except TemplateConflictError as exc:
         raise HTTPException(409, str(exc)) from exc
     return AssignmentOut.model_validate(assignment)
@@ -272,7 +300,9 @@ async def approve_ingestion_run(
     db: AsyncSession = Depends(get_db),
 ) -> IngestionRunOut:
     try:
-        run = await TemplateIngestionService(db).approve(run_id, reviewer_id=admin.id, comment=body.comment)
+        run = await TemplateIngestionService(db).approve(
+            run_id, reviewer_id=admin.id, comment=body.comment
+        )
     except IngestionRunConflict as exc:
         raise HTTPException(409, str(exc)) from exc
     return IngestionRunOut.model_validate(run)
@@ -286,7 +316,9 @@ async def reject_ingestion_run(
     db: AsyncSession = Depends(get_db),
 ) -> IngestionRunOut:
     try:
-        run = await TemplateIngestionService(db).reject(run_id, reviewer_id=admin.id, comment=body.comment)
+        run = await TemplateIngestionService(db).reject(
+            run_id, reviewer_id=admin.id, comment=body.comment
+        )
     except IngestionRunConflict as exc:
         raise HTTPException(409, str(exc)) from exc
     return IngestionRunOut.model_validate(run)
@@ -322,8 +354,15 @@ async def create_kb_version(
 ) -> KBVersionOut:
     version = await KnowledgeService(db).create_version(project_id, actor=admin)
     await record_audit(
-        db, action="kb_version_created", actor_id=admin.id, target_type="kb_version", target_id=str(version.id),
-        payload={"project_id": str(project_id), "template_version_id": str(version.template_version_id)},
+        db,
+        action="kb_version_created",
+        actor_id=admin.id,
+        target_type="kb_version",
+        target_id=str(version.id),
+        payload={
+            "project_id": str(project_id),
+            "template_version_id": str(version.template_version_id),
+        },
     )
     await db.commit()
     return KBVersionOut.model_validate(version)
@@ -401,7 +440,11 @@ async def ingest_kb_version(
     await KnowledgeService(db)._require_version(project_id, version_id)
     job_id = enqueue_ingest_version(version_id)
     await record_audit(
-        db, action="kb_ingestion_enqueued", actor_id=admin.id, target_type="kb_version", target_id=str(version_id),
+        db,
+        action="kb_ingestion_enqueued",
+        actor_id=admin.id,
+        target_type="kb_version",
+        target_id=str(version_id),
         payload={"project_id": str(project_id), "job_id": job_id},
     )
     await db.commit()
@@ -423,7 +466,11 @@ async def publish_kb_version(
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     await record_audit(
-        db, action="kb_version_published", actor_id=admin.id, target_type="kb_version", target_id=str(version_id),
+        db,
+        action="kb_version_published",
+        actor_id=admin.id,
+        target_type="kb_version",
+        target_id=str(version_id),
         payload={"project_id": str(project_id), "manifest": version.release_manifest_sha256},
     )
     await db.commit()

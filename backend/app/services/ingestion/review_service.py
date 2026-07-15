@@ -37,12 +37,16 @@ async def assemble_review_bundle(
     if doc is None:
         return None
     fragments = (
-        await db.execute(
-            select(SourceFragment)
-            .where(SourceFragment.document_id == doc_id)
-            .order_by(SourceFragment.block_order)
+        (
+            await db.execute(
+                select(SourceFragment)
+                .where(SourceFragment.document_id == doc_id)
+                .order_by(SourceFragment.block_order)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     fragment_dicts = [
         {
             "id": f.id,
@@ -69,7 +73,12 @@ async def assemble_review_bundle(
         },
         fragments=fragment_dicts,
         validation_issues=[
-            {"severity": i.severity, "code": i.code, "message": i.message, "field_path": i.field_path}
+            {
+                "severity": i.severity,
+                "code": i.code,
+                "message": i.message,
+                "field_path": i.field_path,
+            }
             for i in issues
         ],
         audit=[],  # populated from audit table in a follow-up

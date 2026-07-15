@@ -86,15 +86,15 @@ async def _resolve_scoped_rows(
             stmt = stmt.where(model.scope_id == str(scope_id))
         if active_kb_version_id is not None:
             rows = (
-                await db.execute(stmt.where(model.kb_version_id == active_kb_version_id))
-            ).scalars().all()
+                (await db.execute(stmt.where(model.kb_version_id == active_kb_version_id)))
+                .scalars()
+                .all()
+            )
             # Legacy content is a compatibility fallback only when this scope
             # has no row in the active structured release. It never mixes with
             # an active release row.
             if not rows:
-                rows = (
-                    await db.execute(stmt.where(model.kb_version_id.is_(None)))
-                ).scalars().all()
+                rows = (await db.execute(stmt.where(model.kb_version_id.is_(None)))).scalars().all()
         else:
             rows = (await db.execute(stmt.where(model.kb_version_id.is_(None)))).scalars().all()
         if rows:
@@ -133,9 +133,7 @@ async def get_benefits(
         }
         for r in rows
     ]
-    missing = [
-        f"{r['name']}.value" for r in data if r["value"] is None
-    ]
+    missing = [f"{r['name']}.value" for r in data if r["value"] is None]
     return ToolResult(found=True, data=data, missing_fields=missing, scope_used=scope)
 
 
@@ -187,24 +185,32 @@ async def get_job_requirements(
         else JobRequirement.kb_version_id.is_(None)
     )
     rows = (
-        await db.execute(
-            select(JobRequirement).where(
-                JobRequirement.job_id == job_id,
-                JobRequirement.status == PublishedStatus.PUBLISHED.value,
-                kb_version_filter,
-            )
-        )
-    ).scalars().all()
-    if not rows and active_kb_version_id is not None:
-        rows = (
+        (
             await db.execute(
                 select(JobRequirement).where(
                     JobRequirement.job_id == job_id,
                     JobRequirement.status == PublishedStatus.PUBLISHED.value,
-                    JobRequirement.kb_version_id.is_(None),
+                    kb_version_filter,
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
+    )
+    if not rows and active_kb_version_id is not None:
+        rows = (
+            (
+                await db.execute(
+                    select(JobRequirement).where(
+                        JobRequirement.job_id == job_id,
+                        JobRequirement.status == PublishedStatus.PUBLISHED.value,
+                        JobRequirement.kb_version_id.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
     if not rows:
         return ToolResult(found=False)
     data = [
@@ -241,24 +247,32 @@ async def get_job_locations(
         else JobLocation.kb_version_id.is_(None)
     )
     rows = (
-        await db.execute(
-            select(JobLocation).where(
-                JobLocation.job_id == job_id,
-                JobLocation.status == PublishedStatus.PUBLISHED.value,
-                kb_version_filter,
-            )
-        )
-    ).scalars().all()
-    if not rows and active_kb_version_id is not None:
-        rows = (
+        (
             await db.execute(
                 select(JobLocation).where(
                     JobLocation.job_id == job_id,
                     JobLocation.status == PublishedStatus.PUBLISHED.value,
-                    JobLocation.kb_version_id.is_(None),
+                    kb_version_filter,
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
+    )
+    if not rows and active_kb_version_id is not None:
+        rows = (
+            (
+                await db.execute(
+                    select(JobLocation).where(
+                        JobLocation.job_id == job_id,
+                        JobLocation.status == PublishedStatus.PUBLISHED.value,
+                        JobLocation.kb_version_id.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
     if not rows:
         return ToolResult(found=False)
     data = [

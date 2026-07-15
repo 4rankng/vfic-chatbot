@@ -13,7 +13,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import and_, or_, select, text, update
 
 from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
 from app.models.conversation import (
@@ -26,8 +26,9 @@ from app.models.conversation import (
     Message,
     MessageSender,
 )
-from app.models.user import User
+from app.models.user import Role, User
 from app.services.audit_service import record_audit
+from app.services.conversation.abuse_control import AbuseReason
 from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
@@ -214,6 +215,104 @@ class ConversationState:
         await self.events.conversation_updated(conv)
         return msg
 
+    async def record_inbound_and_escalate_abuse(
+        self,
+        conv: Conversation,
+        *,
+        body: str,
+        reason: AbuseReason,
+        zalo_message_id: str | None = None,
+    ) -> bool:
+        """Atomically record an inbound and move suspected abuse to human review.
+
+        The caller keeps its dedup claim uncommitted, so this single commit makes
+        the claim, inbound message, mode transition, operator note, and audit
+        durable together. The conditional update makes concurrent positive
+        messages produce only one transition note while every inbound is kept.
+        """
+        inbound = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.WORKER,
+            body=body,
+            zalo_message_id=zalo_message_id,
+        )
+        self.db.add(inbound)
+        await self.db.flush()
+
+        now = utcnow()
+        target_state = and_(
+            Conversation.mode == ConversationMode.HUMAN,
+            Conversation.needs_human.is_(True),
+        )
+        transition = await self.db.execute(
+            update(Conversation)
+            .where(Conversation.id == conv.id, ~target_state)
+            .values(
+                mode=ConversationMode.HUMAN,
+                status=ConversationStatus.OPEN,
+                needs_human=True,
+                last_inbound_at=now,
+                unread_count=Conversation.unread_count + 1,
+                bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
+                version=Conversation.version + 2,
+                conversation_seq=Conversation.conversation_seq + 2,
+            )
+            .returning(Conversation.version)
+            .execution_options(synchronize_session=False)
+        )
+        transitioned_version = transition.scalar_one_or_none()
+        transitioned = transitioned_version is not None
+
+        system_note: Message | None = None
+        if transitioned:
+            system_note = Message(
+                conversation_id=conv.id,
+                sender=MessageSender.SYSTEM,
+                body="Hội thoại được chuyển sang nhân viên để xác minh dấu hiệu không phải ứng viên.",
+            )
+            self.db.add(system_note)
+            await record_audit(
+                self.db,
+                action="auto_escalate_suspected_abuse",
+                target_type="conversation",
+                target_id=str(conv.id),
+                payload={"reason": reason, "version": transitioned_version},
+            )
+        else:
+            # Either this conversation was already at the complete target state,
+            # or another concurrent transaction reached it while this one waited.
+            # In both cases only the inbound mutation remains to be applied.
+            inbound_only = await self.db.execute(
+                update(Conversation)
+                .where(Conversation.id == conv.id, target_state)
+                .values(
+                    status=ConversationStatus.OPEN,
+                    last_inbound_at=now,
+                    unread_count=Conversation.unread_count + 1,
+                    bot_locked_until=None,
+                    bot_lock_owner=None,
+                    bot_lock_heartbeat_at=None,
+                    version=Conversation.version + 1,
+                    conversation_seq=Conversation.conversation_seq + 1,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if inbound_only.rowcount != 1:
+                raise RuntimeError("conversation abuse transition lost")
+
+        await self.db.commit()
+        await self.db.refresh(inbound)
+        if system_note is not None:
+            await self.db.refresh(system_note)
+        await self.db.refresh(conv)
+        await self.events.message_created(inbound, conv)
+        if system_note is not None:
+            await self.events.message_created(system_note, conv)
+        await self.events.conversation_updated(conv)
+        return transitioned
+
     async def acquire_lock(
         self,
         conv_id: uuid.UUID,
@@ -234,6 +333,7 @@ class ConversationState:
             update(Conversation)
             .where(
                 Conversation.id == conv_id,
+                Conversation.mode.in_((ConversationMode.BOT, ConversationMode.SEMI_AUTO)),
                 or_(
                     Conversation.bot_locked_until.is_(None),
                     Conversation.bot_locked_until < utcnow(),
@@ -858,11 +958,46 @@ class ConversationState:
         return conv
 
     async def release(self, conv: Conversation, actor: User) -> Conversation:
-        conv.mode = ConversationMode.BOT
-        conv.assigned_recruiter_id = None
-        conv.taken_over_at = None
-        conv.version += 1
-        conv.conversation_seq += 1
+        conditions = [Conversation.id == conv.id]
+        if actor.role != Role.admin:
+            conditions.append(
+                or_(
+                    Conversation.assigned_recruiter_id == actor.id,
+                    and_(
+                        Conversation.assigned_recruiter_id.is_(None),
+                        Conversation.needs_human.is_(False),
+                    ),
+                )
+            )
+        released = await self.db.execute(
+            update(Conversation)
+            .where(*conditions)
+            .values(
+                mode=ConversationMode.BOT,
+                assigned_recruiter_id=None,
+                taken_over_at=None,
+                needs_human=False,
+                bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
+                version=Conversation.version + 1,
+                conversation_seq=Conversation.conversation_seq + 1,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if released.rowcount == 0:
+            await self.db.rollback()
+            await self.db.refresh(conv)
+            owner_name = (
+                await _fetch_owner_name(self.db, conv)
+                if conv.assigned_recruiter_id is not None
+                else None
+            )
+            raise ConversationConflict(
+                "conversation must be claimed before release",
+                owner_name=owner_name,
+            )
+        await self.db.refresh(conv)
         self.db.add(
             Message(
                 conversation_id=conv.id,

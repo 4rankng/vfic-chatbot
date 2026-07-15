@@ -203,9 +203,7 @@ class WorkingHoursData(BaseModel):
             # Without midnight crossing, end_time must be > start_time lexically
             # (string comparison works for "HH:MM:SS").
             if self.end_time <= self.start_time:
-                raise ValueError(
-                    "end_time <= start_time requires crosses_midnight=True"
-                )
+                raise ValueError("end_time <= start_time requires crosses_midnight=True")
         return self
 
     @field_validator("days")
@@ -219,9 +217,7 @@ class WorkingHoursData(BaseModel):
 class JobRequirementData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1)
-    category: Literal[
-        "age", "experience", "education", "gender", "skill", "document", "other"
-    ]
+    category: Literal["age", "experience", "education", "gender", "skill", "document", "other"]
     is_required: bool = True
     min_value: str | None = None
     max_value: str | None = None

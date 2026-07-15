@@ -153,6 +153,7 @@ export const ConversationShowContent = ({
   const {
     effectiveMode,
     isBotMode,
+    needsClaim,
     canHumanReply,
     setConversationMode,
     handleTakeover,
@@ -241,7 +242,7 @@ export const ConversationShowContent = ({
                   className={`mode-menu-trigger mode-menu-trigger--primary ${activeMode}`}
                   aria-label="Đổi chế độ trả lời"
                   title="Đổi chế độ trả lời"
-                  disabled={activeMode === "closed"}
+                  disabled={activeMode === "closed" || needsClaim}
                 >
                   <span className="mode-menu-trigger-icon">
                     <ActiveModeIcon className="icon" aria-hidden="true" />
@@ -348,6 +349,7 @@ export const ConversationShowContent = ({
           conversation={record}
           candidateAvatarUrl={lead?.avatar_url}
           isBotModeOverride={isBotMode}
+          needsClaimOverride={needsClaim}
           canHumanReplyOverride={canHumanReply}
           onTakeoverOverride={handleTakeover}
         />

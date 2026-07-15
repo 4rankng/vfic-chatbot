@@ -252,15 +252,20 @@ class JobBenefit(Base):
     __tablename__ = "job_benefit"
     __table_args__ = (
         UniqueConstraint(
-            "job_id", "scope_type", "name", "status",
+            "job_id",
+            "scope_type",
+            "name",
+            "status",
             name="uq_job_benefit_scope_name_status",
         ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     job_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True,
-        comment="NULL when scope_type != job_posting"
+        UUID(as_uuid=True),
+        ForeignKey("jobs.id", ondelete="CASCADE"),
+        nullable=True,
+        comment="NULL when scope_type != job_posting",
     )
     kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="CASCADE")

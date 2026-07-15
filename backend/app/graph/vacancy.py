@@ -8,8 +8,7 @@ from collections.abc import Iterable
 from app.core.text import normalize_vietnamese_text
 
 NO_ACTIVE_JOB_REPLY = (
-    "Hiện VFIC chưa tuyển vị trí này. "
-    "Bạn có muốn tôi hỗ trợ tìm các vị trí khác đang mở không?"
+    "Hiện VFIC chưa tuyển vị trí này. Bạn có muốn tôi hỗ trợ tìm các vị trí khác đang mở không?"
 )
 VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
     "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
@@ -63,7 +62,7 @@ def is_explicit_vacancy_question(text: str) -> bool:
         return True
     if "tuyen" in tokens:
         return any(
-        phrase in normalized for phrase in ("co tuyen", "con tuyen", "dang tuyen", "van tuyen")
+            phrase in normalized for phrase in ("co tuyen", "con tuyen", "dang tuyen", "van tuyen")
         )
     if is_question and "co" in tokens and "nhan" in tokens:
         return True
@@ -78,7 +77,9 @@ def is_explicit_vacancy_question(text: str) -> bool:
         is_question
         and ("con" in tokens)
         and ("khong" in tokens or "ko" in tokens)
-        and (len(continuation_tokens) >= 2 or any(role in normalized for role in _SHORT_ROLE_PHRASES))
+        and (
+            len(continuation_tokens) >= 2 or any(role in normalized for role in _SHORT_ROLE_PHRASES)
+        )
     )
 
 
@@ -87,7 +88,9 @@ def _is_detail_followup(text: str) -> bool:
     return any(term in normalized for term in _FOLLOWUP_TERMS)
 
 
-def _recent_candidate_vacancy_query(user_text: str, recent_messages: Iterable[object]) -> str | None:
+def _recent_candidate_vacancy_query(
+    user_text: str, recent_messages: Iterable[object]
+) -> str | None:
     for message in reversed(list(recent_messages)):
         sender = getattr(message, "sender", "")
         sender_value = getattr(sender, "value", sender)

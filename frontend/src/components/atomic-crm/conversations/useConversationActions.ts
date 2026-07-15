@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDataProvider, useNotify, useRefresh } from "ra-core";
 import type { Conversation } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
@@ -20,19 +20,37 @@ export const useConversationActions = (record?: Conversation) => {
   const [localMode, setLocalMode] = useState<ConversationMode | undefined>(
     undefined,
   );
+  const [locallyClaimed, setLocallyClaimed] = useState(false);
+
+  useEffect(() => {
+    setLocalMode(undefined);
+  }, [record?.id]);
+
+  useEffect(() => {
+    setLocallyClaimed(false);
+  }, [record?.id, record?.assigned_recruiter_id]);
 
   const effectiveMode: ConversationMode | undefined = localMode ?? record?.mode;
   const isBotMode = effectiveMode === "bot";
+  const needsClaim =
+    effectiveMode === "human" &&
+    !record?.assigned_recruiter_id &&
+    !locallyClaimed;
   const canHumanReply =
-    effectiveMode === "human" || effectiveMode === "semi_auto";
+    (effectiveMode === "human" && !needsClaim) || effectiveMode === "semi_auto";
 
   const setConversationMode = async (
     nextMode: Extract<ConversationMode, "bot" | "human" | "semi_auto">,
   ) => {
-    if (!record || effectiveMode === nextMode) return;
+    if (
+      !record ||
+      (effectiveMode === nextMode && !(nextMode === "human" && needsClaim))
+    )
+      return;
     try {
       await dataProvider.setConversationMode(record.id, nextMode);
       setLocalMode(nextMode);
+      setLocallyClaimed(nextMode === "human");
       const key =
         nextMode === "human"
           ? "conversations.takeover.success"
@@ -63,6 +81,7 @@ export const useConversationActions = (record?: Conversation) => {
   return {
     effectiveMode,
     isBotMode,
+    needsClaim,
     canHumanReply,
     setConversationMode,
     handleTakeover,

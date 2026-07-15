@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-14
+**Last updated:** 2026-07-15
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -64,6 +64,59 @@ Compose at `/opt/vfic`, Caddy edge.
 └────────────────────────────────────────────────────────────────────┘
 ```
 
+### 1.1 Installation authority foundation (Phase 2)
+
+Phase 2 adds a database-owned installation lifecycle without switching the live
+recruitment runtime to universal composition:
+
+- No `installation_state` row means `UNCONFIGURED`. Migration `0042` creates
+  `persona_versions`, installation revisions, validation evidence, and the
+  singleton state table but inserts no seed, adoption, persona, or active rows.
+  The first explicit admin draft creates singleton row `1`.
+- Manifest revisions, validation evidence, and persona versions are append-only
+  and checksum-pinned. The singleton state row owns current/validated/active
+  pointers, an optimistic lock version, and monotonic `authority_generation`;
+  activation, rollback, suspend, and resume advance the generation. Revision
+  creation must match the state's `expected_lock_version`, so a stale Settings
+  save fails with `INSTALLATION_CONFLICT` instead of overwriting a successor.
+- Industry packs and capability dependencies are frozen, code-owned metadata.
+  Database settings may select allowlisted IDs but cannot supply imports, SQL,
+  prompts, tool definitions, or other executable plug-in content. Workflow and
+  provider policy inputs are closed typed objects (`extra=forbid`) and contain
+  declarative workflow/model choices plus encrypted-integration references,
+  never credential values. Locale accepts bounded BCP-47 language tags with an
+  optional script/region, and currency is checked against a current ISO-4217
+  alphabetic-code allowlist.
+- `GET /api/v1/installation/runtime` exposes only allowlisted identity/branding,
+  locale, terminology, lifecycle, and capability fields. Persona bodies,
+  workflow/provider policy, integration values, and audit evidence stay out of
+  the public projection.
+- PostgreSQL is authority. Runtime resolution recomputes and checks current
+  database evidence before accepting a revision/generation-keyed Redis cache;
+  `assert_current()` performs a direct database comparison. Cache writes and
+  invalidation are best-effort and cannot change a committed lifecycle result.
+  `READY` is derived only after rechecking the current active pointers,
+  validation, pack/persona/template/integration evidence, and checksum-pinned
+  active-KB state; it is not trusted from the lifecycle string alone.
+
+Activation is deliberately unavailable: the only registered recruitment pack
+declares `runtime_ready=false`, so activation fails with
+`INSTALLATION_RUNTIME_NOT_READY`. This bounded foundation does **not** make the
+image or production deployment universal-ready.
+
+Activation takes the installation authority/state locks and a PostgreSQL
+`SHARE MODE` table lock on the recruitment operational tables (`jobs`, `leads`, and
+`conversations`) before checking contamination. This closes the current
+recruitment count-versus-write race. The pack contract defaults
+`runtime_ready=false`; future non-recruitment packs must keep it false until
+equivalent guards cover their operational writers.
+
+Two required integrations are explicitly deferred. The existing bot still
+consumes the legacy mutable `Persona` projection until the runtime-composition
+phase starts reading pinned `PersonaVersion` content. Active-KB publish/rollback
+writers are not yet wired to the installation authority barrier and generation
+advance; that fencing remains required before activation can be enabled.
+
 ---
 
 ## 2. Request lifecycle — Zalo webhook to sent reply
@@ -74,9 +127,10 @@ Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
                             ▼
   ┌──────────────────────────────────────────────────────────┐
   │ 1. Verify secret (hmac.compare_digest / OA signature)    │
-  │ 2. Persist inbound + capture explicit name + acquire lock│
-  │ 3. Enqueue on webhook_high (503 if enqueue fails)        │
-  │ 4. ACK 200 in <1s                                        │
+  │ 2. Classify only explicit self-declared abuse intent     │
+  │ 3. Persist inbound; abuse → HUMAN review, no automation  │
+  │ 4. Otherwise capture name, lock, and enqueue chatbot     │
+  │ 5. ACK 200 in <1s (503 on transactional/start failure)   │
   └──────────────────────────────────────────────────────────┘
                             │ RQ job (per-chat DB lease)
                             ▼
@@ -137,7 +191,7 @@ Candidate    Zalo        Caddy      FastAPI    Redis(RQ)   worker-chatbot   Post
 
 ### 2.1 Verified sequence diagram (Mermaid)
 
-> Verified against source on 2026-07-12. File:line anchors point at
+> Verified against source on 2026-07-15. File:line anchors point at
 > `backend/app/`. Read alongside the simplified ASCII above; this diagram
 > adds the two no-LLM fast paths, the four-layer mode/ownership guard,
 > and the three-phase message persistence the ASCII omits.
@@ -165,12 +219,21 @@ sequenceDiagram
     W->>W: verify signature<br/>Bot: shared-secret compare (X-Bot-Api-Secret-Token)<br/>OA: SHA256 HMAC (X-ZEvent-Signature)
     W->>H: handle(payload)
 
-    Note over H: ── normalize BEFORE dedup ──<br/>(msg_hash is computed during normalize)
+    Note over H: ── normalize and pure classification BEFORE dedup ──<br/>(msg_hash is computed during normalize)
     H->>H: normalize → NormalizedMessage<br/>(return "ignored" if non-text)
+    H->>H: classify current user_text only<br/>bounded declarations; candidate signals veto<br/>OA escalation requires a verified signature
+    break explicit suspected abuse / non-candidate declaration
+        H->>DB: dedup.claim(commit=false) + ensure conversation
+        H->>DB: one transaction: dedup + inbound WORKER<br/>+ HUMAN/OPEN/needs_human + fixed SYSTEM note + audit
+        H-->>RT: inbound message, optional SYSTEM note,<br/>then conversation.updated
+        W-->>E: 200 ACK {status: "human_review"}
+        Note over H,RQ: no name extraction, bot lock, typing, enqueue,<br/>LLM, embeddings, or proactive follow-up
+    end
     H->>DB: dedup.claim(chat_id, msg_hash)<br/>message_dedup table, 8s window<br/>return "duplicate" if seen
     H->>DB: ensure conversation (upsert Conversation)
     H->>DB: record_inbound → Message WORKER row<br/>bump unread, opt-out check
     H-->>RT: message.created + conversation.updated
+    H->>DB: refresh conversation mode<br/>existing HUMAN → stop before extraction
     H->>DB: capture explicit self-reported name<br/>existing lead upsert; no LLM or queue
     H-->>RT: lead.updated (when captured)
 
@@ -271,6 +334,21 @@ sequenceDiagram
     WK->>RQ: re-enqueue fresh turn (full re-run, not just HTTP POST)
     end
 ```
+
+### 2.2 Suspected-abuse operator handoff
+
+Automatic abuse control is deliberately conservative. It examines only the
+current inbound user message, recognizes a bounded set of explicit first-person
+bot-testing, spam, or non-candidate declarations, and gives candidate signals
+priority. A generated note or earlier AI conclusion is never evidence.
+
+On a positive decision, the conversation becomes `HUMAN` + `OPEN` with
+`needs_human=true`. The inbound remains visible, a fixed PII-free system note and
+stable audit reason are stored, and all chatbot work stops. `HUMAN` is already
+excluded by the webhook start guard, reconciler, and proactive selector. An
+unassigned thread is read-only in the console until a recruiter clicks **Tiếp
+quản**. Returning it to `BOT` is rejected until it has been claimed; an authorized
+release then clears the review flag and restores chatbot processing.
 
 **Key corrections vs naive "webhook → dedup → normalize → worker → send" sketches**
 
@@ -396,9 +474,10 @@ mid-turn.
 ### Tables
 users, audit_events, password_reset_otps, projects, companies, jobs,
 conversations, messages, bot_runs, leads, lead_events, lead_tags,
-follow_up_tasks, personas, integration_settings, kb_versions, kb_text_files,
-knowledge_documents, knowledge_chunks (pgvector), worker_feature_catalog,
-job_feature_values.
+follow_up_tasks, personas, persona_versions, integration_settings, kb_versions,
+kb_text_files, knowledge_documents, knowledge_chunks (pgvector),
+worker_feature_catalog, job_feature_values, installation_manifest_revisions,
+installation_manifest_validations, installation_state.
 
 ### Redis roles (single instance, 7-alpine, AOF on, 256 MB allkeys-lru)
 1. RQ broker (4 queues) + scheduler.

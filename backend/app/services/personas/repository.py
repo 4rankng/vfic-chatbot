@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.persona import Persona
+from app.models.persona import Persona, PersonaVersion
 from app.schemas.personas import ProjectMini
 from app.services.errors import NotFoundError
 
@@ -57,6 +57,23 @@ class PersonaRepository:
     async def find_by_slug(self, slug: str) -> Persona | None:
         """First persona matching ``slug``, or ``None``."""
         return (await self.db.scalars(select(Persona).where(Persona.slug == slug).limit(1))).first()
+
+    async def next_version_no(self, persona_id: uuid.UUID) -> int:
+        current = await self.db.scalar(
+            select(func.max(PersonaVersion.version_no)).where(
+                PersonaVersion.persona_id == persona_id
+            )
+        )
+        return int(current or 0) + 1
+
+    async def lock_for_version_append(self, persona_id: uuid.UUID) -> None:
+        await self.db.execute(select(Persona.id).where(Persona.id == persona_id).with_for_update())
+
+    async def has_versions(self, persona_id: uuid.UUID) -> bool:
+        count = await self.db.scalar(
+            select(func.count(PersonaVersion.id)).where(PersonaVersion.persona_id == persona_id)
+        )
+        return bool(count)
 
     async def deactivate_other_globals(self, persona_id: uuid.UUID) -> None:
         """Deactivate all other active global personas (project_id IS NULL)."""

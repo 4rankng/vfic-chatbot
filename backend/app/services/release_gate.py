@@ -74,7 +74,11 @@ async def evaluate_release_gate(
     # Latency SLO gates.
     if settings.release_gate_latency_slo_enabled:
         fa = slo_by_name.get("full_answer")
-        if fa and fa.actual_p95 is not None and fa.actual_p95 > settings.release_gate_full_answer_p95_ms:
+        if (
+            fa
+            and fa.actual_p95 is not None
+            and fa.actual_p95 > settings.release_gate_full_answer_p95_ms
+        ):
             failures.append(
                 GateFailure(
                     "full_answer_p95",
@@ -84,7 +88,11 @@ async def evaluate_release_gate(
                 )
             )
         err = slo_by_name.get("error_or_timeout_rate")
-        if err and err.actual_p95 is not None and err.actual_p95 > settings.release_gate_error_rate_pct:
+        if (
+            err
+            and err.actual_p95 is not None
+            and err.actual_p95 > settings.release_gate_error_rate_pct
+        ):
             failures.append(
                 GateFailure(
                     "error_rate",
@@ -95,4 +103,6 @@ async def evaluate_release_gate(
             )
 
     verdict: GateVerdict = "block" if failures else "pass"
-    return ReleaseGateResult(verdict=verdict, failures=failures, slos=slos, golden_pass_rate=golden_pass_rate)
+    return ReleaseGateResult(
+        verdict=verdict, failures=failures, slos=slos, golden_pass_rate=golden_pass_rate
+    )

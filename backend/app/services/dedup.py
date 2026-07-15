@@ -24,11 +24,23 @@ DEDUP_WINDOW_SECONDS = 8
 
 class MessageDedupService:
     @staticmethod
-    async def claim(db: AsyncSession, chat_id: str, msg_hash: str) -> bool:
+    async def claim(
+        db: AsyncSession,
+        chat_id: str,
+        msg_hash: str,
+        *,
+        commit: bool = True,
+    ) -> bool:
         """Return True if this is the first time we see (chat_id, msg_hash) in the
-        window, False if it's a duplicate."""
+        window, False if it's a duplicate.
+
+        ``commit=False`` lets a caller make the claim part of a larger atomic
+        transaction. A rollback then releases the claim so the webhook provider
+        can retry safely.
+        """
         repo = MessageDedupRepository(db)
         await repo.delete_expired(chat_id, DEDUP_WINDOW_SECONDS)
         rowcount = await repo.insert_claim(chat_id, msg_hash)
-        await db.commit()
+        if commit:
+            await db.commit()
         return rowcount == 1

@@ -40,7 +40,11 @@ from app.graph.safety import (
 )
 from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES, delivery_status_for_send_error
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
-from app.graph.vacancy import VACANCY_LOOKUP_UNAVAILABLE_REPLY, format_vacancy_lookup, vacancy_lookup_query
+from app.graph.vacancy import (
+    VACANCY_LOOKUP_UNAVAILABLE_REPLY,
+    format_vacancy_lookup,
+    vacancy_lookup_query,
+)
 from app.models.conversation import DeliveryStatus, Message
 
 logger = logging.getLogger(__name__)
@@ -350,10 +354,23 @@ def _faq_should_abstain(bypass, settings) -> bool:
 # (architecture-audit DI boundary), so keep the two in sync. When paths.py is
 # wired into the turn pipeline, inject this set through GraphDeps.
 _FAQ_BYPASS_VOLATILE_MARKERS = (
-    "lương", "thu nhập", "ca làm", "giờ làm", "tăng ca", "phụ cấp",
-    "xe đưa đón", "tuyến xe", "xe lúc", "xe mấy", "đón xe",
-    "số điện thoại", "hotline", "liên hệ",
-    "đang tuyển", "còn tuyển", "còn vị trí",
+    "lương",
+    "thu nhập",
+    "ca làm",
+    "giờ làm",
+    "tăng ca",
+    "phụ cấp",
+    "xe đưa đón",
+    "tuyến xe",
+    "xe lúc",
+    "xe mấy",
+    "đón xe",
+    "số điện thoại",
+    "hotline",
+    "liên hệ",
+    "đang tuyển",
+    "còn tuyển",
+    "còn vị trí",
 )
 
 
@@ -363,7 +380,9 @@ def _faq_bypass_allowed(user_text: str) -> bool:
     return not any(marker in normalized for marker in _FAQ_BYPASS_VOLATILE_MARKERS)
 
 
-async def _vacancy_reply(user_text: str, recent_messages: list[Message], retrieval) -> tuple[str, str] | None:
+async def _vacancy_reply(
+    user_text: str, recent_messages: list[Message], retrieval
+) -> tuple[str, str] | None:
     """Resolve explicit hiring questions before any FAQ or LLM answer path.
 
     The lookup is deliberately before the fast/FAQ lanes: project catalog and

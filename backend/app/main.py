@@ -15,6 +15,7 @@ from app.api import (
     conversations,
     dashboard,
     integrations,
+    installation,
     jobs,
     knowledge,
     leads,
@@ -128,6 +129,7 @@ app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
 app.include_router(performance.router, prefix=API_V1_PREFIX)
 app.include_router(integrations.router, prefix=API_V1_PREFIX)
+app.include_router(installation.router, prefix=API_V1_PREFIX)
 app.include_router(webhooks.router)
 
 

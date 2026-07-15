@@ -793,7 +793,11 @@ class RetrievalRepository:
     ):
         """Return a typed profile-based job recommendation outcome."""
         from app.services.lead.repository import LeadRepository
-        from app.services.recommendation import LeadJobRecommendation, LeadProfile, RecommendationRepository
+        from app.services.recommendation import (
+            LeadJobRecommendation,
+            LeadProfile,
+            RecommendationRepository,
+        )
 
         try:
             lead = await LeadRepository(self.db).by_zalo_id(chat_id)

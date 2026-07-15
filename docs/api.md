@@ -11,7 +11,9 @@
 
 ## Authentication
 
-All endpoints except `/auth/login`, `/auth/refresh`, `/auth/forgot-password`, `/auth/reset-password`, `/health`, `/metrics`, `/health/queue`, and `/webhooks/*` require a JWT Bearer token.
+All endpoints except `/auth/login`, `/auth/refresh`, `/auth/forgot-password`,
+`/auth/reset-password`, `/installation/runtime`, `/health`, `/metrics`,
+`/health/queue`, and `/webhooks/*` require a JWT Bearer token.
 
 ```
 Authorization: Bearer <access_token>
@@ -29,7 +31,7 @@ Authorization: Bearer <access_token>
 - **Refresh token:** 14 days (default). `POST /api/v1/auth/refresh` with refresh token → new access token.
 - **Token versioning:** `user.token_version` — bumping invalidates all existing tokens for that user.
 
-## Routes (14 routers)
+## Routes (15 routers)
 
 All routers registered in `backend/app/main.py` under `API_V1_PREFIX = "/api/v1"`.
 
@@ -47,6 +49,7 @@ All routers registered in `backend/app/main.py` under `API_V1_PREFIX = "/api/v1"
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
 | `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Performance observability |
 | `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` | Integration settings (Zalo, LLM) |
+| `installation` | `/api/v1/installation`, `/api/v1/admin/installation` | `installation` | Public-safe runtime projection; `require_admin` for lifecycle administration | Immutable installation revision lifecycle |
 | `realtime` | `/realtime` | — | JWT via `?token=` or Bearer | Legacy SSE endpoint |
 | `webhooks` | `/webhooks` | `webhooks` | HMAC signature (no JWT) | Zalo webhook receiver |
 
@@ -84,6 +87,66 @@ Returned directly (no envelope):
 ```
 
 HTTP status codes follow REST conventions: 200 (OK), 201 (Created), 204 (No Content), 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 409 (Conflict), 422 (Validation Error), 429 (Too Many Requests), 502 (Bad Gateway).
+
+## Installation lifecycle
+
+Phase 2 exposes one public-safe bootstrap endpoint and seven admin-only
+lifecycle endpoints. An absent `installation_state` row is returned as
+`UNCONFIGURED`; reading it does not create or infer configuration.
+
+| Method and path | Auth | Result |
+|---|---|---|
+| `GET /api/v1/installation/runtime` | Public | Safe lifecycle, branding, locale, terminology, and capability projection; no persona body, policy, integration value, or audit data. |
+| `GET /api/v1/admin/installation` | Admin | Current lifecycle, generation/lock metadata, current revision, active validation, and readiness. |
+| `POST /api/v1/admin/installation/revisions` | Admin | Append a complete immutable successor revision (`201`). The request must echo the loaded `expected_lock_version`; a stale save returns `409 INSTALLATION_CONFLICT`. |
+| `POST /api/v1/admin/installation/revisions/{revision_id}/validate` | Admin | Append checksum-pinned validation evidence; invalid input/reference evidence returns field-level issues. |
+| `POST /api/v1/admin/installation/revisions/{revision_id}/activate` | Admin | Attempt transactional activation of the current validated revision. |
+| `POST /api/v1/admin/installation/revisions/{revision_id}/rollback` | Admin | Attempt a validated same-pack rollback with a new authority generation. |
+| `POST /api/v1/admin/installation/suspend` | Admin | Suspend the active installation and advance authority generation. |
+| `POST /api/v1/admin/installation/resume` | Admin | Resume from current validation evidence and advance authority generation. |
+
+Installation lifecycle failures use the compatibility `detail` field plus
+stable machine-readable fields:
+
+```json
+{
+  "detail": "Installation revision validation failed",
+  "code": "INSTALLATION_VALIDATION_FAILED",
+  "lifecycle": "DRAFT",
+  "issues": [
+    {
+      "code": "PERSONA_VERSION_NOT_FOUND",
+      "message": "Persona Version Not Found",
+      "path": "persona_version_id"
+    }
+  ]
+}
+```
+
+Admin request-shape failures use the same envelope with HTTP `422` and
+`lifecycle: "UNKNOWN"`. Other lifecycle mappings are `404`
+`INSTALLATION_REVISION_NOT_FOUND`; `409` `INSTALLATION_NOT_ACTIVE`,
+`INSTALLATION_CONFLICT`, `INSTALLATION_PACK_LOCKED`, or
+`INSTALLATION_RUNTIME_NOT_READY`. Normal missing/insufficient JWT credentials
+remain `401`/`403` through the existing auth handlers.
+
+The code-owned recruitment pack intentionally declares `runtime_ready=false`,
+so activation currently returns `409 INSTALLATION_RUNTIME_NOT_READY`. These
+contracts are a foundation for later runtime composition, not evidence that a
+universal deployment is ready.
+
+Revision input is closed rather than free-form. `workflow_policy` accepts only
+`workflow_id`, `handoff_mode`, and `automation_enabled`. `provider_policy`
+accepts only integration references, model IDs, temperature, and output-token
+limit; extra fields and secret-shaped values are rejected. Locale accepts a
+bounded BCP-47 language tag with optional script and region (for example
+`vi`, `zh-Hant`, or `zh-Hant-TW`), timezone must be an IANA name, and currency
+must be present in the server's current ISO-4217 alphabetic-code allowlist.
+
+A `READY` response is not based only on the stored lifecycle flag. The service
+rechecks the active revision, validation, pack contract, immutable persona and
+template checksums, required integrations, and checksum-pinned active-KB
+evidence against PostgreSQL before reporting readiness.
 
 ## Rate-Limited Endpoints
 

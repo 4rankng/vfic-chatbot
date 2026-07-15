@@ -80,10 +80,18 @@ def _days_from_source(text: str) -> list[str]:
     """Return only days explicitly present in source text; never infer a workweek."""
     lowered = text.lower()
     days = [
-        ("thứ 2", "MON"), ("thứ hai", "MON"), ("thứ 3", "TUE"),
-        ("thứ ba", "TUE"), ("thứ 4", "WED"), ("thứ tư", "WED"),
-        ("thứ 5", "THU"), ("thứ năm", "THU"), ("thứ 6", "FRI"),
-        ("thứ sáu", "FRI"), ("thứ 7", "SAT"), ("thứ bảy", "SAT"),
+        ("thứ 2", "MON"),
+        ("thứ hai", "MON"),
+        ("thứ 3", "TUE"),
+        ("thứ ba", "TUE"),
+        ("thứ 4", "WED"),
+        ("thứ tư", "WED"),
+        ("thứ 5", "THU"),
+        ("thứ năm", "THU"),
+        ("thứ 6", "FRI"),
+        ("thứ sáu", "FRI"),
+        ("thứ 7", "SAT"),
+        ("thứ bảy", "SAT"),
         ("chủ nhật", "SUN"),
     ]
     result: list[str] = []
@@ -114,9 +122,7 @@ def extract_money(text: str) -> tuple[float, str] | None:
 # ─── Per-section-type extraction ─────────────────────────────────────────────
 
 
-def extract_benefit(
-    text: str, *, fragment_id: int | None = None
-) -> ExtractionEnvelope | None:
+def extract_benefit(text: str, *, fragment_id: int | None = None) -> ExtractionEnvelope | None:
     """Extract a benefit from a fragment. Deterministic-first."""
     kv = extract_key_value_lines(text)
     # Look for a benefit name + value.
@@ -150,7 +156,7 @@ def extract_benefit(
             source=SourceRef(fragment_id=fragment_id),
             method="regex",
             confidence=0.85 if value is not None else 0.5,
-        )
+        ),
     ]
     cadence = _cadence_from_source(text)
     if cadence is None:
@@ -212,9 +218,7 @@ def extract_working_hours(
     )
 
 
-def extract_faq(
-    text: str, *, fragment_id: int | None = None
-) -> ExtractionEnvelope | None:
+def extract_faq(text: str, *, fragment_id: int | None = None) -> ExtractionEnvelope | None:
     """Extract a FAQ Q&A pair. Deterministic-first (Q: / A: markers)."""
     q_match = re.search(r"(?:Q|Câu hỏi|Question)[:.]\s*(.+)", text, re.IGNORECASE)
     a_match = re.search(r"(?:A|Đáp án|Trả lời|Answer)[:.]\s*(.+)", text, re.IGNORECASE)

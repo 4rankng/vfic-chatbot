@@ -214,11 +214,18 @@ async def release(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
     svc = ConversationService(db)
-    conv = await svc.release_and_enqueue_unanswered(
-        await _load(conv_id, db, user),
-        user,
-        enqueue=enqueue_chat_run,
-    )
+    try:
+        conv = await svc.release_and_enqueue_unanswered(
+            await _load(conv_id, db, user),
+            user,
+            enqueue=enqueue_chat_run,
+        )
+    except ConversationConflict as exc:
+        who = exc.owner_name or "một nhân viên"
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Cần tiếp quản hội thoại trước khi trả lại ChatBot ({who}).",
+        )
     return ConversationOut.model_validate(conv)
 
 

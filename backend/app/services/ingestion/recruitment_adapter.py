@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.company import Company
 from app.models.job import Job
 from app.schemas.extraction_contracts import ExtractionEnvelope
-from app.services.knowledge.publishing.publisher import PublishingError, PublishingResult, publish_contract
+from app.services.knowledge.publishing.publisher import (
+    PublishingError,
+    PublishingResult,
+    publish_contract,
+)
 
 
 async def resolve_stable_job_id(

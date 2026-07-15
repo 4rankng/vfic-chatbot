@@ -128,7 +128,9 @@ def _content_equal(row: Any, data: Any, entity_type: str) -> bool:
     return False
 
 
-async def _publish_faq(db, data: FaqEnvelopeData, scope, envelope, kb_version_id) -> PublishingResult:
+async def _publish_faq(
+    db, data: FaqEnvelopeData, scope, envelope, kb_version_id
+) -> PublishingResult:
     nk = {"scope_type": scope.type, "normalized_question": _norm(data.canonical_question)}
     if kb_version_id is not None:
         nk["kb_version_id"] = kb_version_id
@@ -245,15 +247,19 @@ async def _publish_job_requirement(db, data, job_id, envelope, kb_version_id) ->
     # No natural-key uniqueness per requirement text (a job can have many);
     # idempotency is by exact-text match against the current published set.
     existing = (
-        await db.execute(
-            select(JobRequirement).where(
-                JobRequirement.job_id == uuid.UUID(job_id),
-                JobRequirement.status == PublishedStatus.PUBLISHED.value,
-                JobRequirement.requirement_text == data.text,
-                JobRequirement.kb_version_id == kb_version_id,
+        (
+            await db.execute(
+                select(JobRequirement).where(
+                    JobRequirement.job_id == uuid.UUID(job_id),
+                    JobRequirement.status == PublishedStatus.PUBLISHED.value,
+                    JobRequirement.requirement_text == data.text,
+                    JobRequirement.kb_version_id == kb_version_id,
+                )
             )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if existing:
         return PublishingResult("job_requirement", existing.version, no_op=True, diff_fields=[])
     row = JobRequirement(
