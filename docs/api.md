@@ -31,15 +31,19 @@ Authorization: Bearer <access_token>
 - **Refresh token:** 14 days (default). `POST /api/v1/auth/refresh` with refresh token → new access token.
 - **Token versioning:** `user.token_version` — bumping invalidates all existing tokens for that user.
 
-## Routes (15 routers)
+## Routes (18 route groups)
 
-All routers registered in `backend/app/main.py` under `API_V1_PREFIX = "/api/v1"`.
+The application registers the API routers in `backend/app/main.py` under
+`API_V1_PREFIX = "/api/v1"`; realtime and webhook groups keep their root paths.
 
 | Router | Prefix | Tags | Auth | Purpose |
 |---|---|---|---|---|
 | `auth` | `/api/v1/auth` | `auth` | Public (login/refresh); JWT (`/me`, `/change-password`) | Login, refresh, profile, password |
 | `users` | `/api/v1/users` | `users` | JWT (self); `require_admin` (CRUD) | User management |
 | `conversations` | `/api/v1/conversations` | `conversations` | JWT; `require_admin` (history clear) | Inbox, messages, takeover, release |
+| `contacts` | `/api/v1/contacts` | `contacts` | JWT + active `conversation` capability; admin/recruiter viewer scope | Dormant generic Contact and channel-identity resources |
+| `cases` | `/api/v1/cases` | `cases` | JWT + active `conversation` capability; admin/recruiter viewer scope | Dormant generic Cases, transitions, tags, notes, and follow-ups |
+| `case_workflows` | `/api/v1/admin/case-workflows` | `case-workflows` | `require_admin` | Pre-active immutable workflow authoring |
 | `leads` | `/api/v1/leads` | `leads` | JWT | Lead CRM pipeline |
 | `bot_runs` | `/api/v1/bot_runs` | `bot_runs` | JWT (read-only) | Bot turn audit log |
 | `knowledge` | `/api/v1/knowledge` | `knowledge` | `require_admin` | KB documents, chunks, versions |
@@ -100,7 +104,7 @@ insert sample rows.
 |---|---|---|
 | `GET /api/v1/installation/runtime` | Public | Schema-versioned, `no-store` lifecycle projection. Draft values stay private; active-only output may include branding, locale, terminology, and capability IDs, but never persona body, policy, integration value, or audit data. |
 | `GET /api/v1/admin/installation` | Admin | Current lifecycle, generation/lock metadata, current revision, current and active validation, and readiness. |
-| `GET /api/v1/admin/installation/catalog` | Admin | Code-owned packs, capabilities, workflows, locales, currencies, integration references, and authentication methods that Settings may select. |
+| `GET /api/v1/admin/installation/catalog` | Admin | Code-owned packs, capabilities, workflows, locales, currencies, integration references, authentication methods, and authored immutable workflow-version summaries that Settings may select. |
 | `GET /api/v1/admin/installation/setup-draft` | Admin | Strict partial setup draft, optimistic lock tokens, per-section completion, and validation issues. The response never returns decrypted credentials. |
 | `PUT /api/v1/admin/installation/setup-draft` | Admin | Replace the typed partial draft using `expected_lock_version`; stale writes return `409 INSTALLATION_CONFLICT`. |
 | `POST /api/v1/admin/installation/setup-draft/finalize` | Admin | Atomically revalidate a complete draft and append an immutable revision using both draft and installation lock tokens. The result stops at `VALIDATED`. |
@@ -143,22 +147,85 @@ author and validate a clean installation without a rebuild, but these contracts
 are a foundation for later runtime composition—not evidence that a universal
 deployment is ready or authorized to send messages.
 
-Setup-authored personas must carry an explicit policy. Choosing no proactive
-follow-up stores disabled rules with no cadence or eligible stage; it never
-inherits the recruitment defaults used by the legacy persona editor.
+Setup-authored personas must carry an explicit policy. The current no-proactive-
+follow-up path stores disabled rules with no cadence or eligible stage, but its
+wire shape still requires the recruitment-specific keys `hot`, `warm`, and
+`not_interested`. That hard-coded category shape is not a universal contract and
+must be replaced or made capability-owned in the protected Phase 5 work before
+any pack can become runtime-ready.
 
 Revision input is closed rather than free-form. `workflow_policy` accepts only
-`workflow_id`, `handoff_mode`, and `automation_enabled`. `provider_policy`
-accepts only integration references, model IDs, temperature, and output-token
-limit; extra fields and secret-shaped values are rejected. Locale accepts a
-bounded BCP-47 language tag with optional script and region (for example
-`vi`, `zh-Hant`, or `zh-Hant-TW`), timezone must be an IANA name, and currency
-must be present in the server's current ISO-4217 alphabetic-code allowlist.
+`workflow_id`, the selected immutable `workflow_version_id` and
+`workflow_version_checksum`, `handoff_mode`, and `automation_enabled`.
+Finalizing a new setup requires a matching authored workflow version/checksum;
+historical revisions with null pins remain readable but are not activation-ready.
+`provider_policy` accepts only integration references, model IDs, temperature,
+and output-token limit; extra fields and secret-shaped values are rejected.
+Locale accepts a bounded BCP-47 language tag with optional script and region
+(for example `vi`, `zh-Hant`, or `zh-Hant-TW`), timezone must be an IANA name,
+and currency must be present in the server's current ISO-4217 alphabetic-code
+allowlist.
 
 A `READY` response is not based only on the stored lifecycle flag. The service
 rechecks the active revision, validation, pack contract, immutable persona and
 template checksums, required integrations, and checksum-pinned active-KB
 evidence against PostgreSQL before reporting readiness.
+
+## Dormant generic workflow, Contact, and Case APIs
+
+Phase 4 registers the following additive endpoints. Workflow publication is a
+pre-active admin operation; Contact and Case routers compose authentication with
+active-installation and capability checks. Because every shipped pack remains
+`runtime_ready=false`, the generic business routers cannot be used as a live
+industry runtime yet.
+
+### Immutable workflow authoring
+
+| Method and path | Auth | Result |
+|---|---|---|
+| `GET /api/v1/admin/case-workflows` | Admin | Bounded workflow-version summaries, optionally filtered by pack/workflow. |
+| `POST /api/v1/admin/case-workflows` | Admin | Atomically publish one immutable version from explicit administrator input; the server assigns version number and canonical checksum. |
+| `GET /api/v1/admin/case-workflows/{version_id}` | Admin | Complete immutable version with stages, transitions, tags, and bounded Case attribute schema. |
+
+Published versions have no PATCH or DELETE endpoint. Publication requires one
+non-terminal initial stage, at least one terminal stage, reachable stages, valid
+transitions, and unique bounded stage/tag/attribute keys. Setup stores the
+selected version ID and checksum; it never auto-selects a newest/default version.
+
+### Contacts
+
+| Method and path | Auth | Result |
+|---|---|---|
+| `GET /api/v1/contacts` | Admin or visible recruiter | Bounded list with typed profile and channel summaries. |
+| `POST /api/v1/contacts` | Admin | Create a typed Contact; no generic Contact JSON/EAV field. |
+| `GET /api/v1/contacts/{contact_id}` | Admin or visible recruiter | Read one viewer-scoped Contact. |
+| `PATCH /api/v1/contacts/{contact_id}` | Admin or visible recruiter | Optimistic typed profile update. |
+| `POST /api/v1/contacts/{contact_id}/channel-identities` | Admin | Attach one configured `(provider, account_key, external_id)` identity; conflicts do not move an existing identity. |
+
+### Cases
+
+| Method and path | Auth | Result |
+|---|---|---|
+| `GET, POST /api/v1/cases` | Admin or visible recruiter | List or create Cases pinned to an immutable workflow version/checksum. |
+| `GET, PATCH /api/v1/cases/{case_id}` | Admin or visible recruiter | Read or optimistically update non-lifecycle fields. |
+| `POST /api/v1/cases/{case_id}/assign` | Scoped user | Assign/claim under role and stale-version rules. |
+| `POST /api/v1/cases/{case_id}/transition` | Scoped user | Apply an allowed transition from the pinned workflow. |
+| `POST /api/v1/cases/{case_id}/cancel` | Scoped user | Change only an open Case to `CANCELLED`; closed/cancelled Cases do not reopen. |
+| `GET, PUT /api/v1/cases/{case_id}/tags` | Scoped user | Read or atomically replace tags defined by the pinned workflow. |
+| `GET, POST /api/v1/cases/{case_id}/notes` | Scoped user | Read bounded notes or append a note. |
+| `GET, POST /api/v1/cases/{case_id}/follow-ups` | Scoped user | Read bounded follow-ups or create one. |
+| `POST /api/v1/cases/{case_id}/follow-ups/{followup_id}/complete` or `/cancel` | Scoped user | Optimistically finish a pending follow-up. |
+
+Recruiters can see Contacts/Cases reachable through their assigned or unassigned
+Conversation/Case scope and may claim unassigned Cases; Contact creation,
+channel-identity attachment, workflow publication, and reassignment to another
+user remain administrator-only. The backend is the authorization boundary.
+Disabled capabilities return authenticated `404`; inactive installation state
+uses the typed `409` installation envelope.
+
+`ConversationOut` also carries nullable/defaulted Contact and channel-identity
+projections. Legacy fields and status codes remain unchanged, and no Case is
+guessed from a Conversation.
 
 ## Rate-Limited Endpoints
 

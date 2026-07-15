@@ -25,7 +25,8 @@ const KNOWN_ACTIONS = new Set([
 /**
  * VFIC access control.
  *
- * Recruiters can only access leads, conversations, and projects. All other
+ * Recruiters can access conversations, projects, Contacts, and Cases, with
+ * administrator-only actions filtered separately. All other
  * resources (users, bot_runs, knowledge_sources, personas, etc.) are
  * admin-only. Real enforcement is the FastAPI backend
  * (app/api/dependencies.py); this is the UX layer.

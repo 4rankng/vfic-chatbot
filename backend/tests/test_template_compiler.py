@@ -15,6 +15,66 @@ def test_compiler_is_deterministic_for_starter_pack():
 
     assert artifact_a == artifact_b
     assert checksum_a == checksum_b
+    assert artifact_a["compiler_version"] == "1"
+
+
+def test_compiler_v2_supports_bounded_repeated_and_tabular_occurrences():
+    definition = {
+        "schema_version": "2",
+        "record_types": [
+            {
+                "key": "product",
+                "display_name": "Product",
+                "occurrence_mode": "table_rows",
+                "max_records": 500,
+                "natural_key_fields": ["sku"],
+                "fields": [
+                    {"key": "sku", "type": "string", "aliases": ["SKU"]},
+                    {"key": "name", "type": "string", "aliases": ["Tên"]},
+                ],
+            }
+        ],
+    }
+
+    artifact, _ = compile_template(definition)
+
+    assert artifact["compiler_version"] == "2"
+    assert artifact["record_types"][0]["occurrence_mode"] == "table_rows"
+    assert artifact["record_types"][0]["max_records"] == 500
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        {
+            "schema_version": "1",
+            "record_types": [
+                {
+                    "key": "legacy",
+                    "display_name": "Legacy",
+                    "occurrence_mode": "table_rows",
+                    "natural_key_fields": ["id"],
+                    "fields": [{"key": "id", "type": "string"}],
+                }
+            ],
+        },
+        {
+            "schema_version": "2",
+            "record_types": [
+                {
+                    "key": "single",
+                    "display_name": "Single",
+                    "max_records": 2,
+                    "natural_key_fields": ["id"],
+                    "fields": [{"key": "id", "type": "string"}],
+                }
+            ],
+        },
+    ],
+)
+def test_compiler_rejects_invalid_occurrence_bounds(definition):
+    with pytest.raises(TemplateCompileError):
+        compile_template(definition)
 
 
 @pytest.mark.parametrize(
@@ -138,3 +198,38 @@ async def test_preview_rejects_invalid_declared_field_types():
     assert any(issue["code"] == "invalid_field_type" for issue in issues)
     # A field that failed coercion must not also be reported as missing required.
     assert not any(issue["code"] == "missing_required_field" for issue in issues)
+
+
+async def test_compiler_v2_preview_materializes_each_repeated_section_with_field_evidence():
+    artifact, _ = compile_template(
+        {
+            "schema_version": "2",
+            "record_types": [
+                {
+                    "key": "item",
+                    "display_name": "Item",
+                    "occurrence_mode": "repeated_section",
+                    "max_records": 10,
+                    "natural_key_fields": ["code"],
+                    "fields": [
+                        {"key": "code", "type": "string", "required": True},
+                        {"key": "name", "type": "string", "required": True},
+                    ],
+                }
+            ],
+        }
+    )
+    service = TemplateIngestionService(None)  # type: ignore[arg-type]
+
+    records, issues = service._extract_artifact(
+        artifact,
+        "code: A\nname: Alpha\n\ncode: B\nname: Beta",
+        file_id=None,
+    )
+
+    assert issues == []
+    assert [record["payload"] for record in records] == [
+        {"code": "A", "name": "Alpha"},
+        {"code": "B", "name": "Beta"},
+    ]
+    assert records[0]["evidence_sources"]["name"]["locator"].occurrence_id == "section:1"

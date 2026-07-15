@@ -13,10 +13,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-COMPILER_VERSION = "1"
+COMPILER_VERSION = "2"
+LEGACY_COMPILER_VERSION = "1"
 MAX_RECORD_TYPES = 24
-MAX_FIELDS_PER_RECORD = 48
-MAX_ALIASES_PER_FIELD = 12
+MAX_FIELDS_PER_RECORD = 128
+MAX_ALIASES_PER_FIELD = 16
 _KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _FORBIDDEN = {"prompt", "tool", "resolver", "sql", "regex", "script", "url", "expression"}
 
@@ -71,6 +72,8 @@ class RecordDefinition(BaseModel):
     natural_key_fields: list[str]
     scope_type: Literal["global", "company", "location", "job_posting", "campaign"] = "global"
     scope_id_field: str | None = None
+    occurrence_mode: Literal["single", "repeated_section", "table_rows", "auto"] = "single"
+    max_records: int = Field(default=1, ge=1, le=10_000)
 
     @field_validator("key")
     @classmethod
@@ -104,13 +107,15 @@ class RecordDefinition(BaseModel):
             raise ValueError("non-global scopes require a declared scope_id_field")
         if self.scope_id_field is not None and self.scope_id_field not in field_keys:
             raise ValueError("scope_id_field must refer to a declared field")
+        if self.occurrence_mode == "single" and self.max_records != 1:
+            raise ValueError("single occurrence mode must have max_records=1")
         return self
 
 
 class TemplateDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1", "2"] = "1"
     record_types: list[RecordDefinition]
 
     @field_validator("record_types")
@@ -121,6 +126,19 @@ class TemplateDefinition(BaseModel):
             raise ValueError("record types must be non-empty, unique, and bounded")
         return value
 
+    @model_validator(mode="after")
+    def validate_schema_specific_limits(self) -> "TemplateDefinition":
+        if self.schema_version != "1":
+            return self
+        for record in self.record_types:
+            if len(record.fields) > 48:
+                raise ValueError("schema v1 supports at most 48 fields per record")
+            if record.occurrence_mode != "single" or record.max_records != 1:
+                raise ValueError("schema v1 does not support occurrence modes")
+            if any(len(field.aliases) > 12 for field in record.fields):
+                raise ValueError("schema v1 supports at most 12 aliases per field")
+        return self
+
 
 def compile_template(definition: dict) -> tuple[dict, str]:
     """Return a canonical stored IR and its SHA-256 checksum."""
@@ -128,10 +146,16 @@ def compile_template(definition: dict) -> tuple[dict, str]:
         parsed = TemplateDefinition.model_validate(definition)
     except ValidationError as exc:
         raise TemplateCompileError(exc.errors(include_url=False)) from exc
+    record_types = [record.model_dump(mode="json") for record in parsed.record_types]
+    compiler_version = COMPILER_VERSION if parsed.schema_version == "2" else LEGACY_COMPILER_VERSION
+    if parsed.schema_version == "1":
+        for record in record_types:
+            record.pop("occurrence_mode", None)
+            record.pop("max_records", None)
     artifact = {
-        "compiler_version": COMPILER_VERSION,
+        "compiler_version": compiler_version,
         "schema_version": parsed.schema_version,
-        "record_types": [record.model_dump(mode="json") for record in parsed.record_types],
+        "record_types": record_types,
     }
     canonical = json.dumps(artifact, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     return artifact, hashlib.sha256(canonical.encode()).hexdigest()

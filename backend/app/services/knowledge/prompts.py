@@ -6,7 +6,7 @@ sits at the bottom of the dependency graph and can be reused by any layer.
 
 from __future__ import annotations
 
-DIGEST_SYSTEM_PROMPT = """Bạn là bộ phân tích tài liệu cho chatbot tuyển dụng VFIC. \
+DIGEST_SYSTEM_PROMPT = """Bạn là bộ phân tích tài liệu cho một trợ lý được quản trị cấu hình. \
 Bạn nhận một đoạn tài liệu thô (tiếng Việt) và phải biến nó thành các đơn vị kiến thức \
 tối ưu cho tìm kiếm ngữ nghĩa (RAG).
 
@@ -14,7 +14,7 @@ YÊU CẦU với từng đơn vị (unit):
 1. Làm sạch: bỏ header/footer/lặp lại/số trang/lời phủ nhận.
 2. Tách ngữ nghĩa: mỗi unit = MỘT sự thật/hướng dẫn độc lập, không phụ thuộc ngữ cảnh xung quanh.
 3. Viết lại tự chứa: thêm ngữ cảnh cần thiết để unit đứng một mình vẫn hiểu được \
-(ví dụ "LG Display Hải Phòng — tuyển operator ca đêm, lương 9-11 triệu" thay vì chỉ "lương 9-11 triệu").
+(ví dụ "Sản phẩm A — thời hạn bảo hành 12 tháng" thay vì chỉ "bảo hành 12 tháng").
 4. Trích metadata: category (một trong: job|salary|schedule|policy|faq|contact|benefits|other), \
 entities {job_title, salary_range, location, shift,...} nếu có.
 5. Sinh câu hỏi: 1-3 câu hỏi mà unit này trả lời được (giúp tăng recall).
@@ -41,15 +41,15 @@ Trả về ĐÚNG MỘT JSON object theo schema sau, không kèm markdown/code f
 }
 Nếu tài liệu không có nội dung hữu ích, trả về {"document_summary": "", "units": []}."""
 
-INDEX_SYSTEM_PROMPT = """Bạn là trợ lý tổng hợp danh mục dự án cho chatbot tuyển dụng VFIC. \
-Dựa vào các đơn vị kiến thức (tiếng Việt) của một dự án/sản phẩm, sinh ra một "thẻ danh mục" \
-ngắn gọn để agent giới thiệu sản phẩm đó cho ứng viên.
+INDEX_SYSTEM_PROMPT = """Bạn là trợ lý tổng hợp danh mục kiến thức cho một hệ thống được quản trị cấu hình. \
+Dựa vào các đơn vị kiến thức (tiếng Việt) của một danh mục, sinh ra một "thẻ danh mục" \
+ngắn gọn để trợ lý giới thiệu nội dung đó cho người dùng.
 
 Trả về ĐÚNG MỘT JSON object, không kèm markdown:
 {
-  "summary": "mô tả 1-2 câu về dự án/nhà máy",
-  "key_roles": ["vị trí tuyển chính", "..."],
-  "location": "địa điểm",
+  "summary": "mô tả 1-2 câu về danh mục",
+  "key_roles": ["mục hoặc vai trò chính", "..."],
+  "location": "địa điểm nếu tài liệu có nêu",
   "highlights": ["điểm nổi bật", "..."]
 }
 Chỉ dựa vào dữ liệu cung cấp, không bịa."""

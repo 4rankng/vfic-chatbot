@@ -1,7 +1,7 @@
 # Codebase Summary
 
 **Repo:** `git@github.com:4rankng/ChatBotN8N.git` (branch `main`)
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-15
 
 A monorepo with two deployable subprojects (`backend/`, `frontend/`) plus
 root-level ops scripts. DockerHub images: `franknguyenvd/vfic-backend:latest`
@@ -11,49 +11,56 @@ and `franknguyenvd/vfic-frontend:latest` (also tagged `:<git-sha>`).
 
 ```
 ChatBot/
-├── backend/              FastAPI + RQ workers + Alembic (~19.6k LOC Python)
+├── backend/              FastAPI + RQ workers + Alembic (~42.8k LOC Python)
 │   ├── app/
-│   │   ├── api/          Routers + dependencies.py        (15 files, 2,173 LOC)
+│   │   ├── api/          Routers + auth/capability dependencies
+│   │   ├── capabilities/ Closed source-owned pack registry + parity artifacts
 │   │   ├── core/         config, db, redis, security,
 │   │   │                 logging, errors, cache,
 │   │   │                 ratelimit, embedding, vector,
-│   │   │                 text                              (694 LOC)
+│   │   │                 text                              (~1,600 LOC)
 │   │   ├── graph/        runner, clients, factories,
 │   │   │                 tools, safety, prompts,
-│   │   │                 proactive                         (2,145 LOC)
-│   │   ├── models/       SQLAlchemy 2.x ORM                (932 LOC)
-│   │   ├── schemas/      Pydantic v2                       (1,049 LOC)
+│   │   │                 proactive                         (~5,300 LOC)
+│   │   ├── models/       SQLAlchemy 2.x ORM
+│   │   ├── schemas/      Pydantic v2
 │   │   ├── services/     conversation/, lead/, knowledge/,
 │   │   │                 dashboard/, personas/, project/,
-│   │   │                 retrieval/, proactive/ + flat
-│   │   │                 zalo_*, integration_settings, auth (67 files, 11,818 LOC)
+│   │   │                 retrieval/, proactive/ + installation,
+│   │   │                 generic workflow/contact/case services + flat
+│   │   │                 zalo_*, integration_settings, auth (~24,100 LOC)
 │   │   ├── workers/      run_worker, chatbot, persistence,
 │   │   │                 ingest, followup, reconcile,
-│   │   │                 async_runner, scheduler_utils     (943 LOC)
-│   │   ├── realtime/     Socket.IO server + bridge         (264 LOC)
+│   │   │                 async_runner, scheduler_utils     (~1,600 LOC)
+│   │   ├── realtime/     Socket.IO server + bridge         (~300 LOC)
 │   │   ├── prompts/
 │   │   └── main.py        FastAPI app + lifespan + ASGI wrap
-│   ├── alembic/          23 migrations + 1 merge head
+│   ├── alembic/          Hand-written migrations through 0044
 │   ├── mock_servers/     zalo_mock.py (local :8788)
 │   ├── scripts/          create_admin, seed_dev, prod-env,
 │   │                     benchmark_models, benchmark_rag,
 │   │                     capture_bus_timetable_golden, loadtest/
-│   ├── tests/            28 files, pure unit (no live DB/Redis)
+│   ├── tests/            Unit + selected disposable PostgreSQL integration lanes
 │   ├── docker-compose.yml        10-service prod stack
 │   ├── docker-compose.dev.yml    Postgres+Redis+Adminer only
 │   ├── Dockerfile        python:3.12-slim, pip install -e .
 │   ├── Caddyfile         edge routes for bot.tingting.vip
 │   ├── .env.example      committed env template (values blank/dev)
 │   └── Makefile          dev / db / push / deploy / adminer
-├── frontend/             React Admin SPA (~37.4k LOC TS/TSX)
+├── frontend/             React Admin SPA (~48.6k LOC TS/TSX)
 │   ├── src/
 │   │   ├── main.tsx      StrictMode + vite:preloadError guard
-│   │   ├── App.tsx       renders <CRM/>
+│   │   ├── App.tsx       installation gate + dormant runtime compilation
 │   │   ├── components/
 │   │   │   ├── admin/            vendored shadcn-admin-kit (mutable dep)
 │   │   │   ├── ui/               vendored Shadcn primitives (mutable dep)
 │   │   │   └── atomic-crm/       THE VFIC app
-│   │   │       ├── root/             <CRM> resource registration
+│   │   │       ├── root/             compiled <CRM> composition + generation reset
+│   │   │       ├── capabilities/     static compiler/registry + recruitment adapter
+│   │   │       ├── installation/     public runtime bootstrap clients/context
+│   │   │       ├── settings/installation/ admin setup wizard
+│   │   │       ├── workflows/        blank immutable workflow authoring
+│   │   │       ├── contacts/, cases/ dormant generic React Admin resources
 │   │   │       ├── conversations/    inbox + ChatThread (virtua) + context panel
 │   │   │       ├── leads/            kanban + chatops
 │   │   │       ├── dashboard/        RecruitingCommandCenter
@@ -82,27 +89,28 @@ ChatBot/
 
 | Area | LOC |
 |---|---|
-| Backend `app/services/` | 11,818 |
-| Backend `app/api/` | 2,173 |
-| Backend `app/graph/` | 2,145 |
-| Backend `app/schemas/` | 1,049 |
-| Backend `app/models/` | 932 |
-| Backend `app/workers/` | 943 |
-| Backend `app/core/` | 694 |
-| Backend `app/realtime/` | 264 |
-| **Backend total** | **~19,600** |
-| Frontend `src/` (TS/TSX) | ~37,400 |
+| Backend `app/services/` | ~24,100 |
+| Backend `app/api/` | ~4,000 |
+| Backend `app/graph/` | ~5,300 |
+| Backend `app/schemas/` | ~2,600 |
+| Backend `app/models/` | ~2,600 |
+| Backend `app/workers/` | ~1,600 |
+| Backend `app/core/` | ~1,600 |
+| Backend `app/realtime/` | ~300 |
+| **Backend `app/` total** | **~42,800** |
+| Frontend `src/` (TS/TSX) | ~48,600 |
 
 ## Module map — backend `app/`
 
 | Subdir | Responsibility |
 |---|---|
 | `api/` | FastAPI routers under `/api/v1` (except `realtime`, `webhooks`). `dependencies.py` holds auth deps. |
+| `capabilities/` | Closed-world industry pack/capability definitions, dependency/owner validation, canonical non-executable pack contract, and dormant recruitment delegation descriptor. Database values never select executable imports. |
 | `core/` | Cross-cutting infra: config (Pydantic BaseSettings), async DB engine + session, Redis pool, security (JWT/argon2), structured logging + request_id, error handlers, cache, ratelimit, embedding + vector helpers, text utils. |
 | `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools.py` tool dispatch; `safety.py` fast + LLM safety; `prompts.py`; `proactive/`. |
-| `models/` | SQLAlchemy 2.x ORM mirroring the schema. **Does not generate migrations** — Alembic baseline is raw SQL `op.execute`. |
+| `models/` | SQLAlchemy 2.x ORM mirroring the schema, including immutable workflows and generic Contacts/Cases. **Does not generate migrations** — migrations remain hand-written. |
 | `schemas/` | Pydantic v2 request/response models. |
-| `services/` | Business logic, the largest subpackage. Subpackages: `conversation/`, `lead/`, `knowledge/`, `dashboard/`, `personas/`, `project/`, `retrieval/`, `proactive/`. Flat modules: `zalo_sender`, `zalo_bot_service`, `zalo_oa_service`, `integration_settings`, `auth`. |
+| `services/` | Business logic, the largest subpackage. Includes legacy recruitment services, installation authority/setup, and dormant `case_workflow_service`, `contact_service`, and `case_service`. |
 | `workers/` | RQ worker entrypoints + async bridge. `run_worker.py` is the container entrypoint. |
 | `realtime/` | Socket.IO ASGI server + cross-process emit bridge so workers can push to clients. |
 | `prompts/` | Prompt assets. |
@@ -114,7 +122,12 @@ ChatBot/
 | `components/admin/` | **Vendored mutable dependency.** shadcn-admin-kit: `admin.tsx`, `data-table.tsx`, `filter-form.tsx`, `simple-form-iterator.tsx`, `file-input.tsx`. |
 | `components/ui/` | **Vendored mutable dependency.** Shadcn UI + Radix primitives. |
 | `components/atomic-crm/` | **The VFIC app.** All product code lives here. |
-| `components/atomic-crm/root/` | `<CRM>` — resource registration, CustomRoutes, providers, theme props. |
+| `components/atomic-crm/root/` | `<CRM>` receives one compiled runtime bundle and renders direct React Admin resources/routes; reset code owns Query/store/socket/message generation teardown. |
+| `components/atomic-crm/capabilities/` | Static safe module registry, strict pack compiler, canonical backend parity check, and delegation-only recruitment composition. |
+| `components/atomic-crm/installation/` | Public runtime manifest parsing, lifecycle context/bootstrap, and setup API clients. |
+| `components/atomic-crm/settings/installation/` | PostgreSQL-backed administrator setup wizard; no business configuration is read from browser/env fallbacks. |
+| `components/atomic-crm/workflows/` | Blank workflow authoring and structural validation for immutable published versions. |
+| `components/atomic-crm/contacts/`, `cases/` | Dormant generic React Admin resources with human selectors and workflow-derived Case fields. |
 | `components/atomic-crm/providers/` | `dataProvider.ts` (react-admin verb mapping), `rest/api.ts` (HTTP client + JWT + 401 refresh), `authProvider.ts`, `i18nProvider.ts` (Vietnamese-only). |
 | `components/atomic-crm/conversations/` | Inbox: ConversationList, ChatThread (virtua VList), ConversationContextPanel, WorkspaceShell + WorkspaceIconRail, chatRepository, useConversationRealtime, Zustand `messageStore.ts`. CSS barrel `inbox.css`. |
 | `components/atomic-crm/leads/` | Kanban board, lead show/edit, chatops actions. |
@@ -131,6 +144,8 @@ ChatBot/
 | File | Purpose |
 |---|---|
 | `backend/app/main.py` | `FastAPI(title="VFIC API", version="0.1.0", lifespan=lifespan)`. Registers domain exception handlers, CORS (credentials=True, no `*`), request_id middleware, Socket.IO ASGI wrap, rq-scheduler ticks. |
+| `backend/app/capabilities/registry.py` | Closed registry resolution and canonical contract hashing; rejects unknown versions, dependency cycles, duplicate owners, and hash drift. |
+| `backend/app/capabilities/recruitment_v1_contract.json` | Non-executable backend/frontend parity artifact; canonical hash `2a7c602a...58622d9`. |
 | `backend/app/core/config.py` | `Settings(BaseSettings)` + `get_settings()` lru_cache singleton. Boot-time safety checks. `active_llm_provider` / `llm_fallback_enabled` properties. |
 | `backend/app/core/security.py` | passlib argon2, python-jose HS256 JWT, `asyncio.to_thread` for crypto. |
 | `backend/app/core/db.py` | `create_async_engine(..., pool_pre_ping=True)`, `async_session` (`expire_on_commit=False`), `get_db()` (rolls back on exception). |
@@ -152,7 +167,11 @@ ChatBot/
 | `backend/app/workers/async_runner.py` | One persistent event loop per worker process (sync RQ → async bridge). |
 | `backend/app/realtime/` | Socket.IO server + cross-process emit bridge (264 LOC). |
 | `backend/app/api/webhooks.py` | `POST /webhooks/zalo/chatbot` (line 34), `POST /webhooks/zalo/oa` (line 71), `_verify_oa_signature` (line 115). |
-| `backend/app/api/dependencies.py` | `get_current_user`, `require_admin` (403), `require_recruiter`. Token `ver` gate at line 45. |
+| `backend/app/api/dependencies.py` | Auth dependencies plus dormant auth-first `get_active_installation` / `require_capability`; token-version gate remains the identity boundary. |
+| `backend/app/services/case_workflow_service.py` | Validate and atomically publish immutable workflow versions/checksums. |
+| `backend/app/services/contact_service.py` | Viewer-scoped typed Contact mutations and race-safe configured channel identity resolution. |
+| `backend/app/services/case_service.py` | Viewer-scoped, workflow-pinned Case lifecycle, assignment, tags, notes, follow-ups, optimistic updates, and audit writes. |
+| `backend/alembic/versions/0044_generic_contact_case_kernel.py` | Additive generic workflow/Contact/Case schema, installation workflow pins, nullable Conversation identity links, immutability and downgrade refusal. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
 | `backend/Makefile` | `dev`, `db`, `push`, `deploy`, `deploy-restart`, `deploy-restart-frontend`, `adminer`. |
 | `backend/docker-compose.yml` | 10-service prod stack (postgres, redis, web, worker-chatbot ×6, worker-ingest, scheduler, worker-followup, frontend, adminer, caddy). |
@@ -163,8 +182,10 @@ ChatBot/
 | `backend/scripts/benchmark_models.py` | LLM latency/throughput benchmark. |
 | `backend/scripts/benchmark_rag.py` | Golden-case RAG retrieval scoring. |
 | `frontend/src/main.tsx` | StrictMode + `vite:preloadError` sessionStorage-guarded force-reload. |
-| `frontend/src/App.tsx` | Renders `<CRM/>`. |
-| `frontend/src/components/atomic-crm/root/CRM.tsx` | `<Admin>` (vendored, not stock react-admin); 8 resources; CustomRoutes; hoisted `QueryClient`; `wrappedAuthProvider`. |
+| `frontend/src/App.tsx` | Shows setup unless the public manifest is `ACTIVE + READY`; compiles one runtime generation fail-closed and never remounts the previous Admin after failure. |
+| `frontend/src/components/atomic-crm/root/CRM.tsx` | Renders compiled direct React Admin Resources, CustomRoutes, dashboard, navigation, providers, and capability slots. |
+| `frontend/src/components/atomic-crm/capabilities/compile-capabilities.ts` | Pure compatibility/collision compiler; no database-selected imports. |
+| `frontend/src/components/atomic-crm/root/reset-runtime-state.ts` | Generation-owned Query/store/Socket.IO/Zustand/adapter teardown and stale-response isolation. |
 | `frontend/src/components/atomic-crm/providers/rest/api.ts` | HTTP client; JWT in `Authorization: Bearer`; `apiRequest()` 401 retry via `refreshOnce()`; `friendlyApiMessage()` Vietnamese i18n. |
 | `frontend/src/components/atomic-crm/providers/rest/dataProvider.ts` | react-admin verb → `/api/v1/{resource}`; custom methods (takeOverConversation, etc.); `RESOURCE_PATH` aliases. |
 | `frontend/src/components/atomic-crm/providers/commons/i18nProvider.ts` | `polyglotI18nProvider(() => vietnameseCatalog, "vi", ...)`; `getInitialLocale()` hard-returns `"vi"`. |

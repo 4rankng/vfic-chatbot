@@ -32,42 +32,24 @@ vi.mock("../../installation/installation-context", () => ({
 }));
 
 vi.mock("./steps/InstallationSteps", () => ({
-  IdentityBrandingStep: ({ onChange }: { onChange: (value: unknown) => void }) => (
+  KnowledgeTemplatesStep: () => <p>Kiến thức</p>,
+  PersonaStep: ({ onChange }: { onChange: (value: unknown) => void }) => (
     <button
       type="button"
       onClick={() =>
         onChange({
-          customer_identity: { display_name: "Khách hàng tự nhập" },
-          branding: { app_name: "Ứng dụng tự nhập" },
+          persona_version_id: "00000000-0000-4000-8000-000000000003",
+          checksum: "a".repeat(64),
         })
       }
     >
-      Điền danh tính
+      Chọn Agent
     </button>
   ),
-  RegionalTerminologyStep: () => <p>Khu vực</p>,
-  PackCapabilitiesStep: ({ onChange }: { onChange: (value: unknown) => void }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onChange({ pack_key: "alternate-pack", capability_ids: [] })
-      }
-    >
-      Chọn gói khác
-    </button>
-  ),
-  WorkflowStep: ({ onChange }: { onChange: (value: undefined) => void }) => (
-    <><p>Quy trình</p><button type="button" onClick={() => onChange(undefined)}>Xoá lựa chọn quy trình</button></>
-  ),
-  KnowledgeTemplatesStep: () => <p>Kiến thức</p>,
-  PersonaStep: () => <p>Agent</p>,
   ProvidersIntegrationsStep: () => <p>Tích hợp</p>,
 }));
 
-import {
-  InstallationClientError,
-  type InstallationSetupDraft,
-} from "../../installation/installation-client";
+import { type InstallationSetupDraft } from "../../installation/installation-client";
 import { InstallationWizard } from "./InstallationWizard";
 
 const checksum = "a".repeat(64);
@@ -171,150 +153,66 @@ const catalog = {
   authentication_methods: ["email_password" as const],
 };
 
-const adminStatus = (validated: boolean) => ({
-  lifecycle: validated ? "VALIDATED" : "DRAFT",
-  authority_generation: 1,
-  lock_version: 8,
-  current_revision: validated ? { id: "00000000-0000-4000-8000-000000000009" } : null,
-  active_revision_id: null,
-  active_validation: null,
-  current_validation: validated
-    ? {
-        revision_id: "00000000-0000-4000-8000-000000000009",
-        is_valid: true,
-      }
-    : null,
-  readiness_code: "SETUP_REQUIRED",
-});
-
 afterEach(async () => {
   await cleanup();
   vi.clearAllMocks();
 });
 
 describe("InstallationWizard", () => {
-  it("reloads current validation and prevents duplicate finalization", async () => {
-    mocks.getDraft.mockResolvedValue(draft());
-    mocks.getCatalog.mockResolvedValue(catalog);
-    mocks.getAdminStatus.mockResolvedValue(adminStatus(true));
-
-    const screen = await render(<InstallationWizard />);
-    await screen.getByRole("button", { name: /Rà soát/ }).click();
-
-    await expect.element(screen.getByRole("button", { name: "Đã xác nhận" })).toBeDisabled();
-    expect(mocks.getAdminStatus).toHaveBeenCalledOnce();
-    expect(mocks.finalize).not.toHaveBeenCalled();
-  });
-
-  it("preserves the dirty section and reapplies it over a newer server draft", async () => {
-    const emptyDraft = draft({
-      payload: {},
-      section_completion: Object.fromEntries(
-        Object.keys(sectionCompletion).map((key) => [key, false]),
-      ),
-      issues: [],
-    });
-    const serverRegional = completePayload.regional_terminology;
-    const latest = draft({
-      payload: { regional_terminology: serverRegional },
-      lock_version: 5,
-    });
-    mocks.getDraft.mockResolvedValueOnce(emptyDraft).mockResolvedValueOnce(latest);
-    mocks.getCatalog.mockResolvedValue(catalog);
-    mocks.getAdminStatus.mockResolvedValue(adminStatus(false));
-    mocks.saveDraft
-      .mockRejectedValueOnce(
-        new InstallationClientError(
-          "conflict",
-          409,
-          "INSTALLATION_CONFLICT",
-          "DRAFT",
-          [],
+  it("opens an empty installation as an optional setup hub", async () => {
+    mocks.getDraft.mockResolvedValue(
+      draft({
+        payload: {},
+        section_completion: Object.fromEntries(
+          Object.keys(sectionCompletion).map((key) => [key, false]),
         ),
-      )
-      .mockImplementationOnce(async (payload) => draft({ payload, lock_version: 6 }));
-
-    const screen = await render(<InstallationWizard />);
-    await screen.getByRole("button", { name: "Điền danh tính" }).click();
-    await screen.getByRole("button", { name: "Lưu bước" }).click();
-    await expect.element(screen.getByText("Bản nháp đã được thay đổi ở nơi khác")).toBeVisible();
-    await screen.getByRole("button", { name: "Áp dụng lại phần đã sửa" }).click();
-
-    expect(mocks.saveDraft).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        identity_branding: expect.objectContaining({
-          customer_identity: { display_name: "Khách hàng tự nhập" },
-        }),
-        regional_terminology: serverRegional,
       }),
-      5,
     );
+    mocks.getCatalog.mockResolvedValue(catalog);
+    const screen = await render(<InstallationWizard />);
+
+    await expect.element(screen.getByText("Thiết lập chatbot khi sẵn sàng")).toBeVisible();
+    await expect.element(screen.getByText("Không có việc bắt buộc lúc khởi tạo")).toBeVisible();
+    await screen.getByRole("button", { name: "Thiết lập Agent" }).click();
+    await expect.element(screen.getByRole("navigation", { name: "Các bước thiết lập" })).toBeVisible();
   });
 
-  it("removes pack-dependent workflow and stale terminology during conflict merge", async () => {
-    const latest = draft({ lock_version: 5 });
-    mocks.getDraft.mockResolvedValueOnce(draft()).mockResolvedValueOnce(latest);
+  it("shows only the three minimum chatbot settings in a responsive grid", async () => {
+    mocks.getDraft.mockResolvedValue(draft());
     mocks.getCatalog.mockResolvedValue(catalog);
-    mocks.getAdminStatus.mockResolvedValue(adminStatus(false));
-    mocks.saveDraft
-      .mockRejectedValueOnce(
-        new InstallationClientError(
-          "conflict",
-          409,
-          "INSTALLATION_CONFLICT",
-          "DRAFT",
-          [],
+
+    const screen = await render(<InstallationWizard />);
+    await screen.getByRole("button", { name: "Thiết lập Kết nối AI" }).click();
+    const navigation = screen.getByRole("navigation", { name: "Các bước thiết lập" });
+
+    await expect.element(navigation).toHaveClass("grid");
+    await expect.element(navigation).toHaveClass("sm:grid-cols-3");
+    await expect.element(navigation).not.toHaveClass("overflow-x-auto");
+    await expect.element(screen.getByRole("button", { name: "Kết nối AI", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Agent", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Kiến thức", exact: true })).toBeVisible();
+  });
+
+  it("saves a selected persona without requiring unrelated setup data", async () => {
+    mocks.getDraft.mockResolvedValue(
+      draft({
+        payload: {},
+        section_completion: Object.fromEntries(
+          Object.keys(sectionCompletion).map((key) => [key, false]),
         ),
-      )
-      .mockImplementationOnce(async (payload) => draft({ payload, lock_version: 6 }));
-
-    const screen = await render(<InstallationWizard />);
-    await screen.getByRole("button", { name: /^Gói$/ }).click();
-    await screen.getByRole("button", { name: "Chọn gói khác" }).click();
-    await screen.getByRole("button", { name: "Lưu bước" }).click();
-    await expect.element(screen.getByText("Bản nháp đã được thay đổi ở nơi khác")).toBeVisible();
-    await screen.getByRole("button", { name: "Áp dụng lại phần đã sửa" }).click();
-
-    const mergedPayload = mocks.saveDraft.mock.calls.at(-1)?.[0];
-    expect(mergedPayload).toMatchObject({
-      pack_capabilities: { pack_key: "alternate-pack", capability_ids: [] },
-      regional_terminology: { terminology: {} },
-    });
-    expect(mergedPayload).not.toHaveProperty("workflow");
-    expect(mocks.saveDraft).toHaveBeenLastCalledWith(mergedPayload, 5);
-  });
-
-  it("does not save a stale completed workflow after the visible selection is cleared", async () => {
-    mocks.getDraft.mockResolvedValue(draft());
+      }),
+    );
     mocks.getCatalog.mockResolvedValue(catalog);
-    mocks.getAdminStatus.mockResolvedValue(adminStatus(false));
+    mocks.saveDraft.mockImplementation(async (payload) => draft({ payload, lock_version: 5 }));
 
     const screen = await render(<InstallationWizard />);
-    await screen.getByRole("button", { name: /^Quy trình$/ }).click();
-    await screen.getByRole("button", { name: "Xoá lựa chọn quy trình" }).click();
-    await screen.getByRole("button", { name: "Lưu bước" }).click();
+    await screen.getByRole("button", { name: "Thiết lập Agent" }).click();
+    await screen.getByRole("button", { name: "Chọn Agent" }).click();
+    await screen.getByRole("button", { name: "Lưu", exact: true }).click();
 
-    expect(mocks.saveDraft).not.toHaveBeenCalled();
-    await expect.element(screen.getByText(/chưa đủ thông tin bắt buộc/)).toBeVisible();
-  });
-
-  it("finalizes with both locks while activation and no-send testing stay unavailable", async () => {
-    mocks.getDraft.mockResolvedValue(draft());
-    mocks.getCatalog.mockResolvedValue(catalog);
-    mocks.getAdminStatus.mockResolvedValue(adminStatus(false));
-    mocks.finalize.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000009" });
-    mocks.refreshRuntime.mockResolvedValue(undefined);
-
-    const screen = await render(<InstallationWizard />);
-    await screen.getByRole("button", { name: /Rà soát/ }).click();
-    await expect.element(screen.getByText(/chưa khả dụng cho đến khi cơ chế thực thi runtime/)).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: /Kích hoạt chưa khả dụng/ })).toBeDisabled();
-    await screen.getByRole("button", { name: "Xác nhận cấu hình" }).click();
-
-    expect(mocks.finalize).toHaveBeenCalledWith({
-      expectedDraftLockVersion: 4,
-      expectedInstallationLockVersion: 8,
-    });
-    expect(mocks.refreshRuntime).toHaveBeenCalledOnce();
+    expect(mocks.saveDraft).toHaveBeenCalledWith(
+      { persona: expect.objectContaining({ checksum }) },
+      4,
+    );
   });
 });

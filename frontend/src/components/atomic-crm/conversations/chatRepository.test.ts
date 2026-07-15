@@ -220,6 +220,48 @@ describe("chatRepository.getConversationMessages", () => {
     expect(messages.map((message) => message.content)).toEqual(["right"]);
   });
 
+  it("maps external_error and preserves send_unknown delivery_status", async () => {
+    // A failed send carries the backend failure reason (messages.external_error)
+    // so a "Gửi lỗi" bubble is diagnosable. SEND_UNKNOWN must round-trip (the
+    // old type cast dropped it from the union, leaving the runtime string intact
+    // but unsoundly typed).
+    const { fetch } = stubJson(async () => ({
+      data: [
+        {
+          id: 1,
+          conversation_id: "c1",
+          body: "",
+          sender: "BOT",
+          delivery_status: "FAILED",
+          external_error: "zalo rejected: OA quota exceeded",
+          created_at: "2026-07-15T16:52:00.000Z",
+        },
+        {
+          id: 2,
+          conversation_id: "c1",
+          body: "đã gửi",
+          sender: "BOT",
+          delivery_status: "SEND_UNKNOWN",
+          created_at: "2026-07-15T16:53:00.000Z",
+        },
+      ],
+      total: 2,
+    }));
+    globalThis.fetch = fetch;
+
+    const { messages } = await chatRepository.getConversationMessages("c1", {
+      limit: 10,
+    });
+
+    const failed = messages.find((m) => m.id === "1");
+    expect(failed?.delivery_status).toBe("failed");
+    expect(failed?.external_error).toBe("zalo rejected: OA quota exceeded");
+
+    const unknown = messages.find((m) => m.id === "2");
+    expect(unknown?.delivery_status).toBe("send_unknown");
+    expect(unknown?.external_error).toBeNull();
+  });
+
   it("rejects a late direct response after the runtime epoch advances", async () => {
     let resolveJson: ((value: unknown) => void) | undefined;
     const json = new Promise<unknown>((resolve) => {

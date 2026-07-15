@@ -24,6 +24,13 @@ _NON_VACANCY_TOPICS = (
     "nha tro",
     "xe dua don",
 )
+# De-accenting (normalize_vietnamese_text) collapses "nhận" (accept/recruit
+# workers) and "nhắn" (send a message) into the same token "nhan". A messaging
+# phrase like "nhắn tin" must not trip the nhận-based branches below — otherwise
+# a complaint such as "nhắn tin cho shop mà mất 1 ngày mới hồi âm" is misread as
+# a hiring question and answered with the canned NO_ACTIVE_JOB_REPLY. These fall
+# through to the agent, which understands the real intent.
+_ACCENT_COLLIDED_MESSAGING = ("nhan tin",)
 _SHORT_ROLE_PHRASES = ("bao ve", "lai xe")
 _GENERIC_VACANCY_REFERENCES = ("cong viec nay", "viec nay", "vi tri nay")
 _FOLLOWUP_TERMS = frozenset(
@@ -57,6 +64,10 @@ def is_explicit_vacancy_question(text: str) -> bool:
         return True
     is_question = "?" in text or any(token in _QUESTION_SUFFIXES for token in tokens)
     if any(topic in normalized for topic in _NON_VACANCY_TOPICS):
+        return False
+    # Messaging collocations (de-accented "nhắn tin") trip the "nhận"-based
+    # branches below via accent collision; exclude them before those branches.
+    if any(phrase in normalized for phrase in _ACCENT_COLLIDED_MESSAGING):
         return False
     if "tuyen" in tokens and is_question:
         return True

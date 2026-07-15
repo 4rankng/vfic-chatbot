@@ -417,3 +417,76 @@ describe("isUnseenWorthyArrival — unseen-content contract", () => {
     expect(isUnseenWorthyArrival(recruiterReply("9", "43"), 42)).toBe(true);
   });
 });
+
+describe("ChatThread — failed-send bubble diagnosability", () => {
+  // A "Gửi lỗi" (delivery_status=failed) bubble must never be blank. When the
+  // attempted reply body is empty, the failure reason (external_error) is shown
+  // in its place so the recruiter knows what happened. When content is present,
+  // the content is shown and the reason is not duplicated.
+
+  it("shows the failure reason when the failed bubble has no content", async () => {
+    messageStoreState.messages = [
+      msg(2, {
+        type: "outbound",
+        content: "",
+        delivery_status: "failed",
+        external_error: "timeout contacting Zalo OA",
+        // outbound with no recruiter_id → bot kind
+        data: null,
+      }),
+    ];
+    const screen = await mountThread({ canHumanReplyOverride: true });
+
+    await vi.waitFor(() => {
+      expect(
+        screen.container.querySelector(".delivery-error-detail"),
+      ).not.toBeNull();
+    });
+    await expect
+      .element(screen.getByText("Lỗi kết nối mạng"))
+      .toBeVisible();
+    // The "Gửi lỗi" status label is still present.
+    await expect.element(screen.getByText("Gửi lỗi")).toBeVisible();
+  });
+
+  it("maps a non-network external_error to the provider-rejected reason", async () => {
+    messageStoreState.messages = [
+      msg(2, {
+        type: "outbound",
+        content: "",
+        delivery_status: "failed",
+        external_error: "OA quota exceeded",
+        data: null,
+      }),
+    ];
+    const screen = await mountThread({ canHumanReplyOverride: true });
+
+    await expect.element(screen.getByText("Zalo từ chối tin nhắn")).toBeVisible();
+  });
+
+  it("does not render the failure reason when the failed bubble has content", async () => {
+    messageStoreState.messages = [
+      msg(2, {
+        type: "outbound",
+        content: "Cảm ơn bạn đã liên hệ.",
+        delivery_status: "failed",
+        external_error: "OA quota exceeded",
+        data: null,
+      }),
+    ];
+    const screen = await mountThread({ canHumanReplyOverride: true });
+
+    await vi.waitFor(() => {
+      expect(
+        screen.container.querySelector('[data-message-id="2"] .message-text-block'),
+      ).not.toBeNull();
+    });
+    // Content is shown; the reason detail is not (content takes priority).
+    expect(
+      screen.container.querySelector(".delivery-error-detail"),
+    ).toBeNull();
+    await expect
+      .element(screen.getByText("Cảm ơn bạn đã liên hệ."))
+      .toBeVisible();
+  });
+});

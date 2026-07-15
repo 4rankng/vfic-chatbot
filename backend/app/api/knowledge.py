@@ -352,7 +352,13 @@ async def create_kb_version(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> KBVersionOut:
-    version = await KnowledgeService(db).create_version(project_id, actor=admin)
+    try:
+        version = await KnowledgeService(db).create_version(project_id, actor=admin)
+    except TemplateConflictError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "assign a published knowledge template before creating a knowledge version",
+        ) from exc
     await record_audit(
         db,
         action="kb_version_created",

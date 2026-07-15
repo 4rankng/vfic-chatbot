@@ -1294,3 +1294,76 @@ async def test_stage_timings_captures_preamble_and_webhook_to_pickup(monkeypatch
     assert st["preamble_ms"] >= 0
     assert st["queue_depth"] == 3
     assert st["end_to_end_ms"] >= 350  # measured from webhook receipt
+
+
+# --- empty-candidate defense-in-depth --------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_empty_vacancy_candidate_falls_back_to_error_reply(monkeypatch):
+    """An empty candidate that slips past every lane (here a vacancy lookup
+    that returns an empty string, bypassing the agent safety gate) must fall
+    back to ERROR_REPLY instead of being persisted/sent as a blank message.
+
+    Regression for the empty "Gửi lỗi" bubble: without the guard, the empty
+    candidate is stamped onto the pending row (body="") and, when the send
+    later fails, renders as a blank failed bubble with no diagnosable content.
+    """
+
+    async def _empty_vacancy(*args, **kwargs):  # noqa: ARG001
+        return "", "matched"
+
+    monkeypatch.setattr(runner, "_vacancy_reply", _empty_vacancy)
+    # Fast lane must not short-circuit the empty candidate back to a template.
+    monkeypatch.setattr(runner, "fast_lane", SimpleNamespace(match=lambda _t: None))
+
+    async def _must_not_run(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("agent must not run when vacancy produced a candidate")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    zalo = _FakeZalo()
+    state = BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        # Non-greeting text so the fast lane (above also force-cleared) does not fire.
+        user_text="bên bạn có tuyển dụng gì không?",
+    )
+
+    res = await run_turn(state, _deps(zalo, conversation=svc))
+
+    assert res["reply"] == ERROR_REPLY
+    # The fallback reply is what gets sent to Zalo and stamped on the row.
+    assert zalo.sent and zalo.sent[0][1] == ERROR_REPLY
+    assert recorded and recorded[0]["reply"] == ERROR_REPLY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blank", ["", "   ", "\n\t  "])
+async def test_whitespace_candidate_falls_back_to_error_reply(monkeypatch, blank):
+    """Whitespace-only candidates are treated as empty by the guard."""
+
+    async def _blank_vacancy(*args, **kwargs):  # noqa: ARG001
+        return blank, "matched"
+
+    monkeypatch.setattr(runner, "_vacancy_reply", _blank_vacancy)
+    monkeypatch.setattr(runner, "fast_lane", SimpleNamespace(match=lambda _t: None))
+
+    async def _must_not_run(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("agent must not run")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    zalo = _FakeZalo()
+    state = BotRunState(
+        conversation_id=CONV_ID, version_at_start=1, user_text="cho mình hỏi lương"
+    )
+
+    res = await run_turn(state, _deps(zalo, conversation=svc))
+
+    assert res["reply"] == ERROR_REPLY
+    assert zalo.sent and zalo.sent[0][1] == ERROR_REPLY

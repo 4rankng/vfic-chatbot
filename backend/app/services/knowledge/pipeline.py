@@ -215,7 +215,10 @@ class KnowledgePipeline:
 
         meta = canonical_doc.metadata
         project_slug = str(meta["project_slug"])
-        company_name = str(meta.get("company_name") or "VFIC")
+        company_name = str(meta.get("company_name") or "").strip()
+        if not company_name:
+            logger.warning("canonical bus timetable has no configured company name; skipping")
+            return
         await BusTimetableRepo(self.db).upsert(
             canonical_doc.bus_timetable,
             project_slug=project_slug,
@@ -474,17 +477,8 @@ def _fallback_unit(block: str, index: int) -> dict:
     entities = {}
     if location:
         entities["location"] = location
-    if "lg display" in lowered:
-        entities["company"] = "LG Display"
-    if "công nhân" in lowered:
-        entities["job_title"] = "Công nhân thời vụ"
-
-    content = block
-    if "lg display" not in lowered and len(block) < 900:
-        content = f"LG Display Hải Phòng — {block}"
-
     return {
-        "content": content,
+        "content": block,
         "source_quote": block[:1000],
         "summary": block[:160],
         "questions": [_fallback_question(category)],
@@ -498,10 +492,10 @@ def _fallback_unit(block: str, index: int) -> dict:
 
 def _fallback_question(category: str) -> str:
     return {
-        "salary": "Thu nhập, lương hoặc trợ cấp của LG Display như thế nào?",
-        "schedule": "Lịch làm việc, ca làm hoặc tăng ca của LG Display như thế nào?",
-        "contact": "Ứng viên cần liên hệ ai để hỏi về LG Display?",
-        "policy": "Yêu cầu, hồ sơ hoặc quy định khi ứng tuyển LG Display là gì?",
-        "job": "Công việc hoặc vị trí tuyển dụng tại LG Display là gì?",
-        "benefits": "Phúc lợi hoặc hỗ trợ cho ứng viên LG Display là gì?",
-    }.get(category, "Thông tin này trả lời câu hỏi nào về LG Display?")
+        "salary": "Thông tin này nói gì về thu nhập, giá hoặc hỗ trợ?",
+        "schedule": "Thông tin này nói gì về lịch hoặc thời gian áp dụng?",
+        "contact": "Thông tin này nêu kênh liên hệ nào?",
+        "policy": "Thông tin này nêu yêu cầu hoặc quy định nào?",
+        "job": "Thông tin này nói gì về công việc hoặc nội dung cung cấp?",
+        "benefits": "Thông tin này nói gì về quyền lợi hoặc hỗ trợ?",
+    }.get(category, "Thông tin này trả lời câu hỏi nào?")

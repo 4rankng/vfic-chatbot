@@ -5,23 +5,31 @@ const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 const nullableSha256Schema = sha256Schema.nullable();
 const nullableUuidSchema = z.string().uuid().nullable();
 
+/**
+ * Wraps an optional string field that the backend serializes as JSON null
+ * when unset. Accepts string | null | absent and normalizes null to
+ * undefined so the inferred type stays `string | undefined`.
+ */
+const nullableOptional = <S extends z.ZodTypeAny>(schema: S) =>
+  schema.nullish().transform((value) => value ?? undefined);
+
 const customerIdentitySchema = z
   .object({
     display_name: z.string().min(1).max(160),
-    legal_name: z.string().max(240).optional(),
-    support_name: z.string().max(160).optional(),
-    support_email: z.string().email().max(254).optional(),
-    support_phone: z.string().max(32).optional(),
-    website_url: z.string().url().max(500).optional(),
-    address: z.string().max(500).optional(),
+    legal_name: nullableOptional(z.string().max(240)),
+    support_name: nullableOptional(z.string().max(160)),
+    support_email: nullableOptional(z.string().email().max(254)),
+    support_phone: nullableOptional(z.string().max(32)),
+    website_url: nullableOptional(z.string().url().max(500)),
+    address: nullableOptional(z.string().max(500)),
   })
   .strict();
 
 const brandingSchema = z
   .object({
-    app_name: z.string().max(160).optional(),
-    primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-    secondary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    app_name: nullableOptional(z.string().max(160)),
+    primary_color: nullableOptional(z.string().regex(/^#[0-9a-fA-F]{6}$/)),
+    secondary_color: nullableOptional(z.string().regex(/^#[0-9a-fA-F]{6}$/)),
   })
   .strict();
 

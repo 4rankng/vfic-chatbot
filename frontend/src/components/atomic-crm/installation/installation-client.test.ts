@@ -147,6 +147,47 @@ describe("installation setup client", () => {
     ]);
   });
 
+  it("treats null optional identity and branding fields as unset", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        payload: {
+          identity_branding: {
+            customer_identity: {
+              display_name: "Công ty thử nghiệm",
+              legal_name: null,
+              support_name: null,
+              support_email: null,
+              support_phone: null,
+              website_url: null,
+              address: null,
+            },
+            branding: {
+              app_name: "Cổng tư vấn",
+              primary_color: null,
+              secondary_color: null,
+            },
+          },
+        },
+        lock_version: 1,
+        installation_lock_version: 1,
+        section_completion: { identity_branding: true },
+        issues: [],
+      }),
+    ) as typeof globalThis.fetch;
+
+    const draft = await getInstallationSetupDraft();
+    const identity = draft.payload.identity_branding?.customer_identity;
+    const branding = draft.payload.identity_branding?.branding;
+
+    expect(identity?.display_name).toBe("Công ty thử nghiệm");
+    expect(identity?.legal_name).toBeUndefined();
+    expect(identity?.support_email).toBeUndefined();
+    expect(identity?.website_url).toBeUndefined();
+    expect(branding?.app_name).toBe("Cổng tư vấn");
+    expect(branding?.primary_color).toBeUndefined();
+    expect(branding?.secondary_color).toBeUndefined();
+  });
+
   it("sends the submitted draft with its expected optimistic lock", async () => {
     let request: RequestInit | undefined;
     globalThis.fetch = vi.fn(async (_input, init) => {

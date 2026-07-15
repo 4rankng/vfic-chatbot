@@ -9,7 +9,13 @@ from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
-from app.graph.ports import ConversationPort, FaqBypassPort, LeadContextPort, RetrievalPort
+from app.graph.ports import (
+    ConversationPort,
+    FaqBypassPort,
+    LeadContextPort,
+    RetrievalPort,
+    RuntimePolicyPort,
+)
 
 # TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
 # annotation is stringified by ``from __future__ import annotations`` anyway,
@@ -73,6 +79,29 @@ class TurnOutcome(TypedDict):
     reason: NotRequired[str]
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedToolRegistry:
+    """Immutable, per-turn allowlist. Known but disabled tools are unreachable."""
+
+    names: frozenset[str]
+
+    def allows(self, name: str) -> bool:
+        return name in self.names
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedRuntimePolicy:
+    """Active installation policy after all database-backed checks have passed."""
+
+    revision_id: str
+    fingerprint_checksum: str
+    pack_key: str
+    capability_ids: frozenset[str]
+    terminology: dict[str, str]
+    persona_body: str
+    tool_registry: ResolvedToolRegistry
+
+
 @dataclass
 class GraphDeps:
     db: AsyncSession  # injected at runtime; AsyncSession only for type-checking
@@ -97,6 +126,9 @@ class GraphDeps:
     # Fire-and-forget candidate extraction after a SENT reply.
     # None in tests -> persistence is skipped.
     persist: Callable[[dict], None] | None = None
+    # New manifest-composed runtime authority. It is intentionally not attached
+    # to the legacy delivery path until Phase 7 has the full dispatch fence.
+    runtime_policy: RuntimePolicyPort | None = None
 
 
 def _now() -> datetime:

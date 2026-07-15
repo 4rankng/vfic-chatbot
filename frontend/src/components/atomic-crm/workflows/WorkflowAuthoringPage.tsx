@@ -85,9 +85,9 @@ export const WorkflowAuthoringPage = ({
     [attributes, draft],
   );
   const checklist = [
-    { label: "Có đúng một giai đoạn bắt đầu", codes: ["INITIAL_COUNT"] },
+    { label: "Có đúng một giai đoạn bắt đầu riêng biệt", codes: ["INITIAL_COUNT", "INITIAL_TERMINAL"] },
     { label: "Có ít nhất một giai đoạn kết thúc", codes: ["TERMINAL_REQUIRED"] },
-    { label: "Mã và thứ tự không trùng nhau", codes: ["STAGE_KEY_DUPLICATE", "STAGE_POSITION_DUPLICATE", "TAG_KEY_DUPLICATE", "TAG_POSITION_DUPLICATE", "ATTRIBUTE_KEY_DUPLICATE"] },
+    { label: "Mã và thứ tự hợp lệ, không trùng nhau", codes: ["STAGE_KEY_INVALID", "STAGE_KEY_DUPLICATE", "STAGE_POSITION_DUPLICATE", "TAG_KEY_INVALID", "TAG_KEY_DUPLICATE", "TAG_POSITION_DUPLICATE", "ATTRIBUTE_KEY_INVALID", "ATTRIBUTE_KEY_DUPLICATE"] },
     { label: "Các luồng chuyển hợp lệ", codes: ["TRANSITION_REQUIRED", "TRANSITION_ENDPOINT", "TRANSITION_SELF", "TRANSITION_DUPLICATE", "TERMINAL_OUTGOING"] },
     { label: "Mọi giai đoạn đều đi được từ điểm bắt đầu", codes: ["STAGE_UNREACHABLE"] },
   ];

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ingestion_template import (
@@ -18,11 +18,7 @@ from app.models.company import Project
 from app.models.user import User
 from app.services.audit_service import record_audit
 from app.services.errors import NotFoundError
-from app.services.ingestion.template_compiler import (
-    COMPILER_VERSION,
-    compile_template,
-)
-from app.services.ingestion.reference_templates import RECRUITMENT_FACTORY
+from app.services.ingestion.template_compiler import compile_template
 
 
 class TemplateConflictError(ValueError):
@@ -134,7 +130,7 @@ class TemplateService:
             raise TemplateConflictError("a successful preview of this exact draft is required")
         version.compiled_artifact = artifact
         version.checksum = checksum
-        version.compiler_version = COMPILER_VERSION
+        version.compiler_version = artifact["compiler_version"]
         version.status = TemplateVersionStatus.PUBLISHED
         version.published_at = datetime.now(UTC)
         version.updated_at = version.published_at
@@ -144,7 +140,7 @@ class TemplateService:
             actor_id=actor.id,
             target_type="ingestion_template_version",
             target_id=str(version.id),
-            payload={"checksum": checksum, "compiler_version": COMPILER_VERSION},
+            payload={"checksum": checksum, "compiler_version": artifact["compiler_version"]},
         )
         await self.db.commit()
         await self.db.refresh(version)
@@ -249,58 +245,11 @@ class TemplateService:
 
     async def pinned_version_for_project(self, project_id: uuid.UUID) -> IngestionTemplateVersion:
         assignment = await self.current_assignment(project_id)
-        if assignment is not None:
-            return await self.get_version(assignment.template_version_id)
-        return await self.ensure_builtin_recruitment()
-
-    async def ensure_builtin_recruitment(self) -> IngestionTemplateVersion:
-        template = await self.db.scalar(
-            select(IngestionTemplate).where(
-                IngestionTemplate.template_key == "recruitment_factory_builtin"
+        if assignment is None:
+            raise TemplateConflictError(
+                "project requires an explicit published ingestion-template assignment"
             )
-        )
-        if template is None:
-            template = IngestionTemplate(
-                template_key="recruitment_factory_builtin",
-                name="Factory recruitment (built-in)",
-                vertical="recruitment",
-            )
-            self.db.add(template)
-            await self.db.flush()
-        version = await self.db.scalar(
-            select(IngestionTemplateVersion)
-            .where(
-                IngestionTemplateVersion.template_id == template.id,
-                IngestionTemplateVersion.status == TemplateVersionStatus.PUBLISHED,
-            )
-            .order_by(IngestionTemplateVersion.version_no.desc())
-            .limit(1)
-        )
-        if version is not None:
-            return version
-        artifact, checksum = compile_template(RECRUITMENT_FACTORY)
-        version_no = int(
-            await self.db.scalar(
-                select(func.coalesce(func.max(IngestionTemplateVersion.version_no), 0) + 1).where(
-                    IngestionTemplateVersion.template_id == template.id
-                )
-            )
-            or 1
-        )
-        version = IngestionTemplateVersion(
-            template_id=template.id,
-            version_no=version_no,
-            status=TemplateVersionStatus.PUBLISHED,
-            definition=RECRUITMENT_FACTORY,
-            compiled_artifact=artifact,
-            checksum=checksum,
-            compiler_version=COMPILER_VERSION,
-            published_at=datetime.now(UTC),
-        )
-        self.db.add(version)
-        await self.db.commit()
-        await self.db.refresh(version)
-        return version
+        return await self.get_version(assignment.template_version_id)
 
     async def deprecate(self, version_id: uuid.UUID, *, actor: User) -> IngestionTemplateVersion:
         version = await self.get_version(version_id)

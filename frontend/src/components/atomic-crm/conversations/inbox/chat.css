@@ -1061,6 +1061,14 @@
 .inbox-bg-container .delivery-status.suppressed {
   color: var(--ink-muted);
 }
+/* Failure reason shown in place of missing reply text on a blank "Gửi lỗi"
+ * bubble, so the row is diagnosable. Destructive but slightly muted so it reads
+ * as a sub-detail, not the primary message content. */
+.inbox-bg-container .delivery-error-detail {
+  color: var(--destructive);
+  opacity: 0.85;
+  margin: 0;
+}
 .inbox-bg-container .message-row.user .bubble-time-inline {
   color: var(--ink-faint);
 }

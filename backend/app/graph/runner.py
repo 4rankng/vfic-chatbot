@@ -210,6 +210,33 @@ async def _agent_turn(
     return reply
 
 
+async def run_manifest_composed_agent(user_text: str, deps: GraphDeps) -> str | None:
+    """Run the new authority-composed agent path without any delivery side effect.
+
+    Phase 7 will attach its complete authority fence to the provider dispatch.
+    Until then this helper is intentionally isolated from ``run_turn`` so the
+    inactive legacy deployment cannot accidentally start sending through a
+    partially fenced path.
+    """
+    if deps.runtime_policy is None:
+        return None
+    policy = await deps.runtime_policy.resolve_active_policy()
+    if policy is None:
+        return None
+    from app.graph.runtime_policy import build_policy_system_prompt
+
+    return await deps.agent.agent(
+        user_text,
+        system=build_policy_system_prompt(policy),
+        retrieval=deps.retrieval,
+        embedder=deps.embedder,
+        allowed_tools=tuple(sorted(policy.tool_registry.names)),
+        resolved_tool_registry=policy.tool_registry.names,
+        make_retrieval=deps.make_retrieval,
+        lookup_query=user_text,
+    )
+
+
 async def _status_heartbeat(zalo, chat_id: str, *, settings) -> None:
     """Keep the channel visibly active while a turn is processing.
 
@@ -638,6 +665,16 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             if blocklist_hit(raw) or (fs["needs_llm_safety"] and not fs["too_long"]):
                 candidate = retry_exhausted_fallback(state.user_text)
             # else: over-long was already truncated by fast_safety_filter; send it.
+
+        # Defense-in-depth: every lane should already produce non-empty content
+        # (fast_safety_filter falls back to FALLBACK_REPLY; the safety gate above
+        # redirects to retry_exhausted_fallback), but an empty candidate reaching
+        # here would be persisted as body="" (via claim_send / record_bot_outcome)
+        # and render in the recruiter console as a blank "Gửi lỗi" bubble with no
+        # indication of what the bot tried to send. Fall back to the generic
+        # technical-issue reply so a failed send is always diagnosable.
+        if not (candidate or "").strip():
+            candidate = ERROR_REPLY
 
         # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
         # server-side on version + lock_owner + lock liveness. Closes both the

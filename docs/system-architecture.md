@@ -117,6 +117,47 @@ phase starts reading pinned `PersonaVersion` content. Active-KB publish/rollback
 writers are not yet wired to the installation authority barrier and generation
 advance; that fencing remains required before activation can be enabled.
 
+### 1.2 Dormant capability compiler and generic kernel (Phase 4)
+
+Phase 4 adds the code-reviewed composition boundary and domain-neutral records
+needed by later industry packs, without changing the live recruitment runtime:
+
+- The backend capability registry is closed-world source code. Database state
+  may select known pack/capability IDs, but cannot supply modules, imports,
+  prompts, tools, routes, or other executable content. The canonical
+  non-executable `recruitment@1` contract uses schema `1`, kernel ABI `1`, and
+  hash `2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9`.
+  Frontend tests consume the checked backend JSON artifact and reject parity
+  drift before materializing modules.
+- The frontend compiler validates dependencies and rejects unknown or duplicate
+  resources, routes, navigation contributions, dashboard owners, and
+  conversation slots before mounting React Admin. Compiled `Resource` and
+  custom-route elements are direct Admin children. A runtime-generation switch
+  abandons the old Query client/store, closes Socket.IO, clears message and
+  adapter state, advances the request epoch, then mounts one fresh generation;
+  stale responses cannot repopulate the new workspace.
+- Migration `0044_generic_contact_case_kernel` adds immutable administrator-
+  authored workflow versions, typed Contacts with account-scoped channel
+  identities, and Cases pinned to a workflow version/checksum. Case stages,
+  transitions, tags, notes, follow-ups, lifecycle, assignment, and bounded
+  supplemental attributes are explicit typed authorities rather than generic
+  operational EAV. Conversations receive only nullable Contact/channel-identity
+  links and projections; there is no inferred Case or Lead backfill.
+- Workflow authoring is available to an authenticated administrator before
+  activation. Generic Contact/Case APIs require authentication, an active
+  installation, and the `conversation` capability. These APIs are therefore
+  dormant while activation remains impossible.
+
+Every shipped pack still declares `runtime_ready=false`. Phase 4 does not attach
+new guards to the live webhook, workers, Socket.IO rooms, provider dispatch, or
+legacy recruitment routers, and it does not change the graph, prompts, safety,
+grounding, or tool behavior. The existing setup-persona wire contract still
+serializes disabled `hot`, `warm`, and `not_interested` follow-up rule keys. That
+recruitment-specific contract is a protected Phase 5 activation blocker: it must
+be replaced or deliberately capability-owned before any readiness flip. Phase 6
+owns recruitment parity extraction, and Phase 7 owns live authority guards and
+the first possible `runtime_ready=true` decision.
+
 ---
 
 ## 2. Request lifecycle — Zalo webhook to sent reply
@@ -488,12 +529,18 @@ mid-turn.
 - Embedding dim: 3072 (OpenRouter `text-embedding-3-large` default).
 
 ### Tables
-users, audit_events, password_reset_otps, projects, companies, jobs,
-conversations, messages, bot_runs, leads, lead_events, lead_tags,
-follow_up_tasks, personas, persona_versions, integration_settings, kb_versions,
-kb_text_files, knowledge_documents, knowledge_chunks (pgvector),
-worker_feature_catalog, job_feature_values, installation_manifest_revisions,
-installation_manifest_validations, installation_state.
+Core tables include users, audit events, projects, companies, conversations,
+messages, outbound commands, bot runs, personas/persona versions, integration
+settings, installation revisions/validations/setup/state, and versioned
+knowledge/provenance records. The legacy recruitment adapter continues to own
+jobs, leads, lead events/tags, follow-up tasks, and worker/job feature tables.
+
+The dormant generic kernel adds `case_workflow_versions`,
+`case_workflow_stages`, `case_workflow_transitions`, `case_tag_definitions`,
+`contacts`, `contact_channel_identities`, `cases`, `case_tag_assignments`,
+`case_notes`, and `case_followups`. These tables are schema-only after migration:
+`0044` inserts no workflow, stage, tag, Contact, Case, customer, template,
+persona, credential, or sample row.
 
 ### Redis roles (single instance, 7-alpine, AOF on, 256 MB allkeys-lru)
 1. RQ broker (4 queues) + scheduler.

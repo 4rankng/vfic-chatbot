@@ -22,7 +22,7 @@ chatbot loop is live:
 - Reconcile worker recovers lost turns after crashes (~3-4 min).
 - Auth via JWT (replaces Supabase Auth, decommissioned 2026-06-26) with
   `token_version` revocation.
-- Alembic HEAD = `0023_kb_versioned_ingestion` (7 Jul 2026).
+- Alembic HEAD = `0044_generic_contact_case_kernel` (15 Jul 2026).
 - Manual deploy via `make deploy` over SSH (no CI deploys to prod).
 
 Zalo Official Account integration is implemented in the working tree and
@@ -36,6 +36,43 @@ an isolated FastAPI/JWT/Playwright harness. It freezes current recruitment
 behavior without changing production runtime code; the platform remains
 recruitment-specific and is **not** yet a universal-industry platform.
 
+### Universal-platform foundation through Phase 4 (2026-07-15)
+
+- Phase 2 added immutable PostgreSQL installation authority and a closed,
+  source-owned pack/capability registry. Phase 3 added the administrator setup
+  workspace; business configuration is selected in Settings and stored in the
+  database rather than business environment variables or browser fallbacks.
+- Phase 4 added the dormant backend/frontend capability compiler, canonical
+  `recruitment@1` parity artifact (hash
+  `2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9`),
+  immutable workflow authoring, typed Contacts/channel identities, generic
+  workflow-pinned Cases, and generation-owned frontend reset. The frontend
+  renders compiled React Admin resources/routes directly and fails closed on
+  unknown or colliding composition.
+- Migration `0044` inserts no customer, workflow, stage, tag, Contact, Case,
+  persona, template, credential, or sample row. Administrators must explicitly
+  author and select an immutable workflow version/checksum.
+
+This is an activation-preparation *foundation*, not a live universal product.
+Every shipped pack remains `runtime_ready=false`; activation still returns
+`INSTALLATION_RUNTIME_NOT_READY`. The live Zalo webhook, workers, provider
+dispatch, Socket.IO rooms, graph, prompts, safety, grounding, tools, and legacy
+recruitment routers remain unchanged.
+
+Before any readiness flip:
+
+1. **Phase 5 — runtime policy authority:** replace or deliberately capability-
+   own the setup persona contract that still serializes disabled recruitment
+   keys `hot`, `warm`, and `not_interested`; compose pinned persona/policy/tool
+   authority and fence active-KB mutation.
+2. **Phase 6 — recruitment parity:** extract the current Lead/Job behavior into
+   the recruitment adapter without changing candidate-facing behavior, and
+   prove a generic flow has no recruitment rows, imports, requests, or copy.
+3. **Phase 7 — Release B authority fence:** attach active-generation/capability
+   guards to every producer, worker, reconciler, Socket.IO room, outbound
+   dispatch, and inbound identity path; only then consider the first
+   `runtime_ready=true` pack and activation.
+
 ---
 
 ## 2. Near-term priorities
@@ -43,19 +80,21 @@ recruitment-specific and is **not** yet a universal-industry platform.
 These are **observations from the codebase**, not committed commitments. Treat
 as candidate work items; confirm with the owner before scheduling.
 
-1. **Resolve the Makefile conflict markers** so `make dev` is reliable for
+1. **Complete the protected Phase 5–7 activation gates** above without
+   weakening the dormant fail-closed boundary.
+2. **Resolve the Makefile conflict markers** so `make dev` is reliable for
    new contributors (see Known Issues K-1).
-2. **Fix over-length Alembic revision IDs** so migrations can't fail the
+3. **Fix over-length Alembic revision IDs** so migrations can't fail the
    `VARCHAR(32)` constraint under future tooling (K-2).
-3. **Clarify the test Redis expectation** — either stand up a dedicated test
+4. **Clarify the test Redis expectation** — either stand up a dedicated test
    Redis on 6380 or align the test command with the dev compose port 6382
    (K-3).
-4. **Decide logout-on-browser-close behavior** — product call (K-4).
-5. **Remove dead Supabase CI** from the frontend workflow (K-5).
-6. **Investigate the open `lead_stage` PATCH issue** (K-6).
-7. **Tighten domain exception coverage** — some routers still raise raw
+5. **Decide logout-on-browser-close behavior** — product call (K-4).
+6. **Remove dead Supabase CI** from the frontend workflow (K-5).
+7. **Investigate the open `lead_stage` PATCH issue** (K-6).
+8. **Tighten domain exception coverage** — some routers still raise raw
    `HTTPException`; convert when touched (code-standards notes this).
-8. **Zalo OA path hardening** — the OA integration is newer than the Bot
+9. **Zalo OA path hardening** — the OA integration is newer than the Bot
    Platform path; load-test + golden-case before promoting to primary.
 
 ---

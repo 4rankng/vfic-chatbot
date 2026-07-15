@@ -5,6 +5,14 @@ export type WorkflowValidationIssue = Readonly<{
   message: string;
 }>;
 
+const STAGE_KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const TAG_KEY = /^[a-z0-9][a-z0-9._-]{0,47}$/;
+const ATTRIBUTE_KEY = /^[\p{L}\p{N}_-]{1,64}$/u;
+const BLOCKED_ATTRIBUTE_KEYS = new Set([
+  "assignment", "assigned_user_id", "stage", "stage_key", "status", "lifecycle",
+  "price", "stock", "vacancy", "order", "shipment", "payment", "eta",
+]);
+
 const duplicateValues = (values: readonly string[]): string[] => {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
@@ -29,8 +37,14 @@ export const validateWorkflowGraph = (
   if (draft.stages.some((stage) => !stage.key.trim() || !stage.label.trim())) {
     issues.push({ code: "STAGE_REQUIRED", message: "Mỗi giai đoạn cần có mã và tên hiển thị." });
   }
+  if (stageKeys.some((key) => key && !STAGE_KEY.test(key))) {
+    issues.push({ code: "STAGE_KEY_INVALID", message: "Mã giai đoạn phải bắt đầu bằng chữ thường hoặc số và chỉ dùng chữ thường, số, dấu chấm, gạch ngang hoặc gạch dưới." });
+  }
   if (initialStages.length !== 1) {
     issues.push({ code: "INITIAL_COUNT", message: "Chọn đúng một giai đoạn bắt đầu." });
+  }
+  if (initialStages.length === 1 && initialStages[0]!.is_terminal) {
+    issues.push({ code: "INITIAL_TERMINAL", message: "Giai đoạn bắt đầu không thể đồng thời là giai đoạn kết thúc." });
   }
   if (terminalStages.length === 0) {
     issues.push({ code: "TERMINAL_REQUIRED", message: "Chọn ít nhất một giai đoạn kết thúc." });
@@ -94,11 +108,22 @@ export const validateWorkflowGraph = (
   if (duplicateValues(draft.tags.map((tag) => tag.key)).length > 0) {
     issues.push({ code: "TAG_KEY_DUPLICATE", message: "Mã nhãn không được trùng nhau." });
   }
+  if (draft.tags.some((tag) => tag.key.trim() && !TAG_KEY.test(tag.key.trim()))) {
+    issues.push({ code: "TAG_KEY_INVALID", message: "Mã nhãn phải bắt đầu bằng chữ thường hoặc số và chỉ dùng chữ thường, số, dấu chấm, gạch ngang hoặc gạch dưới." });
+  }
   if (new Set(draft.tags.map((tag) => tag.position)).size !== draft.tags.length) {
     issues.push({ code: "TAG_POSITION_DUPLICATE", message: "Thứ tự nhãn không được trùng nhau." });
   }
   if (duplicateValues(attributeKeys).length > 0) {
     issues.push({ code: "ATTRIBUTE_KEY_DUPLICATE", message: "Mã thuộc tính hồ sơ không được trùng nhau." });
+  }
+  if (
+    attributeKeys.some((key) => {
+      const normalized = key.trim();
+      return normalized && (!ATTRIBUTE_KEY.test(normalized) || BLOCKED_ATTRIBUTE_KEYS.has(normalized.toLowerCase()));
+    })
+  ) {
+    issues.push({ code: "ATTRIBUTE_KEY_INVALID", message: "Mã thuộc tính không hợp lệ hoặc trùng với trường vận hành được hệ thống bảo vệ." });
   }
   return issues;
 };

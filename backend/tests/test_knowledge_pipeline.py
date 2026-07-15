@@ -23,6 +23,8 @@ from app.services.knowledge import (
     validate_digest,
 )
 from app.services.knowledge import KnowledgeService  # noqa: F401  (used by skipped integration tests)
+from app.services.knowledge.pipeline import _fallback_question, _fallback_unit
+from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
 
 # Integration tests in this module need infrastructure that is deliberately
 # absent from the unit suite (live DB + seeded admin user + fixtures), and some
@@ -113,6 +115,16 @@ def test_split_for_digest_respects_size():
     assert len(sections) >= 2 and all(len(s) <= 6000 for s in sections)
     assert split_for_digest("", 6000) == []
     assert split_for_digest("ngắn", 6000) == ["ngắn"]
+
+
+def test_generic_digest_prompts_and_fallback_never_invent_a_customer_or_industry():
+    unit = _fallback_unit("Bảo hành: 12 tháng", 0)
+
+    assert unit["content"] == "Bảo hành: 12 tháng"
+    assert "LG Display" not in DIGEST_SYSTEM_PROMPT
+    assert "VFIC" not in DIGEST_SYSTEM_PROMPT
+    assert "VFIC" not in INDEX_SYSTEM_PROMPT
+    assert "LG Display" not in _fallback_question("benefits")
 
 
 # --------------------------------------------------------------------------- validate

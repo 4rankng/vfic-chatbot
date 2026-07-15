@@ -29,6 +29,12 @@ describe("validateWorkflowGraph", () => {
     expect(codes(draft)).toContain("TERMINAL_REQUIRED");
   });
 
+  it("rejects an initial stage that is also terminal", () => {
+    const draft = validDraft();
+    draft.stages[0]!.is_terminal = true;
+    expect(codes(draft)).toContain("INITIAL_TERMINAL");
+  });
+
   it("rejects duplicate stage, tag, attribute keys and positions", () => {
     const draft = validDraft();
     draft.stages[1]!.key = "new";
@@ -58,5 +64,14 @@ describe("validateWorkflowGraph", () => {
     const draft = validDraft();
     draft.stages[1]!.key = "closed";
     expect(codes(draft)).toContain("TRANSITION_ENDPOINT");
+  });
+
+  it("rejects known-invalid stage, tag, and protected attribute keys", () => {
+    const draft = validDraft();
+    draft.stages[1]!.key = "Not Valid";
+    draft.tags = [{ key: "Bad Tag", label: "Sai", tone: "warning", position: 0 }];
+    expect(codes(draft, ["stage_key"])).toEqual(
+      expect.arrayContaining(["STAGE_KEY_INVALID", "TAG_KEY_INVALID", "ATTRIBUTE_KEY_INVALID"]),
+    );
   });
 });

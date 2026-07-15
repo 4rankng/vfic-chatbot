@@ -113,6 +113,28 @@ const deliveryRetryLabel = (attempts?: number) => {
   return `Đã thử lại ${retries} lần`;
 };
 
+/**
+ * Map a failed/unknown send's backend `external_error` to a short Vietnamese
+ * reason, so a "Gửi lỗi" bubble is diagnosable instead of blank when the
+ * attempted reply content is empty/unavailable. Mirrors the provider/network
+ * taxonomy used elsewhere in the CRM (englishCrmMessages.reply.*), in Vietnamese.
+ */
+const failureReasonLabel = (m: Message): string => {
+  if (m.delivery_status !== "failed" && m.delivery_status !== "send_unknown") {
+    return "";
+  }
+  const reason = (m.external_error ?? "").toLowerCase();
+  if (!reason) return "";
+  if (
+    reason.includes("timeout") ||
+    reason.includes("connect") ||
+    reason.includes("network")
+  ) {
+    return "Lỗi kết nối mạng";
+  }
+  return "Zalo từ chối tin nhắn";
+};
+
 const splitLongTextLine = (line: string) => {
   if (line.length <= MESSAGE_TEXT_CHUNK_CHARS) return [line];
 
@@ -200,6 +222,11 @@ const ChatMessageRow = memo(
       kind === "agent" &&
       m.delivery_status === "failed" &&
       !m.id.startsWith("optimistic-");
+    // A failed send whose reply body is empty (e.g. an empty candidate that
+    // slipped through) would render a blank bubble. Surface the failure reason
+    // instead so the "Gửi lỗi" row always tells the recruiter what happened.
+    const failureReason = failureReasonLabel(m);
+    const hasText = textBlocks.some((block) => block && block.trim());
     const avatar =
       kind === "user" ? (
         !isGrouped ? (
@@ -233,6 +260,11 @@ const ChatMessageRow = memo(
                 />
               ),
             )}
+            {failureReason && !hasText ? (
+              <p className="message-text-block delivery-error-detail">
+                {failureReason}
+              </p>
+            ) : null}
           </div>
           <span className="bubble-meta-inline">
             {kind !== "user" && deliveryLabel ? (

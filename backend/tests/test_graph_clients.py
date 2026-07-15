@@ -57,6 +57,29 @@ async def test_dispatch_tool_unknown_name_returns_marker():
     assert await _dispatch_tool(None, None, "", None) == "unknown tool"
 
 
+@pytest.mark.asyncio
+async def test_disabled_known_tool_never_reaches_its_repository_handler(monkeypatch):
+    called = False
+
+    async def forbidden(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return "must not run"
+
+    monkeypatch.setattr("app.graph.schemas.recommend_jobs", forbidden)
+
+    result = await _dispatch_tool(
+        object(),
+        object(),
+        "recommend_jobs",
+        {"chat_id": "x"},
+        resolved_registry=frozenset({"search_knowledge"}),
+    )
+
+    assert result == "tool is disabled for the active installation"
+    assert called is False
+
+
 def test_every_tool_schema_name_is_dispatchable():
     names = {t["function"]["name"] for t in TOOL_SCHEMAS}
     assert names <= _DISPATCHED  # no schema describes a tool the dispatcher can't route

@@ -82,7 +82,8 @@ const toMessage = (row: ApiRecord): Message => {
     type,
     content: String(row.body ?? ""),
     delivery_status: String(row.delivery_status ?? "sent").toLowerCase() as
-      "pending" | "sent" | "failed" | "suppressed",
+      Message["delivery_status"],
+    external_error: row.external_error ? String(row.external_error) : null,
     delivery_attempts: asPositiveInteger(row.delivery_attempts),
     data: { recruiter_id: recruiterId },
     created_at: String(row.created_at ?? new Date().toISOString()),

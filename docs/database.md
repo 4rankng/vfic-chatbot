@@ -52,7 +52,7 @@ Default (local dev): `postgresql+asyncpg://vfic:vfic@localhost:5432/vfic`
 .venv/bin/alembic current                         # View current revision
 ```
 
-## ORM Models (21 entities, 11 files)
+## ORM model modules
 
 Path: `backend/app/models/`
 
@@ -61,6 +61,9 @@ Path: `backend/app/models/`
 | `base.py` | `Base` (DeclarativeBase) | SQLAlchemy declarative base |
 | `user.py` | `User`, `Role` (admin/recruiter/viewer) | User accounts + roles |
 | `audit.py` | `AuditEvent` | Audit log |
+| `case_workflow.py` | `CaseWorkflowVersion`, `CaseWorkflowStage`, `CaseWorkflowTransition`, `CaseTagDefinition` | Immutable administrator-authored generic workflows |
+| `contact.py` | `Contact`, `ContactChannelIdentity` | Typed people and account-scoped channel identity authority |
+| `case.py` | `Case`, `CaseTagAssignment`, `CaseNote`, `CaseFollowup` | Generic workflow-pinned operational Cases |
 | `company.py` | `Company`, `Project` | Companies + projects |
 | `conversation.py` | `Conversation`, `ConversationMode`, `ConversationStatus`, `Message`, `MessageSender`, `DeliveryStatus`, `BotRun`, `BotRunOutcome` | Chat conversations + messages + bot run tracking |
 | `lead.py` | `Lead`, `LeadStage`, `LeadScore`, `LeadEvent`, `FollowUpTask`, `FollowupStatus` | Lead CRM pipeline + follow-ups |
@@ -114,8 +117,45 @@ PostgreSQL rather than business environment variables or browser storage.
 - Migrations `0042` and `0043` insert no customer, industry, persona, template,
   credential, or sample-data rows. `0043` adds the setup draft and explicit
   authentication-policy evidence needed by the setup flow.
+- Migration `0044` adds nullable immutable workflow-version/checksum pins to
+  revisions and validation evidence. New setup finalization requires an
+  explicit matching pair; historical null-pinned revisions remain readable but
+  are not future activation authority.
 - Integration secrets remain encrypted in `integration_settings`; setup drafts
   store logical references only and reject secret-shaped values.
+
+### Dormant generic workflow, Contact, and Case kernel (`0044`)
+
+Migration `0044_generic_contact_case_kernel` is additive DDL with no business
+row seeds and no inferred Lead/Conversation backfill:
+
+- `case_workflow_versions`, stages, transitions, and tag definitions form one
+  normalized immutable version. A canonical checksum covers the published
+  definition, and database triggers reject later parent/child insert, update,
+  or delete operations that would reinterpret pinned Cases.
+- `contacts` contains only typed nullable profile fields and an optimistic
+  version; V1 deliberately has no generic Contact attribute JSON.
+  `contact_channel_identities` owns the unique configured authority tuple
+  `(provider, account_key, external_id)` and does not invent an account key.
+- `cases` pins workflow version/checksum and current stage, with closed
+  `OPEN|CLOSED|CANCELLED` lifecycle, assignment, optimistic version, and a
+  bounded Case-only attribute object validated against the pinned schema.
+  Tags, append-only notes, and typed follow-ups use dedicated tables.
+- `conversations.contact_id` and `channel_identity_id` are nullable for legacy
+  compatibility. Foreign keys and a check prove that a linked channel identity
+  belongs to the linked Contact; a partial unique index permits one V1
+  Conversation per channel identity. No `conversation.case_id` was added.
+
+The downgrade refuses while any generic-kernel row, Conversation identity link,
+or installation workflow pin/evidence exists. Disposable PostgreSQL tests cover
+the empty `0043 -> 0044 -> 0043 -> 0044` round trip, populated downgrade
+refusal, workflow immutability, pinned Case lifecycle, and concurrent channel-
+identity convergence.
+
+These tables do not make the deployment universal or active. All code-owned
+packs remain `runtime_ready=false`; live webhook adoption, provider-message
+deduplication by channel identity, and legacy recruitment separation are later
+Release B work.
 
 ## Redis
 

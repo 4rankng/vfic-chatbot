@@ -128,6 +128,12 @@ class LeadContextPort(Protocol):
     def instruction(self, question: str) -> str: ...
 
 
+class RuntimePolicyPort(Protocol):
+    """Resolve only an active, validated installation into immutable turn policy."""
+
+    async def resolve_active_policy(self) -> Any: ...
+
+
 class RetrievalPort(Protocol):
     """Retrieval repository surface the agent tools + prompt assembly depend on."""
 

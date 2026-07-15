@@ -290,10 +290,12 @@ export const WorkflowStep = ({
   onChange,
   catalog,
   selectedPackKey,
+  syncToken,
   issues,
 }: CommonStepProps & {
   value?: WorkflowDraft;
   selectedPackKey?: string;
+  syncToken?: number;
   onChange: (value: WorkflowDraft | undefined) => void;
 }) => {
   const initial = value?.workflow_policy;
@@ -343,7 +345,7 @@ export const WorkflowStep = ({
     setWorkflowVersionId(policy.workflow_version_id);
     setHandoffMode(policy.handoff_mode);
     setAutomationChoice(policy.automation_enabled ? "enabled" : "disabled");
-  }, [allowedIds, catalog.authored_workflow_versions, selectedPackKey, value]);
+  }, [allowedIds, catalog.authored_workflow_versions, selectedPackKey, syncToken, value]);
   const selectableVersions = authoredVersions
     .filter(
       (version) =>
@@ -775,19 +777,15 @@ export const ProvidersIntegrationsStep = ({
     temperature: value ? String(value.provider_policy.temperature) : "",
     maxOutputTokens: value ? String(value.provider_policy.max_output_tokens) : "",
   }));
-  const [requirements, setRequirements] = useState(
-    () => value?.integration_requirements.map((item) => item.key) ?? [],
-  );
   const selectedKeys = Array.from(
     new Set(
       [
         policy.chatIntegrationKey,
         policy.embeddingIntegrationKey,
-        ...requirements,
       ].filter(Boolean),
     ),
   );
-  const commit = (nextPolicy: typeof policy, nextRequirements: string[]) => {
+  const commit = (nextPolicy: typeof policy) => {
     const temperature = Number(nextPolicy.temperature);
     const maxOutputTokens = Number(nextPolicy.maxOutputTokens);
     if (
@@ -811,21 +809,14 @@ export const ProvidersIntegrationsStep = ({
         temperature,
         max_output_tokens: maxOutputTokens,
       },
-      integration_requirements: nextRequirements.map((key) => ({ key })),
+      integration_requirements: [],
       authentication_policy: { email_password_enabled: true },
     });
   };
   const updatePolicy = (patch: Partial<typeof policy>) => {
     const next = { ...policy, ...patch };
     setPolicy(next);
-    commit(next, requirements);
-  };
-  const toggleRequirement = (key: string, checked: boolean) => {
-    const next = checked
-      ? Array.from(new Set([...requirements, key]))
-      : requirements.filter((item) => item !== key);
-    setRequirements(next);
-    commit(policy, next);
+    commit(next);
   };
   return (
     <fieldset className="grid gap-6">
@@ -840,7 +831,6 @@ export const ProvidersIntegrationsStep = ({
         <div className="grid gap-2"><Label htmlFor="temperature">Temperature *</Label><Input id="temperature" type="number" min={0} max={2} step="0.1" className={inputClassName} value={policy.temperature} onChange={(event) => updatePolicy({ temperature: event.target.value })} /></div>
         <div className="grid gap-2"><Label htmlFor="max-output">Số token đầu ra tối đa *</Label><Input id="max-output" type="number" min={1} max={131072} className={inputClassName} value={policy.maxOutputTokens} onChange={(event) => updatePolicy({ maxOutputTokens: event.target.value })} /></div>
       </div>
-      <div className="grid gap-3"><h3 className="font-medium">Tích hợp bắt buộc</h3>{catalog.integration_keys.map((key) => <label key={key} className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><Checkbox checked={requirements.includes(key)} onCheckedChange={(checked) => toggleRequirement(key, checked === true)} />{key}</label>)}</div>
       <div className="grid gap-4 sm:grid-cols-2">
         {selectedKeys.filter(isSupportedModelIntegration).map((key) => <ProviderSecretPanel key={key} integrationKey={key} />)}
         {selectedKeys.includes("zalo") ? <ZaloSecretPanel /> : null}

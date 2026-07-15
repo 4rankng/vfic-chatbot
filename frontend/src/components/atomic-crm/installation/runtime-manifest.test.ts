@@ -80,6 +80,29 @@ describe("parseRuntimeManifest", () => {
     expect(parseRuntimeManifest(payload)).toEqual(payload);
   });
 
+  it("treats null optional identity and branding fields as unset", () => {
+    const manifest = parseRuntimeManifest({
+      ...activeManifest(),
+      customer_identity: {
+        display_name: "Configured customer",
+        legal_name: null,
+        support_name: null,
+        support_email: null,
+        support_phone: null,
+        website_url: null,
+        address: null,
+      },
+      branding: { app_name: null, primary_color: null, secondary_color: null },
+    });
+
+    expect(manifest.customer_identity?.display_name).toBe("Configured customer");
+    expect(manifest.customer_identity?.legal_name).toBeUndefined();
+    expect(manifest.customer_identity?.support_email).toBeUndefined();
+    expect(manifest.branding?.app_name).toBeUndefined();
+    expect(manifest.branding?.primary_color).toBeUndefined();
+    expect(manifest.branding?.secondary_color).toBeUndefined();
+  });
+
   it.each([
     ["SUSPENDED", "SUSPENDED"],
     ["UPGRADE_REQUIRED", "UPGRADE_REQUIRED"],

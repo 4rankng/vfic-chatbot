@@ -26,6 +26,8 @@ from app.models.ingestion_template import (
 from app.models.knowledge import KBTextFile, KBVersion, KBVersionStatus
 from app.models.provenance import ExtractionRun, FieldEvidence, SourceDocument, SourceFragment
 from app.services.ingestion.extraction import extract_key_value_lines
+from app.services.ingestion.generic_extraction import extract_compiled_records
+from app.services.ingestion.source_blocks import SourceBlock, source_blocks_from_sections
 from app.services.ingestion.template_compiler import compile_template
 from app.services.ingestion.template_service import TemplateService
 from app.services.audit_service import record_audit
@@ -157,15 +159,6 @@ class TemplateIngestionService:
             raise IngestionRunConflict("ingestion run lease expired")
         template = await TemplateService(self.db).get_version(run.template_version_id)
         artifact = template.compiled_artifact or {}
-        template_family = await TemplateService(self.db).get_template(template.template_id)
-        # The compatibility template intentionally delegates recruitment parsing
-        # to the canonical pipeline until its typed adapter is fully migrated.
-        if template_family.template_key == "recruitment_factory_builtin":
-            run.status = IngestionRunStatus.READY
-            run.finished_at = datetime.now(UTC)
-            run.stats = {"facts": 0, "compatibility": "recruitment_builtin"}
-            await self.db.commit()
-            return run
         files = list(
             (
                 await self.db.scalars(
@@ -330,26 +323,72 @@ class TemplateIngestionService:
     async def _persist_evidence(
         self, extraction_run_id: int, source_document_id: int, record: dict
     ) -> dict:
-        fragment = SourceFragment(
-            document_id=source_document_id,
-            block_type="key_value",
-            block_order=0,
-            original_text=record["source_text"],
-            normalized_text=record["source_text"],
-            created_at=datetime.now(UTC),
-        )
-        self.db.add(fragment)
-        await self.db.flush()
+        evidence_sources = record.get("evidence_sources", {})
+        legacy_fragment: SourceFragment | None = None
         evidence: dict[str, int] = {}
         for field, value in record["payload"].items():
             if field not in record["evidence_fields"]:
                 continue
+            source = evidence_sources.get(field)
+            if source is not None:
+                locator = source["locator"]
+                fragment = SourceFragment(
+                    document_id=source_document_id,
+                    block_type="source_block",
+                    block_order=locator.line_start or locator.row_start or 0,
+                    section_path="/".join(locator.section_path) or None,
+                    original_text=source["original_text"],
+                    normalized_text=source["normalized_text"],
+                    table_json={
+                        "coordinate_space": locator.coordinate_space,
+                        "sheet": locator.sheet,
+                        "table": locator.table,
+                        "row_start": locator.row_start,
+                        "row_end": locator.row_end,
+                        "column_start": locator.column_start,
+                        "column_end": locator.column_end,
+                        "occurrence_id": locator.occurrence_id,
+                    },
+                    bounding_box={
+                        "start_offset": locator.start_offset,
+                        "end_offset": locator.end_offset,
+                        "source_checksum": locator.source_checksum,
+                    },
+                    fragment_hash=_sha(source["original_text"]),
+                    created_at=datetime.now(UTC),
+                )
+                self.db.add(fragment)
+                await self.db.flush()
+                extraction_method = "template_v2"
+                char_range = (
+                    f"{locator.start_offset}:{locator.end_offset}"
+                    if locator.start_offset is not None and locator.end_offset is not None
+                    else None
+                )
+            else:
+                if legacy_fragment is None:
+                    legacy_fragment = SourceFragment(
+                        document_id=source_document_id,
+                        block_type="key_value",
+                        block_order=0,
+                        original_text=record["source_text"],
+                        normalized_text=record["source_text"],
+                        created_at=datetime.now(UTC),
+                    )
+                    self.db.add(legacy_fragment)
+                    await self.db.flush()
+                fragment = legacy_fragment
+                extraction_method = "template_key_value"
+                char_range = None
             item = FieldEvidence(
                 extraction_run_id=extraction_run_id,
                 source_fragment_id=fragment.id,
                 field_path=f"payload.{field}",
                 value=str(value),
-                extraction_method="template_key_value",
+                table_row=locator.row_start if source is not None else None,
+                table_column=locator.column_start if source is not None else None,
+                char_range=char_range,
+                extraction_method=extraction_method,
                 confidence=1.0,
                 created_at=datetime.now(UTC),
             )
@@ -361,6 +400,8 @@ class TemplateIngestionService:
     def _extract_artifact(
         self, artifact: dict, source_text: str, *, file_id: uuid.UUID | None
     ) -> tuple[list[dict], list[dict]]:
+        if artifact.get("compiler_version") == "2":
+            return self._extract_compiler_v2(artifact, source_text)
         values = extract_key_value_lines(source_text)
         records: list[dict] = []
         issues: list[dict] = []
@@ -453,6 +494,70 @@ class TemplateIngestionService:
                     "source_text": source_text,
                 }
             )
+        return records, issues
+
+    @staticmethod
+    def _extract_compiler_v2(artifact: dict, source_text: str) -> tuple[list[dict], list[dict]]:
+        """Convert deterministic v2 records to the persistence-neutral v1 shape.
+
+        The v1 executor remains untouched for checksum replay. V2 instead keeps the
+        exact source block for every sourced field so materialization never treats a
+        whole uploaded file as evidence for an individual value.
+        """
+        blocks = source_blocks_from_sections(source_text)
+        block_by_locator: dict[object, SourceBlock] = {block.locator: block for block in blocks}
+        extracted, extracted_issues = extract_compiled_records(artifact, blocks)
+        records: list[dict] = []
+        for item in extracted:
+            record_type = next(
+                entry for entry in artifact["record_types"] if entry["key"] == item.record_type_key
+            )
+            source_modes = {
+                field.get("source_mode", "sourced_fact")
+                for field in record_type["fields"]
+                if field["key"] in item.payload
+            }
+            if "narrative" in source_modes:
+                continue
+            evidence_sources = {
+                field: {
+                    "original_text": block_by_locator[locator].original_text,
+                    "normalized_text": block_by_locator[locator].normalized_text,
+                    "locator": locator,
+                }
+                for field, locator in item.evidence.items()
+                if locator in block_by_locator
+            }
+            natural_key = {
+                key: item.payload[key] for key in record_type["natural_key_fields"]
+            }
+            records.append(
+                {
+                    "record_type_key": item.record_type_key,
+                    "source_mode": item.source_mode,
+                    "natural_key": natural_key,
+                    "natural_key_hash": _sha(natural_key),
+                    "payload": item.payload,
+                    "evidence_fields": set(item.evidence),
+                    "evidence_sources": evidence_sources,
+                    "scope_type": item.scope_type,
+                    "scope_id": item.scope_id,
+                    "source_text": "\n".join(
+                        source["original_text"] for source in evidence_sources.values()
+                    ),
+                }
+            )
+        issues = [
+            {
+                "severity": "warning" if issue.code == "conflicting_source_value" else "error",
+                "code": issue.code,
+                "message": issue.message,
+                "record_type_key": issue.record_type_key,
+                "field_path": issue.field_key,
+                "occurrence_id": issue.occurrence_id,
+            }
+            for issue in extracted_issues
+        ]
         return records, issues
 
     @staticmethod

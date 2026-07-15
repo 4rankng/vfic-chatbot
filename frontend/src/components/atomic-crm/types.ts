@@ -162,6 +162,10 @@ export type Message = {
     | "suppressed";
   /** Number of delivery attempts made for this outbound message. */
   delivery_attempts?: number;
+  /** Backend failure reason for a failed/unknown send (maps to
+   * messages.external_error). Surfaced in the bubble so a "Gửi lỗi" row is
+   * diagnosable instead of blank. */
+  external_error?: string | null;
   // Backend `data` jsonb. Carries recruiter_id on recruiter-sent messages
   // (the direction discriminator read in ChatThread). Narrowed from `any`.
   data: { recruiter_id?: string | null } | null;

@@ -169,7 +169,11 @@ _ALWAYS_AVAILABLE = frozenset({"search_knowledge", "search_user_memory"})
 ROUTE_CONFIDENCE_FLOOR = 0.5
 
 
-def filter_tool_schemas(allowed: tuple[str, ...] | None) -> list[dict]:
+def filter_tool_schemas(
+    allowed: tuple[str, ...] | None,
+    *,
+    resolved_registry: frozenset[str] | None = None,
+) -> list[dict]:
     """Return the tool-schema subset the agent is permitted to bind this turn.
 
     ``allowed`` is the routed tool set (``TurnRoute.tools``). The safety-floor tools
@@ -177,6 +181,11 @@ def filter_tool_schemas(allowed: tuple[str, ...] | None) -> list[dict]:
     still recover from a mis-route. ``None`` or empty → full registry (current behavior,
     used for low-confidence / un-routed turns).
     """
+    if resolved_registry is not None:
+        wanted = set(resolved_registry)
+        if allowed:
+            wanted.intersection_update(allowed)
+        return [schema for schema in TOOL_SCHEMAS if schema["function"]["name"] in wanted]
     if not allowed:
         return TOOL_SCHEMAS
     wanted = set(allowed) | set(_ALWAYS_AVAILABLE)
@@ -184,7 +193,13 @@ def filter_tool_schemas(allowed: tuple[str, ...] | None) -> list[dict]:
 
 
 async def _dispatch_tool(
-    retrieval, embedder, name: str, args: dict, *, metrics: dict | None = None
+    retrieval,
+    embedder,
+    name: str,
+    args: dict,
+    *,
+    metrics: dict | None = None,
+    resolved_registry: frozenset[str] | None = None,
 ) -> str:
     """Route a named tool call to its function.
 
@@ -199,6 +214,9 @@ async def _dispatch_tool(
 
     name = (name or "").strip()
     args = args or {}
+    if resolved_registry is not None and name not in resolved_registry:
+        logger.warning("disabled tool dispatch blocked: %s", name)
+        return "tool is disabled for the active installation"
     try:
         t0 = time.monotonic()
         if name == "search_user_memory":

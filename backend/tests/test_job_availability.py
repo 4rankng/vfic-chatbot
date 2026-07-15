@@ -43,6 +43,23 @@ def test_explicit_co2_welder_question_is_a_vacancy_lookup():
     assert not is_explicit_vacancy_question("tôi muốn ứng tuyển thợ hàn CO2")
 
 
+def test_messaging_complaint_is_not_a_vacancy_lookup():
+    # Accent collision: de-accenting turns "nhắn tin" (send a message) into the
+    # same token as "nhận" (accept workers), which previously misread a slow-reply
+    # complaint as a hiring question and answered it with NO_ACTIVE_JOB_REPLY.
+    complaint = (
+        "Khi tôi cần và nhắn tin cho shop thì lại mất 1 ngày shop mới hồi âm "
+        "thì tôi cũng không chờ được"
+    )
+    assert not is_explicit_vacancy_question(complaint)
+    assert vacancy_lookup_query(complaint, []) is None
+    # Other phrasings about messaging must also fall through to the agent.
+    assert not is_explicit_vacancy_question("shop nhắn tin lại quá chậm")
+    assert not is_explicit_vacancy_question("tôi nhắn tin mà không ai trả lời")
+    # The legitimate "nhận" (accept workers) path is unaffected.
+    assert is_explicit_vacancy_question("bên bạn có nhận thợ hàn không?")
+
+
 def test_exact_role_match_returns_same_active_job_evidence():
     job = _job()
     outcome = select_matching_active_jobs("bên bạn tuyển thợ hàn Co2 đúng ko?", [job])

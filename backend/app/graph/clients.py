@@ -95,13 +95,21 @@ async def _prefetch_tool(
     name: str,
     args: dict,
     metrics: dict | None,
+    resolved_registry: frozenset[str] | None = None,
 ) -> tuple[object, bool]:
     """Run one routed lookup with shared timing and fail-open semantics."""
     started = time.monotonic()
     if metrics is not None:
         metrics["prefetch_calls"] = metrics.get("prefetch_calls", 0) + 1
     try:
-        result = await _dispatch_tool(retrieval, embedder, name, args, metrics=metrics)
+        result = await _dispatch_tool(
+            retrieval,
+            embedder,
+            name,
+            args,
+            metrics=metrics,
+            resolved_registry=resolved_registry,
+        )
     except Exception:  # noqa: BLE001 — caller retains the normal tool loop
         logger.warning("%s prefetch failed", name, exc_info=True)
         result = ""
@@ -345,6 +353,7 @@ class MiniMaxAgent:
         retrieval,
         embedder,
         allowed_tools=None,
+        resolved_tool_registry: frozenset[str] | None = None,
         use_fast=False,
         make_retrieval=None,
         lookup_query: str | None = None,
@@ -356,7 +365,7 @@ class MiniMaxAgent:
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
         active_llm = self.fast_llm if (use_fast and self.fast_llm is not None) else self.llm
-        schemas = filter_tool_schemas(allowed_tools)
+        schemas = filter_tool_schemas(allowed_tools, resolved_registry=resolved_tool_registry)
         sem = get_llm_semaphore()
         messages = [SystemMessage(content=system)]
         tool_results: list[str] = []  # captured for post-generation grounding cross-check
@@ -397,6 +406,7 @@ class MiniMaxAgent:
                     "search_knowledge",
                     {"query": effective_query},
                     metrics=metrics,
+                    resolved_registry=resolved_tool_registry,
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("Contact knowledge prefetch failed", exc_info=True)
@@ -420,6 +430,7 @@ class MiniMaxAgent:
                 "search_bus_timetable",
                 {"company": "", "question": effective_query},
                 metrics,
+                resolved_tool_registry,
             )
             if prefetch_hit:
                 tool_results.append(str(prefetched))
@@ -444,6 +455,7 @@ class MiniMaxAgent:
                 "search_knowledge",
                 {"query": effective_query},
                 metrics,
+                resolved_tool_registry,
             )
             if prefetch_hit:
                 tool_results.append(str(prefetched))
@@ -534,7 +546,12 @@ class MiniMaxAgent:
                         try:
                             async with make_retrieval() as fresh_retrieval:
                                 return await _dispatch_tool(
-                                    fresh_retrieval, embedder, name, args, metrics=metrics
+                                    fresh_retrieval,
+                                    embedder,
+                                    name,
+                                    args,
+                                    metrics=metrics,
+                                    resolved_registry=resolved_tool_registry,
                                 )
                         except Exception:  # noqa: BLE001 — session setup failed → shared
                             logger.warning(
@@ -542,7 +559,14 @@ class MiniMaxAgent:
                                 name,
                                 exc_info=True,
                             )
-                    return await _dispatch_tool(retrieval, embedder, name, args, metrics=metrics)
+                    return await _dispatch_tool(
+                        retrieval,
+                        embedder,
+                        name,
+                        args,
+                        metrics=metrics,
+                        resolved_registry=resolved_tool_registry,
+                    )
                 finally:
                     if metrics is not None:
                         breakdown = metrics.setdefault("tool_breakdown", {})

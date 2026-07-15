@@ -1314,9 +1314,38 @@ class ConversationState:
             outbox.sent_at = utcnow()
             conv.last_outbound_at = utcnow()
         if msg.sender == MessageSender.BOT:
-            conv.bot_locked_until = None
-            conv.bot_lock_owner = None
-            conv.bot_lock_heartbeat_at = None
+            # A stale-outbox finalization can run on the recovery sweep LONG
+            # after the message's own turn ended (it fires only once the outbox
+            # row exceeds ``chat_turn_job_timeout`` without a receipt). By then a
+            # NEWER turn may already hold this conversation's lock — and clearing
+            # it unconditionally here steals that live lock, causing the in-flight
+            # turn's ``claim_send`` to suppress (the "Đã chặn" / SUPPRESSED bug).
+            # Only clear a lock that is NOT live: one with no owner or whose TTL
+            # already expired. A still-live lock belongs to a concurrent turn and
+            # is left for its own ``record_bot_outcome`` / the reconciler's TTL
+            # sweep. Conditional SQL (evaluated server-side at commit) mirrors the
+            # owner-guarded pattern in ``release_lock`` / ``record_bot_outcome``.
+            clear_lock = await self.db.execute(
+                update(Conversation)
+                .where(
+                    Conversation.id == conv.id,
+                    or_(
+                        Conversation.bot_lock_owner.is_(None),
+                        Conversation.bot_locked_until.is_(None),
+                        Conversation.bot_locked_until <= utcnow(),
+                    ),
+                )
+                .values(
+                    bot_locked_until=None,
+                    bot_lock_owner=None,
+                    bot_lock_heartbeat_at=None,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if clear_lock.rowcount == 1:
+                conv.bot_locked_until = None
+                conv.bot_lock_owner = None
+                conv.bot_lock_heartbeat_at = None
         await self.db.commit()
         await self.db.refresh(msg)
         msg._delivery_attempts = outbox.attempts

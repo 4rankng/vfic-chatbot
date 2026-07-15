@@ -138,6 +138,29 @@ class _FaqBypassAdapter:
         return None
 
 
+class _RuntimePolicyAdapter:
+    """Installation-backed policy adapter owned by the graph composition root."""
+
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def resolve_active_policy(self):
+        from app.graph.runtime_policy import build_resolved_runtime_policy
+        from app.services.errors import InstallationError
+        from app.services.installation.service import InstallationService
+
+        installation = InstallationService(self._db)
+        try:
+            active = await installation.require_active()
+        except InstallationError:
+            return None
+        persona = await installation.repo.get_persona_version(active.revision.persona_version_id)
+        return build_resolved_runtime_policy(
+            active,
+            persona_body=persona.body_md if persona is not None else None,
+        )
+
+
 def build_minimax_extractor():
     """MiniMax extractor (safety model, temp 0) for candidate extraction."""
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -376,6 +399,7 @@ async def build_deps(db, *, session_factory=None):
         lead=_LeadContextAdapter(db),
         faq_bypass=_FaqBypassAdapter(db, clients.embedder),
         followup_allowed=_make_followup_allowed(db),
+        runtime_policy=_RuntimePolicyAdapter(db),
     )
 
 

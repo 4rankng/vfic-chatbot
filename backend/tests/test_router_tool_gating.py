@@ -70,6 +70,18 @@ def test_filter_unknown_tool_name_is_ignored_silently():
     assert "no_such_tool" not in names
 
 
+def test_resolved_registry_is_an_exact_tool_boundary_without_legacy_safety_floor():
+    names = {
+        schema["function"]["name"]
+        for schema in filter_tool_schemas(
+            None,
+            resolved_registry=frozenset({"search_knowledge"}),
+        )
+    }
+
+    assert names == {"search_knowledge"}
+
+
 # --- confidence floor → full registry ---------------------------------------
 
 

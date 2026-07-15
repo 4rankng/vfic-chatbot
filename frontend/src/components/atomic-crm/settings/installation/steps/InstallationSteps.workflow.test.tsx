@@ -141,4 +141,18 @@ describe("WorkflowStep", () => {
     await expect.element(screen.getByLabelText("Phiên bản đã xuất bản *")).toBeDisabled();
     await expect.element(screen.getByRole("radio", { name: "Bật tự động hóa", exact: true })).not.toBeChecked();
   });
+
+  it("clears an incomplete local selection when discard reloads the same empty parent value", async () => {
+    const onChange = vi.fn();
+    const screen = await render(
+      <WorkflowStep catalog={catalog} issues={[]} selectedPackKey="configured-pack" syncToken={0} onChange={onChange} />,
+    );
+    await screen.getByLabelText("Quy trình *").selectOptions("support");
+    await expect.element(screen.getByLabelText("Quy trình *")).toHaveValue("support");
+
+    await screen.rerender(
+      <WorkflowStep catalog={catalog} issues={[]} selectedPackKey="configured-pack" syncToken={1} onChange={onChange} />,
+    );
+    await expect.element(screen.getByLabelText("Quy trình *")).toHaveValue("");
+  });
 });

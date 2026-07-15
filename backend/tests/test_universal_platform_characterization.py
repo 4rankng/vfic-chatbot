@@ -13,13 +13,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
+from app.api import knowledge as knowledge_api
 from app.graph.router import route_turn
 from app.graph.context import build_system_prompt
 from app.graph.types import BotRunState
 from app.graph.vacancy import NO_ACTIVE_JOB_REPLY
 from app.services.ingestion.template_compiler import compile_template
-from app.services.ingestion.template_service import TemplateService
+from app.services.ingestion.template_service import TemplateConflictError, TemplateService
 from app.services.knowledge.pipeline import KnowledgePipeline, _fallback_unit
 from tests.fixtures.universal_platform.factories import (
     empty_installation_fixture,
@@ -167,36 +169,54 @@ async def test_explicit_recruitment_fixture_reproduces_current_vacancy_reply(
     assert sender.sent == [("z1", NO_ACTIVE_JOB_REPLY)]
 
 
-def test_current_knowledge_fallback_injects_lg_display_context():
+def test_knowledge_fallback_keeps_only_source_context():
     unit = _fallback_unit("Lương cơ bản là 8 triệu đồng.", 0)
 
-    assert unit["content"].startswith("LG Display Hải Phòng —")
-    assert unit["questions"] == ["Thu nhập, lương hoặc trợ cấp của LG Display như thế nào?"]
+    assert unit["content"] == "Lương cơ bản là 8 triệu đồng."
+    assert unit["questions"] == ["Thông tin này nói gì về thu nhập, giá hoặc hỗ trợ?"]
 
 
-def test_current_digest_fallback_is_source_grounded_and_recruitment_specific():
+def test_digest_fallback_is_source_grounded_and_domain_neutral():
     pipeline = object.__new__(KnowledgePipeline)
 
     summary, units = pipeline._fallback_digest_section("Lương cơ bản là 8 triệu đồng.")
 
     assert summary == "Lương cơ bản là 8 triệu đồng."
     assert units[0]["source_quote"] == "Lương cơ bản là 8 triệu đồng."
-    assert units[0]["content"].startswith("LG Display Hải Phòng —")
+    assert units[0]["content"] == "Lương cơ bản là 8 triệu đồng."
 
 
 @pytest.mark.asyncio
-async def test_current_template_resolution_creates_builtin_recruitment_when_unassigned():
-    expected = object()
+async def test_template_resolution_requires_an_explicit_assignment():
     service = TemplateService(object())  # type: ignore[arg-type]
     service.current_assignment = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    service.ensure_builtin_recruitment = AsyncMock(return_value=expected)  # type: ignore[method-assign]
 
-    resolved = await service.pinned_version_for_project(
-        uuid.UUID("00000000-0000-0000-0000-000000000001")
-    )
+    with pytest.raises(ValueError, match="explicit published"):
+        await service.pinned_version_for_project(
+            uuid.UUID("00000000-0000-0000-0000-000000000001")
+        )
 
-    assert resolved is expected
-    service.ensure_builtin_recruitment.assert_awaited_once()
+
+@pytest.mark.asyncio
+async def test_knowledge_version_creation_explains_missing_template_assignment(monkeypatch):
+    class MissingAssignmentService:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        async def create_version(self, _project_id: uuid.UUID, *, actor: object) -> object:
+            raise TemplateConflictError("project requires an explicit published ingestion-template assignment")
+
+    monkeypatch.setattr(knowledge_api, "KnowledgeService", MissingAssignmentService)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_api.create_kb_version(
+            uuid.UUID("00000000-0000-0000-0000-000000000001"),
+            admin=SimpleNamespace(id=uuid.UUID("00000000-0000-0000-0000-000000000002")),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "assign a published knowledge template before creating a knowledge version"
 
 
 @pytest.mark.asyncio
@@ -220,7 +240,7 @@ async def test_current_system_prompt_uses_database_persona_but_appends_recruitme
     assert cache_hit is False
 
 
-def test_current_template_service_source_contains_automatic_recruitment_fallback():
+def test_template_service_source_contains_no_automatic_recruitment_fallback():
     source = (
         Path(__file__).parents[1]
         / "app"
@@ -229,8 +249,8 @@ def test_current_template_service_source_contains_automatic_recruitment_fallback
         / "template_service.py"
     ).read_text(encoding="utf-8")
 
-    assert "return await self.ensure_builtin_recruitment()" in source
-    assert 'template_key="recruitment_factory_builtin"' in source
+    assert "ensure_builtin_recruitment" not in source
+    assert "recruitment_factory_builtin" not in source
 
 
 def test_required_recruitment_behavioral_baselines_are_present_and_selected():
