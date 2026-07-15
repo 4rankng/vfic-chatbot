@@ -26,6 +26,7 @@ from app.core.logging import request_id_ctx
 from app.models.conversation import ConversationMode
 from app.services.conversation import ConversationService
 from app.services.dedup import MessageDedupService
+from app.services.installation.authority import RuntimeAuthorityStamp
 from app.services.zalo_oa_events import parse_oa_webhook_event
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,7 @@ class ZaloWebhookService:
         enqueue: Callable[[dict], bool | Awaitable[bool]],
         channel: str = "bot",
         bot_token: str | None = None,
+        runtime_authority: RuntimeAuthorityStamp | None = None,
     ) -> dict:
         """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
@@ -125,6 +127,9 @@ class ZaloWebhookService:
             conv,
             body=norm.user_text,
             zalo_message_id=norm.msg_id,
+            runtime_revision_id=(runtime_authority.revision_id if runtime_authority else None),
+            authority_generation=(runtime_authority.authority_generation if runtime_authority else None),
+            runtime_fingerprint=(runtime_authority.fingerprint if runtime_authority else None),
         )  # persists candidate message; stamps last_inbound_at; bumps unread if HUMAN
 
         # Human-only conversations keep every inbound but spend no resources on
@@ -208,6 +213,15 @@ class ZaloWebhookService:
             "zalo_chat_id": norm.zalo_chat_id,
             "zalo_channel": norm.zalo_channel,
             "zalo_bot_token": bot_token,
+            "runtime_revision_id": (
+                str(runtime_authority.revision_id) if runtime_authority is not None else ""
+            ),
+            "authority_generation": (
+                runtime_authority.authority_generation if runtime_authority is not None else None
+            ),
+            "runtime_fingerprint": (
+                runtime_authority.fingerprint if runtime_authority is not None else ""
+            ),
         }
         result = enqueue(job)
         if asyncio.iscoroutine(result):

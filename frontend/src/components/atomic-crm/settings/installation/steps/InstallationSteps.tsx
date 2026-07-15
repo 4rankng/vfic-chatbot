@@ -1,11 +1,10 @@
 import { Check, Loader2, Plus, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   IdentityBrandingDraft,
@@ -44,6 +43,9 @@ import {
   type ZaloSecretDraft,
 } from "../../../installation/setup-authoring-client";
 import { describeInstallationIssue } from "../installation-issues";
+import { Field } from "../Field";
+import { RadioCard } from "../RadioCard";
+import { SetupSection } from "../SetupSection";
 import { WorkflowAuthoringPage } from "../../../workflows/WorkflowAuthoringPage";
 import { listWorkflowVersions } from "../../../workflows/workflow-authoring-client";
 
@@ -55,7 +57,7 @@ type CommonStepProps = {
 const FieldError = ({ issues, path }: { issues: InstallationIssue[]; path: string }) => {
   const issue = issues.find((item) => item.path?.endsWith(path));
   return issue ? (
-    <p className="text-xs font-medium text-destructive" role="alert">
+    <p className="text-meta font-medium text-destructive" role="alert">
       {describeInstallationIssue(issue)}
     </p>
   ) : null;
@@ -66,7 +68,7 @@ const StepIssues = ({ issues }: { issues: InstallationIssue[] }) =>
     <Alert variant="destructive">
       <AlertTitle>Cần kiểm tra lại</AlertTitle>
       <AlertDescription>
-        <ul className="list-disc space-y-1 pl-4">
+        <ul className="list-disc space-y-1 pl-4 text-body">
           {issues.map((issue, index) => (
             <li key={`${issue.code}-${issue.path ?? index}`}>
               {describeInstallationIssue(issue)}
@@ -76,10 +78,6 @@ const StepIssues = ({ issues }: { issues: InstallationIssue[] }) =>
       </AlertDescription>
     </Alert>
   ) : null;
-
-const inputClassName = "min-h-11";
-const selectClassName =
-  "min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const optional = (value: string): string | undefined => {
   const trimmed = value.trim();
@@ -122,62 +120,73 @@ export const IdentityBrandingStep = ({
     });
 
   return (
-    <fieldset className="grid gap-5" aria-describedby="identity-help">
+    <fieldset className="grid gap-6" aria-describedby="identity-help">
       <legend className="sr-only">Danh tính và thương hiệu</legend>
-      <p id="identity-help" className="text-sm leading-6 text-muted-foreground">
+      <p id="identity-help" className="text-body text-muted-foreground">
         Nhập thông tin của khách hàng này. Hệ thống không tự điền tên, logo hoặc nội dung ngành.
       </p>
       <StepIssues issues={issues} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2 sm:col-span-2">
-          <Label htmlFor="setup-display-name">Tên hiển thị *</Label>
-          <Input
-            id="setup-display-name"
-            className={inputClassName}
-            value={identity?.display_name ?? ""}
-            onChange={(event) => updateIdentity("display_name", event.target.value)}
-            required
-            maxLength={160}
-            autoFocus
-          />
-          <FieldError issues={issues} path="display_name" />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-legal-name">Tên pháp lý</Label>
-          <Input id="setup-legal-name" className={inputClassName} value={identity?.legal_name ?? ""} onChange={(event) => updateIdentity("legal_name", event.target.value)} maxLength={240} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-app-name">Tên ứng dụng *</Label>
-          <Input id="setup-app-name" className={inputClassName} value={branding?.app_name ?? ""} onChange={(event) => updateBranding("app_name", event.target.value)} maxLength={160} required />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-support-name">Tên bộ phận hỗ trợ</Label>
-          <Input id="setup-support-name" className={inputClassName} value={identity?.support_name ?? ""} onChange={(event) => updateIdentity("support_name", event.target.value)} maxLength={160} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-support-email">Email hỗ trợ</Label>
-          <Input id="setup-support-email" type="email" className={inputClassName} value={identity?.support_email ?? ""} onChange={(event) => updateIdentity("support_email", event.target.value)} maxLength={254} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-support-phone">Số điện thoại hỗ trợ</Label>
-          <Input id="setup-support-phone" className={inputClassName} value={identity?.support_phone ?? ""} onChange={(event) => updateIdentity("support_phone", event.target.value)} maxLength={32} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-website">Website</Label>
-          <Input id="setup-website" type="url" className={inputClassName} value={identity?.website_url ?? ""} onChange={(event) => updateIdentity("website_url", event.target.value)} maxLength={500} />
-        </div>
-        <div className="grid gap-2 sm:col-span-2">
-          <Label htmlFor="setup-address">Địa chỉ</Label>
-          <Input id="setup-address" className={inputClassName} value={identity?.address ?? ""} onChange={(event) => updateIdentity("address", event.target.value)} maxLength={500} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-primary-color">Màu chính</Label>
-          <Input id="setup-primary-color" className={inputClassName} value={branding?.primary_color ?? ""} onChange={(event) => updateBranding("primary_color", event.target.value)} pattern="#[0-9a-fA-F]{6}" placeholder="#000000" />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-secondary-color">Màu phụ</Label>
-          <Input id="setup-secondary-color" className={inputClassName} value={branding?.secondary_color ?? ""} onChange={(event) => updateBranding("secondary_color", event.target.value)} pattern="#[0-9a-fA-F]{6}" placeholder="#000000" />
-        </div>
+        <Field label="Tên hiển thị" required colSpan="sm:col-span-2">
+          {({ id }) => (
+            <>
+              <Input
+                id={id}
+                value={identity?.display_name ?? ""}
+                onChange={(event) => updateIdentity("display_name", event.target.value)}
+                required
+                maxLength={160}
+                autoFocus
+              />
+              <FieldError issues={issues} path="display_name" />
+            </>
+          )}
+        </Field>
+        <Field label="Tên pháp lý">
+          {({ id }) => (
+            <Input id={id} value={identity?.legal_name ?? ""} onChange={(event) => updateIdentity("legal_name", event.target.value)} maxLength={240} />
+          )}
+        </Field>
+        <Field label="Tên ứng dụng" required>
+          {({ id }) => (
+            <Input id={id} value={branding?.app_name ?? ""} onChange={(event) => updateBranding("app_name", event.target.value)} maxLength={160} required />
+          )}
+        </Field>
+        <Field label="Tên bộ phận hỗ trợ">
+          {({ id }) => (
+            <Input id={id} value={identity?.support_name ?? ""} onChange={(event) => updateIdentity("support_name", event.target.value)} maxLength={160} />
+          )}
+        </Field>
+        <Field label="Email hỗ trợ">
+          {({ id }) => (
+            <Input id={id} type="email" value={identity?.support_email ?? ""} onChange={(event) => updateIdentity("support_email", event.target.value)} maxLength={254} />
+          )}
+        </Field>
+        <Field label="Số điện thoại hỗ trợ">
+          {({ id }) => (
+            <Input id={id} value={identity?.support_phone ?? ""} onChange={(event) => updateIdentity("support_phone", event.target.value)} maxLength={32} />
+          )}
+        </Field>
+        <Field label="Website">
+          {({ id }) => (
+            <Input id={id} type="url" value={identity?.website_url ?? ""} onChange={(event) => updateIdentity("website_url", event.target.value)} maxLength={500} />
+          )}
+        </Field>
+        <Field label="Địa chỉ" colSpan="sm:col-span-2">
+          {({ id }) => (
+            <Input id={id} value={identity?.address ?? ""} onChange={(event) => updateIdentity("address", event.target.value)} maxLength={500} />
+          )}
+        </Field>
+        <Field label="Màu chính">
+          {({ id }) => (
+            <Input id={id} value={branding?.primary_color ?? ""} onChange={(event) => updateBranding("primary_color", event.target.value)} pattern="#[0-9a-fA-F]{6}" placeholder="#000000" />
+          )}
+        </Field>
+        <Field label="Màu phụ">
+          {({ id }) => (
+            <Input id={id} value={branding?.secondary_color ?? ""} onChange={(event) => updateBranding("secondary_color", event.target.value)} pattern="#[0-9a-fA-F]{6}" placeholder="#000000" />
+          )}
+        </Field>
       </div>
     </fieldset>
   );
@@ -201,14 +210,14 @@ export const RegionalTerminologyStep = ({
   );
   const current = value ?? { locale: "", timezone: "", currency: "", terminology: {} };
   return (
-    <fieldset className="grid gap-5">
+    <fieldset className="grid gap-6">
       <legend className="sr-only">Khu vực và thuật ngữ</legend>
-      <p className="text-sm leading-6 text-muted-foreground">
+      <p className="text-body text-muted-foreground">
         Chỉ các giá trị được máy chủ hỗ trợ mới có thể lưu. Không có khu vực hoặc tiền tệ mặc định.
       </p>
       <StepIssues issues={issues} />
       {!selectedPackKey ? (
-        <Alert>
+        <Alert variant="info">
           <AlertTitle>Chưa chọn gói ngành</AlertTitle>
           <AlertDescription>
             Hãy chọn gói ngành ở bước trước để tải đúng bộ thuật ngữ.
@@ -216,29 +225,46 @@ export const RegionalTerminologyStep = ({
         </Alert>
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="setup-locale">Ngôn ngữ *</Label>
-          <select id="setup-locale" className={selectClassName} value={current.locale} onChange={(event) => onChange({ ...current, locale: event.target.value })} required autoFocus>
-            <option value="">Chọn ngôn ngữ</option>
-            {catalog.locales.map((locale) => <option key={locale} value={locale}>{locale}</option>)}
-          </select>
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-currency">Tiền tệ *</Label>
-          <select id="setup-currency" className={selectClassName} value={current.currency} onChange={(event) => onChange({ ...current, currency: event.target.value })} required>
-            <option value="">Chọn tiền tệ</option>
-            {catalog.currencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
-          </select>
-        </div>
-        <div className="grid gap-2 sm:col-span-2">
-          <Label htmlFor="setup-timezone">Múi giờ IANA *</Label>
-          <Input id="setup-timezone" className={inputClassName} value={current.timezone} onChange={(event) => onChange({ ...current, timezone: event.target.value })} placeholder="Continent/City" required maxLength={64} />
-        </div>
+        <Field label="Ngôn ngữ" required>
+          {({ id }) => (
+            <select
+              id={id}
+              className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+              value={current.locale}
+              onChange={(event) => onChange({ ...current, locale: event.target.value })}
+              required
+              autoFocus
+            >
+              <option value="">Chọn ngôn ngữ</option>
+              {catalog.locales.map((locale) => <option key={locale} value={locale}>{locale}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Tiền tệ" required>
+          {({ id }) => (
+            <select
+              id={id}
+              className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+              value={current.currency}
+              onChange={(event) => onChange({ ...current, currency: event.target.value })}
+              required
+            >
+              <option value="">Chọn tiền tệ</option>
+              {catalog.currencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Múi giờ IANA" required colSpan="sm:col-span-2">
+          {({ id }) => (
+            <Input id={id} value={current.timezone} onChange={(event) => onChange({ ...current, timezone: event.target.value })} placeholder="Continent/City" required maxLength={64} />
+          )}
+        </Field>
         {terminologyKeys.map((key) => (
-          <div key={key} className="grid gap-2">
-            <Label htmlFor={`term-${key}`}>Thuật ngữ: {key}</Label>
-            <Input id={`term-${key}`} className={inputClassName} value={current.terminology[key] ?? ""} onChange={(event) => onChange({ ...current, terminology: { ...current.terminology, [key]: event.target.value } })} maxLength={80} />
-          </div>
+          <Field key={key} label={`Thuật ngữ: ${key}`}>
+            {({ id }) => (
+              <Input id={id} value={current.terminology[key] ?? ""} onChange={(event) => onChange({ ...current, terminology: { ...current.terminology, [key]: event.target.value } })} maxLength={80} />
+            )}
+          </Field>
         ))}
       </div>
     </fieldset>
@@ -256,30 +282,34 @@ export const PackCapabilitiesStep = ({
 }) => {
   const selectedPack = catalog.packs.find((pack) => pack.key === value?.pack_key);
   return (
-    <fieldset className="grid gap-5">
+    <fieldset className="grid gap-6">
       <legend className="sr-only">Gói ngành và chức năng</legend>
       <StepIssues issues={issues} />
       <div className="grid gap-3 sm:grid-cols-2">
         {catalog.packs.map((pack) => (
-          <label key={pack.key} className="flex min-h-20 cursor-pointer items-start gap-3 rounded-lg border bg-card p-4 focus-within:ring-3 focus-within:ring-ring/50">
-            <input type="radio" name="setup-pack" value={pack.key} checked={value?.pack_key === pack.key} onChange={() => onChange({ pack_key: pack.key, capability_ids: [] })} className="mt-1 size-4" />
-            <span className="min-w-0"><strong className="block break-words">{pack.key}</strong><span className="text-xs text-muted-foreground">Phiên bản {pack.version}</span></span>
-          </label>
+          <RadioCard
+            key={pack.key}
+            name="setup-pack"
+            value={pack.key}
+            checked={value?.pack_key === pack.key}
+            onChange={() => onChange({ pack_key: pack.key, capability_ids: [] })}
+            title={pack.key}
+            description={`Phiên bản ${pack.version}`}
+          />
         ))}
       </div>
       {selectedPack ? (
-        <div className="grid gap-3">
-          <h3 className="font-medium">Chức năng cho phép</h3>
+        <SetupSection title="Chức năng cho phép">
           {selectedPack.capability_ids.map((capabilityId) => {
             const checked = value?.capability_ids.includes(capabilityId) ?? false;
             return (
-              <label key={capabilityId} className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2">
+              <label key={capabilityId} className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-body text-foreground">
                 <Checkbox checked={checked} onCheckedChange={(next) => onChange({ pack_key: selectedPack.key, capability_ids: next === true ? [...(value?.capability_ids ?? []), capabilityId] : (value?.capability_ids ?? []).filter((item) => item !== capabilityId) })} />
-                <span className="break-all text-sm">{capabilityId}</span>
+                <span className="break-all">{capabilityId}</span>
               </label>
             );
           })}
-        </div>
+        </SetupSection>
       ) : null}
     </fieldset>
   );
@@ -307,7 +337,6 @@ export const WorkflowStep = ({
     catalog.authored_workflow_versions,
   );
   const [versionError, setVersionError] = useState<string | null>(null);
-  const retainIncompleteLocalSelection = useRef(false);
   const [handoffMode, setHandoffMode] = useState<"" | WorkflowDraft["workflow_policy"]["handoff_mode"]>(initial?.handoff_mode ?? "");
   const [automationChoice, setAutomationChoice] = useState<"" | "enabled" | "disabled">(
     initial ? (initial.automation_enabled ? "enabled" : "disabled") : "",
@@ -323,16 +352,12 @@ export const WorkflowStep = ({
   const selectedWorkflow = workflows.find((workflow) => workflow.id === workflowId);
   useEffect(() => {
     const policy = value?.workflow_policy;
-    if (!policy && retainIncompleteLocalSelection.current) {
-      retainIncompleteLocalSelection.current = false;
-      return;
-    }
     const version = catalog.authored_workflow_versions.find(
       (candidate) =>
         candidate.id === policy?.workflow_version_id &&
         candidate.checksum === policy.workflow_version_checksum &&
         candidate.pack_key === selectedPackKey &&
-        candidate.workflow_key === policy.workflow_id,
+        candidate.workflow_key === policy?.workflow_id,
     );
     if (!policy || !version || !allowedIds.includes(policy.workflow_id)) {
       setWorkflowId("");
@@ -376,7 +401,6 @@ export const WorkflowStep = ({
         candidate.workflow_key === nextWorkflowId,
     );
     if (!nextWorkflowId || !version || !nextHandoffMode || !nextAutomationChoice) {
-      retainIncompleteLocalSelection.current = Boolean(value);
       onChange(undefined);
       return;
     }
@@ -391,58 +415,83 @@ export const WorkflowStep = ({
     });
   };
   return (
-    <fieldset className="grid gap-5">
+    <fieldset className="grid gap-6">
       <legend className="sr-only">Quy trình và bàn giao</legend>
       <StepIssues issues={issues} />
-      {!selectedPackKey ? <Alert><AlertTitle>Chưa chọn gói</AlertTitle><AlertDescription>Hãy chọn gói ở bước trước để tải đúng quy trình.</AlertDescription></Alert> : null}
+      {!selectedPackKey ? <Alert variant="info"><AlertTitle>Chưa chọn gói</AlertTitle><AlertDescription>Hãy chọn gói ở bước trước để tải đúng quy trình.</AlertDescription></Alert> : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2 sm:col-span-2">
-          <Label htmlFor="setup-workflow">Quy trình *</Label>
-          <select id="setup-workflow" className={selectClassName} value={workflowId} onChange={(event) => { const next = event.target.value; setWorkflowId(next); setWorkflowVersionId(""); setHandoffMode(""); commit(next, "", "", automationChoice); }} required autoFocus>
-            <option value="">Chọn quy trình</option>
-            {workflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.id}</option>)}
-          </select>
-        </div>
-        <div className="grid gap-2 sm:col-span-2">
-          <Label htmlFor="setup-workflow-version">Phiên bản đã xuất bản *</Label>
-          <select
-            id="setup-workflow-version"
-            className={selectClassName}
-            value={workflowVersionId}
-            disabled={!workflowId}
-            onChange={(event) => {
-              const next = event.target.value;
-              setWorkflowVersionId(next);
-              commit(workflowId, next, handoffMode, automationChoice);
-            }}
-            required
-          >
-            <option value="">Chọn phiên bản</option>
-            {selectableVersions.map((version) => (
-              <option key={version.id} value={version.id}>
-                {version.label} — phiên bản {version.version_no}
-              </option>
-            ))}
-          </select>
-          {workflowId && selectableVersions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Chưa có phiên bản nào. Hãy tạo và xuất bản một phiên bản bên dưới.
-            </p>
-          ) : null}
-          {versionError ? <p className="text-sm text-destructive" role="alert">{versionError}</p> : null}
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="setup-handoff">Cách bàn giao *</Label>
-          <select id="setup-handoff" className={selectClassName} value={handoffMode} onChange={(event) => { const next = event.target.value as "" | WorkflowDraft["workflow_policy"]["handoff_mode"]; setHandoffMode(next); commit(workflowId, workflowVersionId, next, automationChoice); }} required>
-            <option value="">Chọn cách bàn giao</option>
-            {(selectedWorkflow?.handoff_modes ?? []).map((mode) => <option key={mode} value={mode}>{mode === "manual" ? "Thủ công" : mode === "assisted" ? "Có hỗ trợ" : "Tự động"}</option>)}
-          </select>
-        </div>
+        <Field label="Quy trình" required colSpan="sm:col-span-2">
+          {({ id }) => (
+            <select
+              id={id}
+              className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+              value={workflowId}
+              onChange={(event) => { const next = event.target.value; setWorkflowId(next); setWorkflowVersionId(""); setHandoffMode(""); commit(next, "", "", automationChoice); }}
+              required
+              autoFocus
+            >
+              <option value="">Chọn quy trình</option>
+              {workflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.id}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Phiên bản đã xuất bản" required colSpan="sm:col-span-2" helper={workflowId && selectableVersions.length === 0 ? "Chưa có phiên bản nào. Hãy tạo và xuất bản một phiên bản bên dưới." : undefined}>
+          {({ id }) => (
+            <>
+              <select
+                id={id}
+                className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                value={workflowVersionId}
+                disabled={!workflowId}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setWorkflowVersionId(next);
+                  commit(workflowId, next, handoffMode, automationChoice);
+                }}
+                required
+              >
+                <option value="">Chọn phiên bản</option>
+                {selectableVersions.map((version) => (
+                  <option key={version.id} value={version.id}>
+                    {version.label} — phiên bản {version.version_no}
+                  </option>
+                ))}
+              </select>
+              {versionError ? <p className="text-meta text-destructive" role="alert">{versionError}</p> : null}
+            </>
+          )}
+        </Field>
+        <Field label="Cách bàn giao" required>
+          {({ id }) => (
+            <select
+              id={id}
+              className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+              value={handoffMode}
+              onChange={(event) => { const next = event.target.value as "" | WorkflowDraft["workflow_policy"]["handoff_mode"]; setHandoffMode(next); commit(workflowId, workflowVersionId, next, automationChoice); }}
+              required
+            >
+              <option value="">Chọn cách bàn giao</option>
+              {(selectedWorkflow?.handoff_modes ?? []).map((mode) => <option key={mode} value={mode}>{mode === "manual" ? "Thủ công" : mode === "assisted" ? "Có hỗ trợ" : "Tự động"}</option>)}
+            </select>
+          )}
+        </Field>
         <fieldset className="grid gap-2 sm:col-span-2">
-          <legend className="text-sm font-medium">Tự động hóa *</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><input type="radio" name="setup-automation" checked={automationChoice === "enabled"} onChange={() => { setAutomationChoice("enabled"); commit(workflowId, workflowVersionId, handoffMode, "enabled"); }} />Bật tự động hóa</label>
-            <label className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><input type="radio" name="setup-automation" checked={automationChoice === "disabled"} onChange={() => { setAutomationChoice("disabled"); commit(workflowId, workflowVersionId, handoffMode, "disabled"); }} />Không bật tự động hóa</label>
+          <legend className="text-control font-medium text-foreground">Tự động hóa *</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <RadioCard
+              name="setup-automation"
+              value="enabled"
+              checked={automationChoice === "enabled"}
+              onChange={() => { setAutomationChoice("enabled"); commit(workflowId, workflowVersionId, handoffMode, "enabled"); }}
+              title="Bật tự động hóa"
+            />
+            <RadioCard
+              name="setup-automation"
+              value="disabled"
+              checked={automationChoice === "disabled"}
+              onChange={() => { setAutomationChoice("disabled"); commit(workflowId, workflowVersionId, handoffMode, "disabled"); }}
+              title="Không bật tự động hóa"
+            />
           </div>
         </fieldset>
       </div>
@@ -530,34 +579,65 @@ export const KnowledgeTemplatesStep = ({
   return (
     <div className="grid gap-6">
       <StepIssues issues={issues} />
-      <section className="grid gap-4 rounded-lg border p-4 sm:p-5" aria-labelledby="existing-template-title">
-        <h3 id="existing-template-title" className="font-semibold">Chọn mẫu đã xuất bản</h3>
-        <select className={selectClassName} aria-label="Mẫu kiến thức" value={selectedTemplateId} onChange={(event) => void selectTemplate(event.target.value)}>
-          <option value="">Chọn mẫu</option>
-          {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
-        </select>
+      <SetupSection title="Chọn mẫu đã xuất bản">
+        <Field label="Mẫu kiến thức">
+          {({ id }) => (
+            <select
+              id={id}
+              className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+              aria-label="Mẫu kiến thức"
+              value={selectedTemplateId}
+              onChange={(event) => void selectTemplate(event.target.value)}
+            >
+              <option value="">Chọn mẫu</option>
+              {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+          )}
+        </Field>
         {versions.map((version) => (
-          <label key={version.id} className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm">
+          <label key={version.id} className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-body text-foreground">
             <Checkbox checked={value?.template_version_refs.some((item) => item.version_id === version.id) ?? false} onCheckedChange={(checked) => toggleVersion(version, checked === true)} />
             Phiên bản {version.version_no}
           </label>
         ))}
-      </section>
-      <section className="grid gap-4 rounded-lg border p-4 sm:p-5" aria-labelledby="new-template-title">
-        <div><h3 id="new-template-title" className="font-semibold">Tạo mẫu mới</h3><p className="mt-1 text-sm text-muted-foreground">Mọi trường và dữ liệu thử đều do quản trị viên nhập.</p></div>
+      </SetupSection>
+      <SetupSection
+        title="Tạo mẫu mới"
+        description="Mọi trường và dữ liệu thử đều do quản trị viên nhập."
+      >
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2"><Label htmlFor="new-template-name">Tên mẫu</Label><Input id="new-template-name" className={inputClassName} value={name} onChange={(event) => { setName(event.target.value); setPreviewed(false); }} /></div>
-          <div className="grid gap-2"><Label htmlFor="new-template-vertical">Lĩnh vực</Label><Input id="new-template-vertical" className={inputClassName} value={vertical} onChange={(event) => { setVertical(event.target.value); setPreviewed(false); }} /></div>
-          <div className="grid gap-2"><Label htmlFor="new-template-record">Loại bản ghi</Label><Input id="new-template-record" className={inputClassName} value={recordName} onChange={(event) => { setRecordName(event.target.value); setPreviewed(false); }} /></div>
-          <div className="grid gap-2"><Label htmlFor="new-template-fields">Các trường, cách nhau bằng dấu phẩy</Label><Input id="new-template-fields" className={inputClassName} value={fields} onChange={(event) => { setFields(event.target.value); setPreviewed(false); }} /></div>
-          <div className="grid gap-2 sm:col-span-2"><Label htmlFor="new-template-sample">Dữ liệu thử của bạn</Label><Textarea id="new-template-sample" value={sample} onChange={(event) => { setSample(event.target.value); setPreviewed(false); }} rows={6} /></div>
+          <Field label="Tên mẫu">
+            {({ id }) => (
+              <Input id={id} value={name} onChange={(event) => { setName(event.target.value); setPreviewed(false); }} />
+            )}
+          </Field>
+          <Field label="Lĩnh vực">
+            {({ id }) => (
+              <Input id={id} value={vertical} onChange={(event) => { setVertical(event.target.value); setPreviewed(false); }} />
+            )}
+          </Field>
+          <Field label="Loại bản ghi">
+            {({ id }) => (
+              <Input id={id} value={recordName} onChange={(event) => { setRecordName(event.target.value); setPreviewed(false); }} />
+            )}
+          </Field>
+          <Field label="Các trường, cách nhau bằng dấu phẩy">
+            {({ id }) => (
+              <Input id={id} value={fields} onChange={(event) => { setFields(event.target.value); setPreviewed(false); }} />
+            )}
+          </Field>
+          <Field label="Dữ liệu thử của bạn" colSpan="sm:col-span-2">
+            {({ id }) => (
+              <Textarea id={id} value={sample} onChange={(event) => { setSample(event.target.value); setPreviewed(false); }} rows={6} />
+            )}
+          </Field>
         </div>
-        {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
+        {error ? <p className="text-meta text-destructive" role="alert">{error}</p> : null}
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={() => void preview()}>{busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}Kiểm tra mẫu</Button>
-          <Button type="button" className="min-h-11" disabled={busy || !previewed} onClick={() => void publish()}><Plus />Xuất bản và chọn</Button>
+          <Button type="button" variant="outline" size="touch" disabled={busy} onClick={() => void preview()}>{busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}Kiểm tra mẫu</Button>
+          <Button type="button" size="touch" disabled={busy || !previewed} onClick={() => void publish()}><Plus />Xuất bản và chọn</Button>
         </div>
-      </section>
+      </SetupSection>
     </div>
   );
 };
@@ -576,7 +656,6 @@ export const PersonaStep = ({
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
   const [notes, setNotes] = useState("");
-  const [followupDisabledConfirmed, setFollowupDisabledConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reload = async () => { try { setPersonas(await listSetupPersonas()); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không tải được Agent."); } };
@@ -587,10 +666,6 @@ export const PersonaStep = ({
   };
   const create = async () => {
     if (!name.trim() || !body.trim()) { setError("Tên và nội dung Agent là bắt buộc."); return; }
-    if (!followupDisabledConfirmed) {
-      setError("Hãy xác nhận tắt theo dõi chủ động trước khi tạo Agent.");
-      return;
-    }
     setBusy(true); setError(null);
     try {
       const persona = await createSetupPersona({
@@ -603,46 +678,66 @@ export const PersonaStep = ({
       const latest = nextVersions.sort((a, b) => b.version_no - a.version_no)[0];
       if (!latest) throw new Error("Agent chưa có phiên bản bất biến.");
       onChange({ persona_version_id: latest.id, checksum: latest.checksum });
-      setName(""); setBody(""); setNotes(""); setFollowupDisabledConfirmed(false); await reload(); await selectPersona(persona.id);
+      setName(""); setBody(""); setNotes(""); await reload(); await selectPersona(persona.id);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Không tạo được Agent."); } finally { setBusy(false); }
   };
   return (
     <div className="grid gap-6">
       <StepIssues issues={issues} />
-      <section className="grid gap-4 rounded-lg border p-4 sm:p-5">
-        <h3 className="font-semibold">Chọn phiên bản Agent</h3>
-        <select className={selectClassName} value={selectedPersonaId} onChange={(event) => void selectPersona(event.target.value)} aria-label="Agent">
-          <option value="">Chọn Agent</option>{personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
-        </select>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {versions.map((version) => (
-            <Button key={version.id} type="button" variant={value?.persona_version_id === version.id ? "default" : "outline"} className="min-h-11 justify-start" onClick={() => onChange({ persona_version_id: version.id, checksum: version.checksum })}>
-              {value?.persona_version_id === version.id ? <Check /> : null}Phiên bản {version.version_no}
-            </Button>
-          ))}
+      <SetupSection title="Chọn phiên bản Agent">
+        <Field label="Agent">
+          {({ id }) => (
+            <select
+              id={id}
+              className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+              value={selectedPersonaId}
+              onChange={(event) => void selectPersona(event.target.value)}
+              aria-label="Agent"
+            >
+              <option value="">Chọn Agent</option>{personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
+            </select>
+          )}
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {versions.map((version) => {
+            const isSelected = value?.persona_version_id === version.id;
+            return (
+              <Button
+                key={version.id}
+                type="button"
+                variant={isSelected ? "default" : "outline"}
+                size="touch"
+                className="justify-start"
+                onClick={() => onChange({ persona_version_id: version.id, checksum: version.checksum })}
+              >
+                {isSelected ? <Check /> : null}Phiên bản {version.version_no}
+              </Button>
+            );
+          })}
         </div>
-      </section>
-      <section className="grid gap-4 rounded-lg border p-4 sm:p-5">
-        <div><h3 className="font-semibold">Tạo Agent mới</h3><p className="mt-1 text-sm text-muted-foreground">Không có nội dung mẫu. Hãy viết persona và chính sách phù hợp với khách hàng này.</p></div>
-        <div className="grid gap-2"><Label htmlFor="new-persona-name">Tên Agent *</Label><Input id="new-persona-name" className={inputClassName} value={name} onChange={(event) => setName(event.target.value)} /></div>
-        <div className="grid gap-2"><Label htmlFor="new-persona-body">Nội dung và chính sách *</Label><Textarea id="new-persona-body" value={body} onChange={(event) => setBody(event.target.value)} rows={10} /></div>
-        <div className="grid gap-2"><Label htmlFor="new-persona-notes">Ghi chú</Label><Textarea id="new-persona-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} /></div>
-        <label className="flex min-h-11 items-start gap-3 rounded-md border p-3 text-sm">
-          <Checkbox
-            checked={followupDisabledConfirmed}
-            onCheckedChange={(checked) => setFollowupDisabledConfirmed(checked === true)}
-            aria-describedby="new-persona-followup-help"
-          />
-          <span className="grid gap-1">
-            <span className="font-medium">Xác nhận tắt theo dõi chủ động</span>
-            <span id="new-persona-followup-help" className="leading-5 text-muted-foreground">
-              Hệ thống sẽ không tạo lịch hoặc gửi tin nhắn theo dõi chủ động. Quy tắc theo dõi chỉ có thể được cấu hình khi tính năng tương ứng được hỗ trợ.
-            </span>
-          </span>
-        </label>
-        {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
-        <Button type="button" className="min-h-11 sm:justify-self-end" disabled={busy || !followupDisabledConfirmed} onClick={() => void create()}>{busy ? <Loader2 className="animate-spin" /> : <Plus />}Tạo và chọn phiên bản</Button>
-      </section>
+      </SetupSection>
+      <SetupSection
+        title="Tạo Agent mới"
+        description="Không có nội dung mẫu. Hãy viết persona và chính sách phù hợp với khách hàng này."
+      >
+        <Field label="Tên Agent" required>
+          {({ id }) => (
+            <Input id={id} value={name} onChange={(event) => setName(event.target.value)} />
+          )}
+        </Field>
+        <Field label="Nội dung và chính sách" required>
+          {({ id }) => (
+            <Textarea id={id} value={body} onChange={(event) => setBody(event.target.value)} rows={10} />
+          )}
+        </Field>
+        <Field label="Ghi chú">
+          {({ id }) => (
+            <Textarea id={id} value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+          )}
+        </Field>
+        {error ? <p className="text-meta text-destructive" role="alert">{error}</p> : null}
+        <Button type="button" size="touch" className="sm:justify-self-end" disabled={busy} onClick={() => void create()}>{busy ? <Loader2 className="animate-spin" /> : <Plus />}Tạo và chọn phiên bản</Button>
+      </SetupSection>
     </div>
   );
 };
@@ -674,13 +769,21 @@ const ProviderSecretPanel = ({ integrationKey }: { integrationKey: SupportedMode
     try { const result = await testModelIntegration(integrationKey); setMessage(result.configured ? "Tích hợp đã sẵn sàng." : `Thiếu: ${result.missing.join(", ")}`); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Không kiểm tra được tích hợp."); } finally { setBusy(false); }
   };
   return (
-    <section className="grid gap-3 rounded-lg border p-4">
-      <div><h4 className="font-medium">{integrationKey}</h4><p className="text-xs text-muted-foreground">{configured ? "Đã có khóa được mã hóa" : "Chưa có khóa"}</p></div>
-      <Label htmlFor={`secret-${integrationKey}`}>Khóa bí mật</Label>
-      <Input id={`secret-${integrationKey}`} type="password" autoComplete="off" className={inputClassName} value={secret} onChange={(event) => setSecret(event.target.value)} />
-      <div className="flex flex-col gap-2 sm:flex-row"><Button type="button" className="min-h-11" disabled={busy || !secret.trim()} onClick={() => void save()}>Lưu khóa</Button><Button type="button" variant="outline" className="min-h-11" disabled={busy || !configured} onClick={() => void test()}>Kiểm tra</Button></div>
-      {message ? <p className="text-sm" aria-live="polite">{message}</p> : null}
-    </section>
+    <SetupSection
+      title={integrationKey}
+      description={configured ? "Đã có khóa được mã hóa" : "Chưa có khóa"}
+    >
+      <Field label="Khóa bí mật">
+        {({ id }) => (
+          <Input id={id} type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} />
+        )}
+      </Field>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="button" size="touch" disabled={busy || !secret.trim()} onClick={() => void save()}>Lưu khóa</Button>
+        <Button type="button" variant="outline" size="touch" disabled={busy || !configured} onClick={() => void test()}>Kiểm tra</Button>
+      </div>
+      {message ? <p className="text-meta text-muted-foreground" aria-live="polite">{message}</p> : null}
+    </SetupSection>
   );
 };
 
@@ -740,25 +843,38 @@ const ZaloSecretPanel = () => {
     ? [status.zalo_bot_token, status.zalo_bot_webhook_secret, status.zalo_oa_app_id, status.zalo_oa_secret_key, status.zalo_oa_access_token, status.zalo_oa_refresh_token].filter((item) => item.configured).length
     : 0;
   return (
-    <section className="grid gap-4 rounded-lg border p-4 sm:col-span-2" aria-labelledby="setup-zalo-title">
-      <div><h4 id="setup-zalo-title" className="font-medium">Zalo</h4><p className="text-xs text-muted-foreground">{configuredCount}/6 trường đã cấu hình. Giá trị bí mật đã lưu không được tải lại vào biểu mẫu.</p></div>
+    <SetupSection
+      title="Zalo"
+      description={`${configuredCount}/6 trường đã cấu hình. Giá trị bí mật đã lưu không được tải lại vào biểu mẫu.`}
+      className="sm:col-span-2"
+    >
       <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((field) => (
-          <div key={field.key} className="grid gap-2">
-            <Label htmlFor={`zalo-${field.key}`}>{field.label}</Label>
-            <Input id={`zalo-${field.key}`} type={field.secret ? "password" : "text"} autoComplete="off" className={inputClassName} value={form[field.key]} onChange={(event) => setField(field.key, event.target.value)} />
-          </div>
+          <Field key={field.key} label={field.label}>
+            {({ id }) => (
+              <Input
+                id={id}
+                type={field.secret ? "password" : "text"}
+                autoComplete="off"
+                value={form[field.key]}
+                onChange={(event) => setField(field.key, event.target.value)}
+              />
+            )}
+          </Field>
         ))}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <Button type="button" className="min-h-11" disabled={busy || !Object.values(form).some((item) => item.trim())} onClick={() => void save()}>Lưu thông tin Zalo</Button>
-        <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={() => void test("bot")}>Kiểm tra Bot</Button>
-        <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={() => void test("oa")}>Kiểm tra OA</Button>
+        <Button type="button" size="touch" disabled={busy || !Object.values(form).some((item) => item.trim())} onClick={() => void save()}>Lưu thông tin Zalo</Button>
+        <Button type="button" variant="outline" size="touch" disabled={busy} onClick={() => void test("bot")}>Kiểm tra Bot</Button>
+        <Button type="button" variant="outline" size="touch" disabled={busy} onClick={() => void test("oa")}>Kiểm tra OA</Button>
       </div>
-      {message ? <p className="text-sm" aria-live="polite">{message}</p> : null}
-    </section>
+      {message ? <p className="text-meta text-muted-foreground" aria-live="polite">{message}</p> : null}
+    </SetupSection>
   );
 };
+
+const selectClassName =
+  "border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
 
 export const ProvidersIntegrationsStep = ({
   value,
@@ -822,20 +938,65 @@ export const ProvidersIntegrationsStep = ({
     <fieldset className="grid gap-6">
       <legend className="sr-only">Nhà cung cấp và tích hợp</legend>
       <StepIssues issues={issues} />
-      <Alert><ShieldCheck /><AlertTitle>Bí mật không nằm trong bản nháp</AlertTitle><AlertDescription>Khóa được gửi thẳng đến kho mã hóa hiện có. Bản nháp chỉ lưu tham chiếu và chính sách.</AlertDescription></Alert>
+      <Alert variant="info">
+        <ShieldCheck />
+        <AlertTitle>Bí mật không nằm trong bản nháp</AlertTitle>
+        <AlertDescription>
+          Khóa được gửi thẳng đến kho mã hóa hiện có. Bản nháp chỉ lưu tham chiếu và chính sách.
+        </AlertDescription>
+      </Alert>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2"><Label htmlFor="chat-provider">Nhà cung cấp chat *</Label><select id="chat-provider" className={selectClassName} value={policy.chatIntegrationKey} onChange={(event) => updatePolicy({ chatIntegrationKey: event.target.value })}><option value="">Chọn nhà cung cấp</option>{catalog.integration_keys.filter((key) => key === "minimax" || key === "openrouter").map((key) => <option key={key} value={key}>{key}</option>)}</select></div>
-        <div className="grid gap-2"><Label htmlFor="chat-model">Model chat *</Label><Input id="chat-model" className={inputClassName} value={policy.chatModel} onChange={(event) => updatePolicy({ chatModel: event.target.value })} /></div>
-        <div className="grid gap-2"><Label htmlFor="embedding-provider">Nhà cung cấp embedding *</Label><select id="embedding-provider" className={selectClassName} value={policy.embeddingIntegrationKey} onChange={(event) => updatePolicy({ embeddingIntegrationKey: event.target.value })}><option value="">Chọn nhà cung cấp</option>{catalog.integration_keys.filter((key) => key === "openrouter").map((key) => <option key={key} value={key}>{key}</option>)}</select></div>
-        <div className="grid gap-2"><Label htmlFor="embedding-model">Model embedding *</Label><Input id="embedding-model" className={inputClassName} value={policy.embeddingModel} onChange={(event) => updatePolicy({ embeddingModel: event.target.value })} /></div>
-        <div className="grid gap-2"><Label htmlFor="temperature">Temperature *</Label><Input id="temperature" type="number" min={0} max={2} step="0.1" className={inputClassName} value={policy.temperature} onChange={(event) => updatePolicy({ temperature: event.target.value })} /></div>
-        <div className="grid gap-2"><Label htmlFor="max-output">Số token đầu ra tối đa *</Label><Input id="max-output" type="number" min={1} max={131072} className={inputClassName} value={policy.maxOutputTokens} onChange={(event) => updatePolicy({ maxOutputTokens: event.target.value })} /></div>
+        <Field label="Nhà cung cấp chat" required>
+          {({ id }) => (
+            <select
+              id={id}
+              className={selectClassName}
+              value={policy.chatIntegrationKey}
+              onChange={(event) => updatePolicy({ chatIntegrationKey: event.target.value })}
+            >
+              <option value="">Chọn nhà cung cấp</option>
+              {catalog.integration_keys.filter((key) => key === "minimax" || key === "openrouter").map((key) => <option key={key} value={key}>{key}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Model chat" required>
+          {({ id }) => (
+            <Input id={id} value={policy.chatModel} onChange={(event) => updatePolicy({ chatModel: event.target.value })} />
+          )}
+        </Field>
+        <Field label="Nhà cung cấp embedding" required>
+          {({ id }) => (
+            <select
+              id={id}
+              className={selectClassName}
+              value={policy.embeddingIntegrationKey}
+              onChange={(event) => updatePolicy({ embeddingIntegrationKey: event.target.value })}
+            >
+              <option value="">Chọn nhà cung cấp</option>
+              {catalog.integration_keys.filter((key) => key === "openrouter").map((key) => <option key={key} value={key}>{key}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Model embedding" required>
+          {({ id }) => (
+            <Input id={id} value={policy.embeddingModel} onChange={(event) => updatePolicy({ embeddingModel: event.target.value })} />
+          )}
+        </Field>
+        <Field label="Temperature" required helper="Giá trị từ 0 đến 2.">
+          {({ id }) => (
+            <Input id={id} type="number" min={0} max={2} step="0.1" value={policy.temperature} onChange={(event) => updatePolicy({ temperature: event.target.value })} />
+          )}
+        </Field>
+        <Field label="Số token đầu ra tối đa" required helper="Tối đa 131072 token.">
+          {({ id }) => (
+            <Input id={id} type="number" min={1} max={131072} value={policy.maxOutputTokens} onChange={(event) => updatePolicy({ maxOutputTokens: event.target.value })} />
+          )}
+        </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {selectedKeys.filter(isSupportedModelIntegration).map((key) => <ProviderSecretPanel key={key} integrationKey={key} />)}
         {selectedKeys.includes("zalo") ? <ZaloSecretPanel /> : null}
       </div>
-      <label className="flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm"><Checkbox checked={true} disabled />Email và mật khẩu (phương thức quản trị duy nhất được hỗ trợ)</label>
     </fieldset>
   );
 };

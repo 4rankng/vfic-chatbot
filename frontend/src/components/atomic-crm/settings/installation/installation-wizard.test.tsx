@@ -159,7 +159,7 @@ afterEach(async () => {
 });
 
 describe("InstallationWizard", () => {
-  it("opens an empty installation as an optional setup hub", async () => {
+  it("opens an empty installation directly on the stacked left-pane configuration flow", async () => {
     mocks.getDraft.mockResolvedValue(
       draft({
         payload: {},
@@ -171,23 +171,23 @@ describe("InstallationWizard", () => {
     mocks.getCatalog.mockResolvedValue(catalog);
     const screen = await render(<InstallationWizard />);
 
-    await expect.element(screen.getByText("Thiết lập chatbot khi sẵn sàng")).toBeVisible();
-    await expect.element(screen.getByText("Không có việc bắt buộc lúc khởi tạo")).toBeVisible();
-    await screen.getByRole("button", { name: "Thiết lập Agent" }).click();
     await expect.element(screen.getByRole("navigation", { name: "Các bước thiết lập" })).toBeVisible();
+    await expect.element(screen.getByText("Thiết lập chatbot khi sẵn sàng")).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Không có việc bắt buộc lúc khởi tạo")).not.toBeInTheDocument();
   });
 
-  it("shows only the three minimum chatbot settings in a responsive grid", async () => {
+  it("shows only the three minimum chatbot settings stacked in the left pane", async () => {
     mocks.getDraft.mockResolvedValue(draft());
     mocks.getCatalog.mockResolvedValue(catalog);
 
     const screen = await render(<InstallationWizard />);
-    await screen.getByRole("button", { name: "Thiết lập Kết nối AI" }).click();
     const navigation = screen.getByRole("navigation", { name: "Các bước thiết lập" });
 
     await expect.element(navigation).toHaveClass("grid");
-    await expect.element(navigation).toHaveClass("sm:grid-cols-3");
+    await expect.element(navigation).not.toHaveClass("grid-cols-3");
     await expect.element(navigation).not.toHaveClass("overflow-x-auto");
+    await expect.element(screen.getByText("Thiết lập tùy chọn")).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Về tổng quan" })).not.toBeInTheDocument();
     await expect.element(screen.getByRole("button", { name: "Kết nối AI", exact: true })).toBeVisible();
     await expect.element(screen.getByRole("button", { name: "Agent", exact: true })).toBeVisible();
     await expect.element(screen.getByRole("button", { name: "Kiến thức", exact: true })).toBeVisible();
@@ -206,7 +206,7 @@ describe("InstallationWizard", () => {
     mocks.saveDraft.mockImplementation(async (payload) => draft({ payload, lock_version: 5 }));
 
     const screen = await render(<InstallationWizard />);
-    await screen.getByRole("button", { name: "Thiết lập Agent" }).click();
+    await screen.getByRole("button", { name: /Agent/ }).click();
     await screen.getByRole("button", { name: "Chọn Agent" }).click();
     await screen.getByRole("button", { name: "Lưu", exact: true }).click();
 

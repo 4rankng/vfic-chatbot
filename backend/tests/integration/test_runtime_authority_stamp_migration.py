@@ -7,6 +7,7 @@ import subprocess
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.integration.conftest import BACKEND_DIR, IntegrationDatabase
@@ -86,6 +87,42 @@ async def test_runtime_authority_stamp_migration_roundtrip(
                 "ck_outbound_outbox_fence_scope",
                 "ck_outbound_outbox_authority_origin",
             } <= constraints
+            stamp_check = await connection.scalar(
+                text(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                    "WHERE conname = 'ck_outbound_outbox_runtime_stamp_complete'"
+                )
+            )
+            origin_check = await connection.scalar(
+                text(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                    "WHERE conname = 'ck_outbound_outbox_authority_origin'"
+                )
+            )
+            assert "authority_generation IS NOT NULL" in str(stamp_check)
+            assert "runtime_fingerprint IS NOT NULL" in str(stamp_check)
+            assert "origin_kind IS NOT NULL" in str(origin_check)
+            assert "fence_scope IS NOT NULL" in str(origin_check)
+
+            conversation_id = await connection.scalar(
+                text(
+                    "INSERT INTO conversations (zalo_chat_id, zalo_channel) "
+                    "VALUES ('runtime-stamp-proof', 'bot') RETURNING id"
+                )
+            )
+            with pytest.raises(IntegrityError):
+                async with connection.begin_nested():
+                    await connection.execute(
+                        text(
+                            "INSERT INTO messages "
+                            "(conversation_id, sender, body, runtime_fingerprint) "
+                            "VALUES (:conversation_id, 'BOT', 'partial stamp', :fingerprint)"
+                        ),
+                        {
+                            "conversation_id": conversation_id,
+                            "fingerprint": "a" * 64,
+                        },
+                    )
     finally:
         await engine.dispose()
 
@@ -101,3 +138,7 @@ async def test_runtime_authority_stamp_migration_roundtrip(
             ) is None
     finally:
         await engine.dispose()
+
+    # This suite shares one disposable database. Restore the schema expected by
+    # every subsequent integration test after proving the downgrade path.
+    _alembic(integration_database, "upgrade", "head")

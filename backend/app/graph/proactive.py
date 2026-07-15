@@ -175,6 +175,11 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     cap = PROACTIVE_FOLLOWUP_CAP
     silence_limit = PROACTIVE_SILENCE_LIMIT
 
+    if deps.runtime_policy is not None:
+        policy = await deps.runtime_policy.resolve_active_policy()
+        if policy is None or policy.pack_key != "recruitment":
+            return _outcome("suppressed", reason="proactive_not_enabled")
+
     # 1. Re-check guards
     await deps.db.refresh(conv)
     mode_value = getattr(conv.mode, "value", conv.mode)

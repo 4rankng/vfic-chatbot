@@ -28,7 +28,7 @@ from app.schemas.installation import (
 )
 from app.services.audit_service import record_audit
 from app.services.errors import InstallationError
-from app.services.installation.authority import RuntimeAuthorityFingerprint
+from app.services.installation.authority import RuntimeAuthorityFingerprint, RuntimeAuthorityStamp
 from app.services.installation.hashing import sha256_json
 from app.services.installation.catalog import (
     CHANNEL_CAPABILITY_REQUIREMENTS,
@@ -157,10 +157,6 @@ class InstallationService:
         if required_refs - integration_refs:
             selection_issues.append(
                 self._issue("INTEGRATION_REQUIRED_BY_CAPABILITY", "integration_requirements")
-            )
-        if "knowledge" in capability_ids and not body.template_version_refs:
-            selection_issues.append(
-                self._issue("TEMPLATE_REQUIRED_BY_CAPABILITY", "template_version_refs")
             )
         if selection_issues:
             raise self._error(
@@ -619,6 +615,11 @@ class InstallationService:
                 "INSTALLATION_CONFLICT",
                 state.lifecycle if state else InstallationLifecycle.unconfigured.value,
             )
+
+    async def runtime_stamp_is_current(self, stamp: RuntimeAuthorityStamp) -> bool:
+        """Return whether a durable command still matches the active authority exactly."""
+        active = await self.resolve_active()
+        return active is not None and active.fingerprint.stamp() == stamp
 
     async def runtime_view(self) -> InstallationRuntimeOut:
         state = await self.repo.get_state()

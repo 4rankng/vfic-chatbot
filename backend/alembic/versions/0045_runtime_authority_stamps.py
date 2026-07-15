@@ -31,7 +31,9 @@ def upgrade() -> None:
             f"ck_{table}_runtime_stamp_complete",
             table,
             "(runtime_revision_id IS NULL AND authority_generation IS NULL AND runtime_fingerprint IS NULL) "
-            "OR (runtime_revision_id IS NOT NULL AND authority_generation >= 0 "
+            "OR (runtime_revision_id IS NOT NULL AND authority_generation IS NOT NULL "
+            "AND authority_generation >= 0 "
+            "AND runtime_fingerprint IS NOT NULL "
             "AND runtime_fingerprint ~ '^[0-9a-f]{64}$')",
         )
 
@@ -57,8 +59,9 @@ def upgrade() -> None:
         "ck_outbound_outbox_authority_origin",
         "outbound_outbox",
         "(origin_kind IS NULL AND fence_scope IS NULL) OR "
-        "(origin_kind IN ('BOT','PROACTIVE') AND fence_scope = 'RUNTIME') OR "
-        "(origin_kind = 'MANUAL' AND fence_scope = 'CHANNEL')",
+        "(origin_kind IS NOT NULL AND fence_scope IS NOT NULL AND "
+        "((origin_kind IN ('BOT','PROACTIVE') AND fence_scope = 'RUNTIME') OR "
+        "(origin_kind = 'MANUAL' AND fence_scope = 'CHANNEL')))",
     )
     op.create_index(
         "ix_outbound_outbox_pending_runtime_authority",

@@ -40,7 +40,7 @@ afterEach(async () => {
 });
 
 describe("PersonaStep", () => {
-  it("requires an explicit disabled follow-up choice and sends the neutral policy", async () => {
+  it("creates an agent with proactive follow-up disabled by default", async () => {
     const personaId = "00000000-0000-4000-8000-000000000001";
     const versionId = "00000000-0000-4000-8000-000000000002";
     const checksum = "a".repeat(64);
@@ -70,11 +70,6 @@ describe("PersonaStep", () => {
       name: "Tạo và chọn phiên bản",
     });
 
-    await expect.element(createButton).toBeDisabled();
-    expect(mocks.createPersona).not.toHaveBeenCalled();
-    await screen
-      .getByRole("checkbox", { name: /Xác nhận tắt theo dõi chủ động/ })
-      .click();
     await expect.element(createButton).toBeEnabled();
     await createButton.click();
 
@@ -89,6 +84,9 @@ describe("PersonaStep", () => {
       },
     });
     await expect.element(screen.getByText("Phiên bản 1")).toBeVisible();
+    await expect
+      .element(screen.getByText("Xác nhận tắt theo dõi chủ động"))
+      .not.toBeInTheDocument();
     expect(onChange).toHaveBeenCalledWith({
       persona_version_id: versionId,
       checksum,

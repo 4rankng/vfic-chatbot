@@ -310,6 +310,13 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
         queue_depth=queue_depth,
         execution_source=source,
         trace_id=trace_id,
+        runtime_revision_id=str(job.get("runtime_revision_id") or ""),
+        authority_generation=(
+            int(job["authority_generation"])
+            if job.get("authority_generation") is not None
+            else None
+        ),
+        runtime_fingerprint=str(job.get("runtime_fingerprint") or ""),
     )
     heartbeat_task = asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
     # Bridge the Bot typing indicator across the preamble. The webhook's one-shot

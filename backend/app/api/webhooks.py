@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.services.integration_settings import IntegrationSettingsService
+from app.services.installation.service import InstallationService
 from app.services.slo_service import record_webhook_ack_ms
 from app.services.webhook import ZaloWebhookService
 from app.services.zalo_oa_health import record_oa_signature
@@ -44,6 +45,15 @@ async def _stamp_ack(t0: float, status_code: int) -> None:
     """
     if 200 <= status_code < 300:
         await record_webhook_ack_ms((time.time() - t0) * 1000.0)
+
+
+async def _runtime_authority_or_inactive(db: AsyncSession, *, channel: str):
+    """Resolve active authority after signature verification and before any business write."""
+    active = await InstallationService(db).resolve_active()
+    if active is None:
+        logger.info("webhook accepted while runtime inactive channel=%s", channel)
+        return None
+    return active.fingerprint.stamp()
 
 
 @router.post("/zalo/chatbot")
@@ -82,8 +92,16 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
 
     # Pass the DB-resolved bot token so the fire-and-forget typing indicator uses
     # the live token (the env ZALO_BOT_TOKEN is stale; resolve_zalo wins).
+    runtime_authority = await _runtime_authority_or_inactive(db, channel="bot")
+    if runtime_authority is None:
+        await _stamp_ack(t0, 200)
+        return JSONResponse({"status": "inactive"}, status_code=200)
     result = await ZaloWebhookService.handle(
-        db, payload, enqueue=enqueue_chat_run, bot_token=cfg.bot_token
+        db,
+        payload,
+        enqueue=enqueue_chat_run,
+        bot_token=cfg.bot_token,
+        runtime_authority=runtime_authority,
     )
     code = 503 if result.get("status") == "start_failed" else 200
     await _stamp_ack(t0, code)
@@ -163,11 +181,16 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             status_code=503,
         )
 
+    runtime_authority = await _runtime_authority_or_inactive(db, channel="oa")
+    if runtime_authority is None:
+        await _stamp_ack(t0, 200)
+        return JSONResponse({"status": "inactive"}, status_code=200)
     result = await ZaloWebhookService.handle(
         db,
         payload,
         enqueue=enqueue_chat_run,
         channel="oa",
+        runtime_authority=runtime_authority,
     )
     code = 503 if result.get("status") == "start_failed" else 200
     await _stamp_ack(t0, code)

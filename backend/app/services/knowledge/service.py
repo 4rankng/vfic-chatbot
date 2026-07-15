@@ -14,6 +14,7 @@ sources by archiving/replacing them rather than approving a review queue.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -85,13 +86,13 @@ class KnowledgeService:
         )
         from app.services.ingestion.template_service import TemplateService
 
-        template = await TemplateService(self.db).pinned_version_for_project(project_id)
+        assignment = await TemplateService(self.db).current_assignment(project_id)
         version = KBVersion(
             project_id=project_id,
             version_no=next_version,
             status=KBVersionStatus.DRAFT,
             created_by=actor.id,
-            template_version_id=template.id,
+            template_version_id=assignment.template_version_id if assignment is not None else None,
         )
         self.db.add(version)
         await self.db.commit()
@@ -199,8 +200,8 @@ class KnowledgeService:
         files = await self.list_version_files(version.id)
         if not files:
             raise ValueError("KB version has no uploaded text files.")
-        ingestion = TemplateIngestionService(self.db)
-        run = await ingestion.start_run(version)
+        ingestion = TemplateIngestionService(self.db) if version.template_version_id is not None else None
+        run = await ingestion.start_run(version) if ingestion is not None else None
         version.status = KBVersionStatus.INDEXING
         version.error_message = None
         await self.db.commit()
@@ -230,9 +231,14 @@ class KnowledgeService:
                     source_text=text_file.normalized_text,
                 )
                 await self.db.commit()
-            run = await ingestion.materialize_version(version, run=run)
+            if ingestion is not None and run is not None:
+                run = await ingestion.materialize_version(version, run=run)
+            else:
+                version.release_manifest_sha256 = hashlib.sha256(
+                    "|".join(sorted(item.content_sha256 for item in files)).encode()
+                ).hexdigest()
             version.error_message = None
-            if run.status == "READY":
+            if run is None or run.status == "READY":
                 version.status = KBVersionStatus.READY
             await self.db.commit()
         except Exception as exc:

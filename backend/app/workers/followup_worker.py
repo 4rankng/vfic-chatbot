@@ -70,6 +70,19 @@ async def _run_followup_async(job: dict) -> None:
             return
 
         deps = await build_deps(db)
+        policy = (
+            await deps.runtime_policy.resolve_active_policy()
+            if deps.runtime_policy is not None
+            else None
+        )
+        # Proactive outreach is recruitment-specific today: it reads candidate
+        # profile state and uses a recruitment prompt. Do not run it for any
+        # other active installation until that product owns an equivalent flow.
+        if policy is None or policy.pack_key != "recruitment":
+            logger.info(
+                "proactive followup skipped: installation does not enable recruitment outreach"
+            )
+            return
         outcome = await run_proactive_turn(conv, deps)
         logger.info(
             "proactive followup complete: conversation=%s outcome=%s",

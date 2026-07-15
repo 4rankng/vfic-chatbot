@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from app.models.conversation import BotRun, Message
 from app.models.outbox import OutboundOutbox, OutboxFenceScope, OutboxOriginKind
@@ -54,8 +56,50 @@ def test_authority_stamp_migration_requires_complete_stamps_and_origin_specific_
     ).read_text(encoding="utf-8")
 
     assert 'f"ck_{table}_runtime_stamp_complete"' in migration
-    assert "runtime_revision_id IS NOT NULL AND authority_generation >= 0" in migration
+    assert "authority_generation IS NOT NULL" in migration
+    assert "runtime_fingerprint IS NOT NULL" in migration
     assert "origin_kind IN ('BOT','PROACTIVE','MANUAL')" in migration
     assert "fence_scope IN ('RUNTIME','CHANNEL')" in migration
+    assert "origin_kind IS NOT NULL AND fence_scope IS NOT NULL" in migration
     assert "ix_outbound_outbox_pending_runtime_authority" in migration
     assert "def downgrade" in migration
+
+
+async def test_stale_runtime_outbox_is_suppressed_before_provider_dispatch(monkeypatch):
+    from app.services import outbox_service
+
+    outbox = SimpleNamespace(
+        status="PENDING",
+        fence_scope="RUNTIME",
+        runtime_revision_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        authority_generation=7,
+        runtime_fingerprint="a" * 64,
+    )
+    db = SimpleNamespace(get=AsyncMock(return_value=outbox))
+    acquire_lock = AsyncMock()
+    current = AsyncMock(return_value=False)
+    claim = AsyncMock(
+        return_value=SimpleNamespace(outbox_id=11, message_id=22, channel="zalo_bot", payload={})
+    )
+    send = AsyncMock()
+
+    monkeypatch.setattr(
+        "app.services.installation.repository.InstallationRepository.acquire_runtime_dispatch_lock",
+        acquire_lock,
+    )
+    monkeypatch.setattr(
+        "app.services.installation.service.InstallationService.runtime_stamp_is_current",
+        current,
+    )
+    monkeypatch.setattr(outbox_service, "claim_pending_outbox", claim)
+    monkeypatch.setattr("app.services.zalo_sender.ZaloChannelSender.send_payload", send)
+
+    result = await outbox_service.dispatch_outbox(db, outbox_id=11)
+
+    assert result is not None
+    assert result.suppressed is True
+    assert result.error_class == "suppressed"
+    acquire_lock.assert_awaited_once()
+    current.assert_awaited_once()
+    claim.assert_awaited_once_with(db, outbox_id=11)
+    send.assert_not_awaited()

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -160,6 +161,29 @@ def _deps(agent, zalo, *, conversation) -> "object":
 # ---------------------------------------------------------------------------
 # Outcome matrix
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_non_recruitment_policy_suppresses_proactive_outreach(monkeypatch):
+    svc, _ = _stub_svc()
+    _patch_lazy_helpers(monkeypatch)
+    agent = _FakeAgent('{"send": true, "message": "never", "reason": "x"}')
+    zalo = _FakeZalo()
+    deps = _deps(agent, zalo, conversation=svc)
+
+    async def _product_policy():
+        return SimpleNamespace(pack_key="product_advisory")
+
+    deps.runtime_policy = SimpleNamespace(resolve_active_policy=_product_policy)
+
+    result = await run_proactive_turn(_FakeConv(), deps)
+
+    assert result == {
+        "outcome": "proactive:suppressed",
+        "reason": "proactive_not_enabled",
+        "reply": "",
+    }
+    assert zalo.sent == []
 
 
 @pytest.mark.asyncio

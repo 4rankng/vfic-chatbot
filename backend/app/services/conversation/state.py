@@ -184,6 +184,9 @@ class ConversationState:
         *,
         body: str,
         zalo_message_id: str | None = None,
+        runtime_revision_id: uuid.UUID | None = None,
+        authority_generation: int | None = None,
+        runtime_fingerprint: str | None = None,
     ) -> Message:
         """Persist an inbound worker message and update conversation attention state."""
         msg = Message(
@@ -191,6 +194,9 @@ class ConversationState:
             sender=MessageSender.WORKER,
             body=body,
             zalo_message_id=zalo_message_id,
+            runtime_revision_id=runtime_revision_id,
+            authority_generation=authority_generation,
+            runtime_fingerprint=runtime_fingerprint,
         )
         self.db.add(msg)
         conv.last_inbound_at = utcnow()
@@ -499,11 +505,19 @@ class ConversationState:
         if res.rowcount == 1 and outbox_channel is not None and outbox_payload is not None:
             from app.services.outbox_service import create_pending_outbox
 
+            pending = await self.db.get(Message, pending_message_id)
+            stamped = pending is not None and pending.runtime_revision_id is not None
+
             await create_pending_outbox(
                 self.db,
                 message_id=pending_message_id,
                 channel=outbox_channel,
                 payload=outbox_payload,
+                runtime_revision_id=pending.runtime_revision_id if stamped else None,
+                authority_generation=pending.authority_generation if stamped else None,
+                runtime_fingerprint=pending.runtime_fingerprint if stamped else None,
+                origin_kind="BOT" if stamped else None,
+                fence_scope="RUNTIME" if stamped else None,
             )
         await self.db.commit()
         return res.rowcount == 1
@@ -549,13 +563,6 @@ class ConversationState:
         atomically. The channel is ``zalo_bot`` / ``zalo_oa``; the payload is
         the Zalo send body. Best-effort — outbox failures never block the turn.
         """
-        outcome = (
-            BotRunOutcome.ERROR
-            if external_error
-            else BotRunOutcome.SENT
-            if sent
-            else BotRunOutcome.SUPPRESSED
-        )
         if delivery_status is None:
             delivery_status = (
                 DeliveryStatus.FAILED
@@ -564,6 +571,15 @@ class ConversationState:
                 if sent
                 else DeliveryStatus.SUPPRESSED
             )
+        outcome = (
+            BotRunOutcome.SUPPRESSED
+            if delivery_status == DeliveryStatus.SUPPRESSED
+            else BotRunOutcome.ERROR
+            if external_error
+            else BotRunOutcome.SENT
+            if sent
+            else BotRunOutcome.SUPPRESSED
+        )
         run = BotRun(
             conversation_id=conv.id,
             version_at_start=version_at_start,
@@ -575,9 +591,9 @@ class ConversationState:
             trace_id=trace_id or None,
             outcome_metadata=outcome_metadata,
         )
-        self.db.add(run)
-        await self.db.flush()
         msg = None
+        pending_msg = None
+        matched_pending = False
         if pending_message_id is not None:
             pending_msg = await self.db.get(Message, pending_message_id)
             if (
@@ -586,12 +602,19 @@ class ConversationState:
                 and pending_msg.sender == MessageSender.BOT
                 and pending_msg.delivery_status in (DeliveryStatus.PENDING, DeliveryStatus.SENDING)
             ):
-                pending_msg.body = reply
-                pending_msg.bot_run_id = run.id
-                pending_msg.delivery_status = delivery_status
-                pending_msg.external_error = external_error
-                pending_msg.zalo_message_id = zalo_message_id
-                msg = pending_msg
+                matched_pending = True
+                run.runtime_revision_id = pending_msg.runtime_revision_id
+                run.authority_generation = pending_msg.authority_generation
+                run.runtime_fingerprint = pending_msg.runtime_fingerprint
+        self.db.add(run)
+        await self.db.flush()
+        if matched_pending and pending_msg is not None:
+            pending_msg.body = reply
+            pending_msg.bot_run_id = run.id
+            pending_msg.delivery_status = delivery_status
+            pending_msg.external_error = external_error
+            pending_msg.zalo_message_id = zalo_message_id
+            msg = pending_msg
         if msg is None:
             msg = Message(
                 conversation_id=conv.id,
@@ -656,6 +679,11 @@ class ConversationState:
                 status=outbox_status,
                 zalo_message_id=zalo_message_id,
                 last_error=external_error,
+                runtime_revision_id=msg.runtime_revision_id,
+                authority_generation=msg.authority_generation,
+                runtime_fingerprint=msg.runtime_fingerprint,
+                origin_kind="BOT" if msg.runtime_revision_id is not None else None,
+                fence_scope="RUNTIME" if msg.runtime_revision_id is not None else None,
             )
             if outbox is not None:
                 outbox_attempts = int(outbox.attempts or 0)
@@ -671,6 +699,9 @@ class ConversationState:
         conv: Conversation,
         *,
         body: str = "Đang soạn trả lời...",
+        runtime_revision_id: uuid.UUID | None = None,
+        authority_generation: int | None = None,
+        runtime_fingerprint: str | None = None,
     ) -> Message:
         """Persist a visible pending BOT row without touching the version guard."""
         msg = Message(
@@ -678,6 +709,9 @@ class ConversationState:
             sender=MessageSender.BOT,
             body=body,
             delivery_status=DeliveryStatus.PENDING,
+            runtime_revision_id=runtime_revision_id,
+            authority_generation=authority_generation,
+            runtime_fingerprint=runtime_fingerprint,
         )
         self.db.add(msg)
         await self.db.commit()
@@ -1285,6 +1319,7 @@ class ConversationState:
         zalo_message_id: str | None = None,
         external_error: str | None = None,
         error_class: str | None = None,
+        suppressed: bool = False,
     ) -> Message:
         """Finalize a recovered command for any outbound sender without a new row."""
         from app.graph.send_classification import delivery_status_for_send_error
@@ -1294,14 +1329,20 @@ class ConversationState:
         outbox = await self.db.get(OutboundOutbox, outbox_id)
         if msg is None or msg.conversation_id != conv.id or outbox is None:
             raise RuntimeError("outbound message disappeared before dispatch finalization")
-        delivery_status = delivery_status_for_send_error(error_class, ok=delivered)
+        delivery_status = (
+            DeliveryStatus.SUPPRESSED
+            if suppressed
+            else delivery_status_for_send_error(error_class, ok=delivered)
+        )
         if delivery_status is None:
             delivery_status = DeliveryStatus.SENT if delivered else DeliveryStatus.FAILED
         msg.delivery_status = delivery_status
         msg.zalo_message_id = zalo_message_id
         msg.external_error = None if delivered else external_error
         outbox.status = (
-            OutboxStatus.SENT.value
+            OutboxStatus.SUPPRESSED.value
+            if suppressed
+            else OutboxStatus.SENT.value
             if delivered
             else OutboxStatus.SEND_UNKNOWN.value
             if delivery_status == DeliveryStatus.SEND_UNKNOWN

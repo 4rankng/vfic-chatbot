@@ -51,6 +51,7 @@ class DispatchResult:
     zalo_message_id: str | None = None
     error: str | None = None
     error_class: str | None = None
+    suppressed: bool = False
 
     @property
     def msg_id(self) -> str | None:
@@ -74,6 +75,11 @@ async def create_pending_outbox(
     message_id: int,
     channel: str,
     payload: dict[str, Any],
+    runtime_revision_id=None,
+    authority_generation: int | None = None,
+    runtime_fingerprint: str | None = None,
+    origin_kind: str | None = None,
+    fence_scope: str | None = None,
 ) -> OutboundOutbox:
     """Persist a command before provider I/O in the caller's transaction.
 
@@ -91,6 +97,11 @@ async def create_pending_outbox(
             channel=channel,
             payload=payload,
             status=OutboxStatus.PENDING.value,
+            runtime_revision_id=runtime_revision_id,
+            authority_generation=authority_generation,
+            runtime_fingerprint=runtime_fingerprint,
+            origin_kind=origin_kind,
+            fence_scope=fence_scope,
             updated_at=now,
         )
         .on_conflict_do_nothing(index_elements=["message_id"])
@@ -140,11 +151,53 @@ async def claim_pending_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchC
 
 
 async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult | None:
-    """Claim and send an immutable command; caller persists the final state."""
+    """Claim, authorize, and send an immutable command.
+
+    Runtime-bound commands hold a shared PostgreSQL advisory lock after their
+    active-authority check. The caller finalizes the command in this same
+    transaction, so an activation's exclusive lock cannot interleave between
+    authorization and the provider request or its durable classification.
+    """
+    outbox = await db.get(OutboundOutbox, outbox_id)
+    if outbox is None or outbox.status != OutboxStatus.PENDING.value:
+        return None
+
+    if outbox.fence_scope == "RUNTIME":
+        from app.services.installation.authority import RuntimeAuthorityStamp
+        from app.services.installation.repository import InstallationRepository
+        from app.services.installation.service import InstallationService
+
+        await InstallationRepository(db).acquire_runtime_dispatch_lock()
+        stamp_complete = (
+            outbox.runtime_revision_id is not None
+            and outbox.authority_generation is not None
+            and outbox.runtime_fingerprint is not None
+        )
+        stamp_is_current = False
+        if stamp_complete:
+            stamp_is_current = await InstallationService(db).runtime_stamp_is_current(
+                RuntimeAuthorityStamp(
+                    revision_id=outbox.runtime_revision_id,
+                    authority_generation=outbox.authority_generation,
+                    fingerprint=outbox.runtime_fingerprint,
+                )
+            )
+        if not stamp_is_current:
+            candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
+            if candidate is None:
+                return None
+            return DispatchResult(
+                outbox_id=candidate.outbox_id,
+                message_id=candidate.message_id,
+                ok=False,
+                error="runtime authority changed before outbound dispatch",
+                error_class="suppressed",
+                suppressed=True,
+            )
+
     candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
     if candidate is None:
         return None
-    await db.commit()
 
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.zalo_sender import ZaloChannelSender
@@ -259,6 +312,11 @@ async def enqueue_outbox(
     status: OutboxStatus,
     zalo_message_id: str | None = None,
     last_error: str | None = None,
+    runtime_revision_id=None,
+    authority_generation: int | None = None,
+    runtime_fingerprint: str | None = None,
+    origin_kind: str | None = None,
+    fence_scope: str | None = None,
 ) -> OutboundOutbox | None:
     """Insert (or upsert) an outbox row for ``message_id``.
 
@@ -289,6 +347,11 @@ async def enqueue_outbox(
                 status=status.value if isinstance(status, OutboxStatus) else status,
                 zalo_message_id=zalo_message_id,
                 last_error=last_error,
+                runtime_revision_id=runtime_revision_id,
+                authority_generation=authority_generation,
+                runtime_fingerprint=runtime_fingerprint,
+                origin_kind=origin_kind,
+                fence_scope=fence_scope,
                 sent_at=datetime.now(timezone.utc) if status == OutboxStatus.SENT else None,
                 updated_at=datetime.now(timezone.utc),
             )
@@ -300,6 +363,11 @@ async def enqueue_outbox(
                     "last_error": pg_insert.excluded.last_error,
                     "sent_at": pg_insert.excluded.sent_at,
                     "updated_at": pg_insert.excluded.updated_at,
+                    "runtime_revision_id": pg_insert.excluded.runtime_revision_id,
+                    "authority_generation": pg_insert.excluded.authority_generation,
+                    "runtime_fingerprint": pg_insert.excluded.runtime_fingerprint,
+                    "origin_kind": pg_insert.excluded.origin_kind,
+                    "fence_scope": pg_insert.excluded.fence_scope,
                 },
             )
             .returning(OutboundOutbox)

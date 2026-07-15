@@ -76,6 +76,7 @@ async def _dispatch_pending() -> None:
                     zalo_message_id=result.zalo_message_id,
                     external_error=result.error,
                     error_class=result.error_class,
+                    suppressed=result.suppressed,
                 )
             except Exception:  # noqa: BLE001 - one command must not stop recovery
                 logger.exception("outbound dispatcher failed for outbox id=%s", outbox_id)

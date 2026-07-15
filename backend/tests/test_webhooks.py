@@ -5,9 +5,27 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 import hashlib
 import json
+import uuid
 from types import SimpleNamespace
 
 import pytest
+
+
+def _runtime_authority():
+    from app.services.installation.authority import RuntimeAuthorityFingerprint
+
+    return RuntimeAuthorityFingerprint(
+        authority_generation=1,
+        revision_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        manifest_checksum="a" * 64,
+        pack_contract_hash="b" * 64,
+        persona_checksum="c" * 64,
+        workflow_policy_checksum="d" * 64,
+        provider_policy_checksum="e" * 64,
+        authentication_policy_checksum="f" * 64,
+        template_checksums={},
+        active_kb_vector=(),
+    ).stamp()
 
 
 class FakeRequest:
@@ -28,6 +46,7 @@ async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
     handle = AsyncMock(return_value={"status": "start_failed"})
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
 
     response = await webhooks.zalo_webhook(
         FakeRequest(json.dumps({"message": {"text": "Xin chào"}}).encode()),
@@ -36,6 +55,7 @@ async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
 
     assert response.status_code == 503
     assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 
 @pytest.mark.asyncio
@@ -47,6 +67,7 @@ async def test_oa_webhook_dispatches_turn_through_rq(monkeypatch):
     handle = AsyncMock(return_value={"status": "start_failed"})
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
 
     response = await webhooks.zalo_oa_webhook(
         FakeRequest(json.dumps({"event_name": "user_send_text"}).encode()),
@@ -86,6 +107,7 @@ async def test_oa_webhook_processes_unsigned_real_event_non_blocking(monkeypatch
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
     handle = AsyncMock(return_value={"status": "queued"})
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
     raw = json.dumps(
         {
             "event_name": "user_send_text",
@@ -123,6 +145,7 @@ async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
     handle = AsyncMock(return_value={"status": "queued"})
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
 
     req = FakeRequest(
         raw,
@@ -143,6 +166,79 @@ async def test_zalo_webhook_returns_400_for_malformed_json():
 
     assert response.status_code == 400
     handle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_verified_webhook_acknowledges_inactive_runtime_without_calling_handler(monkeypatch):
+    from app.api import webhooks
+
+    cfg = SimpleNamespace(bot_webhook_secret="", bot_token="bot-token")
+    monkeypatch.setattr(
+        webhooks,
+        "IntegrationSettingsService",
+        lambda _db: SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg)),
+    )
+    inactive = AsyncMock(return_value=None)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", inactive)
+    handle = AsyncMock()
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+
+    response = await webhooks.zalo_webhook(
+        FakeRequest(json.dumps({"message": {"text": "Xin chào"}}).encode()),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 200
+    assert response.body == b'{"status":"inactive"}'
+    inactive.assert_awaited_once()
+    handle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_webhook_copies_active_runtime_authority_to_inbound_and_queued_turn(monkeypatch):
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(
+        id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=3,
+        mode="BOT",
+    )
+    service = MagicMock()
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = AsyncMock()
+    service.get = AsyncMock(return_value=conv)
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(return_value=uuid.UUID("00000000-0000-0000-0000-000000000002"))
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        AsyncMock(return_value=None),
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+    jobs: list[dict] = []
+    authority = _runtime_authority()
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {"message": {"message_id": "msg-1", "chat": {"id": "bot-user-1"}, "text": "Xin chào"}},
+        enqueue=lambda job: jobs.append(job) or True,
+        runtime_authority=authority,
+    )
+
+    assert result == {"status": "processing", "conversation_id": str(conv.id)}
+    assert service.record_inbound.await_args.kwargs["runtime_revision_id"] == authority.revision_id
+    assert service.record_inbound.await_args.kwargs["authority_generation"] == 1
+    assert service.record_inbound.await_args.kwargs["runtime_fingerprint"] == authority.fingerprint
+    assert jobs[0]["runtime_revision_id"] == str(authority.revision_id)
+    assert jobs[0]["authority_generation"] == 1
+    assert jobs[0]["runtime_fingerprint"] == authority.fingerprint
 
 
 @pytest.mark.asyncio

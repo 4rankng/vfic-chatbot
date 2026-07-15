@@ -64,6 +64,11 @@ class BotRunState:
     # every log line for a single candidate message's journey. Empty for legacy
     # jobs / tests; stamped on BotRun.trace_id by record_bot_outcome.
     trace_id: str = ""
+    # Immutable authority captured when the inbound was accepted. Empty values
+    # are legacy/test work and must not be treated as active authority.
+    runtime_revision_id: str = ""
+    authority_generation: int | None = None
+    runtime_fingerprint: str = ""
 
 
 class TurnOutcome(TypedDict):

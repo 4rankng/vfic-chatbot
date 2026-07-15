@@ -357,7 +357,7 @@ async def create_kb_version(
     except TemplateConflictError as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "assign a published knowledge template before creating a knowledge version",
+            "the selected knowledge template assignment is not available",
         ) from exc
     await record_audit(
         db,
@@ -367,7 +367,9 @@ async def create_kb_version(
         target_id=str(version.id),
         payload={
             "project_id": str(project_id),
-            "template_version_id": str(version.template_version_id),
+            "template_version_id": str(version.template_version_id)
+            if version.template_version_id is not None
+            else None,
         },
     )
     await db.commit()

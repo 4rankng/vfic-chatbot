@@ -58,6 +58,7 @@ async def test_oa_webhook_records_verified_on_valid_signature(monkeypatch):
     recorder = AsyncMock()
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
     monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=object()))
     monkeypatch.setattr(
         webhooks.ZaloWebhookService, "handle", AsyncMock(return_value={"status": "queued"})
     )
@@ -99,6 +100,7 @@ async def test_oa_webhook_uses_event_app_id_for_signature(monkeypatch):
     recorder = AsyncMock()
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
     monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=object()))
     handler = AsyncMock(return_value={"status": "queued"})
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handler)
 
@@ -125,6 +127,7 @@ async def test_oa_webhook_records_mismatch_but_still_processes(monkeypatch):
     recorder = AsyncMock()
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
     monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=object()))
     handler = AsyncMock(return_value={"status": "queued"})
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handler)
 

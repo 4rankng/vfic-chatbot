@@ -186,8 +186,18 @@ class ConversationService:
         *,
         body: str,
         zalo_message_id: str | None = None,
+        runtime_revision_id: uuid.UUID | None = None,
+        authority_generation: int | None = None,
+        runtime_fingerprint: str | None = None,
     ) -> Message:
-        return await self.state.record_inbound(conv, body=body, zalo_message_id=zalo_message_id)
+        return await self.state.record_inbound(
+            conv,
+            body=body,
+            zalo_message_id=zalo_message_id,
+            runtime_revision_id=runtime_revision_id,
+            authority_generation=authority_generation,
+            runtime_fingerprint=runtime_fingerprint,
+        )
 
     async def escalate_extracted_intent(
         self,
@@ -266,6 +276,7 @@ class ConversationService:
         zalo_message_id: str | None = None,
         external_error: str | None = None,
         error_class: str | None = None,
+        suppressed: bool = False,
     ) -> Message:
         return await self.state.finalize_outbound_dispatch(
             conv,
@@ -275,6 +286,7 @@ class ConversationService:
             zalo_message_id=zalo_message_id,
             external_error=external_error,
             error_class=error_class,
+            suppressed=suppressed,
         )
 
     async def record_bot_outcome(
@@ -315,9 +327,21 @@ class ConversationService:
         )
 
     async def record_bot_pending(
-        self, conv: Conversation, *, body: str = "Đang soạn trả lời..."
+        self,
+        conv: Conversation,
+        *,
+        body: str = "Đang soạn trả lời...",
+        runtime_revision_id: uuid.UUID | None = None,
+        authority_generation: int | None = None,
+        runtime_fingerprint: str | None = None,
     ) -> Message:
-        return await self.state.record_bot_pending(conv, body=body)
+        return await self.state.record_bot_pending(
+            conv,
+            body=body,
+            runtime_revision_id=runtime_revision_id,
+            authority_generation=authority_generation,
+            runtime_fingerprint=runtime_fingerprint,
+        )
 
     async def take_over(self, conv: Conversation, recruiter: User) -> Conversation:
         return await self.state.take_over(conv, recruiter)

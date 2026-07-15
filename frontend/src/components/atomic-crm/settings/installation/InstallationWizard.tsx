@@ -1,10 +1,10 @@
-import { Check, ChevronLeft, ChevronRight, Loader2, RefreshCw, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw, Save } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { KnowledgeUpload } from "@/components/atomic-crm/knowledge/KnowledgeUpload";
 import {
   getInstallationCatalog,
   getInstallationSetupDraft,
@@ -15,6 +15,7 @@ import {
   type InstallationSetupDraft,
   type InstallationSetupDraftPayload,
 } from "../../installation/installation-client";
+import { SetupStepper } from "./SetupStepper";
 import { KnowledgeTemplatesStep, PersonaStep, ProvidersIntegrationsStep } from "./steps/InstallationSteps";
 
 const STEPS = [
@@ -34,7 +35,7 @@ const isSectionLocallyComplete = (
 ): boolean => {
   switch (section) {
     case "knowledge_templates":
-      return (payload.knowledge_templates?.template_version_refs.length ?? 0) > 0;
+      return true;
     case "persona":
       return Boolean(payload.persona?.persona_version_id && payload.persona.checksum);
     case "providers_integrations": {
@@ -52,7 +53,7 @@ const isSectionLocallyComplete = (
 };
 
 const Loading = () => (
-  <div className="flex min-h-64 items-center justify-center gap-3" aria-live="polite">
+  <div className="flex min-h-64 items-center justify-center gap-3 text-body text-muted-foreground" aria-live="polite">
     <Loader2 className="size-6 animate-spin" aria-hidden="true" />
     <span>Đang tải bản nháp từ máy chủ</span>
   </div>
@@ -68,7 +69,7 @@ export const InstallationWizard = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<InstallationClientError | null>(null);
-  const [showConfiguration, setShowConfiguration] = useState(false);
+  const [knowledgeUploadOpen, setKnowledgeUploadOpen] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const load = async () => {
@@ -79,7 +80,6 @@ export const InstallationWizard = () => {
         getInstallationCatalog(),
       ]);
       setDraft(nextDraft); setPayload(nextDraft.payload); setCatalog(nextCatalog); setDirtySections(new Set());
-      setShowConfiguration(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Không tải được cấu hình thiết lập.");
     } finally { setLoading(false); }
@@ -182,100 +182,35 @@ export const InstallationWizard = () => {
     return (
       <Alert variant="destructive">
         <AlertTitle>Không tải được thiết lập</AlertTitle>
-        <AlertDescription className="gap-4"><p>{error ?? "Máy chủ chưa trả về bản nháp hợp lệ."}</p><Button type="button" variant="outline" className="min-h-11" onClick={() => void load()}><RefreshCw />Thử lại</Button></AlertDescription>
+        <AlertDescription className="gap-4">
+          <p>{error ?? "Máy chủ chưa trả về bản nháp hợp lệ."}</p>
+          <Button type="button" variant="outline" size="touch" onClick={() => void load()}><RefreshCw />Thử lại</Button>
+        </AlertDescription>
       </Alert>
     );
   }
 
-  const openConfiguration = (step: DraftSection) => {
-    setCurrentStep(STEPS.findIndex((item) => item.key === step));
-    setShowConfiguration(true);
-  };
-
-  if (!showConfiguration) {
-    return (
-      <div className="mx-auto grid max-w-4xl gap-5">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl sm:text-3xl">Thiết lập chatbot khi sẵn sàng</CardTitle>
-            <CardDescription className="max-w-2xl text-base leading-7">
-              Không có chatbot nào được bật khi cài đặt mới. Khi cần, chỉ cấu hình ba phần: kết nối AI, Agent và kiến thức.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Alert>
-              <Check />
-              <AlertTitle>Không có việc bắt buộc lúc khởi tạo</AlertTitle>
-              <AlertDescription>
-                Chatbot vẫn tắt an toàn cho đến khi bạn lưu đủ ba phần này và chủ động bật nó sau này.
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-        </Card>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {[
-            { step: "providers_integrations" as const, title: "Kết nối AI", description: "Lưu khóa API, chọn nhà cung cấp và model." },
-            { step: "persona" as const, title: "Agent", description: "Thiết lập giọng điệu và nguyên tắc trả lời." },
-            { step: "knowledge_templates" as const, title: "Kiến thức", description: "Thêm tài liệu và cấu trúc dữ liệu của riêng bạn." },
-          ].map((item) => (
-            <Card key={item.step} className="flex min-h-44 flex-col">
-              <CardHeader className="flex-1">
-                <CardTitle className="text-lg">{item.title}</CardTitle>
-                <CardDescription className="leading-6">{item.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button type="button" variant="outline" onClick={() => openConfiguration(item.step)}>
-                  Thiết lập {item.title}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside className="min-w-0">
-        <div className="sticky top-20 grid gap-3">
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-sm font-medium">Thiết lập tùy chọn</p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">Chỉ mở mục phù hợp với nhu cầu hiện tại của bạn.</p>
-            <Button type="button" variant="ghost" className="mt-2 justify-start px-0" onClick={() => setShowConfiguration(false)}>Về tổng quan</Button>
-          </div>
-          <nav
-            aria-label="Các bước thiết lập"
-            className="grid grid-cols-1 gap-2 sm:grid-cols-3"
-          >
-            {STEPS.map((step, index) => {
-              const complete = draft.section_completion[step.key];
-              return (
-                <button
-                  key={step.key}
-                  type="button"
-                  className={cn(
-                    "flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                    currentStep === index ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-muted",
-                  )}
-                  aria-current={currentStep === index ? "step" : undefined}
-                  onClick={() => navigateToStep(index)}
-                >
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border text-xs">{complete ? <Check className="size-3" /> : index + 1}</span>
-                  <span className="truncate">{step.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+    <div className="installation-wizard mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <aside className="min-w-0 lg:order-1">
+        <SetupStepper
+          ariaLabel="Các bước thiết lập"
+          items={STEPS.map((step) => ({
+            key: step.key,
+            label: step.label,
+            complete: draft.section_completion[step.key],
+          }))}
+          currentIndex={currentStep}
+          onSelect={navigateToStep}
+        />
       </aside>
 
-      <Card className="min-w-0 bg-card">
+      <Card className="min-w-0 bg-card lg:order-2">
         <CardHeader className="border-b">
-          <CardTitle ref={headingRef} tabIndex={-1} className="text-xl outline-none sm:text-2xl">{current.title}</CardTitle>
-          <CardDescription className="leading-6">{current.description}</CardDescription>
+          <CardTitle ref={headingRef} tabIndex={-1} className="text-page-title outline-none">{current.title}</CardTitle>
+          <CardDescription className="text-body">{current.description}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-6 pt-0">
+        <CardContent className="grid gap-6 pt-6">
           {error ? <Alert variant="destructive"><AlertTitle>Không thể tiếp tục</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
           {conflict ? (
             <Alert variant="destructive">
@@ -283,23 +218,43 @@ export const InstallationWizard = () => {
               <AlertDescription className="gap-3">
                 <p>Thay đổi chưa lưu của bạn vẫn được giữ trong trang này.</p>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" variant="outline" className="min-h-11" disabled={saving} onClick={() => void load()}>Tải bản mới</Button>
-                  <Button type="button" className="min-h-11" disabled={saving} onClick={() => void mergeAfterConflict()}>Áp dụng lại phần đã sửa</Button>
+                  <Button type="button" variant="outline" size="touch" disabled={saving} onClick={() => void load()}>Tải bản mới</Button>
+                  <Button type="button" size="touch" disabled={saving} onClick={() => void mergeAfterConflict()}>Áp dụng lại phần đã sửa</Button>
                 </div>
               </AlertDescription>
             </Alert>
           ) : null}
 
-          {current.key === "knowledge_templates" ? <KnowledgeTemplatesStep catalog={catalog} issues={currentIssues} value={payload.knowledge_templates} onChange={(value) => updateSection("knowledge_templates", value)} /> : null}
+          {current.key === "knowledge_templates" ? (
+            <>
+              <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:p-5">
+                <div>
+                  <h3 className="text-control font-semibold text-foreground">Kiến thức (tùy chọn)</h3>
+                  <p className="mt-1 text-meta text-muted-foreground">Tải tài liệu để chatbot tham khảo. Bạn có thể thêm hoặc thay đổi sau.</p>
+                </div>
+                <div>
+                  <Button type="button" variant="outline" size="touch" onClick={() => setKnowledgeUploadOpen(true)}>Thêm tài liệu</Button>
+                </div>
+              </div>
+              <details className="rounded-lg border border-border bg-card p-4 sm:p-5">
+                <summary className="cursor-pointer text-control font-semibold text-foreground">Cấu trúc dữ liệu nâng cao</summary>
+                <p className="mt-2 text-meta text-muted-foreground">Chỉ dùng mẫu khi bạn cần trích xuất bản ghi có cấu trúc từ tài liệu.</p>
+                <div className="mt-4">
+                  <KnowledgeTemplatesStep catalog={catalog} issues={currentIssues} value={payload.knowledge_templates} onChange={(value) => updateSection("knowledge_templates", value)} />
+                </div>
+              </details>
+              <KnowledgeUpload open={knowledgeUploadOpen} onOpenChange={setKnowledgeUploadOpen} />
+            </>
+          ) : null}
           {current.key === "persona" ? <PersonaStep catalog={catalog} issues={currentIssues} value={payload.persona} onChange={(value) => updateSection("persona", value)} /> : null}
           {current.key === "providers_integrations" ? <ProvidersIntegrationsStep catalog={catalog} issues={currentIssues} value={payload.providers_integrations} onChange={(value) => updateSection("providers_integrations", value)} /> : null}
 
-          <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-between">
-            <Button type="button" variant="outline" className="min-h-11" disabled={currentStep === 0 || saving} onClick={() => navigateToStep(Math.max(0, currentStep - 1))}><ChevronLeft />Quay lại</Button>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              {dirtySections.has(section) ? <Button type="button" variant="ghost" className="min-h-11" disabled={saving} onClick={discardCurrentChanges}>Bỏ thay đổi</Button> : null}
-              <Button type="button" variant="outline" className="min-h-11" disabled={saving || !dirtySections.has(section)} onClick={() => void saveCurrent()}>{saving ? <Loader2 className="animate-spin" /> : <Save />}Lưu</Button>
-              <Button type="button" className="min-h-11" disabled={saving} onClick={() => void saveAndContinue()}>Lưu và tiếp tục<ChevronRight /></Button>
+          <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <Button type="button" variant="outline" size="touch" disabled={currentStep === 0 || saving} onClick={() => navigateToStep(Math.max(0, currentStep - 1))}><ChevronLeft />Quay lại</Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              {dirtySections.has(section) ? <Button type="button" variant="ghost" size="touch" disabled={saving} onClick={discardCurrentChanges}>Bỏ thay đổi</Button> : null}
+              <Button type="button" variant="outline" size="touch" disabled={saving || !dirtySections.has(section)} onClick={() => void saveCurrent()}>{saving ? <Loader2 className="animate-spin" /> : <Save />}Lưu</Button>
+              <Button type="button" size="touch" disabled={saving} onClick={() => void saveAndContinue()}>Lưu và tiếp tục<ChevronRight /></Button>
             </div>
           </div>
         </CardContent>

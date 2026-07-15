@@ -133,6 +133,10 @@ class RuntimePolicyPort(Protocol):
 
     async def resolve_active_policy(self) -> Any: ...
 
+    async def runtime_stamp_is_current(
+        self, *, revision_id: str, authority_generation: int, runtime_fingerprint: str
+    ) -> bool: ...
+
 
 class RetrievalPort(Protocol):
     """Retrieval repository surface the agent tools + prompt assembly depend on."""

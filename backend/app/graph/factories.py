@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -159,6 +160,23 @@ class _RuntimePolicyAdapter:
             active,
             persona_body=persona.body_md if persona is not None else None,
         )
+
+    async def runtime_stamp_is_current(
+        self, *, revision_id: str, authority_generation: int, runtime_fingerprint: str
+    ) -> bool:
+        from app.services.installation.authority import RuntimeAuthorityStamp
+        from app.services.installation.service import InstallationService
+
+        try:
+            return await InstallationService(self._db).runtime_stamp_is_current(
+                RuntimeAuthorityStamp(
+                    revision_id=uuid.UUID(revision_id),
+                    authority_generation=authority_generation,
+                    fingerprint=runtime_fingerprint,
+                )
+            )
+        except (ValueError, TypeError):
+            return False
 
 
 def build_minimax_extractor():

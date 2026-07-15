@@ -19,9 +19,9 @@ async def test_catalog_is_code_owned_and_contains_no_selected_defaults() -> None
     assert catalog.integration_keys == ["minimax", "openrouter", "zalo"]
     assert catalog.authentication_methods == ["email_password"]
     assert catalog.locales == ["vi-VN"]
-    assert catalog.packs[0].key == "recruitment"
-    assert catalog.packs[0].runtime_ready is False
-    assert "candidate_intake" in catalog.packs[0].workflow_ids
+    packs = {pack.key: pack for pack in catalog.packs}
+    assert packs["recruitment"].runtime_ready is False
+    assert "candidate_intake" in packs["recruitment"].workflow_ids
     assert all(not hasattr(pack, "selected") for pack in catalog.packs)
 
 

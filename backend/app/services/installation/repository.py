@@ -38,6 +38,10 @@ class InstallationRepository:
     async def acquire_authority_lock(self) -> None:
         await self.db.execute(select(func.pg_advisory_xact_lock(INSTALLATION_AUTHORITY_LOCK)))
 
+    async def acquire_runtime_dispatch_lock(self) -> None:
+        """Hold a shared authority lock until a runtime-bound send is finalized."""
+        await self.db.execute(select(func.pg_advisory_xact_lock_shared(INSTALLATION_AUTHORITY_LOCK)))
+
     async def get_state(self, *, for_update: bool = False) -> InstallationState | None:
         statement = select(InstallationState).where(InstallationState.singleton_id == 1)
         if for_update:

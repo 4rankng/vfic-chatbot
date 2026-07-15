@@ -130,7 +130,11 @@ async def _agent_turn(
     chat_id: str,
     recent_messages: list[Message],
     timings: dict | None = None,
+    manifest_policy=None,
 ) -> str:
+    if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
+        return await run_manifest_composed_agent(user_text, deps, policy=manifest_policy)
+
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
     # Redis-cached (10min TTL, version-bumped on persona/project edits) so a hit
@@ -161,22 +165,40 @@ async def _agent_turn(
     # Low-confidence routes fall through to the full toolset (filter_tool_schemas
     # returns the whole registry when allowed is empty/None).
     allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
+    resolved_tool_registry = None
+    if manifest_policy is not None:
+        # Recruitment retains its proven prompt/routing path, but its bound
+        # tools are still the manifest's immutable allowlist.  A low-confidence
+        # route therefore cannot restore the full legacy registry.
+        resolved_tool_registry = manifest_policy.tool_registry.names
+        if allowed_tools is not None:
+            allowed_tools = tuple(
+                name for name in allowed_tools if name in resolved_tool_registry
+            )
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
     # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
     # the switch when no fast model was injected (tests / un-configured deployments).
     use_fast = should_use_fast_model(route)
     if timings is not None:
         timings["model_tier"] = "fast" if use_fast else "primary"
-    try:
-        lead_profile, lead_collection_question = await deps.lead.context(
-            chat_id, user_text, recent_messages
+    allow_lead_context = (
+        manifest_policy is None
+        or (
+            manifest_policy.pack_key == "recruitment"
+            and "candidate_intake" in manifest_policy.capability_ids
         )
-        if lead_collection_question:
-            lead_collection_instruction = deps.lead.instruction(lead_collection_question)
-    except Exception:  # noqa: BLE001
-        logger.warning(
-            "lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True
-        )
+    )
+    if allow_lead_context:
+        try:
+            lead_profile, lead_collection_question = await deps.lead.context(
+                chat_id, user_text, recent_messages
+            )
+            if lead_collection_question:
+                lead_collection_instruction = deps.lead.instruction(lead_collection_question)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True
+            )
     if timings is not None:
         # Accumulate so a safety-retry (a second _agent_turn call) adds to the
         # first attempt rather than overwriting; total_ms still spans the turn.
@@ -196,31 +218,28 @@ async def _agent_turn(
     # the split ``llm_queue_ms`` (semaphore wait) + ``llm_model_ms`` (inference)
     # pair, written directly into the shared ``timings`` dict. No external timer
     # here — wrapping the agent call would double-count the semaphore wait.
-    reply = await deps.agent.agent(
-        contextual_user_text,
-        system=system,
-        retrieval=deps.retrieval,
-        embedder=deps.embedder,
-        allowed_tools=allowed_tools,
-        use_fast=use_fast,
-        make_retrieval=deps.make_retrieval,
-        lookup_query=user_text,
-        metrics=timings,
-    )
+    agent_kwargs = {
+        "system": system,
+        "retrieval": deps.retrieval,
+        "embedder": deps.embedder,
+        "allowed_tools": allowed_tools,
+        "use_fast": use_fast,
+        "make_retrieval": deps.make_retrieval,
+        "lookup_query": user_text,
+        "metrics": timings,
+    }
+    if resolved_tool_registry is not None:
+        agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
+    reply = await deps.agent.agent(contextual_user_text, **agent_kwargs)
     return reply
 
 
-async def run_manifest_composed_agent(user_text: str, deps: GraphDeps) -> str | None:
-    """Run the new authority-composed agent path without any delivery side effect.
-
-    Phase 7 will attach its complete authority fence to the provider dispatch.
-    Until then this helper is intentionally isolated from ``run_turn`` so the
-    inactive legacy deployment cannot accidentally start sending through a
-    partially fenced path.
-    """
-    if deps.runtime_policy is None:
-        return None
-    policy = await deps.runtime_policy.resolve_active_policy()
+async def run_manifest_composed_agent(user_text: str, deps: GraphDeps, *, policy=None) -> str | None:
+    """Run an active manifest policy without granting legacy tool authority."""
+    if policy is None:
+        if deps.runtime_policy is None:
+            return None
+        policy = await deps.runtime_policy.resolve_active_policy()
     if policy is None:
         return None
     if policy.pack_key == "product_advisory":
@@ -322,9 +341,12 @@ async def _finish_terminal_reply(
     # Classify transport errors (same conservative logic as run_turn): a timeout
     # after the request may have reached Zalo → SEND_UNKNOWN (non-retriable), so
     # the error-reply path cannot produce a duplicate on reconcile recovery.
+    _suppressed = bool(send_result and getattr(send_result, "suppressed", False))
     _error_class = send_result.error_class if (send_result and not send_result.ok) else None
-    _override = delivery_status_for_send_error(
-        _error_class, ok=bool(send_result and send_result.ok)
+    _override = (
+        DeliveryStatus.SUPPRESSED
+        if _suppressed
+        else delivery_status_for_send_error(_error_class, ok=bool(send_result and send_result.ok))
     )
     await svc.record_bot_outcome(
         conv,
@@ -342,7 +364,9 @@ async def _finish_terminal_reply(
         outbox_channel=_channel_for_conversation(conv),
         outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
     )
-    if send_result is None or send_result.ok:
+    if _suppressed:
+        outcome = "suppressed"
+    elif send_result is None or send_result.ok:
         outcome = base_outcome
     elif _override is not None and _override.value == "SEND_UNKNOWN":
         outcome = "send_unknown"
@@ -442,6 +466,35 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     if conv is None:
         return {"outcome": "error", "reason": "conversation_not_found"}
     lock_owner = state.lock_owner or None
+    has_runtime_stamp = bool(
+        state.runtime_revision_id
+        and state.authority_generation is not None
+        and state.runtime_fingerprint
+    )
+    if has_runtime_stamp:
+        is_current = (
+            deps.runtime_policy is not None
+            and await deps.runtime_policy.runtime_stamp_is_current(
+                revision_id=state.runtime_revision_id,
+                authority_generation=state.authority_generation,
+                runtime_fingerprint=state.runtime_fingerprint,
+            )
+        )
+        if not is_current:
+            if lock_owner:
+                await svc.release_lock(conv, lock_owner=lock_owner)
+            return {"outcome": "suppressed", "reason": "stale_runtime_authority"}
+    manifest_policy = None
+    if has_runtime_stamp:
+        if deps.runtime_policy is None:
+            if lock_owner:
+                await svc.release_lock(conv, lock_owner=lock_owner)
+            return {"outcome": "suppressed", "reason": "missing_runtime_policy"}
+        manifest_policy = await deps.runtime_policy.resolve_active_policy()
+        if manifest_policy is None:
+            if lock_owner:
+                await svc.release_lock(conv, lock_owner=lock_owner)
+            return {"outcome": "suppressed", "reason": "inactive_runtime_policy"}
     if lock_owner:
         db_t0 = time.monotonic()
         await deps.db.refresh(conv)
@@ -462,7 +515,18 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     _stamp_db(timings, "last_messages", db_t0)
     started = _now()
     db_t0 = time.monotonic()
-    pending_msg = await svc.record_bot_pending(conv)
+    pending_kwargs: dict[str, object] = {}
+    if (
+        state.runtime_revision_id
+        and state.authority_generation is not None
+        and state.runtime_fingerprint
+    ):
+        pending_kwargs = {
+            "runtime_revision_id": uuid.UUID(state.runtime_revision_id),
+            "authority_generation": state.authority_generation,
+            "runtime_fingerprint": state.runtime_fingerprint,
+        }
+    pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
     _stamp_db(timings, "record_bot_pending", db_t0)
     state.pending_message_id = pending_msg.id
 
@@ -491,7 +555,16 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         faq_metadata: dict | None = None
 
         vacancy_t0 = time.monotonic()
-        vacancy = await _vacancy_reply(state.user_text, recent_messages, deps.retrieval)
+        recruitment_capabilities = (
+            frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
+        )
+        recruitment_enabled = manifest_policy is None or manifest_policy.pack_key == "recruitment"
+        vacancy = (
+            await _vacancy_reply(state.user_text, recent_messages, deps.retrieval)
+            if recruitment_enabled
+            and (recruitment_capabilities is None or "job_advisory" in recruitment_capabilities)
+            else None
+        )
         if vacancy is not None:
             candidate, vacancy_status = vacancy
             timings["vacancy_lookup_ms"] = int(round((time.monotonic() - vacancy_t0) * 1000))
@@ -504,9 +577,26 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # no LLM call. Factual questions are never templated — they fall through
         # here, then through the FAQ-bypass cascade below, before reaching the
         # RAG + agent path.
+        # These legacy shortcuts are recruitment-scoped. A manifest-composed
+        # installation must reach its own agent/tool policy instead of answering
+        # from the unscoped FAQ store or recruitment-specific canned replies.
+        allow_recruitment_fast_lane = (
+            recruitment_enabled
+            and (
+                recruitment_capabilities is None
+                or "candidate_intake" in recruitment_capabilities
+            )
+        )
+        allow_legacy_faq_bypass = (
+            recruitment_enabled
+            and (
+                recruitment_capabilities is None
+                or {"candidate_intake", "job_advisory"} <= recruitment_capabilities
+            )
+        )
         fast = (
             fast_lane.match(state.user_text)
-            if vacancy is None and settings.faq_fast_lane_enabled
+            if vacancy is None and allow_recruitment_fast_lane and settings.faq_fast_lane_enabled
             else None
         )
 
@@ -520,6 +610,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         if (
             vacancy is None
             and fast is None
+            and allow_legacy_faq_bypass
             and deps.faq_bypass is not None
             and _faq_bypass_allowed(state.user_text)
         ):
@@ -617,14 +708,14 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             # reaped by the RQ job_timeout backstop (>> any realistic turn) and the
             # turn is recovered by the reconcile sweep.
             try:
-                raw = await _agent_turn(
-                    state,
-                    deps,
-                    state.user_text,
-                    chat_id=conv.zalo_chat_id,
-                    recent_messages=recent_messages,
-                    timings=timings,
-                )
+                agent_kwargs = {
+                    "chat_id": conv.zalo_chat_id,
+                    "recent_messages": recent_messages,
+                    "timings": timings,
+                }
+                if manifest_policy is not None:
+                    agent_kwargs["manifest_policy"] = manifest_policy
+                raw = await _agent_turn(state, deps, state.user_text, **agent_kwargs)
             except LLMThrottled:
                 raise  # let worker handle degradation msg (no LLM call)
             except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
@@ -719,9 +810,12 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             # Classify transport failures: ambiguous (timeout/reset after the
             # request may have reached Zalo) → SEND_UNKNOWN (non-retriable); every
             # other failure stays FAILED (the reconciler may re-enqueue).
+            send_suppressed = bool(getattr(send_result, "suppressed", False))
             send_error_class = send_result.error_class if not send_result.ok else None
             override_status: DeliveryStatus | None = None
-            if send_error_class in AMBIGUOUS_SEND_CLASSES:
+            if send_suppressed:
+                override_status = DeliveryStatus.SUPPRESSED
+            elif send_error_class in AMBIGUOUS_SEND_CLASSES:
                 override_status = DeliveryStatus.SEND_UNKNOWN
             await svc.record_bot_outcome(
                 conv,
@@ -743,6 +837,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 ),
             )
             _stamp_db(timings, "record_bot_outcome", db_t0)
+            if send_suppressed:
+                return {"outcome": "suppressed", "reason": send_result.error, "reply": candidate}
             if not send_result.ok:
                 return {
                     "outcome": (
@@ -759,7 +855,14 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             pure_fast_pleasantry = fast is not None and fast_lane.is_pure_pleasantry(
                 state.user_text
             )
-            if deps.persist is not None and not pure_fast_pleasantry:
+            # Candidate extraction owns recruitment lead/contact state. It is
+            # not a generic post-send hook, so never enqueue it for a
+            # manifest-composed non-recruitment installation.
+            if (
+                deps.persist is not None
+                and allow_recruitment_fast_lane
+                and not pure_fast_pleasantry
+            ):
                 deps.persist(
                     {
                         "chat_id": conv.zalo_chat_id,

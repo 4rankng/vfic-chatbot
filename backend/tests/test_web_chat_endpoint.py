@@ -20,6 +20,24 @@ from unittest.mock import AsyncMock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _active_installation(monkeypatch) -> None:
+    """The inline tester is available only after an explicit activation."""
+
+    async def _resolve_active(_self):
+        return SimpleNamespace(
+            fingerprint=SimpleNamespace(
+                revision_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+                authority_generation=3,
+                checksum=lambda: "a" * 64,
+            )
+        )
+
+    monkeypatch.setattr(
+        "app.services.installation.service.InstallationService.resolve_active", _resolve_active
+    )
+
+
 @pytest.mark.asyncio
 async def test_web_chat_turn_invokes_run_turn_with_web_chat_source(monkeypatch) -> None:
     """The handler builds a BotRunState with execution_source='web_chat' and calls run_turn."""
@@ -60,6 +78,36 @@ async def test_web_chat_turn_invokes_run_turn_with_web_chat_source(monkeypatch) 
     assert state.execution_source == "web_chat"
     assert state.user_text == "chào bạn"
     assert state.conversation_id == str(conv.id)
+    assert state.runtime_revision_id == "00000000-0000-4000-8000-000000000001"
+    assert state.authority_generation == 3
+    assert state.runtime_fingerprint == "a" * 64
+
+
+@pytest.mark.asyncio
+async def test_web_chat_turn_requires_an_active_chatbot(monkeypatch) -> None:
+    from fastapi import HTTPException
+
+    from app.api import conversations
+
+    conv = SimpleNamespace(id=uuid.uuid4(), version=1, zalo_chat_id="chat-1")
+
+    async def _inactive(_self):
+        return None
+
+    monkeypatch.setattr(conversations, "_load", AsyncMock(return_value=conv))
+    monkeypatch.setattr(
+        "app.services.installation.service.InstallationService.resolve_active", _inactive
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations.web_chat_turn(
+            conv.id,
+            body=SimpleNamespace(body="chào bạn"),
+            user=SimpleNamespace(id=uuid.uuid4(), role="admin"),
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 409
 
 
 @pytest.mark.asyncio

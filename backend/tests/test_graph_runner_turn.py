@@ -125,7 +125,7 @@ def _stub_svc(*, conv=None, owned: bool = True, messages: list | None = None):
         async def last_messages(self, c, limit):
             return messages or []
 
-        async def record_bot_pending(self, c):
+        async def record_bot_pending(self, c, **_kwargs):
             return SimpleNamespace(id=777)
 
         async def recheck_ownership(self, c, version_at_start, lock_owner=None):

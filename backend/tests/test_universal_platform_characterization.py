@@ -198,7 +198,7 @@ async def test_template_resolution_requires_an_explicit_assignment():
 
 
 @pytest.mark.asyncio
-async def test_knowledge_version_creation_explains_missing_template_assignment(monkeypatch):
+async def test_knowledge_version_creation_reports_an_invalid_optional_template_assignment(monkeypatch):
     class MissingAssignmentService:
         def __init__(self, _db: object) -> None:
             pass
@@ -216,7 +216,7 @@ async def test_knowledge_version_creation_explains_missing_template_assignment(m
         )
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == "assign a published knowledge template before creating a knowledge version"
+    assert exc_info.value.detail == "the selected knowledge template assignment is not available"
 
 
 @pytest.mark.asyncio

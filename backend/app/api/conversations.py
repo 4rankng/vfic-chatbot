@@ -374,8 +374,16 @@ async def web_chat_turn(
     from app.graph.factories import build_deps
     from app.graph.runner import run_turn
     from app.graph.types import BotRunState
+    from app.services.installation.service import InstallationService
 
     settings = get_settings()
+    active = await InstallationService(db).resolve_active()
+    if active is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Chatbot chưa được bật. Hãy hoàn tất cấu hình rồi bật chatbot trước khi thử hội thoại.",
+        )
+    authority = active.fingerprint
     now = time.time()
     state = BotRunState(
         conversation_id=str(conv_id),
@@ -390,6 +398,9 @@ async def web_chat_turn(
         queue_depth=None,
         execution_source="web_chat",
         trace_id=f"webchat-{user.id.hex}-{int(now)}",
+        runtime_revision_id=str(authority.revision_id),
+        authority_generation=authority.authority_generation,
+        runtime_fingerprint=authority.checksum(),
     )
     try:
         outcome = await run_turn(state, deps=await build_deps(db))

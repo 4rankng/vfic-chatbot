@@ -117,7 +117,7 @@ export const KnowledgeUpload = ({
     const payload: File | null =
       mode === "paste"
         ? pasteText.trim()
-          ? new File([pasteText], "tin-tuyen-dung.txt", { type: "text/plain" })
+          ? new File([pasteText], "kien-thuc.txt", { type: "text/plain" })
           : null
         : file;
     if (!payload) {
@@ -329,13 +329,13 @@ export const KnowledgeUpload = ({
             <TabsContent value="paste" className="mt-0">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Nội dung tin tuyển dụng
+                  Nội dung kiến thức
                 </label>
                 <Textarea
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
                   rows={10}
-                  placeholder="Dán toàn bộ nội dung tin tuyển dụng vào đây..."
+                  placeholder="Dán nội dung mà chatbot cần tham khảo vào đây..."
                   className="max-h-[40vh] min-h-52 resize-y overflow-y-auto text-sm"
                 />
               </div>

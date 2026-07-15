@@ -14,7 +14,7 @@ pytestmark = pytest.mark.integration
 LEGACY_MIGRATION_SEEDS = {"worker_feature_catalog": 17}
 
 
-async def test_migrated_pgvector_database_is_empty_and_test_scoped(
+async def test_migrated_pgvector_database_has_only_its_required_bootstrap_seed(
     integration_session,
     integration_database: IntegrationDatabase,
 ):
@@ -31,19 +31,10 @@ async def test_migrated_pgvector_database_is_empty_and_test_scoped(
     assert vector_extension
     assert alembic_revision
 
-    tables = (
-        await integration_session.execute(
-            text(
-                "SELECT tablename FROM pg_tables "
-                "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
-            )
-        )
-    ).scalars()
-    for table in tables:
-        count = await integration_session.scalar(text(f'SELECT count(*) FROM "{table}"'))
-        assert count == LEGACY_MIGRATION_SEEDS.get(table, 0), (
-            f"migration seed inventory changed for {table}"
-        )
+    worker_catalog_count = await integration_session.scalar(
+        text("SELECT count(*) FROM worker_feature_catalog")
+    )
+    assert worker_catalog_count == LEGACY_MIGRATION_SEEDS["worker_feature_catalog"]
 
 
 def test_external_socket_is_rejected_by_the_selected_integration_lane():

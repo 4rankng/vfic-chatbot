@@ -382,20 +382,6 @@ class InstallationSetupService:
                     )
                 )
 
-        if (
-            require_complete
-            and payload.pack_capabilities is not None
-            and "knowledge" in payload.pack_capabilities.capability_ids
-            and payload.knowledge_templates is not None
-            and not payload.knowledge_templates.template_version_refs
-        ):
-            issues.append(
-                self._issue(
-                    "TEMPLATE_REQUIRED_BY_CAPABILITY",
-                    "knowledge_templates.template_version_refs",
-                )
-            )
-
         if issues:
             raise self._error(
                 "Setup draft validation failed",

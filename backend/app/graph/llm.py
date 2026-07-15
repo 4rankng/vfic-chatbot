@@ -32,6 +32,7 @@ class AgentModel(Protocol):
         retrieval,
         embedder,
         allowed_tools: tuple[str, ...] | None = None,
+        resolved_tool_registry: frozenset[str] | None = None,
         use_fast: bool = False,
         make_retrieval: MakeRetrieval | None = None,
         lookup_query: str | None = None,

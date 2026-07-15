@@ -44,17 +44,6 @@ async def lifespan(app: FastAPI):
     logger.info("vfic backend starting env=%s", settings.app_env)
     if not settings.resend_api_key:
         logger.warning("RESEND_API_KEY is unset — password-reset emails will fail silently")
-    # Ensure a default persona exists (idempotent, non-fatal). resolve_persona falls
-    # back to persona.md regardless.
-    try:
-        from app.core.db import async_session
-        from app.services.seeder import ensure_defaults
-
-        async with async_session() as db:
-            await ensure_defaults(db)
-    except Exception:  # noqa: BLE001
-        logger.exception("startup seeder failed (non-fatal)")
-
     # Register the periodic ticks in rq-scheduler. Each is registered through
     # register_unique_tick so exactly ONE recurring job exists per tick — earlier
     # boots stacked random-id duplicates that over-fired both ticks ~12x.
@@ -221,8 +210,8 @@ async def unhandled_exception_handler(request, exc: Exception):
 # Socket.IO realtime: mount the AsyncServer at the ASGI root so /socket.io/ is
 # served alongside the REST API (Caddy forwards WebSocket upgrades by default,
 # so wss://<origin>/socket.io/ works with no edge change). The FastAPI app
-# becomes the fallback for every non-Socket.IO request, and its lifespan
-# (startup seeder) is forwarded by the ASGIApp. Importing the server here (after
+# becomes the fallback for every non-Socket.IO request, and its lifespan is
+# forwarded by the ASGIApp. Importing the server here (after
 # all routers/middleware are registered) keeps the construction cost out of test
 # collection's import path.
 import socketio  # noqa: E402

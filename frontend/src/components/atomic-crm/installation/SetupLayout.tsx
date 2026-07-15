@@ -52,8 +52,8 @@ export const SetupLayout = ({ children }: { children: ReactNode }) => {
               <Settings2 className="size-5" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <p className="truncate font-semibold">Thiết lập hệ thống</p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-section-title font-semibold">Thiết lập hệ thống</p>
+              <p className="truncate text-meta text-muted-foreground">
                 {identity?.fullName ?? "Tài khoản quản trị"}
               </p>
             </div>
@@ -61,7 +61,8 @@ export const SetupLayout = ({ children }: { children: ReactNode }) => {
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 shrink-0"
+            size="touch"
+            className="shrink-0"
             onClick={() => void logoutSafely()}
           >
             <LogOut className="size-4" aria-hidden="true" />
