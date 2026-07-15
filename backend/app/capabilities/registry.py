@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from app.capabilities.contracts import CapabilityDefinition, IndustryPackDefinition, ResolvedPack
 from app.capabilities.recruitment.definition import CAPABILITIES as RECRUITMENT_CAPABILITIES
 from app.capabilities.recruitment.definition import PACK as RECRUITMENT_PACK
+from app.capabilities.product_advisory.definition import CAPABILITIES as PRODUCT_ADVISORY_CAPABILITIES
+from app.capabilities.product_advisory.definition import PACK as PRODUCT_ADVISORY_PACK
 
 SUPPORTED_KERNEL_ABI = "1"
 PACK_CONTRACT_SCHEMA_VERSION = 1
@@ -194,8 +196,8 @@ class CapabilityRegistry:
 
 
 _REGISTRY = CapabilityRegistry(
-    capabilities=RECRUITMENT_CAPABILITIES,
-    packs=(RECRUITMENT_PACK,),
+    capabilities=(*RECRUITMENT_CAPABILITIES, *PRODUCT_ADVISORY_CAPABILITIES),
+    packs=(RECRUITMENT_PACK, PRODUCT_ADVISORY_PACK),
 )
 
 

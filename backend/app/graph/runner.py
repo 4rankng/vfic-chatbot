@@ -223,6 +223,11 @@ async def run_manifest_composed_agent(user_text: str, deps: GraphDeps) -> str | 
     policy = await deps.runtime_policy.resolve_active_policy()
     if policy is None:
         return None
+    if policy.pack_key == "product_advisory":
+        from app.capabilities.product_advisory.tools import product_advisory_preflight
+
+        if reply := product_advisory_preflight(user_text):
+            return reply
     from app.graph.runtime_policy import build_policy_system_prompt
 
     return await deps.agent.agent(

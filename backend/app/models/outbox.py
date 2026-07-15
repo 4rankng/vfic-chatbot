@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import enum
+import uuid
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -26,6 +27,17 @@ class OutboxStatus(str, enum.Enum):
     FAILED = "FAILED"
     SEND_UNKNOWN = "SEND_UNKNOWN"
     SUPPRESSED = "SUPPRESSED"
+
+
+class OutboxOriginKind(str, enum.Enum):
+    BOT = "BOT"
+    PROACTIVE = "PROACTIVE"
+    MANUAL = "MANUAL"
+
+
+class OutboxFenceScope(str, enum.Enum):
+    RUNTIME = "RUNTIME"
+    CHANNEL = "CHANNEL"
 
 
 class OutboundOutbox(Base):
@@ -51,6 +63,14 @@ class OutboundOutbox(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     zalo_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    runtime_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("installation_manifest_revisions.id", ondelete="RESTRICT"),
+    )
+    authority_generation: Mapped[int | None] = mapped_column(BigInteger)
+    runtime_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    origin_kind: Mapped[str | None] = mapped_column(String(24))
+    fence_scope: Mapped[str | None] = mapped_column(String(24))
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

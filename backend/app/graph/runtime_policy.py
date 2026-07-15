@@ -4,9 +4,21 @@ from __future__ import annotations
 
 from app.graph.types import ResolvedRuntimePolicy, ResolvedToolRegistry
 
-# Core tools are capability-owned rather than selected by persona or retrieved text.
+# Tools are capability-owned rather than selected by persona or retrieved text.
+# A plain conversation grants no data authority: retrieval and profile-aware
+# recruitment actions must be explicitly selected by the active manifest.
 _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
-    "conversation": frozenset({"search_knowledge", "search_user_memory"}),
+    "knowledge": frozenset({"search_knowledge"}),
+    "candidate_intake": frozenset({"search_user_memory"}),
+    "job_advisory": frozenset(
+        {
+            "list_active_projects",
+            "recommend_projects",
+            "recommend_jobs",
+            "search_bus_timetable",
+            "get_product_features",
+        }
+    ),
 }
 
 

@@ -43,3 +43,20 @@ class RuntimeAuthorityFingerprint:
             separators=(",", ":"),
         )
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def stamp(self) -> "RuntimeAuthorityStamp":
+        """Return the durable, complete authority identity for queued work."""
+        return RuntimeAuthorityStamp(
+            revision_id=self.revision_id,
+            authority_generation=self.authority_generation,
+            fingerprint=self.checksum(),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeAuthorityStamp:
+    """Minimal immutable authority identity persisted with a command or bot run."""
+
+    revision_id: uuid.UUID
+    authority_generation: int
+    fingerprint: str

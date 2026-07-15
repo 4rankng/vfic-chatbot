@@ -200,6 +200,12 @@ class BotRun(Base):
     # journey (webhook → RQ → LangGraph → Zalo send). Nullable — legacy runs and
     # direct/test turns may not stamp it. Indexed for log-correlation queries.
     trace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    runtime_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("installation_manifest_revisions.id", ondelete="RESTRICT"),
+    )
+    authority_generation: Mapped[int | None] = mapped_column(BigInteger)
+    runtime_fingerprint: Mapped[str | None] = mapped_column(String(64))
     # Phase 4 FAQ-bypass provenance: similarity_score, runner_up_score,
     # decision_threshold, faq_document_id, abstained (bool). Surfaces the
     # abstention rate on the performance dashboard to tune the margin.
@@ -231,6 +237,12 @@ class Message(Base):
     )
     zalo_message_id: Mapped[str | None] = mapped_column(String)
     external_error: Mapped[str | None] = mapped_column(Text)
+    runtime_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("installation_manifest_revisions.id", ondelete="RESTRICT"),
+    )
+    authority_generation: Mapped[int | None] = mapped_column(BigInteger)
+    runtime_fingerprint: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
