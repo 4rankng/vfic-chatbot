@@ -22,6 +22,10 @@ from app.services.chatbot.budget import BudgetExhausted, CallKind, TurnBudget
 
 logger = logging.getLogger(__name__)
 
+# Volatile operational claims that must bypass the static FAQ path. Intentionally
+# duplicated as app.graph.runner._FAQ_BYPASS_VOLATILE_MARKERS: the graph/service
+# DI boundary forbids a shared import, so keep the two in sync. When this path
+# is wired into the runner, inject one set through GraphDeps.
 _VOLATILE_FACT_MARKERS = (
     "lương",
     "thu nhập",

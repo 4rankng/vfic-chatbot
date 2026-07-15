@@ -136,3 +136,5 @@ async def test_preview_rejects_invalid_declared_field_types():
     records, issues = service._extract_artifact(artifact, "code: A1\nprice: not-a-number", file_id=None)
     assert records == []
     assert any(issue["code"] == "invalid_field_type" for issue in issues)
+    # A field that failed coercion must not also be reported as missing required.
+    assert not any(issue["code"] == "missing_required_field" for issue in issues)

@@ -231,6 +231,7 @@ class TemplateIngestionService:
             evidence_fields: set[str] = set()
             record_invalid = False
             found_any_source_value = False
+            coercion_failed: set[str] = set()
             for field in record_type["fields"]:
                 source_value = self._value_for_field(values, field)
                 if source_value is None and field.get("constant") is not None:
@@ -243,13 +244,14 @@ class TemplateIngestionService:
                 except ValueError as exc:
                     issues.append({"severity": "error", "code": "invalid_field_type", "message": f"{record_type['key']}.{field['key']}: {exc}", "field_path": f"{record_type['key']}.{field['key']}"})
                     record_invalid = True
+                    coercion_failed.add(field["key"])
                     continue
                 if field.get("constant") is None:
                     evidence_fields.add(field["key"])
             if not found_any_source_value:
                 continue
             for field in record_type["fields"]:
-                if field["required"] and field["key"] not in payload:
+                if field["required"] and field["key"] not in payload and field["key"] not in coercion_failed:
                     issues.append({"severity": "error", "code": "missing_required_field", "message": f"{record_type['key']}.{field['key']} has no source value", "field_path": f"{record_type['key']}.{field['key']}"})
                     record_invalid = True
             if not payload or record_invalid:

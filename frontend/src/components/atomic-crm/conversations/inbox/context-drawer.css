@@ -745,6 +745,22 @@
   padding-block: 2px;
 }
 
+.inbox-bg-container .candidate-note-list {
+  display: grid;
+  gap: 6px;
+  margin: 1px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.inbox-bg-container .candidate-note-list li {
+  padding-left: 2px;
+}
+
+.inbox-bg-container .candidate-note-list li::marker {
+  color: var(--brand);
+}
+
 .inbox-bg-container .candidate-info-row.filled .candidate-info-value {
   color: var(--ink);
 }

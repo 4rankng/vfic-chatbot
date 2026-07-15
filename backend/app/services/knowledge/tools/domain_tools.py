@@ -178,12 +178,20 @@ async def get_job_requirements(
     active_kb_version_id: str | None = None,
 ) -> ToolResult:
     """Query job_requirement for one job. job_id is required (requirements are per-job)."""
+    # When no active structured release is in scope, read legacy unversioned
+    # rows (kb_version_id IS NULL) instead of comparing against NULL, which
+    # would silently match nothing and drop every requirement.
+    kb_version_filter = (
+        JobRequirement.kb_version_id == active_kb_version_id
+        if active_kb_version_id is not None
+        else JobRequirement.kb_version_id.is_(None)
+    )
     rows = (
         await db.execute(
             select(JobRequirement).where(
                 JobRequirement.job_id == job_id,
                 JobRequirement.status == PublishedStatus.PUBLISHED.value,
-                JobRequirement.kb_version_id == active_kb_version_id,
+                kb_version_filter,
             )
         )
     ).scalars().all()
@@ -225,12 +233,19 @@ async def get_job_locations(
     release has no location for the job. This keeps a rollback from combining
     the new release's chunks with a location fact from a different release.
     """
+    # See get_job_requirements: with no active release, fall back to legacy
+    # unversioned rows rather than comparing against NULL (which matches nothing).
+    kb_version_filter = (
+        JobLocation.kb_version_id == active_kb_version_id
+        if active_kb_version_id is not None
+        else JobLocation.kb_version_id.is_(None)
+    )
     rows = (
         await db.execute(
             select(JobLocation).where(
                 JobLocation.job_id == job_id,
                 JobLocation.status == PublishedStatus.PUBLISHED.value,
-                JobLocation.kb_version_id == active_kb_version_id,
+                kb_version_filter,
             )
         )
     ).scalars().all()

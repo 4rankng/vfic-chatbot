@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { Lead } from "../types";
+import { formatCandidateNotes } from "./candidateNotes";
 import {
   BusFront,
   CalendarDays,
@@ -27,6 +28,7 @@ type CandidateInfoItem = {
   key: string;
   label: string;
   value: string;
+  noteItems?: string[];
   complete: boolean;
   Icon: LucideIcon;
 };
@@ -55,6 +57,7 @@ export const ConversationContextPanel = ({
   const isMobile = useIsMobile();
   const candidateInfoItems = useMemo<CandidateInfoItem[]>(() => {
     const notes = lead?.notes;
+    const noteItems = formatCandidateNotes(notes);
     const dateOfBirth = lead?.birth_year
       ? String(lead.birth_year)
       : lead?.age
@@ -164,8 +167,9 @@ export const ConversationContextPanel = ({
       {
         key: "notes",
         label: "Ghi chú",
-        value: display(lead?.notes),
-        complete: hasMeaningfulValue(lead?.notes),
+        value: noteItems.length > 0 ? noteItems.join("\n") : display(null),
+        noteItems: noteItems.length > 0 ? noteItems : undefined,
+        complete: noteItems.length > 0,
         Icon: NotepadText,
       },
     ];
@@ -299,10 +303,18 @@ const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
       <span className="candidate-info-icon">
         <Icon className="icon" aria-hidden="true" />
       </span>
-      <span className="candidate-info-copy">
+      <div className="candidate-info-copy">
         <span className="candidate-info-label">{item.label}</span>
-        <span className="candidate-info-value">{item.value}</span>
-      </span>
+        {item.noteItems ? (
+          <ul className="candidate-info-value candidate-note-list">
+            {item.noteItems.map((note, index) => (
+              <li key={`${index}-${note}`}>{note}</li>
+            ))}
+          </ul>
+        ) : (
+          <span className="candidate-info-value">{item.value}</span>
+        )}
+      </div>
       <span className="candidate-info-state" aria-hidden="true">
         {item.complete ? <Check className="icon" /> : null}
       </span>

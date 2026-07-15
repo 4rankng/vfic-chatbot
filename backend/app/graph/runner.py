@@ -344,6 +344,11 @@ def _faq_should_abstain(bypass, settings) -> bool:
     return (bypass.score - bypass.runner_up_score) < margin
 
 
+# Volatile operational claims (pay/hours/transport/contact/vacancy) must never
+# be answered from FAQ prose. Duplicated in app.services.chatbot.paths.
+# _VOLATILE_FACT_MARKERS: the graph layer may not import service modules
+# (architecture-audit DI boundary), so keep the two in sync. When paths.py is
+# wired into the turn pipeline, inject this set through GraphDeps.
 _FAQ_BYPASS_VOLATILE_MARKERS = (
     "lương", "thu nhập", "ca làm", "giờ làm", "tăng ca", "phụ cấp",
     "xe đưa đón", "tuyến xe", "xe lúc", "xe mấy", "đón xe",

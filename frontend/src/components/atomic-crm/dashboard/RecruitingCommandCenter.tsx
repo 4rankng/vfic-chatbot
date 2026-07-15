@@ -30,7 +30,7 @@ const candidateName = (row: AttentionItem): string => {
   const name = normalizeText(row.name);
   if (name) return name;
   const phone = normalizeText(row.phone);
-  return phone ? `Ứng viên ${phone}` : "Ứng viên chưa định danh";
+  return phone ? `Ứng viên ${phone}` : "Ứng viên mới";
 };
 
 const formatClock = (value: string | null | undefined): string => {

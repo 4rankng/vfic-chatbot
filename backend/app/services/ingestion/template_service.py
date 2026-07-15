@@ -78,6 +78,10 @@ class TemplateService:
             raise TemplateConflictError("stale template revision")
         compile_template(definition)
         version.definition = definition
+        # A definition change invalidates any previously recorded preview; the
+        # publish gate requires a fresh preview of the exact current draft.
+        version.preview_checksum = None
+        version.previewed_at = None
         version.revision += 1
         version.updated_at = datetime.now(UTC)
         await record_audit(self.db, action="ingestion_template_draft_updated", actor_id=actor.id, target_type="ingestion_template_version", target_id=str(version.id), payload={"revision": version.revision})

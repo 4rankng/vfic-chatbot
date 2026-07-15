@@ -13,10 +13,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  createIngestionTemplate,
   assignIngestionTemplate,
+  createIngestionTemplate,
   getIngestionTemplateAssignment,
   previewIngestionTemplate,
+  previewNewIngestionTemplate,
   publishIngestionTemplate,
   type IngestionPreview,
 } from "@/lib/vfic/knowledgeService";
@@ -96,14 +97,7 @@ export const IngestionTemplateBuilder = () => {
     setBusy(true);
     setError(null);
     try {
-      const created = await createIngestionTemplate({
-        template_key: `${cleanKey(name) || cleanKey(recordName)}_${Date.now()}`,
-        name: name.trim() || recordName.trim(),
-        vertical,
-        definition: definition(),
-      });
-      setDraftId(created.id);
-      setPreview(await previewIngestionTemplate(created.id, sample));
+      setPreview(await previewNewIngestionTemplate(definition(), sample));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Không thể kiểm tra mẫu.");
     } finally {
@@ -115,8 +109,20 @@ export const IngestionTemplateBuilder = () => {
     setBusy(true);
     setError(null);
     try {
-      if (!draftId) return;
-      const published = await publishIngestionTemplate(draftId);
+      let versionId = draftId;
+      if (!versionId) {
+        const created = await createIngestionTemplate({
+          template_key: `${cleanKey(name) || cleanKey(recordName)}_${Date.now()}`,
+          name: name.trim() || recordName.trim(),
+          vertical,
+          definition: definition(),
+        });
+        versionId = created.id;
+        setDraftId(versionId);
+      }
+      // Publishing requires a successful preview recorded on this exact draft.
+      await previewIngestionTemplate(versionId, sample);
+      const published = await publishIngestionTemplate(versionId);
       if (projectId.trim()) {
         const current = await getIngestionTemplateAssignment(projectId.trim());
         await assignIngestionTemplate(
