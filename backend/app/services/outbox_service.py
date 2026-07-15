@@ -338,40 +338,36 @@ async def enqueue_outbox(
         # crash re-records the final state rather than failing.
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        stmt = (
-            pg_insert(OutboundOutbox)
-            .values(
-                message_id=message_id,
-                channel=channel,
-                payload=payload,
-                status=status.value if isinstance(status, OutboxStatus) else status,
-                zalo_message_id=zalo_message_id,
-                last_error=last_error,
-                runtime_revision_id=runtime_revision_id,
-                authority_generation=authority_generation,
-                runtime_fingerprint=runtime_fingerprint,
-                origin_kind=origin_kind,
-                fence_scope=fence_scope,
-                sent_at=datetime.now(timezone.utc) if status == OutboxStatus.SENT else None,
-                updated_at=datetime.now(timezone.utc),
-            )
-            .on_conflict_do_update(
-                index_elements=["message_id"],
-                set_={
-                    "status": pg_insert.excluded.status,
-                    "zalo_message_id": pg_insert.excluded.zalo_message_id,
-                    "last_error": pg_insert.excluded.last_error,
-                    "sent_at": pg_insert.excluded.sent_at,
-                    "updated_at": pg_insert.excluded.updated_at,
-                    "runtime_revision_id": pg_insert.excluded.runtime_revision_id,
-                    "authority_generation": pg_insert.excluded.authority_generation,
-                    "runtime_fingerprint": pg_insert.excluded.runtime_fingerprint,
-                    "origin_kind": pg_insert.excluded.origin_kind,
-                    "fence_scope": pg_insert.excluded.fence_scope,
-                },
-            )
-            .returning(OutboundOutbox)
+        insert_stmt = pg_insert(OutboundOutbox).values(
+            message_id=message_id,
+            channel=channel,
+            payload=payload,
+            status=status.value if isinstance(status, OutboxStatus) else status,
+            zalo_message_id=zalo_message_id,
+            last_error=last_error,
+            runtime_revision_id=runtime_revision_id,
+            authority_generation=authority_generation,
+            runtime_fingerprint=runtime_fingerprint,
+            origin_kind=origin_kind,
+            fence_scope=fence_scope,
+            sent_at=datetime.now(timezone.utc) if status == OutboxStatus.SENT else None,
+            updated_at=datetime.now(timezone.utc),
         )
+        stmt = insert_stmt.on_conflict_do_update(
+            index_elements=["message_id"],
+            set_={
+                "status": insert_stmt.excluded.status,
+                "zalo_message_id": insert_stmt.excluded.zalo_message_id,
+                "last_error": insert_stmt.excluded.last_error,
+                "sent_at": insert_stmt.excluded.sent_at,
+                "updated_at": insert_stmt.excluded.updated_at,
+                "runtime_revision_id": insert_stmt.excluded.runtime_revision_id,
+                "authority_generation": insert_stmt.excluded.authority_generation,
+                "runtime_fingerprint": insert_stmt.excluded.runtime_fingerprint,
+                "origin_kind": insert_stmt.excluded.origin_kind,
+                "fence_scope": insert_stmt.excluded.fence_scope,
+            },
+        ).returning(OutboundOutbox)
         result = await db.execute(stmt)
         row = result.scalar_one_or_none()
         return row

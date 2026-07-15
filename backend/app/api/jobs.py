@@ -7,7 +7,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user, get_embedder, require_admin
+from app.api.dependencies import (
+    get_current_user,
+    get_embedder,
+    require_admin,
+    require_capability_or_legacy,
+)
 from app.core.db import get_db
 from app.models.job import JobStatus
 from app.models.user import User
@@ -21,7 +26,11 @@ from app.schemas.job import (
 )
 from app.services.job_service import JobService
 
-router = APIRouter(prefix="/jobs", tags=["jobs"])
+router = APIRouter(
+    prefix="/jobs",
+    tags=["jobs"],
+    dependencies=[Depends(require_capability_or_legacy("job_advisory"))],
+)
 
 
 @router.get("", response_model=JobListResponse)

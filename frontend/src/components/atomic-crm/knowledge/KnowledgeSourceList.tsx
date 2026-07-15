@@ -16,7 +16,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KnowledgeUpload } from "./KnowledgeUpload";
-import { IngestionTemplateBuilder } from "./IngestionTemplateBuilder";
 import { KnowledgeVersionManager } from "./KnowledgeVersionManager";
 import {
   flaggedCount,
@@ -107,9 +106,10 @@ const KnowledgeSourceListContent = () => {
           </div>
           {hasSources && (
             <div className="flex w-full flex-col gap-2 sm:w-fit sm:flex-row">
-              <IngestionTemplateBuilder />
               <KnowledgeVersionManager
-                projectId={projectFilter !== ALL_PROJECTS ? projectFilter : undefined}
+                projectId={
+                  projectFilter !== ALL_PROJECTS ? projectFilter : undefined
+                }
               />
               <Button
                 type="button"

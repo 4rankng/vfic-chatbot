@@ -97,6 +97,24 @@ async def test_stamped_turn_is_suppressed_before_agent_when_authority_is_stale(m
     }
 
 
+async def test_unstamped_turn_is_suppressed_after_runtime_activation():
+    from app.graph import runner
+    from tests.test_graph_runner_turn import _FakeConv, _FakeZalo, _deps, _state, _stub_svc
+
+    active, persona = _active(capabilities=["conversation", "knowledge"], pack_key="recruitment")
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+    assert policy is not None
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    deps = _deps(_FakeZalo(), conversation=svc)
+    deps.runtime_policy = SimpleNamespace(resolve_active_policy=lambda: _value(policy))
+
+    assert await runner.run_turn(_state(), deps) == {
+        "outcome": "suppressed",
+        "reason": "missing_runtime_authority",
+    }
+
+
 async def _none():
     return None
 

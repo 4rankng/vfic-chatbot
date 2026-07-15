@@ -48,11 +48,12 @@ to end.
   Pre-active states mount an account/setup-only shell with no business resources,
   dashboard, or realtime connection.
 - Added the admin setup flow for identity, pack, regional terminology, workflow,
-  templates, persona, integrations, and review. Inputs start blank, secrets go
-  directly to encrypted integration settings, and activation remains disabled.
+  templates, persona, integrations, and review. Inputs start blank except for a
+  user-triggered, editable Agent starter format; secrets go directly to encrypted
+  integration settings, and activation remains disabled.
 - Independent frontend review found that the legacy persona-create default would
-  silently add recruitment follow-up schedules. Setup now requires an explicit
-  disabled choice and stores no cadence or eligible recruitment stage; legacy
+  silently add recruitment follow-up schedules. Setup-created Agents always store
+  an explicit disabled policy with no cadence or eligible recruitment stage; legacy
   create defaults remain unchanged for compatibility until the later capability
   migration.
 

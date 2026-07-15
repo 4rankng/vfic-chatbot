@@ -7,6 +7,7 @@ PROD_SERVER   := bot.tingting.vip
 PROD_DIR      := /opt/vfic
 IMAGE_NAME    := franknguyenvd/vfic-backend
 GIT_SHA       := $(shell git rev-parse --short HEAD)
+IMAGE_TAG     ?= $(GIT_SHA)
 BUILDER       := bb
 PY            := ./.venv/bin/python
 
@@ -108,32 +109,31 @@ deploy:
 	@echo "==> Generating $(PROD_DIR)/.env if missing (infra secrets filled, API keys blank)..."
 	$(SSH) root@$(PROD_SERVER) 'bash -s' < scripts/prod-env.sh
 	@echo "==> Pulling images..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull"
-	@echo "==> Tearing down n8n (big-bang) to free :80/:443..."
-	-$(SSH) root@$(PROD_SERVER) "cd /opt/n8n-docker-caddy && docker compose down -v" 2>/dev/null || true
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull"
 	@echo "==> Starting Postgres + Redis..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d postgres redis"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d postgres redis"
 	@echo "==> Waiting for Postgres healthy (retries transient SSH refusals)..."
 	@ok=0; for i in 1 2 3 4 5; do \
-		timeout 60 sh -c "$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && until docker compose exec -T postgres pg_isready -U vfic >/dev/null 2>&1; do sleep 2; done'" && { ok=1; break; }; \
+		timeout 60 sh -c "$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose exec -T postgres pg_isready -U vfic >/dev/null 2>&1'" && { ok=1; break; }; \
 		echo "  SSH/pg_isready refused (attempt $$i/5), retrying in 4s..."; sleep 4; \
 	done; [ $$ok -eq 1 ] || echo "  Postgres slow to come up"
 	@echo "==> Applying Alembic baseline (retries transient SSH refusals)..."
 	@ok=0; for i in 1 2 3 4 5; do \
-		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
+		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
 		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
 	done; [ $$ok -eq 1 ]
 	@echo "==> Creating bootstrap admin (idempotent)..."
-	@$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose run --rm web python -m scripts.create_admin --only-if-no-admins --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin' || true
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web python -m scripts.create_admin --only-if-no-admins --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin'
 	@echo "==> Bringing up full stack..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web frontend worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
+	@echo "==> Verifying application containers..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for i in $$(seq 1 30); do docker compose exec -T web python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=3)' && exit 0; sleep 2; done; docker compose ps; exit 1"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for service in web frontend worker-chatbot worker-persistence worker-ingest worker-followup scheduler; do container=$$(docker compose ps -q \"$$service\"); test -n \"$$container\" && test \"$$(docker inspect --format '{{.State.Status}}' \"$$container\")\" = running || exit 1; done"
 	@echo "==============================================================="
 	@echo " Deploy done."
 	@echo "   health : https://$(PROD_SERVER)/health"
 	@echo "   adminer: make adminer"
-	@echo " Next: fill API keys in $(PROD_DIR)/.env, then:"
-	@echo "   ssh root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose up -d --force-recreate web worker-chatbot worker-ingest scheduler'"
-	@echo " Then flip the Zalo Chatbot webhook -> https://$(PROD_SERVER)/webhooks/zalo/chatbot"
+	@echo " Deployed image tag: $(IMAGE_TAG)"
 	@echo "==============================================================="
 
 # ---- Adminer over SSH tunnel (private; never public). ----
@@ -150,20 +150,20 @@ adminer:
 # bootstrap — just pull the latest image, migrate, and recreate.
 deploy-restart:
 	@echo "==> Pulling backend image on $(PROD_SERVER)..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull web"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull web worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
 	@echo "==> Applying Alembic migrations (idempotent)..."
 	@ok=0; for i in 1 2 3 4 5; do \
-		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
+		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
 		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
 	done; [ $$ok -eq 1 ]
 	@echo "==> Recreating backend containers..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d --force-recreate web worker-chatbot worker-ingest worker-followup scheduler"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
 	@echo "==> Backend deploy done."
 
 # ---- Fast-track: pull + rolling restart frontend container only. ----
 deploy-restart-frontend:
 	@echo "==> Pulling frontend image on $(PROD_SERVER)..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose pull frontend"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull frontend"
 	@echo "==> Recreating frontend container..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose up -d --force-recreate frontend"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate frontend"
 	@echo "==> Frontend deploy done."

@@ -61,7 +61,7 @@ export const SetupLayout = ({ children }: { children: ReactNode }) => {
           <Button
             type="button"
             variant="outline"
-            size="touch"
+
             className="shrink-0"
             onClick={() => void logoutSafely()}
           >

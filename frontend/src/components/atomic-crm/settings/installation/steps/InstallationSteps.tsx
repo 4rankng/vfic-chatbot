@@ -1,16 +1,14 @@
-import { Check, Loader2, Plus, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   IdentityBrandingDraft,
   InstallationCatalog,
   InstallationIssue,
-  KnowledgeTemplatesDraft,
   PackCapabilitiesDraft,
   PersonaDraft,
   ProvidersIntegrationsDraft,
@@ -19,26 +17,17 @@ import type {
 } from "../../../installation/installation-client";
 import {
   createSetupPersona,
-  createSetupTemplate,
+  getSetupPersonaTemplate,
   getZaloSetupStatus,
   getModelIntegrationStatus,
   isSupportedModelIntegration,
   listSetupPersonas,
   listSetupPersonaVersions,
-  listSetupTemplates,
-  listSetupTemplateVersions,
-  previewNewSetupTemplate,
-  previewSetupTemplateVersion,
-  publishSetupTemplateVersion,
   saveModelIntegrationSecret,
   saveZaloSetupSecrets,
-  testModelIntegration,
   testZaloSetupChannel,
   type PersonaOption,
-  type PersonaVersionOption,
   type DisabledSetupFollowupRules,
-  type SetupTemplate,
-  type SetupTemplateVersion,
   type SupportedModelIntegration,
   type ZaloSecretDraft,
 } from "../../../installation/setup-authoring-client";
@@ -54,7 +43,13 @@ type CommonStepProps = {
   issues: InstallationIssue[];
 };
 
-const FieldError = ({ issues, path }: { issues: InstallationIssue[]; path: string }) => {
+const FieldError = ({
+  issues,
+  path,
+}: {
+  issues: InstallationIssue[];
+  path: string;
+}) => {
   const issue = issues.find((item) => item.path?.endsWith(path));
   return issue ? (
     <p className="text-meta font-medium text-destructive" role="alert">
@@ -100,7 +95,10 @@ export const IdentityBrandingStep = ({
 }) => {
   const identity = value?.customer_identity;
   const branding = value?.branding;
-  const updateIdentity = (field: keyof IdentityBrandingDraft["customer_identity"], next: string) =>
+  const updateIdentity = (
+    field: keyof IdentityBrandingDraft["customer_identity"],
+    next: string,
+  ) =>
     onChange({
       customer_identity: {
         display_name: identity?.display_name ?? "",
@@ -109,7 +107,10 @@ export const IdentityBrandingStep = ({
       },
       branding: branding ?? { app_name: "" },
     });
-  const updateBranding = (field: keyof IdentityBrandingDraft["branding"], next: string) =>
+  const updateBranding = (
+    field: keyof IdentityBrandingDraft["branding"],
+    next: string,
+  ) =>
     onChange({
       customer_identity: identity ?? { display_name: "" },
       branding: {
@@ -123,7 +124,8 @@ export const IdentityBrandingStep = ({
     <fieldset className="grid gap-6" aria-describedby="identity-help">
       <legend className="sr-only">Danh tính và thương hiệu</legend>
       <p id="identity-help" className="text-body text-muted-foreground">
-        Nhập thông tin của khách hàng này. Hệ thống không tự điền tên, logo hoặc nội dung ngành.
+        Nhập thông tin của khách hàng này. Hệ thống không tự điền tên, logo hoặc
+        nội dung ngành.
       </p>
       <StepIssues issues={issues} />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -133,7 +135,9 @@ export const IdentityBrandingStep = ({
               <Input
                 id={id}
                 value={identity?.display_name ?? ""}
-                onChange={(event) => updateIdentity("display_name", event.target.value)}
+                onChange={(event) =>
+                  updateIdentity("display_name", event.target.value)
+                }
                 required
                 maxLength={160}
                 autoFocus
@@ -144,47 +148,115 @@ export const IdentityBrandingStep = ({
         </Field>
         <Field label="Tên pháp lý">
           {({ id }) => (
-            <Input id={id} value={identity?.legal_name ?? ""} onChange={(event) => updateIdentity("legal_name", event.target.value)} maxLength={240} />
+            <Input
+              id={id}
+              value={identity?.legal_name ?? ""}
+              onChange={(event) =>
+                updateIdentity("legal_name", event.target.value)
+              }
+              maxLength={240}
+            />
           )}
         </Field>
         <Field label="Tên ứng dụng" required>
           {({ id }) => (
-            <Input id={id} value={branding?.app_name ?? ""} onChange={(event) => updateBranding("app_name", event.target.value)} maxLength={160} required />
+            <Input
+              id={id}
+              value={branding?.app_name ?? ""}
+              onChange={(event) =>
+                updateBranding("app_name", event.target.value)
+              }
+              maxLength={160}
+              required
+            />
           )}
         </Field>
         <Field label="Tên bộ phận hỗ trợ">
           {({ id }) => (
-            <Input id={id} value={identity?.support_name ?? ""} onChange={(event) => updateIdentity("support_name", event.target.value)} maxLength={160} />
+            <Input
+              id={id}
+              value={identity?.support_name ?? ""}
+              onChange={(event) =>
+                updateIdentity("support_name", event.target.value)
+              }
+              maxLength={160}
+            />
           )}
         </Field>
         <Field label="Email hỗ trợ">
           {({ id }) => (
-            <Input id={id} type="email" value={identity?.support_email ?? ""} onChange={(event) => updateIdentity("support_email", event.target.value)} maxLength={254} />
+            <Input
+              id={id}
+              type="email"
+              value={identity?.support_email ?? ""}
+              onChange={(event) =>
+                updateIdentity("support_email", event.target.value)
+              }
+              maxLength={254}
+            />
           )}
         </Field>
         <Field label="Số điện thoại hỗ trợ">
           {({ id }) => (
-            <Input id={id} value={identity?.support_phone ?? ""} onChange={(event) => updateIdentity("support_phone", event.target.value)} maxLength={32} />
+            <Input
+              id={id}
+              value={identity?.support_phone ?? ""}
+              onChange={(event) =>
+                updateIdentity("support_phone", event.target.value)
+              }
+              maxLength={32}
+            />
           )}
         </Field>
         <Field label="Website">
           {({ id }) => (
-            <Input id={id} type="url" value={identity?.website_url ?? ""} onChange={(event) => updateIdentity("website_url", event.target.value)} maxLength={500} />
+            <Input
+              id={id}
+              type="url"
+              value={identity?.website_url ?? ""}
+              onChange={(event) =>
+                updateIdentity("website_url", event.target.value)
+              }
+              maxLength={500}
+            />
           )}
         </Field>
         <Field label="Địa chỉ" colSpan="sm:col-span-2">
           {({ id }) => (
-            <Input id={id} value={identity?.address ?? ""} onChange={(event) => updateIdentity("address", event.target.value)} maxLength={500} />
+            <Input
+              id={id}
+              value={identity?.address ?? ""}
+              onChange={(event) =>
+                updateIdentity("address", event.target.value)
+              }
+              maxLength={500}
+            />
           )}
         </Field>
         <Field label="Màu chính">
           {({ id }) => (
-            <Input id={id} value={branding?.primary_color ?? ""} onChange={(event) => updateBranding("primary_color", event.target.value)} pattern="#[0-9a-fA-F]{6}" placeholder="#000000" />
+            <Input
+              id={id}
+              value={branding?.primary_color ?? ""}
+              onChange={(event) =>
+                updateBranding("primary_color", event.target.value)
+              }
+              pattern="#[0-9a-fA-F]{6}"
+              placeholder="#000000"
+            />
           )}
         </Field>
         <Field label="Màu phụ">
           {({ id }) => (
-            <Input id={id} value={branding?.secondary_color ?? ""} onChange={(event) => updateBranding("secondary_color", event.target.value)} pattern="#[0-9a-fA-F]{6}" placeholder="#000000" />
+            <Input
+              id={id}
+              value={branding?.secondary_color ?? ""}
+              onChange={(event) =>
+                updateBranding("secondary_color", event.target.value)
+              }
+              pattern="#[0-9a-fA-F]{6}"
+              placeholder="#000000"
+            />
           )}
         </Field>
       </div>
@@ -205,15 +277,22 @@ export const RegionalTerminologyStep = ({
 }) => {
   const terminologyKeys = useMemo(
     () =>
-      catalog.packs.find((pack) => pack.key === selectedPackKey)?.terminology_keys ?? [],
+      catalog.packs.find((pack) => pack.key === selectedPackKey)
+        ?.terminology_keys ?? [],
     [catalog.packs, selectedPackKey],
   );
-  const current = value ?? { locale: "", timezone: "", currency: "", terminology: {} };
+  const current = value ?? {
+    locale: "",
+    timezone: "",
+    currency: "",
+    terminology: {},
+  };
   return (
     <fieldset className="grid gap-6">
       <legend className="sr-only">Khu vực và thuật ngữ</legend>
       <p className="text-body text-muted-foreground">
-        Chỉ các giá trị được máy chủ hỗ trợ mới có thể lưu. Không có khu vực hoặc tiền tệ mặc định.
+        Chỉ các giá trị được máy chủ hỗ trợ mới có thể lưu. Không có khu vực
+        hoặc tiền tệ mặc định.
       </p>
       <StepIssues issues={issues} />
       {!selectedPackKey ? (
@@ -231,12 +310,18 @@ export const RegionalTerminologyStep = ({
               id={id}
               className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
               value={current.locale}
-              onChange={(event) => onChange({ ...current, locale: event.target.value })}
+              onChange={(event) =>
+                onChange({ ...current, locale: event.target.value })
+              }
               required
               autoFocus
             >
               <option value="">Chọn ngôn ngữ</option>
-              {catalog.locales.map((locale) => <option key={locale} value={locale}>{locale}</option>)}
+              {catalog.locales.map((locale) => (
+                <option key={locale} value={locale}>
+                  {locale}
+                </option>
+              ))}
             </select>
           )}
         </Field>
@@ -246,23 +331,51 @@ export const RegionalTerminologyStep = ({
               id={id}
               className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
               value={current.currency}
-              onChange={(event) => onChange({ ...current, currency: event.target.value })}
+              onChange={(event) =>
+                onChange({ ...current, currency: event.target.value })
+              }
               required
             >
               <option value="">Chọn tiền tệ</option>
-              {catalog.currencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+              {catalog.currencies.map((currency) => (
+                <option key={currency} value={currency}>
+                  {currency}
+                </option>
+              ))}
             </select>
           )}
         </Field>
         <Field label="Múi giờ IANA" required colSpan="sm:col-span-2">
           {({ id }) => (
-            <Input id={id} value={current.timezone} onChange={(event) => onChange({ ...current, timezone: event.target.value })} placeholder="Continent/City" required maxLength={64} />
+            <Input
+              id={id}
+              value={current.timezone}
+              onChange={(event) =>
+                onChange({ ...current, timezone: event.target.value })
+              }
+              placeholder="Continent/City"
+              required
+              maxLength={64}
+            />
           )}
         </Field>
         {terminologyKeys.map((key) => (
           <Field key={key} label={`Thuật ngữ: ${key}`}>
             {({ id }) => (
-              <Input id={id} value={current.terminology[key] ?? ""} onChange={(event) => onChange({ ...current, terminology: { ...current.terminology, [key]: event.target.value } })} maxLength={80} />
+              <Input
+                id={id}
+                value={current.terminology[key] ?? ""}
+                onChange={(event) =>
+                  onChange({
+                    ...current,
+                    terminology: {
+                      ...current.terminology,
+                      [key]: event.target.value,
+                    },
+                  })
+                }
+                maxLength={80}
+              />
             )}
           </Field>
         ))}
@@ -280,7 +393,24 @@ export const PackCapabilitiesStep = ({
   value?: PackCapabilitiesDraft;
   onChange: (value: PackCapabilitiesDraft) => void;
 }) => {
-  const selectedPack = catalog.packs.find((pack) => pack.key === value?.pack_key);
+  const selectedPack = catalog.packs.find(
+    (pack) => pack.key === value?.pack_key,
+  );
+  const packCopy: Record<string, { title: string; description: string }> = {
+    recruitment: {
+      title: "Tuyển dụng",
+      description:
+        "Ứng viên, vị trí tuyển, tư vấn việc làm và quy trình tuyển dụng.",
+    },
+    shopping: {
+      title: "Bán hàng và mua sắm",
+      description: "Sản phẩm, đơn hàng và quy trình hỗ trợ mua sắm.",
+    },
+    product_advisory: {
+      title: "Tư vấn sản phẩm",
+      description: "Tra cứu và tư vấn dựa trên tài liệu sản phẩm.",
+    },
+  };
   return (
     <fieldset className="grid gap-6">
       <legend className="sr-only">Gói ngành và chức năng</legend>
@@ -292,24 +422,24 @@ export const PackCapabilitiesStep = ({
             name="setup-pack"
             value={pack.key}
             checked={value?.pack_key === pack.key}
-            onChange={() => onChange({ pack_key: pack.key, capability_ids: [] })}
-            title={pack.key}
-            description={`Phiên bản ${pack.version}`}
+            onChange={() =>
+              onChange({
+                pack_key: pack.key,
+                capability_ids: pack.capability_ids,
+              })
+            }
+            title={packCopy[pack.key]?.title ?? pack.key}
+            description={
+              packCopy[pack.key]?.description ?? `Phiên bản ${pack.version}`
+            }
           />
         ))}
       </div>
       {selectedPack ? (
-        <SetupSection title="Chức năng cho phép">
-          {selectedPack.capability_ids.map((capabilityId) => {
-            const checked = value?.capability_ids.includes(capabilityId) ?? false;
-            return (
-              <label key={capabilityId} className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-body text-foreground">
-                <Checkbox checked={checked} onCheckedChange={(next) => onChange({ pack_key: selectedPack.key, capability_ids: next === true ? [...(value?.capability_ids ?? []), capabilityId] : (value?.capability_ids ?? []).filter((item) => item !== capabilityId) })} />
-                <span className="break-all">{capabilityId}</span>
-              </label>
-            );
-          })}
-        </SetupSection>
+        <p className="text-meta text-muted-foreground">
+          Hệ thống sẽ dùng toàn bộ chức năng đã kiểm duyệt của loại hình này:{" "}
+          {selectedPack.capability_ids.join(", ")}.
+        </p>
       ) : null}
     </fieldset>
   );
@@ -337,19 +467,26 @@ export const WorkflowStep = ({
     catalog.authored_workflow_versions,
   );
   const [versionError, setVersionError] = useState<string | null>(null);
-  const [handoffMode, setHandoffMode] = useState<"" | WorkflowDraft["workflow_policy"]["handoff_mode"]>(initial?.handoff_mode ?? "");
-  const [automationChoice, setAutomationChoice] = useState<"" | "enabled" | "disabled">(
-    initial ? (initial.automation_enabled ? "enabled" : "disabled") : "",
-  );
+  const [handoffMode, setHandoffMode] = useState<
+    "" | WorkflowDraft["workflow_policy"]["handoff_mode"]
+  >(initial?.handoff_mode ?? "");
+  const [automationChoice, setAutomationChoice] = useState<
+    "" | "enabled" | "disabled"
+  >(initial ? (initial.automation_enabled ? "enabled" : "disabled") : "");
   const allowedIds = useMemo(
-    () => catalog.packs.find((pack) => pack.key === selectedPackKey)?.workflow_ids ?? [],
+    () =>
+      catalog.packs.find((pack) => pack.key === selectedPackKey)
+        ?.workflow_ids ?? [],
     [catalog.packs, selectedPackKey],
   );
   const workflows = useMemo(
-    () => catalog.workflows.filter((workflow) => allowedIds.includes(workflow.id)),
+    () =>
+      catalog.workflows.filter((workflow) => allowedIds.includes(workflow.id)),
     [allowedIds, catalog.workflows],
   );
-  const selectedWorkflow = workflows.find((workflow) => workflow.id === workflowId);
+  const selectedWorkflow = workflows.find(
+    (workflow) => workflow.id === workflowId,
+  );
   useEffect(() => {
     const policy = value?.workflow_policy;
     const version = catalog.authored_workflow_versions.find(
@@ -370,11 +507,18 @@ export const WorkflowStep = ({
     setWorkflowVersionId(policy.workflow_version_id);
     setHandoffMode(policy.handoff_mode);
     setAutomationChoice(policy.automation_enabled ? "enabled" : "disabled");
-  }, [allowedIds, catalog.authored_workflow_versions, selectedPackKey, syncToken, value]);
+  }, [
+    allowedIds,
+    catalog.authored_workflow_versions,
+    selectedPackKey,
+    syncToken,
+    value,
+  ]);
   const selectableVersions = authoredVersions
     .filter(
       (version) =>
-        version.pack_key === selectedPackKey && version.workflow_key === workflowId,
+        version.pack_key === selectedPackKey &&
+        version.workflow_key === workflowId,
     )
     .sort((left, right) => right.version_no - left.version_no);
   const reloadVersions = async () => {
@@ -384,7 +528,9 @@ export const WorkflowStep = ({
       setAuthoredVersions(versions);
     } catch (cause) {
       setVersionError(
-        cause instanceof Error ? cause.message : "Không tải lại được phiên bản quy trình.",
+        cause instanceof Error
+          ? cause.message
+          : "Không tải lại được phiên bản quy trình.",
       );
     }
   };
@@ -400,7 +546,12 @@ export const WorkflowStep = ({
         candidate.pack_key === selectedPackKey &&
         candidate.workflow_key === nextWorkflowId,
     );
-    if (!nextWorkflowId || !version || !nextHandoffMode || !nextAutomationChoice) {
+    if (
+      !nextWorkflowId ||
+      !version ||
+      !nextHandoffMode ||
+      !nextAutomationChoice
+    ) {
       onChange(undefined);
       return;
     }
@@ -418,7 +569,14 @@ export const WorkflowStep = ({
     <fieldset className="grid gap-6">
       <legend className="sr-only">Quy trình và bàn giao</legend>
       <StepIssues issues={issues} />
-      {!selectedPackKey ? <Alert variant="info"><AlertTitle>Chưa chọn gói</AlertTitle><AlertDescription>Hãy chọn gói ở bước trước để tải đúng quy trình.</AlertDescription></Alert> : null}
+      {!selectedPackKey ? (
+        <Alert variant="info">
+          <AlertTitle>Chưa chọn gói</AlertTitle>
+          <AlertDescription>
+            Hãy chọn gói ở bước trước để tải đúng quy trình.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Quy trình" required colSpan="sm:col-span-2">
           {({ id }) => (
@@ -426,16 +584,35 @@ export const WorkflowStep = ({
               id={id}
               className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
               value={workflowId}
-              onChange={(event) => { const next = event.target.value; setWorkflowId(next); setWorkflowVersionId(""); setHandoffMode(""); commit(next, "", "", automationChoice); }}
+              onChange={(event) => {
+                const next = event.target.value;
+                setWorkflowId(next);
+                setWorkflowVersionId("");
+                setHandoffMode("");
+                commit(next, "", "", automationChoice);
+              }}
               required
               autoFocus
             >
               <option value="">Chọn quy trình</option>
-              {workflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.id}</option>)}
+              {workflows.map((workflow) => (
+                <option key={workflow.id} value={workflow.id}>
+                  {workflow.id}
+                </option>
+              ))}
             </select>
           )}
         </Field>
-        <Field label="Phiên bản đã xuất bản" required colSpan="sm:col-span-2" helper={workflowId && selectableVersions.length === 0 ? "Chưa có phiên bản nào. Hãy tạo và xuất bản một phiên bản bên dưới." : undefined}>
+        <Field
+          label="Phiên bản đã xuất bản"
+          required
+          colSpan="sm:col-span-2"
+          helper={
+            workflowId && selectableVersions.length === 0
+              ? "Chưa có phiên bản nào. Hãy tạo và xuất bản một phiên bản bên dưới."
+              : undefined
+          }
+        >
           {({ id }) => (
             <>
               <select
@@ -457,7 +634,11 @@ export const WorkflowStep = ({
                   </option>
                 ))}
               </select>
-              {versionError ? <p className="text-meta text-destructive" role="alert">{versionError}</p> : null}
+              {versionError ? (
+                <p className="text-meta text-destructive" role="alert">
+                  {versionError}
+                </p>
+              ) : null}
             </>
           )}
         </Field>
@@ -467,29 +648,50 @@ export const WorkflowStep = ({
               id={id}
               className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
               value={handoffMode}
-              onChange={(event) => { const next = event.target.value as "" | WorkflowDraft["workflow_policy"]["handoff_mode"]; setHandoffMode(next); commit(workflowId, workflowVersionId, next, automationChoice); }}
+              onChange={(event) => {
+                const next = event.target.value as
+                  "" | WorkflowDraft["workflow_policy"]["handoff_mode"];
+                setHandoffMode(next);
+                commit(workflowId, workflowVersionId, next, automationChoice);
+              }}
               required
             >
               <option value="">Chọn cách bàn giao</option>
-              {(selectedWorkflow?.handoff_modes ?? []).map((mode) => <option key={mode} value={mode}>{mode === "manual" ? "Thủ công" : mode === "assisted" ? "Có hỗ trợ" : "Tự động"}</option>)}
+              {(selectedWorkflow?.handoff_modes ?? []).map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode === "manual"
+                    ? "Thủ công"
+                    : mode === "assisted"
+                      ? "Có hỗ trợ"
+                      : "Tự động"}
+                </option>
+              ))}
             </select>
           )}
         </Field>
         <fieldset className="grid gap-2 sm:col-span-2">
-          <legend className="text-control font-medium text-foreground">Tự động hóa *</legend>
+          <legend className="text-control font-medium text-foreground">
+            Tự động hóa *
+          </legend>
           <div className="grid gap-3 sm:grid-cols-2">
             <RadioCard
               name="setup-automation"
               value="enabled"
               checked={automationChoice === "enabled"}
-              onChange={() => { setAutomationChoice("enabled"); commit(workflowId, workflowVersionId, handoffMode, "enabled"); }}
+              onChange={() => {
+                setAutomationChoice("enabled");
+                commit(workflowId, workflowVersionId, handoffMode, "enabled");
+              }}
               title="Bật tự động hóa"
             />
             <RadioCard
               name="setup-automation"
               value="disabled"
               checked={automationChoice === "disabled"}
-              onChange={() => { setAutomationChoice("disabled"); commit(workflowId, workflowVersionId, handoffMode, "disabled"); }}
+              onChange={() => {
+                setAutomationChoice("disabled");
+                commit(workflowId, workflowVersionId, handoffMode, "disabled");
+              }}
               title="Không bật tự động hóa"
             />
           </div>
@@ -510,181 +712,116 @@ export const WorkflowStep = ({
   );
 };
 
-const cleanKey = (value: string) => value.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
-export const KnowledgeTemplatesStep = ({
-  value,
-  onChange,
-  issues,
-}: CommonStepProps & {
-  value?: KnowledgeTemplatesDraft;
-  onChange: (value: KnowledgeTemplatesDraft) => void;
-}) => {
-  const [templates, setTemplates] = useState<SetupTemplate[]>([]);
-  const [versions, setVersions] = useState<SetupTemplateVersion[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [name, setName] = useState("");
-  const [vertical, setVertical] = useState("");
-  const [recordName, setRecordName] = useState("");
-  const [fields, setFields] = useState("");
-  const [sample, setSample] = useState("");
-  const [previewed, setPreviewed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const reload = async () => {
-    setError(null);
-    try { setTemplates(await listSetupTemplates()); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không tải được danh sách mẫu."); }
-  };
-  useEffect(() => { void reload(); }, []);
-
-  const selectTemplate = async (templateId: string) => {
-    setSelectedTemplateId(templateId);
-    setVersions([]);
-    if (!templateId) return;
-    try { setVersions((await listSetupTemplateVersions(templateId)).filter((item) => item.status === "PUBLISHED" && item.checksum)); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không tải được phiên bản mẫu."); }
-  };
-  const toggleVersion = (version: SetupTemplateVersion, checked: boolean) => {
-    if (!version.checksum) return;
-    const current = value?.template_version_refs ?? [];
-    onChange({ template_version_refs: checked ? [...current.filter((item) => item.version_id !== version.id), { version_id: version.id, checksum: version.checksum }] : current.filter((item) => item.version_id !== version.id) });
-  };
-  const buildDefinition = (): Record<string, unknown> | null => {
-    const recordKey = cleanKey(recordName);
-    const fieldKeys = fields.split(",").map(cleanKey).filter(Boolean);
-    if (!recordKey || fieldKeys.length === 0) return null;
-    return { schema_version: "1", record_types: [{ key: recordKey, display_name: recordName.trim(), natural_key_fields: [fieldKeys[0]], fields: fieldKeys.map((key, index) => ({ key, type: "string", aliases: [key, key.replace(/_/g, " ")], required: index === 0, source_mode: "sourced_fact" })) }] };
-  };
-  const preview = async () => {
-    const definition = buildDefinition();
-    if (!name.trim() || !vertical.trim() || !definition || !sample.trim()) { setError("Nhập đủ tên mẫu, lĩnh vực, loại bản ghi, trường dữ liệu và dữ liệu thử."); return; }
-    setBusy(true); setError(null);
-    try { await previewNewSetupTemplate(definition, sample); setPreviewed(true); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không kiểm tra được mẫu."); } finally { setBusy(false); }
-  };
-  const publish = async () => {
-    const definition = buildDefinition();
-    if (!previewed || !definition) return;
-    setBusy(true); setError(null);
-    try {
-      const created = await createSetupTemplate({ template_key: `${cleanKey(name)}_${Date.now()}`, name: name.trim(), vertical: vertical.trim(), definition });
-      await previewSetupTemplateVersion(created.id, sample);
-      const published = await publishSetupTemplateVersion(created.id);
-      if (!published.checksum) throw new Error("Phiên bản đã xuất bản thiếu checksum.");
-      toggleVersion(published, true);
-      setName(""); setVertical(""); setRecordName(""); setFields(""); setSample(""); setPreviewed(false);
-      await reload();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Không xuất bản được mẫu."); } finally { setBusy(false); }
-  };
-
-  return (
-    <div className="grid gap-6">
-      <StepIssues issues={issues} />
-      <SetupSection title="Chọn mẫu đã xuất bản">
-        <Field label="Mẫu kiến thức">
-          {({ id }) => (
-            <select
-              id={id}
-              className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-control text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-              aria-label="Mẫu kiến thức"
-              value={selectedTemplateId}
-              onChange={(event) => void selectTemplate(event.target.value)}
-            >
-              <option value="">Chọn mẫu</option>
-              {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
-            </select>
-          )}
-        </Field>
-        {versions.map((version) => (
-          <label key={version.id} className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-body text-foreground">
-            <Checkbox checked={value?.template_version_refs.some((item) => item.version_id === version.id) ?? false} onCheckedChange={(checked) => toggleVersion(version, checked === true)} />
-            Phiên bản {version.version_no}
-          </label>
-        ))}
-      </SetupSection>
-      <SetupSection
-        title="Tạo mẫu mới"
-        description="Mọi trường và dữ liệu thử đều do quản trị viên nhập."
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Tên mẫu">
-            {({ id }) => (
-              <Input id={id} value={name} onChange={(event) => { setName(event.target.value); setPreviewed(false); }} />
-            )}
-          </Field>
-          <Field label="Lĩnh vực">
-            {({ id }) => (
-              <Input id={id} value={vertical} onChange={(event) => { setVertical(event.target.value); setPreviewed(false); }} />
-            )}
-          </Field>
-          <Field label="Loại bản ghi">
-            {({ id }) => (
-              <Input id={id} value={recordName} onChange={(event) => { setRecordName(event.target.value); setPreviewed(false); }} />
-            )}
-          </Field>
-          <Field label="Các trường, cách nhau bằng dấu phẩy">
-            {({ id }) => (
-              <Input id={id} value={fields} onChange={(event) => { setFields(event.target.value); setPreviewed(false); }} />
-            )}
-          </Field>
-          <Field label="Dữ liệu thử của bạn" colSpan="sm:col-span-2">
-            {({ id }) => (
-              <Textarea id={id} value={sample} onChange={(event) => { setSample(event.target.value); setPreviewed(false); }} rows={6} />
-            )}
-          </Field>
-        </div>
-        {error ? <p className="text-meta text-destructive" role="alert">{error}</p> : null}
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" size="touch" disabled={busy} onClick={() => void preview()}>{busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}Kiểm tra mẫu</Button>
-          <Button type="button" size="touch" disabled={busy || !previewed} onClick={() => void publish()}><Plus />Xuất bản và chọn</Button>
-        </div>
-      </SetupSection>
-    </div>
-  );
-};
-
 export const PersonaStep = ({
-  value,
   onChange,
   issues,
+  onRegisterSave,
 }: CommonStepProps & {
   value?: PersonaDraft;
   onChange: (value: PersonaDraft) => void;
+  onRegisterSave?: (save: (() => Promise<PersonaDraft | null>) | null) => void;
 }) => {
   const [personas, setPersonas] = useState<PersonaOption[]>([]);
-  const [versions, setVersions] = useState<PersonaVersionOption[]>([]);
   const [selectedPersonaId, setSelectedPersonaId] = useState("");
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
-  const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const reload = async () => { try { setPersonas(await listSetupPersonas()); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không tải được Agent."); } };
-  useEffect(() => { void reload(); }, []);
-  const selectPersona = async (personaId: string) => {
-    setSelectedPersonaId(personaId); setVersions([]); if (!personaId) return;
-    try { setVersions(await listSetupPersonaVersions(personaId)); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không tải được phiên bản Agent."); }
-  };
-  const create = async () => {
-    if (!name.trim() || !body.trim()) { setError("Tên và nội dung Agent là bắt buộc."); return; }
-    setBusy(true); setError(null);
+  const reload = useCallback(async () => {
+    try {
+      setPersonas(await listSetupPersonas());
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Không tải được Agent.",
+      );
+    }
+  }, []);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+  const selectPersona = useCallback(
+    async (personaId: string) => {
+      if (!personaId) {
+        setSelectedPersonaId("");
+        return;
+      }
+      try {
+        const latest = [...(await listSetupPersonaVersions(personaId))].sort(
+          (left, right) => right.version_no - left.version_no,
+        )[0];
+        if (!latest) {
+          setError(
+            "Agent này chưa sẵn sàng để sử dụng. Hãy chọn Agent khác hoặc tạo Agent mới.",
+          );
+          return;
+        }
+        setError(null);
+        setSelectedPersonaId(personaId);
+        onChange({ persona_version_id: latest.id, checksum: latest.checksum });
+      } catch {
+        setError("Không tải được Agent. Vui lòng thử lại.");
+      }
+    },
+    [onChange],
+  );
+  const create = useCallback(async (): Promise<PersonaDraft | null> => {
+    if (!name.trim() && !body.trim()) return null;
+    if (!name.trim() || !body.trim()) {
+      setError("Tên và nội dung Agent là bắt buộc.");
+      return null;
+    }
+    setError(null);
     try {
       const persona = await createSetupPersona({
         name: name.trim(),
         body_md: body.trim(),
-        notes: optional(notes) ?? null,
+        notes: null,
         followup_rules: disabledSetupFollowupRules(),
       });
       const nextVersions = await listSetupPersonaVersions(persona.id);
-      const latest = nextVersions.sort((a, b) => b.version_no - a.version_no)[0];
-      if (!latest) throw new Error("Agent chưa có phiên bản bất biến.");
-      onChange({ persona_version_id: latest.id, checksum: latest.checksum });
-      setName(""); setBody(""); setNotes(""); await reload(); await selectPersona(persona.id);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Không tạo được Agent."); } finally { setBusy(false); }
+      const latest = nextVersions.sort(
+        (a, b) => b.version_no - a.version_no,
+      )[0];
+      if (!latest)
+        throw new Error("Không thể tạo Agent mới, vui lòng thử lại.");
+      const created = {
+        persona_version_id: latest.id,
+        checksum: latest.checksum,
+      };
+      onChange(created);
+      setName("");
+      setBody("");
+      await reload();
+      await selectPersona(persona.id);
+      return created;
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Không tạo được Agent.",
+      );
+      return null;
+    }
+  }, [body, name, onChange, reload, selectPersona]);
+  useEffect(() => {
+    onRegisterSave?.(create);
+    return () => onRegisterSave?.(null);
+  }, [create, onRegisterSave]);
+  const loadTemplate = async () => {
+    setTemplateBusy(true);
+    setError(null);
+    try {
+      setBody(await getSetupPersonaTemplate());
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Không tải được mẫu Agent.",
+      );
+    } finally {
+      setTemplateBusy(false);
+    }
   };
   return (
     <div className="grid gap-6">
       <StepIssues issues={issues} />
-      <SetupSection title="Chọn phiên bản Agent">
+      <SetupSection title="Chọn Agent">
         <Field label="Agent">
           {({ id }) => (
             <select
@@ -694,96 +831,142 @@ export const PersonaStep = ({
               onChange={(event) => void selectPersona(event.target.value)}
               aria-label="Agent"
             >
-              <option value="">Chọn Agent</option>{personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
+              <option value="">Chọn Agent</option>
+              {personas.map((persona) => (
+                <option key={persona.id} value={persona.id}>
+                  {persona.name}
+                </option>
+              ))}
             </select>
           )}
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {versions.map((version) => {
-            const isSelected = value?.persona_version_id === version.id;
-            return (
-              <Button
-                key={version.id}
-                type="button"
-                variant={isSelected ? "default" : "outline"}
-                size="touch"
-                className="justify-start"
-                onClick={() => onChange({ persona_version_id: version.id, checksum: version.checksum })}
-              >
-                {isSelected ? <Check /> : null}Phiên bản {version.version_no}
-              </Button>
-            );
-          })}
-        </div>
       </SetupSection>
       <SetupSection
         title="Tạo Agent mới"
-        description="Không có nội dung mẫu. Hãy viết persona và chính sách phù hợp với khách hàng này."
+        description="Dùng mẫu bắt đầu rồi chỉnh sửa để phù hợp với khách hàng này."
+        trailing={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={templateBusy}
+            onClick={() => void loadTemplate()}
+          >
+            {templateBusy ? <Loader2 className="animate-spin" /> : null}
+            Tải mẫu
+          </Button>
+        }
       >
         <Field label="Tên Agent" required>
           {({ id }) => (
-            <Input id={id} value={name} onChange={(event) => setName(event.target.value)} />
+            <Input
+              id={id}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           )}
         </Field>
         <Field label="Nội dung và chính sách" required>
           {({ id }) => (
-            <Textarea id={id} value={body} onChange={(event) => setBody(event.target.value)} rows={10} />
+            <Textarea
+              id={id}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              rows={10}
+            />
           )}
         </Field>
-        <Field label="Ghi chú">
-          {({ id }) => (
-            <Textarea id={id} value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
-          )}
-        </Field>
-        {error ? <p className="text-meta text-destructive" role="alert">{error}</p> : null}
-        <Button type="button" size="touch" className="sm:justify-self-end" disabled={busy} onClick={() => void create()}>{busy ? <Loader2 className="animate-spin" /> : <Plus />}Tạo và chọn phiên bản</Button>
+        {error ? (
+          <p className="text-meta text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
       </SetupSection>
     </div>
   );
 };
 
-const ProviderSecretPanel = ({ integrationKey }: { integrationKey: SupportedModelIntegration }) => {
+const PROVIDER_LABELS: Record<SupportedModelIntegration, string> = {
+  minimax: "MiniMax",
+  openrouter: "OpenRouter",
+};
+
+type ProviderSecretPanelProps = {
+  integrationKey: SupportedModelIntegration;
+  onRegisterSave: (
+    key: SupportedModelIntegration,
+    save: (() => Promise<boolean>) | null,
+  ) => void;
+};
+
+const ProviderSecretPanel = ({
+  integrationKey,
+  onRegisterSave,
+}: ProviderSecretPanelProps) => {
   const [configured, setConfigured] = useState(false);
   const [secret, setSecret] = useState("");
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    void getModelIntegrationStatus(integrationKey).then((status) => {
-      if (!active) return;
-      setConfigured(
-        "minimax_api_key" in status
-          ? status.minimax_api_key.configured
-          : status.openrouter_api_key.configured,
-      );
-    }).catch(() => { if (active) setMessage("Không tải được trạng thái tích hợp."); });
-    return () => { active = false; };
+    void getModelIntegrationStatus(integrationKey)
+      .then((status) => {
+        if (!active) return;
+        setConfigured(
+          "minimax_api_key" in status
+            ? status.minimax_api_key.configured
+            : status.openrouter_api_key.configured,
+        );
+      })
+      .catch(() => {
+        if (active) setMessage("Không tải được trạng thái tích hợp.");
+      });
+    return () => {
+      active = false;
+    };
   }, [integrationKey]);
-  const save = async () => {
-    if (!secret.trim()) return;
-    setBusy(true); setMessage(null);
-    try { await saveModelIntegrationSecret(integrationKey, secret.trim()); setSecret(""); setConfigured(true); setMessage("Đã lưu bí mật ở dạng mã hóa."); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Không lưu được bí mật."); } finally { setBusy(false); }
-  };
-  const test = async () => {
-    setBusy(true); setMessage(null);
-    try { const result = await testModelIntegration(integrationKey); setMessage(result.configured ? "Tích hợp đã sẵn sàng." : `Thiếu: ${result.missing.join(", ")}`); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Không kiểm tra được tích hợp."); } finally { setBusy(false); }
-  };
+  const save = useCallback(async (): Promise<boolean> => {
+    if (!secret.trim()) return true;
+    setMessage(null);
+    try {
+      await saveModelIntegrationSecret(integrationKey, secret.trim());
+      setSecret("");
+      setConfigured(true);
+      setMessage("Đã lưu bí mật ở dạng mã hóa.");
+      return true;
+    } catch (cause) {
+      setMessage(
+        cause instanceof Error ? cause.message : "Không lưu được bí mật.",
+      );
+      return false;
+    }
+  }, [integrationKey, secret]);
+  useEffect(() => {
+    onRegisterSave(integrationKey, save);
+    return () => onRegisterSave(integrationKey, null);
+  }, [integrationKey, onRegisterSave, save]);
   return (
-    <SetupSection
-      title={integrationKey}
-      description={configured ? "Đã có khóa được mã hóa" : "Chưa có khóa"}
-    >
-      <Field label="Khóa bí mật">
-        {({ id }) => (
-          <Input id={id} type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} />
+    <div className="grid content-start gap-4">
+      <Field
+        label={`${PROVIDER_LABELS[integrationKey]} API Key`}
+        helper={configured ? "Đã có khóa được mã hóa" : "Chưa có khóa"}
+      >
+        {({ id, describedBy }) => (
+          <Input
+            id={id}
+            type="password"
+            autoComplete="off"
+            aria-describedby={describedBy}
+            value={secret}
+            onChange={(event) => setSecret(event.target.value)}
+          />
         )}
       </Field>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button type="button" size="touch" disabled={busy || !secret.trim()} onClick={() => void save()}>Lưu khóa</Button>
-        <Button type="button" variant="outline" size="touch" disabled={busy || !configured} onClick={() => void test()}>Kiểm tra</Button>
-      </div>
-      {message ? <p className="text-meta text-muted-foreground" aria-live="polite">{message}</p> : null}
-    </SetupSection>
+      {message ? (
+        <p className="text-meta text-muted-foreground" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 };
 
@@ -797,16 +980,24 @@ const EMPTY_ZALO_SECRETS: ZaloSecretDraft = {
 };
 
 const ZaloSecretPanel = () => {
-  const [status, setStatus] = useState<Awaited<ReturnType<typeof getZaloSetupStatus>> | null>(null);
+  const [status, setStatus] = useState<Awaited<
+    ReturnType<typeof getZaloSetupStatus>
+  > | null>(null);
   const [form, setForm] = useState<ZaloSecretDraft>(EMPTY_ZALO_SECRETS);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     void getZaloSetupStatus()
-      .then((next) => { if (active) setStatus(next); })
-      .catch(() => { if (active) setMessage("Không tải được trạng thái Zalo."); });
-    return () => { active = false; };
+      .then((next) => {
+        if (active) setStatus(next);
+      })
+      .catch(() => {
+        if (active) setMessage("Không tải được trạng thái Zalo.");
+      });
+    return () => {
+      active = false;
+    };
   }, []);
   const setField = (field: keyof ZaloSecretDraft, next: string) =>
     setForm((current) => ({ ...current, [field]: next }));
@@ -815,32 +1006,65 @@ const ZaloSecretPanel = () => {
       Object.entries(form).filter(([, value]) => value.trim()),
     ) as Partial<ZaloSecretDraft>;
     if (Object.keys(payload).length === 0) return;
-    setBusy(true); setMessage(null);
+    setBusy(true);
+    setMessage(null);
     try {
       setStatus(await saveZaloSetupSecrets(payload));
       setForm(EMPTY_ZALO_SECRETS);
       setMessage("Đã lưu thông tin Zalo ở kho mã hóa.");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Không lưu được Zalo."); }
-    finally { setBusy(false); }
+    } catch (cause) {
+      setMessage(
+        cause instanceof Error ? cause.message : "Không lưu được Zalo.",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
   const test = async (channel: "bot" | "oa") => {
-    setBusy(true); setMessage(null);
+    setBusy(true);
+    setMessage(null);
     try {
       const result = await testZaloSetupChannel(channel);
-      setMessage(result.connected ? `Kênh ${channel.toUpperCase()} đã kết nối.` : result.missing.length > 0 ? `Thiếu: ${result.missing.join(", ")}` : result.errors.join("; ") || "Kênh chưa kết nối.");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Không kiểm tra được Zalo."); }
-    finally { setBusy(false); }
+      setMessage(
+        result.connected
+          ? `Kênh ${channel.toUpperCase()} đã kết nối.`
+          : result.missing.length > 0
+            ? `Thiếu: ${result.missing.join(", ")}`
+            : result.errors.join("; ") || "Kênh chưa kết nối.",
+      );
+    } catch (cause) {
+      setMessage(
+        cause instanceof Error ? cause.message : "Không kiểm tra được Zalo.",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
-  const fields: Array<{ key: keyof ZaloSecretDraft; label: string; secret: boolean }> = [
+  const fields: Array<{
+    key: keyof ZaloSecretDraft;
+    label: string;
+    secret: boolean;
+  }> = [
     { key: "zalo_bot_token", label: "Bot token", secret: true },
-    { key: "zalo_bot_webhook_secret", label: "Bot webhook secret", secret: true },
+    {
+      key: "zalo_bot_webhook_secret",
+      label: "Bot webhook secret",
+      secret: true,
+    },
     { key: "zalo_oa_app_id", label: "OA App ID", secret: false },
     { key: "zalo_oa_secret_key", label: "OA secret key", secret: true },
     { key: "zalo_oa_access_token", label: "OA access token", secret: true },
     { key: "zalo_oa_refresh_token", label: "OA refresh token", secret: true },
   ];
   const configuredCount = status
-    ? [status.zalo_bot_token, status.zalo_bot_webhook_secret, status.zalo_oa_app_id, status.zalo_oa_secret_key, status.zalo_oa_access_token, status.zalo_oa_refresh_token].filter((item) => item.configured).length
+    ? [
+        status.zalo_bot_token,
+        status.zalo_bot_webhook_secret,
+        status.zalo_oa_app_id,
+        status.zalo_oa_secret_key,
+        status.zalo_oa_access_token,
+        status.zalo_oa_refresh_token,
+      ].filter((item) => item.configured).length
     : 0;
   return (
     <SetupSection
@@ -864,11 +1088,35 @@ const ZaloSecretPanel = () => {
         ))}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <Button type="button" size="touch" disabled={busy || !Object.values(form).some((item) => item.trim())} onClick={() => void save()}>Lưu thông tin Zalo</Button>
-        <Button type="button" variant="outline" size="touch" disabled={busy} onClick={() => void test("bot")}>Kiểm tra Bot</Button>
-        <Button type="button" variant="outline" size="touch" disabled={busy} onClick={() => void test("oa")}>Kiểm tra OA</Button>
+        <Button
+          type="button"
+          disabled={busy || !Object.values(form).some((item) => item.trim())}
+          onClick={() => void save()}
+        >
+          Lưu thông tin Zalo
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void test("bot")}
+        >
+          Kiểm tra Bot
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void test("oa")}
+        >
+          Kiểm tra OA
+        </Button>
       </div>
-      {message ? <p className="text-meta text-muted-foreground" aria-live="polite">{message}</p> : null}
+      {message ? (
+        <p className="text-meta text-muted-foreground" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
     </SetupSection>
   );
 };
@@ -881,26 +1129,50 @@ export const ProvidersIntegrationsStep = ({
   onChange,
   catalog,
   issues,
+  onRegisterSecretSaver,
 }: CommonStepProps & {
   value?: ProvidersIntegrationsDraft;
   onChange: (value: ProvidersIntegrationsDraft) => void;
+  onRegisterSecretSaver?: (save: (() => Promise<boolean>) | null) => void;
 }) => {
   const [policy, setPolicy] = useState(() => ({
     chatIntegrationKey: value?.provider_policy.chat_integration_key ?? "",
     chatModel: value?.provider_policy.chat_model ?? "",
-    embeddingIntegrationKey: value?.provider_policy.embedding_integration_key ?? "",
+    embeddingIntegrationKey:
+      value?.provider_policy.embedding_integration_key ?? "",
     embeddingModel: value?.provider_policy.embedding_model ?? "",
     temperature: value ? String(value.provider_policy.temperature) : "",
-    maxOutputTokens: value ? String(value.provider_policy.max_output_tokens) : "",
+    maxOutputTokens: value
+      ? String(value.provider_policy.max_output_tokens)
+      : "",
   }));
   const selectedKeys = Array.from(
     new Set(
-      [
-        policy.chatIntegrationKey,
-        policy.embeddingIntegrationKey,
-      ].filter(Boolean),
+      [policy.chatIntegrationKey, policy.embeddingIntegrationKey].filter(
+        Boolean,
+      ),
     ),
   );
+  const secretSavers = useRef(
+    new Map<SupportedModelIntegration, () => Promise<boolean>>(),
+  );
+  const registerSecretSaver = useCallback(
+    (key: SupportedModelIntegration, save: (() => Promise<boolean>) | null) => {
+      if (save) secretSavers.current.set(key, save);
+      else secretSavers.current.delete(key);
+    },
+    [],
+  );
+  const savePendingSecrets = useCallback(async (): Promise<boolean> => {
+    const results = await Promise.all(
+      Array.from(secretSavers.current.values(), (save) => save()),
+    );
+    return results.every(Boolean);
+  }, []);
+  useEffect(() => {
+    onRegisterSecretSaver?.(savePendingSecrets);
+    return () => onRegisterSecretSaver?.(null);
+  }, [onRegisterSecretSaver, savePendingSecrets]);
   const commit = (nextPolicy: typeof policy) => {
     const temperature = Number(nextPolicy.temperature);
     const maxOutputTokens = Number(nextPolicy.maxOutputTokens);
@@ -938,13 +1210,6 @@ export const ProvidersIntegrationsStep = ({
     <fieldset className="grid gap-6">
       <legend className="sr-only">Nhà cung cấp và tích hợp</legend>
       <StepIssues issues={issues} />
-      <Alert variant="info">
-        <ShieldCheck />
-        <AlertTitle>Bí mật không nằm trong bản nháp</AlertTitle>
-        <AlertDescription>
-          Khóa được gửi thẳng đến kho mã hóa hiện có. Bản nháp chỉ lưu tham chiếu và chính sách.
-        </AlertDescription>
-      </Alert>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Nhà cung cấp chat" required>
           {({ id }) => (
@@ -952,16 +1217,30 @@ export const ProvidersIntegrationsStep = ({
               id={id}
               className={selectClassName}
               value={policy.chatIntegrationKey}
-              onChange={(event) => updatePolicy({ chatIntegrationKey: event.target.value })}
+              onChange={(event) =>
+                updatePolicy({ chatIntegrationKey: event.target.value })
+              }
             >
               <option value="">Chọn nhà cung cấp</option>
-              {catalog.integration_keys.filter((key) => key === "minimax" || key === "openrouter").map((key) => <option key={key} value={key}>{key}</option>)}
+              {catalog.integration_keys
+                .filter((key) => key === "minimax" || key === "openrouter")
+                .map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
             </select>
           )}
         </Field>
         <Field label="Model chat" required>
           {({ id }) => (
-            <Input id={id} value={policy.chatModel} onChange={(event) => updatePolicy({ chatModel: event.target.value })} />
+            <Input
+              id={id}
+              value={policy.chatModel}
+              onChange={(event) =>
+                updatePolicy({ chatModel: event.target.value })
+              }
+            />
           )}
         </Field>
         <Field label="Nhà cung cấp embedding" required>
@@ -970,31 +1249,74 @@ export const ProvidersIntegrationsStep = ({
               id={id}
               className={selectClassName}
               value={policy.embeddingIntegrationKey}
-              onChange={(event) => updatePolicy({ embeddingIntegrationKey: event.target.value })}
+              onChange={(event) =>
+                updatePolicy({ embeddingIntegrationKey: event.target.value })
+              }
             >
               <option value="">Chọn nhà cung cấp</option>
-              {catalog.integration_keys.filter((key) => key === "openrouter").map((key) => <option key={key} value={key}>{key}</option>)}
+              {catalog.integration_keys
+                .filter((key) => key === "openrouter")
+                .map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
             </select>
           )}
         </Field>
         <Field label="Model embedding" required>
           {({ id }) => (
-            <Input id={id} value={policy.embeddingModel} onChange={(event) => updatePolicy({ embeddingModel: event.target.value })} />
+            <Input
+              id={id}
+              value={policy.embeddingModel}
+              onChange={(event) =>
+                updatePolicy({ embeddingModel: event.target.value })
+              }
+            />
           )}
         </Field>
         <Field label="Temperature" required helper="Giá trị từ 0 đến 2.">
           {({ id }) => (
-            <Input id={id} type="number" min={0} max={2} step="0.1" value={policy.temperature} onChange={(event) => updatePolicy({ temperature: event.target.value })} />
+            <Input
+              id={id}
+              type="number"
+              min={0}
+              max={2}
+              step="0.1"
+              value={policy.temperature}
+              onChange={(event) =>
+                updatePolicy({ temperature: event.target.value })
+              }
+            />
           )}
         </Field>
-        <Field label="Số token đầu ra tối đa" required helper="Tối đa 131072 token.">
+        <Field
+          label="Số token đầu ra tối đa"
+          required
+          helper="Tối đa 131072 token."
+        >
           {({ id }) => (
-            <Input id={id} type="number" min={1} max={131072} value={policy.maxOutputTokens} onChange={(event) => updatePolicy({ maxOutputTokens: event.target.value })} />
+            <Input
+              id={id}
+              type="number"
+              min={1}
+              max={131072}
+              value={policy.maxOutputTokens}
+              onChange={(event) =>
+                updatePolicy({ maxOutputTokens: event.target.value })
+              }
+            />
           )}
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        {selectedKeys.filter(isSupportedModelIntegration).map((key) => <ProviderSecretPanel key={key} integrationKey={key} />)}
+        {selectedKeys.filter(isSupportedModelIntegration).map((key) => (
+          <ProviderSecretPanel
+            key={key}
+            integrationKey={key}
+            onRegisterSave={registerSecretSaver}
+          />
+        ))}
         {selectedKeys.includes("zalo") ? <ZaloSecretPanel /> : null}
       </div>
     </fieldset>

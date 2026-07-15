@@ -93,6 +93,37 @@ def require_capability(capability_id: str):
     return dependency
 
 
+def require_capability_or_legacy(capability_id: str):
+    """Require a capability after installation adoption, preserving legacy operations.
+
+    A deployment to an existing recruitment installation has no
+    ``installation_state`` row until an administrator deliberately adopts the
+    new configuration workflow.  That empty state is the sole compatibility
+    case.  Once a state row exists, inactive installations and capabilities
+    absent from the active manifest remain unavailable.
+    """
+    registry = get_capability_registry()
+    if capability_id not in {item.capability_id for item in registry.capabilities()}:
+        raise ValueError(f"unknown capability dependency: {capability_id}")
+
+    async def dependency(
+        _user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> ActiveInstallation | None:
+        service = InstallationService(db)
+        active = await service.resolve_active()
+        if active is None:
+            if await service.repo.get_state() is None:
+                return None
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+        if capability_id not in active.revision.capability_ids:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+        return active
+
+    dependency.__name__ = f"require_capability_or_legacy_{capability_id.replace('.', '_')}"
+    return dependency
+
+
 def get_embedder():
     """DI provider for the configured embedder.
 

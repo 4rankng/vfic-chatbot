@@ -31,21 +31,37 @@ vi.mock("../../installation/installation-context", () => ({
   }),
 }));
 
+vi.mock("@/components/atomic-crm/knowledge/KnowledgeUpload", () => ({
+  KnowledgeUpload: () => null,
+}));
+
 vi.mock("./steps/InstallationSteps", () => ({
-  KnowledgeTemplatesStep: () => <p>Kiến thức</p>,
-  PersonaStep: ({ onChange }: { onChange: (value: unknown) => void }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onChange({
-          persona_version_id: "00000000-0000-4000-8000-000000000003",
-          checksum: "a".repeat(64),
-        })
-      }
-    >
-      Chọn Agent
-    </button>
-  ),
+  PackCapabilitiesStep: () => <p>Loại hình</p>,
+  PersonaStep: ({
+    onChange,
+    onRegisterSave,
+  }: {
+    onChange: (value: unknown) => void;
+    onRegisterSave?: (save: (() => Promise<unknown>) | null) => void;
+  }) => {
+    onRegisterSave?.(async () => ({
+      persona_version_id: "00000000-0000-4000-8000-000000000003",
+      checksum: "a".repeat(64),
+    }));
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          onChange({
+            persona_version_id: "00000000-0000-4000-8000-000000000003",
+            checksum: "a".repeat(64),
+          })
+        }
+      >
+        Chọn Agent
+      </button>
+    );
+  },
   ProvidersIntegrationsStep: () => <p>Tích hợp</p>,
 }));
 
@@ -138,7 +154,9 @@ const catalog = {
   capabilities: [],
   locales: ["vi-VN"],
   currencies: ["VND"],
-  workflows: [{ id: "configured-workflow", handoff_modes: ["manual" as const] }],
+  workflows: [
+    { id: "configured-workflow", handoff_modes: ["manual" as const] },
+  ],
   authored_workflow_versions: [
     {
       id: "00000000-0000-4000-8000-000000000021",
@@ -171,26 +189,47 @@ describe("InstallationWizard", () => {
     mocks.getCatalog.mockResolvedValue(catalog);
     const screen = await render(<InstallationWizard />);
 
-    await expect.element(screen.getByRole("navigation", { name: "Các bước thiết lập" })).toBeVisible();
-    await expect.element(screen.getByText("Thiết lập chatbot khi sẵn sàng")).not.toBeInTheDocument();
-    await expect.element(screen.getByText("Không có việc bắt buộc lúc khởi tạo")).not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("navigation", { name: "Các bước thiết lập" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Thiết lập chatbot khi sẵn sàng"))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByText("Không có việc bắt buộc lúc khởi tạo"))
+      .not.toBeInTheDocument();
   });
 
-  it("shows only the three minimum chatbot settings stacked in the left pane", async () => {
+  it("shows the product type before the three minimum chatbot settings", async () => {
     mocks.getDraft.mockResolvedValue(draft());
     mocks.getCatalog.mockResolvedValue(catalog);
 
     const screen = await render(<InstallationWizard />);
-    const navigation = screen.getByRole("navigation", { name: "Các bước thiết lập" });
+    const navigation = screen.getByRole("navigation", {
+      name: "Các bước thiết lập",
+    });
 
     await expect.element(navigation).toHaveClass("grid");
     await expect.element(navigation).not.toHaveClass("grid-cols-3");
     await expect.element(navigation).not.toHaveClass("overflow-x-auto");
-    await expect.element(screen.getByText("Thiết lập tùy chọn")).not.toBeInTheDocument();
-    await expect.element(screen.getByRole("button", { name: "Về tổng quan" })).not.toBeInTheDocument();
-    await expect.element(screen.getByRole("button", { name: "Kết nối AI", exact: true })).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Agent", exact: true })).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Kiến thức", exact: true })).toBeVisible();
+    await expect
+      .element(screen.getByText("Thiết lập tùy chọn"))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Về tổng quan" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Loại hình", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Kết nối AI", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Agent", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Kiến thức", exact: true }))
+      .toBeVisible();
   });
 
   it("saves a selected persona without requiring unrelated setup data", async () => {
@@ -203,12 +242,38 @@ describe("InstallationWizard", () => {
       }),
     );
     mocks.getCatalog.mockResolvedValue(catalog);
-    mocks.saveDraft.mockImplementation(async (payload) => draft({ payload, lock_version: 5 }));
+    mocks.saveDraft.mockImplementation(async (payload) =>
+      draft({ payload, lock_version: 5 }),
+    );
 
     const screen = await render(<InstallationWizard />);
     await screen.getByRole("button", { name: /Agent/ }).click();
     await screen.getByRole("button", { name: "Chọn Agent" }).click();
-    await screen.getByRole("button", { name: "Lưu", exact: true }).click();
+    await screen.getByRole("button", { name: "Lưu và tiếp tục" }).click();
+
+    expect(mocks.saveDraft).toHaveBeenCalledWith(
+      { persona: expect.objectContaining({ checksum }) },
+      4,
+    );
+  });
+
+  it("uses Lưu và tiếp tục to add a newly created Agent to the draft", async () => {
+    mocks.getDraft.mockResolvedValue(
+      draft({
+        payload: {},
+        section_completion: Object.fromEntries(
+          Object.keys(sectionCompletion).map((key) => [key, false]),
+        ),
+      }),
+    );
+    mocks.getCatalog.mockResolvedValue(catalog);
+    mocks.saveDraft.mockImplementation(async (payload) =>
+      draft({ payload, lock_version: 5 }),
+    );
+
+    const screen = await render(<InstallationWizard />);
+    await screen.getByRole("button", { name: /Agent/ }).click();
+    await screen.getByRole("button", { name: "Lưu và tiếp tục" }).click();
 
     expect(mocks.saveDraft).toHaveBeenCalledWith(
       { persona: expect.objectContaining({ checksum }) },

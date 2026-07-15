@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createSetupPersona,
+  getSetupPersonaTemplate,
   type DisabledSetupFollowupRules,
 } from "./setup-authoring-client";
 
@@ -51,5 +52,18 @@ describe("setup authoring client", () => {
       notes: null,
       followup_rules: followupRules,
     });
+  });
+
+  it("loads the editable persona format from the existing admin endpoint", async () => {
+    let url = "";
+    globalThis.fetch = vi.fn(async (input) => {
+      url = String(input);
+      return new Response("### 1. Vai trò của tôi", {
+        headers: { "Content-Type": "text/markdown" },
+      });
+    }) as typeof globalThis.fetch;
+
+    await expect(getSetupPersonaTemplate()).resolves.toBe("### 1. Vai trò của tôi");
+    expect(url).toMatch(/\/api\/v1\/knowledge\/personas\/format\/template$/);
   });
 });

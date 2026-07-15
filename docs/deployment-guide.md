@@ -14,8 +14,8 @@ remote recreate over ~9 sequential SSH calls (ControlMaster multiplexed).
 
 `backend/docker-compose.yml` is shipped to `/opt/vfic` and auto-loads
 `/opt/vfic/.env`. Images are pulled from DockerHub:
-`franknguyenvd/vfic-backend:latest` and `franknguyenvd/vfic-frontend:latest`
-(also tagged `:<git-sha>`).
+immutable `:<git-sha>` tags. `latest` remains a registry convenience tag but is
+never used by `make deploy`.
 
 | Service | Image / base | Replicas | Role |
 |---|---|---|---|
@@ -58,33 +58,32 @@ headers (HSTS 1y, `nosniff`, `Referrer-Policy`); auto-TLS Let's Encrypt
 All targets live in the root `Makefile` (delegates to `backend/Makefile`).
 
 ### Full deploy (`make deploy`)
-1. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
-2. `cd backend && make push` — same for backend image.
-3. `cd backend && make deploy`:
+1. `release-check` — requires a clean committed worktree, exactly one Alembic
+   head, then runs backend lint/tests and frontend lint/typecheck/unit tests/build.
+   It stops before any image is pushed if a check fails.
+2. `backup` — creates and verifies a fresh compressed production PostgreSQL
+   backup before any image is pushed or migration can run.
+3. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
+4. `cd backend && make push` — same for backend image.
+5. `cd backend && make deploy`:
    - SSH `mkdir -p /opt/vfic`.
    - SCP `docker-compose.yml` + `Caddyfile` to `/opt/vfic/`.
    - Run `scripts/prod-env.sh` over SSH → generates `/opt/vfic/.env` (mode
      0600) on first deploy: random `POSTGRES_PASSWORD`, `REDIS_PASSWORD`,
      `JWT_SECRET` (openssl rand), random bootstrap admin password. Third-party
      API keys left **blank** for the operator to fill. Idempotent.
-   - `docker compose pull`.
-   - Tear down n8n (big-bang) to free `:80`/`:443` if present.
+   - Pull the exact image tag for the committed release.
    - `docker compose up -d postgres redis`; wait healthy (5× SSH retry).
    - `docker compose run --rm web alembic upgrade head` (5× SSH retry).
    - `docker compose run --rm web python -m scripts.create_admin --only-if-no-admins ...`
      (idempotent bootstrap admin).
-   - `docker compose up -d`.
-4. Operator fills third-party keys in `/opt/vfic/.env`, then
-   `docker compose up -d --force-recreate web worker-chatbot worker-persistence worker-ingest scheduler`.
-5. Flip the Zalo Chatbot webhook in the Zalo console →
-   `https://bot.tingting.vip/webhooks/zalo/chatbot`.
+   - Force-recreate `web`, `frontend`, and every worker/scheduler with that
+     exact tag; then require the application health check to pass.
 
 ### Fast-track backend (`make deploy-backend`)
 Rebuild + push backend image → `deploy-restart`: pull `web`, apply Alembic,
-recreate `web worker-chatbot worker-ingest worker-followup scheduler`. No compose
-sync, no bootstrap. A new worker service such as `worker-persistence` requires a
-human-approved full deployment (or an equivalent manually reviewed Compose rollout)
-before it can be recreated by this path.
+recreate `web worker-chatbot worker-persistence worker-ingest worker-followup
+scheduler` with the exact committed tag. No compose sync or bootstrap.
 
 ### Fast-track frontend (`make deploy-frontend`)
 Rebuild + push frontend image → `deploy-restart-frontend`: pull `frontend`,
@@ -98,7 +97,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0033_bot_runs_started_at_index` (12 Jul 2026).
+- **HEAD:** `0045_runtime_authority_stamps` (15 Jul 2026).
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.

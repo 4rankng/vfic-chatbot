@@ -64,9 +64,6 @@ async def test_enqueue_outbox_calls_insert_with_correct_fields(monkeypatch):
             captured["executed"] = True
             return _FakeResult()
 
-    # Patch the pg_insert path to be a no-op so we can call enqueue_outbox
-    # without a real DB. The function already swallows exceptions, so if the
-    # insert path raises, we get None back.
     row = await outbox_service.enqueue_outbox(
         _FakeDB(),
         message_id=42,
@@ -76,9 +73,10 @@ async def test_enqueue_outbox_calls_insert_with_correct_fields(monkeypatch):
         zalo_message_id="zm1",
     )
     # The fake execute returns None from scalar_one_or_none; enqueue returns it.
-    # If the insert path raised, enqueue swallows and returns None. Both are
-    # acceptable for this test — we're verifying no crash + correct call shape.
-    assert captured.get("executed") is True or row is None
+    # Building the PostgreSQL upsert must reach execute rather than being
+    # swallowed by the best-effort error handler.
+    assert captured.get("executed") is True
+    assert row is None
 
 
 async def test_enqueue_outbox_swallows_db_errors():

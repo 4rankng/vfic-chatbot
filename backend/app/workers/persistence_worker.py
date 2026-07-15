@@ -55,10 +55,27 @@ async def _persist_candidate_async(job: dict) -> None:
     from app.graph.clients import build_embedder
     from app.services.candidate_extraction import CandidateExtractionService
     from app.services.integration_settings import IntegrationSettingsService
+    from app.services.installation.service import InstallationService
     from app.workers._db import worker_session
 
     try:
         async with worker_session() as db:
+            revision_id = str(job.get("runtime_revision_id") or "")
+            authority_generation = job.get("authority_generation")
+            fingerprint = str(job.get("runtime_fingerprint") or "")
+            stamped = bool(revision_id or authority_generation is not None or fingerprint)
+            if stamped:
+                active = await InstallationService(db).resolve_active()
+                is_current = (
+                    active is not None
+                    and revision_id == str(active.revision.id)
+                    and authority_generation == active.fingerprint.authority_generation
+                    and fingerprint == active.fingerprint.checksum()
+                    and "candidate_intake" in active.revision.capability_ids
+                )
+                if not is_current:
+                    logger.info("candidate extraction suppressed by runtime authority")
+                    return
             openrouter_config = await IntegrationSettingsService(db).resolve_openrouter()
             await CandidateExtractionService.persist(
                 db,

@@ -102,7 +102,7 @@ export const KnowledgeVersionManager = ({ projectId }: { projectId?: string }) =
               <div className="flex items-center justify-between gap-3 rounded-md border p-3">
                 <div>
                   <p className="text-sm font-medium">Phiên bản {version.version_no}</p>
-                  <p className="text-xs text-muted-foreground">Mẫu: {version.template_version_id ?? "Tuyển dụng tích hợp"}</p>
+                  <p className="text-xs text-muted-foreground">Mẫu: {version.template_version_id ?? "Không dùng mẫu"}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{version.status}</Badge>

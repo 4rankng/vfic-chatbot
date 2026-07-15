@@ -495,6 +495,14 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             if lock_owner:
                 await svc.release_lock(conv, lock_owner=lock_owner)
             return {"outcome": "suppressed", "reason": "inactive_runtime_policy"}
+    elif deps.runtime_policy is not None:
+        # A clean cutover never lets pre-authority jobs inherit today's
+        # capabilities.  Tests and explicitly legacy deployments inject no
+        # runtime policy and retain their existing behavior.
+        if await deps.runtime_policy.resolve_active_policy() is not None:
+            if lock_owner:
+                await svc.release_lock(conv, lock_owner=lock_owner)
+            return {"outcome": "suppressed", "reason": "missing_runtime_authority"}
     if lock_owner:
         db_t0 = time.monotonic()
         await deps.db.refresh(conv)
@@ -863,14 +871,21 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 and allow_recruitment_fast_lane
                 and not pure_fast_pleasantry
             ):
-                deps.persist(
-                    {
-                        "chat_id": conv.zalo_chat_id,
-                        "user_text": state.user_text,
-                        "bot_output": candidate,
-                        "conversation_version": state.version_at_start,
-                    }
-                )
+                persist_job = {
+                    "chat_id": conv.zalo_chat_id,
+                    "user_text": state.user_text,
+                    "bot_output": candidate,
+                    "conversation_version": state.version_at_start,
+                }
+                if manifest_policy is not None:
+                    persist_job.update(
+                        {
+                            "runtime_revision_id": manifest_policy.revision_id,
+                            "authority_generation": state.authority_generation,
+                            "runtime_fingerprint": manifest_policy.fingerprint_checksum,
+                        }
+                    )
+                deps.persist(persist_job)
             return {"outcome": outcome_label, "reply": candidate}
 
         timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))

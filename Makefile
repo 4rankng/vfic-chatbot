@@ -1,4 +1,4 @@
-.PHONY: dev deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod
+.PHONY: dev deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod release-check
 
 # Port shared by backend (uvicorn) and frontend (Vite) in local dev — both
 # bind to the same number. Override on the CLI, e.g. `make dev PORT=9000`.
@@ -12,8 +12,16 @@ dev:
 	@echo "=== Starting VFIC dev environment (port $(PORT)) ==="
 	$(MAKE) -C backend dev PORT=$(PORT)
 
+# Release must be committed and validated before any image is pushed or production is touched.
+release-check:
+	@test -z "$$(git status --porcelain)" || { echo "Release blocked: commit or stash all local changes first."; exit 1; }
+	@git diff --check
+	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
+	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest
+	@cd frontend && npm run lint && npm run typecheck && npm run test:unit:app -- --run && npm run build
+
 # Build & push BOTH DockerHub images, then deploy to bot.tingting.vip.
-deploy:
+deploy: release-check backup
 	@echo "=== Building & pushing frontend ==="
 	cd frontend && make push
 	@echo "=== Building & pushing backend ==="
@@ -28,13 +36,13 @@ adminer:
 
 # Fast-track: rebuild + push + rolling restart backend only (web + workers + scheduler).
 # Skips frontend build and full-stack bootstrap (compose sync, migrations, etc.).
-deploy-backend:
+deploy-backend: release-check backup
 	@echo "=== Deploying backend only ==="
 	cd backend && make push
 	$(MAKE) -C backend deploy-restart
 
 # Fast-track: rebuild + push + rolling restart frontend only.
-deploy-frontend:
+deploy-frontend: release-check
 	@echo "=== Deploying frontend only ==="
 	cd frontend && make push
 	$(MAKE) -C backend deploy-restart-frontend

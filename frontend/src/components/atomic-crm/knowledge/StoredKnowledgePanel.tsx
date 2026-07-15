@@ -46,11 +46,6 @@ const ENTITY_LABELS: Record<string, string> = {
   stop: "Điểm đón",
 };
 
-const CANONICAL_TEXT_LABELS: Record<string, string> = {
-  "Company Overview": "Tổng quan công ty",
-  "LG Display Worker Guide": "Hướng dẫn công nhân LG Display",
-};
-
 const labelFromMap = (
   value: string | null | undefined,
   labels: Record<string, string>,
@@ -59,11 +54,7 @@ const labelFromMap = (
   return key ? (labels[key] ?? key) : "";
 };
 
-export const localizeKnowledgeText = (value: string) =>
-  Object.entries(CANONICAL_TEXT_LABELS).reduce(
-    (text, [source, label]) => text.replaceAll(source, label),
-    value,
-  );
+export const localizeKnowledgeText = (value: string) => value;
 
 const COMPACT_MARKDOWN_CLASS =
   "[&_h1]:text-base [&_h2]:text-base [&_h3]:text-sm [&_h4]:text-sm [&_h5]:text-sm [&_h6]:text-sm [&_pre]:p-3 [&_table]:text-xs";

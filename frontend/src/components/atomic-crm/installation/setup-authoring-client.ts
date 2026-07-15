@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { apiJson } from "../providers/rest/api";
+import { ApiError, apiJson, apiRequest } from "../providers/rest/api";
 
 const uuidSchema = z.string().uuid();
 const checksumSchema = z.string().regex(/^[0-9a-f]{64}$/);
@@ -51,6 +51,14 @@ export const createSetupPersona = async (input: {
     body: input,
   });
   return personaOptionSchema.parse(value);
+};
+
+export const getSetupPersonaTemplate = async (): Promise<string> => {
+  const response = await apiRequest("/api/v1/knowledge/personas/format/template");
+  if (!response.ok) {
+    throw new ApiError(response.status, "Không tải được mẫu Agent.");
+  }
+  return response.text();
 };
 
 export const listSetupPersonaVersions = async (
