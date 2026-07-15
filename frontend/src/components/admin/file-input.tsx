@@ -250,9 +250,9 @@ export const FileInput = (props: FileInputProps) => {
         {placeholder ? (
           placeholder
         ) : multiple ? (
-          <p className="text-sm">{translate(labelMultiple)}</p>
+          <p className="text-body">{translate(labelMultiple)}</p>
         ) : (
-          <p className="text-sm">{translate(labelSingle)}</p>
+          <p className="text-body">{translate(labelSingle)}</p>
         )}
       </div>
 

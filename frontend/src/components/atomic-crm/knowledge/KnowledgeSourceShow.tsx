@@ -27,7 +27,7 @@ const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
     <span className="text-caption uppercase tracking-wide text-muted-foreground">
       {label}
     </span>
-    <span className="text-sm">{value ?? "—"}</span>
+    <span className="text-body">{value ?? "—"}</span>
   </div>
 );
 
@@ -61,14 +61,14 @@ const KnowledgeSourceShowContent = () => {
     <div className="mx-auto mt-4 max-w-3xl">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-4 py-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-section-title">
             <BookOpen className="size-4 text-muted-foreground" />
             {source.file_name}
           </CardTitle>
           <div className="flex items-center gap-2">
             <span
               className={cn(
-                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
+                "inline-flex items-center rounded-full px-2.5 py-0.5 text-helper font-semibold uppercase tracking-wide",
                 stageTone(source.stage, source.status),
               )}
             >
@@ -166,7 +166,7 @@ const KnowledgeSourceShowContent = () => {
 export const KnowledgeSourceShow = () => (
   <ShowBase>
     <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">Cơ sở kiến thức</h2>
+      <h2 className="mr-auto text-content-title font-semibold">Cơ sở kiến thức</h2>
     </TopToolbar>
     <KnowledgeSourceShowContent />
   </ShowBase>

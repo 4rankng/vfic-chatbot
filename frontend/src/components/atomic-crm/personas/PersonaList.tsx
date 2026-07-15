@@ -630,7 +630,7 @@ const PersonaEmptyWorkspace = ({ onCreate }: { onCreate: () => void }) => (
         </p>
         <Button
           type="button"
-          className="h-9 rounded-[8px] text-sm"
+          className="h-9 rounded-[8px] text-button"
           onClick={onCreate}
         >
           <Plus className="size-4" />

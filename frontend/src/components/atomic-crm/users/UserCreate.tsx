@@ -46,7 +46,7 @@ export const UserCreate = () => {
     <CreateBase resource="users">
       <div className="mx-auto w-full max-w-2xl">
         <TopToolbar className="items-center">
-          <h2 className="mr-auto text-xl font-semibold">Tạo tài khoản</h2>
+          <h2 className="mr-auto text-content-title font-semibold">Tạo tài khoản</h2>
         </TopToolbar>
         <Card className="mt-4 w-full">
           <CardContent className="pt-6">

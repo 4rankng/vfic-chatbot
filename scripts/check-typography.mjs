@@ -13,6 +13,8 @@
  *   - Letter-spacing arbitrary: tracking-[0.08em] (not a font size)
  *
  * Flagged:
+ *   - Raw Tailwind font-size utilities: text-sm, text-xs, text-base, text-lg,
+ *     text-xl, text-2xl, text-3xl (swept out 2026-07-15 — use a token instead)
  *   - Arbitrary font-size utilities: text-[11px], text-[1.25rem], text-[clamp(...)]
  *   - Raw px/rem font-size in component CSS (outside the allowlist files)
  *
@@ -89,6 +91,19 @@ const violations = [];
 const ARBITRARY_FS = /text-\[(?!var\()[\d.]+(?:px|rem|em|pt)\]/;
 const ARBITRARY_FS_CLAMP = /text-\[clamp\(/;
 
+// Raw Tailwind font-size utility classes (the built-in scale). These were swept
+// out of the codebase on 2026-07-15 in favor of semantic tokens (text-page-title,
+// text-body, text-helper, ...). Matches bare OR variant-prefixed forms
+// (text-sm, md:text-lg, hover:text-xs, group-hover:text-base). Word-boundary on
+// both sides so it never matches text-small / text-slate-500 / text-xxl-foo.
+const RAW_SIZE_UTILITIES = ["sm", "xs", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl", "8xl", "9xl"];
+const RAW_FS_CLASS = new RegExp(
+  // optional variant prefix (e.g. "md:", "hover:", "group-hover:", "max-sm:")
+  "(?:\\b[a-z0-9-]+:)*" +
+  // the utility, not preceded by "-" (to skip text-9 → text-\[9\]) and at a class boundary
+  `text-(?:${RAW_SIZE_UTILITIES.join("|")})\\b`,
+);
+
 for (const rel of files) {
   const full = join(ROOT, rel);
   let content;
@@ -101,6 +116,25 @@ for (const rel of files) {
 
   lines.forEach((line, i) => {
     const lineno = i + 1;
+
+    // Raw Tailwind font-size utility classes (text-sm, text-lg, md:text-xl, ...).
+    // Skip the token-owner CSS (index.css owns the @theme text-* definitions and
+    // may reference the raw names in comments/aliases) and legacy CSS surfaces.
+    if (
+      !CSS_ALLOWLIST.has(rel) &&
+      !isLegacy(rel) &&
+      RAW_FS_CLASS.test(line)
+    ) {
+      const match = line.match(RAW_FS_CLASS);
+      violations.push({
+        file: rel,
+        line: lineno,
+        kind: "raw-tailwind-font-size-utility",
+        detail: match[0],
+        source: line.trim(),
+      });
+    }
+
     // Tailwind arbitrary font-size utilities (JSX + CSS).
     if (ARBITRARY_FS.test(line) || ARBITRARY_FS_CLAMP.test(line)) {
       const match =

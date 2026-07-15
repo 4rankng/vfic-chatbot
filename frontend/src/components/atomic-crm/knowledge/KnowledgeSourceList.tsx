@@ -161,7 +161,7 @@ const KnowledgeSourceListContent = () => {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Tìm tài liệu, nguồn, tóm tắt..."
-              className="h-10 rounded-[9px] border-border bg-card pl-9 text-sm"
+              className="h-10 rounded-[9px] border-border bg-card pl-9 text-control"
             />
           </div>
           <div className="knowledge-filter-actions">
@@ -262,7 +262,7 @@ const SourceSelector = ({
           value={selectedSource ? String(selectedSource.id) : undefined}
           onValueChange={onSelect}
         >
-          <SelectTrigger className="h-10 w-full rounded-[9px] border-border bg-background text-sm md:w-[380px] lg:w-[460px]">
+          <SelectTrigger className="h-10 w-full rounded-[9px] border-border bg-background text-control md:w-[380px] lg:w-[460px]">
             <SelectValue placeholder="Chọn nguồn kiến thức" />
           </SelectTrigger>
           <SelectContent className="max-h-96">

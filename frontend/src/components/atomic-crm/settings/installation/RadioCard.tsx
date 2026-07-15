@@ -45,9 +45,9 @@ export const RadioCard = forwardRef<HTMLInputElement, RadioCardProps>(
           className="mt-1 size-4 shrink-0 cursor-pointer border-input text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         />
         <span className="grid min-w-0 gap-0.5">
-          <span className="text-control font-semibold text-foreground">{title}</span>
+          <span className="text-label font-semibold text-foreground">{title}</span>
           {description ? (
-            <span className="text-meta text-muted-foreground">{description}</span>
+            <span className="text-helper text-muted-foreground">{description}</span>
           ) : null}
         </span>
       </label>

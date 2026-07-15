@@ -47,8 +47,8 @@ const V: Record<Variant, VariantConfig> = {
     headerClass: "pb-3",
     contentClass: "px-5 pb-5",
     spinnerClass: "h-[300px]",
-    titleClass: "text-xl",
-    descriptionClass: "text-xs",
+    titleClass: "text-content-title",
+    descriptionClass: "text-helper",
     issueSubtitle: (minutes) => `${minutes} phút chưa cập nhật`,
   },
   mobile: {
@@ -57,7 +57,7 @@ const V: Record<Variant, VariantConfig> = {
     headerClass: "px-4 pb-3 pt-4",
     contentClass: "px-4 pb-4",
     spinnerClass: "h-[220px]",
-    titleClass: "text-base",
+    titleClass: "text-section-title",
     descriptionClass: "text-caption",
     issueSubtitle: (minutes) => `${minutes} phút`,
   },
@@ -145,7 +145,7 @@ const CompactMetric = ({
         {icon}
       </span>
     </div>
-    <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-foreground">
+    <div className="mt-2 font-mono text-content-title font-semibold tracking-tight text-foreground">
       {value}
     </div>
   </div>
@@ -165,7 +165,7 @@ const ProgressRow = ({
   detail?: string;
 }) => (
   <div className="space-y-1.5">
-    <div className="flex items-center justify-between gap-3 text-xs">
+    <div className="flex items-center justify-between gap-3 text-helper">
       <span className="min-w-0 truncate font-semibold text-muted-foreground">
         {label}
       </span>
@@ -216,8 +216,8 @@ const DonutMetric = ({
         </div>
       </div>
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-foreground">{label}</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        <p className="text-body font-semibold text-foreground">{label}</p>
+        <p className="mt-1 text-helper leading-relaxed text-muted-foreground">
           {caption}
         </p>
       </div>
@@ -508,7 +508,7 @@ const KnowledgeStagesCard = ({
 
         <div className="space-y-3">
           {stageBreakdown.length === 0 ? (
-            <p className="rounded-lg border border-border/60 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+            <p className="rounded-lg border border-border/60 bg-muted/20 px-4 py-5 text-body text-muted-foreground">
               Chưa có nguồn kiến thức.
             </p>
           ) : (
@@ -599,19 +599,19 @@ const KnowledgeOpsCard = ({
 
         <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <span className="text-helper font-bold uppercase tracking-wider text-muted-foreground">
               Vấn đề gần đây
             </span>
             <button
               type="button"
-              className="text-xs font-bold text-primary hover:text-primary/80"
+              className="text-helper font-bold text-primary hover:text-primary/80"
               onClick={() => navigate("/knowledge_sources")}
             >
               Mở kiến thức
             </button>
           </div>
           {recentIssues.length === 0 ? (
-            <p className="rounded-md border border-border/60 bg-background/35 px-3 py-4 text-sm text-muted-foreground">
+            <p className="rounded-md border border-border/60 bg-background/35 px-3 py-4 text-body text-muted-foreground">
               Không có nguồn lỗi hoặc đứng quá 10 phút.
             </p>
           ) : (
@@ -627,10 +627,10 @@ const KnowledgeOpsCard = ({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">
+                      <p className="truncate text-body font-semibold text-foreground">
                         {issue.file_name}
                       </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-helper text-muted-foreground">
                         {stageLabel(issue.stage)} ·{" "}
                         {v.issueSubtitle(issue.minutes_since_update)}
                       </p>
@@ -640,7 +640,7 @@ const KnowledgeOpsCard = ({
                     </span>
                   </div>
                   {issue.error ? (
-                    <p className="mt-2 line-clamp-2 text-xs text-destructive">
+                    <p className="mt-2 line-clamp-2 text-helper text-destructive">
                       {issue.error}
                     </p>
                   ) : null}
@@ -651,7 +651,7 @@ const KnowledgeOpsCard = ({
         </div>
 
         {failedJobCount > 0 ? (
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700">
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-helper font-medium text-amber-700">
             {failedJobCount} RQ job failed. Kiểm tra worker/log trước khi retry
             hàng loạt.
           </div>

@@ -32,10 +32,10 @@ const AccessDenied = () => {
     <Card className="mt-4">
       <div className="flex flex-col items-center gap-3 p-10 text-center text-muted-foreground">
         <ShieldOff className="size-10 opacity-60" />
-        <p className="text-base font-medium text-foreground">
+        <p className="text-section-title font-medium text-foreground">
           {translate("ra.page.access_denied", { _: "Access denied" })}
         </p>
-        <p className="max-w-sm text-sm">
+        <p className="max-w-sm text-body">
           {translate("crm.users.access_denied_help", {
             _: "Only administrators can manage users. Ask an admin to grant you access.",
           })}

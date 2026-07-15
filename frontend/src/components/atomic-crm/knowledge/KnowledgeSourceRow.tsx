@@ -248,7 +248,7 @@ const SourceRowActions = ({ source }: { source: KnowledgeSource }) => {
           redirect={false}
           successMessage="Đã xóa tài liệu."
           mutationOptions={{ onSuccess: () => refresh() }}
-          className="h-8 w-full justify-start px-2 text-sm text-destructive hover:bg-destructive/10"
+          className="h-8 w-full justify-start px-2 text-button text-destructive hover:bg-destructive/10"
         />
       </DropdownMenuContent>
     </DropdownMenu>

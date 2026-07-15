@@ -124,7 +124,7 @@ export const ListPagination = ({
       className={`flex items-center justify-end space-x-2 gap-4 ${className}`}
     >
       <div className="hidden md:flex items-center space-x-2">
-        <p className="text-sm font-medium">
+        <p className="text-body font-medium">
           <Translate i18nKey="ra.navigation.page_rows_per_page">
             Rows per page
           </Translate>
@@ -147,7 +147,7 @@ export const ListPagination = ({
           </SelectContent>
         </Select>
       </div>
-      <div className="text-sm text-muted-foreground">{rangeLabel}</div>
+      <div className="text-body text-muted-foreground">{rangeLabel}</div>
       <Pagination className="-w-full -mx-auto">
         <PaginationContent>
           <PaginationItem>
@@ -162,7 +162,7 @@ export const ListPagination = ({
                 <ChevronLeftIcon />
               </PaginationLink>
             ) : (
-              <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium size-9">
+              <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-body font-medium size-9">
                 <ChevronLeftIcon
                   aria-label={translate("ra.navigation.previous", {
                     _: "Previous",
@@ -251,7 +251,7 @@ export const ListPagination = ({
                 <ChevronRightIcon />
               </PaginationLink>
             ) : (
-              <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium size-9">
+              <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-body font-medium size-9">
                 <ChevronRightIcon
                   aria-label={translate("ra.navigation.next", { _: "Next" })}
                   size="16"

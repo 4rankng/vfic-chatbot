@@ -21,7 +21,7 @@ export const LoadingState = ({
       "flex items-center justify-center text-muted-foreground",
       compact
         ? "gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-caption font-medium shadow-xs"
-        : "min-h-40 w-full flex-col gap-3 p-6 text-center text-sm font-medium",
+        : "min-h-40 w-full flex-col gap-3 p-6 text-center text-body font-medium",
       className,
     )}
     role="status"

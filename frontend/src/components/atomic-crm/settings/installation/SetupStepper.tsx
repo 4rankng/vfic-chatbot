@@ -53,7 +53,7 @@ export const SetupStepper = ({
           >
             <span
               className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-full border text-meta font-semibold",
+                "flex size-6 shrink-0 items-center justify-center rounded-full border text-helper font-semibold",
                 item.complete
                   ? isCurrent
                     ? "border-primary-foreground/50 text-primary-foreground"
@@ -68,7 +68,7 @@ export const SetupStepper = ({
             </span>
             <span
               className={cn(
-                "min-w-0 truncate text-control font-medium",
+                "min-w-0 truncate text-nav font-medium",
                 isCurrent ? "text-primary-foreground" : "text-foreground",
               )}
             >

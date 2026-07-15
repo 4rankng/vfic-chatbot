@@ -41,16 +41,16 @@ export const Field = forwardRef<HTMLDivElement, FieldProps>(function Field(
         {required ? `${label} *` : label}
       </Label>
       {description ? (
-        <p className="text-meta text-muted-foreground">{description}</p>
+        <p className="text-helper text-muted-foreground">{description}</p>
       ) : null}
       {children({ id, describedBy, invalid: Boolean(error) })}
       {helper ? (
-        <p id={helperId} className="text-meta text-muted-foreground">
+        <p id={helperId} className="text-helper text-muted-foreground">
           {helper}
         </p>
       ) : null}
       {error ? (
-        <p id={errorId} className="text-meta font-medium text-destructive" role="alert">
+        <p id={errorId} className="text-helper font-medium text-destructive" role="alert">
           {error}
         </p>
       ) : null}

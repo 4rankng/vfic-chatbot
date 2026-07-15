@@ -140,7 +140,7 @@ export const FieldToggle = (props: FieldToggleProps) => {
           onCheckedChange={onToggle}
           name={`${index}`}
         />
-        <span className="text-sm">
+        <span className="text-label">
           <FieldTitle label={label} source={source} resource={resource} />
         </span>
       </label>

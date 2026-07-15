@@ -156,7 +156,7 @@ export const RadioButtonGroupInput = (inProps: RadioButtonGroupInputProps) => {
                 <Label
                   htmlFor={`${id}-${value}`}
                   className={cn(
-                    "text-sm font-normal cursor-pointer",
+                    "text-label font-normal cursor-pointer",
                     isDisabled && "opacity-50 cursor-not-allowed",
                   )}
                 >

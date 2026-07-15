@@ -37,11 +37,11 @@ export const ProjectCreate = () => {
       <ProjectWorkspaceShell>
         <div className="project-workspace-content">
           <div className="project-editor-header rounded-lg border p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="text-helper font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Dự án
             </p>
-            <h1 className="mt-1 text-xl font-semibold">Tạo dự án</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <h1 className="mt-1 text-content-title font-semibold">Tạo dự án</h1>
+            <p className="mt-1 text-body text-muted-foreground">
               Tạo không gian huấn luyện riêng cho một dự án tuyển dụng.
             </p>
           </div>

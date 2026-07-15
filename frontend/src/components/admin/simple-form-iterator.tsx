@@ -226,7 +226,7 @@ export const SimpleFormIteratorItem = React.forwardRef(
           )}
         >
           {label != null && label !== false && (
-            <p className="text-sm text-muted-foreground mb-2">{label}</p>
+            <p className="text-body text-muted-foreground mb-2">{label}</p>
           )}
           <div
             className={cn(

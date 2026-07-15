@@ -242,7 +242,7 @@ export const ProjectFeatures = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="project-feature-detail-toggle h-10 w-full justify-center text-xs text-muted-foreground"
+                  className="project-feature-detail-toggle h-10 w-full justify-center text-helper text-muted-foreground"
                   onClick={() => setShowDetail((s) => !s)}
                   aria-expanded={showDetail}
                 >
@@ -268,10 +268,10 @@ export const ProjectFeatures = ({
                             className="mb-4 break-inside-avoid space-y-2"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <h3 className="text-sm font-semibold">
+                              <h3 className="text-body font-semibold">
                                 {category}
                               </h3>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-helper text-muted-foreground">
                                 {items.length} mục
                               </span>
                             </div>
@@ -299,8 +299,8 @@ export const ProjectFeatures = ({
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-md bg-muted/40 p-5 text-center text-muted-foreground">
                 <Sparkles className="size-5 opacity-50" />
-                <p className="text-sm font-medium">Chưa có đặc điểm sản phẩm</p>
-                <p className="text-xs">
+                <p className="text-body font-medium">Chưa có đặc điểm sản phẩm</p>
+                <p className="text-helper">
                   {editable
                     ? "Chưa có đặc điểm sản phẩm để chỉnh sửa."
                     : "Dự án này chưa có đặc điểm sản phẩm để hiển thị."}
@@ -345,7 +345,7 @@ const ReadinessHero = ({
         <span className="project-readiness-label text-muted-foreground">
           Sẵn sàng tư vấn
         </span>
-        <span className="project-readiness-count text-sm font-semibold tabular-nums">
+        <span className="project-readiness-count text-body font-semibold tabular-nums">
           {readyCount}/{totalSlots} có thể tư vấn
         </span>
       </div>
@@ -413,7 +413,7 @@ const FeatureGroup = ({
               <div
                 key={f?.id ?? `slot-${i}`}
                 className={cn(
-                  "project-feature-chip flex items-start gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-xs",
+                  "project-feature-chip flex items-start gap-2.5 rounded-md border bg-muted/20 px-2.5 py-2 text-helper",
                   ready
                     ? "border-feature-ready/30 bg-feature-ready-soft"
                     : "border-feature-gap-border border-dashed bg-feature-gap-soft",
@@ -440,7 +440,7 @@ const FeatureGroup = ({
           })}
         </div>
       ) : (
-        <p className="project-feature-empty rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+        <p className="project-feature-empty rounded-md border border-dashed bg-muted/20 px-3 py-2 text-helper text-muted-foreground">
           {ready ? "Chưa có mục đầy đủ." : "Không còn mục thiếu thông tin."}
         </p>
       )}
@@ -498,7 +498,7 @@ const FeatureCard = ({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="min-w-0 text-sm font-semibold">
+            <span className="min-w-0 text-body font-semibold">
               {feature.name_vi}
             </span>
             {ready ? (
@@ -523,14 +523,14 @@ const FeatureCard = ({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 rows={3}
-                className="text-sm"
+                className="text-control"
               />
             </div>
           ) : (
             <>
-              <p className="mt-1 text-sm leading-5">{feature.value_text}</p>
+              <p className="mt-1 text-body leading-5">{feature.value_text}</p>
               {showFillHint && (
-                <p className="mt-2 rounded-md border border-dashed bg-muted/25 px-2.5 py-2 text-xs leading-5 text-muted-foreground">
+                <p className="mt-2 rounded-md border border-dashed bg-muted/25 px-2.5 py-2 text-helper leading-5 text-muted-foreground">
                   <span className="font-medium text-foreground">
                     Thiếu thông tin:
                   </span>{" "}

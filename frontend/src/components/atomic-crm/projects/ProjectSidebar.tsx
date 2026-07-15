@@ -66,7 +66,7 @@ const ProjectActionsMenu = ({
           redirect={false}
           successMessage="Đã xóa dự án."
           mutationOptions={{ onSuccess: onDeleted }}
-          className="h-8 w-full justify-start px-2 text-sm text-destructive hover:bg-destructive/10"
+          className="h-8 w-full justify-start px-2 text-button text-destructive hover:bg-destructive/10"
         />
       </DropdownMenuContent>
     </DropdownMenu>

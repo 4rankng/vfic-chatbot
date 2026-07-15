@@ -78,8 +78,8 @@ const ReadyRuntimeApplication = ({
     return (
       <main className="flex min-h-svh items-center justify-center bg-background p-5">
         <section className="w-full max-w-lg rounded-xl border bg-card p-6 text-center shadow-sm">
-          <h1 className="text-xl font-semibold">Không thể mở không gian làm việc</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          <h1 className="text-content-title font-semibold">Không thể mở không gian làm việc</h1>
+          <p className="mt-2 text-body leading-6 text-muted-foreground">
             Cấu hình hiện tại không tương thích hoặc chưa đầy đủ. Hệ thống đã chặn dữ liệu cũ để bảo đảm an toàn.
           </p>
           <Button className="mt-5" onClick={() => void refreshRuntime()}>

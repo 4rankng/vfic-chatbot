@@ -57,7 +57,7 @@ const UserEditContent = () => {
   return (
     <Card className="mt-4 w-full">
       <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-3 text-base">
+        <CardTitle className="flex items-center justify-between gap-3 text-section-title">
           <span>{user.email}</span>
           <span className="flex gap-2">
             <UserRoleBadge />
@@ -91,7 +91,7 @@ export const UserEdit = () => (
   <EditBase>
     <div className="mx-auto w-full max-w-2xl">
       <TopToolbar className="items-center">
-        <h2 className="mr-auto text-xl font-semibold">Chỉnh sửa tài khoản</h2>
+        <h2 className="mr-auto text-content-title font-semibold">Chỉnh sửa tài khoản</h2>
         <Button asChild variant="outline" size="sm">
           <Link to="/users">
             <ArrowLeft className="size-4" />

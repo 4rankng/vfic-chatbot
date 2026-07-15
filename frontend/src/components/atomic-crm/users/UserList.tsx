@@ -36,10 +36,10 @@ const AccessDenied = () => {
     <Card className="mt-4">
       <div className="flex flex-col items-center gap-3 p-10 text-center text-muted-foreground">
         <ShieldOff className="size-10 opacity-60" />
-        <p className="text-base font-medium text-foreground">
+        <p className="text-section-title font-medium text-foreground">
           {translate("ra.page.access_denied", { _: "Access denied" })}
         </p>
-        <p className="max-w-sm text-sm">
+        <p className="max-w-sm text-body">
           {translate("crm.users.access_denied_help", {
             _: "Only administrators can manage users. Ask an admin to grant you access.",
           })}
@@ -89,7 +89,7 @@ const UserListContent = ({
         <h2 className="truncate text-page-title font-bold tracking-tight">
           {title}
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground lg:hidden">
+        <p className="mt-1 text-body text-muted-foreground lg:hidden">
           Quản lý tài khoản và quyền truy cập nội bộ.
         </p>
       </div>
@@ -165,8 +165,8 @@ const UserMobileList = () => {
         <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-muted">
           <UserCog className="size-5 text-muted-foreground" />
         </div>
-        <p className="text-sm font-medium">Chưa có tài khoản nào</p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="text-body font-medium">Chưa có tài khoản nào</p>
+        <p className="mt-1 text-helper text-muted-foreground">
           Tạo tài khoản để phân quyền cho đội tuyển dụng.
         </p>
       </Card>
@@ -179,17 +179,17 @@ const UserMobileList = () => {
         <RecordContextProvider key={user.id} value={user}>
           <Card className="gap-3 overflow-hidden rounded-xl p-4">
             <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-body font-bold text-muted-foreground">
                 <UserRound className="size-5" aria-hidden="true" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-2">
-                  <h3 className="min-w-0 flex-1 truncate text-base font-semibold leading-6">
+                  <h3 className="min-w-0 flex-1 truncate text-section-title font-semibold leading-6">
                     {user.full_name || "Chưa có tên"}
                   </h3>
                   <UserActions />
                 </div>
-                <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-body text-muted-foreground">
                   <Mail className="size-3.5 shrink-0" />
                   <span className="truncate">{user.email}</span>
                 </p>
@@ -199,7 +199,7 @@ const UserMobileList = () => {
               <UserRoleBadge />
               <UserStatusBadge />
             </div>
-            <p className="flex items-center gap-1.5 pl-13 text-xs text-muted-foreground">
+            <p className="flex items-center gap-1.5 pl-13 text-helper text-muted-foreground">
               <CalendarDays className="size-3.5" />
               Tạo {formatDate(user.created_at)}
             </p>

@@ -422,10 +422,10 @@ export const InstallationWizard = () => {
             <>
               <section className="flex flex-col gap-3 border-b border-border pb-6 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-control font-semibold text-foreground">
+                  <h3 className="text-section-title font-semibold text-foreground">
                     Tài liệu tham khảo (tùy chọn)
                   </h3>
-                  <p className="mt-1 text-meta text-muted-foreground">
+                  <p className="mt-1 text-helper text-muted-foreground">
                     Tải tài liệu để chatbot tham khảo. Bạn có thể thêm hoặc thay
                     đổi sau.
                   </p>

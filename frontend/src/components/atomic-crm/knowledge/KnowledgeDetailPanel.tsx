@@ -84,7 +84,7 @@ export const KnowledgeDetailPanel = ({
         <button
           type="button"
           onClick={onBack}
-          className="kb-mono self-start rounded-[9px] px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
+          className="kb-mono self-start rounded-[9px] px-2 py-1 text-button text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
         >
           ← Quay lại danh sách
         </button>
@@ -93,7 +93,7 @@ export const KnowledgeDetailPanel = ({
       {/* Compact identity — one block, no duplicated stats */}
       <div className="flex items-start justify-between gap-3 px-1 sm:px-0">
         <div className="min-w-0">
-          <h3 className="kb-display break-words text-lg text-foreground sm:text-xl">
+          <h3 className="kb-display break-words text-subsection text-foreground sm:text-content-title">
             {source.file_name}
           </h3>
           <p className="kb-mono mt-1 break-words text-meta text-muted-foreground">
@@ -173,7 +173,7 @@ export const KnowledgeDetailPanel = ({
               redirect={false}
               successMessage="Đã xóa tài liệu."
               mutationOptions={{ onSuccess: () => refresh() }}
-              className="h-8 w-full justify-start px-2 text-sm text-destructive hover:bg-destructive/10"
+              className="h-8 w-full justify-start px-2 text-button text-destructive hover:bg-destructive/10"
             />
           </DropdownMenuContent>
         </DropdownMenu>
@@ -182,7 +182,7 @@ export const KnowledgeDetailPanel = ({
       {processing && <PipelineMiniProgress source={source} />}
 
       {source.error && (
-        <div className="rounded-[10px] border border-[var(--kb-rust-soft)] bg-[var(--kb-rust-soft)] p-3 text-sm text-[var(--kb-rust)]">
+        <div className="rounded-[10px] border border-[var(--kb-rust-soft)] bg-[var(--kb-rust-soft)] p-3 text-body text-[var(--kb-rust)]">
           {source.error}
         </div>
       )}
@@ -202,13 +202,13 @@ export const KnowledgeDetailPanel = ({
 
       {/* Digest ticket */}
       <div className="px-1 sm:px-0">
-        <h4 className="kb-display text-sm text-foreground">
+        <h4 className="kb-display text-card-title text-foreground">
           {isCanonicalSource(source) ? "Tóm tắt nguồn" : "Tóm tắt digest"}
         </h4>
         {source.digest_summary ? (
           <div className="mt-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3">
             <p
-              className="text-sm italic leading-6 text-[var(--kb-ink-700)]"
+              className="text-body italic leading-6 text-[var(--kb-ink-700)]"
               style={{ fontFamily: "var(--kb-font-display)" }}
             >
               {localizeKnowledgeText(source.digest_summary)}
@@ -227,10 +227,10 @@ export const KnowledgeDetailPanel = ({
         <button
           type="button"
           onClick={() => setShowPipeline((value) => !value)}
-          className="flex w-full items-center justify-between gap-2 border-y border-border py-3 text-left text-sm font-semibold text-foreground transition-colors hover:text-[var(--kb-teal)] sm:rounded-[10px] sm:border sm:bg-background sm:px-4 sm:hover:bg-secondary"
+          className="flex w-full items-center justify-between gap-2 border-y border-border py-3 text-left text-button font-semibold text-foreground transition-colors hover:text-[var(--kb-teal)] sm:rounded-[10px] sm:border sm:bg-background sm:px-4 sm:hover:bg-secondary"
         >
           <span>Chi tiết pipeline (6 bước)</span>
-          <span className="kb-mono text-xs text-muted-foreground">
+          <span className="kb-mono text-helper text-muted-foreground">
             {pipelinePercent(source)}% ·{" "}
             {isFailed(source)
               ? "Lỗi"
@@ -243,7 +243,7 @@ export const KnowledgeDetailPanel = ({
         </button>
         {showPipeline && (
           <div className="mt-2 border-b border-border pb-4 sm:rounded-[10px] sm:border sm:bg-background sm:p-4">
-            <p className="mb-3 text-xs leading-5 text-muted-foreground">
+            <p className="mb-3 text-helper leading-5 text-muted-foreground">
               {pipelineStateCopy(source)}
             </p>
             <PipelineTimeline source={source} />
@@ -259,7 +259,7 @@ const InfoBlock = ({ label, value }: { label: string; value: string }) => (
     <div className="kb-mono text-badge font-semibold uppercase tracking-[0.08em] text-muted-foreground">
       {label}
     </div>
-    <div className="kb-mono mt-1.5 break-words text-lg font-semibold text-foreground">
+    <div className="kb-mono mt-1.5 break-words text-subsection font-semibold text-foreground">
       {value}
     </div>
   </div>
@@ -268,7 +268,7 @@ const InfoBlock = ({ label, value }: { label: string; value: string }) => (
 const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
   if (isRunning(source)) {
     return (
-      <div className="mt-2 flex items-center gap-2 rounded-[10px] bg-[var(--kb-teal-soft)] p-3 text-sm text-[var(--kb-teal)]">
+      <div className="mt-2 flex items-center gap-2 rounded-[10px] bg-[var(--kb-teal-soft)] p-3 text-body text-[var(--kb-teal)]">
         <RefreshCw className="size-4 animate-spin" />
         {isCanonicalSource(source)
           ? "Đang chuẩn hóa Markdown và tạo đơn vị truy xuất."
@@ -279,7 +279,7 @@ const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
 
   if (isFailed(source)) {
     return (
-      <div className="mt-2 rounded-[10px] bg-[var(--kb-rust-soft)] p-3 text-sm text-[var(--kb-rust)]">
+      <div className="mt-2 rounded-[10px] bg-[var(--kb-rust-soft)] p-3 text-body text-[var(--kb-rust)]">
         Pipeline đã lỗi trước khi tạo tóm tắt. Huấn luyện lại hoặc kiểm tra định
         dạng nguồn nếu lỗi lặp lại.
       </div>
@@ -289,7 +289,7 @@ const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
   return (
     <div className="mt-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3">
       <p
-        className="text-sm italic leading-6 text-[var(--kb-ink-300)]"
+        className="text-body italic leading-6 text-[var(--kb-ink-300)]"
         style={{ fontFamily: "var(--kb-font-display)" }}
       >
         Pipeline chưa trả về tóm tắt cho nguồn này. Tóm tắt sẽ hiện ra ở đây sau

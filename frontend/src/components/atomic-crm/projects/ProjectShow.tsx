@@ -25,8 +25,8 @@ const ProjectShowContent = () => {
     <ProjectWorkspaceShell>
       <div className="project-workspace-content">
         <div className="project-editor-header">
-          <h2 className="mt-1 text-xl font-semibold">{project.name}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h2 className="mt-1 text-content-title font-semibold">{project.name}</h2>
+          <p className="mt-1 text-body text-muted-foreground">
             Xem thẻ danh mục, đặc điểm sản phẩm và FAQ mà Agent dùng trong hội
             thoại tuyển dụng.
           </p>
@@ -34,7 +34,7 @@ const ProjectShowContent = () => {
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader>
-              <CardTitle className="flex items-center justify-between gap-2 text-base">
+              <CardTitle className="flex items-center justify-between gap-2 text-section-title">
                 <span>{project.name}</span>
                 <Badge
                   variant="outline"
@@ -48,27 +48,27 @@ const ProjectShowContent = () => {
                 </Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3 text-sm">
+            <CardContent className="flex flex-col gap-3 text-body">
               <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Mã dự án
                 </div>
                 <div className="font-mono">{project.slug}</div>
               </div>
               <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Tóm tắt
                 </div>
                 <p>{project.summary ?? "—"}</p>
               </div>
               <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Địa điểm
                 </div>
                 <p>{card.location ?? "—"}</p>
               </div>
               <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Vị trí
                 </div>
                 <p>{(card.key_roles ?? []).join(", ") || "—"}</p>

@@ -476,7 +476,7 @@ export const FilterButtonMenuItem = React.forwardRef<
   return (
     <div
       className={cn(
-        "new-filter-item flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm",
+        "new-filter-item flex items-center px-2 py-1.5 text-body cursor-pointer hover:bg-accent rounded-sm",
         filter.props.disabled && "opacity-50 cursor-not-allowed",
       )}
       data-key={filter.props.source}

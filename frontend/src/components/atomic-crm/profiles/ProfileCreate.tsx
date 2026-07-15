@@ -30,7 +30,7 @@ export const ProfileCreate = () => {
   return (
     <CreateBase>
       <TopToolbar>
-        <h2 className="text-xl font-semibold mr-auto">Tạo người dùng</h2>
+        <h2 className="text-content-title font-semibold mr-auto">Tạo người dùng</h2>
       </TopToolbar>
       <Card className="mt-4 max-w-2xl">
         <CardContent className="pt-6">

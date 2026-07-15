@@ -29,8 +29,8 @@ const BotRunRow = ({ run }: { run: BotRun }) => {
         {meta.label}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{preview}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="truncate text-body">{preview}</p>
+        <p className="mt-0.5 text-helper text-muted-foreground">
           {getRelativeTimeString(run.started_at)}
           {dur ? ` · ${dur}` : ""}
         </p>
@@ -66,8 +66,8 @@ const BotRunListContent = () => {
           ) : !data || data.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
               <Inbox className="size-10 opacity-50" />
-              <p className="text-sm font-medium">Chưa có lần chạy bot nào</p>
-              <p className="text-xs">
+              <p className="text-body font-medium">Chưa có lần chạy bot nào</p>
+              <p className="text-helper">
                 Các lần thực thi chatbot tuyển dụng sẽ hiển thị tại đây.
               </p>
             </div>

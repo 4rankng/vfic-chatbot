@@ -55,11 +55,11 @@ const KnowledgeSourceEditContent = () => {
   return (
     <Card className="mt-4 max-w-2xl">
       <CardHeader>
-        <CardTitle className="text-base">Thông tin tài liệu</CardTitle>
+        <CardTitle className="text-section-title">Thông tin tài liệu</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
+          <label className="flex flex-col gap-1.5 text-label font-medium">
             Tên tài liệu
             <Input
               value={fileName}
@@ -67,7 +67,7 @@ const KnowledgeSourceEditContent = () => {
               required
             />
           </label>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
+          <label className="flex flex-col gap-1.5 text-label font-medium">
             Dự án
             <ProjectPicker value={projectId} onChange={setProjectId} />
           </label>
@@ -83,7 +83,7 @@ const KnowledgeSourceEditContent = () => {
 export const KnowledgeSourceEdit = () => (
   <EditBase>
     <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">
+      <h2 className="mr-auto text-content-title font-semibold">
         Chỉnh sửa cơ sở kiến thức
       </h2>
     </TopToolbar>

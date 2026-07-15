@@ -95,7 +95,7 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
   return (
     <Card className="mt-4 max-w-2xl">
       <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-2 text-base">
+        <CardTitle className="flex items-center justify-between gap-2 text-section-title">
           <span>Agent chatbot</span>
           <Badge variant="outline" className="gap-1">
             <Bot className="size-3.5" />
@@ -186,7 +186,7 @@ export const ProjectPersonaPanel = ({ project }: ProjectPersonaPanelProps) => {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-body text-muted-foreground">
               {selected === GLOBAL_DEFAULT_VALUE
                 ? "Dự án này dùng Agent mặc định toàn hệ thống."
                 : `Dự án này sẽ dùng "${selectedPersona?.name ?? "Agent đã chọn"}" thay cho mặc định.`}

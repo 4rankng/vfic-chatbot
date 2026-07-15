@@ -25,7 +25,7 @@ import {
 import { useCompiledRuntime } from "../capabilities/runtime-context";
 
 const selectClassName =
-  "min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "min-h-11 w-full rounded-md border border-input bg-background px-3 text-control outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const WorkflowVersionInput = () => {
   const { packKey } = useCompiledRuntime();
@@ -104,7 +104,7 @@ const WorkflowVersionInput = () => {
           </option>
         ))}
       </select>
-      {loadingDefinition ? <p className="text-sm text-muted-foreground">Đang tải trường thông tin…</p> : null}
+      {loadingDefinition ? <p className="text-body text-muted-foreground">Đang tải trường thông tin…</p> : null}
       {definition ? <CaseAttributeInputs schema={definition.case_attribute_schema} /> : null}
       {error ? (
         <Alert variant="destructive">
@@ -128,7 +128,7 @@ const CaseAttributeInputs = ({
   if (entries.length === 0) return null;
   return (
     <fieldset className="grid gap-4 rounded-md border p-4">
-      <legend className="px-1 text-sm font-semibold">Thông tin theo quy trình</legend>
+      <legend className="px-1 text-label font-semibold">Thông tin theo quy trình</legend>
       {entries.map(([key, definition]) => {
         const source = `attributes.${key}`;
         const validate = validationFor(definition);

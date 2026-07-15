@@ -162,7 +162,7 @@ export const AutocompleteArrayInput = (
           shouldFilter={!isFromReference}
           className="overflow-visible bg-transparent"
         >
-          <div className="group rounded-md bg-transparent dark:bg-input/30 border border-input px-3 py-1.75 text-sm transition-all ring-offset-background focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
+          <div className="group rounded-md bg-transparent dark:bg-input/30 border border-input px-3 py-1.75 text-control transition-all ring-offset-background focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
             <div className="flex flex-wrap gap-1">
               {selectedChoices.map((choice) => (
                 <Badge key={getChoiceValue(choice)} variant="outline">

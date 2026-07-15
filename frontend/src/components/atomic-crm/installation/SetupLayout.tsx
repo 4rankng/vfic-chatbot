@@ -81,8 +81,8 @@ export const SetupLayout = ({ children }: { children: ReactNode }) => {
 const WaitingForAdministrator = () => (
   <section className="mx-auto max-w-xl rounded-xl border bg-card p-6 sm:p-8">
     <CircleAlert className="size-6" aria-hidden="true" />
-    <h1 className="mt-4 text-xl font-semibold">Đang chờ quản trị viên thiết lập</h1>
-    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+    <h1 className="mt-4 text-content-title font-semibold">Đang chờ quản trị viên thiết lập</h1>
+    <p className="mt-2 text-body leading-6 text-muted-foreground">
       Không gian làm việc sẽ mở sau khi quản trị viên hoàn tất và xác nhận cấu hình.
     </p>
   </section>
@@ -91,8 +91,8 @@ const WaitingForAdministrator = () => (
 const RuntimeRecovery = ({ title, description }: { title: string; description: string }) => (
   <section className="mx-auto max-w-xl rounded-xl border bg-card p-6 sm:p-8" role="alert">
     <CircleAlert className="size-6" aria-hidden="true" />
-    <h1 className="mt-4 text-xl font-semibold">{title}</h1>
-    <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+    <h1 className="mt-4 text-content-title font-semibold">{title}</h1>
+    <p className="mt-2 text-body leading-6 text-muted-foreground">{description}</p>
   </section>
 );
 

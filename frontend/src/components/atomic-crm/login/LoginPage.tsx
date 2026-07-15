@@ -43,13 +43,13 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
             <ShieldCheck className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <p className="break-words text-sm font-medium text-muted-foreground">
+            <p className="break-words text-body font-medium text-muted-foreground">
               {activeName ?? "Thiết lập hệ thống"}
             </p>
-            <h1 id="login-title" className="mt-1 text-2xl font-semibold tracking-tight">
+            <h1 id="login-title" className="mt-1 text-page-title font-semibold tracking-tight">
               Đăng nhập quản trị
             </h1>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            <p className="mt-2 text-body leading-6 text-muted-foreground">
               Đăng nhập bằng tài khoản đã được quản trị viên cấp.
             </p>
           </div>
@@ -64,7 +64,7 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
             {!loading ? <ArrowRight /> : null}
           </Button>
         </Form>
-        <p className="mt-5 text-center text-sm text-muted-foreground">
+        <p className="mt-5 text-center text-body text-muted-foreground">
           <Link to="/forgot-password" className="font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4">
             Quên mật khẩu?
           </Link>

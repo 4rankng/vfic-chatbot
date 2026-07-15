@@ -44,25 +44,31 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --transition: 0.3s var(--ease);
 
-  /* Typography hierarchy.
-     Keep sizes semantic and centralized. Message/body text is the anchor;
-     page titles, card titles, rows, controls, labels, and metadata step from it. */
+  /* Typography hierarchy — single source of truth.
+     These crm-/chat- aliases now POINT AT the canonical rem scale in index.css
+     (--fs-* / --text-* @theme tokens) instead of holding their own px literals.
+     The workspace/inbox modules therefore share one typographic scale with the
+     rest of the app and can no longer drift (the prior 13.5px control / 24px
+     page-title divergence is gone). Role mapping:
+       display→page-title(28), page-title→page-title, section-title→section-title,
+       card/row/message/body→body, body-sm→body-sm, meta→helper, caption/badge→caption,
+       control→control, input→input. */
   --crm-font-family:
     Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  --crm-fs-display: 28px;
-  --crm-fs-page-title: 24px;
-  --crm-fs-section-title: 16px;
-  --crm-fs-card-title: 14px;
-  --crm-fs-row-title: 14px;
-  --crm-fs-message: 14px;
-  --crm-fs-body: 14px;
-  --crm-fs-body-sm: 13px;
-  --crm-fs-meta: 12px;
-  --crm-fs-caption: 11.5px;
-  --crm-fs-badge: 11.5px;
-  --crm-fs-control: 13.5px;
-  --crm-fs-input: 14px;
+  --crm-fs-display: var(--fs-page-title);
+  --crm-fs-page-title: var(--fs-page-title);
+  --crm-fs-section-title: var(--fs-section-title);
+  --crm-fs-card-title: var(--fs-card-title);
+  --crm-fs-row-title: var(--fs-row-title);
+  --crm-fs-message: var(--fs-body);
+  --crm-fs-body: var(--fs-body);
+  --crm-fs-body-sm: var(--fs-body-sm);
+  --crm-fs-meta: var(--fs-helper);
+  --crm-fs-caption: var(--fs-caption);
+  --crm-fs-badge: var(--fs-badge);
+  --crm-fs-control: var(--fs-control);
+  --crm-fs-input: var(--fs-input);
   --crm-control-height-sm: 32px;
   --crm-control-height-md: 40px;
   --crm-control-height-touch: 44px;
@@ -86,8 +92,8 @@
   --chat-font-family: var(--crm-font-family);
   --chat-fs-page-title: var(--crm-fs-page-title);
   --chat-fs-section-title: var(--crm-fs-section-title);
-  --chat-fs-list-title: 14px;
-  --chat-fs-list-preview: 13px;
+  --chat-fs-list-title: var(--fs-card-title);
+  --chat-fs-list-preview: var(--fs-body-sm);
   --chat-fs-message: var(--crm-fs-message);
   --chat-fs-body: var(--crm-fs-body);
   --chat-fs-meta: var(--crm-fs-meta);

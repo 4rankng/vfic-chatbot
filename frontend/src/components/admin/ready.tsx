@@ -24,7 +24,7 @@ export const Ready = () => (
     >
       <ScanFace className="w-32 h-32 mb-4" />
       <h1 className="text-page-title mb-4">Welcome to shadcn-admin-kit</h1>
-      <div className="text-lg opacity-75">
+      <div className="text-subsection opacity-75">
         Your application is properly configured.
         <br />
         Now you can add a &lt;Resource&gt; as child of
@@ -32,19 +32,19 @@ export const Ready = () => (
       </div>
     </div>
     <div className="flex h-[20vh] bg-zinc-100 text-black items-center justify-evenly">
-      <div className="text-xl">
+      <div className="text-content-title">
         <a href="https://marmelab.com/shadcn-admin-kit/docs">
           <BookOpenText className="inline mr-4 w-10 h-10" />
           Documentation
         </a>
       </div>
-      <div className="text-xl">
+      <div className="text-content-title">
         <a href="http://marmelab.com/shadcn-admin-kit/demo">
           <ChevronsLeftRight className="inline mr-4 w-10 h-10" />
           Demo
         </a>
       </div>
-      <div className="text-xl">
+      <div className="text-content-title">
         <a href="https://github.com/marmelab/shadcn-admin-kit">
           <GitBranch className="inline mr-4 w-10 h-10" />
           GitHub

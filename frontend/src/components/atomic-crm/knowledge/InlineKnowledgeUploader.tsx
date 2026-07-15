@@ -97,7 +97,7 @@ export const InlineKnowledgeUploader = () => {
             <h4 className="text-subsection font-semibold leading-6 text-foreground">
               Bắt đầu bằng một nguồn kiến thức
             </h4>
-            <p className="mt-1 max-w-[34rem] text-sm leading-6 text-muted-foreground">
+            <p className="mt-1 max-w-[34rem] text-body leading-6 text-muted-foreground">
               Gắn tệp Markdown/TXT theo mẫu, FAQ hoặc Word DOCX vào dự án để
               agent truy xuất sau khi pipeline xử lý xong.
             </p>
@@ -118,7 +118,7 @@ export const InlineKnowledgeUploader = () => {
             <label className="kb-mono text-caption font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               2. Tệp nguồn
             </label>
-            <span className="hidden text-xs text-muted-foreground sm:inline">
+            <span className="hidden text-helper text-muted-foreground sm:inline">
               Markdown, TXT hoặc DOCX
             </span>
           </div>
@@ -149,12 +149,12 @@ export const InlineKnowledgeUploader = () => {
               <span className="flex size-12 items-center justify-center rounded-[10px] bg-card text-[var(--kb-teal)] shadow-[inset_0_0_0_1px_var(--border)]">
                 <UploadCloud className="size-5" />
               </span>
-              <p className="mt-3 text-sm font-semibold text-foreground">
+              <p className="mt-3 text-body font-semibold text-foreground">
                 {isDragActive
                   ? "Thả tệp vào đây"
                   : "Kéo thả hoặc bấm để chọn tệp"}
               </p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground sm:hidden">
+              <p className="mt-1 text-helper leading-5 text-muted-foreground sm:hidden">
                 Tệp Markdown, TXT hoặc Word DOCX.
               </p>
             </div>
@@ -162,7 +162,7 @@ export const InlineKnowledgeUploader = () => {
         </div>
 
         {validationErrors.length > 0 && (
-          <div className="rounded-[10px] border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <div className="rounded-[10px] border border-destructive/30 bg-destructive/10 p-3 text-body text-destructive">
             <p className="font-medium">Tệp chưa đúng định dạng:</p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {validationErrors.map((error) => (
@@ -179,7 +179,7 @@ export const InlineKnowledgeUploader = () => {
                 <FileText className="size-4" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">
+                <p className="truncate text-row-title font-semibold text-foreground">
                   {file.name}
                 </p>
                 <p className="kb-mono mt-0.5 text-caption text-[var(--kb-teal)]">
@@ -199,7 +199,7 @@ export const InlineKnowledgeUploader = () => {
               </Button>
             </div>
           ) : (
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-helper leading-5 text-muted-foreground">
               Chọn dự án và một tệp nguồn để bật nút tải lên.
             </p>
           )}

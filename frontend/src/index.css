@@ -85,24 +85,25 @@
    utility (e.g. text-page-title) AND a :root CSS var. Semantic role names,
    never raw sizes — add new roles here, not one-off values in components.
 
-   Fluid roles use clamp(min, preferred, max) so headings can never balloon;
-   the mobile html=17px root boost scales fixed roles uniformly, replacing
-   the old per-token px mobile overrides. */
+   Root font-size is fixed at 16px (see the html rule in @layer base below).
+   Mobile scale is applied with a (max-width:767px) :root override, NOT by
+   changing the html root size, so rem tokens stay predictable everywhere.
+
+   Fluid roles (display/page-title/metric) use clamp(min, preferred, max) so
+   large headings scale gently with the viewport without ballooning. Their
+   clamp() max is rem-based and therefore caps correctly against the fixed
+   16px root. */
 @theme {
-  /* Fluid roles — page titles and metrics that may flex with viewport.
-     Wrapped in min() with an ABSOLUTE px ceiling so the mobile html=17px
-     root boost can NEVER push them past the documented cap. Without the px
-     cap, 2rem at 17px root = 34px (the exact outlier class this migration
-     killed). The clamp() alone is not enough — its max is rem-based too. */
-  --text-display: min(clamp(1.5rem, 1.25rem + 1vw, 2rem), 32px);
+  /* Fluid roles — page titles and metrics that may flex with viewport. */
+  --text-display: clamp(1.5rem, 1.25rem + 1vw, 2rem);
   --text-display--line-height: 1.15;
   --text-display--letter-spacing: -0.01em;
 
-  --text-page-title: min(clamp(1.375rem, 1.25rem + 0.5vw, 1.5rem), 24px);
-  --text-page-title--line-height: 1.2;
+  --text-page-title: clamp(1.375rem, 1.275rem + 0.5vw, 1.75rem);
+  --text-page-title--line-height: 1.2857; /* 36px at 28px desktop */
   --text-page-title--letter-spacing: -0.01em;
 
-  --text-metric: min(clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem), 24px);
+  --text-metric: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
   --text-metric--line-height: 1.15;
   --text-metric--letter-spacing: -0.01em;
 
@@ -111,11 +112,14 @@
   --text-content-title--line-height: 1.4;
   --text-content-title--letter-spacing: -0.01em;
 
-  --text-section-title: 1rem;
-  --text-section-title--line-height: 1.3;
+  --text-section-title: 1.25rem;
+  --text-section-title--line-height: 1.4; /* 28px at 20px desktop */
 
-  --text-subsection: 0.9375rem;
-  --text-subsection--line-height: 1.3;
+  --text-subsection: 1.125rem;
+  --text-subsection--line-height: 1.3333; /* 24px at 18px desktop */
+
+  --text-nav: 0.9375rem; /* 15px */
+  --text-nav--line-height: 1.4667; /* 22px */
 
   --text-card-title: 0.875rem;
   --text-card-title--line-height: 1.3;
@@ -124,31 +128,40 @@
   --text-row-title--line-height: 1.25;
 
   --text-body: 0.875rem;
-  --text-body--line-height: 1.45;
+  --text-body--line-height: 1.4286; /* 20px at 14px desktop */
 
   --text-body-sm: 0.8125rem;
-  --text-body-sm--line-height: 1.45;
+  --text-body-sm--line-height: 1.4545; /* 18px */
 
   --text-control: 0.875rem;
-  --text-control--line-height: 1.25;
+  --text-control--line-height: 1.4286; /* 20px at 14px desktop */
+
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.4286; /* 20px at 14px desktop */
+
+  --text-button: 0.875rem;
+  --text-button--line-height: 1.4286; /* 20px at 14px desktop */
 
   /* NOTE: no --text-input utility. The name collides with --color-input
      (Tailwind's text-input resolves to color: var(--input), not font-size),
      which silently recolors <Input>/<Textarea> to the border token and fails
-     WCAG contrast. Inputs use text-sm (14px = the scale value) directly;
-     CSS consumers use var(--fs-input) below. Do not reintroduce --text-input.
+     WCAG contrast. Inputs use text-control directly; CSS consumers use
+     var(--fs-input) below. Do not reintroduce --text-input.
      Other unsafe names (all claimed by --color-*): foreground, background,
      card, popover, primary, secondary, muted, accent, destructive, border,
      ring, input. */
 
+  --text-helper: 0.75rem; /* 12px */
+  --text-helper--line-height: 1.5; /* 18px at 12px desktop */
+
   --text-meta: 0.75rem;
-  --text-meta--line-height: 1.3;
+  --text-meta--line-height: 1.5; /* 18px */
 
   --text-caption: 0.71875rem;
-  --text-caption--line-height: 1.25;
+  --text-caption--line-height: 1.4545; /* 16px */
 
   --text-badge: 0.71875rem;
-  --text-badge--line-height: 1.25;
+  --text-badge--line-height: 1.4545;
 }
 
 :root {
@@ -161,12 +174,16 @@
   --fs-content-title: var(--text-content-title);
   --fs-section-title: var(--text-section-title);
   --fs-subsection: var(--text-subsection);
+  --fs-nav: var(--text-nav);
   --fs-card-title: var(--text-card-title);
   --fs-row-title: var(--text-row-title);
   --fs-body: var(--text-body);
   --fs-body-sm: var(--text-body-sm);
   --fs-control: var(--text-control);
-  --fs-input: var(--text-control); /* input/textarea use text-sm directly; CSS consumers use this var */
+  --fs-input: var(--text-control); /* input/textarea use text-control; CSS consumers use this var */
+  --fs-label: var(--text-label);
+  --fs-button: var(--text-button);
+  --fs-helper: var(--text-helper);
   --fs-meta: var(--text-meta);
   --fs-caption: var(--text-caption);
   --fs-badge: var(--text-badge);
@@ -375,16 +392,34 @@ input {
   cursor: text;
 }
 
-/* Prevent mobile zoom on input focus by ensuring 16px minimum font size.
-   Root font-size stays at 16px on mobile so design tokens (which use
-   --text-* rem roles defined in @theme) match desktop exactly. Only the
-   input/textarea/select min-size is forced, purely to prevent iOS Safari
-   from zooming the viewport on focus. */
+/* Mobile typography scale. The root stays 16px (so rem math is identical to
+   desktop); instead we step the role tokens down on small screens to match the
+   compact mobile spec. This is a single, centralized override — components do
+   not set their own mobile font sizes.
+
+   Form controls (input/textarea/select) are kept at 16px on touch so iOS
+   Safari does not zoom the viewport on focus; the control/label tokens are
+   overridden to 1rem (16px) below only for that purpose. */
 @media screen and (max-width: 767px) {
-  input,
-  textarea,
-  select {
-    font-size: 16px !important;
+  :root {
+    --text-display: 1.5rem; /* 24px */
+    --text-page-title: 1.375rem; /* 22px */
+    --text-metric: 1.25rem; /* 20px */
+    --text-content-title: 1.125rem; /* 18px */
+    --text-section-title: 1.125rem; /* 18px */
+    --text-subsection: 1rem; /* 16px */
+    --text-nav: 0.8125rem; /* 13px */
+    --text-card-title: 0.875rem; /* 14px */
+    --text-row-title: 0.875rem; /* 14px */
+    --text-body: 0.75rem; /* 12px */
+    --text-body-sm: 0.75rem; /* 12px */
+    --text-control: 1rem; /* 16px — iOS focus-zoom safe */
+    --text-label: 1rem; /* 16px — iOS focus-zoom safe */
+    --text-button: 0.8125rem; /* 13px */
+    --text-helper: 0.6875rem; /* 11px */
+    --text-meta: 0.6875rem; /* 11px */
+    --text-caption: 0.625rem; /* 10px */
+    --text-badge: 0.625rem; /* 10px */
   }
 }
 
@@ -1052,13 +1087,37 @@ input[type="time"] {
   * {
     @apply border-border outline-ring/50;
   }
+  /* Pin the root font-size at 16px so every rem token is predictable. Keep
+     text inflation under control on PWAs/mobile Safari: 100% lets users zoom
+     but stops the browser from auto-inflating text in landscape/pwa mode. */
+  html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-synthesis: none;
+  }
   body {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
     @apply bg-background text-foreground font-sans;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Form controls inherit the document font instead of the UA stylesheet's
+     monospace/serif defaults. This removes the need for the previous global
+     16px !important zoom hack — controls now pick up the control/label tokens
+     at the desktop size and the mobile :root scale on touch. */
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
   }
 }
 
 body {
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   background-color: var(--background);
   background-image: none;
 }

@@ -185,7 +185,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 ))}
               </div>
             ) : (projects ?? []).length === 0 ? (
-              <div role="status" className="p-4 text-sm text-muted-foreground">
+              <div role="status" className="p-4 text-body text-muted-foreground">
                 Chưa có dự án để gán Agent.
               </div>
             ) : (
@@ -212,7 +212,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                         <span className="block truncate font-medium">
                           {project.name}
                         </span>
-                        <span className="block truncate font-mono text-xs text-muted-foreground">
+                        <span className="block truncate font-mono text-helper text-muted-foreground">
                           {project.slug}
                         </span>
                       </span>

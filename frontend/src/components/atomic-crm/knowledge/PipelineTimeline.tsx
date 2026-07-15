@@ -58,10 +58,10 @@ export const PipelineTimeline = ({ source }: { source: KnowledgeSource }) => {
               )}
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-semibold text-foreground">
+              <span className="block text-body font-semibold text-foreground">
                 {copy.label}
               </span>
-              <span className="mt-0.5 block break-words text-xs leading-5 text-muted-foreground">
+              <span className="mt-0.5 block break-words text-helper leading-5 text-muted-foreground">
                 {copy.description}
               </span>
             </span>

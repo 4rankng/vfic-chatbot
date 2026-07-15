@@ -64,21 +64,21 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="inline-flex items-center gap-2 text-base font-semibold">
+        <h3 className="inline-flex items-center gap-2 text-section-title font-semibold">
           <BusFront className="size-4 text-muted-foreground" />
           Lịch xe đưa đón
         </h3>
         <div className="flex items-center gap-2">
           {loading ? (
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 text-body text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin text-primary" />
               Đang tải…
             </span>
           ) : (
-            <span className="text-sm text-muted-foreground">{total} tuyến</span>
+            <span className="text-body text-muted-foreground">{total} tuyến</span>
           )}
           {total > BUS_ROUTE_PAGE_SIZE && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-helper text-muted-foreground">
               Trang {page}/{pageCount}
             </span>
           )}
@@ -126,7 +126,7 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
       ) : (
         <p
           role="status"
-          className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-sm text-muted-foreground"
+          className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-body text-muted-foreground"
         >
           Chưa có lịch xe đưa đón được trích xuất cho dự án này.
         </p>
@@ -140,7 +140,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h4 className="text-sm font-semibold leading-5">
+          <h4 className="text-body font-semibold leading-5">
             {route.route_name}
           </h4>
           {route.route_no && (
@@ -152,7 +152,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
             </Badge>
           )}
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">
+        <div className="mt-1 text-helper text-muted-foreground">
           {shiftLabel(route.shift)} • {directionLabel(route.direction)}
         </div>
       </div>
@@ -166,7 +166,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
         {route.stops.map((stop) => (
           <span
             key={stop.id}
-            className="inline-flex max-w-full items-center gap-1 rounded-md border bg-card px-2 py-1 text-xs"
+            className="inline-flex max-w-full items-center gap-1 rounded-md border bg-card px-2 py-1 text-helper"
           >
             <span className="max-w-[180px] truncate font-medium">
               {stop.stop_name}
@@ -182,7 +182,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
     ) : (
       <p
         role="status"
-        className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+        className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-helper text-muted-foreground"
       >
         Chưa có điểm đón cho tuyến này.
       </p>

@@ -78,7 +78,7 @@ export const RecordField = <
       {label !== "" && label !== false ? (
         <div
           className={cn(
-            variant === "inline" ? "block min-w-50" : "text-xs",
+            variant === "inline" ? "block min-w-50" : "text-helper",
             "text-muted-foreground",
           )}
         >

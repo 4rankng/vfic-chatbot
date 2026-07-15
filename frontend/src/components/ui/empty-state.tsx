@@ -32,9 +32,9 @@ function EmptyState({
         </div>
       ) : null}
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-card-title font-semibold text-foreground">{title}</p>
         {description ? (
-          <p className="mx-auto max-w-sm text-xs text-muted-foreground">
+          <p className="mx-auto max-w-sm text-helper text-muted-foreground">
             {description}
           </p>
         ) : null}

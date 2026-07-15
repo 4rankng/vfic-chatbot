@@ -270,7 +270,7 @@ const PersonaForm = ({
 
         <section className="persona-edit-identity">
           <div className="persona-edit-name-field">
-            <Label htmlFor="persona-name" className="text-sm font-semibold">
+            <Label htmlFor="persona-name" className="text-label font-semibold">
               Tên Agent{" "}
               <span aria-hidden="true" className="text-destructive">
                 *
@@ -285,10 +285,10 @@ const PersonaForm = ({
                 setName(e.target.value);
                 if (nameError) setNameError(null);
               }}
-              className="h-11 text-base sm:text-sm lg:max-w-xl"
+              className="h-11 text-control lg:max-w-xl"
             />
             {nameError ? (
-              <p role="alert" className="text-xs font-medium text-destructive">
+              <p role="alert" className="text-helper font-medium text-destructive">
                 {nameError}
               </p>
             ) : null}
@@ -458,7 +458,7 @@ const PersonaForm = ({
                             })
                           }
                           placeholder="VD: 10 22 46"
-                          className="h-9 font-mono text-sm"
+                          className="h-9 font-mono text-control"
                         />
                       </div>
 
@@ -500,7 +500,7 @@ const PersonaForm = ({
                 <FileText className="size-4" />
                 Ghi chú riêng tư
               </div>
-              <Label htmlFor="persona-notes" className="text-sm font-semibold">
+              <Label htmlFor="persona-notes" className="text-label font-semibold">
                 Chỉ dùng nội bộ
               </Label>
               <Textarea

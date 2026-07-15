@@ -52,7 +52,7 @@ const FieldError = ({
 }) => {
   const issue = issues.find((item) => item.path?.endsWith(path));
   return issue ? (
-    <p className="text-meta font-medium text-destructive" role="alert">
+    <p className="text-helper font-medium text-destructive" role="alert">
       {describeInstallationIssue(issue)}
     </p>
   ) : null;
@@ -436,7 +436,7 @@ export const PackCapabilitiesStep = ({
         ))}
       </div>
       {selectedPack ? (
-        <p className="text-meta text-muted-foreground">
+        <p className="text-helper text-muted-foreground">
           Hệ thống sẽ dùng toàn bộ chức năng đã kiểm duyệt của loại hình này:{" "}
           {selectedPack.capability_ids.join(", ")}.
         </p>
@@ -635,7 +635,7 @@ export const WorkflowStep = ({
                 ))}
               </select>
               {versionError ? (
-                <p className="text-meta text-destructive" role="alert">
+                <p className="text-helper text-destructive" role="alert">
                   {versionError}
                 </p>
               ) : null}
@@ -670,7 +670,7 @@ export const WorkflowStep = ({
           )}
         </Field>
         <fieldset className="grid gap-2 sm:col-span-2">
-          <legend className="text-control font-medium text-foreground">
+          <legend className="text-label font-medium text-foreground">
             Tự động hóa *
           </legend>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -877,7 +877,7 @@ export const PersonaStep = ({
           )}
         </Field>
         {error ? (
-          <p className="text-meta text-destructive" role="alert">
+          <p className="text-helper text-destructive" role="alert">
             {error}
           </p>
         ) : null}
@@ -962,7 +962,7 @@ const ProviderSecretPanel = ({
         )}
       </Field>
       {message ? (
-        <p className="text-meta text-muted-foreground" aria-live="polite">
+        <p className="text-helper text-muted-foreground" aria-live="polite">
           {message}
         </p>
       ) : null}
@@ -1113,7 +1113,7 @@ const ZaloSecretPanel = () => {
         </Button>
       </div>
       {message ? (
-        <p className="text-meta text-muted-foreground" aria-live="polite">
+        <p className="text-helper text-muted-foreground" aria-live="polite">
           {message}
         </p>
       ) : null}

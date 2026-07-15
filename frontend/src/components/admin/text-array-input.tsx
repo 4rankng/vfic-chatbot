@@ -124,7 +124,7 @@ export const TextArrayInput = (props: TextArrayInputProps) => {
       )}
       <FormControl>
         <div
-          className="group rounded-md bg-background shadow-xs dark:bg-input/30 border border-input px-3 py-1.75 text-sm transition-all ring-offset-background focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]"
+          className="group rounded-md bg-background shadow-xs dark:bg-input/30 border border-input px-3 py-1.75 text-control transition-all ring-offset-background focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]"
           {...rest}
         >
           <div className="flex flex-wrap gap-1">

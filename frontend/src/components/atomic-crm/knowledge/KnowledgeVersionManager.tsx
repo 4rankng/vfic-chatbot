@@ -95,14 +95,14 @@ export const KnowledgeVersionManager = ({ projectId }: { projectId?: string }) =
           <DialogTitle>Phiên bản kiến thức</DialogTitle>
           <DialogDescription>Chỉ phiên bản READY mới có thể được xuất bản. Việc xuất bản sẽ thay thế toàn bộ KB đang hoạt động của dự án.</DialogDescription>
         </DialogHeader>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="text-body text-destructive">{error}</p>}
         <div className="max-h-[55vh] space-y-2 overflow-y-auto">
           {versions.map((version) => (
             <div key={version.id} className="space-y-2">
               <div className="flex items-center justify-between gap-3 rounded-md border p-3">
                 <div>
-                  <p className="text-sm font-medium">Phiên bản {version.version_no}</p>
-                  <p className="text-xs text-muted-foreground">Mẫu: {version.template_version_id ?? "Không dùng mẫu"}</p>
+                  <p className="text-row-title font-medium">Phiên bản {version.version_no}</p>
+                  <p className="text-helper text-muted-foreground">Mẫu: {version.template_version_id ?? "Không dùng mẫu"}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{version.status}</Badge>
@@ -111,7 +111,7 @@ export const KnowledgeVersionManager = ({ projectId }: { projectId?: string }) =
                 </div>
               </div>
               {runsByVersion[version.id]?.map((run) => (
-                <div key={run.id} className="ml-3 rounded-md bg-muted/50 p-3 text-xs">
+                <div key={run.id} className="ml-3 rounded-md bg-muted/50 p-3 text-helper">
                   <p className="font-medium">Lần ingest {run.attempt_no}: {run.status}</p>
                   {run.issues.length > 0 && <ul className="mt-1 list-disc pl-4 text-muted-foreground">{run.issues.map((issue) => <li key={`${issue.code}-${issue.message}`}>{issue.message}</li>)}</ul>}
                   {run.status === "REVIEW_REQUIRED" && <div className="mt-2 flex gap-2"><Button size="sm" onClick={() => void review(run, "approve")} disabled={busyId === run.id}>Phê duyệt</Button><Button size="sm" variant="outline" onClick={() => void review(run, "reject")} disabled={busyId === run.id}>Từ chối</Button></div>}
@@ -119,7 +119,7 @@ export const KnowledgeVersionManager = ({ projectId }: { projectId?: string }) =
               ))}
             </div>
           ))}
-          {versions.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">Chưa có phiên bản KB.</p>}
+          {versions.length === 0 && <p className="py-8 text-center text-body text-muted-foreground">Chưa có phiên bản KB.</p>}
         </div>
       </DialogContent>
     </Dialog>

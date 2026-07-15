@@ -93,14 +93,14 @@ export const ForgotPasswordPage = () => {
       <main className="mx-auto flex min-h-svh w-full max-w-[620px] items-center justify-center px-5 py-8 sm:px-8">
         <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
           <div className="mb-6 space-y-3 text-center sm:mb-8">
-            <p className="text-xl font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
+            <p className="text-content-title font-semibold leading-none tracking-tight text-foreground sm:text-page-title">
               {activeName ?? "Thiết lập hệ thống"}
             </p>
             <div className="space-y-3">
               <h1 className="kb-display text-balance text-display leading-none text-foreground">
                 Khôi phục mật khẩu
               </h1>
-              <p className="mx-auto max-w-[360px] text-sm leading-6 text-muted-foreground">
+              <p className="mx-auto max-w-[360px] text-body leading-6 text-muted-foreground">
                 {step === "email"
                   ? "Nhập email tài khoản để nhận mã OTP."
                   : "Nhập mã OTP và mật khẩu mới cho tài khoản của bạn."}
@@ -121,7 +121,7 @@ export const ForgotPasswordPage = () => {
                 />
                 <Button
                   type="submit"
-                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-sm font-semibold"
+                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-button font-semibold"
                   disabled={loading}
                 >
                   {loading ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -163,7 +163,7 @@ export const ForgotPasswordPage = () => {
                 />
                 <Button
                   type="submit"
-                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-sm font-semibold"
+                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-button font-semibold"
                   disabled={loading}
                 >
                   {loading ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -173,7 +173,7 @@ export const ForgotPasswordPage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-12 w-full rounded-md text-sm font-semibold"
+                  className="h-12 w-full rounded-md text-button font-semibold"
                   disabled={loading || !canResend}
                   onClick={() => resendOtp(email)}
                 >
@@ -191,14 +191,14 @@ export const ForgotPasswordPage = () => {
 
             <Link
               to="/login"
-              className="mt-5 flex items-center justify-center gap-2 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+              className="mt-5 flex items-center justify-center gap-2 text-body font-semibold text-foreground underline-offset-4 hover:underline"
             >
               <ArrowLeft className="size-4" />
               Quay lại đăng nhập
             </Link>
           </div>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
+          <p className="mt-6 text-center text-helper text-muted-foreground">
             Khôi phục quyền truy cập an toàn
           </p>
         </section>
@@ -243,7 +243,7 @@ const RecoveryField = ({
           id={id}
           type={type}
           required={isRequired}
-          className="h-12 rounded-md bg-background/70 pl-11 text-base shadow-none placeholder:text-muted-foreground/70 disabled:opacity-100"
+          className="h-12 rounded-md bg-background/70 pl-11 text-control shadow-none placeholder:text-muted-foreground/70 disabled:opacity-100"
           {...inputProps}
           {...field}
         />

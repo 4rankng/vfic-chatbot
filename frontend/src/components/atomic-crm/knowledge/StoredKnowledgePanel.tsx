@@ -57,7 +57,7 @@ const labelFromMap = (
 export const localizeKnowledgeText = (value: string) => value;
 
 const COMPACT_MARKDOWN_CLASS =
-  "[&_h1]:text-base [&_h2]:text-base [&_h3]:text-sm [&_h4]:text-sm [&_h5]:text-sm [&_h6]:text-sm [&_pre]:p-3 [&_table]:text-xs";
+  "[&_h1]:text-section-title [&_h2]:text-section-title [&_h3]:text-card-title [&_h4]:text-card-title [&_h5]:text-card-title [&_h6]:text-card-title [&_pre]:p-3 [&_table]:text-helper";
 
 export const StoredKnowledgePanel = ({
   source,
@@ -76,10 +76,10 @@ export const StoredKnowledgePanel = ({
     <section className="border-y border-border py-4 sm:rounded-[12px] sm:border sm:bg-background sm:p-4">
       <div className="flex flex-wrap items-start justify-between gap-3 px-1 sm:px-0">
         <div className="min-w-0">
-          <h4 className="kb-display text-sm text-foreground">
+          <h4 className="kb-display text-card-title text-foreground">
             Kiến thức đã lưu
           </h4>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          <p className="mt-1 text-helper leading-5 text-muted-foreground">
             Đơn vị agent thực sự truy xuất — đây là phần con người có thể kiểm
             tra.
           </p>
@@ -90,7 +90,7 @@ export const StoredKnowledgePanel = ({
       </div>
 
       {!isPublished(source) && !needsReview(source) ? (
-        <div className="mt-3 flex items-center gap-2 border-l-2 border-[var(--kb-teal)] py-2 pl-3 text-sm text-[var(--kb-teal)]">
+        <div className="mt-3 flex items-center gap-2 border-l-2 border-[var(--kb-teal)] py-2 pl-3 text-body text-[var(--kb-teal)]">
           <RefreshCw className="size-4 animate-spin" />
           Kiến thức sẽ hiện ở đây sau khi pipeline xuất bản các đơn vị truy
           xuất.
@@ -102,12 +102,12 @@ export const StoredKnowledgePanel = ({
           ))}
         </div>
       ) : isError ? (
-        <div className="mt-3 border-l-2 border-[var(--kb-rust)] py-2 pl-3 text-sm text-[var(--kb-rust)]">
+        <div className="mt-3 border-l-2 border-[var(--kb-rust)] py-2 pl-3 text-body text-[var(--kb-rust)]">
           Chưa tải được danh sách kiến thức đã lưu. Hãy làm mới trang hoặc thử
           lại sau.
         </div>
       ) : units.length === 0 ? (
-        <div className="mt-3 border-l-2 border-border py-2 pl-3 text-sm text-muted-foreground">
+        <div className="mt-3 border-l-2 border-border py-2 pl-3 text-body text-muted-foreground">
           Chưa có đơn vị kiến thức nào được lưu. Nếu tài liệu đã xử lý xong, hãy
           kiểm tra nội dung nguồn hoặc chạy lại pipeline.
         </div>
@@ -155,15 +155,15 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
       </div>
 
       <Markdown
-        className={`mt-3 break-words text-sm leading-6 text-foreground ${COMPACT_MARKDOWN_CLASS}`}
+        className={`mt-3 break-words text-body leading-6 text-foreground ${COMPACT_MARKDOWN_CLASS}`}
       >
         {localizeKnowledgeText(unit.content)}
       </Markdown>
 
       {unit.summary && (
-        <div className="mt-3 border-l-2 border-border py-1 pl-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-3 border-l-2 border-border py-1 pl-3 text-helper leading-5 text-muted-foreground">
           <Markdown
-            className={`text-xs [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
+            className={`text-helper [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
           >
             {localizeKnowledgeText(unit.summary)}
           </Markdown>
@@ -171,10 +171,10 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
       )}
 
       {unit.source_quote && (
-        <div className="mt-3 flex gap-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-3 flex gap-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3 text-helper leading-5 text-muted-foreground">
           <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-ink-300)]" />
           <Markdown
-            className={`min-w-0 flex-1 break-words text-xs [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
+            className={`min-w-0 flex-1 break-words text-helper [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
           >
             {localizeKnowledgeText(unit.source_quote)}
           </Markdown>
@@ -182,7 +182,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
       )}
 
       {(unit.citation_label || unit.source_anchor || unit.effective_from) && (
-        <div className="mt-3 grid gap-2 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-3 grid gap-2 border-t border-border pt-3 text-helper leading-5 text-muted-foreground">
           {unit.citation_label && (
             <div className="flex gap-2">
               <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
@@ -210,7 +210,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
 
       {questionCount > 0 && (
         <div className="mt-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+          <div className="flex items-center gap-2 text-helper font-semibold text-foreground">
             <HelpCircle className="size-4 text-[var(--kb-teal)]" />
             Câu hỏi unit này trả lời được
           </div>
@@ -218,7 +218,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
             {unit.questions.slice(0, 3).map((question) => (
               <li
                 key={question}
-                className="break-words border-l-2 border-border py-1 pl-3 text-xs leading-5 text-[var(--kb-ink-700)]"
+                className="break-words border-l-2 border-border py-1 pl-3 text-helper leading-5 text-[var(--kb-ink-700)]"
               >
                 {localizeKnowledgeText(question)}
               </li>
@@ -229,7 +229,7 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
 
       {entityEntries.length > 0 && (
         <div className="mt-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+          <div className="flex items-center gap-2 text-helper font-semibold text-foreground">
             <Tags className="size-4 text-[var(--kb-teal)]" />
             Thực thể đã nhận diện
           </div>

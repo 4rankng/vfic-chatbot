@@ -39,11 +39,11 @@ export const SetupSection = ({
     >
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid min-w-0 gap-1">
-          <h3 className="text-control font-semibold leading-tight text-foreground">
+          <h3 className="text-section-title font-semibold text-foreground">
             {title}
           </h3>
           {description ? (
-            <p className="text-meta text-muted-foreground">{description}</p>
+            <p className="text-helper text-muted-foreground">{description}</p>
           ) : null}
         </div>
         {trailing ? <div className="shrink-0">{trailing}</div> : null}

@@ -56,13 +56,13 @@ const ProjectEditContent = () => {
       <div className="project-workspace-content">
         <div className="project-editor-header flex flex-wrap items-start gap-3 rounded-lg border p-4">
           <div className="mr-auto min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="text-helper font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Dự án
             </p>
-            <h1 className="mt-1 truncate text-xl font-semibold">
+            <h1 className="mt-1 truncate text-content-title font-semibold">
               Chỉnh sửa {project.name}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-body text-muted-foreground">
               Cập nhật trạng thái, Agent mặc định và nguồn tri thức dùng khi tư
               vấn ứng viên.
             </p>
@@ -78,7 +78,7 @@ const ProjectEditContent = () => {
 
         <Card className="mt-4 max-w-2xl">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between text-base">
+            <CardTitle className="flex items-center justify-between text-section-title">
               <span>{project.name}</span>
               <Badge
                 variant="outline"
@@ -109,7 +109,7 @@ const ProjectEditContent = () => {
 
         <Card className="mt-4 max-w-2xl">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between text-base">
+            <CardTitle className="flex items-center justify-between text-section-title">
               <span>Thẻ danh mục (master index)</span>
               {isAdmin && (
                 <Button
@@ -124,7 +124,7 @@ const ProjectEditContent = () => {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-2 pt-2 text-sm">
+          <CardContent className="flex flex-col gap-2 pt-2 text-body">
             <p>
               <span className="text-muted-foreground">Tóm tắt: </span>
               {project.summary ?? "—"}
@@ -137,7 +137,7 @@ const ProjectEditContent = () => {
               <span className="text-muted-foreground">Vị trí: </span>
               {(card.key_roles ?? []).join(", ") || "—"}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-helper text-muted-foreground">
               Thẻ được LLM tạo tự động khi huấn luyện cơ sở kiến thức của dự án.
             </p>
           </CardContent>

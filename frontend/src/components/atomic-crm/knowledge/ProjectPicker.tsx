@@ -120,7 +120,7 @@ export const ProjectPicker = ({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-10 w-full justify-between rounded-[9px] border-border bg-background px-3 text-sm font-normal"
+          className="h-10 w-full justify-between rounded-[9px] border-border bg-background px-3 text-button font-normal"
         >
           <span className="truncate">
             {selectedProject?.name ?? "Chọn dự án"}
@@ -175,7 +175,7 @@ export const ProjectPicker = ({
                     </CommandItem>
                   ))
                 ) : (
-                  <div className="px-2 py-3 text-sm text-muted-foreground">
+                  <div className="px-2 py-3 text-body text-muted-foreground">
                     Không tìm thấy dự án.
                   </div>
                 )}
@@ -208,7 +208,7 @@ export const ProjectPicker = ({
           <Button
             type="button"
             variant={canCreate ? "default" : "ghost"}
-            className="h-9 w-full justify-start rounded-[8px] px-2 text-sm"
+            className="h-9 w-full justify-start rounded-[8px] px-2 text-button"
             disabled={!canCreate || creating}
             onClick={() => void createProject()}
           >

@@ -12,7 +12,7 @@ const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
     <span className="text-caption uppercase tracking-wide text-muted-foreground">
       {label}
     </span>
-    <span className="text-sm">{value ?? "—"}</span>
+    <span className="text-body">{value ?? "—"}</span>
   </div>
 );
 
@@ -26,13 +26,13 @@ const BotRunShowContent = () => {
     <div className="mx-auto mt-4 max-w-3xl">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-4 py-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-section-title">
             <Bot className="size-4 text-muted-foreground" />
             Lần chạy bot #{run.id}
           </CardTitle>
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
+              "inline-flex items-center rounded-full px-2.5 py-0.5 text-helper font-semibold uppercase tracking-wide",
               meta.classes,
             )}
           >
@@ -44,7 +44,7 @@ const BotRunShowContent = () => {
             label="Câu trả lời đề xuất"
             value={
               run.proposed_reply ? (
-                <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-sm">
+                <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-body">
                   {run.proposed_reply}
                 </pre>
               ) : (
@@ -55,7 +55,7 @@ const BotRunShowContent = () => {
           <Field
             label="Cuộc trò chuyện"
             value={
-              <span className="font-mono text-xs">{run.conversation_id}</span>
+              <span className="font-mono text-helper">{run.conversation_id}</span>
             }
           />
           <Field label="Kết quả" value={meta.label} />
@@ -64,7 +64,7 @@ const BotRunShowContent = () => {
             value={
               <span>
                 {run.version_at_start}{" "}
-                <span className="text-xs text-muted-foreground">
+                <span className="text-helper text-muted-foreground">
                   (conversations.version khi lần chạy bắt đầu — dùng cho cơ chế
                   chống tranh chấp tiếp nhận)
                 </span>
@@ -79,7 +79,7 @@ const BotRunShowContent = () => {
                 <span>
                   {formatDateTime(run.ended_at)}
                   {dur ? (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-helper text-muted-foreground">
                       {" "}
                       · thời lượng {dur}
                     </span>
@@ -97,7 +97,7 @@ const BotRunShowContent = () => {
 export const BotRunShow = () => (
   <ShowBase>
     <TopToolbar>
-      <h2 className="mr-auto text-xl font-semibold">Lần chạy bot</h2>
+      <h2 className="mr-auto text-content-title font-semibold">Lần chạy bot</h2>
     </TopToolbar>
     <BotRunShowContent />
   </ShowBase>

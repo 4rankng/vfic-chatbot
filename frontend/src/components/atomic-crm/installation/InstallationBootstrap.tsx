@@ -49,10 +49,10 @@ const NeutralSurface = ({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-content-title font-semibold tracking-tight">
             {busy ? "Đang kiểm tra cấu hình" : "Không thể xác minh cấu hình"}
           </h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          <p className="mt-2 text-body leading-6 text-muted-foreground">
             {busy
               ? "Hệ thống đang tải cấu hình an toàn từ máy chủ."
               : "Không gian làm việc chưa được mở để tránh dùng cấu hình cũ hoặc không đầy đủ."}

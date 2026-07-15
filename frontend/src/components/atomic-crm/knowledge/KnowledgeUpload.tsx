@@ -186,7 +186,7 @@ export const KnowledgeUpload = ({
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
-            <span className="text-sm font-medium text-muted-foreground">
+            <span className="text-label font-medium text-muted-foreground">
               Mẫu
             </span>
             <div className="flex flex-wrap gap-2">
@@ -213,7 +213,7 @@ export const KnowledgeUpload = ({
 
           {!lockProject && (
             <div className="grid gap-2 sm:grid-cols-[180px_1fr] sm:items-center">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <label className="text-helper font-medium uppercase tracking-wide text-muted-foreground">
                 Dự án
               </label>
               <ProjectPicker
@@ -225,8 +225,8 @@ export const KnowledgeUpload = ({
 
           <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-3">
             <div>
-              <p className="text-sm font-medium">Ingest theo mẫu đã gán</p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="text-body font-medium">Ingest theo mẫu đã gán</p>
+              <p className="mt-1 text-helper text-muted-foreground">
                 Tạo một phiên bản KB riêng, ghim mẫu hiện tại và yêu cầu xem lại trước khi xuất bản.
               </p>
             </div>
@@ -285,13 +285,13 @@ export const KnowledgeUpload = ({
                 <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-background text-primary ring-1 ring-border">
                   <UploadCloud className="size-6" />
                 </span>
-                <p className="text-base font-semibold">
+                <p className="text-section-title font-semibold">
                   {isDragActive ? "Thả tệp vào đây" : "Kéo thả tệp vào đây"}
                 </p>
-                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                <p className="mt-1 max-w-sm text-body text-muted-foreground">
                   hoặc bấm để chọn tệp Markdown, TXT hoặc Word DOCX.
                 </p>
-                <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="mt-4 text-helper font-medium uppercase tracking-wide text-muted-foreground">
                   Một tệp mỗi lần tải
                 </p>
               </div>
@@ -303,10 +303,10 @@ export const KnowledgeUpload = ({
                       <FileText className="size-5" />
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
+                      <p className="truncate text-row-title font-medium">
                         {file.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-helper text-muted-foreground">
                         {formatFileSize(file.size)}
                       </p>
                     </div>
@@ -328,7 +328,7 @@ export const KnowledgeUpload = ({
 
             <TabsContent value="paste" className="mt-0">
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <label className="text-helper font-medium uppercase tracking-wide text-muted-foreground">
                   Nội dung kiến thức
                 </label>
                 <Textarea
@@ -336,14 +336,14 @@ export const KnowledgeUpload = ({
                   onChange={(e) => setPasteText(e.target.value)}
                   rows={10}
                   placeholder="Dán nội dung mà chatbot cần tham khảo vào đây..."
-                  className="max-h-[40vh] min-h-52 resize-y overflow-y-auto text-sm"
+                  className="max-h-[40vh] min-h-52 resize-y overflow-y-auto text-control"
                 />
               </div>
             </TabsContent>
           </Tabs>
 
           {validationErrors.length > 0 && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-body text-destructive">
               <p className="font-medium">Tệp chưa đúng định dạng:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 {validationErrors.map((error) => (
@@ -363,12 +363,12 @@ export const KnowledgeUpload = ({
                 )}
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-medium">
+                <p className="text-body font-medium">
                   {busy
                     ? "Đang gửi vào pipeline ingest"
                     : "Pipeline tự chạy sau khi tải lên"}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                <p className="mt-1 text-helper leading-5 text-muted-foreground">
                   Nhận tệp, trích văn bản, tạo digest, nhúng vector và xuất bản
                   nguồn có trích dẫn cho agent truy xuất.
                 </p>
@@ -425,7 +425,7 @@ const UploadStep = ({
 }) => (
   <div
     className={cn(
-      "flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-xs",
+      "flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-helper",
       done
         ? "bg-background text-foreground shadow-xs"
         : "bg-background/60 text-muted-foreground",

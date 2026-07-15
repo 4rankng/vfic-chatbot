@@ -280,18 +280,18 @@ export const WorkflowAuthoringPage = ({
     <div className={embedded ? "w-full" : "mx-auto w-full max-w-4xl p-4 md:p-8"}>
       <header className="mb-6">
         <h1 className="text-page-title font-bold">Tạo phiên bản quy trình</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-body text-muted-foreground">
           Bắt đầu từ biểu mẫu trống. Sau khi xuất bản, phiên bản không thể sửa hoặc xoá.
         </p>
       </header>
       <Card className="space-y-5 p-5">
-        <label className="space-y-2 text-sm font-medium">
+        <label className="space-y-2 text-body font-medium">
           Tên hiển thị
           <Input value={draft.label} onChange={(event) => updateLabel(event.target.value)} />
         </label>
         <section className="grid gap-3 rounded-md border p-4" aria-label="Kiểm tra cấu trúc quy trình">
           <h2 className="font-semibold">Kiểm tra cấu trúc</h2>
-          <ul className="grid gap-2 text-sm">
+          <ul className="grid gap-2 text-body">
             {checklist.map((item) => {
               const passed = !validationIssues.some((issue) => item.codes.includes(issue.code));
               return <li key={item.label} className={passed ? "text-foreground" : "text-muted-foreground"}>{passed ? "Đạt" : "Chưa đạt"} — {item.label}</li>;
@@ -316,7 +316,7 @@ export const WorkflowAuthoringPage = ({
             </Button>
           </div>
           {draft.stages.length === 0 ? (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed p-4 text-body text-muted-foreground">
               Chưa có giai đoạn. Quy trình phải có đúng một giai đoạn bắt đầu.
             </p>
           ) : null}
@@ -334,7 +334,7 @@ export const WorkflowAuthoringPage = ({
                 value={stage.label}
                 onChange={(event) => updateStage(index, "label", event.target.value)}
               />
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-body">
                 <input
                   type="radio"
                   name="workflow-initial-stage"
@@ -345,7 +345,7 @@ export const WorkflowAuthoringPage = ({
                 />
                 Giai đoạn bắt đầu
               </label>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-body">
                 <input
                   type="checkbox"
                   checked={stage.is_terminal}
@@ -423,7 +423,7 @@ export const WorkflowAuthoringPage = ({
                 value={tag.label}
                 onChange={(event) => updateTag(index, "label", event.target.value)}
               />
-              <label className="grid gap-2 text-sm font-medium">
+              <label className="grid gap-2 text-body font-medium">
                 Màu nhãn
                 <select
                   aria-label={`Màu nhãn ${index + 1}`}
@@ -449,14 +449,14 @@ export const WorkflowAuthoringPage = ({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">Thuộc tính hồ sơ</h2>
-              <p className="text-sm text-muted-foreground">Chỉ thêm các thông tin riêng mà quy trình cần thu thập.</p>
+              <p className="text-body text-muted-foreground">Chỉ thêm các thông tin riêng mà quy trình cần thu thập.</p>
             </div>
             <Button type="button" variant="outline" onClick={addAttribute}>
               <Plus className="size-4" /> Thêm thuộc tính
             </Button>
           </div>
           {attributes.length === 0 ? (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed p-4 text-body text-muted-foreground">
               Chưa có thuộc tính bổ sung.
             </p>
           ) : null}
@@ -474,7 +474,7 @@ export const WorkflowAuthoringPage = ({
                 value={attribute.label}
                 onChange={(event) => updateAttribute(index, "label", event.target.value)}
               />
-              <label className="grid gap-2 text-sm font-medium">
+              <label className="grid gap-2 text-body font-medium">
                 Kiểu dữ liệu
                 <select
                   aria-label={`Kiểu thuộc tính ${index + 1}`}
@@ -507,7 +507,7 @@ export const WorkflowAuthoringPage = ({
               {(["string", "integer", "number", "boolean"] as const).includes(
                 attribute.type as "string" | "integer" | "number" | "boolean",
               ) ? (
-                <label className="grid gap-2 text-sm font-medium md:col-span-2">
+                <label className="grid gap-2 text-body font-medium md:col-span-2">
                   Các lựa chọn (không bắt buộc, mỗi dòng một giá trị)
                   <Textarea
                     aria-label={`Các lựa chọn thuộc tính ${index + 1}`}
@@ -516,11 +516,11 @@ export const WorkflowAuthoringPage = ({
                     placeholder={attribute.type === "boolean" ? "true\nfalse" : "Mỗi dòng một lựa chọn"}
                   />
                   {!parseEnumValues(attribute).valid ? (
-                    <span className="text-xs text-destructive">Giá trị lựa chọn không đúng kiểu dữ liệu hoặc bị trùng.</span>
+                    <span className="text-helper text-destructive">Giá trị lựa chọn không đúng kiểu dữ liệu hoặc bị trùng.</span>
                   ) : null}
                 </label>
               ) : null}
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-body">
                 <input
                   type="checkbox"
                   checked={attribute.required}

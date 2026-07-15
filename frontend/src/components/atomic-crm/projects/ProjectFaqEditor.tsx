@@ -132,7 +132,7 @@ const FaqFields = ({
       placeholder="Câu trả lời"
     />
     <details className="rounded-md border bg-muted/10 p-2">
-      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+      <summary className="cursor-pointer text-helper font-medium text-muted-foreground">
         Tùy chọn trả lời nhanh (FAQ bypass)
       </summary>
       <div className="mt-2 grid gap-2">
@@ -241,7 +241,7 @@ export const ProjectFaqEditor = ({
 
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="text-base font-semibold">FAQ dự án</h3>
+      <h3 className="text-section-title font-semibold">FAQ dự án</h3>
       <div className="flex items-center gap-2">
         {editable && !adding && (
           <Button
@@ -305,7 +305,7 @@ export const ProjectFaqEditor = ({
           ))}
         </div>
       ) : (
-        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center text-body text-muted-foreground">
           Chưa có FAQ cho dự án này.
         </p>
       )}
@@ -422,8 +422,8 @@ const FaqRow = ({
       ) : (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold leading-5">{item.question}</h3>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
+            <h3 className="text-body font-semibold leading-5">{item.question}</h3>
+            <p className="mt-1 whitespace-pre-wrap text-body leading-5 text-muted-foreground">
               {item.answer}
             </p>
             {(item.source_name || item.source_anchor) && (
