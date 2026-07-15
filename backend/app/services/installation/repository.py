@@ -20,7 +20,7 @@ from app.models.integration import IntegrationSetting
 from app.models.job import Job
 from app.models.knowledge import KBVersion
 from app.models.lead import Lead
-from app.models.persona import PersonaVersion
+from app.models.persona import Persona, PersonaVersion
 from app.services.installation.catalog import (
     INTEGRATION_REFERENCE_ENABLE_KEYS,
     INTEGRATION_REFERENCE_REQUIREMENTS,
@@ -161,6 +161,18 @@ class InstallationRepository:
             if await self.db.scalar(select(func.count()).select_from(model)):
                 return {"recruitment"}
         return set()
+
+    async def has_legacy_workspace(self) -> bool:
+        """Recognize an established pre-installation recruitment workspace.
+
+        The setup lifecycle was added after the original single-tenant CRM. A
+        fresh deployment has none of these records; an existing workspace has
+        a configured project, persona, integration settings, and history.
+        """
+        for model in (Project, Persona, IntegrationSetting, Conversation):
+            if not await self.db.scalar(select(func.count()).select_from(model)):
+                return False
+        return True
 
     async def lock_operational_writers(self) -> None:
         """Close the first-activation count/commit window against recruitment writers."""

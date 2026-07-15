@@ -35,6 +35,7 @@ export const readyRecruitmentManifest = (
   terminology: {},
   capability_ids: [...RECRUITMENT_V1_PARITY.capabilityIds],
   readiness_code: "READY",
+  legacy_workspace: false,
   ...overrides,
 });
 

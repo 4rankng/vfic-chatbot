@@ -3,6 +3,10 @@ import {
   hasReadyActiveRuntime,
   useInstallationContext,
 } from "@/components/atomic-crm/installation/installation-context";
+import {
+  isLegacyWorkspaceRuntime,
+  legacyRecruitmentWorkspaceManifest,
+} from "@/components/atomic-crm/installation/runtime-manifest";
 import { SetupApplication } from "@/components/atomic-crm/installation/SetupLayout";
 import { createI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 import { useMemo } from "react";
@@ -107,16 +111,18 @@ export const RuntimeCompilationLoading = () => (
 const App = () => {
   const { manifest, refreshRuntime } = useInstallationContext();
   const ready = hasReadyActiveRuntime(manifest);
-  const key = getRuntimeKey(manifest);
+  const legacyWorkspace = isLegacyWorkspaceRuntime(manifest);
+  const effectiveManifest = legacyWorkspace ? legacyRecruitmentWorkspaceManifest() : manifest;
+  const key = getRuntimeKey(effectiveManifest);
 
   useEffect(() => {
-    if (!ready) void resetActiveRuntimeState();
-  }, [key, ready]);
+    if (!ready && !legacyWorkspace) void resetActiveRuntimeState();
+  }, [key, legacyWorkspace, ready]);
 
-  return ready ? (
+  return ready || legacyWorkspace ? (
     <ReadyRuntimeApplication
       key={key}
-      manifest={manifest}
+      manifest={effectiveManifest}
       refreshRuntime={refreshRuntime}
     />
   ) : (

@@ -51,6 +51,7 @@ SAFE_RUNTIME_FIELDS = {
     "terminology",
     "capability_ids",
     "readiness_code",
+    "legacy_workspace",
     "schema_version",
 }
 
@@ -72,6 +73,7 @@ def _active_runtime_payload() -> dict[str, object]:
         "terminology": {"lead": "Ứng viên"},
         "capability_ids": ["conversation", "candidate_intake"],
         "readiness_code": "READY",
+        "legacy_workspace": False,
     }
 
 

@@ -169,10 +169,6 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
     )
     await service.validate_revision(first.id, actor.id)
 
-    with pytest.raises(InstallationError) as blocked:
-        await InstallationService(integration_session).activate_revision(first.id, actor.id)
-    assert blocked.value.code == "INSTALLATION_RUNTIME_NOT_READY"
-
     async def cache_outage() -> None:
         raise RuntimeError("simulated Redis outage")
 
@@ -309,3 +305,33 @@ async def test_operational_data_created_after_draft_blocks_incompatible_first_ac
     with pytest.raises(InstallationError) as exc_info:
         await service.activate_revision(revision.id, actor.id)
     assert exc_info.value.code == "INSTALLATION_PACK_LOCKED"
+
+
+async def test_real_recruitment_pack_activates_without_registry_override(
+    integration_session,
+):
+    """The shipped recruitment pack is activation-ready.
+
+    This is the regression test for the ``runtime_ready=True`` unlock: a full
+    create → validate → activate cycle succeeds against the default capability
+    registry (the real production pack), with no ``_runtime_ready_registry``
+    fixture override. An admin can activate a recruitment installation without
+    the bot being blocked by a dormant-pack rejection.
+    """
+    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    # Default registry = the real shipped packs. No override.
+    service = InstallationService(integration_session)
+
+    revision = await service.create_revision(
+        _revision_body(persona_version.id, display_name="Real pack customer"), actor.id
+    )
+    await service.validate_revision(revision.id, actor.id)
+
+    active = await service.activate_revision(revision.id, actor.id)
+    assert active.fingerprint.authority_generation == 1
+    assert active.revision.pack_key == "recruitment"
+
+    # The runtime now resolves this installation as active, stamping turns.
+    resolved = await service.resolve_active()
+    assert resolved is not None
+    assert resolved.revision.id == revision.id

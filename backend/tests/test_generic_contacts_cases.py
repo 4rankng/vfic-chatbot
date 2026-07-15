@@ -144,8 +144,12 @@ def test_registry_rejects_cycles_and_owner_collisions() -> None:
         )
 
 
-def test_shipped_pack_remains_runtime_dormant() -> None:
-    assert PACK.runtime_ready is False
+def test_recruitment_pack_is_runtime_ready() -> None:
+    # Recruitment is the sole production pack and is activation-ready. The bot
+    # still runs unstamped/legacy until an admin activates an installation from
+    # Settings; this flag only stops activation from being hard-rejected.
+    assert PACK.runtime_ready is True
+    # New packs still ship dormant by default — readiness is opt-in per pack.
     assert replace(PACK, runtime_ready=False).runtime_ready is False
 
 

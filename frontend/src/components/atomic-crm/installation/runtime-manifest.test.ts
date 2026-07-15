@@ -31,6 +31,7 @@ const unconfiguredManifest = () => ({
   terminology: null,
   capability_ids: [],
   readiness_code: "SETUP_REQUIRED",
+  legacy_workspace: false,
 });
 
 const activeManifest = () => ({
@@ -50,6 +51,7 @@ const activeManifest = () => ({
   terminology: { lead: "Ung vien" },
   capability_ids: ["conversation", "candidate_intake"],
   readiness_code: "READY",
+  legacy_workspace: false,
 });
 
 const jsonResponse = (body: unknown, headers?: HeadersInit) => {
@@ -72,6 +74,13 @@ describe("parseRuntimeManifest", () => {
     const payload = unconfiguredManifest();
 
     expect(parseRuntimeManifest(payload)).toEqual(payload);
+  });
+
+  it("recognizes only a pre-setup manifest explicitly marked as a legacy workspace", async () => {
+    const { isLegacyWorkspaceRuntime } = await import("./runtime-manifest");
+
+    expect(isLegacyWorkspaceRuntime(parseRuntimeManifest({ ...unconfiguredManifest(), legacy_workspace: true }))).toBe(true);
+    expect(isLegacyWorkspaceRuntime(parseRuntimeManifest(unconfiguredManifest()))).toBe(false);
   });
 
   it("accepts an ACTIVE projection with complete authority evidence", () => {

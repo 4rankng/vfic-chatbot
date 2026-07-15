@@ -49,6 +49,7 @@ async def test_public_runtime_endpoint_returns_only_the_safe_projection(monkeypa
         terminology={"lead": "Ứng viên"},
         capability_ids=["conversation"],
         readiness_code="READY",
+        legacy_workspace=False,
     )
 
     async def runtime_view(_self):

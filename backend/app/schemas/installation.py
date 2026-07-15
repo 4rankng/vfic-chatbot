@@ -424,6 +424,7 @@ class InstallationRuntimeOut(BaseModel):
     terminology: dict[str, JsonValue] | None
     capability_ids: list[str]
     readiness_code: str
+    legacy_workspace: bool = False
 
 
 class InstallationSetupDraftOut(BaseModel):

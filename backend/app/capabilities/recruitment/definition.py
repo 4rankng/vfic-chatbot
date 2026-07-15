@@ -44,5 +44,5 @@ PACK = IndustryPackDefinition(
     compatible_operational_data=("recruitment",),
     workflow_ids=("candidate_intake",),
     terminology_keys=("application", "candidate", "conversation", "job", "lead", "organization"),
-    runtime_ready=False,
+    runtime_ready=True,
 )

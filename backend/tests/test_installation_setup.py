@@ -20,7 +20,10 @@ async def test_catalog_is_code_owned_and_contains_no_selected_defaults() -> None
     assert catalog.authentication_methods == ["email_password"]
     assert catalog.locales == ["vi-VN"]
     packs = {pack.key: pack for pack in catalog.packs}
-    assert packs["recruitment"].runtime_ready is False
+    # Recruitment is the sole production pack and is activation-ready; the bot
+    # runs unstamped until an admin activates it from Settings, but the pack no
+    # longer blocks activation. Other packs stay dormant until proven.
+    assert packs["recruitment"].runtime_ready is True
     assert "candidate_intake" in packs["recruitment"].workflow_ids
     assert all(not hasattr(pack, "selected") for pack in catalog.packs)
 

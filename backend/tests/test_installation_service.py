@@ -58,15 +58,32 @@ async def test_absent_state_reads_unconfigured_without_writing() -> None:
         acquire_authority_lock=AsyncMock(),
         get_state=AsyncMock(return_value=None),
         get_setup_draft=AsyncMock(return_value=None),
+        has_legacy_workspace=AsyncMock(return_value=False),
     )
 
     view = await service.runtime_view()
 
     assert view.lifecycle == "UNCONFIGURED"
     assert view.readiness_code == "SETUP_REQUIRED"
+    assert view.legacy_workspace is False
     db.add.assert_not_called()
     db.flush.assert_not_awaited()
     db.commit.assert_not_awaited()
+
+
+async def test_existing_pre_installation_workspace_is_marked_for_legacy_ui_compatibility() -> None:
+    service = InstallationService(AsyncMock())
+    service.repo = SimpleNamespace(
+        get_state=AsyncMock(return_value=None),
+        get_setup_draft=AsyncMock(return_value=None),
+        has_legacy_workspace=AsyncMock(return_value=True),
+    )
+
+    view = await service.runtime_view()
+
+    assert view.lifecycle == "UNCONFIGURED"
+    assert view.readiness_code == "SETUP_REQUIRED"
+    assert view.legacy_workspace is True
 
 
 async def test_unknown_pack_is_a_typed_validation_failure_before_any_write() -> None:
