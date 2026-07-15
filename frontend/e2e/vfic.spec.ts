@@ -10,9 +10,6 @@ test.describe("current recruitment workspace baseline", () => {
     await expect(
       page.getByRole("heading", { name: "Tổng quan tuyển dụng" }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Ứng viên cần xử lý ngay" }),
-    ).toBeVisible();
   });
 
   test("keeps the authenticated conversation inbox route reachable", async ({

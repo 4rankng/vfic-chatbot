@@ -31,7 +31,6 @@ from app.services.errors import InstallationError
 from app.services.installation.authority import RuntimeAuthorityFingerprint, RuntimeAuthorityStamp
 from app.services.installation.hashing import sha256_json
 from app.services.installation.catalog import (
-    CHANNEL_CAPABILITY_REQUIREMENTS,
     CHAT_INTEGRATION_REFERENCES,
     EMBEDDING_INTEGRATION_REFERENCES,
     integration_reference_ids,
@@ -148,15 +147,6 @@ class InstallationService:
         if integration_refs - set(integration_reference_ids()):
             selection_issues.append(
                 self._issue("INTEGRATION_REFERENCE_INVALID", "integration_requirements")
-            )
-        required_refs = {
-            reference
-            for capability, reference in CHANNEL_CAPABILITY_REQUIREMENTS.items()
-            if capability in capability_ids
-        }
-        if required_refs - integration_refs:
-            selection_issues.append(
-                self._issue("INTEGRATION_REQUIRED_BY_CAPABILITY", "integration_requirements")
             )
         if selection_issues:
             raise self._error(
