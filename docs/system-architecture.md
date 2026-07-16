@@ -323,7 +323,7 @@ sequenceDiagram
     else FAQ semantic bypass (Redis-cached embeddings)
         WK->>WK: faq_bypass.try_answer(text) → canonical KB answer
     else fall through to agent
-        WK->>WK: build_system_prompt (persona + active-product catalog)
+        WK->>WK: build_system_prompt (persona + active recruitment knowledge projects)
         WK->>WK: route_turn → 8 intents, deterministic (no LLM)
         WK->>DB: lead.context(chat_id) → profile + probing question
         WK->>WK: build_agent_user_text (history + lead + route hint)

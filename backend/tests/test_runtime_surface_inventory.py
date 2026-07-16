@@ -44,9 +44,7 @@ EXPECTED_ROUTE_COUNTS = {
     "conversations": 17,
     "dashboard": 2,
     "integrations": 11,
-    # Installation setup authoring adds four admin-only endpoints; immutable
-    # persona metadata adds one admin-only selector endpoint.
-    "installation": 12,
+    "installation": 8,
     "jobs": 7,
     "knowledge": 37,
     "leads": 15,
@@ -57,7 +55,7 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 2,
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "abc5d5dda7b46e43c2f01b1005342ac3e345da0f9a1514a7c34e795597c3769e"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "43df55fe0164672aeac100c4238e1748142ee1a8bd53078310360d60e5a3925a"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 56,

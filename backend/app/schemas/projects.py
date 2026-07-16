@@ -1,4 +1,4 @@
-"""Project ("product catalog") schemas."""
+"""Recruitment knowledge-project schemas."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ class ProjectUpdate(BaseModel):
     default_persona_id: uuid.UUID | None = None
 
 
-# --- Worker product features (one row per catalog feature per project) ---
+# --- Worker knowledge features (one row per catalog feature per project) ---
 
 
 class FeatureOut(BaseModel):

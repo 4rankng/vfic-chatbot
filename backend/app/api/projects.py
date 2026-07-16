@@ -1,8 +1,9 @@
-"""Projects ("product catalog") admin API — thin HTTP layer over :class:`ProjectService`.
+"""Recruitment knowledge-project admin API — thin HTTP layer over :class:`ProjectService`.
 
-All CRUD, master-index rebuild, and worker product-feature CRUD/re-extraction live in
-``app.services.project``; this router only validates input, delegates, and serializes
-the response. Domain exceptions raised by the service are mapped to HTTP status codes.
+All CRUD, master-index rebuild, and worker knowledge-feature CRUD/re-extraction live
+in ``app.services.project``; this router only validates input, delegates, and
+serializes the response. Domain exceptions raised by the service are mapped to HTTP
+status codes.
 """
 
 from __future__ import annotations

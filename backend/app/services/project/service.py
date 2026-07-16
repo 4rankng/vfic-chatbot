@@ -1,4 +1,4 @@
-"""Project ("product catalog") business logic: CRUD + master-index rebuild.
+"""Recruitment knowledge-project business logic: CRUD + master-index rebuild.
 
 Extracted from the legacy monolithic ``project_service.py`` into the
 ``services/project/`` package. The managed-FAQ and feature/catalog concerns live

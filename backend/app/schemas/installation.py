@@ -15,6 +15,7 @@ from pydantic import (
     Field,
     JsonValue,
     field_validator,
+    model_validator,
 )
 
 

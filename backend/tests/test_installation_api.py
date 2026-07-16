@@ -27,7 +27,7 @@ def test_public_runtime_route_is_the_only_installation_route_without_admin_rbac(
         for route in installation.router.routes
         if route.path.startswith("/admin/installation")
     ]
-    assert len(admin_routes) == 11
+    assert len(admin_routes) == 7
     for route in admin_routes:
         assert any(dependency.call is require_admin for dependency in route.dependant.dependencies)
 

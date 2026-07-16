@@ -31,7 +31,7 @@ Authorization: Bearer <access_token>
 - **Refresh token:** 14 days (default). `POST /api/v1/auth/refresh` with refresh token → new access token.
 - **Token versioning:** `user.token_version` — bumping invalidates all existing tokens for that user.
 
-## Routes (18 route groups)
+## Routes (15 route groups)
 
 The application registers the API routers in `backend/app/main.py` under
 `API_V1_PREFIX = "/api/v1"`; realtime and webhook groups keep their root paths.
@@ -41,9 +41,6 @@ The application registers the API routers in `backend/app/main.py` under
 | `auth` | `/api/v1/auth` | `auth` | Public (login/refresh); JWT (`/me`, `/change-password`) | Login, refresh, profile, password |
 | `users` | `/api/v1/users` | `users` | JWT (self); `require_admin` (CRUD) | User management |
 | `conversations` | `/api/v1/conversations` | `conversations` | JWT; `require_admin` (history clear) | Inbox, messages, takeover, release |
-| `contacts` | `/api/v1/contacts` | `contacts` | JWT + active `conversation` capability; admin/recruiter viewer scope | Dormant generic Contact and channel-identity resources |
-| `cases` | `/api/v1/cases` | `cases` | JWT + active `conversation` capability; admin/recruiter viewer scope | Dormant generic Cases, transitions, tags, notes, and follow-ups |
-| `case_workflows` | `/api/v1/admin/case-workflows` | `case-workflows` | `require_admin` | Pre-active immutable workflow authoring |
 | `leads` | `/api/v1/leads` | `leads` | JWT | Lead CRM pipeline |
 | `bot_runs` | `/api/v1/bot_runs` | `bot_runs` | JWT (read-only) | Bot turn audit log |
 | `knowledge` | `/api/v1/knowledge` | `knowledge` | `require_admin` | KB documents, chunks, versions |
@@ -92,22 +89,17 @@ Returned directly (no envelope):
 
 HTTP status codes follow REST conventions: 200 (OK), 201 (Created), 204 (No Content), 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 409 (Conflict), 422 (Validation Error), 429 (Too Many Requests), 502 (Bad Gateway).
 
-## Installation lifecycle and setup
+## Installation lifecycle and Settings configuration
 
-Phases 2–3 expose one public-safe bootstrap endpoint, immutable lifecycle
-operations, and a PostgreSQL-backed setup workspace. An absent
-`installation_state` row is returned as `UNCONFIGURED`; reading either the
-runtime projection or setup draft does not infer business configuration or
-insert sample rows.
+The runtime endpoint provides safe metadata for the authenticated recruitment
+console. Administrators manage lifecycle configuration through Settings-backed
+revision operations; there is no installation setup wizard or mutable setup
+workspace. An absent `installation_state` row is returned as `UNCONFIGURED`.
 
 | Method and path | Auth | Result |
 |---|---|---|
 | `GET /api/v1/installation/runtime` | Public | Schema-versioned, `no-store` lifecycle projection. Draft values stay private; active-only output may include branding, locale, terminology, and capability IDs, but never persona body, policy, integration value, or audit data. |
 | `GET /api/v1/admin/installation` | Admin | Current lifecycle, generation/lock metadata, current revision, current and active validation, and readiness. |
-| `GET /api/v1/admin/installation/catalog` | Admin | Code-owned packs, capabilities, workflows, locales, currencies, integration references, authentication methods, and authored immutable workflow-version summaries that Settings may select. |
-| `GET /api/v1/admin/installation/setup-draft` | Admin | Strict partial setup draft, optimistic lock tokens, per-section completion, and validation issues. The response never returns decrypted credentials. |
-| `PUT /api/v1/admin/installation/setup-draft` | Admin | Replace the typed partial draft using `expected_lock_version`; stale writes return `409 INSTALLATION_CONFLICT`. |
-| `POST /api/v1/admin/installation/setup-draft/finalize` | Admin | Atomically revalidate a complete draft and append an immutable revision using both draft and installation lock tokens. The result stops at `VALIDATED`. |
 | `POST /api/v1/admin/installation/revisions` | Admin | Append a complete immutable successor revision (`201`). The request must echo the loaded `expected_lock_version`; a stale save returns `409 INSTALLATION_CONFLICT`. |
 | `POST /api/v1/admin/installation/revisions/{revision_id}/validate` | Admin | Append checksum-pinned validation evidence; invalid input/reference evidence returns field-level issues. |
 | `POST /api/v1/admin/installation/revisions/{revision_id}/activate` | Admin | Attempt transactional activation of the current validated revision. |
@@ -141,13 +133,11 @@ Admin request-shape failures use the same envelope with HTTP `422` and
 `INSTALLATION_RUNTIME_NOT_READY`. Normal missing/insufficient JWT credentials
 remain `401`/`403` through the existing auth handlers.
 
-The code-owned packs intentionally declare `runtime_ready=false`, so activation
-currently returns `409 INSTALLATION_RUNTIME_NOT_READY`. The admin wizard can
-author and validate a clean installation without a rebuild, but these contracts
-are a foundation for later runtime composition—not evidence that a universal
-deployment is ready or authorized to send messages.
+The code-owned recruitment pack is the only active runtime contract. Lifecycle
+configuration is retained for administrator Settings, not as a multi-industry
+installation flow.
 
-Setup-authored personas must carry an explicit policy. The current no-proactive-
+Administrator-authored personas must carry an explicit policy. The current no-proactive-
 follow-up path stores disabled rules with no cadence or eligible stage, but its
 wire shape still requires the recruitment-specific keys `hot`, `warm`, and
 `not_interested`. That hard-coded category shape is not a universal contract and
@@ -157,7 +147,7 @@ any pack can become runtime-ready.
 Revision input is closed rather than free-form. `workflow_policy` accepts only
 `workflow_id`, the selected immutable `workflow_version_id` and
 `workflow_version_checksum`, `handoff_mode`, and `automation_enabled`.
-Finalizing a new setup requires a matching authored workflow version/checksum;
+Creating a new revision requires a matching authored workflow version/checksum;
 historical revisions with null pins remain readable but are not activation-ready.
 `provider_policy` accepts only integration references, model IDs, temperature,
 and output-token limit; extra fields and secret-shaped values are rejected.
@@ -170,62 +160,6 @@ A `READY` response is not based only on the stored lifecycle flag. The service
 rechecks the active revision, validation, pack contract, immutable persona and
 template checksums, required integrations, and checksum-pinned active-KB
 evidence against PostgreSQL before reporting readiness.
-
-## Dormant generic workflow, Contact, and Case APIs
-
-Phase 4 registers the following additive endpoints. Workflow publication is a
-pre-active admin operation; Contact and Case routers compose authentication with
-active-installation and capability checks. Because every shipped pack remains
-`runtime_ready=false`, the generic business routers cannot be used as a live
-industry runtime yet.
-
-### Immutable workflow authoring
-
-| Method and path | Auth | Result |
-|---|---|---|
-| `GET /api/v1/admin/case-workflows` | Admin | Bounded workflow-version summaries, optionally filtered by pack/workflow. |
-| `POST /api/v1/admin/case-workflows` | Admin | Atomically publish one immutable version from explicit administrator input; the server assigns version number and canonical checksum. |
-| `GET /api/v1/admin/case-workflows/{version_id}` | Admin | Complete immutable version with stages, transitions, tags, and bounded Case attribute schema. |
-
-Published versions have no PATCH or DELETE endpoint. Publication requires one
-non-terminal initial stage, at least one terminal stage, reachable stages, valid
-transitions, and unique bounded stage/tag/attribute keys. Setup stores the
-selected version ID and checksum; it never auto-selects a newest/default version.
-
-### Contacts
-
-| Method and path | Auth | Result |
-|---|---|---|
-| `GET /api/v1/contacts` | Admin or visible recruiter | Bounded list with typed profile and channel summaries. |
-| `POST /api/v1/contacts` | Admin | Create a typed Contact; no generic Contact JSON/EAV field. |
-| `GET /api/v1/contacts/{contact_id}` | Admin or visible recruiter | Read one viewer-scoped Contact. |
-| `PATCH /api/v1/contacts/{contact_id}` | Admin or visible recruiter | Optimistic typed profile update. |
-| `POST /api/v1/contacts/{contact_id}/channel-identities` | Admin | Attach one configured `(provider, account_key, external_id)` identity; conflicts do not move an existing identity. |
-
-### Cases
-
-| Method and path | Auth | Result |
-|---|---|---|
-| `GET, POST /api/v1/cases` | Admin or visible recruiter | List or create Cases pinned to an immutable workflow version/checksum. |
-| `GET, PATCH /api/v1/cases/{case_id}` | Admin or visible recruiter | Read or optimistically update non-lifecycle fields. |
-| `POST /api/v1/cases/{case_id}/assign` | Scoped user | Assign/claim under role and stale-version rules. |
-| `POST /api/v1/cases/{case_id}/transition` | Scoped user | Apply an allowed transition from the pinned workflow. |
-| `POST /api/v1/cases/{case_id}/cancel` | Scoped user | Change only an open Case to `CANCELLED`; closed/cancelled Cases do not reopen. |
-| `GET, PUT /api/v1/cases/{case_id}/tags` | Scoped user | Read or atomically replace tags defined by the pinned workflow. |
-| `GET, POST /api/v1/cases/{case_id}/notes` | Scoped user | Read bounded notes or append a note. |
-| `GET, POST /api/v1/cases/{case_id}/follow-ups` | Scoped user | Read bounded follow-ups or create one. |
-| `POST /api/v1/cases/{case_id}/follow-ups/{followup_id}/complete` or `/cancel` | Scoped user | Optimistically finish a pending follow-up. |
-
-Recruiters can see Contacts/Cases reachable through their assigned or unassigned
-Conversation/Case scope and may claim unassigned Cases; Contact creation,
-channel-identity attachment, workflow publication, and reassignment to another
-user remain administrator-only. The backend is the authorization boundary.
-Disabled capabilities return authenticated `404`; inactive installation state
-uses the typed `409` installation envelope.
-
-`ConversationOut` also carries nullable/defaulted Contact and channel-identity
-projections. Legacy fields and status codes remain unchanged, and no Case is
-guessed from a Conversation.
 
 ## Rate-Limited Endpoints
 

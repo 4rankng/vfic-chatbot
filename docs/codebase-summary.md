@@ -107,9 +107,9 @@ ChatBot/
 | `capabilities/` | Closed-world industry pack/capability definitions, dependency/owner validation, canonical non-executable pack contract, and dormant recruitment delegation descriptor. Database values never select executable imports. |
 | `core/` | Cross-cutting infra: config (Pydantic BaseSettings), async DB engine + session, Redis pool, security (JWT/argon2), structured logging + request_id, error handlers, cache, ratelimit, embedding + vector helpers, text utils. |
 | `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools.py` tool dispatch; `safety.py` fast + LLM safety; `prompts.py`; `proactive/`. |
-| `models/` | SQLAlchemy 2.x ORM mirroring the schema, including immutable workflows and generic Contacts/Cases. **Does not generate migrations** — migrations remain hand-written. |
+| `models/` | SQLAlchemy 2.x ORM mirroring the schema. Retired universal-platform tables remain mapped for historical migration compatibility. **Does not generate migrations** — migrations remain hand-written. |
 | `schemas/` | Pydantic v2 request/response models. |
-| `services/` | Business logic, the largest subpackage. Includes legacy recruitment services, installation authority/setup, and dormant `case_workflow_service`, `contact_service`, and `case_service`. |
+| `services/` | Business logic, the largest subpackage. Includes recruitment services and installation lifecycle authority used by the admin Settings surface. |
 | `workers/` | RQ worker entrypoints + async bridge. `run_worker.py` is the container entrypoint. |
 | `realtime/` | Socket.IO ASGI server + cross-process emit bridge so workers can push to clients. |
 | `prompts/` | Prompt assets. |
@@ -124,8 +124,6 @@ ChatBot/
 | `components/atomic-crm/root/` | `<CRM>` receives one compiled runtime bundle and renders direct React Admin resources/routes; reset code owns Query/store/socket/message generation teardown. |
 | `components/atomic-crm/capabilities/` | Static safe module registry, strict pack compiler, canonical backend parity check, and delegation-only recruitment composition. |
 | `components/atomic-crm/installation/` | Public runtime manifest parsing and lifecycle context/bootstrap. It refreshes safe runtime metadata but does not gate the authenticated recruiter console behind an installer. |
-| `components/atomic-crm/workflows/` | Blank workflow authoring and structural validation for immutable published versions. |
-| `components/atomic-crm/contacts/`, `cases/` | Dormant generic React Admin resources with human selectors and workflow-derived Case fields. |
 | `components/atomic-crm/providers/` | `dataProvider.ts` (react-admin verb mapping), `rest/api.ts` (HTTP client + JWT + 401 refresh), `authProvider.ts`, `i18nProvider.ts` (Vietnamese-only). |
 | `components/atomic-crm/conversations/` | Inbox: ConversationList, ChatThread (virtua VList), ConversationContextPanel, WorkspaceShell + WorkspaceIconRail, chatRepository, useConversationRealtime, Zustand `messageStore.ts`. CSS barrel `inbox.css`. |
 | `components/atomic-crm/leads/` | Kanban board, lead show/edit, chatops actions. |
@@ -166,9 +164,6 @@ ChatBot/
 | `backend/app/realtime/` | Socket.IO server + cross-process emit bridge (264 LOC). |
 | `backend/app/api/webhooks.py` | `POST /webhooks/zalo/chatbot` (line 34), `POST /webhooks/zalo/oa` (line 71), `_verify_oa_signature` (line 115). |
 | `backend/app/api/dependencies.py` | Auth dependencies plus dormant auth-first `get_active_installation` / `require_capability`; token-version gate remains the identity boundary. |
-| `backend/app/services/case_workflow_service.py` | Validate and atomically publish immutable workflow versions/checksums. |
-| `backend/app/services/contact_service.py` | Viewer-scoped typed Contact mutations and race-safe configured channel identity resolution. |
-| `backend/app/services/case_service.py` | Viewer-scoped, workflow-pinned Case lifecycle, assignment, tags, notes, follow-ups, optimistic updates, and audit writes. |
 | `backend/alembic/versions/0044_generic_contact_case_kernel.py` | Additive generic workflow/Contact/Case schema, installation workflow pins, nullable Conversation identity links, immutability and downgrade refusal. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
 | `backend/Makefile` | `dev`, `db`, `push`, `deploy`, `deploy-restart`, `deploy-restart-frontend`, `adminer`. |
