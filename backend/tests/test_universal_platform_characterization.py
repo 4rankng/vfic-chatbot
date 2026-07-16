@@ -227,6 +227,7 @@ async def test_current_system_prompt_uses_database_persona_but_appends_recruitme
     assert prompt.startswith("Neutral configured persona")
     assert "đang tuyển" in prompt
     assert "search_knowledge" in prompt
+    assert "NGỮ CẢNH RIÊNG TƯ" in prompt
     assert cache_hit is False
 
 

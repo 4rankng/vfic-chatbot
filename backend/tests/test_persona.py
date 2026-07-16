@@ -34,6 +34,7 @@ CRITICAL_RULES = [
     "CHỐNG ẢO GIÁC",  # anti-hallucination / no fabrication beyond data
     "tiếng Việt",  # Vietnamese-only
     "KHÔNG dùng Markdown",  # plain-text output format
+    "Ngữ cảnh riêng tư",  # memory/history must never be recited to the user
 ]
 
 

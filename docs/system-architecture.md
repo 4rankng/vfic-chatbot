@@ -326,7 +326,7 @@ sequenceDiagram
         WK->>WK: build_system_prompt (persona + active recruitment knowledge projects)
         WK->>WK: route_turn → 8 intents, deterministic (no LLM)
         WK->>DB: lead.context(chat_id) → profile + probing question
-        WK->>WK: build_agent_user_text (history + lead + route hint)
+        WK->>WK: build_agent_user_text (private history + lead + route hint)
         Note over WK,ZS: prefetch tool for high-confidence routes<br/>(search_knowledge / search_bus_timetable)
         WK->>WK: agent.agent() LLM loop (max 6 iterations)<br/>Redis concurrency semaphore,<br/>tool dispatch = WHERE RAG RETRIEVAL HAPPENS<br/>(search_knowledge, recommend_jobs, get_product_features...)
         WK->>WK: grounding.strip — remove hallucinated job IDs
@@ -376,7 +376,16 @@ sequenceDiagram
     end
 ```
 
-### 2.2 Extraction-owned intent handoff
+### 2.2 Private conversation context
+
+Recent chat history, lead profile data, and `search_user_memory` results are private
+model context. They may prevent duplicate questions and support a directly relevant
+job recommendation, but must never be quoted, summarized, or identified as remembered
+information in a user-facing reply. The system prompt, per-turn context, and memory
+tool output all carry this boundary so an unrelated or short message cannot trigger a
+recap of prior candidate details.
+
+### 2.3 Extraction-owned intent handoff
 
 Contact intent is classified by the existing post-send candidate extraction
 call, together with `lead_patch` and `memory_facts`. The webhook/chatbot response

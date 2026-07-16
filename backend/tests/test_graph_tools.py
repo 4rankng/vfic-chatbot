@@ -212,9 +212,11 @@ async def test_search_user_memory_formats_rows_with_similarity(no_cache_io):
     out = await search_user_memory(
         retrieval=repo, embedder=_FakeEmbedder(), chat_id="c1", query="kinh nghiệm"
     )
+    assert out.startswith("NGỮ CẢNH RIÊNG TƯ")
+    assert "Không được trích dẫn, tóm tắt" in out
     assert "đã làm lái xe 5 năm (sim=0.91)" in out
     assert "sống Bình Dương (sim=0.82)" in out
-    assert out.count("\n") == 1  # two rows joined by a single newline
+    assert out.count("\n") == 2  # privacy notice + two rows
 
 
 # ---------------------------------------------------------------------------

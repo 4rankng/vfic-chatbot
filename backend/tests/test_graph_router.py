@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.router import route_turn, routing_instruction
+from app.models.conversation import MessageSender
 
 
 def test_route_recommendation_query_prefers_recommendation_tool_path():
@@ -99,3 +102,22 @@ def test_routing_instruction_is_injected_into_prompt_context():
     assert "KẾ HOẠCH ĐIỀU PHỐI:" in prompt
     assert "recommend_projects" in prompt
     assert "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:" in prompt
+
+
+def test_prompt_context_marks_history_as_private_and_keeps_focus_on_current_message():
+    prompt = build_agent_user_text(
+        chat_id="z1",
+        current_user_text="3+7=",
+        recent_messages=[
+            SimpleNamespace(
+                sender=MessageSender.WORKER,
+                body="Tôi là đầu bếp và muốn tìm việc ở Hải Phòng",
+                delivery_status=None,
+            )
+        ],
+    )
+
+    assert "NGỮ CẢNH RIÊNG TƯ" in prompt
+    assert "Không được trích dẫn, tóm tắt" in prompt
+    assert "không gọi người dùng là 'ứng viên trước đó'" in prompt
+    assert prompt.endswith("không chào lại hoặc hỏi lại thông tin đã có.")

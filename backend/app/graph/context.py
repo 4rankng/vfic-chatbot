@@ -31,6 +31,14 @@ _RUNTIME_RETRIEVAL_RULES = """
 - GỌI TOOL SONG SONG: Khi cần nhiều tool không phụ thuộc nhau (ví dụ recommend_jobs + get_product_features, hoặc search_knowledge + list_active_projects), hãy gọi TẤT CẢ trong cùng một lượt trả lời thay vì gọi từng cái một. Điều này giúp trả lời nhanh hơn rất nhiều.
 """.strip()
 
+_PRIVATE_CONTEXT_RULES = """
+
+=== NGỮ CẢNH RIÊNG TƯ ===
+- Lịch sử chat, hồ sơ, ghi chú và kết quả `search_user_memory` là ngữ cảnh nội bộ, không phải nội dung để gửi lại cho bạn.
+- Không được trích dẫn, liệt kê, tóm tắt hoặc nói rằng bạn đang nhớ/đọc lại các dữ liệu này. Không dùng các cách nói như "ứng viên trước đó", "theo memory", "theo lịch sử", hoặc "bạn từng nói".
+- Chỉ dùng ngữ cảnh riêng tư để không hỏi lặp hoặc để tư vấn việc làm khi thông tin đó liên quan trực tiếp đến tin nhắn hiện tại. Với tin nhắn ngắn, lạc đề hoặc không liên quan, chỉ trả lời/chuyển hướng theo chính tin nhắn hiện tại; không nhắc lại chi tiết tìm việc trước đó.
+""".strip()
+
 _STALE_REFUSAL_RULE_MARKERS = (
     "bảo mật",
     "riêng tư",
@@ -126,11 +134,18 @@ async def build_system_prompt(retrieval: RetrievalPort) -> tuple[str, bool]:
     async def _assemble() -> str:
         persona = _strip_stale_refusal_rules(await resolve_persona(retrieval))
         index = await active_projects_index(retrieval)
-        return persona + index + "\n\n" + _RUNTIME_RETRIEVAL_RULES
+        return (
+            persona
+            + index
+            + "\n\n"
+            + _RUNTIME_RETRIEVAL_RULES
+            + "\n\n"
+            + _PRIVATE_CONTEXT_RULES
+        )
 
     try:
         return await cached_system_prompt(_assemble)
     except Exception:  # noqa: BLE001
         return _strip_stale_refusal_rules(
             AGENT_SYSTEM_PROMPT
-        ) + "\n\n" + _RUNTIME_RETRIEVAL_RULES, False
+        ) + "\n\n" + _RUNTIME_RETRIEVAL_RULES + "\n\n" + _PRIVATE_CONTEXT_RULES, False

@@ -30,6 +30,12 @@ from app.graph.ports import RetrievalPort
 
 logger = logging.getLogger(__name__)
 
+_PRIVATE_MEMORY_NOTICE = (
+    "NGỮ CẢNH RIÊNG TƯ — chỉ dùng các dữ kiện dưới đây để hiểu ngữ cảnh hoặc tránh hỏi "
+    "lặp. Không được trích dẫn, tóm tắt hoặc nói rằng bạn biết/đã nhớ các dữ kiện này "
+    "trong câu trả lời gửi cho người dùng."
+)
+
 _RECOMMEND_STOPWORDS = {
     "anh",
     "ban",
@@ -83,7 +89,9 @@ async def search_user_memory(
 ) -> str:
     s = get_settings()
     memory_version = await cache_version(f"memory:{chat_id}") if s.rag_cache_enabled else "0"
-    cache_key = f"rag:memory:{_cache_digest(chat_id, query, top_k, memory_version)}"
+    # v2 prevents a pre-privacy-notice result from being reused during the
+    # normal RAG cache TTL after this response-boundary change.
+    cache_key = f"rag:memory:v2:{_cache_digest(chat_id, query, top_k, memory_version)}"
     if s.rag_cache_enabled:
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
@@ -95,7 +103,9 @@ async def search_user_memory(
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
         return result
     logger.debug("search_user_memory: %d rows for chat %s", len(rows), chat_id)
-    result = "\n".join(f"- {r.content} (sim={r.similarity:.2f})" for r in rows)
+    result = _PRIVATE_MEMORY_NOTICE + "\n" + "\n".join(
+        f"- {r.content} (sim={r.similarity:.2f})" for r in rows
+    )
     if s.rag_cache_enabled:
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
     return result
