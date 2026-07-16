@@ -321,7 +321,13 @@ class ConversationRepository:
         return messages
 
     async def latest_unanswered_worker_message(self, conv: Conversation) -> Message | None:
-        """Return the latest Zalo user message if no successful outbound follows it."""
+        """Return the latest Zalo user message if no confirmed outbound follows it.
+
+        Zalo receipts advance a successfully sent message from ``SENT`` to
+        ``DELIVERED`` or ``READ``. All three states answer the candidate message;
+        treating only ``SENT`` as an answer makes releasing a human-managed
+        conversation requeue an already answered inbound message.
+        """
         worker_msg = (
             await self.db.scalars(
                 select(Message)
@@ -343,7 +349,13 @@ class ConversationRepository:
                     Message.conversation_id == conv.id,
                     Message.id > worker_msg.id,
                     Message.sender.in_([MessageSender.BOT, MessageSender.RECRUITER]),
-                    Message.delivery_status == DeliveryStatus.SENT,
+                    Message.delivery_status.in_(
+                        [
+                            DeliveryStatus.SENT,
+                            DeliveryStatus.DELIVERED,
+                            DeliveryStatus.READ,
+                        ]
+                    ),
                 )
                 .limit(1)
             )

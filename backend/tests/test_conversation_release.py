@@ -15,6 +15,38 @@ class _Result:
         self.rowcount = rowcount
 
 
+class _ScalarResult:
+    def __init__(self, value: object | None) -> None:
+        self.value = value
+
+    def first(self) -> object | None:
+        return self.value
+
+
+@pytest.mark.asyncio
+async def test_release_treats_delivered_or_read_recruiter_replies_as_answers() -> None:
+    """A Zalo receipt must not let release replay an already answered inbound."""
+    from app.models.conversation import DeliveryStatus
+    from app.services.conversation.repository import ConversationRepository
+
+    conversation = SimpleNamespace(id=uuid.uuid4())
+    worker_message = SimpleNamespace(id=101)
+    db = MagicMock()
+    db.scalars = AsyncMock(
+        side_effect=[_ScalarResult(worker_message), _ScalarResult(None)]
+    )
+
+    await ConversationRepository(db).latest_unanswered_worker_message(conversation)
+
+    answered_query = db.scalars.await_args_list[1].args[0]
+    params = answered_query.compile().params
+    assert set(params["delivery_status_1"]) == {
+        DeliveryStatus.SENT,
+        DeliveryStatus.DELIVERED,
+        DeliveryStatus.READ,
+    }
+
+
 @pytest.mark.asyncio
 async def test_release_dispatches_unanswered_turn_through_rq(monkeypatch) -> None:
     from app.api import conversations
