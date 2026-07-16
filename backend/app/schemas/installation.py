@@ -15,7 +15,6 @@ from pydantic import (
     Field,
     JsonValue,
     field_validator,
-    model_validator,
 )
 
 
@@ -34,17 +33,6 @@ SHIPPED_LOCALES = ("vi-VN",)
 TERMINOLOGY_KEYS = frozenset(
     {"application", "candidate", "case", "contact", "conversation", "job", "lead", "organization"}
 )
-SETUP_SECTION_NAMES = (
-    "identity_branding",
-    "regional_terminology",
-    "pack_capabilities",
-    "workflow",
-    "knowledge_templates",
-    "persona",
-    "providers_integrations",
-)
-
-
 class WorkflowPolicySettings(BaseModel):
     """Bounded, declarative workflow choices; never executable configuration."""
 
@@ -202,134 +190,6 @@ class InstallationRevisionCreate(BaseModel):
         return value
 
 
-class IdentityBrandingDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    customer_identity: CustomerIdentitySettings
-    branding: BrandingSettings
-
-
-class RegionalTerminologyDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    locale: str
-    timezone: str
-    currency: str
-    terminology: dict[str, str]
-
-    @model_validator(mode="after")
-    def validate_region(self) -> "RegionalTerminologyDraft":
-        InstallationRevisionCreate.validate_shipped_locale(self.locale)
-        InstallationRevisionCreate.validate_timezone(self.timezone)
-        InstallationRevisionCreate.validate_currency(self.currency)
-        InstallationRevisionCreate.validate_terminology(self.terminology)
-        return self
-
-
-class PackCapabilitiesDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    pack_key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9._-]*$")
-    capability_ids: list[str]
-
-
-class WorkflowDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    workflow_policy: WorkflowPolicySettings
-
-
-class KnowledgeTemplatesDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    template_version_refs: list[TemplateVersionReference]
-
-    @field_validator("template_version_refs")
-    @classmethod
-    def validate_unique_template_versions(
-        cls, value: list[TemplateVersionReference]
-    ) -> list[TemplateVersionReference]:
-        version_ids = [item.version_id for item in value]
-        if len(version_ids) != len(set(version_ids)):
-            raise ValueError("template_version_refs must contain unique version_id values")
-        return value
-
-
-class PersonaDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    persona_version_id: uuid.UUID
-    checksum: str = Field(pattern=r"^[0-9a-f]{64}$")
-
-
-class ProvidersIntegrationsDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    provider_policy: ProviderPolicySettings
-    integration_requirements: list[IntegrationRequirement]
-    authentication_policy: AuthenticationPolicySettings
-
-
-class InstallationSetupDraftPayload(BaseModel):
-    """Strict partial setup state. Missing sections are explicit, never defaulted."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    identity_branding: IdentityBrandingDraft | None = None
-    regional_terminology: RegionalTerminologyDraft | None = None
-    pack_capabilities: PackCapabilitiesDraft | None = None
-    workflow: WorkflowDraft | None = None
-    knowledge_templates: KnowledgeTemplatesDraft | None = None
-    persona: PersonaDraft | None = None
-    providers_integrations: ProvidersIntegrationsDraft | None = None
-
-    def complete(self) -> bool:
-        return all(getattr(self, section) is not None for section in SETUP_SECTION_NAMES)
-
-    def to_revision_create(self, *, expected_lock_version: int) -> InstallationRevisionCreate:
-        if not self.complete():
-            raise ValueError("all setup sections are required before finalization")
-        identity = self.identity_branding
-        region = self.regional_terminology
-        pack = self.pack_capabilities
-        workflow = self.workflow
-        templates = self.knowledge_templates
-        persona = self.persona
-        providers = self.providers_integrations
-        assert identity and region and pack and workflow and templates and persona and providers
-        return InstallationRevisionCreate(
-            expected_lock_version=expected_lock_version,
-            pack_key=pack.pack_key,
-            customer_identity=identity.customer_identity,
-            branding=identity.branding,
-            locale=region.locale,
-            timezone=region.timezone,
-            currency=region.currency,
-            terminology=region.terminology,
-            workflow_policy=workflow.workflow_policy,
-            capability_ids=pack.capability_ids,
-            persona_version_id=persona.persona_version_id,
-            template_version_refs=templates.template_version_refs,
-            provider_policy=providers.provider_policy,
-            integration_requirements=providers.integration_requirements,
-            authentication_policy=providers.authentication_policy,
-        )
-
-
-class InstallationSetupDraftSave(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    payload: InstallationSetupDraftPayload
-    expected_lock_version: int = Field(ge=0)
-
-
-class InstallationSetupDraftFinalize(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    expected_draft_lock_version: int = Field(ge=0)
-    expected_installation_lock_version: int = Field(ge=0)
-
-
 class InstallationIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -425,69 +285,6 @@ class InstallationRuntimeOut(BaseModel):
     capability_ids: list[str]
     readiness_code: str
     legacy_workspace: bool = False
-
-
-class InstallationSetupDraftOut(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    payload: InstallationSetupDraftPayload
-    lock_version: int
-    installation_lock_version: int
-    section_completion: dict[str, bool]
-    issues: list[InstallationIssue]
-
-
-class CapabilityCatalogItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    dependencies: list[str]
-
-
-class PackCatalogItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    key: str
-    version: str
-    contract_hash: str
-    capability_ids: list[str]
-    runtime_ready: bool
-    workflow_ids: list[str]
-    terminology_keys: list[str]
-
-
-class WorkflowCatalogItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    handoff_modes: list[Literal["manual", "assisted", "automatic"]]
-
-
-class AuthoredWorkflowVersionCatalogItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: uuid.UUID
-    pack_key: str
-    workflow_key: str
-    version_no: int
-    label: str
-    checksum: str
-
-
-class InstallationCatalogOut(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal[1] = 1
-    packs: list[PackCatalogItem]
-    capabilities: list[CapabilityCatalogItem]
-    locales: list[str]
-    currencies: list[str]
-    workflows: list[WorkflowCatalogItem]
-    authored_workflow_versions: list[AuthoredWorkflowVersionCatalogItem] = Field(
-        default_factory=list
-    )
-    integration_keys: list[str]
-    authentication_methods: list[Literal["email_password"]]
 
 
 class InstallationErrorOut(BaseModel):

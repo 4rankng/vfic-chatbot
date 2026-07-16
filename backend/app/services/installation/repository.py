@@ -13,7 +13,6 @@ from app.models.ingestion_template import IngestionTemplateVersion, TemplateVers
 from app.models.installation import (
     InstallationManifestRevision,
     InstallationManifestValidation,
-    InstallationSetupDraft,
     InstallationState,
 )
 from app.models.integration import IntegrationSetting
@@ -44,12 +43,6 @@ class InstallationRepository:
 
     async def get_state(self, *, for_update: bool = False) -> InstallationState | None:
         statement = select(InstallationState).where(InstallationState.singleton_id == 1)
-        if for_update:
-            statement = statement.with_for_update()
-        return (await self.db.scalars(statement)).one_or_none()
-
-    async def get_setup_draft(self, *, for_update: bool = False) -> InstallationSetupDraft | None:
-        statement = select(InstallationSetupDraft).where(InstallationSetupDraft.singleton_id == 1)
         if for_update:
             statement = statement.with_for_update()
         return (await self.db.scalars(statement)).one_or_none()

@@ -12,10 +12,7 @@ from fastapi.responses import JSONResponse
 from app.api import (
     auth,
     bot_runs,
-    case_workflows,
-    cases,
     conversations,
-    contacts,
     dashboard,
     integrations,
     installation,
@@ -112,9 +109,6 @@ API_V1_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=API_V1_PREFIX)
 app.include_router(users.router, prefix=API_V1_PREFIX)
 app.include_router(conversations.router, prefix=API_V1_PREFIX)
-app.include_router(contacts.router, prefix=API_V1_PREFIX)
-app.include_router(cases.router, prefix=API_V1_PREFIX)
-app.include_router(case_workflows.router, prefix=API_V1_PREFIX)
 app.include_router(leads.router, prefix=API_V1_PREFIX)
 app.include_router(bot_runs.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge.router, prefix=API_V1_PREFIX)

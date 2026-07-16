@@ -1,7 +1,7 @@
 # Codebase Summary
 
 **Repo:** `git@github.com:4rankng/ChatBotN8N.git` (branch `main`)
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-17
 
 A monorepo with two deployable subprojects (`backend/`, `frontend/`) plus
 root-level ops scripts. DockerHub images: `franknguyenvd/vfic-backend:latest`
@@ -50,7 +50,7 @@ ChatBot/
 ├── frontend/             React Admin SPA (~48.6k LOC TS/TSX)
 │   ├── src/
 │   │   ├── main.tsx      StrictMode + vite:preloadError guard
-│   │   ├── App.tsx       installation gate + dormant runtime compilation
+│   │   ├── App.tsx       direct recruitment console + runtime compilation recovery
 │   │   ├── components/
 │   │   │   ├── admin/            vendored shadcn-admin-kit (mutable dep)
 │   │   │   ├── ui/               vendored Shadcn primitives (mutable dep)
@@ -58,7 +58,6 @@ ChatBot/
 │   │   │       ├── root/             compiled <CRM> composition + generation reset
 │   │   │       ├── capabilities/     static compiler/registry + recruitment adapter
 │   │   │       ├── installation/     public runtime bootstrap clients/context
-│   │   │       ├── settings/installation/ admin setup wizard
 │   │   │       ├── workflows/        blank immutable workflow authoring
 │   │   │       ├── contacts/, cases/ dormant generic React Admin resources
 │   │   │       ├── conversations/    inbox + ChatThread (virtua) + context panel
@@ -124,8 +123,7 @@ ChatBot/
 | `components/atomic-crm/` | **The VFIC app.** All product code lives here. |
 | `components/atomic-crm/root/` | `<CRM>` receives one compiled runtime bundle and renders direct React Admin resources/routes; reset code owns Query/store/socket/message generation teardown. |
 | `components/atomic-crm/capabilities/` | Static safe module registry, strict pack compiler, canonical backend parity check, and delegation-only recruitment composition. |
-| `components/atomic-crm/installation/` | Public runtime manifest parsing, lifecycle context/bootstrap, and setup API clients. |
-| `components/atomic-crm/settings/installation/` | PostgreSQL-backed administrator setup wizard; no business configuration is read from browser/env fallbacks. |
+| `components/atomic-crm/installation/` | Public runtime manifest parsing and lifecycle context/bootstrap. It refreshes safe runtime metadata but does not gate the authenticated recruiter console behind an installer. |
 | `components/atomic-crm/workflows/` | Blank workflow authoring and structural validation for immutable published versions. |
 | `components/atomic-crm/contacts/`, `cases/` | Dormant generic React Admin resources with human selectors and workflow-derived Case fields. |
 | `components/atomic-crm/providers/` | `dataProvider.ts` (react-admin verb mapping), `rest/api.ts` (HTTP client + JWT + 401 refresh), `authProvider.ts`, `i18nProvider.ts` (Vietnamese-only). |
@@ -182,7 +180,7 @@ ChatBot/
 | `backend/scripts/benchmark_models.py` | LLM latency/throughput benchmark. |
 | `backend/scripts/benchmark_rag.py` | Golden-case RAG retrieval scoring. |
 | `frontend/src/main.tsx` | StrictMode + `vite:preloadError` sessionStorage-guarded force-reload. |
-| `frontend/src/App.tsx` | Shows setup unless the public manifest is `ACTIVE + READY`; compiles one runtime generation fail-closed and never remounts the previous Admin after failure. |
+| `frontend/src/App.tsx` | Opens the static recruitment console for every runtime lifecycle; compiles one runtime generation fail-closed and offers recovery if console compilation fails. |
 | `frontend/src/components/atomic-crm/root/CRM.tsx` | Renders compiled direct React Admin Resources, CustomRoutes, dashboard, navigation, providers, and capability slots. |
 | `frontend/src/components/atomic-crm/capabilities/compile-capabilities.ts` | Pure compatibility/collision compiler; no database-selected imports. |
 | `frontend/src/components/atomic-crm/root/reset-runtime-state.ts` | Generation-owned Query/store/Socket.IO/Zustand/adapter teardown and stale-response isolation. |

@@ -9,8 +9,6 @@ type CanAccessParams<RecordType extends Record<string, unknown> = Record<string,
 const RECRUITER_RESOURCES = new Set([
   "conversations",
   "projects",
-  "contacts",
-  "cases",
 ]);
 const KNOWN_ACTIONS = new Set([
   "list",
@@ -25,8 +23,7 @@ const KNOWN_ACTIONS = new Set([
 /**
  * VFIC access control.
  *
- * Recruiters can access conversations, projects, Contacts, and Cases, with
- * administrator-only actions filtered separately. All other
+ * Recruiters can access conversations and projects. All other
  * resources (users, bot_runs, knowledge_sources, personas, etc.) are
  * admin-only. Real enforcement is the FastAPI backend
  * (app/api/dependencies.py); this is the UX layer.
@@ -41,7 +38,5 @@ export const canAccess = <
   if (!KNOWN_ACTIONS.has(params.action)) return false;
   if (!availableResources.has(params.resource)) return false;
   if (role === "admin") return true;
-  if (params.resource === "contacts" && params.action === "create") return false;
-
   return RECRUITER_RESOURCES.has(params.resource);
 };

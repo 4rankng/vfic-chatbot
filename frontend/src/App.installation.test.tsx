@@ -1,9 +1,11 @@
 import { cleanup, render } from "vitest-browser-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type * as RuntimeStateModule from "@/components/atomic-crm/root/reset-runtime-state";
 
 const state = vi.hoisted(() => ({
   manifest: {} as Record<string, unknown>,
   refreshRuntime: vi.fn(async () => undefined),
+  failCompilation: false,
 }));
 
 vi.mock("@/components/atomic-crm/installation/installation-context", () => ({
@@ -15,10 +17,6 @@ vi.mock("@/components/atomic-crm/installation/installation-context", () => ({
     manifest.lifecycle === "ACTIVE" && manifest.readiness_code === "READY",
 }));
 vi.mock("@/components/atomic-crm/installation/runtime-manifest", () => ({
-  isLegacyWorkspaceRuntime: (manifest: { lifecycle?: string; readiness_code?: string; legacy_workspace?: boolean }) =>
-    manifest.lifecycle === "UNCONFIGURED" &&
-    manifest.readiness_code === "SETUP_REQUIRED" &&
-    manifest.legacy_workspace === true,
   legacyRecruitmentWorkspaceManifest: () => ({
     schema_version: 1,
     lifecycle: "ACTIVE",
@@ -39,15 +37,22 @@ vi.mock("@/components/atomic-crm/installation/runtime-manifest", () => ({
     legacy_workspace: false,
   }),
 }));
-vi.mock("@/components/atomic-crm/installation/SetupLayout", () => ({
-  SetupApplication: () => <p>setup-only-shell</p>,
-}));
 vi.mock("@/components/atomic-crm/root/CRM", () => ({
   CRM: () => <p>business-admin</p>,
 }));
 vi.mock("@/components/atomic-crm/providers/commons/i18nProvider", () => ({
   createI18nProvider: () => ({}),
 }));
+vi.mock("@/components/atomic-crm/root/reset-runtime-state", async (importOriginal) => {
+  const actual = await importOriginal<typeof RuntimeStateModule>();
+  return {
+    ...actual,
+    ensureRuntimeGeneration: async (...args: Parameters<typeof actual.ensureRuntimeGeneration>) => {
+      if (state.failCompilation) throw new Error("Compilation failed");
+      return actual.ensureRuntimeGeneration(...args);
+    },
+  };
+});
 
 import App, { RuntimeCompilationLoading } from "./App";
 import { readyRecruitmentManifest } from "./components/atomic-crm/capabilities/test-fixtures";
@@ -61,21 +66,21 @@ afterEach(async () => {
   await resetActiveRuntimeState();
   abandonRuntimeGenerationForTests();
   state.refreshRuntime.mockClear();
+  state.failCompilation = false;
 });
 
 describe("application lifecycle composition", () => {
   it("announces the neutral runtime compilation state", async () => {
     const screen = await render(<RuntimeCompilationLoading />);
-    await expect.element(screen.getByRole("status")).toHaveTextContent("Đang chuẩn bị không gian làm việc");
+    await expect.element(screen.getByRole("status")).toHaveTextContent("Đang chuẩn bị không gian tuyển dụng");
     await expect.element(screen.getByRole("main")).toHaveAttribute("aria-live", "polite");
   });
   it.each(["UNCONFIGURED", "DRAFT", "VALIDATED", "SUSPENDED", "UPGRADE_REQUIRED"])(
-    "mounts only the setup shell for %s",
+    "opens the recruitment console without an installation screen for %s",
     async (lifecycle) => {
       state.manifest = { lifecycle, readiness_code: "SETUP_REQUIRED", locale: null };
       const screen = await render(<App />);
-      await expect.element(screen.getByText("setup-only-shell")).toBeVisible();
-      await expect.element(screen.getByText("business-admin")).not.toBeInTheDocument();
+      await expect.element(screen.getByText("business-admin")).toBeVisible();
     },
   );
 
@@ -83,10 +88,9 @@ describe("application lifecycle composition", () => {
     state.manifest = readyRecruitmentManifest();
     const screen = await render(<App />);
     await expect.element(screen.getByText("business-admin")).toBeVisible();
-    await expect.element(screen.getByText("setup-only-shell")).not.toBeInTheDocument();
   });
 
-  it("keeps an established pre-installation workspace out of the setup wizard", async () => {
+  it("opens the static recruitment console for a legacy workspace", async () => {
     state.manifest = {
       lifecycle: "UNCONFIGURED",
       readiness_code: "SETUP_REQUIRED",
@@ -96,21 +100,20 @@ describe("application lifecycle composition", () => {
     const screen = await render(<App />);
 
     await expect.element(screen.getByText("business-admin")).toBeVisible();
-    await expect.element(screen.getByText("setup-only-shell")).not.toBeInTheDocument();
   });
 
-  it("fails closed with an explicit retry when a ready manifest cannot compile", async () => {
-    state.manifest = readyRecruitmentManifest({
-      authority_generation: 2,
-      pack_contract_hash: "f".repeat(64),
-    });
+  it("keeps an explicit retry when static recruitment composition cannot compile", async () => {
+    state.manifest = readyRecruitmentManifest();
+    state.failCompilation = true;
     const screen = await render(<App />);
 
     await expect.element(
-      screen.getByRole("heading", { name: "Không thể mở không gian làm việc" }),
+      screen.getByRole("heading", { name: "Không thể tải không gian tuyển dụng" }),
     ).toBeVisible();
     await expect.element(screen.getByText("business-admin")).not.toBeInTheDocument();
-    await screen.getByRole("button", { name: "Kiểm tra lại cấu hình" }).click();
+    state.failCompilation = false;
+    await screen.getByRole("button", { name: "Tải lại không gian làm việc" }).click();
     expect(state.refreshRuntime).toHaveBeenCalledOnce();
+    await expect.element(screen.getByText("business-admin")).toBeVisible();
   });
 });

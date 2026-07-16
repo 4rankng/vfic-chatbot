@@ -614,14 +614,8 @@ class InstallationService:
     async def runtime_view(self) -> InstallationRuntimeOut:
         state = await self.repo.get_state()
         if state is None:
-            draft = await self.repo.get_setup_draft()
-            legacy_workspace = draft is None and await self.repo.has_legacy_workspace()
             return InstallationRuntimeOut(
-                lifecycle=(
-                    InstallationLifecycle.draft.value
-                    if draft is not None
-                    else InstallationLifecycle.unconfigured.value
-                ),
+                lifecycle=InstallationLifecycle.unconfigured.value,
                 authority_generation=0,
                 revision_id=None,
                 pack_key=None,
@@ -636,7 +630,7 @@ class InstallationService:
                 terminology=None,
                 capability_ids=[],
                 readiness_code="SETUP_REQUIRED",
-                legacy_workspace=legacy_workspace,
+                legacy_workspace=await self.repo.has_legacy_workspace(),
             )
         revision_id = state.active_revision_id
         if revision_id is None:
@@ -688,13 +682,8 @@ class InstallationService:
     async def admin_view(self) -> InstallationAdminOut:
         state = await self.repo.get_state()
         if state is None:
-            draft = await self.repo.get_setup_draft()
             return InstallationAdminOut(
-                lifecycle=(
-                    InstallationLifecycle.draft.value
-                    if draft is not None
-                    else InstallationLifecycle.unconfigured.value
-                ),
+                lifecycle=InstallationLifecycle.unconfigured.value,
                 authority_generation=0,
                 lock_version=0,
                 current_revision=None,

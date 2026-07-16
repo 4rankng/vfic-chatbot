@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const realtime = vi.hoisted(() => ({ closeRealtimeSocket: vi.fn() }));
+const realtime = vi.hoisted(() => ({
+  closeRealtimeSocket: vi.fn(),
+  getRealtimeSocket: vi.fn(),
+}));
 vi.mock("@/lib/vfic/realtimeSocket", () => realtime);
 
 import { useMessageStore } from "../conversations/messageStore";
-import { genericFixtureManifest, genericFixtureRegistry } from "../capabilities/test-fixtures";
+import { readyRecruitmentManifest } from "../capabilities/test-fixtures";
 import {
   abandonRuntimeGenerationForTests,
   ensureRuntimeGeneration,
@@ -27,12 +30,11 @@ describe("runtime generation reset", () => {
   });
 
   it("reuses the exact QueryClient and store for the same complete key", async () => {
-    const manifest = genericFixtureManifest();
-    const registry = genericFixtureRegistry();
-    const first = await ensureRuntimeGeneration(manifest, registry);
+    const manifest = readyRecruitmentManifest();
+    const first = await ensureRuntimeGeneration(manifest);
     first.store.setItem("view", "same-generation");
 
-    const second = await ensureRuntimeGeneration({ ...manifest }, registry);
+    const second = await ensureRuntimeGeneration({ ...manifest });
 
     expect(second).toBe(first);
     expect(second.queryClient).toBe(first.queryClient);
@@ -42,10 +44,8 @@ describe("runtime generation reset", () => {
   });
 
   it("abandons Query, message, socket and adapter state before mounting G8", async () => {
-    const registry = genericFixtureRegistry();
     const first = await ensureRuntimeGeneration(
-      genericFixtureManifest({ authority_generation: 7 }),
-      registry,
+      readyRecruitmentManifest({ authority_generation: 7 }),
     );
     first.queryClient.setQueryData(["generation"], "G7");
     useMessageStore.getState().reset("conversation-g7");
@@ -53,12 +53,11 @@ describe("runtime generation reset", () => {
     const previousEpoch = getRuntimeEpoch();
 
     const second = await ensureRuntimeGeneration(
-      genericFixtureManifest({
+      readyRecruitmentManifest({
         authority_generation: 8,
         revision_id: "00000000-0000-4000-8000-000000000008",
         manifest_checksum: "8".repeat(64),
       }),
-      registry,
     );
 
     expect(second).not.toBe(first);
@@ -74,17 +73,15 @@ describe("runtime generation reset", () => {
   });
 
   it("leaves no old generation active when the replacement fails compilation", async () => {
-    const registry = genericFixtureRegistry();
-    const first = await ensureRuntimeGeneration(genericFixtureManifest(), registry);
+    const first = await ensureRuntimeGeneration(readyRecruitmentManifest());
     first.queryClient.setQueryData(["old"], "value");
 
     await expect(
       ensureRuntimeGeneration(
-        genericFixtureManifest({
+        readyRecruitmentManifest({
           authority_generation: 2,
           pack_contract_hash: "f".repeat(64),
         }),
-        registry,
       ),
     ).rejects.toMatchObject({ code: "PACK_HASH_MISMATCH" });
 
@@ -94,10 +91,7 @@ describe("runtime generation reset", () => {
   });
 
   it("fully abandons business state on an active to suspended transition", async () => {
-    const bundle = await ensureRuntimeGeneration(
-      genericFixtureManifest(),
-      genericFixtureRegistry(),
-    );
+    const bundle = await ensureRuntimeGeneration(readyRecruitmentManifest());
     bundle.queryClient.setQueryData(["active"], true);
     useMessageStore.getState().reset("active-conversation");
 

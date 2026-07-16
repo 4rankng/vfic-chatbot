@@ -57,7 +57,6 @@ async def test_absent_state_reads_unconfigured_without_writing() -> None:
     service.repo = SimpleNamespace(
         acquire_authority_lock=AsyncMock(),
         get_state=AsyncMock(return_value=None),
-        get_setup_draft=AsyncMock(return_value=None),
         has_legacy_workspace=AsyncMock(return_value=False),
     )
 
@@ -75,7 +74,6 @@ async def test_existing_pre_installation_workspace_is_marked_for_legacy_ui_compa
     service = InstallationService(AsyncMock())
     service.repo = SimpleNamespace(
         get_state=AsyncMock(return_value=None),
-        get_setup_draft=AsyncMock(return_value=None),
         has_legacy_workspace=AsyncMock(return_value=True),
     )
 

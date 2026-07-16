@@ -57,7 +57,6 @@ def _load_fixture(name: str) -> dict:
     [
         "empty_installation.json",
         "recruitment_installation.json",
-        "product_advisory_installation.json",
     ],
 )
 def test_universal_fixtures_are_explicit_and_contain_no_current_customer_data(name: str):
@@ -76,17 +75,8 @@ def test_empty_installation_fixture_contains_no_business_configuration_or_rows()
     assert fixture == empty_installation_fixture()
 
 
-@pytest.mark.parametrize(
-    ("name", "expected_pack"),
-    [
-        ("recruitment_installation.json", "recruitment"),
-        ("product_advisory_installation.json", "product_advisory"),
-    ],
-)
-def test_vertical_fixtures_require_explicit_identity_persona_template_and_capabilities(
-    name: str, expected_pack: str
-):
-    fixture = _load_fixture(name)
+def test_recruitment_fixture_requires_explicit_identity_persona_template_and_capabilities():
+    fixture = _load_fixture("recruitment_installation.json")
     built = installation_fixture(
         customer=fixture["customer"],
         pack=fixture["pack"],
@@ -98,7 +88,7 @@ def test_vertical_fixtures_require_explicit_identity_persona_template_and_capabi
     )
 
     assert built["customer"]["display_name"]
-    assert built["pack"] == expected_pack
+    assert built["pack"] == "recruitment"
     assert built["capabilities"]
     assert built["persona"]["name"]
     assert built["persona"]["authority"] == "none"

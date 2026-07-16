@@ -5,12 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.graph.runtime_policy import build_policy_system_prompt, build_resolved_runtime_policy
-from app.graph.runner import _agent_turn, run_manifest_composed_agent, run_turn
-from app.graph.types import BotRunState
+from app.graph.runner import _agent_turn, run_manifest_composed_agent
 
 
 def _active(
-    *, capabilities: list[str], persona: str = "Giọng điệu thân thiện", pack_key: str = "product_advisory"
+    *, capabilities: list[str], persona: str = "Giọng điệu thân thiện", pack_key: str = "recruitment"
 ):
     return SimpleNamespace(
         revision=SimpleNamespace(
@@ -143,66 +142,6 @@ async def test_manifest_composed_agent_passes_the_immutable_tool_registry():
     assert calls[0]["allowed_tools"] == ("search_knowledge",)
 
 
-async def test_product_advisory_live_state_question_never_reaches_the_agent():
-    active, persona = _active(capabilities=["conversation", "knowledge", "product_advisory"])
-    policy = build_resolved_runtime_policy(active, persona_body=persona)
-    assert policy is not None
-
-    class _Agent:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        async def agent(self, *_args, **_kwargs):
-            self.calls += 1
-            return "must not be returned"
-
-    agent = _Agent()
-    deps = SimpleNamespace(
-        runtime_policy=SimpleNamespace(resolve_active_policy=lambda: _value(policy)),
-        agent=agent,
-        retrieval=object(),
-        embedder=object(),
-        make_retrieval=None,
-    )
-
-    reply = await run_manifest_composed_agent("Sản phẩm này còn hàng không?", deps)
-
-    assert reply is not None
-    assert "không thể xác nhận" in reply
-    assert agent.calls == 0
-
-
-async def test_live_product_turn_skips_recruitment_vacancy_and_lead_dependencies():
-    active, persona = _active(capabilities=["conversation", "knowledge", "product_advisory"])
-    policy = build_resolved_runtime_policy(active, persona_body=persona)
-    assert policy is not None
-
-    class _Agent:
-        async def agent(self, _text, **kwargs):
-            assert kwargs["resolved_tool_registry"] == {"search_knowledge"}
-            return "Tài liệu nói rằng sản phẩm có bảo hành một năm."
-
-    deps = SimpleNamespace(
-        agent=_Agent(),
-        retrieval=object(),
-        embedder=object(),
-        make_retrieval=None,
-        lead=SimpleNamespace(context=_must_not_run),
-    )
-    state = SimpleNamespace()
-
-    reply = await _agent_turn(
-        state,
-        deps,
-        "Chính sách bảo hành thế nào?",
-        chat_id="chat-1",
-        recent_messages=[],
-        manifest_policy=policy,
-    )
-
-    assert reply == "Tài liệu nói rằng sản phẩm có bảo hành một năm."
-
-
 async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(monkeypatch):
     active, persona = _active(
         capabilities=["conversation", "knowledge"], pack_key="recruitment"
@@ -241,66 +180,9 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
     assert reply == "Thông tin có trong tài liệu."
 
 
-async def test_live_product_turn_skips_legacy_faq_and_candidate_extraction():
-    """Product turns use only their manifest-composed agent path end-to-end."""
-    from tests.test_graph_runner_turn import CONV_ID, _FakeConv, _FakeZalo, _deps, _stub_svc
-
-    active, persona = _active(capabilities=["conversation", "knowledge", "product_advisory"])
-    policy = build_resolved_runtime_policy(active, persona_body=persona)
-    assert policy is not None
-
-    class _Agent:
-        async def agent(self, _text, **kwargs):
-            assert kwargs["resolved_tool_registry"] == {"search_knowledge"}
-            return "Tài liệu nói rằng sản phẩm có bảo hành một năm."
-
-    class _MustNotBypass:
-        async def try_answer(self, _user_text):
-            raise AssertionError("product advisory must not query the legacy FAQ store")
-
-    conv = _FakeConv()
-    svc, _ = _stub_svc(conv=conv)
-    persisted: list[dict] = []
-    deps = _deps(
-        _FakeZalo(),
-        conversation=svc,
-        persist=persisted.append,
-        faq_bypass=_MustNotBypass(),
-    )
-    deps.agent = _Agent()
-    deps.runtime_policy = SimpleNamespace(
-        runtime_stamp_is_current=lambda **_kwargs: _value(True),
-        resolve_active_policy=lambda: _value(policy),
-    )
-    state = BotRunState(
-        conversation_id=CONV_ID,
-        version_at_start=1,
-        user_text="Chính sách bảo hành thế nào?",
-        runtime_revision_id="00000000-0000-4000-8000-000000000001",
-        authority_generation=1,
-        runtime_fingerprint="a" * 64,
-    )
-
-    result = await run_turn(state, deps)
-
-    assert result["outcome"] == "sent"
-    assert persisted == []
-
-
-def test_product_advisory_runtime_is_limited_to_document_retrieval():
-    active, persona = _active(capabilities=["conversation", "knowledge", "product_advisory"])
-
-    policy = build_resolved_runtime_policy(active, persona_body=persona)
-
-    assert policy is not None
-    assert policy.tool_registry.names == {"search_knowledge"}
-    assert not policy.tool_registry.allows("search_user_memory")
-    assert not policy.tool_registry.allows("recommend_jobs")
-
-
 async def _value(value):
     return value
 
 
 async def _must_not_run(*_args, **_kwargs):
-    raise AssertionError("product advisory must not use recruitment lead context")
+    raise AssertionError("candidate intake must not use lead context when disabled")

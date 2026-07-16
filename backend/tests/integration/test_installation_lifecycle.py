@@ -252,7 +252,7 @@ async def test_operational_data_created_after_draft_blocks_incompatible_first_ac
         capabilities=(CapabilityDefinition("conversation"),),
         packs=(
             IndustryPackDefinition(
-                key="product_advisory",
+                key="unsupported-pack",
                 version="1",
                 capability_ids=("conversation",),
                 kernel_abi="1",
@@ -270,28 +270,28 @@ async def test_operational_data_created_after_draft_blocks_incompatible_first_ac
         ),
     )
     service = InstallationService(integration_session, registry=registry)
-    product_workflow = CaseWorkflowVersion(
-        pack_key="product_advisory",
+    unsupported_workflow = CaseWorkflowVersion(
+        pack_key="unsupported-pack",
         workflow_key="candidate_intake",
         version_no=1,
-        label="Product intake",
+        label="Unsupported intake",
         schema_version=1,
         case_attribute_schema={},
-        checksum=sha256_json({"pack_key": "product_advisory", "version_no": 1}),
+        checksum=sha256_json({"pack_key": "unsupported-pack", "version_no": 1}),
         created_by=actor.id,
     )
-    integration_session.add(product_workflow)
+    integration_session.add(unsupported_workflow)
     await integration_session.flush()
-    body = _revision_body(persona_version.id, display_name="Product customer").model_copy(
+    body = _revision_body(persona_version.id, display_name="Unsupported customer").model_copy(
         update={
-            "pack_key": "product_advisory",
+            "pack_key": "unsupported-pack",
             "capability_ids": ["conversation"],
             "workflow_policy": _revision_body(
                 persona_version.id, display_name="unused"
             ).workflow_policy.model_copy(
                 update={
-                    "workflow_version_id": product_workflow.id,
-                    "workflow_version_checksum": product_workflow.checksum,
+                    "workflow_version_id": unsupported_workflow.id,
+                    "workflow_version_checksum": unsupported_workflow.checksum,
                 }
             ),
         }

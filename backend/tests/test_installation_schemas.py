@@ -13,7 +13,6 @@ from app.schemas.installation import (
     InstallationRevisionCreate,
     InstallationRevisionOut,
     InstallationRuntimeOut,
-    InstallationSetupDraftPayload,
 )
 
 
@@ -194,7 +193,7 @@ def test_template_reference_requires_lowercase_sha256() -> None:
         InstallationRevisionCreate.model_validate(payload)
 
 
-def test_conflicting_duplicate_template_checksums_are_rejected_for_every_authoring_path() -> None:
+def test_conflicting_duplicate_template_checksums_are_rejected() -> None:
     version_id = str(uuid.uuid4())
     conflicting_refs = [
         {"version_id": version_id, "checksum": "a" * 64},
@@ -205,16 +204,6 @@ def test_conflicting_duplicate_template_checksums_are_rejected_for_every_authori
     with pytest.raises(ValidationError) as direct_error:
         InstallationRevisionCreate.model_validate(revision_payload)
     assert any(error["loc"] == ("template_version_refs",) for error in direct_error.value.errors())
-
-    with pytest.raises(ValidationError) as draft_error:
-        InstallationSetupDraftPayload.model_validate(
-            {"knowledge_templates": {"template_version_refs": conflicting_refs}}
-        )
-    assert any(
-        error["loc"] == ("knowledge_templates", "template_version_refs")
-        for error in draft_error.value.errors()
-    )
-
 
 def test_locale_rejects_well_formed_but_unshipped_catalog() -> None:
     payload = _valid_revision_payload()

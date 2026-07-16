@@ -171,10 +171,10 @@ async def test_non_recruitment_policy_suppresses_proactive_outreach(monkeypatch)
     zalo = _FakeZalo()
     deps = _deps(agent, zalo, conversation=svc)
 
-    async def _product_policy():
-        return SimpleNamespace(pack_key="product_advisory")
+    async def _unsupported_policy():
+        return SimpleNamespace(pack_key="unsupported-pack")
 
-    deps.runtime_policy = SimpleNamespace(resolve_active_policy=_product_policy)
+    deps.runtime_policy = SimpleNamespace(resolve_active_policy=_unsupported_policy)
 
     result = await run_proactive_turn(_FakeConv(), deps)
 

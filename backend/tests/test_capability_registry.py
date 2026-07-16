@@ -65,7 +65,7 @@ def test_selected_pack_hash_ignores_unrelated_pack_contracts() -> None:
             CapabilityDefinition("conversation"),
             CapabilityDefinition("knowledge", ("conversation",)),
             CapabilityDefinition("job_advisory", ("knowledge", "conversation")),
-            CapabilityDefinition("product_catalog"),
+            CapabilityDefinition("unrelated_capability"),
         ),
         packs=(
             IndustryPackDefinition(
@@ -75,9 +75,9 @@ def test_selected_pack_hash_ignores_unrelated_pack_contracts() -> None:
                 kernel_abi="1",
             ),
             IndustryPackDefinition(
-                key="product_advisory",
+                key="unrelated-pack",
                 version="27",
-                capability_ids=("product_catalog",),
+                capability_ids=("unrelated_capability",),
                 kernel_abi="9",
             ),
         ),
@@ -150,7 +150,7 @@ def test_selection_rejects_unknown_and_cross_pack_capability_ids() -> None:
     registry = _registry(
         capabilities=(
             CapabilityDefinition("conversation"),
-            CapabilityDefinition("product_catalog"),
+            CapabilityDefinition("unrelated_capability"),
         ),
         packs=(
             IndustryPackDefinition(
@@ -160,16 +160,16 @@ def test_selection_rejects_unknown_and_cross_pack_capability_ids() -> None:
                 kernel_abi="1",
             ),
             IndustryPackDefinition(
-                key="product_advisory",
+                key="unrelated-pack",
                 version="1",
-                capability_ids=("product_catalog",),
+                capability_ids=("unrelated_capability",),
                 kernel_abi="1",
             ),
         ),
     )
 
     with pytest.raises(ValueError, match="not in pack recruitment"):
-        registry.validate_selection("recruitment", ("product_catalog",))
+        registry.validate_selection("recruitment", ("unrelated_capability",))
 
     with pytest.raises(ValueError, match="not in pack recruitment"):
         registry.validate_selection("recruitment", ("app.capabilities.recruitment",))

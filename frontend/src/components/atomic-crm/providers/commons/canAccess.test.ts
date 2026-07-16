@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { canAccess } from "./canAccess";
 
-const resources = new Set(["contacts", "cases", "conversations"]);
+const resources = new Set(["conversations", "projects"]);
 
 describe("canAccess", () => {
-  it("keeps recruiter Contact list/edit access but hides administrator-only creation", () => {
-    expect(canAccess("recruiter", { resource: "contacts", action: "list" }, resources)).toBe(true);
-    expect(canAccess("recruiter", { resource: "contacts", action: "edit" }, resources)).toBe(true);
-    expect(canAccess("recruiter", { resource: "contacts", action: "create" }, resources)).toBe(false);
-    expect(canAccess("admin", { resource: "contacts", action: "create" }, resources)).toBe(true);
+  it("allows recruiters to use the recruitment workspace resources", () => {
+    expect(canAccess("recruiter", { resource: "conversations", action: "list" }, resources)).toBe(true);
+    expect(canAccess("recruiter", { resource: "projects", action: "edit" }, resources)).toBe(true);
+    expect(canAccess("recruiter", { resource: "personas", action: "list" }, resources)).toBe(false);
   });
 });
