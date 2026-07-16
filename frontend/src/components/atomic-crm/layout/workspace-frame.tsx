@@ -18,6 +18,7 @@ import "./mobile-workspace.css";
 import Header from "./Header";
 import {
   getWorkspaceDestinations,
+  getWorkspaceDestination,
   getWorkspaceOverflowDestinations,
   normalizeWorkspacePath,
   type WorkspaceNavigationSurface,
@@ -79,11 +80,15 @@ const WorkspaceNavigation = ({
         {destinations.map(({ id, label, to, Icon, isActive }) => {
           const active = isActive(path);
           const badge = id === "messages" ? attentionCount : 0;
+          const destination = getWorkspaceDestination(
+            { id, to },
+            badge,
+          );
 
           return (
             <Link
               key={id}
-              to={to}
+              to={destination}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "workspace-navigation-link",

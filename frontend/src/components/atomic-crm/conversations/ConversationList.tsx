@@ -27,6 +27,16 @@ import {
   getGenericConversationPresentation,
   useConversationCapabilitySlots,
 } from "./conversation-capability";
+import {
+  getConversationListServerFilter,
+  isAttentionReason,
+} from "./conversation-list-filters";
+import {
+  botHasNotReplied,
+  getConversationAttentionLabel,
+  getConversationUnreadCount,
+  needsHumanReply,
+} from "./conversation-row-state";
 import type { ConversationRowPresentation } from "../capabilities/types";
 import conversationEmptyIllustration from "@/assets/empty-states/conversation-empty-illustration.png";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
@@ -46,42 +56,12 @@ type ConversationRow = Conversation & {
 
 export type QueueFilter = "all" | "attention" | "priority";
 
-const ATTENTION_REASON_KEYS = new Set([
-  "DELIVERY_REVIEW",
-  "HUMAN_ESCALATION",
-  "REPLY_OVERDUE",
-  "FOLLOWUP_OVERDUE",
-  "WAITING_REPLY",
-  "PRIORITY_NO_ACTION",
-  "FOLLOWUP_TODAY",
-  "UNREAD",
-  "STALLED",
-]);
-
-const isAttentionReason = (value: string | null): value is string =>
-  value !== null && ATTENTION_REASON_KEYS.has(value);
-
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
 
 const QUEUE_FILTER_ICON: Record<QueueFilter, string> = {
   all: "#i-filter",
   attention: "#i-clock",
   priority: "#i-sparkles",
-};
-
-const needsVisibleAttention = (
-  conversation: Conversation,
-  _readIds: Set<string>,
-) => {
-  if (conversation.mode !== "human" && conversation.mode !== "semi_auto") {
-    return false;
-  }
-  if (!conversation.last_inbound_at) return false;
-  if (!conversation.last_outbound_at) return true;
-  return (
-    new Date(conversation.last_inbound_at).getTime() >
-    new Date(conversation.last_outbound_at).getTime()
-  );
 };
 
 const getConversationModePriority = (mode: Conversation["mode"]) => {
@@ -95,16 +75,6 @@ const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-};
-
-const getAttentionLabel = (
-  conversation: Conversation,
-  needsAttention: boolean,
-): string => {
-  if (conversation.mode === "closed") return "Đã đóng";
-  if (conversation.needs_human) return "Cần xử lý";
-  if (needsAttention) return "Chờ nhân viên";
-  return "";
 };
 
 // Hoisted static style objects so list rows don't allocate brand-new objects on
@@ -196,13 +166,13 @@ const ConversationListItem = memo(
     const priorityChip = presentation.priorityLabel
       ? { label: presentation.priorityLabel, tone: presentation.priorityTone ?? "warm" }
       : null;
-    const needsAttention = needsVisibleAttention(conversation, readIds);
-    const attentionLabel = getAttentionLabel(conversation, needsAttention);
+    const needsHumanAttention = needsHumanReply(conversation);
+    const needsBotAttention = botHasNotReplied(conversation);
+    const needsAttention = needsHumanAttention || needsBotAttention;
+    const attentionLabel = getConversationAttentionLabel(conversation);
     // Unread badge: optimistically cleared once opened (readIds); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
-    const unread = readIds.has(conversation.id)
-      ? 0
-      : (conversation.unread_count ?? 0);
+    const unread = getConversationUnreadCount(conversation, readIds);
 
     return (
       <button
@@ -382,6 +352,7 @@ const ConversationListPanel = ({
   onSelect: (c: Conversation) => void;
   readIds: Set<string>;
 }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     data: conversations,
     isPending,
@@ -400,10 +371,30 @@ const ConversationListPanel = ({
   // server-side (via `InfiniteListBase filter`), NOT via this chip — see the
   // note in `ConversationList`. The user may still pick a chip on top.
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const hasNeedsAttentionFilter =
+    searchParams.get("needs_attention") === "true";
+  const hasServerFilter =
+    isAttentionReason(searchParams.get("reason")) ||
+    hasNeedsAttentionFilter;
+  const isQueueFilterActive = (value: QueueFilter) => {
+    if (value === "all") return queueFilter === "all" && !hasServerFilter;
+    if (value === "attention") {
+      return queueFilter === "attention" || hasNeedsAttentionFilter;
+    }
+    return queueFilter === value;
+  };
   const clearSearchAndFilters = useCallback(() => {
     setQuery("");
     setQueueFilter("all");
-  }, []);
+    setSearchParams(
+      (prev) => {
+        prev.delete("reason");
+        prev.delete("needs_attention");
+        return prev;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
   // Defer the query used for filtering so fast typing never blocks the input;
   // the immediate `query` still drives the search box value.
   const deferredQuery = useDeferredValue(query);
@@ -454,7 +445,7 @@ const ConversationListPanel = ({
         };
       })
       .filter((c) => {
-        if (queueFilter === "attention" && !needsVisibleAttention(c, readIds)) {
+        if (queueFilter === "attention" && !needsHumanReply(c)) {
           return false;
         }
         if (
@@ -480,8 +471,8 @@ const ConversationListPanel = ({
         const bMode = getConversationModePriority(b.mode);
         if (aMode !== bMode) return aMode - bMode;
 
-        const aAttention = needsVisibleAttention(a, readIds) ? 1 : 0;
-        const bAttention = needsVisibleAttention(b, readIds) ? 1 : 0;
+        const aAttention = needsHumanReply(a) || botHasNotReplied(a) ? 1 : 0;
+        const bAttention = needsHumanReply(b) || botHasNotReplied(b) ? 1 : 0;
         if (aAttention !== bAttention) return bAttention - aAttention;
 
         const aUnread = readIds.has(a.id) ? 0 : (a.unread_count ?? 0);
@@ -555,9 +546,15 @@ const ConversationListPanel = ({
                   type="button"
                   className={`conversation-filter is-${value}`}
                   aria-label={label}
-                  aria-pressed={queueFilter === value}
+                  aria-pressed={isQueueFilterActive(value)}
                   title={label}
-                  onClick={() => setQueueFilter(value)}
+                  onClick={() => {
+                    if (value === "all" && hasServerFilter) {
+                      clearSearchAndFilters();
+                      return;
+                    }
+                    setQueueFilter(value);
+                  }}
                 >
                   <svg className="icon" aria-hidden="true">
                     <use href={QUEUE_FILTER_ICON[value]} />
@@ -581,9 +578,15 @@ const ConversationListPanel = ({
           <ListEmptyState kind="error" onAction={() => void refetch()} />
         ) : rows.length === 0 ? (
           <ListEmptyState
-            kind={query || queueFilter !== "all" ? "filtered" : "empty"}
+            kind={
+              query || queueFilter !== "all" || hasServerFilter
+                ? "filtered"
+                : "empty"
+            }
             onAction={
-              query || queueFilter !== "all" ? clearSearchAndFilters : undefined
+              query || queueFilter !== "all" || hasServerFilter
+                ? clearSearchAndFilters
+                : undefined
             }
           />
         ) : (
@@ -785,14 +788,15 @@ export const ConversationList = () => {
   // it at the content level (useListContext child) would be too late — the
   // request has already fired.
   const [searchParams] = useSearchParams();
-  const reasonParam = searchParams.get("reason");
-  const reasonFilter = isAttentionReason(reasonParam)
-    ? { reason: reasonParam }
-    : undefined;
+  const serverFilter = getConversationListServerFilter(searchParams);
   // When the reason changes (or clears), remount cleanly so no stale rows from
   // the previous reason linger and react-admin's permanent-filter bookkeeping
   // resets. Acceptable per the spec note.
-  const listKey = reasonFilter ? `reason:${reasonFilter.reason}` : "all";
+  const listKey = serverFilter
+    ? "reason" in serverFilter
+      ? `reason:${serverFilter.reason}`
+      : "needs-attention"
+    : "all";
   return (
     // Infinite pagination keeps the inbox light while removing visible page
     // controls. Row previews come from /conversations/last-messages/batch for
@@ -801,7 +805,7 @@ export const ConversationList = () => {
       key={listKey}
       perPage={25}
       sort={CONVERSATION_LIST_SORT}
-      filter={reasonFilter}
+      filter={serverFilter}
     >
       <ConversationListContent />
     </InfiniteListBase>

@@ -17,6 +17,10 @@ export const useNotifications = () => {
     queryFn: () =>
       apiJson<NeedsAttentionResponse>("/api/v1/conversations/needs-attention"),
     staleTime: 1000 * 30,
+    // `staleTime` only permits a refetch; it does not schedule one for this
+    // continuously mounted workspace query. Poll at the same cadence so a
+    // completed reply cannot leave a stale navigation badge behind.
+    refetchInterval: 1000 * 30,
   });
 
   const count = data?.count ?? 0;

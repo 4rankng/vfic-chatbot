@@ -5,6 +5,7 @@ import { UserMenu } from "@/components/admin/user-menu";
 
 import { useInstallationContext } from "../installation/installation-context";
 import { useNotifications } from "./topbar/useNotifications";
+import { getWorkspaceDestination } from "./workspace-navigation";
 
 const Header = () => {
   const { manifest } = useInstallationContext();
@@ -14,6 +15,10 @@ const Header = () => {
         manifest.customer_identity?.display_name.trim()
       : "";
   const { count } = useNotifications();
+  const messagesDestination = getWorkspaceDestination(
+    { id: "messages", to: "/conversations" },
+    count,
+  );
 
   return (
     <header className="workspace-topbar">
@@ -23,7 +28,7 @@ const Header = () => {
 
       <div className="workspace-topbar-actions">
         <Link
-          to="/conversations"
+          to={messagesDestination}
           className="workspace-topbar-notifications"
           aria-label={
             count > 0

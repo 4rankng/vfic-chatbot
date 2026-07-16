@@ -4,6 +4,7 @@ import type { WorkspaceDestination } from "./workspace-navigation";
 
 import {
   getWorkspaceDestinations,
+  getWorkspaceDestination,
   getWorkspaceOverflowDestinations,
   normalizeWorkspacePath,
 } from "./workspace-navigation";
@@ -79,5 +80,14 @@ describe("workspace navigation", () => {
       ({ id }) => id === "settings",
     );
     expect(settings?.isActive("/knowledge_sources/documents")).toBe(true);
+  });
+
+  it("opens the server-filtered reply queue from a non-zero Messages badge", () => {
+    const messages = destinations.find(({ id }) => id === "messages");
+    expect(messages).toBeDefined();
+    expect(getWorkspaceDestination(messages!, 1)).toBe(
+      "/conversations?needs_attention=true",
+    );
+    expect(getWorkspaceDestination(messages!, 0)).toBe("/conversations");
   });
 });

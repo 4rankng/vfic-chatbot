@@ -3,6 +3,7 @@ import type { CompiledDestination } from "../capabilities/types";
 export type WorkspaceRole = "admin" | "recruiter";
 export type WorkspaceNavigationSurface = "rail" | "mobile";
 export type WorkspaceDestination = CompiledDestination;
+type WorkspaceLinkDestination = Pick<WorkspaceDestination, "id" | "to">;
 
 export const normalizeWorkspacePath = (value: string): string => {
   const hashPath = value.startsWith("#") ? value.slice(1) : value;
@@ -41,3 +42,12 @@ export const getWorkspaceOverflowDestinations = (
       !primaryIds.has(destination.id),
   );
 };
+
+/** A non-zero inbox badge opens the authoritative server-filtered reply queue. */
+export const getWorkspaceDestination = (
+  destination: WorkspaceLinkDestination,
+  attentionCount: number,
+): string =>
+  destination.id === "messages" && attentionCount > 0
+    ? `${destination.to}?needs_attention=true`
+    : destination.to;
