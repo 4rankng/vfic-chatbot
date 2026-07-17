@@ -102,51 +102,13 @@ async def _count(database: IntegrationDatabase, sql: str) -> int:
         await engine.dispose()
 
 
-async def _truncate_all(database: IntegrationDatabase) -> None:
-    """Clear all domain tables so each test starts from a clean slate.
-
-    The integration DB is session-scoped; without per-test cleanup, UNIQUE
-    constraints collide and leftover Messenger rows trip the downgrade
-    fail-closed guard. Runs at head (all tables exist). Order respects FKs:
-    children first. Uses DELETE (not TRUNCATE) because TRUNCATE has no IF EXISTS
-    clause and we want this to be idempotent regardless of revision state.
-    """
+async def _count(database: IntegrationDatabase, sql: str) -> int:
     engine = create_async_engine(database.async_url)
     try:
-        async with engine.begin() as conn:
-            for table in (
-                "messages",
-                "outbound_outbox",
-                "leads",
-                "conversations",
-                "contact_channel_identities",
-                "contacts",
-                "channel_accounts",
-            ):
-                # Only delete from tables that exist at the current revision.
-                exists = await conn.scalar(
-                    text("SELECT to_regclass(:t)"), {"t": f"public.{table}"}
-                )
-                if exists is not None:
-                    await conn.execute(text(f"DELETE FROM {table}"))
-            # Reset the messages identity sequence so INSERT ids are stable.
-            await conn.execute(
-                text("SELECT setval(pg_get_serial_sequence('messages','id'), 1, false)")
-            )
+        async with engine.connect() as conn:
+            return int(await conn.scalar(text(sql)) or 0)
     finally:
         await engine.dispose()
-
-
-async def _to_head_and_clean(database: IntegrationDatabase) -> None:
-    """Upgrade to head, truncate, then the caller downgrades to seed.
-
-    The session-level autouse fixture in tests/integration/conftest.py already
-    truncates domain tables before each test, so callers normally do not need
-    to invoke this directly. Kept for tests that downgrade to 0046, seed, then
-    upgrade: the truncate must happen at HEAD (where channel_accounts exists).
-    """
-    _alembic_strict(database, "upgrade", "head")
-    await _truncate_all(database)
 
 
 # ─── upgrade + backfill ─────────────────────────────────────────────────────

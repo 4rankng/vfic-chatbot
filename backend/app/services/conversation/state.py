@@ -157,14 +157,24 @@ class ConversationState:
 
         Atomically ensures a Contact + ContactChannelIdentity + Conversation for
         the neutral triple. The Contact is created one-per-identity (matching the
-        1:1 conversation/identity invariant). Two first-contact events for the
-        same triple resolve to the same rows; the conversation's UNIQUE on
-        channel_identity_id is the final authority.
+        1:1 conversation/identity invariant).
+
+        Concurrency: the check-then-insert sequence has a TOCTOU window. Two
+        first-contact events for the same triple may both pass the initial
+        ``get_by_identity`` lookup and race on insert. The DB partial unique
+        indexes (``uq_contact_channel_authority`` on the identity triple,
+        ``uq_conversations_channel_identity`` on the conversation) are the final
+        authority: the loser raises ``IntegrityError`` on flush, which we catch,
+        roll back, and refetch the winner. This is safer than relying on
+        ``MessageDedupService`` (which gates on zalo_chat_id+msg_hash and does
+        not cover OA side events or future Messenger entry points).
 
         ``zalo_chat_id_alias`` / ``zalo_channel_alias`` populate the nullable
         compatibility columns for Zalo rows so legacy reads keep working during
         the migration. They stay NULL for Messenger (no Zalo equivalent).
         """
+        from sqlalchemy.exc import IntegrityError
+
         from app.models.contact import Contact, ContactChannelIdentity
 
         conv = await self.repo.get_by_identity(
@@ -181,38 +191,52 @@ class ConversationState:
             await self.db.flush()
             return conv
 
-        # Resolve or create the Contact + identity in the same transaction.
-        identity = (
-            await self.db.scalars(
-                select(ContactChannelIdentity).where(
-                    ContactChannelIdentity.provider == provider,
-                    ContactChannelIdentity.account_key == account_key,
-                    ContactChannelIdentity.external_id == external_id,
+        try:
+            # Resolve or create the Contact + identity in the same transaction.
+            identity = (
+                await self.db.scalars(
+                    select(ContactChannelIdentity).where(
+                        ContactChannelIdentity.provider == provider,
+                        ContactChannelIdentity.account_key == account_key,
+                        ContactChannelIdentity.external_id == external_id,
+                    )
                 )
-            )
-        ).first()
-        if identity is None:
-            contact = Contact()
-            self.db.add(contact)
-            await self.db.flush()
-            identity = ContactChannelIdentity(
-                contact_id=contact.id,
-                provider=provider,
-                account_key=account_key,
-                external_id=external_id,
-            )
-            self.db.add(identity)
-            await self.db.flush()
+            ).first()
+            if identity is None:
+                contact = Contact()
+                self.db.add(contact)
+                await self.db.flush()
+                identity = ContactChannelIdentity(
+                    contact_id=contact.id,
+                    provider=provider,
+                    account_key=account_key,
+                    external_id=external_id,
+                )
+                self.db.add(identity)
+                await self.db.flush()
 
-        conv = Conversation(
-            zalo_chat_id=zalo_chat_id_alias,
-            zalo_channel=zalo_channel_alias or "bot",
-            contact_id=identity.contact_id,
-            channel_identity_id=identity.id,
-        )
-        self.db.add(conv)
-        await self.db.flush()
-        return conv
+            conv = Conversation(
+                zalo_chat_id=zalo_chat_id_alias,
+                zalo_channel=zalo_channel_alias or "bot",
+                contact_id=identity.contact_id,
+                channel_identity_id=identity.id,
+            )
+            self.db.add(conv)
+            await self.db.flush()
+            return conv
+        except IntegrityError:
+            # A concurrent ensure_by_identity won the identity/conversation
+            # unique constraint. Roll back this transaction's pending inserts
+            # and refetch the winner. The rollback is safe because the caller's
+            # transaction will continue with the refetched row (the dedup claim
+            # and message write are the caller's responsibility).
+            await self.db.rollback()
+            winner = await self.repo.get_by_identity(
+                provider=provider, account_key=account_key, external_id=external_id
+            )
+            if winner is None:  # pragma: no cover - defensive; race already resolved
+                raise
+            return winner
 
     def semi_auto_inactive(self, conv: Conversation) -> bool:
         reference = conv.taken_over_at or conv.updated_at

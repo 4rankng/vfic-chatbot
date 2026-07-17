@@ -310,6 +310,19 @@ def upgrade() -> None:
             IF NEW.contact_id IS NULL THEN
                 RETURN NEW;
             END IF;
+            -- For Zalo rows, ON CONFLICT (zalo_id) dedups because zalo_chat_id
+            -- is non-NULL and unique. For Messenger rows zalo_chat_id is NULL,
+            -- so the ON CONFLICT target cannot fire — guard with NOT EXISTS on
+            -- (contact_id, lead_stage='NEW') to avoid creating a fresh stub
+            -- lead on every Messenger conversation INSERT for an existing
+            -- contact. Multiple leads per contact are still allowed at other
+            -- stages; only NEW-stage dedup is enforced (the stub phase).
+            IF EXISTS (
+                SELECT 1 FROM public.leads
+                WHERE contact_id = NEW.contact_id AND lead_stage = 'NEW'
+            ) THEN
+                RETURN NEW;
+            END IF;
             INSERT INTO public.leads (
                 zalo_id, contact_id, lead_stage, assigned_recruiter_id, created_at, updated_at
             )
