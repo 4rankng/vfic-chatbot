@@ -89,14 +89,16 @@ class RecommendationRepository:
         scored.sort(key=lambda s: (-s.score, s.job.title))
         return scored[: max(1, min(top_k, 10))]
 
-    async def find_active_jobs(
+    async def list_active_jobs(
         self,
-        query: str,
         *,
+        role: str | None = None,
+        company: str | None = None,
+        location: str | None = None,
         top_k: int = 3,
         project_ids: Sequence[str] | None = None,
     ) -> ActiveJobLookup:
-        """Find currently open jobs for an explicit vacancy-existence question.
+        """List scoped open jobs satisfying explicit semantic filters.
 
         This is intentionally separate from profile-based recommendations: no lead
         data is required. An empty/unconfigured catalog, a genuine no-match, and a
@@ -108,6 +110,7 @@ class RecommendationRepository:
             predicates = [
                 Job.status == JobStatus.ACTIVE,
                 func.coalesce(Job.vacancy_count, 0) > 0,
+                Project.is_active.is_(True),
             ]
             if project_ids is not None:
                 predicates.append(Company.project_id.in_(project_ids))
@@ -117,12 +120,17 @@ class RecommendationRepository:
                     .join(Company, Job.company_id == Company.id)
                     .join(Project, Company.project_id == Project.id)
                     .where(*predicates)
-                    .order_by(Job.updated_at.desc())
+                    .order_by(Job.updated_at.desc(), Job.id.asc())
                     .limit(self.CANDIDATE_LIMIT)
                 )
             ).all()
             if not rows:
-                catalog_query = select(Job.id).join(Company, Job.company_id == Company.id)
+                catalog_query = (
+                    select(Job.id)
+                    .join(Company, Job.company_id == Company.id)
+                    .join(Project, Company.project_id == Project.id)
+                    .where(Project.is_active.is_(True))
+                )
                 if project_ids is not None:
                     catalog_query = catalog_query.where(Company.project_id.in_(project_ids))
                 catalog_probe = await self.db.execute(
@@ -168,7 +176,13 @@ class RecommendationRepository:
             )
             for job, company_name, company_aliases, project_name, project_slug in rows
         ]
-        return select_matching_active_jobs(query, jobs, top_k=top_k)
+        return select_matching_active_jobs(
+            jobs,
+            role=role,
+            company=company,
+            location=location,
+            top_k=top_k,
+        )
 
 
 LeadRecommendationStatus = Literal["matched", "no_match", "insufficient_profile", "unavailable"]

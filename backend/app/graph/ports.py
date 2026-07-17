@@ -182,7 +182,14 @@ class RetrievalPort(Protocol):
         self, chat_id: str, *, top_k: int = 5, province: str | None = None
     ) -> Any: ...
 
-    async def find_active_jobs(self, query: str, *, top_k: int = 3) -> Any: ...
+    async def list_active_jobs(
+        self,
+        *,
+        role: str | None = None,
+        company: str | None = None,
+        location: str | None = None,
+        top_k: int = 3,
+    ) -> Any: ...
 
 
 class FaqBypassPort(Protocol):

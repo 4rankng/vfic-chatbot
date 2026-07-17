@@ -6,6 +6,7 @@ fans out events.
 """
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,8 @@ from app.workers.chatbot_worker import enqueue_chat_run
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
+ChannelProvider = Literal["zalo_bot", "zalo_oa"]
+
 
 async def _load(conv_id: uuid.UUID, db: AsyncSession, user: User | None = None) -> Conversation:
     if user is None:
@@ -46,6 +49,7 @@ async def list_conversations(
     status_: ConversationStatus | None = Query(None, alias="status"),
     zalo_chat_id: str | None = None,
     needs_attention: bool = False,
+    channel_provider: ChannelProvider | None = None,
     q: str | None = Query(None, description="Case-insensitive search over zalo_chat_id"),
     sort: str | None = Query(
         None, description="Sort field (updated_at, created_at, last_inbound_at)"
@@ -70,7 +74,11 @@ async def list_conversations(
         if reason not in AttentionReason._value2member_map_:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid reason")
         rows, total = await svc.list_by_attention_reason(
-            viewer=user, reason=reason, page=page, per_page=per_page
+            viewer=user,
+            reason=reason,
+            page=page,
+            per_page=per_page,
+            channel_provider=channel_provider,
         )
         return ConversationListResponse(
             data=[ConversationOut.model_validate(r) for r in rows], total=total
@@ -83,6 +91,7 @@ async def list_conversations(
         status=status_,
         zalo_chat_id=zalo_chat_id,
         needs_attention=needs_attention,
+        channel_provider=channel_provider,
         q=q,
         sort_by=sort,
         order=order,
@@ -114,6 +123,7 @@ async def last_messages_batch(
 
 @router.get("/needs-attention")
 async def needs_attention(
+    channel_provider: ChannelProvider | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -124,7 +134,9 @@ async def needs_attention(
     Registered BEFORE the ``/{conv_id}`` routes so the literal ``needs-attention``
     segment is never shadowed by the uuid path param.
     """
-    count = await ConversationService(db).needs_attention_count(viewer=user)
+    count = await ConversationService(db).needs_attention_count(
+        viewer=user, channel_provider=channel_provider
+    )
     return {"count": count}
 
 

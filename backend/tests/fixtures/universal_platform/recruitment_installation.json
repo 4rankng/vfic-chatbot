@@ -43,14 +43,13 @@
       "kind": "route",
       "user_text": "tôi muốn tìm việc lái xe",
       "expected_strategy": "recommendation",
-      "expected_tools": ["recommend_jobs", "recommend_projects", "get_product_features"]
+      "expected_tools": ["list_active_jobs", "recommend_jobs", "recommend_projects", "get_product_features"]
     },
     {
       "kind": "reply",
       "user_text": "bên bạn tuyển thợ hàn CO2 đúng ko?",
-      "lookup_status": "no_match",
-      "expected_outcome": "vacancy_lookup",
-      "expected_reply_contract": "no_active_job"
+      "expected_outcome": "sent",
+      "expected_reply_contract": "grounded_llm_tool_path"
     }
   ],
   "integrations": []

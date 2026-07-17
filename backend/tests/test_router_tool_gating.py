@@ -57,8 +57,27 @@ def test_filter_recommend_route_excludes_timetable():
     assert route.confidence >= ROUTE_CONFIDENCE_FLOOR
     names = {s["function"]["name"] for s in filter_tool_schemas(route.tools)}
     assert "recommend_projects" in names
+    assert "list_active_jobs" in names
     assert "get_product_features" in names
     assert "search_bus_timetable" not in names
+
+
+def test_job_advisory_registry_can_bind_active_job_listing_only_when_enabled():
+    enabled = {
+        schema["function"]["name"]
+        for schema in filter_tool_schemas(
+            ("list_active_jobs",), resolved_registry=frozenset({"list_active_jobs"})
+        )
+    }
+    disabled = {
+        schema["function"]["name"]
+        for schema in filter_tool_schemas(
+            ("list_active_jobs",), resolved_registry=frozenset({"search_knowledge"})
+        )
+    }
+
+    assert enabled == {"list_active_jobs"}
+    assert disabled == set()
 
 
 def test_filter_unknown_tool_name_is_ignored_silently():

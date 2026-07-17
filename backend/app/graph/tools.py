@@ -3,6 +3,7 @@
   * search_user_memory  -> match_memories top-5 filtered by chat_id
   * search_knowledge    -> project-scoped semantic retrieval
   * search_bus_timetable-> complete structured bus route groups + stop times
+  * list_active_jobs     -> scoped ACTIVE-job evidence with explicit filters
 
 Each takes an injected embedder + async db session, so they are testable
 without an LLM. STRICT rule (from the agent prompt): advise only from returned data.
@@ -16,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from collections import OrderedDict
 from hashlib import sha256
@@ -394,6 +396,98 @@ async def list_active_projects(retrieval: RetrievalPort) -> str:
     )
 
 
+def _single_line(value: object, *, limit: int = 500) -> str:
+    """Keep repository evidence on one labelled line for the tool-calling model."""
+    text = " ".join(str(value).split())
+    if len(text) <= limit:
+        return text
+    clipped = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:.-")
+    return f"{clipped or text[: limit - 1]}…"
+
+
+def _active_job_evidence(job: object) -> str:
+    """Format only fields present on one verified ACTIVE-job row."""
+    fields: list[tuple[str, object]] = [
+        ("id", getattr(job, "id", "")),
+        ("title", getattr(job, "title", "")),
+        ("company", getattr(job, "company_name", "")),
+        ("factory", getattr(job, "factory_name", "")),
+        ("project", getattr(job, "project_name", "")),
+        ("project_slug", getattr(job, "project_slug", "")),
+        ("province", getattr(job, "province", "")),
+        ("district", getattr(job, "district", "")),
+        ("address", getattr(job, "address", "")),
+        ("salary_min", getattr(job, "salary_min", None)),
+        ("salary_max", getattr(job, "salary_max", None)),
+        ("vacancy_count", getattr(job, "vacancy_count", None)),
+        ("shift", getattr(job, "shift", "")),
+        ("gender_requirement", getattr(job, "gender_requirement", "")),
+        ("age_min", getattr(job, "age_min", None)),
+        ("age_max", getattr(job, "age_max", None)),
+        ("experience_required", getattr(job, "experience_required", "")),
+        ("accommodation_support", getattr(job, "accommodation_support", None)),
+        ("meal_support", getattr(job, "meal_support", None)),
+        ("transport_support", getattr(job, "transport_support", None)),
+        ("description", getattr(job, "description", "")),
+        ("requirements", getattr(job, "requirements", "")),
+        ("benefits", getattr(job, "benefits", "")),
+    ]
+    rendered: list[str] = []
+    for name, value in fields:
+        if value in (None, ""):
+            continue
+        evidence = _single_line(value)
+        if name != "id":
+            # Only the typed Job.id field may authorize an ID in post-generation grounding.
+            evidence = re.sub(r"\bid\s*=", "id =", evidence, flags=re.IGNORECASE)
+        rendered.append(f"{name}={evidence}")
+    return "- " + "; ".join(rendered)
+
+
+async def list_active_jobs(
+    retrieval: RetrievalPort,
+    *,
+    role: str | None = None,
+    company: str | None = None,
+    location: str | None = None,
+    top_k: int = 3,
+) -> str:
+    """Return bounded, status-labelled evidence from scoped ACTIVE Job rows."""
+    try:
+        k = max(1, min(int(top_k), 10))
+    except (TypeError, ValueError):
+        k = 3
+    try:
+        lookup = await retrieval.list_active_jobs(
+            role=role,
+            company=company,
+            location=location,
+            top_k=k,
+        )
+    except Exception:
+        logger.warning("list_active_jobs failed", exc_info=True)
+        lookup = None
+
+    status = getattr(lookup, "status", "unavailable")
+    if status == "matched":
+        jobs = tuple(getattr(lookup, "jobs", ()) or ())[:k]
+        if not jobs:
+            return "STATUS: unavailable\nEVIDENCE: active-job lookup returned no verifiable rows."
+        return "\n".join(("STATUS: matched", *(_active_job_evidence(job) for job in jobs)))
+    if status == "no_match":
+        return "STATUS: no_match\nEVIDENCE: no ACTIVE job matched all supplied filters."
+    if status == "catalog_empty":
+        return (
+            "STATUS: catalog_empty\n"
+            "EVIDENCE: no scoped structured job catalog is available; this does not prove "
+            "that hiring is closed."
+        )
+    return (
+        "STATUS: unavailable\n"
+        "EVIDENCE: the ACTIVE-job lookup is unavailable; do not make a hiring claim."
+    )
+
+
 def _recommend_terms(query: str) -> list[str]:
     normalized = normalize_vietnamese_text(query or "")
     terms = [
@@ -651,6 +745,7 @@ TOOLS_REGISTRY = {
     "search_user_memory": search_user_memory,
     "search_knowledge": search_knowledge,
     "list_active_projects": list_active_projects,
+    "list_active_jobs": list_active_jobs,
     "recommend_projects": recommend_projects,
     "recommend_jobs": recommend_jobs,
     "search_bus_timetable": search_bus_timetable,

@@ -43,6 +43,7 @@ class _Settings:
 _DISPATCHED = {
     "search_user_memory",
     "search_knowledge",
+    "list_active_jobs",
     "list_active_projects",
     "recommend_projects",
     "recommend_jobs",
@@ -80,10 +81,55 @@ async def test_disabled_known_tool_never_reaches_its_repository_handler(monkeypa
     assert called is False
 
 
+@pytest.mark.asyncio
+async def test_dispatch_list_active_jobs_forwards_optional_filters(monkeypatch):
+    calls: list[dict] = []
+
+    async def fake_list_active_jobs(retrieval, **kwargs):
+        calls.append({"retrieval": retrieval, **kwargs})
+        return "STATUS: no_match"
+
+    monkeypatch.setattr("app.graph.schemas.list_active_jobs", fake_list_active_jobs)
+    retrieval = object()
+
+    result = await _dispatch_tool(
+        retrieval,
+        None,
+        "list_active_jobs",
+        {"role": "thợ hàn", "company": "LG", "location": "Hải Phòng", "top_k": 7},
+    )
+
+    assert result == "STATUS: no_match"
+    assert calls == [
+        {
+            "retrieval": retrieval,
+            "role": "thợ hàn",
+            "company": "LG",
+            "location": "Hải Phòng",
+            "top_k": 7,
+        }
+    ]
+
+
 def test_every_tool_schema_name_is_dispatchable():
     names = {t["function"]["name"] for t in TOOL_SCHEMAS}
     assert names <= _DISPATCHED  # no schema describes a tool the dispatcher can't route
     assert "get_product_features" in names  # the newest tool is wired end-to-end
+
+
+def test_list_active_jobs_schema_exposes_only_optional_bounded_filters():
+    schema = next(
+        item["function"] for item in TOOL_SCHEMAS if item["function"]["name"] == "list_active_jobs"
+    )
+
+    assert "required" not in schema["parameters"]
+    assert set(schema["parameters"]["properties"]) == {"role", "company", "location", "top_k"}
+    assert schema["parameters"]["properties"]["top_k"] == {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Số việc tối đa cần trả về, mặc định 3.",
+    }
 
 
 @pytest.mark.asyncio

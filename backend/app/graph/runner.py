@@ -42,26 +42,11 @@ from app.graph.safety import (
 )
 from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES, delivery_status_for_send_error
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
-from app.graph.vacancy import (
-    VACANCY_LOOKUP_UNAVAILABLE_REPLY,
-    format_vacancy_lookup,
-    vacancy_lookup_query,
-)
 from app.models.conversation import DeliveryStatus, Message
 
 logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
-
-_CATALOG_EMPTY_GROUNDING_INSTRUCTION = """
-DANH MỤC JOB CÓ CẤU TRÚC ĐANG TRỐNG/CHƯA ĐƯỢC CẤU HÌNH cho phạm vi Agent hiện tại.
-Đây không phải bằng chứng rằng doanh nghiệp không tuyển. Hãy gọi search_knowledge cho đúng
-doanh nghiệp/dự án được nhắc đến. Chỉ được xác nhận đang tuyển và nêu chi tiết khi kết quả KB
-đang hoạt động, đã xuất bản nói rõ điều đó. Không được suy ra tình trạng tuyển dụng từ danh mục
-dự án, tên dự án, hay kiến thức chung. Nếu KB không có bằng chứng tuyển dụng rõ ràng, hãy nói
-chưa thể xác minh từ dữ liệu hiện có và hỏi người dùng muốn được nhân viên kiểm tra hay không.
-""".strip()
-
 
 def _remaining(state: BotRunState) -> float:
     """Seconds left until the propagated turn deadline (``inf`` if unset).
@@ -155,7 +140,6 @@ async def _agent_turn(
     recent_messages: list[Message],
     timings: dict | None = None,
     manifest_policy=None,
-    vacancy_catalog_empty: bool = False,
 ) -> str:
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
         return await run_manifest_composed_agent(user_text, deps, policy=manifest_policy)
@@ -232,8 +216,6 @@ async def _agent_turn(
         )
 
     route_hint = routing_instruction(route)
-    if vacancy_catalog_empty:
-        route_hint = f"{route_hint}\n\n{_CATALOG_EMPTY_GROUNDING_INSTRUCTION}"
 
     contextual_user_text = build_agent_user_text(
         chat_id=chat_id,
@@ -469,37 +451,69 @@ _FAQ_BYPASS_VOLATILE_MARKERS = (
     "đang tuyển",
     "còn tuyển",
     "còn vị trí",
+    "tuyển",
+    "nhận",
+)
+
+_VACANCY_CONTEXT_MARKERS = (
+    "có nhận",
+    "còn nhận",
+    "đang nhận",
+    "có tuyển",
+    "còn tuyển",
+    "đang tuyển",
+    "cần tuyển",
+    "có việc",
+    "còn việc",
+    "con viec nay",
+    "viec nay",
+    "vi tri nay",
+)
+
+_VACANCY_FOLLOWUP_MARKERS = (
+    "lương",
+    "thu nhập",
+    "ca làm",
+    "giờ làm",
+    "tăng ca",
+    "phụ cấp",
+    "xe đưa đón",
+    "ktx",
+    "hồ sơ",
+    "kinh nghiệm",
+    "địa điểm",
+    "yêu cầu",
+    "độ tuổi",
+    "giới tính",
+    "nhà trọ",
+    "chỗ ở",
 )
 
 
-def _faq_bypass_allowed(user_text: str) -> bool:
+def _recent_vacancy_context(recent_messages: list[Message]) -> bool:
+    for message in reversed(recent_messages):
+        sender = getattr(message, "sender", "")
+        sender_value = getattr(sender, "value", sender)
+        if sender_value != "WORKER":
+            continue
+        normalized = (getattr(message, "body", "") or "").casefold()
+        if any(marker in normalized for marker in _VACANCY_CONTEXT_MARKERS):
+            return True
+    return False
+
+
+def _faq_bypass_allowed(user_text: str, recent_messages: list[Message]) -> bool:
     """Volatile claims must use structured/live authority, never FAQ prose."""
     normalized = user_text.casefold()
-    return not any(marker in normalized for marker in _FAQ_BYPASS_VOLATILE_MARKERS)
-
-
-async def _vacancy_reply(
-    user_text: str, recent_messages: list[Message], retrieval
-) -> tuple[str | None, str] | None:
-    """Resolve explicit hiring questions before any FAQ or LLM answer path.
-
-    The lookup is deliberately before the fast/FAQ lanes. A non-empty Job
-    catalog remains authoritative; an empty catalog is surfaced separately so
-    the grounded agent can consult active, published knowledge instead of
-    turning missing structured data into a negative hiring claim.
-    """
-    query = vacancy_lookup_query(user_text, recent_messages)
-    if query is None:
-        return None
-    try:
-        lookup = await retrieval.find_active_jobs(query)
-    except Exception:  # noqa: BLE001 — an outage must not become a no-vacancy claim
-        logger.warning("active-job vacancy lookup failed", exc_info=True)
-        return VACANCY_LOOKUP_UNAVAILABLE_REPLY, "unavailable"
-    status = str(getattr(lookup, "status", "unavailable"))
-    if status == "catalog_empty":
-        return None, status
-    return format_vacancy_lookup(lookup), status
+    if any(marker in normalized for marker in _FAQ_BYPASS_VOLATILE_MARKERS):
+        return False
+    if any(marker in normalized for marker in _VACANCY_CONTEXT_MARKERS):
+        return False
+    if _recent_vacancy_context(recent_messages) and any(
+        marker in normalized for marker in _VACANCY_FOLLOWUP_MARKERS
+    ):
+        return False
+    return True
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
@@ -612,30 +626,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         direct_context = (
             await deps.direct_context.active_context() if deps.direct_context is not None else None
         )
-        vacancy_t0 = time.monotonic()
         recruitment_capabilities = (
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
         )
         recruitment_enabled = manifest_policy is None or manifest_policy.pack_key == "recruitment"
-        vacancy = (
-            await _vacancy_reply(state.user_text, recent_messages, deps.retrieval)
-            if direct_context is None
-            and recruitment_enabled
-            and (recruitment_capabilities is None or "job_advisory" in recruitment_capabilities)
-            else None
-        )
-        vacancy_catalog_empty = vacancy is not None and vacancy[1] == "catalog_empty"
-        if vacancy is not None:
-            vacancy_candidate, vacancy_status = vacancy
-            timings["vacancy_lookup_ms"] = int(round((time.monotonic() - vacancy_t0) * 1000))
-            timings["vacancy_lookup_status"] = vacancy_status
-            if vacancy_catalog_empty:
-                timings["lane"] = "vacancy_rag_fallback"
-            else:
-                candidate = vacancy_candidate or ""
-                timings["lane"] = "vacancy_lookup"
-                outcome_label = "vacancy_lookup"
-
         # --- FAQ / template fast lane (zero LLM calls) ---
         # Greetings / thanks / goodbye / help return instant tôi/bạn templates with
         # no LLM call. Factual questions are never templated — they fall through
@@ -660,7 +654,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
         fast = (
             fast_lane.match(state.user_text)
-            if direct_context is None and vacancy is None and allow_recruitment_fast_lane and settings.faq_fast_lane_enabled
+            if direct_context is None
+            and allow_recruitment_fast_lane
+            and settings.faq_fast_lane_enabled
             else None
         )
 
@@ -672,11 +668,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # the turn deadline. None in graph unit tests (no bypass wired).
         bypass = None
         if (
-            direct_context is None and vacancy is None
+            direct_context is None
             and fast is None
             and allow_legacy_faq_bypass
             and deps.faq_bypass is not None
-            and _faq_bypass_allowed(state.user_text)
+            and _faq_bypass_allowed(state.user_text, recent_messages)
         ):
             try:
                 # Bound the bypass by both the soft cap and the propagated turn
@@ -734,13 +730,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
             bypass = None
 
-        if direct_context is not None and vacancy is None:
+        if direct_context is not None:
             candidate = await _direct_context_turn(
                 direct_context, deps, state.user_text, recent_messages, timings
             )
             outcome_label = "direct_context"
-        elif vacancy is not None and not vacancy_catalog_empty:
-            pass
         elif fast is not None:
             timings["lane"] = "fast_lane"
             candidate = fast.reply
@@ -768,9 +762,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 bypass.faq_id,
             )
         else:
-            timings["lane"] = (
-                "vacancy_rag_fallback" if vacancy_catalog_empty else "agent"
-            )
+            timings["lane"] = "agent"
             # --- agent (runs to completion; NO hard cap) ---
             # The propagated deadline is advisory only — it bounds the FAQ-bypass
             # lookup above, never the agent. Cancelling a live LLM call mid-generation
@@ -786,8 +778,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 }
                 if manifest_policy is not None:
                     agent_kwargs["manifest_policy"] = manifest_policy
-                if vacancy_catalog_empty:
-                    agent_kwargs["vacancy_catalog_empty"] = True
                 raw = await _agent_turn(state, deps, state.user_text, **agent_kwargs)
             except LLMThrottled:
                 raise  # let worker handle degradation msg (no LLM call)

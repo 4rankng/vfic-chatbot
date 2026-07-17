@@ -11,50 +11,9 @@ from app.core.text import normalize_vietnamese_text
 
 ActiveJobLookupStatus = Literal["matched", "no_match", "catalog_empty", "unavailable"]
 
-_QUERY_STOPWORDS = frozenset(
-    {
-        "a",
-        "ah",
-        "ban",
-        "ben",
-        "co",
-        "con",
-        "cua",
-        "dang",
-        "de",
-        "dung",
-        "duoc",
-        "em",
-        "ha",
-        "hay",
-        "hien",
-        "khong",
-        "ko",
-        "la",
-        "lam",
-        "minh",
-        "ma",
-        "nao",
-        "nhe",
-        "nhi",
-        "o",
-        "phai",
-        "roi",
-        "sao",
-        "thay",
-        "toi",
-        "tuyen",
-        "tuyen dung",
-        "ung",
-        "ung tuyen",
-        "viec",
-        "viet",
-        "vfic",
-        "voi",
-    }
-)
 _IDENTITY_FUZZY_MIN_LENGTH = 5
 _IDENTITY_FUZZY_THRESHOLD = 0.86
+_MAX_RESULTS = 10
 
 
 @dataclass(frozen=True)
@@ -95,21 +54,9 @@ class ActiveJobLookup:
     jobs: tuple[ActiveJob, ...] = ()
 
 
-def vacancy_query_terms(query: str) -> tuple[str, ...]:
-    """Return meaningful whole-word terms from a Vietnamese vacancy question."""
-    normalized = normalize_vietnamese_text(query or "")
-    tokens = re.findall(r"[a-z0-9]+", normalized)
-    seen: set[str] = set()
-    terms: list[str] = []
-    for token in tokens:
-        if token in _QUERY_STOPWORDS or (
-            len(token) < 2 and not any(char.isdigit() for char in token)
-        ):
-            continue
-        if token not in seen:
-            seen.add(token)
-            terms.append(token)
-    return tuple(terms)
+def _filter_terms(value: str | None) -> tuple[str, ...]:
+    """Normalize an already-interpreted semantic filter into whole-word terms."""
+    return tuple(dict.fromkeys(re.findall(r"[a-z0-9]+", normalize_vietnamese_text(value or ""))))
 
 
 def _field_search_tokens(value: str) -> set[str]:
@@ -132,46 +79,61 @@ def _matches_identity_typo(term: str, identity_tokens: set[str]) -> bool:
     )
 
 
-def select_matching_active_jobs(
-    query: str, jobs: list[ActiveJob], *, top_k: int = 3
-) -> ActiveJobLookup:
-    """Match only complete normalized query terms against ACTIVE job facts.
+def _matches_filter(
+    terms: tuple[str, ...],
+    fields: tuple[str, ...],
+    *,
+    allow_identity_typo: bool = False,
+) -> bool:
+    if not terms:
+        return True
+    tokens = set().union(*(_field_search_tokens(field) for field in fields if field))
+    return all(
+        term in tokens or (allow_identity_typo and _matches_identity_typo(term, tokens))
+        for term in terms
+    )
 
-    An explicit term must match a complete token in the title/company/factory/location
-    of the same job. This deliberately rejects substring matches such as ``tho`` in
-    ``thong`` and never combines facts from different jobs.
+
+def select_matching_active_jobs(
+    jobs: list[ActiveJob],
+    *,
+    role: str | None = None,
+    company: str | None = None,
+    location: str | None = None,
+    top_k: int = 3,
+) -> ActiveJobLookup:
+    """Apply explicit semantic filters to a scoped ACTIVE-job catalog.
+
+    The caller, normally the LLM tool dispatcher, owns interpretation of candidate
+    wording. This function only compares supplied role/company/location values with
+    their corresponding structured fields; it has no conversational stopword list.
     """
     if not jobs:
         return ActiveJobLookup("catalog_empty")
 
-    terms = vacancy_query_terms(query)
-    if not terms:
-        return ActiveJobLookup("matched", tuple(jobs[:top_k]))
+    role_terms = _filter_terms(role)
+    company_terms = _filter_terms(company)
+    location_terms = _filter_terms(location)
+    limit = max(1, min(top_k, _MAX_RESULTS))
 
     matches: list[ActiveJob] = []
-    required = set(terms)
     for job in jobs:
-        identity_fields = (
+        company_fields = (
             job.company_name,
             *job.company_aliases,
             job.factory_name,
-            job.address,
-            job.province,
-            job.district,
             job.project_name,
             job.project_slug,
         )
-        identity_tokens = set().union(
-            *(_field_search_tokens(field) for field in identity_fields if field)
-        )
-        job_tokens = identity_tokens | _field_search_tokens(job.title)
-        if all(
-            term in job_tokens or _matches_identity_typo(term, identity_tokens)
-            for term in required
+        location_fields = (job.province, job.district, job.address)
+        if (
+            _matches_filter(role_terms, (job.title,))
+            and _matches_filter(company_terms, company_fields, allow_identity_typo=True)
+            and _matches_filter(location_terms, location_fields, allow_identity_typo=True)
         ):
             matches.append(job)
     return (
-        ActiveJobLookup("matched", tuple(matches[:top_k]))
+        ActiveJobLookup("matched", tuple(matches[:limit]))
         if matches
         else ActiveJobLookup("no_match")
     )

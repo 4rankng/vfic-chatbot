@@ -14,7 +14,25 @@ def test_route_recommendation_query_prefers_recommendation_tool_path():
 
     assert route.intent == "recommend"
     assert route.strategy == "recommendation"
-    assert route.tools == ("recommend_jobs", "recommend_projects", "get_product_features")
+    assert route.tools == (
+        "list_active_jobs",
+        "recommend_jobs",
+        "recommend_projects",
+        "get_product_features",
+    )
+
+
+def test_route_generic_vacancy_listing_exposes_active_job_tool():
+    for query in (
+        "giới thiệu các vị trí đang tuyển",
+        "hiện tại có những công việc gì đang tuyển",
+        "LG tuyển thợ hàn không?",
+    ):
+        route = route_turn(query)
+
+        assert route.intent == "recommend"
+        assert route.strategy == "recommendation"
+        assert "list_active_jobs" in route.tools
 
 
 def test_route_timetable_beats_broader_job_detail():
@@ -101,6 +119,7 @@ def test_routing_instruction_is_injected_into_prompt_context():
 
     assert "KẾ HOẠCH ĐIỀU PHỐI:" in prompt
     assert "recommend_projects" in prompt
+    assert "list_active_jobs" in prompt
     assert "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:" in prompt
 
 

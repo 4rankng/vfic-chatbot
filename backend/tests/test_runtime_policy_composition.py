@@ -43,6 +43,15 @@ def test_runtime_policy_resolves_only_capability_owned_tools_and_neutral_prompt(
     assert "LG Display" not in prompt
 
 
+def test_job_advisory_capability_owns_active_job_listing_tool():
+    active, persona = _active(capabilities=["conversation", "knowledge", "job_advisory"])
+
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+
+    assert policy is not None
+    assert policy.tool_registry.allows("list_active_jobs")
+
+
 async def test_manifest_composed_agent_makes_zero_llm_calls_without_active_policy():
     class _Agent:
         def __init__(self) -> None:

@@ -28,9 +28,12 @@ import {
   useConversationCapabilitySlots,
 } from "./conversation-capability";
 import {
+  getConversationListKey,
   getConversationListServerFilter,
+  getEffectiveConversationChannelProvider,
   isAttentionReason,
 } from "./conversation-list-filters";
+import { ChannelAdapterSelector } from "./ChannelAdapterSelector";
 import {
   botHasNotReplied,
   getConversationAttentionLabel,
@@ -40,13 +43,7 @@ import {
 import type { ConversationRowPresentation } from "../capabilities/types";
 import conversationEmptyIllustration from "@/assets/empty-states/conversation-empty-illustration.png";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
-import {
-  AlertTriangle,
-  Inbox,
-  RefreshCw,
-  Reply,
-  SearchX,
-} from "lucide-react";
+import { AlertTriangle, Inbox, RefreshCw, Reply, SearchX } from "lucide-react";
 import "./inbox.css";
 
 type ConversationRow = Conversation & {
@@ -164,7 +161,10 @@ const ConversationListItem = memo(
     const subtitle = conversation._snippet || presentation.subtitle;
 
     const priorityChip = presentation.priorityLabel
-      ? { label: presentation.priorityLabel, tone: presentation.priorityTone ?? "warm" }
+      ? {
+          label: presentation.priorityLabel,
+          tone: presentation.priorityTone ?? "warm",
+        }
       : null;
     const needsHumanAttention = needsHumanReply(conversation);
     const needsBotAttention = botHasNotReplied(conversation);
@@ -374,8 +374,7 @@ const ConversationListPanel = ({
   const hasNeedsAttentionFilter =
     searchParams.get("needs_attention") === "true";
   const hasServerFilter =
-    isAttentionReason(searchParams.get("reason")) ||
-    hasNeedsAttentionFilter;
+    isAttentionReason(searchParams.get("reason")) || hasNeedsAttentionFilter;
   const isQueueFilterActive = (value: QueueFilter) => {
     if (value === "all") return queueFilter === "all" && !hasServerFilter;
     if (value === "attention") {
@@ -413,7 +412,8 @@ const ConversationListPanel = ({
     (async () => {
       try {
         const [enrichment, snips] = await Promise.all([
-          slots.row?.load(conversations, controller.signal) ?? Promise.resolve(new Map()),
+          slots.row?.load(conversations, controller.signal) ??
+            Promise.resolve(new Map()),
           chatRepository.getLastMessages(conversations),
         ]);
         if (controller.signal.aborted) return;
@@ -440,7 +440,8 @@ const ConversationListPanel = ({
         return {
           ...c,
           _presentation:
-            adapterPresentations.get(c.id) ?? getGenericConversationPresentation(c),
+            adapterPresentations.get(c.id) ??
+            getGenericConversationPresentation(c),
           _snippet: snippets[c.zalo_chat_id] ?? "",
         };
       })
@@ -514,6 +515,15 @@ const ConversationListPanel = ({
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
       <WorkspaceRail
+        adapterSlot={
+          <ChannelAdapterSelector
+            provider={getEffectiveConversationChannelProvider(searchParams)}
+            searchParams={searchParams}
+            onSearchParamsChange={(next) =>
+              setSearchParams(next, { replace: true })
+            }
+          />
+        }
         searchSlot={
           <div className="inbox-toolbar">
             <label className="search">
@@ -534,13 +544,15 @@ const ConversationListPanel = ({
               />
             </label>
             <div className="conversation-filters" aria-label="Lọc hội thoại">
-              {([
-                ["all", "Tất cả hội thoại"],
-                ["attention", "Cần phản hồi"],
-                ...(slots.filters
-                  ? [["priority", slots.filters.priorityLabel] as const]
-                  : []),
-              ] as const).map(([value, label]) => (
+              {(
+                [
+                  ["all", "Tất cả hội thoại"],
+                  ["attention", "Cần phản hồi"],
+                  ...(slots.filters
+                    ? [["priority", slots.filters.priorityLabel] as const]
+                    : []),
+                ] as const
+              ).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
@@ -615,13 +627,20 @@ const ConversationListPanel = ({
   );
 };
 
-const WorkspaceRail = ({ searchSlot }: { searchSlot: ReactNode }) => (
+const WorkspaceRail = ({
+  adapterSlot,
+  searchSlot,
+}: {
+  adapterSlot: ReactNode;
+  searchSlot: ReactNode;
+}) => (
   <div className="workspace-rail" aria-label="Tin nhắn">
     <div className="workspace-title-row">
       <div className="workspace-title-copy">
         <h1 className="workspace-heading">Tin nhắn</h1>
       </div>
     </div>
+    {adapterSlot}
     <div className="inbox-tools">{searchSlot}</div>
   </div>
 );
@@ -787,16 +806,25 @@ export const ConversationList = () => {
   // `list_conversations` then delegates to `list_by_attention_reason`. Reading
   // it at the content level (useListContext child) would be too late — the
   // request has already fired.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const provider = getEffectiveConversationChannelProvider(searchParams);
+  const rawProvider = searchParams.get("channel_provider");
+  useEffect(() => {
+    if (rawProvider === provider) return;
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("channel_provider", provider);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [provider, rawProvider, setSearchParams]);
   const serverFilter = getConversationListServerFilter(searchParams);
   // When the reason changes (or clears), remount cleanly so no stale rows from
   // the previous reason linger and react-admin's permanent-filter bookkeeping
   // resets. Acceptable per the spec note.
-  const listKey = serverFilter
-    ? "reason" in serverFilter
-      ? `reason:${serverFilter.reason}`
-      : "needs-attention"
-    : "all";
+  const listKey = getConversationListKey(serverFilter);
   return (
     // Infinite pagination keeps the inbox light while removing visible page
     // controls. Row previews come from /conversations/last-messages/batch for

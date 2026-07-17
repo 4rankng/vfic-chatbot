@@ -13,7 +13,7 @@ from app.services.retrieval.repository import RetrievalRepository
 
 
 @pytest.mark.asyncio
-async def test_find_active_jobs_filters_to_active_positive_vacancies():
+async def test_list_active_jobs_filters_to_active_positive_vacancies():
     db = MagicMock()
     result = MagicMock()
     result.all.return_value = [
@@ -36,7 +36,7 @@ async def test_find_active_jobs_filters_to_active_positive_vacancies():
     ]
     db.execute = AsyncMock(return_value=result)
 
-    outcome = await RecommendationRepository(db).find_active_jobs("thợ hàn CO2")
+    outcome = await RecommendationRepository(db).list_active_jobs(role="thợ hàn CO2")
 
     assert outcome.status == "matched"
     assert outcome.jobs[0].id == "job-1"
@@ -46,10 +46,12 @@ async def test_find_active_jobs_filters_to_active_positive_vacancies():
     sql = str(statement.compile(dialect=postgresql.dialect()))
     assert "jobs.status" in sql
     assert "coalesce(jobs.vacancy_count" in sql.lower()
+    assert "projects.is_active IS true" in sql
+    assert "jobs.updated_at DESC, jobs.id ASC" in sql
 
 
 @pytest.mark.asyncio
-async def test_find_active_jobs_can_be_scoped_to_knowledge_base_projects():
+async def test_list_active_jobs_can_be_scoped_to_knowledge_base_projects():
     db = MagicMock()
     active_result = MagicMock()
     active_result.all.return_value = []
@@ -57,8 +59,8 @@ async def test_find_active_jobs_can_be_scoped_to_knowledge_base_projects():
     catalog_result.scalar_one_or_none.return_value = None
     db.execute = AsyncMock(side_effect=[active_result, catalog_result])
 
-    outcome = await RecommendationRepository(db).find_active_jobs(
-        "thợ hàn CO2", project_ids=["project-a", "project-b"]
+    outcome = await RecommendationRepository(db).list_active_jobs(
+        role="thợ hàn CO2", project_ids=["project-a", "project-b"]
     )
 
     assert outcome.status == "catalog_empty"
@@ -76,8 +78,8 @@ async def test_nonempty_catalog_with_no_open_jobs_is_a_real_no_match():
     catalog_result.scalar_one_or_none.return_value = "inactive-job-id"
     db.execute = AsyncMock(side_effect=[active_result, catalog_result])
 
-    outcome = await RecommendationRepository(db).find_active_jobs(
-        "LG Tràng Duệ đang tuyển ạ", project_ids=["project-a"]
+    outcome = await RecommendationRepository(db).list_active_jobs(
+        company="LG", location="Tràng Duệ", project_ids=["project-a"]
     )
 
     assert outcome.status == "no_match"
@@ -85,12 +87,12 @@ async def test_nonempty_catalog_with_no_open_jobs_is_a_real_no_match():
 
 
 @pytest.mark.asyncio
-async def test_find_active_jobs_with_no_active_agent_projects_reports_empty_catalog():
+async def test_list_active_jobs_with_no_active_agent_projects_reports_empty_catalog():
     db = MagicMock()
     db.execute = AsyncMock()
 
-    outcome = await RecommendationRepository(db).find_active_jobs(
-        "LG Tràng Duệ đang tuyển ạ", project_ids=[]
+    outcome = await RecommendationRepository(db).list_active_jobs(
+        company="LG", location="Tràng Duệ", project_ids=[]
     )
 
     assert outcome.status == "catalog_empty"
@@ -99,12 +101,12 @@ async def test_find_active_jobs_with_no_active_agent_projects_reports_empty_cata
 
 
 @pytest.mark.asyncio
-async def test_find_active_jobs_returns_unavailable_on_database_error():
+async def test_list_active_jobs_returns_unavailable_on_database_error():
     db = MagicMock()
     db.execute = AsyncMock(side_effect=RuntimeError("db down"))
     db.rollback = AsyncMock()
 
-    outcome = await RecommendationRepository(db).find_active_jobs("thợ hàn CO2")
+    outcome = await RecommendationRepository(db).list_active_jobs(role="thợ hàn CO2")
 
     assert outcome.status == "unavailable"
     assert outcome.jobs == ()
@@ -119,20 +121,47 @@ async def test_retrieval_active_job_lookup_scopes_to_active_agent_kb_projects(mo
 
     captured: dict[str, object] = {}
 
-    async def find_active_jobs(self, query, *, top_k, project_ids):
-        captured.update(query=query, top_k=top_k, project_ids=project_ids)
+    async def list_active_jobs(
+        self, *, role, company, location, top_k, project_ids
+    ):
+        captured.update(
+            role=role,
+            company=company,
+            location=location,
+            top_k=top_k,
+            project_ids=project_ids,
+        )
         return SimpleNamespace(status="no_match", jobs=())
 
-    monkeypatch.setattr(RecommendationRepository, "find_active_jobs", find_active_jobs)
+    monkeypatch.setattr(RecommendationRepository, "list_active_jobs", list_active_jobs)
 
-    result = await RetrievalRepository(_Db()).find_active_jobs("thợ hàn", top_k=2)
+    result = await RetrievalRepository(_Db()).list_active_jobs(
+        role="thợ hàn",
+        company="LG",
+        location="Hải Phòng",
+        top_k=2,
+    )
 
     assert result.status == "no_match"
     assert captured == {
-        "query": "thợ hàn",
+        "role": "thợ hàn",
+        "company": "LG",
+        "location": "Hải Phòng",
         "top_k": 2,
         "project_ids": ["project-a", "project-b"],
     }
+
+
+@pytest.mark.asyncio
+async def test_retrieval_active_project_failure_returns_unavailable():
+    class _Db:
+        async def scalars(self, _statement):
+            raise RuntimeError("db down")
+
+    result = await RetrievalRepository(_Db()).list_active_jobs(role="thợ hàn")
+
+    assert result.status == "unavailable"
+    assert result.jobs == ()
 
 
 @pytest.mark.asyncio

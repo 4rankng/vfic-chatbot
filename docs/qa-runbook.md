@@ -128,7 +128,7 @@ the canonical map; visit each on desktop **and** mobile (390×844) per run.
 | Route | Resource | Component | QA focus |
 |-------|----------|-----------|----------|
 | `#/` | — (dashboard) | `dashboard/Dashboard.tsx` | Cards render live values; no overflow; mobile stacks |
-| `#/conversations` | `conversations` | `conversations/ConversationList.tsx` | List/search/pagination; a nonzero `Tin nhắn` badge opens `?needs_attention=true`; human/semi-auto rows show unread counts and an unanswered bot row says `Bot chưa phản hồi`; mode menu (Human/Semi-auto/Chatbot); composer disabled in chatbot mode |
+| `#/conversations` | `conversations` | `conversations/ConversationList.tsx` | Switch between the exclusive Zalo Chatbot/Zalo OA icon scopes; URL contains `channel_provider`; adapter badges and selected caption match scoped attention counts; search/queue/reason filters never mix adapters; a nonzero `Tin nhắn` badge opens `?needs_attention=true`; human/semi-auto rows show unread counts and an unanswered bot row says `Bot chưa phản hồi`; mode menu (Human/Semi-auto/Chatbot); composer disabled in chatbot mode |
 | `#/conversations/:id` | show | `conversations/ConversationShow.tsx` | Thread loads; context panel; takeover toggle; send (QA conv only) |
 | `#/bot_runs` | `bot_runs` (read-only audit) | `automation/BotRunList.tsx` | Run cards: outcome, preview, timing; detail view |
 | `#/knowledge_sources` | `knowledge_sources` | `knowledge/KnowledgeSourceList.tsx` | Search; upload dialog (template/project/file/paste-text); pipeline timeline; retrain/download actions |

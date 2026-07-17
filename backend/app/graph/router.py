@@ -183,7 +183,7 @@ def route_turn(user_text: str) -> TurnRoute:
     if fast_lane_match(raw) is not None:
         return TurnRoute("small_talk", "template", reason="fast_lane_match", confidence=0.95)
 
-    has_recommendation = _has_any(text, _RECOMMEND_TERMS)
+    has_recommendation = _has_any(text, _RECOMMEND_TERMS) or "tuyen" in text.split()
     has_detail = _has_any(text, _DETAIL_TERMS)
     has_phone = bool(_PHONE_RE.search(raw))
 
@@ -209,7 +209,12 @@ def route_turn(user_text: str) -> TurnRoute:
         return TurnRoute(
             "recommend",
             "recommendation",
-            tools=("recommend_jobs", "recommend_projects", "get_product_features"),
+            tools=(
+                "list_active_jobs",
+                "recommend_jobs",
+                "recommend_projects",
+                "get_product_features",
+            ),
             reason="recommendation_terms",
             confidence=0.86,
         )
@@ -236,7 +241,10 @@ def routing_instruction(route: TurnRoute) -> str:
         return "Ý định: trò chuyện xã giao. Trả lời ngắn gọn, thân thiện; không cần tra cứu nếu không có câu hỏi tuyển dụng."
     if route.intent == "recommend":
         return (
-            "Ý định: gợi ý việc phù hợp. Nếu đã có hồ sơ ứng viên (lương/khu vực/vị trí), "
+            "Ý định: tư vấn việc đang tuyển hoặc gợi ý việc phù hợp. Với câu hỏi về vị trí "
+            "đang tuyển, phải gọi list_active_jobs với các bộ lọc role/company/location đã "
+            "diễn giải; bỏ trống tất cả bộ lọc khi ứng viên muốn xem danh sách chung. "
+            "Nếu đã có hồ sơ ứng viên (lương/khu vực/vị trí), "
             "ưu tiên gọi recommend_jobs(chat_id) để gợi ý việc theo hồ sơ; nếu chưa đủ hồ sơ "
             "thì dùng recommend_projects. Sau đó gọi get_product_features cho slug dự án đã "
             "chọn để nêu lý do cụ thể. Chỉ gợi ý việc/dự án có trong dữ liệu."

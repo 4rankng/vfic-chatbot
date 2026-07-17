@@ -11,6 +11,8 @@ assigned" rule is decided by the SERVICE and passed in; this repo just runs the 
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -613,6 +615,215 @@ class DashboardRepository:
             "LIMIT :limit"
         )
         return list((await self.db.execute(text(sql), params)).mappings())
+
+    async def attention_reason_page(
+        self,
+        recruiter_id: str | None,
+        *,
+        reason: str,
+        channel_provider: str | None,
+        page: int,
+        per_page: int,
+    ) -> tuple[list[uuid.UUID], int]:
+        """Return one exact, provider-scoped attention-reason page.
+
+        Unlike the bounded dashboard widget query, this continuation query
+        selects only the requested reason and applies channel/viewer predicates
+        before deduplication, exact counting, and pagination. The total CTE is
+        left-joined to the requested page so an out-of-range page still returns
+        the non-zero exact total. Reason continuations are intentionally
+        independent: a conversation matching a higher-precedence dashboard
+        reason remains eligible when a caller explicitly filters a lower one.
+        """
+        reason_sql = self._attention_reason_source(reason, recruiter_id)
+        params: dict[str, object] = {
+            "channel_provider": channel_provider,
+            "limit": per_page,
+            "offset": (page - 1) * per_page,
+        }
+        if recruiter_id is not None:
+            params["uid"] = recruiter_id
+
+        sql = (
+            "WITH reason_rows AS ("
+            + reason_sql
+            + "), ranked AS ("
+            "  SELECT conversation_id, urgency_at, "
+            "  row_number() OVER (PARTITION BY conversation_id "
+            "    ORDER BY urgency_at ASC, conversation_id ASC) AS rn "
+            "  FROM reason_rows"
+            "), filtered AS ("
+            "  SELECT conversation_id, urgency_at FROM ranked WHERE rn = 1"
+            "), totals AS ("
+            "  SELECT count(*)::int AS total FROM filtered"
+            "), page_rows AS ("
+            "  SELECT conversation_id, urgency_at FROM filtered "
+            "  ORDER BY urgency_at ASC, conversation_id ASC "
+            "  OFFSET :offset LIMIT :limit"
+            ") "
+            "SELECT page_rows.conversation_id, totals.total "
+            "FROM totals LEFT JOIN page_rows ON true "
+            "ORDER BY page_rows.urgency_at ASC, page_rows.conversation_id ASC"
+        )
+        rows = list((await self.db.execute(text(sql), params)).mappings())
+        if not rows:
+            return [], 0
+        total = int(rows[0]["total"] or 0)
+        ids = [uuid.UUID(str(row["conversation_id"])) for row in rows if row["conversation_id"]]
+        return ids, total
+
+    def _attention_reason_source(self, reason: str, recruiter_id: str | None) -> str:
+        """SQL source for one canonical dashboard reason.
+
+        Every branch projects ``conversation_id`` and ``urgency_at``. Lead-only
+        dashboard items are intentionally absent because the conversation list
+        can open only rows backed by a real, viewer-visible conversation.
+        """
+        c_scope = viewer_scope_sql("c.") if recruiter_id is not None else "(TRUE)"
+        l_scope = viewer_scope_sql("l.") if recruiter_id is not None else "(TRUE)"
+        provider_scope = (
+            "(CAST(:channel_provider AS text) IS NULL "
+            "OR ci.provider = CAST(:channel_provider AS text))"
+        )
+        related_provider_scope = (
+            "(CAST(:channel_provider AS text) IS NULL "
+            "OR ci2.provider = CAST(:channel_provider AS text))"
+        )
+        conversation_from = (
+            "FROM conversations c "
+            "JOIN contact_channel_identities ci ON ci.id = c.channel_identity_id "
+        )
+        lead_conversation_from = (
+            "JOIN conversations c ON c.contact_id = l.contact_id AND "
+            + c_scope
+            + " JOIN contact_channel_identities ci ON ci.id = c.channel_identity_id "
+        )
+        not_skipped = "l.lead_stage <> 'SKIPPED'"
+        vn_today_due = self._vn_today_predicate("f.due_at")
+
+        sources = {
+            "DELIVERY_REVIEW": (
+                "SELECT c.id AS conversation_id, m.created_at AS urgency_at "
+                + conversation_from
+                + "JOIN LATERAL ("
+                "  SELECT m2.created_at, m2.delivery_status FROM messages m2 "
+                "  WHERE m2.conversation_id = c.id "
+                "  AND m2.sender IN ('BOT','RECRUITER') "
+                "  ORDER BY m2.created_at DESC LIMIT 1"
+                ") m ON true "
+                "WHERE m.delivery_status IN ('FAILED','SEND_UNKNOWN') AND "
+                + c_scope
+                + " AND "
+                + provider_scope
+            ),
+            "HUMAN_ESCALATION": (
+                "SELECT c.id AS conversation_id, "
+                "coalesce(c.last_inbound_at, c.updated_at) AS urgency_at "
+                + conversation_from
+                + "WHERE c.status = 'OPEN' AND c.needs_human AND "
+                + c_scope
+                + " AND "
+                + provider_scope
+            ),
+            "REPLY_OVERDUE": (
+                "SELECT c.id AS conversation_id, c.last_inbound_at AS urgency_at "
+                + conversation_from
+                + "WHERE c.status = 'OPEN' AND c.last_inbound_at IS NOT NULL "
+                "AND c.last_inbound_at > c.last_outbound_at "
+                "AND c.last_inbound_at < now() - interval '30 minutes' AND "
+                + c_scope
+                + " AND "
+                + provider_scope
+            ),
+            "FOLLOWUP_OVERDUE": (
+                "SELECT c.id AS conversation_id, f.due_at AS urgency_at "
+                "FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
+                + lead_conversation_from
+                + "WHERE f.status = 'PENDING' AND f.due_at < now() AND "
+                + not_skipped
+                + " AND "
+                + l_scope
+                + " AND "
+                + provider_scope
+            ),
+            "WAITING_REPLY": (
+                "SELECT c.id AS conversation_id, c.last_inbound_at AS urgency_at "
+                + conversation_from
+                + "WHERE c.status = 'OPEN' AND c.last_inbound_at IS NOT NULL "
+                "AND c.last_inbound_at > c.last_outbound_at "
+                "AND c.last_inbound_at >= now() - interval '30 minutes' AND "
+                + c_scope
+                + " AND "
+                + provider_scope
+            ),
+            "PRIORITY_NO_ACTION": (
+                "SELECT c.id AS conversation_id, l.created_at AS urgency_at "
+                "FROM leads l "
+                + lead_conversation_from
+                + "WHERE "
+                + not_skipped
+                + " AND (l.lead_score = 'hot' OR (l.lead_stage = 'REGISTERED' "
+                "AND l.created_at >= now() - interval '7 days')) "
+                "AND NOT EXISTS (SELECT 1 FROM follow_up_tasks f WHERE f.lead_id = l.id "
+                "AND f.status = 'PENDING' AND f.due_at > now()) "
+                "AND (l.next_action_at IS NULL OR l.next_action_at <= now()) "
+                "AND NOT EXISTS (SELECT 1 FROM conversations c2 "
+                "JOIN contact_channel_identities ci2 ON ci2.id = c2.channel_identity_id "
+                "WHERE c2.contact_id = l.contact_id AND "
+                + related_provider_scope
+                + " AND EXISTS ("
+                "SELECT 1 FROM messages m WHERE m.conversation_id = c2.id "
+                "AND m.sender = 'RECRUITER' "
+                "AND m.created_at > now() - interval '24 hours')) AND "
+                + l_scope
+                + " AND "
+                + provider_scope
+            ),
+            "FOLLOWUP_TODAY": (
+                "SELECT c.id AS conversation_id, f.due_at AS urgency_at "
+                "FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
+                + lead_conversation_from
+                + "WHERE f.status = 'PENDING' AND "
+                + vn_today_due
+                + " AND "
+                + not_skipped
+                + " AND "
+                + l_scope
+                + " AND "
+                + provider_scope
+            ),
+            "UNREAD": (
+                "SELECT c.id AS conversation_id, "
+                "coalesce(c.last_inbound_at, c.updated_at) AS urgency_at "
+                + conversation_from
+                + "WHERE c.status = 'OPEN' AND c.unread_count > 0 AND "
+                + c_scope
+                + " AND "
+                + provider_scope
+            ),
+            "STALLED": (
+                "SELECT c.id AS conversation_id, l.updated_at AS urgency_at "
+                "FROM leads l "
+                + lead_conversation_from
+                + "WHERE "
+                + not_skipped
+                + " AND NOT (l.updated_at > now() - interval '48 hours' "
+                "OR EXISTS (SELECT 1 FROM conversations c2 "
+                "JOIN contact_channel_identities ci2 ON ci2.id = c2.channel_identity_id "
+                "WHERE c2.contact_id = l.contact_id AND "
+                + related_provider_scope
+                + " "
+                "AND (c2.last_inbound_at > now() - interval '48 hours' "
+                "OR c2.last_outbound_at > now() - interval '48 hours'))) AND "
+                + l_scope
+                + " AND "
+                + provider_scope
+            ),
+        }
+        try:
+            return sources[reason]
+        except KeyError as exc:
+            raise ValueError(f"unknown attention reason: {reason!r}") from exc
 
     @staticmethod
     def _enrichment_join(c_scope: str, l_scope: str) -> str:

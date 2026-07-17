@@ -282,6 +282,18 @@ which reuses the same reason predicates as `/dashboard/attention` (DRY). Returns
 standard `ConversationListResponse` shape. When `reason` is absent, the existing
 `list_conversations` behavior is unchanged.
 
+### Conversation adapter scope
+
+`GET /api/v1/conversations` accepts an optional `channel_provider` query value:
+`zalo_bot` or `zalo_oa`. The scope composes with search, `needs_attention=true`,
+and `reason=<REASON_ENUM>`. Attention-reason totals and pagination are calculated
+after provider filtering, so pages never mix adapters.
+
+`GET /api/v1/conversations/needs-attention` accepts the same optional scope and
+returns `{"count": <number>}`. Omitting `channel_provider` keeps the aggregate
+count used by the global navigation badge. Unsupported providers return `422`;
+Messenger is not exposed until that adapter is released.
+
 ## Custom DataProvider Methods
 
 The frontend dataProvider (`frontend/src/components/atomic-crm/providers/rest/dataProvider.ts`) extends react-admin with custom methods:

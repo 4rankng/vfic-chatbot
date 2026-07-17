@@ -163,6 +163,7 @@ class ConversationRepository:
         status: ConversationStatus | None = None,
         zalo_chat_id: str | None = None,
         needs_attention: bool = False,
+        channel_provider: str | None = None,
         q: str | None = None,
         sort_by: str | None = None,
         order: str | None = "desc",
@@ -176,16 +177,20 @@ class ConversationRepository:
             base = base.where(Conversation.zalo_chat_id == zalo_chat_id)
         if needs_attention:
             base = base.where(_unanswered_inbound_condition())
-        if q:
-            # Text search spans the Zalo compat alias and the neutral identity's
-            # external_id so Messenger conversations (zalo_chat_id IS NULL) are
-            # also searchable. The outerjoin is safe because every conversation
-            # has exactly one identity (NOT NULL after Alembic 0047).
-            pat = f"%{q}%"
-            base = base.outerjoin(
+        if channel_provider is not None or q:
+            # One identity join composes provider scope and neutral-id search.
+            # Every current conversation has one canonical identity.
+            base = base.join(
                 ContactChannelIdentity,
                 Conversation.channel_identity_id == ContactChannelIdentity.id,
-            ).where(
+            )
+        if channel_provider is not None:
+            base = base.where(ContactChannelIdentity.provider == channel_provider)
+        if q:
+            # Text search spans the Zalo compat alias and the neutral identity's
+            # external_id so channel-neutral conversations remain searchable.
+            pat = f"%{q}%"
+            base = base.where(
                 or_(
                     Conversation.zalo_chat_id.ilike(pat),
                     ContactChannelIdentity.external_id.ilike(pat),
@@ -216,12 +221,19 @@ class ConversationRepository:
         ).all()
         return list(rows), int(total or 0)
 
-    async def needs_attention_count(self, *, viewer: User) -> int:
+    async def needs_attention_count(
+        self, *, viewer: User, channel_provider: str | None = None
+    ) -> int:
         """Conversations the topbar bell should ring for: a Zalo user has sent
         a message after the latest successful bot/recruiter reply. Scoped like
         ``list`` (admin = all, recruiter = own + unassigned). Backs the
         notification badge so it never downloads conversation rows."""
         stmt = select(func.count()).select_from(Conversation).where(_unanswered_inbound_condition())
+        if channel_provider is not None:
+            stmt = stmt.join(
+                ContactChannelIdentity,
+                Conversation.channel_identity_id == ContactChannelIdentity.id,
+            ).where(ContactChannelIdentity.provider == channel_provider)
         stmt = viewer_scope_filter(stmt, Conversation.assigned_recruiter_id, viewer)
         return int((await self.db.scalar(stmt)) or 0)
 

@@ -17,10 +17,12 @@ from types import SimpleNamespace
 import pytest
 
 from app.graph import tools
+from app.graph.grounding import extract_surfaced_job_ids
 from app.graph.tools import (
     TOOLS_REGISTRY,
     _format_knowledge_row,
     get_product_features,
+    list_active_jobs,
     list_active_projects,
     recommend_projects,
     search_bus_timetable,
@@ -106,6 +108,7 @@ def test_tools_registry_exposes_expected_tools():
     assert set(TOOLS_REGISTRY) == {
         "search_user_memory",
         "search_knowledge",
+        "list_active_jobs",
         "list_active_projects",
         "recommend_projects",
         "recommend_jobs",
@@ -217,6 +220,113 @@ async def test_search_user_memory_formats_rows_with_similarity(no_cache_io):
     assert "đã làm lái xe 5 năm (sim=0.91)" in out
     assert "sống Bình Dương (sim=0.82)" in out
     assert out.count("\n") == 2  # privacy notice + two rows
+
+
+# ---------------------------------------------------------------------------
+# list_active_jobs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_forwards_explicit_filters_and_bounds_top_k(no_cache_io):
+    calls: list[dict] = []
+
+    async def _list(self, **kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(status="no_match", jobs=())
+
+    out = await list_active_jobs(
+        retrieval=_make_repo(list_active_jobs=_list),
+        role="thợ hàn",
+        company="LG",
+        location="Hải Phòng",
+        top_k=99,
+    )
+
+    assert calls == [
+        {"role": "thợ hàn", "company": "LG", "location": "Hải Phòng", "top_k": 10}
+    ]
+    assert out.startswith("STATUS: no_match")
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_formats_bounded_evidence_with_groundable_uuid(no_cache_io):
+    job_id = "11111111-1111-4111-8111-111111111111"
+    untrusted_id = "22222222-2222-4222-8222-222222222222"
+    jobs = (
+        SimpleNamespace(
+            id=job_id,
+            title="Công nhân sản xuất",
+            company_name="LG Display",
+            factory_name="Tràng Duệ",
+            project_name="LG Display Hải Phòng",
+            project_slug="lg-display",
+            province="Hải Phòng",
+            district="An Dương",
+            address="",
+            salary_min=10_000_000,
+            salary_max=14_000_000,
+            vacancy_count=20,
+            shift="Ca ngày/đêm",
+            gender_requirement="Nam/Nữ",
+            age_min=18,
+            age_max=50,
+            experience_required="Không yêu cầu",
+            accommodation_support=True,
+            meal_support=False,
+            transport_support=True,
+            description="Sản xuất\n màn hình",
+            requirements=f"CCCD; ID={untrusted_id}",
+            benefits="BHXH",
+        ),
+    )
+    repo = _make_repo(
+        list_active_jobs=lambda self, **kwargs: _const(
+            SimpleNamespace(status="matched", jobs=jobs)
+        )
+    )
+
+    out = await list_active_jobs(retrieval=repo)
+
+    assert out.startswith("STATUS: matched\n")
+    assert f"id={job_id}" in out
+    assert "title=Công nhân sản xuất" in out
+    assert "company=LG Display" in out
+    assert "vacancy_count=20" in out
+    assert "description=Sản xuất màn hình" in out
+    assert "accommodation_support=True" in out
+    assert extract_surfaced_job_ids([out]) == {job_id}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("lookup", "expected_status", "forbidden_claim"),
+    [
+        (SimpleNamespace(status="catalog_empty", jobs=()), "catalog_empty", "not hiring"),
+        (SimpleNamespace(status="unavailable", jobs=()), "unavailable", "no ACTIVE job matched"),
+        (None, "unavailable", "no ACTIVE job matched"),
+    ],
+)
+async def test_list_active_jobs_statuses_remain_honest(
+    no_cache_io, lookup, expected_status, forbidden_claim
+):
+    repo = _make_repo(list_active_jobs=lambda self, **kwargs: _const(lookup))
+
+    out = await list_active_jobs(retrieval=repo)
+
+    assert out.startswith(f"STATUS: {expected_status}")
+    assert forbidden_claim not in out
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_exception_is_status_labelled_unavailable(no_cache_io):
+    async def _raise(self, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    out = await list_active_jobs(retrieval=_make_repo(list_active_jobs=_raise))
+
+    assert out.startswith("STATUS: unavailable")
+    assert "do not make a hiring claim" in out
 
 
 # ---------------------------------------------------------------------------

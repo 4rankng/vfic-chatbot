@@ -11,6 +11,7 @@ import logging
 
 from app.graph.tools import (
     get_product_features,
+    list_active_jobs,
     list_active_projects,
     recommend_jobs,
     recommend_projects,
@@ -32,6 +33,41 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {"chat_id": {"type": "string"}, "query": {"type": "string"}},
                 "required": ["chat_id", "query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_active_jobs",
+            "description": (
+                "Liệt kê việc làm đang ACTIVE từ dữ liệu có cấu trúc. Dùng cho mọi câu hỏi "
+                "về vị trí/công việc đang tuyển, kể cả yêu cầu liệt kê chung. Có thể truyền role, "
+                "company và location đã được diễn giải từ lời ứng viên; không đưa câu hỏi hội thoại "
+                "nguyên văn vào các bộ lọc. Chỉ tư vấn từ các trường tool trả về."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "role": {
+                        "type": "string",
+                        "description": "Tên vị trí/vai trò cần tìm, không kèm lời hội thoại.",
+                    },
+                    "company": {
+                        "type": "string",
+                        "description": "Tên hoặc bí danh công ty/nhà máy/dự án.",
+                    },
+                    "location": {
+                        "type": "string",
+                        "description": "Tỉnh, quận/huyện hoặc địa chỉ cần tìm.",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10,
+                        "description": "Số việc tối đa cần trả về, mặc định 3.",
+                    },
+                },
             },
         },
     },
@@ -233,6 +269,14 @@ async def _dispatch_tool(
             )
         elif name == "list_active_projects":
             result = await list_active_projects(retrieval)
+        elif name == "list_active_jobs":
+            result = await list_active_jobs(
+                retrieval,
+                role=args.get("role"),
+                company=args.get("company"),
+                location=args.get("location"),
+                top_k=args.get("top_k", 3),
+            )
         elif name == "recommend_projects":
             result = await recommend_projects(
                 retrieval, args.get("query", ""), args.get("top_k", 3)

@@ -20,7 +20,6 @@ from app.graph.router import route_turn
 from app.graph.context import build_system_prompt
 from app.models.knowledge import KBVersionStatus
 from app.graph.types import BotRunState
-from app.graph.vacancy import NO_ACTIVE_JOB_REPLY
 from app.services.ingestion.template_compiler import compile_template
 from app.services.ingestion.template_service import TemplateService
 from app.services.knowledge.pipeline import KnowledgePipeline, _fallback_unit
@@ -122,7 +121,7 @@ def test_explicit_recruitment_fixture_reproduces_current_route_and_tool_selectio
 
 
 @pytest.mark.asyncio
-async def test_explicit_recruitment_fixture_reproduces_current_vacancy_reply(
+async def test_explicit_recruitment_fixture_reproduces_grounded_vacancy_agent_path(
     monkeypatch: pytest.MonkeyPatch,
 ):
     from app.graph import runner
@@ -131,19 +130,14 @@ async def test_explicit_recruitment_fixture_reproduces_current_vacancy_reply(
     fixture = _load_fixture("recruitment_installation.json")
     golden = next(item for item in fixture["golden_turns"] if item["kind"] == "reply")
 
-    class _Lookup:
-        async def find_active_jobs(self, query):
-            assert query == golden["user_text"]
-            return SimpleNamespace(status=golden["lookup_status"], jobs=())
+    async def _grounded_agent(_state, _deps, user_text, **_kwargs):
+        assert user_text == golden["user_text"]
+        return "Tôi sẽ kiểm tra các việc ACTIVE bằng công cụ tuyển dụng."
 
-    async def _must_not_call_agent(*args, **kwargs):
-        raise AssertionError("the fixture-backed vacancy lane must not call the agent")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_call_agent)
+    monkeypatch.setattr(runner, "_agent_turn", _grounded_agent)
     conversation, _ = _stub_svc(conv=_FakeConv())
     sender = _FakeZalo()
     deps = _deps(sender, conversation=conversation)
-    deps.retrieval = _Lookup()
     state = BotRunState(
         conversation_id="00000000-0000-0000-0000-000000000001",
         version_at_start=1,
@@ -152,12 +146,14 @@ async def test_explicit_recruitment_fixture_reproduces_current_vacancy_reply(
 
     result = await runner.run_turn(state, deps)
 
-    assert golden["expected_reply_contract"] == "no_active_job"
+    assert golden["expected_reply_contract"] == "grounded_llm_tool_path"
     assert result == {
         "outcome": golden["expected_outcome"],
-        "reply": NO_ACTIVE_JOB_REPLY,
+        "reply": "Tôi sẽ kiểm tra các việc ACTIVE bằng công cụ tuyển dụng.",
     }
-    assert sender.sent == [("z1", NO_ACTIVE_JOB_REPLY)]
+    assert sender.sent == [
+        ("z1", "Tôi sẽ kiểm tra các việc ACTIVE bằng công cụ tuyển dụng.")
+    ]
 
 
 def test_knowledge_fallback_keeps_only_source_context():

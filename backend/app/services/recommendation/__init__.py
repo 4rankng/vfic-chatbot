@@ -12,6 +12,7 @@ ChatGPT "machine-readable matched reasons") on the data columns VFIC already has
 from app.services.recommendation.availability import (
     ActiveJob,
     ActiveJobLookup,
+    ActiveJobLookupStatus,
     select_matching_active_jobs,
 )
 from app.services.recommendation.repository import LeadJobRecommendation, RecommendationRepository
@@ -27,6 +28,7 @@ __all__ = [
     "RecommendationRepository",
     "ActiveJob",
     "ActiveJobLookup",
+    "ActiveJobLookupStatus",
     "LeadJobRecommendation",
     "select_matching_active_jobs",
     "JobCandidate",

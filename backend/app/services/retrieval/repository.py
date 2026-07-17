@@ -837,14 +837,28 @@ class RetrievalRepository:
             return LeadJobRecommendation("no_match")
         return LeadJobRecommendation("matched", tuple(jobs))
 
-    async def find_active_jobs(self, query: str, *, top_k: int = 3):
-        """Resolve an explicit role query within the active Agent RAG KB only."""
-        from app.services.recommendation import RecommendationRepository
+    async def list_active_jobs(
+        self,
+        *,
+        role: str | None = None,
+        company: str | None = None,
+        location: str | None = None,
+        top_k: int = 3,
+    ):
+        """List structured vacancies within the active Agent knowledge base."""
+        from app.services.recommendation import ActiveJobLookup, RecommendationRepository
 
-        return await RecommendationRepository(self.db).find_active_jobs(
-            query,
+        try:
+            project_ids = await self.active_project_ids()
+        except Exception:
+            logger.warning("active-project lookup failed for vacancy catalog", exc_info=True)
+            return ActiveJobLookup("unavailable")
+        return await RecommendationRepository(self.db).list_active_jobs(
+            role=role,
+            company=company,
+            location=location,
             top_k=top_k,
-            project_ids=await self.active_project_ids(),
+            project_ids=project_ids,
         )
 
 
