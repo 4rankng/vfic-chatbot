@@ -27,6 +27,7 @@ from app.models.conversation import (
 )
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
+from app.graph.outbound_telemetry import OutboundTelemetry
 from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
@@ -1290,6 +1291,7 @@ class ConversationState:
         external_error: str | None = None,
         error_class: str | None = None,
         suppressed: bool = False,
+        telemetry: OutboundTelemetry | None = None,
     ) -> Message:
         """Finalize a recovered command for any outbound sender without a new row."""
         from app.graph.send_classification import delivery_status_for_send_error
@@ -1325,6 +1327,30 @@ class ConversationState:
             outbox.sent_at = utcnow()
             conv.last_outbound_at = utcnow()
         if msg.sender == MessageSender.BOT:
+            if telemetry is not None:
+                telemetry_timings = telemetry.to_stage_timings()
+                if msg.bot_run_id is not None:
+                    run = await self.db.get(BotRun, msg.bot_run_id)
+                    if run is not None:
+                        merged_timings = dict(run.stage_timings or {})
+                        merged_timings.update(telemetry_timings)
+                        run.stage_timings = merged_timings
+                else:
+                    run = BotRun(
+                        conversation_id=conv.id,
+                        started_at=msg.created_at or utcnow(),
+                        ended_at=utcnow(),
+                        version_at_start=int(conv.version),
+                        outcome=BotRunOutcome.SENT if delivered else BotRunOutcome.ERROR,
+                        stage_timings={
+                            "execution_source": "outbox_recovery",
+                            "lane": "outbox_recovery",
+                            **telemetry_timings,
+                        },
+                    )
+                    self.db.add(run)
+                    await self.db.flush()
+                    msg.bot_run_id = run.id
             # A stale-outbox finalization can run on the recovery sweep LONG
             # after the message's own turn ended (it fires only once the outbox
             # row exceeds ``chat_turn_job_timeout`` without a receipt). By then a

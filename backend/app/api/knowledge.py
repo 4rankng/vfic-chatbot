@@ -16,13 +16,11 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_embedder, require_admin
 from app.core.db import get_db
 from app.models.knowledge import KnowledgeStatus
-from app.models.ingestion_template import KBIngestionRun
 from app.models.user import User
 from app.schemas.knowledge import (
     KBIngestResponse,
@@ -39,25 +37,7 @@ from app.schemas.knowledge import (
     SearchTestResult,
     UploadRequest,
 )
-from app.schemas.ingestion_templates import (
-    AssignmentOut,
-    AssignmentSet,
-    IngestionRunOut,
-    PreviewOut,
-    PreviewRequest,
-    TemplatePreviewRequest,
-    TemplateCreate,
-    TemplateOut,
-    TemplateVersionOut,
-    TemplateVersionUpdate,
-    ReviewDecision,
-)
-from app.services.ingestion.template_compiler import TemplateCompileError
-from app.services.ingestion.reference_templates import STARTER_PACKS
-from app.services.ingestion.fact_repository import list_active_structured_facts
 from app.services.audit_service import record_audit
-from app.services.ingestion.template_ingestion import IngestionRunConflict, TemplateIngestionService
-from app.services.ingestion.template_service import TemplateConflictError, TemplateService
 from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
@@ -67,261 +47,6 @@ from app.services.knowledge.canonical import (
 from app.workers.ingest_worker import enqueue_ingest, enqueue_ingest_version
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
-
-
-@router.get("/ingestion-templates", response_model=list[TemplateOut])
-async def list_ingestion_templates(
-    _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> list[TemplateOut]:
-    return [TemplateOut.model_validate(item) for item in await TemplateService(db).list_templates()]
-
-
-@router.get("/ingestion-template-starter-packs")
-async def list_ingestion_template_starter_packs(
-    _admin: User = Depends(require_admin),
-) -> dict[str, dict]:
-    return STARTER_PACKS
-
-
-@router.post(
-    "/ingestion-templates", response_model=TemplateVersionOut, status_code=status.HTTP_201_CREATED
-)
-async def create_ingestion_template(
-    body: TemplateCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> TemplateVersionOut:
-    try:
-        _, version = await TemplateService(db).create_template(
-            template_key=body.template_key,
-            name=body.name,
-            vertical=body.vertical,
-            definition=body.definition,
-            actor=admin,
-        )
-    except TemplateCompileError as exc:
-        raise HTTPException(422, detail={"issues": exc.issues}) from exc
-    except TemplateConflictError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return TemplateVersionOut.model_validate(version)
-
-
-@router.post("/ingestion-templates/preview", response_model=PreviewOut)
-async def preview_new_ingestion_template(
-    body: TemplatePreviewRequest,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> PreviewOut:
-    try:
-        checksum, records, issues = await TemplateIngestionService(db).preview(
-            body.definition, body.source_text
-        )
-    except TemplateCompileError as exc:
-        raise HTTPException(422, detail={"issues": exc.issues}) from exc
-    return PreviewOut(checksum=checksum, records=records, issues=issues)
-
-
-@router.get("/ingestion-templates/{template_id}/versions", response_model=list[TemplateVersionOut])
-async def list_ingestion_template_versions(
-    template_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> list[TemplateVersionOut]:
-    try:
-        versions = await TemplateService(db).list_versions(template_id)
-    except Exception as exc:
-        raise HTTPException(404, str(exc)) from exc
-    return [TemplateVersionOut.model_validate(item) for item in versions]
-
-
-@router.post(
-    "/ingestion-templates/{template_id}/drafts",
-    response_model=TemplateVersionOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def clone_ingestion_template_draft(
-    template_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> TemplateVersionOut:
-    try:
-        version = await TemplateService(db).create_draft_from(template_id, actor=admin)
-    except TemplateConflictError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return TemplateVersionOut.model_validate(version)
-
-
-@router.patch("/ingestion-template-versions/{version_id}", response_model=TemplateVersionOut)
-async def update_ingestion_template_draft(
-    version_id: uuid.UUID,
-    body: TemplateVersionUpdate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> TemplateVersionOut:
-    try:
-        version = await TemplateService(db).update_draft(
-            version_id, definition=body.definition, revision=body.revision, actor=admin
-        )
-    except TemplateCompileError as exc:
-        raise HTTPException(422, detail={"issues": exc.issues}) from exc
-    except TemplateConflictError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return TemplateVersionOut.model_validate(version)
-
-
-@router.post("/ingestion-template-versions/{version_id}/preview", response_model=PreviewOut)
-async def preview_ingestion_template(
-    version_id: uuid.UUID,
-    body: PreviewRequest,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> PreviewOut:
-    try:
-        checksum, records, issues = await TemplateService(db).record_preview(
-            version_id, source_text=body.source_text, actor=admin
-        )
-    except TemplateCompileError as exc:
-        raise HTTPException(422, detail={"issues": exc.issues}) from exc
-    except TemplateConflictError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return PreviewOut(checksum=checksum, records=records, issues=issues)
-
-
-@router.post("/ingestion-template-versions/{version_id}/publish", response_model=TemplateVersionOut)
-async def publish_ingestion_template(
-    version_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> TemplateVersionOut:
-    try:
-        version = await TemplateService(db).publish(version_id, actor=admin)
-    except (TemplateConflictError, TemplateCompileError) as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return TemplateVersionOut.model_validate(version)
-
-
-@router.post(
-    "/ingestion-template-versions/{version_id}/deprecate", response_model=TemplateVersionOut
-)
-async def deprecate_ingestion_template(
-    version_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> TemplateVersionOut:
-    try:
-        version = await TemplateService(db).deprecate(version_id, actor=admin)
-    except TemplateConflictError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return TemplateVersionOut.model_validate(version)
-
-
-@router.get(
-    "/projects/{project_id}/ingestion-template-assignment", response_model=AssignmentOut | None
-)
-async def get_ingestion_template_assignment(
-    project_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> AssignmentOut | None:
-    assignment = await TemplateService(db).current_assignment(project_id)
-    return AssignmentOut.model_validate(assignment) if assignment else None
-
-
-@router.put("/projects/{project_id}/ingestion-template-assignment", response_model=AssignmentOut)
-async def set_ingestion_template_assignment(
-    project_id: uuid.UUID,
-    body: AssignmentSet,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> AssignmentOut:
-    try:
-        assignment = await TemplateService(db).assign(
-            project_id,
-            template_version_id=body.template_version_id,
-            revision=body.revision,
-            actor=admin,
-        )
-    except TemplateConflictError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return AssignmentOut.model_validate(assignment)
-
-
-@router.get("/ingestion-runs/{run_id}", response_model=IngestionRunOut)
-async def get_ingestion_run(
-    run_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> IngestionRunOut:
-    run = await db.get(KBIngestionRun, run_id)
-    if run is None:
-        raise HTTPException(404, "ingestion run not found")
-    return IngestionRunOut.model_validate(run)
-
-
-@router.get(
-    "/projects/{project_id}/kb/versions/{version_id}/ingestion-runs",
-    response_model=list[IngestionRunOut],
-)
-async def list_kb_version_ingestion_runs(
-    project_id: uuid.UUID,
-    version_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> list[IngestionRunOut]:
-    await KnowledgeService(db)._require_version(project_id, version_id)
-    runs = list(
-        (
-            await db.scalars(
-                select(KBIngestionRun)
-                .where(KBIngestionRun.kb_version_id == version_id)
-                .order_by(KBIngestionRun.attempt_no.desc())
-            )
-        ).all()
-    )
-    return [IngestionRunOut.model_validate(run) for run in runs]
-
-
-@router.get("/projects/{project_id}/structured-facts")
-async def list_project_structured_facts(
-    project_id: uuid.UUID,
-    record_type_key: str | None = Query(None),
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    facts = await list_active_structured_facts(
-        db, project_id=project_id, record_type_key=record_type_key
-    )
-    return [
-        {
-            "id": str(fact.id),
-            "record_type_key": fact.record_type_key,
-            "payload": fact.payload,
-            "evidence": fact.evidence,
-            "scope_type": fact.scope_type,
-            "scope_id": fact.scope_id,
-        }
-        for fact in facts
-    ]
-
-
-@router.post("/ingestion-runs/{run_id}/approve", response_model=IngestionRunOut)
-async def approve_ingestion_run(
-    run_id: uuid.UUID,
-    body: ReviewDecision,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> IngestionRunOut:
-    try:
-        run = await TemplateIngestionService(db).approve(
-            run_id, reviewer_id=admin.id, comment=body.comment
-        )
-    except IngestionRunConflict as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return IngestionRunOut.model_validate(run)
-
-
-@router.post("/ingestion-runs/{run_id}/reject", response_model=IngestionRunOut)
-async def reject_ingestion_run(
-    run_id: uuid.UUID,
-    body: ReviewDecision,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> IngestionRunOut:
-    try:
-        run = await TemplateIngestionService(db).reject(
-            run_id, reviewer_id=admin.id, comment=body.comment
-        )
-    except IngestionRunConflict as exc:
-        raise HTTPException(409, str(exc)) from exc
-    return IngestionRunOut.model_validate(run)
 
 
 @router.get("/format/template", response_class=PlainTextResponse)
@@ -352,25 +77,14 @@ async def create_kb_version(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> KBVersionOut:
-    try:
-        version = await KnowledgeService(db).create_version(project_id, actor=admin)
-    except TemplateConflictError as exc:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "the selected knowledge template assignment is not available",
-        ) from exc
+    version = await KnowledgeService(db).create_version(project_id, actor=admin)
     await record_audit(
         db,
         action="kb_version_created",
         actor_id=admin.id,
         target_type="kb_version",
         target_id=str(version.id),
-        payload={
-            "project_id": str(project_id),
-            "template_version_id": str(version.template_version_id)
-            if version.template_version_id is not None
-            else None,
-        },
+        payload={"project_id": str(project_id)},
     )
     await db.commit()
     return KBVersionOut.model_validate(version)

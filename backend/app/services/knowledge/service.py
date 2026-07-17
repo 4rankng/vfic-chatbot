@@ -84,15 +84,12 @@ class KnowledgeService:
             )
             or 1
         )
-        from app.services.ingestion.template_service import TemplateService
-
-        assignment = await TemplateService(self.db).current_assignment(project_id)
         version = KBVersion(
             project_id=project_id,
             version_no=next_version,
             status=KBVersionStatus.DRAFT,
             created_by=actor.id,
-            template_version_id=assignment.template_version_id if assignment is not None else None,
+            template_version_id=None,
         )
         self.db.add(version)
         await self.db.commit()
@@ -194,13 +191,9 @@ class KnowledgeService:
         *,
         llm_json: LLMJson,
     ) -> KBVersion:
-        from app.services.ingestion.template_ingestion import TemplateIngestionService
-
         files = await self.list_version_files(version.id)
         if not files:
             raise ValueError("KB version has no uploaded text files.")
-        ingestion = TemplateIngestionService(self.db) if version.template_version_id is not None else None
-        run = await ingestion.start_run(version) if ingestion is not None else None
         version.status = KBVersionStatus.INDEXING
         version.error_message = None
         await self.db.commit()
@@ -230,15 +223,11 @@ class KnowledgeService:
                     source_text=text_file.normalized_text,
                 )
                 await self.db.commit()
-            if ingestion is not None and run is not None:
-                run = await ingestion.materialize_version(version, run=run)
-            else:
-                version.release_manifest_sha256 = hashlib.sha256(
-                    "|".join(sorted(item.content_sha256 for item in files)).encode()
-                ).hexdigest()
+            version.release_manifest_sha256 = hashlib.sha256(
+                "|".join(sorted(item.content_sha256 for item in files)).encode()
+            ).hexdigest()
             version.error_message = None
-            if run is None or run.status == "READY":
-                version.status = KBVersionStatus.READY
+            version.status = KBVersionStatus.READY
             await self.db.commit()
         except Exception as exc:
             version.status = KBVersionStatus.FAILED

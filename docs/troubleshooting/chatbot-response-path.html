@@ -256,7 +256,7 @@ flowchart TD
         <tr><td class="stage">12</td><td class="stage">Agent turn</td><td>Persona + product index system prompt, lead context, RAG tools, MiniMax→OpenRouter. <b>No hard cap</b> (8.5s advisory only).</td><td class="bad">LLMThrottled → degradation reply + clear lock. Latency = usual slow-reply culprit.</td><td><span class="grep">LLMThrottled</span> · LLM client timing</td></tr>
         <tr><td class="stage">13</td><td class="stage">Safety</td><td>lexical fast filter → blocklist (hard redirect) → LLM judge, 1 retry rewrite.</td><td>Blocklist hit skips judge and redirects.</td><td><span class="grep">blocklist_hit</span> / safety judge log</td></tr>
         <tr><td class="stage">14</td><td class="stage">pre_send_guard</td><td><span class="mono">db.refresh(conv)</span> (defeat identity map) + <span class="mono">recheck_ownership(version_at_start)</span>.</td><td class="bad">Version changed mid-turn → SUPPRESSED (recruiter/human took over). Forgetting db.refresh hides takeover.</td><td><span class="grep">SUPPRESSED</span> / outcome column</td></tr>
-        <tr><td class="stage">15</td><td class="stage">send_message</td><td><span class="mono">ZaloChannelSender</span>: Bot (token in path) or OA (access_token, lazy refresh).</td><td class="bad">Send error → reconcile retries. OA token-invalid triggers one Redis-locked refresh.</td><td><span class="grep">send_message</span> · delivery_status SENT/DELIVERED/READ</td></tr>
+        <tr><td class="stage">15</td><td class="stage">send_message</td><td><span class="mono">ZaloChannelSender</span>: Bot (token in path) or OA (access_token, lazy refresh).</td><td class="bad">Definite rejection → FAILED (the bot reconciler may re-enqueue a new guarded turn). Ambiguous transport failure → SEND_UNKNOWN (never replayed). OA token-invalid triggers one Redis-locked refresh.</td><td><span class="grep">send_message</span> · delivery_status SENT/DELIVERED/READ</td></tr>
         <tr><td class="stage">16</td><td class="stage">record_bot_outcome</td><td>SENT (clear lock, last_outbound_at, candidate extraction). Or SUPPRESSED.</td><td>If outcome never written, mutex stalls ~3min until TTL.</td><td><span class="mono">messages.outcome = SENT</span> + lock cleared</td></tr>
         <tr><td class="stage">♻</td><td class="stage">Reconcile sweep</td><td>followup queue, SETNX non-reentrant 300s. Finds unanswered / stale-PENDING / failed-send (grace 120s). Re-checks guard, re-locks, refreshes version, re-enqueues.</td><td>Primary reliability guarantee: OOM, deploy force-recreate, enqueue-fail — all recovered within one ~3-4min cycle.</td><td><span class="grep">reconcile</span> · stale PENDING → FAILED transitions</td></tr>
       </tbody>
@@ -340,13 +340,23 @@ ORDER BY created_at DESC LIMIT 12;</pre>
        stage_timings-&gt;&gt;'llm_ms'      AS llm_ms,
        stage_timings-&gt;&gt;'safety_ms'   AS safety_ms,
        stage_timings-&gt;&gt;'send_ms'     AS send_ms,
+       stage_timings-&gt;&gt;'outbound_adapter' AS outbound_adapter,
+       stage_timings-&gt;&gt;'outbound_prepare_ms' AS outbound_prepare_ms,
+       stage_timings-&gt;&gt;'outbound_provider_ms' AS outbound_provider_ms,
+       stage_timings-&gt;&gt;'outbound_provider_attempts' AS outbound_provider_attempts,
+       stage_timings-&gt;&gt;'outbound_retry_count' AS outbound_retry_count,
+       stage_timings-&gt;&gt;'outbound_retry_ms' AS outbound_retry_ms,
+       stage_timings-&gt;&gt;'outbound_refresh_count' AS outbound_refresh_count,
+       stage_timings-&gt;&gt;'outbound_refresh_ms' AS outbound_refresh_ms,
+       stage_timings-&gt;&gt;'outbound_chunk_count' AS outbound_chunk_count,
+       stage_timings-&gt;&gt;'outbound_result' AS outbound_result,
        stage_timings-&gt;&gt;'total_ms'    AS total_ms,
        stage_timings-&gt;&gt;'queue_depth' AS queue_depth
 FROM bot_runs
 WHERE conversation_id = (SELECT id FROM conversations
                          WHERE zalo_chat_id = :chat_id)
 ORDER BY started_at DESC LIMIT 5;</pre>
-        <p class="sub" style="margin-left:0"><code>outcome</code> SENT / SUPPRESSED / ERROR. <code>llm_ms</code> dominates slow turns (12). If <code>version_at_start</code> &lt; current <code>conversations.version</code> yet <code>outcome = SENT</code>, a stale reply may have slipped past the ownership guard (14).</p>
+        <p class="sub" style="margin-left:0"><code>outcome</code> SENT / SUPPRESSED / ERROR. <code>llm_ms</code> dominates slow turns (12). The <code>outbound_*</code> fields are channel-neutral adapter metadata: they contain no message text, recipient ID, token, or provider envelope. <code>outbound_provider_ms</code> ends at the provider API response; it does not prove device rendering. If <code>version_at_start</code> &lt; current <code>conversations.version</code> yet <code>outcome = SENT</code>, a stale reply may have slipped past the ownership guard (14).</p>
 
         <p class="qlabel"><span class="num">d</span>Stuck-PENDING sweep + dedup — blocks 3, 9, ♻</p>
 <pre class="sql">-- stuck BOT replies older than 5 min (reconcile targets)

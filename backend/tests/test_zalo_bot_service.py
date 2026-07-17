@@ -131,6 +131,9 @@ async def test_sender_missing_token_no_op(unconfigured_settings: Settings) -> No
     assert result.ok is False
     assert "not configured" in (result.error or "")
     assert result.msg_id is None
+    assert result.telemetry is not None
+    assert result.telemetry.provider_attempts == 0
+    assert result.telemetry.result == "rejected"
 
 
 async def test_admin_missing_token_no_op(unconfigured_settings: Settings) -> None:
@@ -163,6 +166,11 @@ async def test_send_message_happy_path(monkeypatch: pytest.MonkeyPatch, settings
     assert result.ok is True
     assert result.msg_id == "m-42"
     assert cap.calls == [("sendMessage", {"chat_id": "chat-1", "text": "hello"})]
+    assert result.telemetry is not None
+    assert result.telemetry.adapter == "zalo_bot"
+    assert result.telemetry.provider_attempts == 1
+    assert result.telemetry.chunk_count == 1
+    assert result.telemetry.result == "sent"
 
 
 async def test_send_message_splits_long_plain_text_into_visible_bubbles(
@@ -224,6 +232,10 @@ async def test_send_message_split_failure_reports_partial_delivery(
     assert "chunk 2/" in (result.error or "")
     assert "rate limited" in (result.error or "")
     assert len(cap.calls) == 2
+    assert result.telemetry is not None
+    assert result.telemetry.chunk_count == 2
+    assert result.telemetry.result == "provider_error"
+    assert result.error_class is None  # preserve retryable aggregate failure semantics
 
 
 async def test_send_message_with_optional_fields(

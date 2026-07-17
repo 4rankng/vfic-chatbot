@@ -82,11 +82,13 @@ class _SendResult:
         error: str | None = None,
         msg_id: str = "mid-1",
         error_class: str | None = None,
+        telemetry=None,
     ) -> None:
         self.ok = ok
         self.error = error
         self.msg_id = msg_id
         self.error_class = error_class
+        self.telemetry = telemetry
 
 
 class _FakeZalo:
@@ -1027,7 +1029,19 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
         return "Chào bạn!"
 
     monkeypatch.setattr(runner, "_agent_turn", _fake)
-    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc))
+    from app.graph.outbound_telemetry import OutboundTelemetry
+
+    telemetry = OutboundTelemetry(
+        adapter="test_adapter",
+        adapter_prepare_ms=2,
+        provider_request_ms=17,
+        provider_attempts=1,
+        chunk_count=1,
+        result="sent",
+    )
+    res = await run_turn(
+        _state(), _deps(_FakeZalo(results=[_SendResult(telemetry=telemetry)]), conversation=svc)
+    )
 
     assert res["outcome"] == "sent"
     assert recorded, "record_bot_outcome must be called"
@@ -1038,6 +1052,10 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     assert st["llm_model_ms"] == 799  # split: model inference
     assert st["system_prompt_ms"] == 5  # split: persona+index assembly
     assert st["send_ms"] >= 0
+    assert st["outbound_adapter"] == "test_adapter"
+    assert st["outbound_prepare_ms"] == 2
+    assert st["outbound_provider_ms"] == 17
+    assert st["outbound_result"] == "sent"
     assert st["total_ms"] >= st["send_ms"]
     # DB path attribution: every DB call in run_turn is timed into db_ms +
     # db_breakdown so a slow query is attributable (the previous blind spot).

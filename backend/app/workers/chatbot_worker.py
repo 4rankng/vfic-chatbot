@@ -11,6 +11,7 @@ import uuid
 
 from app.core.logging import trace_id_ctx
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.outbound_telemetry import OutboundTelemetry
 from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES
 from app.graph.types import _now
 from app.models.conversation import DeliveryStatus
@@ -391,6 +392,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                                 else deps.zalo
                             )
                             dispatch = getattr(svc, "dispatch_outbound_message", None)
+                            send_t0 = time.monotonic()
                             if callable(dispatch) and iscoroutinefunction(dispatch):
                                 send_result = await dispatch(message_id=state.pending_message_id)
                             elif state.reply_to_message_id:
@@ -410,6 +412,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                                     ok=False,
                                     error="outbound command was not available for dispatch",
                                 )
+                            send_elapsed_ms = int(round((time.monotonic() - send_t0) * 1000))
                             sent = send_result.ok
                             external_error = None if send_result.ok else send_result.error
                             zalo_message_id = send_result.msg_id
@@ -424,6 +427,11 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                         throttle_timings = _preamble_timings(
                             state, started_at, lane="agent", throttle=True
                         )
+                        if owned:
+                            throttle_timings["send_ms"] = max(0, send_elapsed_ms)
+                            telemetry = getattr(send_result, "telemetry", None)
+                            if isinstance(telemetry, OutboundTelemetry):
+                                throttle_timings.update(telemetry.to_stage_timings())
                         await svc.record_bot_outcome(
                             conv,
                             version_at_start=state.version_at_start,

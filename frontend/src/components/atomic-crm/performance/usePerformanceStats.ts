@@ -44,6 +44,16 @@ export interface PerfSlowTurn {
   pipeline_ms: number | null;
   total_ms: number | null;
   queue_depth: number | null;
+  outbound_adapter: string | null;
+  outbound_prepare_ms: number | null;
+  outbound_provider_ms: number | null;
+  outbound_provider_attempts: number | null;
+  outbound_retry_count: number | null;
+  outbound_retry_ms: number | null;
+  outbound_refresh_count: number | null;
+  outbound_refresh_ms: number | null;
+  outbound_chunk_count: number | null;
+  outbound_result: string | null;
   db_ms: number | null;
   db_breakdown: Record<string, number> | null;
   faq_bypass_ms: number | null;
@@ -67,12 +77,26 @@ export interface PerfReliability {
   failed_count: number;
 }
 
+export interface PerfAdapterBreakdown {
+  adapter: string;
+  turns: number;
+  sent: number;
+  unsent: number;
+  provider_p50_ms: number | null;
+  provider_p95_ms: number | null;
+  end_to_end_p50_ms: number | null;
+  end_to_end_p95_ms: number | null;
+  retry_count: number;
+  refresh_count: number;
+}
+
 export interface PerfMetrics {
   window: string;
   live: PerfLive;
   percentiles: Record<string, StagePercentiles>;
   by_lane: Record<string, number>;
   by_outcome: Record<string, number>;
+  by_adapter?: PerfAdapterBreakdown[];
   slow_turns: PerfSlowTurn[];
   trend: PerfTrendBucket[];
   // Optional for deploy-order safety: a stale Redis cache hit (30s TTL) during

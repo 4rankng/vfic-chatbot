@@ -283,6 +283,13 @@ async def test_oa_sender_send_retries_once_after_token_refresh(
     assert len(calls) == 2
     assert calls[0]["headers"] == {"access_token": "old-token"}
     assert calls[1]["headers"] == {"access_token": "new-token"}
+    assert result.telemetry is not None
+    assert result.telemetry.adapter == "zalo_oa"
+    assert result.telemetry.provider_attempts == 2
+    assert result.telemetry.retry_count == 1
+    assert result.telemetry.refresh_count == 1
+    assert result.telemetry.chunk_count == 1
+    assert result.telemetry.result == "sent"
 
 
 async def test_oa_sender_send_returns_original_error_when_refresh_raises(
@@ -315,6 +322,11 @@ async def test_oa_sender_send_returns_original_error_when_refresh_raises(
     assert result.ok is False
     assert result.error == "chunk 1/1 failed: Access token is invalid"
     assert calls == [1]
+    assert result.telemetry is not None
+    assert result.telemetry.provider_attempts == 1
+    assert result.telemetry.retry_count == 0
+    assert result.telemetry.refresh_count == 1
+    assert result.telemetry.result == "provider_error"
 
 
 async def test_oa_sender_without_refresh_returns_error_on_token_invalid(
@@ -338,6 +350,21 @@ async def test_oa_sender_without_refresh_returns_error_on_token_invalid(
 
     assert result.ok is False
     assert result.error is not None
+
+
+async def test_oa_sender_missing_token_is_rejected_without_provider_attempt() -> None:
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="",
+    )
+
+    result = await sender.send_message("user-1", "hello", quote_message_id="inbound-1")
+
+    assert result.ok is False
+    assert result.error == "zalo_oa_access_token not configured"
+    assert result.telemetry is not None
+    assert result.telemetry.provider_attempts == 0
+    assert result.telemetry.result == "rejected"
 
 
 async def test_oa_sender_send_anonymous_uses_phone_recipient(

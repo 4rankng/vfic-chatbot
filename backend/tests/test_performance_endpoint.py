@@ -99,6 +99,7 @@ _ROUTE_TREND = "to_timestamp"
 _ROUTE_RELIABILITY = "messages m"
 _ROUTE_LLM_CALL_LATENCY = "jsonb_array_elements_text"
 _ROUTE_LLM_CALL_COUNT = "llm_calls_per_p50"
+_ROUTE_ADAPTER_BREAKDOWN = "outbound_adapter"
 
 
 def _percentile_row() -> SimpleNamespace:
@@ -185,6 +186,37 @@ def _standard_routes() -> list[tuple[str, _FakeResult]]:
             ),
         ),
         (
+            _ROUTE_ADAPTER_BREAKDOWN,
+            _FakeResult(
+                all_rows=[
+                    SimpleNamespace(
+                        adapter="zalo_bot",
+                        turns=4,
+                        sent=4,
+                        unsent=0,
+                        provider_p50_ms=80,
+                        provider_p95_ms=140,
+                        end_to_end_p50_ms=8000,
+                        end_to_end_p95_ms=11000,
+                        retry_count=0,
+                        refresh_count=0,
+                    ),
+                    SimpleNamespace(
+                        adapter="zalo_oa",
+                        turns=3,
+                        sent=2,
+                        unsent=1,
+                        provider_p50_ms=180,
+                        provider_p95_ms=350,
+                        end_to_end_p50_ms=11000,
+                        end_to_end_p95_ms=14000,
+                        retry_count=1,
+                        refresh_count=1,
+                    ),
+                ]
+            ),
+        ),
+        (
             _ROUTE_LLM_CALL_LATENCY,
             _FakeResult(
                 one=SimpleNamespace(
@@ -250,6 +282,32 @@ async def test_performance_bundle_shape(monkeypatch):
     # counts aggregated by lane and by outcome
     assert out["by_lane"] == {"agent": 5, "fast_lane": 3}
     assert out["by_outcome"] == {"SENT": 8}
+    assert out["by_adapter"] == [
+        {
+            "adapter": "zalo_bot",
+            "turns": 4,
+            "sent": 4,
+            "unsent": 0,
+            "provider_p50_ms": 80,
+            "provider_p95_ms": 140,
+            "end_to_end_p50_ms": 8000,
+            "end_to_end_p95_ms": 11000,
+            "retry_count": 0,
+            "refresh_count": 0,
+        },
+        {
+            "adapter": "zalo_oa",
+            "turns": 3,
+            "sent": 2,
+            "unsent": 1,
+            "provider_p50_ms": 180,
+            "provider_p95_ms": 350,
+            "end_to_end_p50_ms": 11000,
+            "end_to_end_p95_ms": 14000,
+            "retry_count": 1,
+            "refresh_count": 1,
+        },
+    ]
     # slow turn row mapped to the panel's columns
     slow = out["slow_turns"][0]
     assert slow["total_ms"] == 6100
@@ -285,6 +343,8 @@ async def test_performance_bundle_shape(monkeypatch):
     # New stages in the percentile chart.
     assert "db" in out["percentiles"]
     assert "faq_bypass" in out["percentiles"]
+    assert "outbound_prepare" in out["percentiles"]
+    assert "outbound_provider" in out["percentiles"]
     # trend bucket mapped from the trend SQL result
     assert len(out["trend"]) == 1
     t = out["trend"][0]
@@ -292,9 +352,9 @@ async def test_performance_bundle_shape(monkeypatch):
     assert t["p50_ms"] == 1500
     assert t["turns"] == 10
     assert t["errors"] == 1
-    # seven distinct SQL statements issued (stage percentiles / llm_call latency
-    # unnest / llm_call count / lane-outcome counts / slow turns / trend / reliability)
-    assert len(queries) == 7
+    # Eight distinct SQL statements issued: stage percentiles, LLM detail,
+    # lane/outcome, adapter comparison, slow turns, trend, and reliability.
+    assert len(queries) == 8
     # reliability section: SEND_UNKNOWN + suppressed + failed counts.
     assert out["reliability"]["send_unknown_count"] == 2
     assert out["reliability"]["suppressed_count"] == 5

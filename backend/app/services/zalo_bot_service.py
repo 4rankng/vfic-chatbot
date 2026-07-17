@@ -24,11 +24,16 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal
 
 
 from app.core.config import Settings, ZALO_BOT_API_BASE, get_settings
+from app.graph.outbound_telemetry import (
+    OutboundTelemetry,
+    combine_outbound_telemetry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +63,7 @@ class SendResult:
     error: str | None = None
     raw: dict[str, Any] | None = None
     error_class: str | None = None
+    telemetry: OutboundTelemetry | None = None
 
 
 @dataclass(frozen=True)
@@ -210,6 +216,8 @@ def _send_result(envelope: dict[str, Any]) -> SendResult:
 async def _aggregate_chunked_send(
     chunks: list[str],
     send_chunk: Callable[[str], Awaitable[SendResult]],
+    *,
+    telemetry_base: OutboundTelemetry | None = None,
 ) -> SendResult:
     """Send each chunk via ``send_chunk`` and fold the per-chunk results.
 
@@ -222,22 +230,42 @@ async def _aggregate_chunked_send(
     """
     envelopes: list[dict[str, Any]] = []
     message_ids: list[str] = []
+    chunk_telemetry: list[OutboundTelemetry] = []
     for index, chunk in enumerate(chunks, start=1):
         result = await send_chunk(chunk)
         envelopes.append(result.raw or {})
+        if result.telemetry is not None:
+            chunk_telemetry.append(result.telemetry)
         if result.msg_id:
             message_ids.append(result.msg_id)
         if not result.ok:
+            telemetry = (
+                combine_outbound_telemetry(
+                    telemetry_base,
+                    chunk_telemetry,
+                    result="transport_error" if result.error_class else "provider_error",
+                )
+                if telemetry_base is not None
+                else None
+            )
             return SendResult(
                 ok=False,
                 msg_id=message_ids[0] if message_ids else None,
                 error=f"chunk {index}/{len(chunks)} failed: {result.error}",
                 raw={"chunks": envelopes, "message_ids": message_ids},
+                error_class=result.error_class,
+                telemetry=telemetry,
             )
+    telemetry = (
+        combine_outbound_telemetry(telemetry_base, chunk_telemetry, result="sent")
+        if telemetry_base is not None
+        else None
+    )
     return SendResult(
         ok=True,
         msg_id=message_ids[0] if message_ids else None,
         raw={"chunks": envelopes, "message_ids": message_ids},
+        telemetry=telemetry,
     )
 
 
@@ -340,11 +368,20 @@ class ZaloBotSender:
         quote_message_id: str | None = None,
     ) -> SendResult:
         """Send a text message, chunking long plain text into readable Zalo bubbles."""
+        prepare_t0 = time.monotonic()
         text = text.strip()
         if not text:
-            return SendResult(ok=False, error="text length must be 1..2000")
+            return SendResult(
+                ok=False,
+                error="text length must be 1..2000",
+                telemetry=OutboundTelemetry(adapter="zalo_bot", result="rejected"),
+            )
         if (parse_mode is not None or text_styles is not None) and len(text) > ZALO_MAX_TEXT_CHARS:
-            return SendResult(ok=False, error="text length must be 1..2000")
+            return SendResult(
+                ok=False,
+                error="text length must be 1..2000",
+                telemetry=OutboundTelemetry(adapter="zalo_bot", result="rejected"),
+            )
 
         chunks = (
             [text]
@@ -356,7 +393,25 @@ class ZaloBotSender:
         # upstream with a less specific error.
         for chunk in chunks:
             if not 1 <= len(chunk) <= ZALO_MAX_TEXT_CHARS:
-                return SendResult(ok=False, error="text length must be 1..2000")
+                return SendResult(
+                    ok=False,
+                    error="text length must be 1..2000",
+                    telemetry=OutboundTelemetry(adapter="zalo_bot", result="rejected"),
+                )
+
+        telemetry_base = OutboundTelemetry(
+            adapter="zalo_bot",
+            adapter_prepare_ms=int(round((time.monotonic() - prepare_t0) * 1000)),
+        )
+        resolved_token = (
+            self._bot_token if self._bot_token is not None else self._settings.zalo_bot_token
+        )
+        if not resolved_token:
+            return SendResult(
+                ok=False,
+                error="zalo_bot_token not configured",
+                telemetry=telemetry_base.with_result("rejected"),
+            )
 
         async def send_chunk(chunk: str) -> SendResult:
             body: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
@@ -366,11 +421,31 @@ class ZaloBotSender:
                 body["parse_mode"] = parse_mode
             if text_styles is not None:
                 body["text_styles"] = text_styles
-            return _send_result(
+            request_t0 = time.monotonic()
+            result = _send_result(
                 await _post(self._settings, "sendMessage", body, token=self._bot_token)
             )
+            request_ms = int(round((time.monotonic() - request_t0) * 1000))
+            return SendResult(
+                ok=result.ok,
+                msg_id=result.msg_id,
+                error=result.error,
+                raw=result.raw,
+                error_class=result.error_class,
+                telemetry=OutboundTelemetry(
+                    adapter="zalo_bot",
+                    provider_request_ms=request_ms,
+                    provider_attempts=1,
+                    chunk_count=1,
+                    result="sent"
+                    if result.ok
+                    else ("transport_error" if result.error_class else "provider_error"),
+                ),
+            )
 
-        return await _aggregate_chunked_send(chunks, send_chunk)
+        return await _aggregate_chunked_send(
+            chunks, send_chunk, telemetry_base=telemetry_base
+        )
 
     async def send_photo(self, chat_id: str, photo: str, caption: str | None = None) -> SendResult:
         """Send an image by URL/path. ``caption`` is 1-2000 chars if provided."""

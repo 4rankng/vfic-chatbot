@@ -28,6 +28,7 @@ from inspect import iscoroutinefunction
 
 from app.core.config import get_settings
 from app.graph import fast_lane
+from app.graph.outbound_telemetry import OutboundTelemetry
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.direct_context import build_direct_system, build_direct_user_text
@@ -122,6 +123,18 @@ def _stamp_end_to_end(state: BotRunState, timings: dict | None) -> None:
     if timings is None or state.received_at_epoch <= 0:
         return
     timings["end_to_end_ms"] = max(0, int(round((time.time() - state.received_at_epoch) * 1000)))
+
+
+def _stamp_outbound_telemetry(timings: dict | None, send_result) -> None:
+    """Persist adapter-neutral metrics when a sender provides them.
+
+    Legacy fakes and non-message send paths intentionally remain valid: absence
+    of telemetry is not a delivery failure and simply leaves the additive keys
+    out of the historical row.
+    """
+    telemetry = getattr(send_result, "telemetry", None)
+    if timings is not None and isinstance(telemetry, OutboundTelemetry):
+        timings.update(telemetry.to_stage_timings())
 
 
 async def _agent_turn(
@@ -340,6 +353,7 @@ async def _finish_terminal_reply(
     )
     send_result = None
     if owned:
+        send_t0 = time.monotonic()
         send_result = await _dispatch_claimed_message(
             svc,
             zalo,
@@ -348,6 +362,9 @@ async def _finish_terminal_reply(
             text=text,
             quote_message_id=state.reply_to_message_id,
         )
+        if stage_timings is not None:
+            stage_timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
+        _stamp_outbound_telemetry(stage_timings, send_result)
     _stamp_end_to_end(state, stage_timings)
     # Classify transport errors (same conservative logic as run_turn): a timeout
     # after the request may have reached Zalo → SEND_UNKNOWN (non-retriable), so
@@ -832,6 +849,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 quote_message_id=state.reply_to_message_id,
             )
             timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
+            _stamp_outbound_telemetry(timings, send_result)
             timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
             _stamp_end_to_end(state, timings)
             db_t0 = time.monotonic()

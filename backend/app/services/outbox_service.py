@@ -27,6 +27,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.outbox import OutboxStatus, OutboundOutbox
+from app.graph.outbound_telemetry import OutboundTelemetry
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class DispatchResult:
     error: str | None = None
     error_class: str | None = None
     suppressed: bool = False
+    telemetry: OutboundTelemetry | None = None
 
     @property
     def msg_id(self) -> str | None:
@@ -213,6 +215,7 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
         zalo_message_id=result.msg_id,
         error=result.error,
         error_class=result.error_class,
+        telemetry=result.telemetry,
     )
 
 

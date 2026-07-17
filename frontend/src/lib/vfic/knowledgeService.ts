@@ -23,95 +23,6 @@ const doc = (id: string) =>
 const proj = (id: string) =>
   `${BASE}/knowledge/projects/${encodeURIComponent(id)}`;
 
-export type IngestionTemplate = {
-  id: string;
-  template_key: string;
-  name: string;
-  vertical: string;
-  created_at: string;
-};
-
-export type IngestionTemplateVersion = {
-  id: string;
-  template_id: string;
-  version_no: number;
-  status: "DRAFT" | "PUBLISHED" | "DEPRECATED" | "REVOKED";
-  definition: Record<string, unknown>;
-  checksum?: string | null;
-  revision: number;
-};
-
-export type IngestionPreview = {
-  checksum: string;
-  records: Record<string, unknown>[];
-  issues: { severity: string; code: string; message: string }[];
-};
-
-export const listIngestionTemplates = () =>
-  apiJson<IngestionTemplate[]>(`${BASE}/knowledge/ingestion-templates`);
-
-export const createIngestionTemplate = (body: {
-  template_key: string;
-  name: string;
-  vertical: string;
-  definition: Record<string, unknown>;
-}) =>
-  apiJson<IngestionTemplateVersion>(`${BASE}/knowledge/ingestion-templates`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-
-export const listIngestionTemplateVersions = (templateId: string) =>
-  apiJson<IngestionTemplateVersion[]>(
-    `${BASE}/knowledge/ingestion-templates/${encodeURIComponent(templateId)}/versions`,
-  );
-
-export const updateIngestionTemplateDraft = (
-  versionId: string,
-  definition: Record<string, unknown>,
-  revision: number,
-) =>
-  apiJson<IngestionTemplateVersion>(
-    `${BASE}/knowledge/ingestion-template-versions/${encodeURIComponent(versionId)}`,
-    { method: "PATCH", body: JSON.stringify({ definition, revision }) },
-  );
-
-export const previewIngestionTemplate = (versionId: string, sourceText: string) =>
-  apiJson<IngestionPreview>(
-    `${BASE}/knowledge/ingestion-template-versions/${encodeURIComponent(versionId)}/preview`,
-    { method: "POST", body: JSON.stringify({ source_text: sourceText }) },
-  );
-
-export const previewNewIngestionTemplate = (
-  definition: Record<string, unknown>,
-  sourceText: string,
-) =>
-  apiJson<IngestionPreview>(`${BASE}/knowledge/ingestion-templates/preview`, {
-    method: "POST",
-    body: JSON.stringify({ definition, source_text: sourceText }),
-  });
-
-export const publishIngestionTemplate = (versionId: string) =>
-  apiJson<IngestionTemplateVersion>(
-    `${BASE}/knowledge/ingestion-template-versions/${encodeURIComponent(versionId)}/publish`,
-    { method: "POST" },
-  );
-
-export const assignIngestionTemplate = (
-  projectId: string,
-  templateVersionId: string,
-  revision: number,
-) =>
-  apiJson(`${proj(projectId)}/ingestion-template-assignment`, {
-    method: "PUT",
-    body: JSON.stringify({ template_version_id: templateVersionId, revision }),
-  });
-
-export const getIngestionTemplateAssignment = (projectId: string) =>
-  apiJson<{ revision: number; template_version_id: string } | null>(
-    `${proj(projectId)}/ingestion-template-assignment`,
-  );
-
 export type KnowledgeUnit = {
   id: string;
   chunk_index: number;
@@ -154,60 +65,11 @@ export type ProjectFaqList = {
   total: number;
 };
 
-export const uploadKnowledgeFile = async (
-  file: File,
-  projectId?: string | null,
-): Promise<ApiRecord> => {
-  const form = new FormData();
-  form.append("file", file);
-  if (projectId) form.append("project_id", projectId);
-  const response = await apiRequest(`${BASE}/knowledge/documents/upload-file`, {
-    method: "POST",
-    body: form,
-  });
-  if (!response.ok) {
-    let detail: unknown;
-    try {
-      detail = ((await response.json()) as { detail?: unknown }).detail;
-    } catch {
-      /* fall through to generic upload error */
-    }
-    const errors =
-      typeof detail === "object" &&
-      detail !== null &&
-      "errors" in detail &&
-      Array.isArray((detail as { errors?: unknown }).errors)
-        ? ((detail as { errors: unknown[] }).errors
-            .map((item) => String(item))
-            .filter(Boolean) as string[])
-        : [];
-    const message =
-      errors.length > 0
-        ? `Tệp chưa ingest được:\n${errors.join("\n")}`
-        : "Tải lên thất bại.";
-    const error = new ApiError(response.status, message) as ApiError & {
-      validationErrors?: string[];
-    };
-    error.validationErrors = errors;
-    throw error;
-  }
-  return (await response.json()) as ApiRecord;
-};
-
 export type KnowledgeBaseVersion = {
   id: string;
   project_id: string;
-  template_version_id?: string | null;
   status: string;
   version_no: number;
-};
-
-export type KnowledgeIngestionRun = {
-  id: string;
-  kb_version_id: string;
-  status: string;
-  attempt_no: number;
-  issues: { severity: string; code: string; message: string }[];
 };
 
 export const createKnowledgeBaseVersion = (projectId: string) =>
@@ -257,21 +119,6 @@ export const publishKnowledgeBaseVersion = (projectId: string, versionId: string
   apiJson<KnowledgeBaseVersion>(
     `${proj(projectId)}/kb/versions/${encodeURIComponent(versionId)}/publish`,
     { method: "POST" },
-  );
-
-export const listKnowledgeBaseVersionRuns = (projectId: string, versionId: string) =>
-  apiJson<KnowledgeIngestionRun[]>(
-    `${proj(projectId)}/kb/versions/${encodeURIComponent(versionId)}/ingestion-runs`,
-  );
-
-export const reviewKnowledgeIngestionRun = (
-  runId: string,
-  decision: "approve" | "reject",
-  comment: string,
-) =>
-  apiJson<KnowledgeIngestionRun>(
-    `${BASE}/knowledge/ingestion-runs/${encodeURIComponent(runId)}/${decision}`,
-    { method: "POST", body: JSON.stringify({ comment }) },
   );
 
 export const downloadKnowledgeTemplate = async (

@@ -18,7 +18,7 @@ vi.mock("@/components/atomic-crm/providers/rest/api", () => ({
   apiRequest: mocks.apiRequest,
 }));
 
-import { createAndIngestKnowledgeBaseVersion } from "./knowledgeService";
+import * as knowledgeService from "./knowledgeService";
 
 describe("createAndIngestKnowledgeBaseVersion", () => {
   it("stages every upload in a KB version before enqueuing ingest", async () => {
@@ -38,7 +38,7 @@ describe("createAndIngestKnowledgeBaseVersion", () => {
     });
 
     await expect(
-      createAndIngestKnowledgeBaseVersion("project-1", file),
+      knowledgeService.createAndIngestKnowledgeBaseVersion("project-1", file),
     ).resolves.toMatchObject({ job_id: "job-1", kb_version_id: "version-1" });
 
     expect(mocks.apiJson).toHaveBeenNthCalledWith(
@@ -58,5 +58,14 @@ describe("createAndIngestKnowledgeBaseVersion", () => {
     expect(mocks.apiJson.mock.calls.flat().join(" ")).not.toContain(
       "/knowledge/documents/",
     );
+  });
+
+  it("does not expose generic-template or direct-upload client operations", () => {
+    expect(knowledgeService).not.toHaveProperty("uploadKnowledgeFile");
+    expect(knowledgeService).not.toHaveProperty("listIngestionTemplates");
+    expect(knowledgeService).not.toHaveProperty("createIngestionTemplate");
+    expect(knowledgeService).not.toHaveProperty("assignIngestionTemplate");
+    expect(knowledgeService).not.toHaveProperty("listKnowledgeBaseVersionRuns");
+    expect(knowledgeService).not.toHaveProperty("reviewKnowledgeIngestionRun");
   });
 });

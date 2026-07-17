@@ -38,6 +38,8 @@ const STAGE_LABELS: Record<string, string> = {
   llm_model: "LLM — xử lý model",
   llm_call_per: "LLM — mỗi lượt gọi",
   db: "Cơ sở dữ liệu",
+  outbound_prepare: "Chuẩn bị adapter",
+  outbound_provider: "Adapter — gọi nhà cung cấp",
   send: "Gửi Zalo",
   total: "Xử lý sau khởi tạo",
   end_to_end: "Tổng từ webhook",
@@ -63,6 +65,8 @@ const STAGE_ORDER = [
   "llm_model",
   "llm_call_per",
   "db",
+  "outbound_prepare",
+  "outbound_provider",
   "send",
   "total",
   "end_to_end",
@@ -82,6 +86,8 @@ const STAGE_TARGETS: Record<string, number> = {
   llm_model: 10000,
   llm_call_per: 10000,
   db: 2000,
+  outbound_prepare: 500,
+  outbound_provider: 1000,
   send: 1000,
   total: 10000,
   end_to_end: 10000,
@@ -520,6 +526,56 @@ const StageMatrix = ({ data }: { data: PerfMetrics }) => {
   );
 };
 
+const ADAPTER_LABELS: Record<string, string> = {
+  zalo_bot: "Zalo Chatbot",
+  zalo_oa: "Zalo OA",
+};
+
+const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
+  const rows = data.by_adapter ?? [];
+  return (
+    <section className="performance-panel performance-matrix">
+      <div className="performance-section-heading">
+        <div>
+          <h2>So sánh kênh giao gửi</h2>
+          <p>
+            Các số liệu cùng một hợp đồng adapter; thời gian dừng khi nhà cung cấp
+            nhận yêu cầu, không phải lúc ứng viên nhìn thấy tin nhắn.
+          </p>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="performance-empty">Chưa có lượt gửi đã được đo theo adapter.</p>
+      ) : (
+        <div className="performance-table-wrap" role="region" aria-label="So sánh kênh giao gửi" tabIndex={0}>
+          <table>
+            <thead>
+              <tr>
+                <th>Kênh</th>
+                <th>Lượt gửi</th>
+                <th>Provider p50 / p95</th>
+                <th>Tổng từ webhook p50 / p95</th>
+                <th>Retry / refresh</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.adapter}>
+                  <td><strong>{ADAPTER_LABELS[row.adapter] ?? row.adapter}</strong></td>
+                  <td>{row.sent}/{row.turns}</td>
+                  <td>{fmtShortMs(row.provider_p50_ms)} / {fmtShortMs(row.provider_p95_ms)}</td>
+                  <td>{fmtShortMs(row.end_to_end_p50_ms)} / {fmtShortMs(row.end_to_end_p95_ms)}</td>
+                  <td>{row.retry_count} / {row.refresh_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+};
+
 const MobileDiagnostics = ({
   candidate,
   internal,
@@ -944,6 +1000,7 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         <AttentionQueue data={data} />
       </section>
       <StageMatrix data={data} />
+      <AdapterComparison data={data} />
       <SlowestTurns slowTurns={data.slow_turns} />
       <SupportingStats data={data} />
     </>

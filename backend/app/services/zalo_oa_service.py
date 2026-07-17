@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -15,6 +16,7 @@ from app.services.zalo_bot_service import (
     _classify_transport_error,
     _split_long_plain_text,
 )
+from app.graph.outbound_telemetry import OutboundTelemetry
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,19 @@ class OAUserProfile:
 
     display_name: str = ""
     avatar_url: str = ""
+
+
+@dataclass(frozen=True)
+class _OaPostTiming:
+    """Timing for one refresh-aware OA POST without retaining request data."""
+
+    envelope: dict[str, Any]
+    provider_request_ms: int
+    provider_attempts: int
+    retry_count: int
+    retry_ms: int
+    refresh_count: int
+    refresh_ms: int
 
 
 class ZaloOASender:
@@ -146,24 +161,60 @@ class ZaloOASender:
         # Known Zalo OA token-related error codes.
         return str(error) in {"-216", "-213"}
 
-    async def _post_with_refresh(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def _post_with_refresh_timing(self, path: str, body: dict[str, Any]) -> _OaPostTiming:
         """POST, lazily refreshing the access_token once on a token-invalid reply.
 
         On a token-invalid envelope (and when a refresh callback is wired in) we
         refresh, swap the token, and retry exactly once. The new token sticks on
         ``self._access_token`` so a chunked send refreshes at most once per call.
         """
+        request_t0 = time.monotonic()
         envelope = await self._post(path, body)
+        provider_request_ms = int(round((time.monotonic() - request_t0) * 1000))
+        provider_attempts = 1
+        retry_count = 0
+        retry_ms = 0
+        refresh_count = 0
+        refresh_ms = 0
         if self._is_token_invalid(envelope) and self._refresh is not None:
+            refresh_count = 1
+            refresh_t0 = time.monotonic()
             try:
                 new_token = await self._refresh()
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA access-token refresh failed", exc_info=True)
-                return envelope
+                refresh_ms = int(round((time.monotonic() - refresh_t0) * 1000))
+                return _OaPostTiming(
+                    envelope=envelope,
+                    provider_request_ms=provider_request_ms,
+                    provider_attempts=provider_attempts,
+                    retry_count=retry_count,
+                    retry_ms=retry_ms,
+                    refresh_count=refresh_count,
+                    refresh_ms=refresh_ms,
+                )
+            refresh_ms = int(round((time.monotonic() - refresh_t0) * 1000))
             if new_token:
                 self._access_token = new_token
+                retry_count = 1
+                retry_t0 = time.monotonic()
                 envelope = await self._post(path, body)
-        return envelope
+                retry_ms = int(round((time.monotonic() - retry_t0) * 1000))
+                provider_request_ms += retry_ms
+                provider_attempts += 1
+        return _OaPostTiming(
+            envelope=envelope,
+            provider_request_ms=provider_request_ms,
+            provider_attempts=provider_attempts,
+            retry_count=retry_count,
+            retry_ms=retry_ms,
+            refresh_count=refresh_count,
+            refresh_ms=refresh_ms,
+        )
+
+    async def _post_with_refresh(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility wrapper for non-chatbot OA callers."""
+        return (await self._post_with_refresh_timing(path, body)).envelope
 
     async def _get_with_refresh(
         self, path: str, *, params: dict[str, Any] | None = None
@@ -184,23 +235,65 @@ class ZaloOASender:
     async def send_message(
         self, chat_id: str, text: str, *, quote_message_id: str | None = None, **_: Any
     ) -> SendResult:
+        prepare_t0 = time.monotonic()
         text = text.strip()
         if not text:
-            return SendResult(ok=False, error="text length must be 1..2000")
+            return SendResult(
+                ok=False,
+                error="text length must be 1..2000",
+                telemetry=OutboundTelemetry(adapter="zalo_oa", result="rejected"),
+            )
         quote_message_id = (quote_message_id or "").strip()
         if not quote_message_id:
-            return SendResult(ok=False, error="quote_message_id is required for OA CS replies")
+            return SendResult(
+                ok=False,
+                error="quote_message_id is required for OA CS replies",
+                telemetry=OutboundTelemetry(adapter="zalo_oa", result="rejected"),
+            )
 
         chunks = _split_long_plain_text(text)
+        telemetry_base = OutboundTelemetry(
+            adapter="zalo_oa",
+            adapter_prepare_ms=int(round((time.monotonic() - prepare_t0) * 1000)),
+        )
+        if not self._token:
+            return SendResult(
+                ok=False,
+                error="zalo_oa_access_token not configured",
+                telemetry=telemetry_base.with_result("rejected"),
+            )
 
         async def send_chunk(chunk: str) -> SendResult:
             body = {
                 "recipient": {"user_id": chat_id},
                 "message": {"text": chunk, "quote_message_id": quote_message_id},
             }
-            return self._send_result(await self._post_with_refresh("/v3.0/oa/message/cs", body))
+            timing = await self._post_with_refresh_timing("/v3.0/oa/message/cs", body)
+            result = self._send_result(timing.envelope)
+            return SendResult(
+                ok=result.ok,
+                msg_id=result.msg_id,
+                error=result.error,
+                raw=result.raw,
+                error_class=result.error_class,
+                telemetry=OutboundTelemetry(
+                    adapter="zalo_oa",
+                    provider_request_ms=timing.provider_request_ms,
+                    provider_attempts=timing.provider_attempts,
+                    retry_count=timing.retry_count,
+                    retry_ms=timing.retry_ms,
+                    refresh_count=timing.refresh_count,
+                    refresh_ms=timing.refresh_ms,
+                    chunk_count=1,
+                    result="sent"
+                    if result.ok
+                    else ("transport_error" if result.error_class else "provider_error"),
+                ),
+            )
 
-        return await _aggregate_chunked_send(chunks, send_chunk)
+        return await _aggregate_chunked_send(
+            chunks, send_chunk, telemetry_base=telemetry_base
+        )
 
     async def send_media(
         self,
@@ -305,10 +398,10 @@ class ZaloOASender:
 
     async def send_chat_action(self, chat_id: str, action: str) -> SendResult:
         # OA OpenAPI has no Bot-Platform-compatible typing endpoint in this app's
-        # current contract. Log at debug so the no-op is observable in monitoring
-        # (the reliable "bot is active" signal for OA is the slow-case ack message,
-        # not a typing indicator). Returns best-effort success so graph UX logic
-        # stays channel-agnostic.
+        # current contract. Log at debug so the no-op is observable in monitoring.
+        # This adapter never sends an additional progress or acknowledgement
+        # message; returns best-effort success so graph UX logic stays
+        # channel-agnostic.
         logger.debug(
             "oa send_chat_action skipped (no OA typing endpoint): chat=%s action=%s",
             chat_id,

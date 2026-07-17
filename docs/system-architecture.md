@@ -438,8 +438,34 @@ Bot-policy outcome that makes no provider call.
 | `PENDING` | The message and immutable command committed before provider I/O. The caller may dispatch immediately; the scheduled outbound dispatcher also claims leftover commands every 60 seconds. |
 | `SENDING` | One dispatcher has atomically claimed the command and incremented its attempt count. A stale row becomes `SEND_UNKNOWN`, never another send attempt. |
 | `SENT` | Zalo confirmed the submission; terminal. |
-| `FAILED` | Zalo definitely rejected the submission. A recruiter can explicitly retry this same command from its existing message bubble; the retry returns it to `PENDING` and never inserts a second message. |
+| `FAILED` | Zalo definitely rejected the submission. The bot reconciler may re-enqueue a new guarded turn; a recruiter can explicitly retry the same recruiter command from its existing message bubble, returning it to `PENDING` without inserting a second message. |
 | `SEND_UNKNOWN` | The provider result was ambiguous (including a crash after submission). Treat as terminal for delivery: investigate if necessary, but do not automatically or manually replay it. |
+
+### Channel-neutral outbound telemetry
+
+Every chatbot send records the same additive adapter fields in
+`BotRun.stage_timings`: adapter name, preparation time, provider-request time,
+provider attempts, retry/credential-refresh counts and durations, chunk count,
+and the final adapter result. The fields contain no message body, recipient ID,
+credential, or provider envelope.
+
+The instrumentation only records metadata. It does not change reply content or
+delivery flow, and in particular it does not add an OA acknowledgement, typing,
+or progress message.
+
+`ZaloChannelSender` selects the concrete Bot or OA adapter, while the graph only
+copies this common telemetry contract into the run. A future Facebook Page,
+Telegram, or WhatsApp adapter therefore implements the same result metadata
+without a graph-runner branch. The performance console groups p50/p95 provider
+and end-to-end timing by adapter. Provider-request timing ends when the
+provider API responds; candidate-device rendering needs channel delivery/read
+receipts and is not inferred.
+
+If the durable outbox recovers a command after a process crash, it writes the
+same adapter fields to the linked bot run. When the crash preceded creation of
+that run, recovery creates an `outbox_recovery` run with the adapter timing only;
+the original webhook-to-send interval is intentionally absent rather than
+guessed.
 
 ---
 
@@ -708,7 +734,7 @@ Per-chat bot locks are durable conversation-row fields:
 | `GET /health` | none | `{"status":"ok","env":...}` |
 | `GET /metrics` | none (internal) | RQ queue depths (4 queues), worker count, 7 reconcile canary counters. |
 | `GET /health/queue` | none (internal) | Chat-path: queue depth, LLM latency (`_RKEY_INVOKE_MS`), 429s (`_RKEY_429`), fallback count, busy/total workers. |
-| `GET /api/v1/admin/performance` | admin | Per-stage p50/p95/p99, true webhook-to-send latency, route intent, model/tool-call counts, and slow turns. |
+| `GET /api/v1/admin/performance` | admin | Per-stage p50/p95/p99, adapter comparison, true webhook-to-send latency, route intent, model/tool-call counts, and slow turns. |
 
 No external APM (no Sentry/Datadog). Structured JSON logs to stdout with
 `request_id` correlation via ContextVar + `RequestIdMiddleware`.

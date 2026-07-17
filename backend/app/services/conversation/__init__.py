@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         Message,
     )
     from app.models.user import User
+    from app.graph.outbound_telemetry import OutboundTelemetry
     from app.services.zalo_bot_service import SendResult
 
 __all__ = ["ConversationConflict", "ConversationService"]
@@ -277,6 +278,7 @@ class ConversationService:
         external_error: str | None = None,
         error_class: str | None = None,
         suppressed: bool = False,
+        telemetry: OutboundTelemetry | None = None,
     ) -> Message:
         return await self.state.finalize_outbound_dispatch(
             conv,
@@ -287,6 +289,7 @@ class ConversationService:
             external_error=external_error,
             error_class=error_class,
             suppressed=suppressed,
+            telemetry=telemetry,
         )
 
     async def record_bot_outcome(

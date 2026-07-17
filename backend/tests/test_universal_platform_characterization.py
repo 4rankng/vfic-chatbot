@@ -8,20 +8,21 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
 
 from app.api import knowledge as knowledge_api
 from app.graph.router import route_turn
 from app.graph.context import build_system_prompt
+from app.models.knowledge import KBVersionStatus
 from app.graph.types import BotRunState
 from app.graph.vacancy import NO_ACTIVE_JOB_REPLY
 from app.services.ingestion.template_compiler import compile_template
-from app.services.ingestion.template_service import TemplateConflictError, TemplateService
+from app.services.ingestion.template_service import TemplateService
 from app.services.knowledge.pipeline import KnowledgePipeline, _fallback_unit
 from tests.fixtures.universal_platform.factories import (
     empty_installation_fixture,
@@ -188,25 +189,50 @@ async def test_template_resolution_requires_an_explicit_assignment():
 
 
 @pytest.mark.asyncio
-async def test_knowledge_version_creation_reports_an_invalid_optional_template_assignment(monkeypatch):
-    class MissingAssignmentService:
+async def test_knowledge_version_creation_is_template_free(monkeypatch):
+    project_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    actor_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
+    version = SimpleNamespace(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        release_manifest_sha256=None,
+        version_no=1,
+        status=KBVersionStatus.DRAFT,
+        created_by=actor_id,
+        created_at=datetime.now(timezone.utc),
+        published_at=None,
+        error_message=None,
+    )
+
+    class PlainKnowledgeService:
         def __init__(self, _db: object) -> None:
             pass
 
         async def create_version(self, _project_id: uuid.UUID, *, actor: object) -> object:
-            raise TemplateConflictError("project requires an explicit published ingestion-template assignment")
+            assert _project_id == project_id
+            assert actor.id == actor_id
+            return version
 
-    monkeypatch.setattr(knowledge_api, "KnowledgeService", MissingAssignmentService)
+    audit_payloads: list[dict] = []
 
-    with pytest.raises(HTTPException) as exc_info:
-        await knowledge_api.create_kb_version(
-            uuid.UUID("00000000-0000-0000-0000-000000000001"),
-            admin=SimpleNamespace(id=uuid.UUID("00000000-0000-0000-0000-000000000002")),
-            db=object(),
-        )
+    async def record_audit(_db: object, **kwargs: object) -> None:
+        audit_payloads.append(kwargs["payload"])
 
-    assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == "the selected knowledge template assignment is not available"
+    class Database:
+        async def commit(self) -> None:
+            return None
+
+    monkeypatch.setattr(knowledge_api, "KnowledgeService", PlainKnowledgeService)
+    monkeypatch.setattr(knowledge_api, "record_audit", record_audit)
+
+    result = await knowledge_api.create_kb_version(
+        project_id,
+        admin=SimpleNamespace(id=actor_id),
+        db=Database(),
+    )
+
+    assert "template_version_id" not in result.model_dump()
+    assert audit_payloads == [{"project_id": str(project_id)}]
 
 
 @pytest.mark.asyncio

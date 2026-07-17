@@ -66,6 +66,8 @@ _STAGE_KEYS = [
     "llm_queue",
     "llm_model",
     "db",
+    "outbound_prepare",
+    "outbound_provider",
     "send",
     "total",
     "end_to_end",
@@ -189,6 +191,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         percentiles,
         llm_call_pct,
         (by_lane, by_outcome),
+        by_adapter,
         slow_turns,
         trend,
         reliability,
@@ -197,6 +200,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         _with_session(_percentiles, interval),
         _with_session(_llm_call_percentiles, interval),
         _with_session(_lane_outcome_counts, interval),
+        _with_session(_adapter_breakdown, interval),
         _with_session(_slow_turns, interval),
         _with_session(_trend, interval),
         _with_session(_reliability, interval),
@@ -208,6 +212,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         "percentiles": percentiles,
         "by_lane": by_lane,
         "by_outcome": by_outcome,
+        "by_adapter": by_adapter,
         "slow_turns": slow_turns,
         "trend": trend,
         "reliability": reliability,
@@ -365,6 +370,49 @@ async def _lane_outcome_counts(db: AsyncSession, interval: timedelta) -> tuple[d
     return by_lane, by_outcome
 
 
+async def _adapter_breakdown(db: AsyncSession, interval: timedelta) -> list[dict]:
+    """Compare additive outbound telemetry across every channel adapter.
+
+    Rows without adapter telemetry are historical data. They intentionally stay
+    out of this comparison rather than being guessed from a legacy channel
+    field, so future adapters receive the exact same measurement contract.
+    """
+    sql = text(
+        "SELECT stage_timings->>'outbound_adapter' AS adapter, "
+        "COUNT(*) AS turns, "
+        "COUNT(*) FILTER (WHERE outcome = 'SENT') AS sent, "
+        "COUNT(*) FILTER (WHERE outcome != 'SENT') AS unsent, "
+        "percentile_cont(0.5) WITHIN GROUP "
+        "(ORDER BY (stage_timings->>'outbound_provider_ms')::int) AS provider_p50_ms, "
+        "percentile_cont(0.95) WITHIN GROUP "
+        "(ORDER BY (stage_timings->>'outbound_provider_ms')::int) AS provider_p95_ms, "
+        "percentile_cont(0.5) WITHIN GROUP "
+        f"(ORDER BY {_END_TO_END_SQL}) AS end_to_end_p50_ms, "
+        "percentile_cont(0.95) WITHIN GROUP "
+        f"(ORDER BY {_END_TO_END_SQL}) AS end_to_end_p95_ms, "
+        "COALESCE(SUM((stage_timings->>'outbound_retry_count')::int), 0) AS retry_count, "
+        "COALESCE(SUM((stage_timings->>'outbound_refresh_count')::int), 0) AS refresh_count "
+        "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings ? 'outbound_adapter' GROUP BY 1 ORDER BY 1"
+    )
+    rows = (await db.execute(sql, {"interval": interval})).all()
+    return [
+        {
+            "adapter": row.adapter,
+            "turns": int(row.turns),
+            "sent": int(row.sent),
+            "unsent": int(row.unsent),
+            "provider_p50_ms": _int(row.provider_p50_ms),
+            "provider_p95_ms": _int(row.provider_p95_ms),
+            "end_to_end_p50_ms": _int(row.end_to_end_p50_ms),
+            "end_to_end_p95_ms": _int(row.end_to_end_p95_ms),
+            "retry_count": int(row.retry_count),
+            "refresh_count": int(row.refresh_count),
+        }
+        for row in rows
+    ]
+
+
 async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
     sql = (
         "SELECT id, conversation_id, started_at, outcome, stage_timings "
@@ -414,6 +462,16 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
                 "pipeline_ms": pipeline_ms,
                 "total_ms": end_to_end_ms,
                 "queue_depth": st.get("queue_depth"),
+                "outbound_adapter": st.get("outbound_adapter"),
+                "outbound_prepare_ms": st.get("outbound_prepare_ms"),
+                "outbound_provider_ms": st.get("outbound_provider_ms"),
+                "outbound_provider_attempts": st.get("outbound_provider_attempts"),
+                "outbound_retry_count": st.get("outbound_retry_count"),
+                "outbound_retry_ms": st.get("outbound_retry_ms"),
+                "outbound_refresh_count": st.get("outbound_refresh_count"),
+                "outbound_refresh_ms": st.get("outbound_refresh_ms"),
+                "outbound_chunk_count": st.get("outbound_chunk_count"),
+                "outbound_result": st.get("outbound_result"),
                 # DB path attribution (Proposal 1): aggregate + per-call breakdown.
                 "db_ms": st.get("db_ms"),
                 "db_breakdown": st.get("db_breakdown"),

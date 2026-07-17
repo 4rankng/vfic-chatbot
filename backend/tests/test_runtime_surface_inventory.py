@@ -47,7 +47,7 @@ EXPECTED_ROUTE_COUNTS = {
     "integrations": 11,
     "installation": 8,
     "jobs": 7,
-    "knowledge": 37,
+    "knowledge": 20,
     "knowledge_bases": 11,
     "leads": 15,
     "main": 3,
@@ -57,7 +57,7 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 2,
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "fd5ea44ce89d104926a6f01e89453e24467ac691c17d7abdcc9bc4d877dace0d"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "548f4030557c1690092df84d208734a6f9209f184db0176c4cd980182cc28cc5"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 58,
