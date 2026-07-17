@@ -20,6 +20,7 @@ import psycopg
 import pytest
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import text as sa_text
 
 from app.core.config import get_settings
 
@@ -192,6 +193,42 @@ async def integration_session(
                     await transaction.rollback()
     finally:
         await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def _truncate_domain_tables_before_each_test(integration_database: IntegrationDatabase):
+    """Clear domain tables before each integration test.
+
+    The integration database is session-scoped (one DB per test session), so
+    without per-test cleanup, rows from one test file contaminate the next.
+    This matters acutely for migration tests: Alembic 0047's downgrade is
+    fail-closed when non-Zalo rows exist, so a Messenger row left by an earlier
+    test would block a later roundtrip test's downgrade. Truncating here keeps
+    every test hermetic regardless of file ordering.
+
+    Uses DELETE (not TRUNCATE) because TRUNCATE has no IF EXISTS clause and we
+    want this to be safe at any revision a test might leave the DB in. Order
+    respects FKs: children first.
+    """
+    admin_engine = create_async_engine(integration_database.async_url)
+    try:
+        async with admin_engine.begin() as conn:
+            for table in (
+                "messages",
+                "outbound_outbox",
+                "leads",
+                "conversations",
+                "contact_channel_identities",
+                "contacts",
+                "channel_accounts",
+            ):
+                exists = await conn.scalar(
+                    sa_text("SELECT to_regclass(:t)"), {"t": f"public.{table}"}
+                )
+                if exists is not None:
+                    await conn.execute(sa_text(f"DELETE FROM {table}"))
+    finally:
+        await admin_engine.dispose()
 
 
 @pytest.fixture(autouse=True)

@@ -20,6 +20,7 @@ from app.models.conversation import (
 from app.models.user import Role, User
 from app.services.conversation.state import ConversationState
 from tests.integration.conftest import IntegrationDatabase
+from tests.integration._conv_factory import make_zalo_conversation
 
 pytestmark = pytest.mark.integration
 
@@ -48,13 +49,14 @@ async def test_concurrent_extraction_handoffs_create_one_review_event(
             )
             setup.add(recruiter)
             await setup.flush()
-            conversation = Conversation(
+            conversation = await make_zalo_conversation(
+                setup,
                 zalo_chat_id="intent-concurrency-chat",
+                zalo_channel="bot",
                 mode=ConversationMode.BOT,
                 assigned_recruiter_id=recruiter.id,
                 taken_over_at=taken_over_at,
             )
-            setup.add(conversation)
             await setup.commit()
             conversation_id = conversation.id
             recruiter_id = recruiter.id
@@ -130,11 +132,12 @@ async def test_stale_extraction_cannot_reopen_newer_closed_state(
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessions() as setup:
-            conversation = Conversation(
+            conversation = await make_zalo_conversation(
+                setup,
                 zalo_chat_id="stale-intent-closed-chat",
+                zalo_channel="bot",
                 mode=ConversationMode.BOT,
             )
-            setup.add(conversation)
             await setup.commit()
             conversation_id = conversation.id
 

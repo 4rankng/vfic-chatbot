@@ -33,6 +33,7 @@ from app.models.conversation import (
 from app.models.outbox import OutboundOutbox, OutboxStatus
 from app.services.conversation.state import ConversationState, utcnow
 from tests.integration.conftest import IntegrationDatabase
+from tests.integration._conv_factory import make_zalo_conversation
 
 pytestmark = pytest.mark.integration
 
@@ -50,15 +51,15 @@ async def _seed(engine, *, zalo_chat_id: str) -> tuple[int, int]:
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions() as db:
         owner = uuid.uuid4()
-        conv = Conversation(
+        conv = await make_zalo_conversation(
+            db,
             zalo_chat_id=zalo_chat_id,
+            zalo_channel="bot",
             mode=ConversationMode.BOT,
             bot_lock_owner=owner,
             bot_locked_until=utcnow() + timedelta(seconds=180),
             bot_lock_heartbeat_at=utcnow(),
         )
-        db.add(conv)
-        await db.flush()
         conv_id = conv.id
 
         msg = Message(

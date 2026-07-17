@@ -36,6 +36,7 @@ from app.models.conversation import (
 )
 from app.services.conversation.state import ConversationState
 from tests.integration.conftest import IntegrationDatabase
+from tests.integration._conv_factory import make_zalo_conversation
 
 pytestmark = pytest.mark.integration
 
@@ -61,12 +62,12 @@ async def _seed(engine, *, zalo_chat_id: str) -> tuple[int, int, int, int]:
     """
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions() as db:
-        conv = Conversation(
+        conv = await make_zalo_conversation(
+            db,
             zalo_chat_id=zalo_chat_id,
+            zalo_channel="bot",
             mode=ConversationMode.BOT,
         )
-        db.add(conv)
-        await db.flush()
         conv_id = conv.id
 
         # The regression: transport timeout left no zalo_message_id. A later

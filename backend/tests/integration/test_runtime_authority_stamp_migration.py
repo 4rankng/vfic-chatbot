@@ -104,11 +104,26 @@ async def test_runtime_authority_stamp_migration_roundtrip(
             assert "origin_kind IS NOT NULL" in str(origin_check)
             assert "fence_scope IS NOT NULL" in str(origin_check)
 
+            # Alembic 0047 made contact_id + channel_identity_id NOT NULL on
+            # conversations. Create a Contact + identity first, then the conversation.
+            contact_id = await connection.scalar(
+                text("INSERT INTO contacts (id) VALUES (gen_random_uuid()) RETURNING id")
+            )
+            identity_id = await connection.scalar(
+                text(
+                    "INSERT INTO contact_channel_identities "
+                    "(id, contact_id, provider, account_key, external_id) "
+                    "VALUES (gen_random_uuid(), :cid, 'zalo_bot', 'default:zalo_bot', 'runtime-stamp-proof') "
+                    "RETURNING id"
+                ),
+                {"cid": contact_id},
+            )
             conversation_id = await connection.scalar(
                 text(
-                    "INSERT INTO conversations (zalo_chat_id, zalo_channel) "
-                    "VALUES ('runtime-stamp-proof', 'bot') RETURNING id"
-                )
+                    "INSERT INTO conversations (zalo_chat_id, zalo_channel, contact_id, channel_identity_id) "
+                    "VALUES ('runtime-stamp-proof', 'bot', :cid, :iid) RETURNING id"
+                ),
+                {"cid": contact_id, "iid": identity_id},
             )
             with pytest.raises(IntegrityError):
                 async with connection.begin_nested():

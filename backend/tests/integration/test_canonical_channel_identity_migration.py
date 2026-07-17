@@ -138,22 +138,15 @@ async def _truncate_all(database: IntegrationDatabase) -> None:
 
 
 async def _to_head_and_clean(database: IntegrationDatabase) -> None:
-    """Upgrade to head, truncate, then the caller downgrades to seed."""
+    """Upgrade to head, truncate, then the caller downgrades to seed.
+
+    The session-level autouse fixture in tests/integration/conftest.py already
+    truncates domain tables before each test, so callers normally do not need
+    to invoke this directly. Kept for tests that downgrade to 0046, seed, then
+    upgrade: the truncate must happen at HEAD (where channel_accounts exists).
+    """
     _alembic_strict(database, "upgrade", "head")
     await _truncate_all(database)
-
-
-@pytest.fixture(autouse=True)
-async def _clean_db_before_each_test(integration_database: IntegrationDatabase):
-    """Each test starts from a clean head-state DB.
-
-    Tests then downgrade to 0046 to seed pre-migration data, or stay at head to
-    test post-migration behavior. Without this, the session-scoped DB would
-    accumulate Messenger rows that trip the fail-closed downgrade guard and
-    violate UNIQUE constraints across tests.
-    """
-    await _to_head_and_clean(integration_database)
-    yield
 
 
 # ─── upgrade + backfill ─────────────────────────────────────────────────────
