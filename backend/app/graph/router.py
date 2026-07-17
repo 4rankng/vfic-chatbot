@@ -191,7 +191,7 @@ def _normalize(text: str) -> str:
 
 
 def is_vacancy_lookup(user_text: str) -> bool:
-    """Whether a turn asks about current openings and therefore needs live Job data."""
+    """Whether a turn asks the LLM to check recruitment knowledge for openings."""
     text = _normalize(user_text)
     if not text:
         return False
@@ -268,8 +268,8 @@ def route_turn(user_text: str) -> TurnRoute:
     if vacancy_lookup:
         return TurnRoute(
             "recommend",
-            "structured_lookup",
-            tools=("list_active_jobs",),
+            "knowledge_lookup",
+            tools=("search_knowledge",),
             reason="vacancy_terms",
             confidence=0.92,
         )
@@ -311,9 +311,9 @@ def routing_instruction(route: TurnRoute) -> str:
     if route.intent == "recommend":
         if route.reason == "vacancy_terms":
             return (
-                "Ý định: kiểm tra các vị trí đang tuyển. Bắt buộc gọi list_active_jobs; "
-                "truyền role/company/location đã diễn giải và bỏ trống bộ lọc khi người dùng "
-                "muốn xem danh sách chung."
+                "Ý định: kiểm tra thông tin việc làm đang tuyển. Dùng search_knowledge để tra "
+                "cứu KB tuyển dụng được gán cho agent, rồi trả lời tự nhiên chỉ từ bằng chứng "
+                "tìm thấy; không suy đoán vị trí hoặc quyền lợi không có trong KB."
             )
         return (
             "Ý định: gợi ý việc phù hợp. Nếu đã có hồ sơ ứng viên (lương/khu vực/vị trí), "

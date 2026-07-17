@@ -301,25 +301,16 @@ sequenceDiagram
     WK->>Z: typing heartbeat (every 4s, bot channel)
 
     rect rgb(235, 242, 255)
-    Note over WK,DB: ── deterministic vacancy guard ──
-    alt explicit vacancy question or factual follow-up
-        WK->>WK: isolate vacancy clause from candidate-profile context
-        WK->>DB: find_active_jobs (ACTIVE + vacancy_count > 0)<br/>within active Agent KB projects
-        WK->>WK: match title/company/factory/project fields<br/>using configured Company aliases;<br/>bounded typo tolerance only for identity fields
-        alt matched
-            WK->>WK: render bounded verified Job facts<br/>(role, location, age, experience, requirements,<br/>salary, shift, support, benefits when present)
-        else structured catalog empty/unconfigured
-            WK->>WK: inject catalog-empty grounding instruction
-            WK->>DB: search_knowledge for mentioned company/project
-            WK->>WK: LLM answers only from explicit published KB evidence;<br/>otherwise says it cannot verify
-        else no match
-            WK->>WK: deterministic "currently not recruiting" reply
-        else lookup unavailable
-            WK->>WK: availability-error reply; never assert no vacancy
-        end
-    else other message
-        Note over WK: continue to normal response lanes
+    Note over WK,DB: ── grounded LLM vacancy lookup ──
+    alt direct-context KB assigned
+        WK->>DB: load complete assigned KB text
+        WK->>WK: one LLM call over persona + full KB + recent history
+    else RAG KB assigned
+        WK->>WK: route vacancy intent to search_knowledge
+        WK->>DB: semantic retrieval within active Agent KB projects
+        WK->>WK: inject retrieved evidence into one LLM generation
     end
+    WK->>WK: assert hiring/details only from retrieved or full-KB evidence;<br/>otherwise say no verified information was found
     end
 
     rect rgb(230, 245, 235)
@@ -487,11 +478,11 @@ functions composed by hand — "LangGraph-style" in shape only. Document it
 honestly as such.
 
 ```
-load_conversation_state -> typing -> vacancy_lookup?
-  vacancy_lookup (explicit question/follow-up) -> ACTIVE job match
-      matched / no_match / unavailable -> deterministic reply -> combine_for_presend
-      catalog_empty -> search_knowledge + grounded LLM -> combine_for_presend
-  vacancy_lookup (not applicable) -> fast lane / FAQ bypass / agent
+load_conversation_state -> typing -> direct_context?
+  direct_context (available) -> one grounded LLM call over full assigned KB
+  direct_context (not available) -> fast lane / FAQ bypass / routed agent
+      vacancy intent -> assigned-KB search_knowledge prefetch -> grounded LLM
+      other agent intent -> scoped tool-calling LLM
       agent (error) -> error_reply
       agent (ok)    -> fast_safety_filter -> combine_for_presend
   combine_for_presend -> pre_send_guard -> ownership_ok?
@@ -503,23 +494,22 @@ load_conversation_state -> typing -> vacancy_lookup?
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
-- **Vacancy authority:** before every fast lane, FAQ bypass, or agent turn,
-  direct hiring-existence questions (and factual follow-ups to one) use the
-  typed active-job lookup. Only a `jobs` record with `status=ACTIVE` and
-  `vacancy_count > 0` is the primary authority for a current-hiring, company,
-  location, or salary claim. `no_match` means the non-empty structured catalog
-  was checked and receives the deterministic no-active-job reply. When that
-  catalog is empty or unconfigured, the turn falls through to the LLM with an
-  explicit `search_knowledge` instruction; only clear recruitment statements
-  in active, published KB content may support a positive answer. Missing KB
-  evidence becomes "cannot verify", never "not recruiting". Lookup failures
-  receive an availability-error reply rather than a negative hiring assertion.
+- **Vacancy authority:** direct hiring questions skip the deterministic FAQ lane
+  and are answered by the LLM from the Agent's assigned recruitment knowledge.
+  RAG knowledge bases run a scoped `search_knowledge` lookup first and inject
+  the retrieved evidence into a single generation; direct-context knowledge
+  bases provide their complete text to a single generation. A positive hiring,
+  location, salary, or benefit claim requires explicit evidence in that assigned
+  KB. Missing or failed retrieval becomes "no verified information found", never
+  a fabricated vacancy or a false "not recruiting" claim. The structured
+  `list_active_jobs` tool remains available to profile-based recommendation
+  flows, but it no longer intercepts ordinary vacancy questions.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
   `_dispatch_tool` dispatch by name. The deterministic router prefetches
   `search_bus_timetable` for high-confidence timetable turns and
-  `search_knowledge` for high-confidence FAQ-detail turns. A successful prefetch
-  is injected into a tool-free generation, avoiding an unnecessary
-  model→tool→model loop; lookup miss/error retains the original scoped tools.
+  `search_knowledge` for high-confidence vacancy and FAQ-detail turns. Vacancy
+  retrieval results, including miss/error states, are injected into a tool-free
+  generation so the LLM answers once without repeating the same lookup.
 - **Tool-loop ceiling:** `max_llm_calls_per_turn` (default 6).
 - **Typing heartbeat:** `_typing_heartbeat` sends `typing` to Zalo every 4s
   while a turn is processing (keeps the candidate's typing indicator alive).

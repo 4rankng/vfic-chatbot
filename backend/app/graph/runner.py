@@ -152,15 +152,10 @@ async def _agent_turn(
     route = route_turn(user_text)
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
         if route.reason == "vacancy_terms" and not manifest_policy.tool_registry.allows(
-            "list_active_jobs"
+            "search_knowledge"
         ):
             return VACANCY_LOOKUP_UNAVAILABLE_REPLY
-        return await run_manifest_composed_agent(
-            user_text,
-            deps,
-            policy=manifest_policy,
-            required_tool="list_active_jobs" if route.reason == "vacancy_terms" else None,
-        )
+        return await run_manifest_composed_agent(user_text, deps, policy=manifest_policy)
 
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
@@ -204,7 +199,7 @@ async def _agent_turn(
     if (
         route.reason == "vacancy_terms"
         and resolved_tool_registry is not None
-        and "list_active_jobs" not in resolved_tool_registry
+        and "search_knowledge" not in resolved_tool_registry
     ):
         return VACANCY_LOOKUP_UNAVAILABLE_REPLY
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
@@ -262,10 +257,6 @@ async def _agent_turn(
         "lookup_query": user_text,
         "metrics": timings,
     }
-    if route.reason == "vacancy_terms" and (
-        resolved_tool_registry is None or "list_active_jobs" in resolved_tool_registry
-    ):
-        agent_kwargs["required_tool"] = "list_active_jobs"
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
     reply = await deps.agent.agent(contextual_user_text, **agent_kwargs)
@@ -644,10 +635,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         direct_context = (
             await deps.direct_context.active_context() if deps.direct_context is not None else None
         )
-        # Vacancy state is more volatile than an installation's static direct
-        # context. Force those turns through the capability-gated ACTIVE-job tool.
-        if is_vacancy_lookup(state.user_text):
-            direct_context = None
         recruitment_capabilities = (
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
         )

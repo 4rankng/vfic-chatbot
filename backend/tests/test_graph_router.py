@@ -24,17 +24,18 @@ def test_route_recommendation_query_prefers_recommendation_tool_path():
     )
 
 
-def test_route_generic_vacancy_listing_exposes_active_job_tool():
+def test_route_generic_vacancy_listing_uses_llm_knowledge_lookup():
     for query in (
         "giới thiệu các vị trí đang tuyển",
         "hiện tại có những công việc gì đang tuyển",
         "LG tuyển thợ hàn không?",
+        "mình nhà ở quán toan _hp gần IG tràng duệ.bên IG tràng duệ mình đang tuyển ạ",
     ):
         route = route_turn(query)
 
         assert route.intent == "recommend"
-        assert route.strategy == "structured_lookup"
-        assert route.tools == ("list_active_jobs",)
+        assert route.strategy == "knowledge_lookup"
+        assert route.tools == ("search_knowledge",)
 
 
 def test_route_timetable_beats_broader_job_detail():
@@ -124,11 +125,12 @@ def test_routing_instruction_is_injected_into_prompt_context():
     assert "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:" in prompt
 
 
-def test_vacancy_routing_instruction_requires_active_job_tool():
+def test_vacancy_routing_instruction_requires_grounded_knowledge_lookup():
     route = route_turn("giới thiệu các vị trí đang tuyển")
 
     assert route.reason == "vacancy_terms"
-    assert "Bắt buộc gọi list_active_jobs" in routing_instruction(route)
+    assert "search_knowledge" in routing_instruction(route)
+    assert "list_active_jobs" not in routing_instruction(route)
 
 
 @pytest.mark.parametrize(
@@ -148,11 +150,11 @@ def test_vacancy_routing_instruction_requires_active_job_tool():
         "bên mình có tuyển công nhân ca đêm không?",
     ],
 )
-def test_vacancy_paraphrase_requires_active_job_tool(query):
+def test_vacancy_paraphrase_uses_llm_knowledge_lookup(query):
     route = route_turn(query)
 
     assert route.reason == "vacancy_terms"
-    assert route.tools == ("list_active_jobs",)
+    assert route.tools == ("search_knowledge",)
 
 
 @pytest.mark.parametrize(

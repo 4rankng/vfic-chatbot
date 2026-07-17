@@ -185,6 +185,47 @@ async def test_agent_without_allowed_tools_binds_full_registry():
     assert recording.bound_names == _ALL_TOOL_NAMES
 
 
+async def test_vacancy_knowledge_route_prefetches_evidence_for_llm(monkeypatch):
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    query = (
+        "mình nhà ở quán toan _hp gần IG tràng duệ."
+        "bên IG tràng duệ mình đang tuyển ạ"
+    )
+    evidence = "LG Display Tràng Duệ đang tuyển công nhân sản xuất."
+
+    async def _search(retrieval, embedder, name, args, **kwargs):  # noqa: ARG001
+        assert name == "search_knowledge"
+        assert args == {"query": query}
+        return evidence
+
+    class _KnowledgeLLM(_RecordingLLM):
+        def __init__(self) -> None:
+            super().__init__()
+            self.messages = []
+
+        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+            self.messages = messages
+            return SimpleNamespace(content="LG Display Tràng Duệ đang tuyển.", tool_calls=None)
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", _search)
+    llm = _KnowledgeLLM()
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        query,
+        system="sys",
+        retrieval=object(),
+        embedder=object(),
+        allowed_tools=("search_knowledge",),
+        lookup_query=query,
+    )
+
+    assert result == "LG Display Tràng Duệ đang tuyển."
+    assert any(evidence in str(message.content) for message in llm.messages)
+    assert llm.bound_names is None
+
+
 async def test_required_vacancy_tool_is_forced_then_reply_is_rendered_from_evidence():
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent

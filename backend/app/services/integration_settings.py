@@ -23,6 +23,7 @@ from app.core.config import (
 )
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import (
+    NS_INTEGRATION_FACEBOOK,
     NS_INTEGRATION_MINIMAX,
     NS_INTEGRATION_OPENROUTER,
     NS_INTEGRATION_ZALO,
@@ -65,6 +66,13 @@ ZALO_SETTING_KEYS = (
     ZALO_OA_REFRESH_TOKEN,
 )
 
+# Facebook Messenger (Phase 4). Page tokens are stored per-Page under
+# "facebook_page_token:<page_id>" with context-bound ciphertext (the page_id
+# is the AEAD associated data, so a row moved between Pages fails to decrypt).
+FB_APP_SECRET = "facebook_app_secret"
+FB_PAGE_TOKEN_PREFIX = "facebook_page_token:"  # + page_id → encrypted Page token
+FB_SETTING_KEYS = (FB_APP_SECRET,)  # per-Page tokens are dynamic, listed separately
+
 MINIMAX_SETTING_KEYS = (MINIMAX_API_KEY, MINIMAX_ENABLE, LLM_DEFAULT_PROVIDER)
 OPENROUTER_SETTING_KEYS = (
     OPENROUTER_API_KEY,
@@ -86,6 +94,25 @@ class ZaloRuntimeConfig:
     oa_refresh_token: str = ""
     bot_api_base: str = ZALO_BOT_API_BASE
     oa_api_base: str = ZALO_OA_API_BASE
+
+
+@dataclass(frozen=True)
+class FacebookRuntimeConfig:
+    """Resolved Facebook/Meta credentials for one active Page.
+
+    ``page_access_token`` is the decrypted Graph API Page token; it is resolved
+    server-side only and never serialized into API responses, logs, or queue
+    payloads. ``app_secret`` is the Meta App secret used for webhook HMAC and
+    API calls. All fields are deployment-owned (config) or DB-resolved.
+    """
+
+    app_id: str = ""
+    app_secret: str = ""
+    page_id: str = ""
+    page_access_token: str = ""
+    verify_token: str = ""
+    graph_api_version: str = "v25.0"
+    graph_api_base: str = "https://graph.facebook.com"
 
 
 @dataclass(frozen=True)
@@ -139,6 +166,37 @@ class IntegrationSettingsCipher:
         payload = base64.urlsafe_b64decode(stored[3:].encode("ascii"))
         nonce, sealed = payload[:12], payload[12:]
         return AESGCM(self._key).decrypt(nonce, sealed, None).decode("utf-8")
+
+    def encrypt_with_context(self, value: str, context: str) -> str:
+        """Bind ``context`` into the AEAD associated data (Red Team #7).
+
+        A ciphertext produced for one context (e.g. Page id ``A``) will NOT
+        decrypt under another (Page id ``B``) — the GCM tag fails. This blocks
+        a token row moved between Pages from decrypting successfully. Stored
+        under a ``v2:`` prefix so legacy ``v1:`` rows decrypt unchanged via
+        :meth:`decrypt_with_context`'s fallback.
+        """
+        nonce = os.urandom(12)
+        aad = context.encode("utf-8")
+        sealed = AESGCM(self._key).encrypt(nonce, value.encode("utf-8"), aad)
+        return "v2:" + base64.urlsafe_b64encode(nonce + sealed).decode("ascii")
+
+    def decrypt_with_context(self, stored: str, context: str) -> str:
+        """Inverse of :meth:`encrypt_with_context`.
+
+        ``v2:`` rows require the matching context; ``v1:`` rows (no context
+        binding) decrypt via the legacy path for the rolling window. A ``v2:``
+        row with the wrong context raises ``InvalidTag`` (the caller surfaces a
+        reconnect-required error rather than accepting a swapped token).
+        """
+        if not stored:
+            return ""
+        if not stored.startswith("v2:"):
+            return self.decrypt(stored)
+        payload = base64.urlsafe_b64decode(stored[3:].encode("ascii"))
+        nonce, sealed = payload[:12], payload[12:]
+        aad = context.encode("utf-8")
+        return AESGCM(self._key).decrypt(nonce, sealed, aad).decode("utf-8")
 
 
 def _preview(value: str) -> str | None:
@@ -549,3 +607,78 @@ class IntegrationSettingsService:
             await self.db.commit()
             await bump_cache_version(NS_INTEGRATION_OPENROUTER)
         return changed
+
+    # ── Facebook / Meta (Phase 4) ───────────────────────────────────────────
+
+    def _fb_page_token_key(self, page_id: str) -> str:
+        return f"{FB_PAGE_TOKEN_PREFIX}{page_id}"
+
+    async def resolve_facebook(self, page_id: str) -> FacebookRuntimeConfig | None:
+        """Resolve the credentials for one active Page, or None if not configured.
+
+        The Page token is decrypted with the page_id as AEAD context (Red Team
+        #7): a ciphertext produced for a different Page fails to decrypt.
+        """
+        if not page_id:
+            return None
+        s = self.settings
+        token = await self._stored_value_with_context(
+            self._fb_page_token_key(page_id), page_id
+        )
+        app_secret = await self._stored_value(FB_APP_SECRET) or s.meta_app_secret
+        if not token:
+            return None
+        return FacebookRuntimeConfig(
+            app_id=s.meta_app_id,
+            app_secret=app_secret,
+            page_id=page_id,
+            page_access_token=token,
+            verify_token=s.meta_webhook_verify_token,
+            graph_api_version=s.meta_graph_api_version,
+            graph_api_base=s.meta_graph_api_base,
+        )
+
+    async def _stored_value_with_context(self, key: str, context: str) -> str:
+        """Fetch one encrypted setting row and decrypt with AEAD context."""
+        if not hasattr(self.db, "scalars"):
+            return ""
+        row = await self.db.scalar(
+            select(IntegrationSetting).where(IntegrationSetting.key == key)
+        )
+        if row is None:
+            return ""
+        try:
+            return self.cipher.decrypt_with_context(row.encrypted_value, context)
+        except Exception:  # noqa: BLE001 — wrong-context / corrupt ciphertext
+            # A token moved between Pages or a rotated encryption key. Surface
+            # as "not resolvable" so the caller fails closed (reconnect required).
+            logger.warning(
+                "facebook page token decrypt failed key=%s (wrong context or corrupt)",
+                key,
+            )
+            return ""
+
+    async def set_facebook_page_token(
+        self, page_id: str, token: str, *, updated_by
+    ) -> None:
+        """Persist one Page access token with page_id-bound ciphertext."""
+        await self._write_setting(
+            self._fb_page_token_key(page_id),
+            self.cipher.encrypt_with_context(token, page_id),
+            actor_id=updated_by,
+            is_secret=True,
+        )
+        await self.db.commit()
+        await bump_cache_version(NS_INTEGRATION_FACEBOOK)
+
+    async def clear_facebook_page_token(self, page_id: str) -> None:
+        """Remove one Page token (disconnect). History is never deleted."""
+        from sqlalchemy import delete as sa_delete
+
+        await self.db.execute(
+            sa_delete(IntegrationSetting).where(
+                IntegrationSetting.key == self._fb_page_token_key(page_id)
+            )
+        )
+        await self.db.commit()
+        await bump_cache_version(NS_INTEGRATION_FACEBOOK)

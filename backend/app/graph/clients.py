@@ -440,6 +440,7 @@ class MiniMaxAgent:
                 metrics.setdefault(key, 0)
             metrics.setdefault("llm_call_ms", [])
         effective_query = lookup_query or user_text
+        knowledge_lookup_route = allowed_tools == ("search_knowledge",)
         timetable_route = allowed_tools == ("search_bus_timetable",)
         faq_detail_route = allowed_tools == (
             "get_product_features",
@@ -447,6 +448,7 @@ class MiniMaxAgent:
         )
         if (
             _should_prefetch_knowledge(effective_query)
+            and not knowledge_lookup_route
             and not timetable_route
             and not faq_detail_route
         ):
@@ -474,7 +476,33 @@ class MiniMaxAgent:
                         )
                     )
                 )
-        if timetable_route:
+        if knowledge_lookup_route:
+            prefetched, _ = await _prefetch_tool(
+                retrieval,
+                embedder,
+                "search_knowledge",
+                {"query": effective_query},
+                metrics,
+                resolved_tool_registry,
+            )
+            tool_results.append(str(prefetched))
+            messages.append(
+                SystemMessage(
+                    content=(
+                        "KẾT QUẢ TRA CỨU KB TUYỂN DỤNG ĐÃ THỰC HIỆN CHO TIN NHẮN NÀY:\n"
+                        f"{prefetched}\n\n"
+                        "Hãy dùng khả năng hiểu ngôn ngữ của bạn để trả lời tự nhiên bằng tiếng "
+                        "Việt, nhưng chỉ khẳng định công việc, trạng thái tuyển dụng, địa điểm, "
+                        "lương hoặc quyền lợi có trong kết quả trên. Nếu kết quả không chứa bằng "
+                        "chứng phù hợp, nói rõ chưa tìm thấy thông tin đã xác minh."
+                    )
+                )
+            )
+            # Retrieval has already run against the Agent's assigned KB. Keep
+            # generation to one evidence-grounded LLM call instead of asking the
+            # model to repeat the same search in a second tool round.
+            schemas = []
+        elif timetable_route:
             prefetched, prefetch_hit = await _prefetch_tool(
                 retrieval,
                 embedder,

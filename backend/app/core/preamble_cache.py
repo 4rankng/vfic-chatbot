@@ -33,6 +33,7 @@ T = TypeVar("T")
 NS_INTEGRATION_MINIMAX = "integration_minimax"
 NS_INTEGRATION_OPENROUTER = "integration_openrouter"
 NS_INTEGRATION_ZALO = "integration_zalo"
+NS_INTEGRATION_FACEBOOK = "integration_facebook"
 NS_PREAMBLE = "preamble"
 
 # Integration settings change only via the admin UI; 5 min is a safety net for

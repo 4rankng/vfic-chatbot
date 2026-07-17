@@ -201,13 +201,13 @@ def _state() -> BotRunState:
 
 
 @pytest.mark.asyncio
-async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
+async def test_vacancy_turn_uses_llm_with_assigned_direct_context(monkeypatch):
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
                 knowledge_base_id="kb-1",
                 persona_body="Bạn là tư vấn viên.",
-                knowledge_text="Nhà máy có xe đưa đón.",
+                knowledge_text="LG Display Tràng Duệ đang tuyển công nhân sản xuất.",
             )
 
     class _DirectAgent:
@@ -215,9 +215,9 @@ async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
 
         async def direct(self, user_text, *, system, metrics=None):
             self.calls += 1
-            assert "Nhà máy có xe đưa đón." in system
-            assert "bên mình còn tuyển không?" in user_text
-            return "Chào bạn, nhà máy có xe đưa đón."
+            assert "LG Display Tràng Duệ đang tuyển công nhân sản xuất." in system
+            assert "bên IG tràng duệ mình đang tuyển ạ" in user_text
+            return "LG Display Tràng Duệ đang tuyển công nhân sản xuất."
 
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
@@ -226,20 +226,27 @@ async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
     direct_agent = _DirectAgent()
     deps.agent = direct_agent
     deps.direct_context = _DirectReader()
-    _stub_agent(monkeypatch, "VFIC hiện có các vị trí ACTIVE.")
+
+    async def _must_not_use_rag_agent(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("direct-context vacancy must use the assigned KB LLM path")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_use_rag_agent)
 
     result = await run_turn(
         BotRunState(
             conversation_id=CONV_ID,
             version_at_start=1,
-            user_text="bên mình còn tuyển không?",
+            user_text=(
+                "mình nhà ở quán toan _hp gần IG tràng duệ."
+                "bên IG tràng duệ mình đang tuyển ạ"
+            ),
         ),
         deps,
     )
 
-    assert result["outcome"] == "sent"
-    assert result["reply"] == "VFIC hiện có các vị trí ACTIVE."
-    assert direct_agent.calls == 0
+    assert result["outcome"] == "direct_context"
+    assert result["reply"] == "LG Display Tràng Duệ đang tuyển công nhân sản xuất."
+    assert direct_agent.calls == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1072,6 +1079,54 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
 
     assert "system_prompt_ms" in timings
     assert timings["system_prompt_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_rag_vacancy_turn_routes_exact_reported_message_to_assigned_kb(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    query = (
+        "mình nhà ở quán toan _hp gần IG tràng duệ."
+        "bên IG tràng duệ mình đang tuyển ạ"
+    )
+    captured: dict[str, object] = {}
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured["user_text"] = user_text
+            captured.update(kwargs)
+            return "LG Display Tràng Duệ đang tuyển."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=query),
+        deps,
+        query,
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+    )
+
+    assert reply == "LG Display Tràng Duệ đang tuyển."
+    assert captured["allowed_tools"] == ("search_knowledge",)
+    assert captured["lookup_query"] == query
+    assert "required_tool" not in captured
 
 
 @pytest.mark.asyncio

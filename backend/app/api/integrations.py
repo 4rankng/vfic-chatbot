@@ -2,7 +2,7 @@
 
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_admin
@@ -10,6 +10,14 @@ from app.core.config import ZALO_BOT_WEBHOOK_URL
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.integrations import (
+    FacebookAccountStatusOut,
+    FacebookChannelTestOut,
+    FacebookIntegrationOut,
+    FacebookOAuthCompleteRequest,
+    FacebookOAuthStartOut,
+    FacebookOAuthCallbackOut,
+    FacebookPageListOut,
+    FacebookPageOut,
     MinimaxIntegrationSettingsOut,
     MinimaxIntegrationSettingsUpdate,
     MinimaxIntegrationTestOut,
@@ -412,4 +420,289 @@ async def test_openrouter_integration_settings(
     return OpenRouterIntegrationTestOut(
         configured=bool(cfg.api_key),
         missing=missing,
+    )
+
+
+# ─── Facebook / Messenger OAuth lifecycle (Phase 4) ─────────────────────────
+#
+# All endpoints are admin-only. Responses carry no tokens, app secrets, or raw
+# PSIDs. OAuth state/flow records are Redis-backed, single-use, short-TTL, and
+# bound to the initiating admin's id + JWT version. Transient Page-credential
+# capsules are encrypted at rest in Redis (never plaintext).
+#
+# The five-step flow:
+#   1. start      → returns the official authorization URL
+#   2. callback   → validates state, exchanges code server-side, stores flow
+#   3. pages      → returns safe Page summaries for selection
+#   4. complete   → selects one Page, probes identity, subscribes, persists
+#   5. test/disconnect/GET → status, health probe, disconnect
+
+
+_FB_OAUTH_STATE_PREFIX = "fb_oauth_state:"
+_FB_OAUTH_FLOW_PREFIX = "fb_oauth_flow:"
+_FB_OAUTH_TTL_SECONDS = 300  # 5 minutes — single-use, short-lived
+
+
+async def _redis():
+    from app.core.redis import get_redis
+
+    return get_redis()
+
+
+def _fb_callback_url() -> str:
+    """The server-side OAuth callback URI. Allowlisted in config."""
+    from app.core.config import get_settings
+
+    s = get_settings()
+    # In production the allowlist is configured; in dev localhost is permitted.
+    # The exact callback origin is deployment-owned.
+    for origin in s.facebook_callback_allowlist or ["http://localhost:5173"]:
+        return f"{origin.rstrip('/')}/api/v1/admin/integrations/facebook/oauth/callback"
+    return "http://localhost:5173/api/v1/admin/integrations/facebook/oauth/callback"
+
+
+@router.post("/facebook/oauth/start", response_model=FacebookOAuthStartOut)
+async def start_facebook_oauth(
+    admin: User = Depends(require_admin),
+    _db: AsyncSession = Depends(get_db),
+) -> FacebookOAuthStartOut:
+    """Begin Facebook Login for Business. Stores single-use state in Redis."""
+    import secrets
+
+    from app.channels.providers.facebook_oauth import build_authorization_url
+
+    state = secrets.token_urlsafe(32)
+    redis = await _redis()
+    # Bind state to the initiating admin so a stolen state cannot be replayed
+    # by a different admin session.
+    await redis.set(
+        f"{_FB_OAUTH_STATE_PREFIX}{state}",
+        f"{admin.id}",
+        ex=_FB_OAUTH_TTL_SECONDS,
+    )
+    return FacebookOAuthStartOut(
+        authorization_url=build_authorization_url(
+            state=state, redirect_uri=_fb_callback_url()
+        )
+    )
+
+
+@router.get("/facebook/oauth/callback", response_model=FacebookOAuthCallbackOut)
+async def facebook_oauth_callback(
+    state: str,
+    code: str | None = None,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookOAuthCallbackOut:
+    """Validate state, exchange code server-side, store an encrypted flow record.
+
+    Redirects the browser to the frontend with only ``flow_id`` + ``status``;
+    no code, token, or Page list crosses to the browser. The flow record stores
+    encrypted Page summaries + the user access token (encrypted with the
+    integration cipher, never plaintext in Redis).
+    """
+    from app.channels.providers.facebook_oauth import (
+        FacebookOAuthError,
+        exchange_code_for_user_token,
+        list_pages,
+    )
+    from app.services.integration_settings import IntegrationSettingsCipher
+
+    redis = await _redis()
+    state_key = f"{_FB_OAUTH_STATE_PREFIX}{state}"
+    bound_admin = await redis.get(state_key)
+    # Single-use: delete immediately regardless of outcome.
+    await redis.delete(state_key)
+    if not bound_admin or str(bound_admin) != str(admin.id):
+        return FacebookOAuthCallbackOut(flow_id="", status="error", error="Phiên đăng nhập không hợp lệ hoặc đã hết hạn.")
+    if not code:
+        return FacebookOAuthCallbackOut(flow_id="", status="error", error="Không nhận được mã ủy quyền từ Facebook.")
+
+    try:
+        user_token = await exchange_code_for_user_token(code=code, redirect_uri=_fb_callback_url())
+        pages = await list_pages(user_token)
+    except FacebookOAuthError:
+        return FacebookOAuthCallbackOut(
+            flow_id="", status="error", error="Trao đổi ủy quyền Facebook thất bại. Vui lòng thử lại."
+        )
+
+    if not pages:
+        return FacebookOAuthCallbackOut(
+            flow_id="", status="error", error="Tài khoản không quản lý Trang nào."
+        )
+
+    # Encrypt the transient user token + Page summaries before storing in Redis.
+    import json
+    import secrets as _secrets
+
+    cipher = IntegrationSettingsCipher()
+    flow_id = _secrets.token_urlsafe(16)
+    capsule = cipher.encrypt(
+        json.dumps(
+            {
+                "user_token": user_token,
+                "pages": [{"id": p.id, "name": p.name} for p in pages],
+            }
+        )
+    )
+    await redis.set(
+        f"{_FB_OAUTH_FLOW_PREFIX}{flow_id}",
+        capsule,
+        ex=_FB_OAUTH_TTL_SECONDS,
+    )
+    return FacebookOAuthCallbackOut(flow_id=flow_id, status="pending_selection")
+
+
+@router.get("/facebook/oauth/pages", response_model=FacebookPageListOut)
+async def list_facebook_pages(
+    flow_id: str,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookPageListOut:
+    """Return the safe Page list stored in the flow record."""
+    import json
+
+    from app.channels.providers.facebook_account import FacebookAccountResolver
+    from app.services.integration_settings import IntegrationSettingsCipher
+
+    redis = await _redis()
+    capsule = await redis.get(f"{_FB_OAUTH_FLOW_PREFIX}{flow_id}")
+    if not capsule:
+        return FacebookPageListOut(pages=[], active_page_id=None)
+    cipher = IntegrationSettingsCipher()
+    try:
+        payload = json.loads(cipher.decrypt(capsule))
+    except Exception:  # noqa: BLE001
+        return FacebookPageListOut(pages=[], active_page_id=None)
+    pages = [FacebookPageOut(id=str(p["id"]), name=str(p["name"])) for p in payload.get("pages", [])]
+    resolver = FacebookAccountResolver(db)
+    active = await resolver.active_facebook_page()
+    return FacebookPageListOut(pages=pages, active_page_id=active.account_key if active else None)
+
+
+@router.post("/facebook/oauth/complete", response_model=FacebookAccountStatusOut)
+async def complete_facebook_oauth(
+    payload: FacebookOAuthCompleteRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookAccountStatusOut:
+    """Select one Page, obtain Page authority, probe identity, subscribe, persist."""
+    import json
+
+    from app.channels.providers.facebook_account import FacebookPageLifecycle
+    from app.channels.providers.facebook_oauth import (
+        FacebookOAuthError,
+        get_page_access_token,
+        probe_page_identity,
+        subscribe_app_to_page,
+    )
+    from app.services.integration_settings import IntegrationSettingsCipher
+
+    redis = await _redis()
+    flow_key = f"{_FB_OAUTH_FLOW_PREFIX}{payload.flow_id}"
+    capsule = await redis.get(flow_key)
+    if not capsule:
+        raise HTTPException(status_code=410, detail="Phiên chọn Trang đã hết hạn. Vui lòng kết nối lại.")
+    cipher = IntegrationSettingsCipher()
+    try:
+        flow = json.loads(cipher.decrypt(capsule))
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=410, detail="Phiên chọn Trang không hợp lệ.")
+    user_token = flow.get("user_token", "")
+    page_name = next(
+        (str(p["name"]) for p in flow.get("pages", []) if str(p.get("id")) == payload.page_id),
+        payload.page_id,
+    )
+
+    try:
+        page_token = await get_page_access_token(user_token, payload.page_id)
+        probed_id = await probe_page_identity(page_token)
+        if probed_id != payload.page_id:
+            raise FacebookOAuthError("page identity mismatch")
+        await subscribe_app_to_page(payload.page_id, page_token)
+    except FacebookOAuthError as exc:
+        raise HTTPException(status_code=502, detail=f"Kích hoạt Trang thất bại: {exc}") from exc
+
+    lifecycle = FacebookPageLifecycle(db)
+    account = await lifecycle.activate_or_reactivate(
+        page_id=payload.page_id,
+        page_name=page_name,
+        page_access_token=page_token,
+        admin_id=admin.id,
+    )
+    # Consume the flow record (single-use).
+    await redis.delete(flow_key)
+    return FacebookAccountStatusOut(
+        page_id_suffix=payload.page_id[-4:],
+        label=page_name,
+        status=account.status,
+    )
+
+
+@router.get("/facebook", response_model=FacebookIntegrationOut)
+async def get_facebook_status(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookIntegrationOut:
+    """Safe status of all Facebook Page accounts (active + archived)."""
+    from app.channels.providers.facebook_account import FacebookAccountResolver
+    from app.core.config import get_settings
+
+    resolver = FacebookAccountResolver(db)
+    accounts = await resolver.list_facebook_accounts()
+    return FacebookIntegrationOut(
+        enabled=get_settings().facebook_connection_enabled,
+        accounts=[
+            FacebookAccountStatusOut(
+                page_id_suffix=(a.account_key[-4:] if a.account_key else ""),
+                label=a.label,
+                status=a.status,
+            )
+            for a in accounts
+        ],
+    )
+
+
+@router.post("/facebook/test", response_model=FacebookChannelTestOut)
+async def test_facebook_connection(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookChannelTestOut:
+    """Health probe: resolve the active Page and probe its identity."""
+    from app.channels.providers.facebook_account import FacebookAccountResolver
+    from app.channels.providers.facebook_oauth import FacebookOAuthError, probe_page_identity
+    from app.services.integration_settings import IntegrationSettingsService
+
+    resolver = FacebookAccountResolver(db)
+    active = await resolver.active_facebook_page()
+    if active is None or not active.is_active:
+        return FacebookChannelTestOut(healthy=False, error="Chưa có Trang Facebook nào được kết nối.")
+    settings_service = IntegrationSettingsService(db)
+    cfg = await settings_service.resolve_facebook(active.account_key)
+    if cfg is None:
+        return FacebookChannelTestOut(healthy=False, error="Không giải mã được token Trang. Vui lòng kết nối lại.")
+    try:
+        await probe_page_identity(cfg.page_access_token)
+    except FacebookOAuthError:
+        return FacebookChannelTestOut(healthy=False, error="Token Trang không hợp lệ hoặc đã bị thu hồi.")
+    return FacebookChannelTestOut(healthy=True)
+
+
+@router.delete("/facebook", response_model=FacebookAccountStatusOut)
+async def disconnect_facebook(
+    page_id: str,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookAccountStatusOut:
+    """Mark a Page inactive. Never deletes contacts/conversations/history."""
+    from app.channels.providers.facebook_account import FacebookPageLifecycle
+
+    lifecycle = FacebookPageLifecycle(db)
+    account = await lifecycle.disconnect(page_id=page_id, admin_id=admin.id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Trang Facebook.")
+    return FacebookAccountStatusOut(
+        page_id_suffix=page_id[-4:],
+        label=account.label,
+        status=account.status,
     )

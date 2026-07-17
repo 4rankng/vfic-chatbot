@@ -165,3 +165,72 @@ class OpenRouterIntegrationSettingsUpdate(BaseModel):
 class OpenRouterIntegrationTestOut(BaseModel):
     configured: bool
     missing: list[str]
+
+
+# ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────
+# Privacy contract: no Page token, app secret, or raw PSID ever appears in
+# these responses. Page ids are surfaced as a masked suffix only; the safe
+# label (Page name) is the recruiter-facing identifier.
+
+
+class FacebookOAuthStartOut(BaseModel):
+    """Returned by POST /facebook/oauth/start — the official authorization URL.
+
+    The opaque ``state`` is a single-use Redis record bound to the initiating
+    admin; the frontend never inspects it.
+    """
+
+    authorization_url: str
+
+
+class FacebookOAuthCallbackOut(BaseModel):
+    """The opaque result of the OAuth callback redirect.
+
+    The frontend receives only ``flow_id`` + ``status``; no code, no token, no
+    Page list. The Page-selection step fetches those server-side via flow_id.
+    """
+
+    flow_id: str
+    status: str  # "pending_selection" | "error"
+    error: str | None = None  # generic, Vietnamese, no provider internals
+
+
+class FacebookPageOut(BaseModel):
+    """One selectable Page during OAuth completion. Safe fields only."""
+
+    id: str  # the Page id is needed to call /complete; it is not PII
+    name: str
+
+
+class FacebookPageListOut(BaseModel):
+    pages: list[FacebookPageOut]
+    active_page_id: str | None = None  # masked if needed; Page id is not PII
+
+
+class FacebookAccountStatusOut(BaseModel):
+    """One Page account in the safe status response."""
+
+    page_id_suffix: str  # last 4 chars only
+    label: str  # safe Page name
+    status: str  # "ACTIVE" | "INACTIVE"
+
+
+class FacebookIntegrationOut(BaseModel):
+    """GET /facebook — safe status of all Facebook Page accounts."""
+
+    enabled: bool  # whether the channel is configured at the deployment level
+    accounts: list[FacebookAccountStatusOut]
+
+
+class FacebookChannelTestOut(BaseModel):
+    """POST /facebook/test — health probe result."""
+
+    healthy: bool
+    error: str | None = None  # generic Vietnamese message
+
+
+class FacebookOAuthCompleteRequest(BaseModel):
+    """POST /facebook/oauth/complete — select one Page to activate."""
+
+    flow_id: str
+    page_id: str
