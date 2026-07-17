@@ -132,8 +132,22 @@ _DETAIL_TERMS = (
     "bao hiem",
     "dia diem",
     "yeu cau",
+    "dieu kien",
+    "quy trinh",
     "do tuoi",
     "gioi tinh",
+)
+
+_VACANCY_PHRASES = (
+    "dang tuyen",
+    "con tuyen",
+    "co tuyen",
+    "tuyen vi tri",
+    "tuyen cong viec",
+    "tuyen nhan vien",
+    "tuyen dung vi tri",
+    "tuyen dung cong viec",
+    "co nhan",
 )
 
 _INTERNAL_RETRY_PREFIX = "ban can viet lai cau tra loi"
@@ -183,9 +197,13 @@ def route_turn(user_text: str) -> TurnRoute:
     if fast_lane_match(raw) is not None:
         return TurnRoute("small_talk", "template", reason="fast_lane_match", confidence=0.95)
 
-    is_vacancy_lookup = "tuyen" in text.split()
     has_recommendation = _has_any(text, _RECOMMEND_TERMS)
     has_detail = _has_any(text, _DETAIL_TERMS)
+    recruitment_detail = "tuyen dung" in text and has_detail
+    is_vacancy_lookup = (
+        ("tuyen" in text.split() and "tuyen dung" not in text)
+        or _has_any(text, _VACANCY_PHRASES)
+    ) and not recruitment_detail
     has_phone = bool(_PHONE_RE.search(raw))
 
     if _has_any(text, _TIMETABLE_TERMS):

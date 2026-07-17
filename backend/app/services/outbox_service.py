@@ -50,6 +50,9 @@ class DispatchResult:
     message_id: int
     ok: bool
     zalo_message_id: str | None = None
+    # Canonical neutral message id (Alembic 0047). When only the neutral path
+    # is used, this carries the value; legacy callers read ``msg_id`` below.
+    provider_message_id: str | None = None
     error: str | None = None
     error_class: str | None = None
     suppressed: bool = False
@@ -58,7 +61,7 @@ class DispatchResult:
     @property
     def msg_id(self) -> str | None:
         """Match the sender result contract consumed by the graph pipeline."""
-        return self.zalo_message_id
+        return self.provider_message_id or self.zalo_message_id
 
 
 def build_outbox_payload(
@@ -206,6 +209,15 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
 
     integration_settings = IntegrationSettingsService(db)
     cfg = await integration_settings.resolve_zalo()
+
+    # Channel-neutral dispatch path (Phase 3): route through the registry when
+    # the outbox channel maps to a registered provider. Falls back to the legacy
+    # ZaloChannelSender for payloads that do not (e.g. a yet-unmapped channel).
+    dispatch_result = await _try_neutral_dispatch(candidate, outbox, cfg, integration_settings)
+    if dispatch_result is not None:
+        return dispatch_result
+
+    # Legacy path: direct ZaloChannelSender (unchanged behavior).
     sender = ZaloChannelSender(cfg, refresh=lambda: integration_settings.refresh_oa_access_token())
     result = await sender.send_payload(candidate.channel, candidate.payload)
     return DispatchResult(
@@ -217,6 +229,85 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
         error_class=result.error_class,
         telemetry=result.telemetry,
     )
+
+
+async def _try_neutral_dispatch(
+    candidate: DispatchCandidate,
+    outbox: OutboundOutbox,
+    cfg,
+    integration_settings,
+) -> DispatchResult | None:
+    """Attempt registry-driven dispatch; return None to fall back to legacy.
+
+    Builds an :class:`OutboundTextCommand` from the outbox row's Zalo-shaped
+    payload (``chat_id``/``text``/``quote_message_id``) and routes it through
+    :class:`ChannelDispatchService`. The authority fence uses the outbox row's
+    ``channel_account_generation`` when present (Phase 2 column).
+    """
+    from app.channels import types as ct
+    from app.channels.dispatch import ChannelDispatchService, build_zalo_registry_from_config
+    from app.channels.registry import ChannelAdapterRegistry
+
+    provider = _provider_for_outbox_channel(candidate.channel)
+    if provider is None:
+        return None  # unmapped channel → legacy path
+
+    registry: ChannelAdapterRegistry = build_zalo_registry_from_config(
+        cfg,
+        oa_refresh=lambda: integration_settings.refresh_oa_access_token(),
+    )
+    if registry.get(provider) is None:
+        return None  # adapter not registered → legacy path
+
+    text = str(candidate.payload.get("text") or "")
+    recipient_id = str(candidate.payload.get("chat_id") or "")
+    if not text or not recipient_id:
+        return DispatchResult(
+            outbox_id=candidate.outbox_id,
+            message_id=candidate.message_id,
+            ok=False,
+            error="outbound payload is missing chat_id or text",
+            error_class="provider_error",
+        )
+
+    account_key = "default:zalo_oa" if provider == ct.PROVIDER_ZALO_OA else "default:zalo_bot"
+
+    command = ct.OutboundTextCommand(
+        provider=provider,
+        account_key=account_key,
+        recipient_id=recipient_id,
+        text=text,
+        channel_account_generation=int(outbox.channel_account_generation or 0),
+        reply_to_message_id=candidate.payload.get("quote_message_id") or None,
+    )
+    svc = ChannelDispatchService(registry)
+    result = await svc.send(command)
+    return DispatchResult(
+        outbox_id=candidate.outbox_id,
+        message_id=candidate.message_id,
+        ok=result.ok,
+        zalo_message_id=result.provider_message_id,
+        provider_message_id=result.provider_message_id,
+        error=result.error,
+        error_class=result.error_class,
+        suppressed=result.suppressed,
+        telemetry=result.telemetry,
+    )
+
+
+def _provider_for_outbox_channel(channel: str) -> str | None:
+    """Map the outbox row's channel string to a neutral provider id.
+
+    The outbox ``channel`` column carries legacy Zalo values (``zalo_bot`` /
+    ``zalo_oa``) which are the same as the neutral provider ids, so the mapping
+    is identity for installed Zalo adapters. Returns ``None`` for any other
+    value so the caller falls back to the legacy sender.
+    """
+    from app.channels import types as ct
+
+    if channel in (ct.PROVIDER_ZALO_BOT, ct.PROVIDER_ZALO_OA, ct.PROVIDER_FACEBOOK_MESSENGER):
+        return channel
+    return None
 
 
 async def dispatch_message_outbox(db: AsyncSession, *, message_id: int) -> DispatchResult | None:

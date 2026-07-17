@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.router import route_turn, routing_instruction
 from app.models.conversation import MessageSender
@@ -127,6 +129,28 @@ def test_vacancy_routing_instruction_requires_active_job_tool():
 
     assert route.reason == "vacancy_terms"
     assert "Bắt buộc gọi list_active_jobs" in routing_instruction(route)
+
+
+def test_vacancy_paraphrase_requires_active_job_tool():
+    route = route_turn("bên bạn có nhận thợ hàn không?")
+
+    assert route.reason == "vacancy_terms"
+    assert route.tools == ("list_active_jobs",)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "hồ sơ tuyển dụng cần những gì?",
+        "điều kiện tuyển dụng là gì?",
+        "quy trình tuyển dụng thế nào?",
+    ],
+)
+def test_recruitment_detail_questions_are_not_vacancy_listings(query):
+    route = route_turn(query)
+
+    assert route.reason != "vacancy_terms"
+    assert route.tools != ("list_active_jobs",)
 
 
 def test_prompt_context_marks_history_as_private_and_keeps_focus_on_current_message():

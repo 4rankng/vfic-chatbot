@@ -252,3 +252,33 @@ async def test_required_vacancy_tool_skip_fails_closed():
 
     assert llm.tool_choices == ["list_active_jobs"]
     assert "chưa thể kiểm tra" in result.lower()
+
+
+async def test_required_vacancy_tool_dispatch_error_fails_closed(monkeypatch):
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def _dispatch_error(*args, **kwargs):  # noqa: ARG001
+        return "Lỗi khi gọi tool 'list_active_jobs': database unavailable"
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", _dispatch_error)
+
+    llm = _RequiredToolLLM(
+        [
+            SimpleNamespace(
+                content="",
+                tool_calls=[{"name": "list_active_jobs", "args": {}, "id": "call-1"}],
+            ),
+        ]
+    )
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "giới thiệu các vị trí đang tuyển",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("list_active_jobs",),
+        required_tool="list_active_jobs",
+    )
+
+    assert "chưa thể kiểm tra" in result.lower()

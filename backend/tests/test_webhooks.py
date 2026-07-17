@@ -1113,3 +1113,88 @@ def test_phase1_send_classification_is_provider_neutral():
     assert "zalo" not in lowered
     assert "facebook" not in lowered
     assert "messenger" not in lowered
+
+
+# ─── Phase 3: no secrets in the RQ payload ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_phase3_queued_job_carries_no_provider_token(monkeypatch):
+    """The v2 webhook payload must NOT carry zalo_bot_token (or any provider
+    token). The worker resolves credentials fresh from DB. A secret in the RQ
+    payload is a secret in Redis — Phase 3 closes that hole.
+
+    Regression guard: an earlier payload carried the live DB-resolved Bot token
+    so the typing-bridge pulse would work when env ZALO_BOT_TOKEN was stale.
+    The bridge now resolves the token worker-side.
+    """
+    from app.api import webhooks
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    enqueued: list[dict] = []
+
+    def _capture(job):
+        enqueued.append(job)
+        return True
+
+    cfg = SimpleNamespace(bot_webhook_secret="", bot_token="secret-bot-token-12345")
+    settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
+    monkeypatch.setattr(
+        webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority())
+    )
+    # Stub handle to call the real enqueue-capture path through the router, but
+    # the simplest proof is to invoke ZaloWebhookService.handle directly with the
+    # real enqueue callback so we observe the exact payload.
+    from app.services.webhook import ZaloWebhookService
+
+    db = AsyncMock()
+    # Minimal ensure/record_inbound/get stubs so handle() reaches the enqueue.
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="chat-secret-test",
+        zalo_channel="bot",
+        version=1,
+        mode="BOT",
+    )
+    svc = AsyncMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.get = AsyncMock(return_value=conv)
+    svc.record_inbound = AsyncMock()
+    svc.run_start_guard = lambda c: True
+    svc.acquire_lock = AsyncMock(return_value=uuid.uuid4())
+    svc.release_lock = AsyncMock()
+    # ConversationService + CandidateExtractionService + dedup are imported
+    # inside handle() — patch the service module where they're looked up.
+    import app.services.webhook as wh_mod
+    from app.services import candidate_extraction as ce_mod
+
+    monkeypatch.setattr(wh_mod, "ConversationService", lambda _db: svc)
+    monkeypatch.setattr(ce_mod, "CandidateExtractionService", SimpleNamespace(
+        persist_explicit_name=AsyncMock()
+    ))
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
+    )
+
+    await ZaloWebhookService.handle(
+        db,
+        {"message": {"text": "hi", "chat": {"id": "chat-secret-test"}, "message_id": 1}},
+        enqueue=_capture,
+        channel="bot",
+        bot_token="secret-bot-token-12345",
+        runtime_authority=_runtime_authority(),
+    )
+
+    assert len(enqueued) == 1, "job was not enqueued"
+    job = enqueued[0]
+    assert "zalo_bot_token" not in job, (
+        f"zalo_bot_token must not be carried in the v2 RQ payload; got keys: {sorted(job)}"
+    )
+    assert job.get("v") == 2
+    # No value in the payload should look like the token.
+    for key, value in job.items():
+        assert value != "secret-bot-token-12345", (
+            f"token-like value leaked via payload key {key!r}"
+        )

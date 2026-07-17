@@ -189,6 +189,12 @@ class ZaloWebhookService:
             asyncio.create_task(_fire_typing(norm.zalo_chat_id, bot_token))
 
         job = {
+            # v2 payload (Phase 3): no provider tokens cross the process
+            # boundary. The worker resolves the Zalo Bot token fresh from DB
+            # when it needs to bridge the typing indicator. Legacy queued jobs
+            # (v absent / v=1) that still carry zalo_bot_token are tolerated by
+            # the worker for the rolling-deploy window.
+            "v": 2,
             "conversation_id": str(conv.id),
             "version_at_start": version_at_start,
             "user_text": norm.user_text,
@@ -205,14 +211,11 @@ class ZaloWebhookService:
             # line for a single candidate message's journey. Contextvar does not
             # cross processes, so the worker re-stashes it from this field.
             "trace_id": request_id_ctx.get(),
-            # Carried so the worker can re-fire the Bot typing indicator on pickup
-            # (the webhook's one-shot expires after ~5s; this bridges the gap
-            # until run_turn's heartbeat starts). No-op for OA. The live DB-resolved
-            # token is carried so the bridge typing works even when the env
-            # ZALO_BOT_TOKEN is stale (the _fire_typing env fallback 401s in prod).
+            # Carried so the worker can re-fire the Bot typing indicator on
+            # pickup. No-op for OA. NOT a secret — just a chat id. The live
+            # DB-resolved token is resolved worker-side (no token in payload).
             "zalo_chat_id": norm.zalo_chat_id,
             "zalo_channel": norm.zalo_channel,
-            "zalo_bot_token": bot_token,
             "runtime_revision_id": (
                 str(runtime_authority.revision_id) if runtime_authority is not None else ""
             ),

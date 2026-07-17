@@ -24,6 +24,7 @@ _VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
     "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
 )
 _ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
+_ACTIVE_JOB_LOOKUP_STATUSES = frozenset({"matched", "no_match", "catalog_empty", "unavailable"})
 
 # ── LLM observability helpers (Redis-backed, process-agnostic) ──────────────
 _RKEY_429 = "llm:minimax_429s"  # INCR on 429, EXPIRE 60 (rolling minute)
@@ -135,6 +136,37 @@ def _is_429(exc: Exception) -> bool:
     return "429" in str(exc) or "rate" in str(exc).lower()
 
 
+def _active_job_safe_reply(tool_result: object) -> str | None:
+    """Validate one active-job tool payload and return its trusted renderer output."""
+    first_line = str(tool_result).partition("\n")[0]
+    if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+        return None
+    try:
+        payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    status = payload["status"] if "status" in payload else None
+    jobs = payload["jobs"] if "jobs" in payload else None
+    safe_reply = payload["safe_reply"] if "safe_reply" in payload else None
+    if status not in _ACTIVE_JOB_LOOKUP_STATUSES or not isinstance(jobs, list):
+        return None
+    if status == "matched":
+        if not jobs or any(
+            not isinstance(job, dict)
+            or not isinstance(job["id"] if "id" in job else None, str)
+            or not isinstance(job["title"] if "title" in job else None, str)
+            for job in jobs
+        ):
+            return None
+    elif jobs:
+        return None
+    if not isinstance(safe_reply, str) or not safe_reply.strip():
+        return None
+    return safe_reply.strip()
+
+
 def _ground_reply(reply: str, tool_results: list[str]) -> str:
     """Enforce deterministic vacancy evidence, then validate other job IDs.
 
@@ -146,20 +178,12 @@ def _ground_reply(reply: str, tool_results: list[str]) -> str:
         first_line = str(tool_result).partition("\n")[0]
         if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
             continue
-        try:
-            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
-        except (TypeError, ValueError):
-            logger.warning("active-job tool returned malformed grounding payload")
-            return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
-        safe_reply = (
-            payload["safe_reply"]
-            if isinstance(payload, dict) and "safe_reply" in payload
-            else None
-        )
-        if isinstance(safe_reply, str) and safe_reply.strip():
+        safe_reply = _active_job_safe_reply(tool_result)
+        if safe_reply is not None:
             # Vacancy prose is rendered from verified tool evidence. The LLM owns
             # semantic filter selection, but cannot contradict status or add facts.
-            return safe_reply.strip()
+            return safe_reply
+        logger.warning("active-job tool returned malformed grounding payload")
         return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
 
     try:
@@ -630,6 +654,9 @@ class MiniMaxAgent:
             for idx, (tc, out) in enumerate(zip(calls, outs)):
                 if (tc["name"] if "name" in tc else "") == required_tool:
                     required_tool_called = True
+                    if _active_job_safe_reply(out) is None:
+                        logger.warning("required LLM tool returned invalid evidence: %s", required_tool)
+                        return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
                 tool_results.append(str(out))
                 messages.append(
                     ToolMessage(

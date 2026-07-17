@@ -82,6 +82,20 @@ def test_malformed_vacancy_tool_payload_fails_closed():
     ).lower()
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"status": "invented", "jobs": [], "safe_reply": "LG đang tuyển."},
+        {"status": "matched", "jobs": [], "safe_reply": "LG đang tuyển."},
+        {"status": "no_match", "jobs": [{"id": "1", "title": "X"}], "safe_reply": "Không có."},
+    ],
+)
+def test_semantically_invalid_vacancy_payload_fails_closed(payload):
+    result = "ACTIVE_JOB_LOOKUP_JSON=" + json.dumps(payload, ensure_ascii=False)
+
+    assert "chưa thể kiểm tra" in _ground_reply("LG đang tuyển.", [result]).lower()
+
+
 @pytest.mark.asyncio
 async def test_dispatch_tool_unknown_name_returns_marker():
     assert await _dispatch_tool(None, None, "does_not_exist", {}) == "unknown tool"

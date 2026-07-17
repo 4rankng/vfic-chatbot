@@ -102,17 +102,28 @@ async def _bridge_typing(chat_id: str, bot_token: str | None = None) -> None:
     heartbeat is running it is redundant, and the caller cancels it before send.
     All failures are swallowed (typing is best-effort).
 
-    ``bot_token`` is the live DB-resolved token carried via the job dict so the
-    pulses work in prod where the env ``ZALO_BOT_TOKEN`` is stale.
+    ``bot_token`` is accepted for backwards compatibility with legacy queued
+    jobs that still carry it. When it is None (the v2 payload), the live token
+    is resolved fresh from the DB so no secret rides the queue payload.
     """
     from app.core.config import get_settings
 
     interval = get_settings().typing_heartbeat_seconds
     for _ in range(4):  # ~14s max — enough to cover any realistic preamble
         try:
+            token = bot_token
+            if token is None:
+                # Resolve the live DB token (env ZALO_BOT_TOKEN is stale in prod).
+                # Best-effort: if resolution fails, _fire_typing falls back to env.
+                from app.core.db import async_session
+                from app.services.integration_settings import IntegrationSettingsService
+
+                async with async_session() as db:
+                    cfg = await IntegrationSettingsService(db).resolve_zalo()
+                    token = cfg.bot_token
             from app.services.webhook import _fire_typing
 
-            await _fire_typing(chat_id, bot_token)
+            await _fire_typing(chat_id, token)
         except Exception:  # noqa: BLE001
             return
         await asyncio.sleep(interval)

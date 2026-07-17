@@ -201,7 +201,7 @@ def _state() -> BotRunState:
 
 
 @pytest.mark.asyncio
-async def test_direct_context_uses_one_tool_free_model_call(monkeypatch):
+async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
@@ -226,6 +226,7 @@ async def test_direct_context_uses_one_tool_free_model_call(monkeypatch):
     direct_agent = _DirectAgent()
     deps.agent = direct_agent
     deps.direct_context = _DirectReader()
+    _stub_agent(monkeypatch, "VFIC hiện có các vị trí ACTIVE.")
 
     result = await run_turn(
         BotRunState(
@@ -236,8 +237,9 @@ async def test_direct_context_uses_one_tool_free_model_call(monkeypatch):
         deps,
     )
 
-    assert result["outcome"] == "direct_context"
-    assert direct_agent.calls == 1
+    assert result["outcome"] == "sent"
+    assert result["reply"] == "VFIC hiện có các vị trí ACTIVE."
+    assert direct_agent.calls == 0
 
 
 # ---------------------------------------------------------------------------

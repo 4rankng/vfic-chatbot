@@ -639,6 +639,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         direct_context = (
             await deps.direct_context.active_context() if deps.direct_context is not None else None
         )
+        # Vacancy state is more volatile than an installation's static direct
+        # context. Force those turns through the capability-gated ACTIVE-job tool.
+        if route_turn(state.user_text).reason == "vacancy_terms":
+            direct_context = None
         recruitment_capabilities = (
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
         )
