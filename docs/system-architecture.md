@@ -308,6 +308,10 @@ sequenceDiagram
         WK->>WK: match title/company/factory/project fields<br/>using configured Company aliases;<br/>bounded typo tolerance only for identity fields
         alt matched
             WK->>WK: render bounded verified Job facts<br/>(role, location, age, experience, requirements,<br/>salary, shift, support, benefits when present)
+        else structured catalog empty/unconfigured
+            WK->>WK: inject catalog-empty grounding instruction
+            WK->>DB: search_knowledge for mentioned company/project
+            WK->>WK: LLM answers only from explicit published KB evidence;<br/>otherwise says it cannot verify
         else no match
             WK->>WK: deterministic "currently not recruiting" reply
         else lookup unavailable
@@ -486,6 +490,7 @@ honestly as such.
 load_conversation_state -> typing -> vacancy_lookup?
   vacancy_lookup (explicit question/follow-up) -> ACTIVE job match
       matched / no_match / unavailable -> deterministic reply -> combine_for_presend
+      catalog_empty -> search_knowledge + grounded LLM -> combine_for_presend
   vacancy_lookup (not applicable) -> fast lane / FAQ bypass / agent
       agent (error) -> error_reply
       agent (ok)    -> fast_safety_filter -> combine_for_presend
@@ -501,11 +506,14 @@ load_conversation_state -> typing -> vacancy_lookup?
 - **Vacancy authority:** before every fast lane, FAQ bypass, or agent turn,
   direct hiring-existence questions (and factual follow-ups to one) use the
   typed active-job lookup. Only a `jobs` record with `status=ACTIVE` and
-  `vacancy_count > 0` may support a current-hiring, company, location, or
-  salary claim. `no_match` receives the deterministic no-active-job reply;
-  lookup failures receive an availability-error reply rather than a negative
-  hiring assertion. Project cards and KB/FAQ retrieval may add context to a
-  resolved job, but never establish that a vacancy exists.
+  `vacancy_count > 0` is the primary authority for a current-hiring, company,
+  location, or salary claim. `no_match` means the non-empty structured catalog
+  was checked and receives the deterministic no-active-job reply. When that
+  catalog is empty or unconfigured, the turn falls through to the LLM with an
+  explicit `search_knowledge` instruction; only clear recruitment statements
+  in active, published KB content may support a positive answer. Missing KB
+  evidence becomes "cannot verify", never "not recruiting". Lookup failures
+  receive an availability-error reply rather than a negative hiring assertion.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
   `_dispatch_tool` dispatch by name. The deterministic router prefetches
   `search_bus_timetable` for high-confidence timetable turns and

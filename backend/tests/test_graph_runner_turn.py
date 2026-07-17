@@ -313,6 +313,50 @@ async def test_explicit_unmatched_vacancy_bypasses_agent_and_faq(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_empty_job_catalog_falls_through_to_grounded_agent(monkeypatch):
+    """An unconfigured Job catalog delegates to KB/RAG instead of claiming no hiring."""
+
+    class _Lookup:
+        async def find_active_jobs(self, query):
+            assert query == "bên lG tràng duệ mình đang tuyển ạ"
+            return SimpleNamespace(status="catalog_empty", jobs=())
+
+    class _MustNotBypass:
+        async def try_answer(self, user_text):  # noqa: ARG002
+            raise AssertionError("catalog-empty vacancy turns must reach the grounded agent")
+
+    captured: dict[str, object] = {}
+
+    async def _grounded_agent(*args, **kwargs):
+        captured.update(kwargs)
+        return "Theo thông tin tuyển dụng đã xuất bản, LG Display Tràng Duệ đang tuyển công nhân."
+
+    monkeypatch.setattr(runner, "_agent_turn", _grounded_agent)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    state = BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        user_text=(
+            "mình nhà ở quoán toan _hp gần lG tràng duệ."
+            "bên lG tràng duệ mình đang tuyển ạ"
+        ),
+    )
+    deps = _deps(zalo, conversation=svc, faq_bypass=_MustNotBypass())
+    deps.retrieval = _Lookup()
+
+    result = await run_turn(state, deps)
+
+    assert result["outcome"] == "sent"
+    assert "LG Display Tràng Duệ đang tuyển" in result["reply"]
+    assert "chưa tuyển" not in result["reply"].lower()
+    assert captured["vacancy_catalog_empty"] is True
+    assert recorded[0]["stage_timings"]["lane"] == "vacancy_rag_fallback"
+    assert recorded[0]["stage_timings"]["vacancy_lookup_status"] == "catalog_empty"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "user_text",
     [
@@ -1138,6 +1182,48 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
 
     assert "system_prompt_ms" in timings
     assert timings["system_prompt_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_agent_turn_injects_catalog_empty_grounding_instruction(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            return user_text
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    state = BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        user_text="LG Tràng Duệ đang tuyển ạ?",
+    )
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    prompt = await _agent_turn(
+        state,
+        deps,
+        state.user_text,
+        chat_id="z1",
+        recent_messages=[],
+        vacancy_catalog_empty=True,
+    )
+
+    assert "DANH MỤC JOB CÓ CẤU TRÚC ĐANG TRỐNG" in prompt
+    assert "search_knowledge" in prompt
+    assert "không được suy ra" in prompt.lower()
 
 
 @pytest.mark.asyncio

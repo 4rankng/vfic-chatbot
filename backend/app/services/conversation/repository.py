@@ -21,6 +21,7 @@ from app.models.conversation import (
     Message,
     MessageSender,
 )
+from app.models.contact import ContactChannelIdentity
 from app.models.user import Role, User
 from app.models.outbox import OutboundOutbox
 from app.services.viewer_scope import viewer_scope_filter, viewer_scope_sql
@@ -64,6 +65,29 @@ class ConversationRepository:
         return (
             await self.db.scalars(
                 select(Conversation).where(Conversation.zalo_chat_id == zalo_chat_id)
+            )
+        ).first()
+
+    async def get_by_identity(
+        self, *, provider: str, account_key: str, external_id: str
+    ) -> Conversation | None:
+        """Canonical lookup by neutral (provider, account_key, external_id).
+
+        Replaces the soft ``zalo_chat_id`` match for new code. The conversation
+        is joined to its ContactChannelIdentity, which carries the neutral triple.
+        """
+        return (
+            await self.db.scalars(
+                select(Conversation)
+                .join(
+                    ContactChannelIdentity,
+                    Conversation.channel_identity_id == ContactChannelIdentity.id,
+                )
+                .where(
+                    ContactChannelIdentity.provider == provider,
+                    ContactChannelIdentity.account_key == account_key,
+                    ContactChannelIdentity.external_id == external_id,
+                )
             )
         ).first()
 

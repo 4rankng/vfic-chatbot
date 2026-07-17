@@ -139,6 +139,13 @@ def test_company_match_does_not_authorize_an_unmatched_role():
     assert outcome.status == "no_match"
 
 
+def test_empty_structured_catalog_is_not_a_negative_hiring_claim():
+    outcome = select_matching_active_jobs("LG Tràng Duệ đang tuyển ạ", [])
+
+    assert outcome.status == "catalog_empty"
+    assert outcome.jobs == ()
+
+
 def test_single_matched_job_renders_verified_advisory_details():
     job = _job(
         title="Công nhân thời vụ",

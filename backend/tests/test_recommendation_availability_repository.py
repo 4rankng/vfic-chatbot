@@ -51,18 +51,51 @@ async def test_find_active_jobs_filters_to_active_positive_vacancies():
 @pytest.mark.asyncio
 async def test_find_active_jobs_can_be_scoped_to_knowledge_base_projects():
     db = MagicMock()
-    result = MagicMock()
-    result.all.return_value = []
-    db.execute = AsyncMock(return_value=result)
+    active_result = MagicMock()
+    active_result.all.return_value = []
+    catalog_result = MagicMock()
+    catalog_result.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(side_effect=[active_result, catalog_result])
 
     outcome = await RecommendationRepository(db).find_active_jobs(
         "thợ hàn CO2", project_ids=["project-a", "project-b"]
     )
 
-    assert outcome.status == "no_match"
-    statement = db.execute.await_args.args[0]
+    assert outcome.status == "catalog_empty"
+    statement = db.execute.await_args_list[0].args[0]
     sql = str(statement.compile(dialect=postgresql.dialect()))
     assert "companies.project_id IN" in sql
+
+
+@pytest.mark.asyncio
+async def test_nonempty_catalog_with_no_open_jobs_is_a_real_no_match():
+    db = MagicMock()
+    active_result = MagicMock()
+    active_result.all.return_value = []
+    catalog_result = MagicMock()
+    catalog_result.scalar_one_or_none.return_value = "inactive-job-id"
+    db.execute = AsyncMock(side_effect=[active_result, catalog_result])
+
+    outcome = await RecommendationRepository(db).find_active_jobs(
+        "LG Tràng Duệ đang tuyển ạ", project_ids=["project-a"]
+    )
+
+    assert outcome.status == "no_match"
+    assert db.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_find_active_jobs_with_no_active_agent_projects_reports_empty_catalog():
+    db = MagicMock()
+    db.execute = AsyncMock()
+
+    outcome = await RecommendationRepository(db).find_active_jobs(
+        "LG Tràng Duệ đang tuyển ạ", project_ids=[]
+    )
+
+    assert outcome.status == "catalog_empty"
+    assert outcome.jobs == ()
+    db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio

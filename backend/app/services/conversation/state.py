@@ -119,14 +119,99 @@ class ConversationState:
 
     # --- webhook-side primitives (used by US-006 chatbot) ---
     async def ensure(self, zalo_chat_id: str, *, zalo_channel: str = "bot") -> Conversation:
-        conv = await self.repo.get_by_zalo(zalo_chat_id)
-        if conv is None:
-            conv = Conversation(zalo_chat_id=zalo_chat_id, zalo_channel=zalo_channel)
-            self.db.add(conv)
+        """Compatibility facade: resolve a Zalo (channel, chat_id) to the neutral
+        identity and delegate to :meth:`ensure_by_identity`.
+
+        Retained during the Zalo→neutral migration (Phase 2–3) so existing
+        webhook/sender callers keep working. New code should call
+        ``ensure_by_identity`` directly. The Zalo account keys are the stable
+        synthetic values backfilled by Alembic 0047. OA's ``oa:`` storage prefix
+        is stripped from the external id, matching the backfill normalization.
+        """
+        if zalo_channel == "oa":
+            provider = "zalo_oa"
+            account_key = "default:zalo_oa"
+            external_id = zalo_chat_id.removeprefix("oa:") if zalo_chat_id.startswith("oa:") else zalo_chat_id
+        else:
+            provider = "zalo_bot"
+            account_key = "default:zalo_bot"
+            external_id = zalo_chat_id
+        return await self.ensure_by_identity(
+            provider=provider,
+            account_key=account_key,
+            external_id=external_id,
+            zalo_chat_id_alias=zalo_chat_id,
+            zalo_channel_alias=zalo_channel,
+        )
+
+    async def ensure_by_identity(
+        self,
+        *,
+        provider: str,
+        account_key: str,
+        external_id: str,
+        zalo_chat_id_alias: str | None = None,
+        zalo_channel_alias: str | None = None,
+    ) -> Conversation:
+        """Canonical create-or-fetch keyed by (provider, account_key, external_id).
+
+        Atomically ensures a Contact + ContactChannelIdentity + Conversation for
+        the neutral triple. The Contact is created one-per-identity (matching the
+        1:1 conversation/identity invariant). Two first-contact events for the
+        same triple resolve to the same rows; the conversation's UNIQUE on
+        channel_identity_id is the final authority.
+
+        ``zalo_chat_id_alias`` / ``zalo_channel_alias`` populate the nullable
+        compatibility columns for Zalo rows so legacy reads keep working during
+        the migration. They stay NULL for Messenger (no Zalo equivalent).
+        """
+        from app.models.contact import Contact, ContactChannelIdentity
+
+        conv = await self.repo.get_by_identity(
+            provider=provider, account_key=account_key, external_id=external_id
+        )
+        if conv is not None:
+            # Backfill a missing Zalo alias on an existing row (defensive).
+            if zalo_chat_id_alias and not conv.zalo_chat_id:
+                conv.zalo_chat_id = zalo_chat_id_alias
+            if zalo_channel_alias and (
+                not conv.zalo_channel or conv.zalo_channel == "bot"
+            ) and zalo_channel_alias != "bot":
+                conv.zalo_channel = zalo_channel_alias
             await self.db.flush()
-        elif not getattr(conv, "zalo_channel", None):
-            conv.zalo_channel = zalo_channel
+            return conv
+
+        # Resolve or create the Contact + identity in the same transaction.
+        identity = (
+            await self.db.scalars(
+                select(ContactChannelIdentity).where(
+                    ContactChannelIdentity.provider == provider,
+                    ContactChannelIdentity.account_key == account_key,
+                    ContactChannelIdentity.external_id == external_id,
+                )
+            )
+        ).first()
+        if identity is None:
+            contact = Contact()
+            self.db.add(contact)
             await self.db.flush()
+            identity = ContactChannelIdentity(
+                contact_id=contact.id,
+                provider=provider,
+                account_key=account_key,
+                external_id=external_id,
+            )
+            self.db.add(identity)
+            await self.db.flush()
+
+        conv = Conversation(
+            zalo_chat_id=zalo_chat_id_alias,
+            zalo_channel=zalo_channel_alias or "bot",
+            contact_id=identity.contact_id,
+            channel_identity_id=identity.id,
+        )
+        self.db.add(conv)
+        await self.db.flush()
         return conv
 
     def semi_auto_inactive(self, conv: Conversation) -> bool:

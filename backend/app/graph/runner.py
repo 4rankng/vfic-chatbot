@@ -53,6 +53,15 @@ logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
 
+_CATALOG_EMPTY_GROUNDING_INSTRUCTION = """
+DANH MỤC JOB CÓ CẤU TRÚC ĐANG TRỐNG/CHƯA ĐƯỢC CẤU HÌNH cho phạm vi Agent hiện tại.
+Đây không phải bằng chứng rằng doanh nghiệp không tuyển. Hãy gọi search_knowledge cho đúng
+doanh nghiệp/dự án được nhắc đến. Chỉ được xác nhận đang tuyển và nêu chi tiết khi kết quả KB
+đang hoạt động, đã xuất bản nói rõ điều đó. Không được suy ra tình trạng tuyển dụng từ danh mục
+dự án, tên dự án, hay kiến thức chung. Nếu KB không có bằng chứng tuyển dụng rõ ràng, hãy nói
+chưa thể xác minh từ dữ liệu hiện có và hỏi người dùng muốn được nhân viên kiểm tra hay không.
+""".strip()
+
 
 def _remaining(state: BotRunState) -> float:
     """Seconds left until the propagated turn deadline (``inf`` if unset).
@@ -146,6 +155,7 @@ async def _agent_turn(
     recent_messages: list[Message],
     timings: dict | None = None,
     manifest_policy=None,
+    vacancy_catalog_empty: bool = False,
 ) -> str:
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
         return await run_manifest_composed_agent(user_text, deps, policy=manifest_policy)
@@ -221,13 +231,17 @@ async def _agent_turn(
             round((time.monotonic() - lead_t0) * 1000)
         )
 
+    route_hint = routing_instruction(route)
+    if vacancy_catalog_empty:
+        route_hint = f"{route_hint}\n\n{_CATALOG_EMPTY_GROUNDING_INSTRUCTION}"
+
     contextual_user_text = build_agent_user_text(
         chat_id=chat_id,
         current_user_text=user_text,
         recent_messages=recent_messages,
         lead_profile=lead_profile,
         lead_collection_instruction=lead_collection_instruction,
-        route_hint=routing_instruction(route),
+        route_hint=route_hint,
     )
     # LLM stage timing is captured inside ``MiniMaxAgent.agent`` (clients.py) as
     # the split ``llm_queue_ms`` (semaphore wait) + ``llm_model_ms`` (inference)
@@ -466,11 +480,13 @@ def _faq_bypass_allowed(user_text: str) -> bool:
 
 async def _vacancy_reply(
     user_text: str, recent_messages: list[Message], retrieval
-) -> tuple[str, str] | None:
+) -> tuple[str | None, str] | None:
     """Resolve explicit hiring questions before any FAQ or LLM answer path.
 
-    The lookup is deliberately before the fast/FAQ lanes: project catalog and
-    knowledge-base text cannot establish that a role has an open vacancy.
+    The lookup is deliberately before the fast/FAQ lanes. A non-empty Job
+    catalog remains authoritative; an empty catalog is surfaced separately so
+    the grounded agent can consult active, published knowledge instead of
+    turning missing structured data into a negative hiring claim.
     """
     query = vacancy_lookup_query(user_text, recent_messages)
     if query is None:
@@ -480,7 +496,10 @@ async def _vacancy_reply(
     except Exception:  # noqa: BLE001 — an outage must not become a no-vacancy claim
         logger.warning("active-job vacancy lookup failed", exc_info=True)
         return VACANCY_LOOKUP_UNAVAILABLE_REPLY, "unavailable"
-    return format_vacancy_lookup(lookup), str(getattr(lookup, "status", "unavailable"))
+    status = str(getattr(lookup, "status", "unavailable"))
+    if status == "catalog_empty":
+        return None, status
+    return format_vacancy_lookup(lookup), status
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
@@ -605,12 +624,17 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             and (recruitment_capabilities is None or "job_advisory" in recruitment_capabilities)
             else None
         )
+        vacancy_catalog_empty = vacancy is not None and vacancy[1] == "catalog_empty"
         if vacancy is not None:
-            candidate, vacancy_status = vacancy
+            vacancy_candidate, vacancy_status = vacancy
             timings["vacancy_lookup_ms"] = int(round((time.monotonic() - vacancy_t0) * 1000))
             timings["vacancy_lookup_status"] = vacancy_status
-            timings["lane"] = "vacancy_lookup"
-            outcome_label = "vacancy_lookup"
+            if vacancy_catalog_empty:
+                timings["lane"] = "vacancy_rag_fallback"
+            else:
+                candidate = vacancy_candidate or ""
+                timings["lane"] = "vacancy_lookup"
+                outcome_label = "vacancy_lookup"
 
         # --- FAQ / template fast lane (zero LLM calls) ---
         # Greetings / thanks / goodbye / help return instant tôi/bạn templates with
@@ -715,7 +739,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 direct_context, deps, state.user_text, recent_messages, timings
             )
             outcome_label = "direct_context"
-        elif vacancy is not None:
+        elif vacancy is not None and not vacancy_catalog_empty:
             pass
         elif fast is not None:
             timings["lane"] = "fast_lane"
@@ -744,7 +768,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 bypass.faq_id,
             )
         else:
-            timings["lane"] = "agent"
+            timings["lane"] = (
+                "vacancy_rag_fallback" if vacancy_catalog_empty else "agent"
+            )
             # --- agent (runs to completion; NO hard cap) ---
             # The propagated deadline is advisory only — it bounds the FAQ-bypass
             # lookup above, never the agent. Cancelling a live LLM call mid-generation
@@ -760,6 +786,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 }
                 if manifest_policy is not None:
                     agent_kwargs["manifest_policy"] = manifest_policy
+                if vacancy_catalog_empty:
+                    agent_kwargs["vacancy_catalog_empty"] = True
                 raw = await _agent_turn(state, deps, state.user_text, **agent_kwargs)
             except LLMThrottled:
                 raise  # let worker handle degradation msg (no LLM call)

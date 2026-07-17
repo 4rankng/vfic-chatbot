@@ -99,7 +99,11 @@ class Conversation(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    zalo_chat_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    # Zalo compatibility alias (Alembic 0047): nullable for Messenger rows,
+    # which carry no Zalo chat id. UNIQUE constraint still holds for non-NULL
+    # Zalo values (Postgres allows multiple NULLs). The canonical identifier is
+    # now (channel_identity_id, contact_id) below.
+    zalo_chat_id: Mapped[str | None] = mapped_column(String, unique=True, nullable=True, index=True)
     # Channel badge/source for the user-visible Zalo inbox. New channel-aware
     # conversations scope zalo_chat_id as "{channel}:{external_id}".
     zalo_channel: Mapped[str] = mapped_column(
@@ -136,10 +140,14 @@ class Conversation(Base):
     assigned_recruiter_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    contact_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="RESTRICT")
+    # Canonical channel identity (Alembic 0047): NOT NULL after backfill.
+    # Every conversation belongs to exactly one ContactChannelIdentity + Contact;
+    # the composite FK to contact_channel_identities(id, contact_id) is declared
+    # in __table_args__ above.
+    contact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="RESTRICT"), nullable=False
     )
-    channel_identity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    channel_identity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     contact: Mapped["Contact | None"] = relationship(lazy="selectin", foreign_keys=[contact_id])
     channel_identity: Mapped["ContactChannelIdentity | None"] = relationship(
         lazy="selectin", foreign_keys=[channel_identity_id], overlaps="contact"
@@ -236,6 +244,11 @@ class Message(Base):
         server_default="SENT",
     )
     zalo_message_id: Mapped[str | None] = mapped_column(String)
+    # Provider-neutral message id (Alembic 0047). Backfilled from zalo_message_id
+    # for Zalo rows; Messenger rows use the Graph API mid. The scoped partial
+    # unique index uq_messages_conv_provider_message on (conversation_id,
+    # provider_message_id) is the durable inbound idempotency boundary.
+    provider_message_id: Mapped[str | None] = mapped_column(String(128))
     external_error: Mapped[str | None] = mapped_column(Text)
     runtime_revision_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

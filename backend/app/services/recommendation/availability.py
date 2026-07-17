@@ -9,7 +9,7 @@ from typing import Literal
 
 from app.core.text import normalize_vietnamese_text
 
-ActiveJobLookupStatus = Literal["matched", "no_match", "unavailable"]
+ActiveJobLookupStatus = Literal["matched", "no_match", "catalog_empty", "unavailable"]
 
 _QUERY_STOPWORDS = frozenset(
     {
@@ -141,11 +141,12 @@ def select_matching_active_jobs(
     of the same job. This deliberately rejects substring matches such as ``tho`` in
     ``thong`` and never combines facts from different jobs.
     """
+    if not jobs:
+        return ActiveJobLookup("catalog_empty")
+
     terms = vacancy_query_terms(query)
     if not terms:
-        return (
-            ActiveJobLookup("matched", tuple(jobs[:top_k])) if jobs else ActiveJobLookup("no_match")
-        )
+        return ActiveJobLookup("matched", tuple(jobs[:top_k]))
 
     matches: list[ActiveJob] = []
     required = set(terms)

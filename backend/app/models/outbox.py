@@ -63,6 +63,17 @@ class OutboundOutbox(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     zalo_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Provider-neutral message id (Alembic 0047). Backfilled from zalo_message_id
+    # for Zalo rows; Messenger rows use the Graph API mid. Used by the delivery
+    # finalizer to match receipts scoped by (provider, account, provider_message_id).
+    provider_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Channel-account authority fence (Alembic 0047): the channel-account
+    # generation stamped at command creation. The dispatcher revalidates it
+    # immediately before provider I/O so a stale command (queued across
+    # disconnect/reconnect/replacement) is suppressed rather than sent under a
+    # superseded account. Distinct from ``authority_generation`` (runtime
+    # installation authority); both must be current for a send to proceed.
+    channel_account_generation: Mapped[int | None] = mapped_column(BigInteger)
     runtime_revision_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("installation_manifest_revisions.id", ondelete="RESTRICT"),

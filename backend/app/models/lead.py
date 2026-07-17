@@ -51,6 +51,14 @@ class Lead(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     zalo_id: Mapped[str | None] = mapped_column(String)
+    # Canonical contact relationship (Alembic 0047). Indexed for the dashboard/
+    # lead-board joins that now resolve through contacts rather than the soft
+    # zalo_id = zalo_chat_id match. Nullable for backfill safety; new rows are
+    # populated by the contact-keyed conversation-lead trigger. ``zalo_id``
+    # remains as a Zalo-only compatibility alias (NULL for Messenger leads).
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="RESTRICT")
+    )
     name: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(Text)
     birth_year: Mapped[int | None] = mapped_column(Integer)

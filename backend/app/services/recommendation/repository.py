@@ -99,11 +99,11 @@ class RecommendationRepository:
         """Find currently open jobs for an explicit vacancy-existence question.
 
         This is intentionally separate from profile-based recommendations: no lead
-        data is required, and database failures remain distinguishable from a genuine
-        no-match result.
+        data is required. An empty/unconfigured catalog, a genuine no-match, and a
+        database failure remain distinct so the graph can choose the right authority.
         """
         if project_ids == []:
-            return ActiveJobLookup("no_match")
+            return ActiveJobLookup("catalog_empty")
         try:
             predicates = [
                 Job.status == JobStatus.ACTIVE,
@@ -121,6 +121,16 @@ class RecommendationRepository:
                     .limit(self.CANDIDATE_LIMIT)
                 )
             ).all()
+            if not rows:
+                catalog_query = select(Job.id).join(Company, Job.company_id == Company.id)
+                if project_ids is not None:
+                    catalog_query = catalog_query.where(Company.project_id.in_(project_ids))
+                catalog_probe = await self.db.execute(
+                    catalog_query.limit(1)
+                )
+                if catalog_probe.scalar_one_or_none() is not None:
+                    return ActiveJobLookup("no_match")
+                return ActiveJobLookup("catalog_empty")
         except Exception:
             logger.warning("active-job availability lookup failed", exc_info=True)
             try:
