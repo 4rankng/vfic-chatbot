@@ -201,7 +201,7 @@ def _state() -> BotRunState:
 
 
 @pytest.mark.asyncio
-async def test_vacancy_turn_uses_llm_with_assigned_direct_context(monkeypatch):
+async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
@@ -215,9 +215,7 @@ async def test_vacancy_turn_uses_llm_with_assigned_direct_context(monkeypatch):
 
         async def direct(self, user_text, *, system, metrics=None):
             self.calls += 1
-            assert "LG Display Tràng Duệ đang tuyển công nhân sản xuất." in system
-            assert "bên IG tràng duệ mình đang tuyển ạ" in user_text
-            return "LG Display Tràng Duệ đang tuyển công nhân sản xuất."
+            raise AssertionError("vacancy state must not come from static direct-context text")
 
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
@@ -227,10 +225,7 @@ async def test_vacancy_turn_uses_llm_with_assigned_direct_context(monkeypatch):
     deps.agent = direct_agent
     deps.direct_context = _DirectReader()
 
-    async def _must_not_use_rag_agent(*args, **kwargs):  # noqa: ARG001
-        raise AssertionError("direct-context vacancy must use the assigned KB LLM path")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_use_rag_agent)
+    _stub_agent(monkeypatch, "VFIC hiện có các vị trí ACTIVE.")
 
     result = await run_turn(
         BotRunState(
@@ -244,9 +239,55 @@ async def test_vacancy_turn_uses_llm_with_assigned_direct_context(monkeypatch):
         deps,
     )
 
-    assert result["outcome"] == "direct_context"
-    assert result["reply"] == "LG Display Tràng Duệ đang tuyển công nhân sản xuất."
-    assert direct_agent.calls == 1
+    assert result["outcome"] == "sent"
+    assert result["reply"] == "VFIC hiện có các vị trí ACTIVE."
+    assert direct_agent.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_vacancy_salary_followup_bypasses_tool_free_direct_context(monkeypatch):
+    class _DirectReader:
+        async def active_context(self):
+            return DirectContext(
+                knowledge_base_id="kb-1",
+                persona_body="Bạn là tư vấn viên.",
+                knowledge_text="Tài liệu cũ ghi lương 30 triệu.",
+            )
+
+    class _DirectAgent:
+        calls = 0
+
+        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+            self.calls += 1
+            raise AssertionError("vacancy pay must be rechecked against live Job data")
+
+    history = [
+        SimpleNamespace(
+            sender="WORKER",
+            body="bên lG tràng duệ mình đang tuyển ạ",
+        ),
+        SimpleNamespace(sender="WORKER", body="cho nao cung duoc"),
+    ]
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, messages=history)
+    deps = _deps(_FakeZalo(), conversation=svc)
+    direct_agent = _DirectAgent()
+    deps.agent = direct_agent
+    deps.direct_context = _DirectReader()
+    _stub_agent(monkeypatch, "Thu nhập đã xác minh từ Job ACTIVE.")
+
+    result = await run_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="luong bao nhieu da",
+        ),
+        deps,
+    )
+
+    assert result["outcome"] == "sent"
+    assert result["reply"] == "Thu nhập đã xác minh từ Job ACTIVE."
+    assert direct_agent.calls == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1082,7 +1123,7 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rag_vacancy_turn_routes_exact_reported_message_to_assigned_kb(monkeypatch):
+async def test_rag_vacancy_turn_requires_active_job_tool_for_exact_reported_message(monkeypatch):
     from app.graph.runner import _agent_turn
 
     query = (
@@ -1124,9 +1165,62 @@ async def test_rag_vacancy_turn_routes_exact_reported_message_to_assigned_kb(mon
     )
 
     assert reply == "LG Display Tràng Duệ đang tuyển."
-    assert captured["allowed_tools"] == ("search_knowledge",)
+    assert captured["allowed_tools"] == ("list_active_jobs",)
     assert captured["lookup_query"] == query
-    assert "required_tool" not in captured
+    assert captured["required_tool"] == "list_active_jobs"
+
+
+@pytest.mark.asyncio
+async def test_rag_vacancy_salary_followup_rechecks_active_jobs(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    query = "luong bao nhieu da"
+    history = [
+        SimpleNamespace(
+            sender="WORKER",
+            body=(
+                "mình nhà ở quoán toan _hp gần lG tràng duệ."
+                "bên lG tràng duệ mình đang tuyển ạ"
+            ),
+        ),
+        SimpleNamespace(sender="WORKER", body="cho nao cung duoc"),
+    ]
+    captured: dict[str, object] = {}
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured["user_text"] = user_text
+            captured.update(kwargs)
+            return "safe reply"
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=query),
+        deps,
+        query,
+        chat_id="z1",
+        recent_messages=history,
+        timings={"lane": "agent"},
+    )
+
+    assert captured["allowed_tools"] == ("list_active_jobs",)
+    assert captured["required_tool"] == "list_active_jobs"
 
 
 @pytest.mark.asyncio

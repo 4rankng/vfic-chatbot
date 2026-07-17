@@ -221,6 +221,7 @@ async def _truncate_domain_tables_before_each_test(integration_database: Integra
                 "contact_channel_identities",
                 "contacts",
                 "channel_accounts",
+                "integration_settings",
             ):
                 exists = await conn.scalar(
                     sa_text("SELECT to_regclass(:t)"), {"t": f"public.{table}"}

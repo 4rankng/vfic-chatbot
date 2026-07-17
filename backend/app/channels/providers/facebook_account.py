@@ -131,7 +131,48 @@ class FacebookPageLifecycle:
         Same-Page reactivation reuses the existing row and advances its
         generation (token rotation). A different Page creates a new row and
         marks the prior active Page INACTIVE (distinct history scope).
+
+        Concurrency: two admins activating different Pages race on the partial
+        unique index ``uq_channel_accounts_one_active_facebook_messenger``. The
+        loser's commit raises IntegrityError; we catch it, roll back, archive
+        the now-active winner, and retry once. The index is the final authority.
         """
+        from sqlalchemy.exc import IntegrityError
+
+        for attempt in (1, 2):
+            try:
+                return await self._activate_once(
+                    page_id=page_id,
+                    page_name=page_name,
+                    page_access_token=page_access_token,
+                    admin_id=admin_id,
+                )
+            except IntegrityError:
+                if attempt == 2:
+                    raise  # second collision → surface; the index is genuinely contested
+                await self.db.rollback()
+                # The winner is now committed ACTIVE; archive it before retry.
+                winner = await self.db.scalar(
+                    select(ChannelAccount).where(
+                        ChannelAccount.provider == ct.PROVIDER_FACEBOOK_MESSENGER,
+                        ChannelAccount.status == ChannelAccountStatus.ACTIVE,
+                        ChannelAccount.account_key != page_id,
+                    )
+                )
+                if winner is not None:
+                    winner.status = ChannelAccountStatus.INACTIVE
+                    winner.updated_at = datetime.now(timezone.utc)
+                    await self.db.commit()
+                # loop retries _activate_once
+
+    async def _activate_once(
+        self,
+        *,
+        page_id: str,
+        page_name: str,
+        page_access_token: str,
+        admin_id,
+    ) -> ChannelAccount:
         from app.services.integration_settings import IntegrationSettingsService
 
         # 1. Resolve existing account for this Page id (reactivation) or None.

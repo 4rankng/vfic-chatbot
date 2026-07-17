@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-17
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -301,16 +301,20 @@ sequenceDiagram
     WK->>Z: typing heartbeat (every 4s, bot channel)
 
     rect rgb(235, 242, 255)
-    Note over WK,DB: ── grounded LLM vacancy lookup ──
-    alt direct-context KB assigned
+    Note over WK,DB: ── grounded LLM / live vacancy lookup ──
+    alt explicit vacancy question or vacancy-thread follow-up
+        WK->>WK: route_turn -> required list_active_jobs
+        WK->>DB: query active Job data
+        WK->>WK: validate ACTIVE_JOB_LOOKUP_JSON and render safe_reply
+    else direct-context KB assigned (non-vacancy facts)
         WK->>DB: load complete assigned KB text
         WK->>WK: one LLM call over persona + full KB + recent history
     else RAG KB assigned
-        WK->>WK: route vacancy intent to search_knowledge
+        WK->>WK: route non-vacancy facts to search_knowledge
         WK->>DB: semantic retrieval within active Agent KB projects
         WK->>WK: inject retrieved evidence into one LLM generation
     end
-    WK->>WK: assert hiring/details only from retrieved or full-KB evidence;<br/>otherwise say no verified information was found
+    WK->>WK: assert hiring/details only from safe_reply or retrieved KB evidence;<br/>otherwise say no verified information was found
     end
 
     rect rgb(230, 245, 235)
@@ -479,9 +483,9 @@ honestly as such.
 
 ```
 load_conversation_state -> typing -> direct_context?
-  direct_context (available) -> one grounded LLM call over full assigned KB
+  direct_context (available, non-vacancy facts) -> one grounded LLM call over full assigned KB
   direct_context (not available) -> fast lane / FAQ bypass / routed agent
-      vacancy intent -> assigned-KB search_knowledge prefetch -> grounded LLM
+      explicit vacancy or vacancy-thread follow-up -> required list_active_jobs -> safe_reply
       other agent intent -> scoped tool-calling LLM
       agent (error) -> error_reply
       agent (ok)    -> fast_safety_filter -> combine_for_presend
@@ -494,22 +498,21 @@ load_conversation_state -> typing -> direct_context?
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
-- **Vacancy authority:** direct hiring questions skip the deterministic FAQ lane
-  and are answered by the LLM from the Agent's assigned recruitment knowledge.
-  RAG knowledge bases run a scoped `search_knowledge` lookup first and inject
-  the retrieved evidence into a single generation; direct-context knowledge
-  bases provide their complete text to a single generation. A positive hiring,
-  location, salary, or benefit claim requires explicit evidence in that assigned
-  KB. Missing or failed retrieval becomes "no verified information found", never
-  a fabricated vacancy or a false "not recruiting" claim. The structured
-  `list_active_jobs` tool remains available to profile-based recommendation
-  flows, but it no longer intercepts ordinary vacancy questions.
+- **Vacancy authority:** explicit vacancy questions and vacancy-thread factual
+  follow-ups are routed to required `list_active_jobs`, not to static direct
+  context. The tool returns `ACTIVE_JOB_LOOKUP_JSON`; when status is `matched`,
+  the client validates the payload and replaces model prose with the tool's
+  `safe_reply`. `search_knowledge` remains the document-fact path for contact,
+  admin, and FAQ detail turns; it is not the live vacancy authority. Missing,
+  failed, or malformed vacancy evidence becomes "no verified information
+  found", never a fabricated vacancy or a false "not recruiting" claim.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
   `_dispatch_tool` dispatch by name. The deterministic router prefetches
   `search_bus_timetable` for high-confidence timetable turns and
-  `search_knowledge` for high-confidence vacancy and FAQ-detail turns. Vacancy
-  retrieval results, including miss/error states, are injected into a tool-free
-  generation so the LLM answers once without repeating the same lookup.
+  `search_knowledge` for high-confidence contact/admin and FAQ-detail turns.
+  Vacancy turns use `list_active_jobs` as a required tool, and a valid active-
+  job payload short-circuits the final answer to the tool-rendered `safe_reply`
+  so the LLM does not restate or reinterpret live vacancy facts.
 - **Tool-loop ceiling:** `max_llm_calls_per_turn` (default 6).
 - **Typing heartbeat:** `_typing_heartbeat` sends `typing` to Zalo every 4s
   while a turn is processing (keeps the candidate's typing indicator alive).
@@ -685,8 +688,8 @@ Per-chat bot locks are durable conversation-row fields:
 - **Caching:** `rag_cache_enabled` (TTL 300s) + embedding cache (TTL 86400s).
 - **Proactive prefetch:** `_should_prefetch_knowledge` (`clients.py:78`) runs
   KB retrieval before the agent call when the turn looks knowledge-bound.
-- **Tools exposed to agent:** `search_knowledge`, `search_user_memory`,
-  `search_bus_timetable`.
+- **Tools exposed to agent:** `list_active_jobs`, `search_knowledge`,
+  `search_user_memory`, `search_bus_timetable`.
 - **Benchmarks:** `scripts/benchmark_rag.py` (golden-case scoring) and
   `scripts/capture_bus_timetable_golden.py`.
 

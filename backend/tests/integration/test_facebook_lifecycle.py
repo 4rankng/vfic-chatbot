@@ -186,3 +186,85 @@ async def test_lifecycle_disconnect_marks_inactive_keeps_history(integration_dat
         )
         assert archived is not None
         assert not archived.is_active
+
+
+async def test_page_token_round_trip_set_then_resolve_decrypts_correctly(
+    integration_database,
+):
+    """The critical round-trip the Phase 4 review flagged was untested.
+
+    Drives set_facebook_page_token → resolve_facebook against the real DB so a
+    double-encryption bug (C2), a missing-method bug (C1), or a context-binding
+    bypass (H1) cannot ship silently. The decrypted token must equal the input.
+    """
+    from app.core.db import async_session
+    from app.services.integration_settings import IntegrationSettingsService
+    from app.models.user import User
+
+    async with async_session() as db:
+        admin = User(
+            email="fb-roundtrip@vfic.test",
+            password_hash="x",
+            full_name="Roundtrip",
+            role="admin",
+        )
+        db.add(admin)
+        await db.flush()
+
+        service = IntegrationSettingsService(db)
+        await service.set_facebook_page_token(
+            "page-RT", "EAAB-secret-page-token-XYZ", updated_by=admin.id
+        )
+
+    async with async_session() as db:
+        service = IntegrationSettingsService(db)
+        cfg = await service.resolve_facebook("page-RT")
+        assert cfg is not None, "resolve_facebook returned None — token decrypt failed"
+        assert cfg.page_access_token == "EAAB-secret-page-token-XYZ"
+        assert cfg.page_id == "page-RT"
+
+
+async def test_page_token_wrong_context_does_not_decrypt(integration_database):
+    """A token encrypted for page-A must NOT resolve under page-B (Red Team #7).
+
+    This is the runtime enforcement of the context-binding: even if a row were
+    copied between Pages, resolve_facebook(page-B) must return None.
+    """
+    from app.core.db import async_session
+    from app.services.integration_settings import IntegrationSettingsService
+    from app.models.user import User
+
+    async with async_session() as db:
+        admin = User(
+            email="fb-ctx@vfic.test", password_hash="x", full_name="Ctx", role="admin"
+        )
+        db.add(admin)
+        await db.flush()
+        service = IntegrationSettingsService(db)
+        await service.set_facebook_page_token(
+            "page-A", "EAAB-token-A", updated_by=admin.id
+        )
+        # Copy the page-A ciphertext into a page-B key (simulating a row move).
+        from app.models.integration import IntegrationSetting
+        from sqlalchemy import select
+
+        row = await db.scalar(
+            select(IntegrationSetting).where(
+                IntegrationSetting.key == "facebook_page_token:page-A"
+            )
+        )
+        assert row is not None
+        db.add(
+            IntegrationSetting(
+                key="facebook_page_token:page-B",
+                encrypted_value=row.encrypted_value,
+                is_secret=True,
+            )
+        )
+        await db.commit()
+
+    async with async_session() as db:
+        service = IntegrationSettingsService(db)
+        # page-B should NOT decrypt — the ciphertext was bound to page-A.
+        cfg = await service.resolve_facebook("page-B")
+        assert cfg is None, "wrong-context token decrypted — context binding failed"

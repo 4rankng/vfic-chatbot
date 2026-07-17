@@ -617,7 +617,9 @@ class IntegrationSettingsService:
         """Resolve the credentials for one active Page, or None if not configured.
 
         The Page token is decrypted with the page_id as AEAD context (Red Team
-        #7): a ciphertext produced for a different Page fails to decrypt.
+        #7): a ciphertext produced for a different Page fails to decrypt. A
+        legacy v1 (non-context-bound) ciphertext is rejected so the context
+        binding is enforced at runtime, not just at write time.
         """
         if not page_id:
             return None
@@ -625,7 +627,7 @@ class IntegrationSettingsService:
         token = await self._stored_value_with_context(
             self._fb_page_token_key(page_id), page_id
         )
-        app_secret = await self._stored_value(FB_APP_SECRET) or s.meta_app_secret
+        app_secret = (await self._stored_values((FB_APP_SECRET,))).get(FB_APP_SECRET) or s.meta_app_secret
         if not token:
             return None
         return FacebookRuntimeConfig(
@@ -639,7 +641,12 @@ class IntegrationSettingsService:
         )
 
     async def _stored_value_with_context(self, key: str, context: str) -> str:
-        """Fetch one encrypted setting row and decrypt with AEAD context."""
+        """Fetch one encrypted setting row and decrypt with AEAD context.
+
+        Page tokens must be context-bound (``v2:``); a legacy ``v1:`` row is
+        rejected as corrupt so a token moved between Pages cannot decrypt via
+        the context-less fallback (Red Team #7).
+        """
         if not hasattr(self.db, "scalars"):
             return ""
         row = await self.db.scalar(
@@ -647,8 +654,17 @@ class IntegrationSettingsService:
         )
         if row is None:
             return ""
+        stored = row.encrypted_value or ""
+        if not stored.startswith("v2:"):
+            # A v1 row for a Page token is either a corrupt write or a legacy
+            # import. Fail closed (reconnect required) rather than decrypting
+            # without the context binding.
+            logger.warning(
+                "facebook page token rejected (not context-bound) key=%s", key
+            )
+            return ""
         try:
-            return self.cipher.decrypt_with_context(row.encrypted_value, context)
+            return self.cipher.decrypt_with_context(stored, context)
         except Exception:  # noqa: BLE001 — wrong-context / corrupt ciphertext
             # A token moved between Pages or a rotated encryption key. Surface
             # as "not resolvable" so the caller fails closed (reconnect required).
@@ -661,13 +677,39 @@ class IntegrationSettingsService:
     async def set_facebook_page_token(
         self, page_id: str, token: str, *, updated_by
     ) -> None:
-        """Persist one Page access token with page_id-bound ciphertext."""
-        await self._write_setting(
-            self._fb_page_token_key(page_id),
-            self.cipher.encrypt_with_context(token, page_id),
-            actor_id=updated_by,
-            is_secret=True,
+        """Persist one Page access token with page_id-bound ciphertext.
+
+        Writes the row directly (NOT via ``_write_setting``) so the pre-sealed
+        ``v2:`` ciphertext is stored verbatim — ``_write_setting`` would
+        double-encrypt it.
+        """
+        from datetime import datetime, timezone
+
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        sealed = self.cipher.encrypt_with_context(token, page_id)
+        key = self._fb_page_token_key(page_id)
+        now = datetime.now(timezone.utc)
+        stmt = (
+            pg_insert(IntegrationSetting)
+            .values(
+                key=key,
+                encrypted_value=sealed,
+                is_secret=True,
+                updated_by=updated_by,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=["key"],
+                set_={
+                    "encrypted_value": sealed,
+                    "is_secret": True,
+                    "updated_by": updated_by,
+                    "updated_at": now,
+                },
+            )
         )
+        await self.db.execute(stmt)
         await self.db.commit()
         await bump_cache_version(NS_INTEGRATION_FACEBOOK)
 

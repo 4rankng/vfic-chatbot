@@ -189,8 +189,10 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
     assert reply == "Thông tin có trong tài liệu."
 
 
-async def test_non_recruitment_manifest_without_knowledge_authority_fails_closed_for_vacancy():
-    active, persona = _active(capabilities=["conversation"], pack_key="customer_support")
+async def test_non_recruitment_manifest_without_job_authority_fails_closed_for_vacancy():
+    active, persona = _active(
+        capabilities=["conversation", "knowledge"], pack_key="customer_support"
+    )
     policy = build_resolved_runtime_policy(active, persona_body=persona)
     assert policy is not None
 

@@ -614,24 +614,40 @@ async def complete_facebook_oauth(
         payload.page_id,
     )
 
+    # Consume the flow record up front (single-use). A crash after this point
+    # requires a fresh OAuth — never a replay of the same flow_id.
+    await redis.delete(flow_key)
+
     try:
         page_token = await get_page_access_token(user_token, payload.page_id)
         probed_id = await probe_page_identity(page_token)
         if probed_id != payload.page_id:
             raise FacebookOAuthError("page identity mismatch")
         await subscribe_app_to_page(payload.page_id, page_token)
-    except FacebookOAuthError as exc:
-        raise HTTPException(status_code=502, detail=f"Kích hoạt Trang thất bại: {exc}") from exc
+    except FacebookOAuthError:
+        # Generic Vietnamese error — never echo the Graph response body (it can
+        # contain the access token in some malformed-token error shapes).
+        raise HTTPException(
+            status_code=502,
+            detail="Kích hoạt Trang thất bại. Vui lòng kết nối lại.",
+        )
 
-    lifecycle = FacebookPageLifecycle(db)
-    account = await lifecycle.activate_or_reactivate(
-        page_id=payload.page_id,
-        page_name=page_name,
-        page_access_token=page_token,
-        admin_id=admin.id,
-    )
-    # Consume the flow record (single-use).
-    await redis.delete(flow_key)
+    try:
+        lifecycle = FacebookPageLifecycle(db)
+        account = await lifecycle.activate_or_reactivate(
+            page_id=payload.page_id,
+            page_name=page_name,
+            page_access_token=page_token,
+            admin_id=admin.id,
+        )
+    except Exception:
+        # The Meta-side subscription succeeded but the DB activation failed
+        # (e.g. concurrent activation). Best-effort unsubscribe so we don't
+        # leave a Meta-side subscription with no DB counterpart, then re-raise.
+        from app.channels.providers.facebook_oauth import unsubscribe_app_from_page
+
+        await unsubscribe_app_from_page(payload.page_id, page_token)
+        raise
     return FacebookAccountStatusOut(
         page_id_suffix=payload.page_id[-4:],
         label=page_name,

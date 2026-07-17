@@ -60,10 +60,10 @@ EXPECTED_ROUTE_COUNTS = {
 EXPECTED_ROUTE_INVENTORY_SHA256 = "befdf32e90f5012f212fb2436ac8c1a6b70345dd3987b34992db70147a74e82d"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 68,  # Phase 4: +10 Facebook OAuth/account provider-boundary references
+    "provider_boundary": 69,  # Phase 4: +11 Facebook OAuth/account provider-boundary references
     "queue_producer": 20,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "caf6d584a2e5172cc021823cf5130e935318036f06d49d12ed2841f681618cb3"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "eb5697ab857fea9613c0cd3e87a9aa567b190517a7c249eb24607acb6fb45d75"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
