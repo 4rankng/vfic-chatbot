@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Literal
 
 from app.core.text import normalize_vietnamese_text
@@ -28,22 +29,32 @@ _QUERY_STOPWORDS = frozenset(
         "hay",
         "hien",
         "khong",
+        "ko",
         "la",
         "lam",
         "minh",
+        "ma",
         "nao",
+        "nhe",
+        "nhi",
         "o",
         "phai",
+        "roi",
+        "sao",
+        "thay",
         "toi",
         "tuyen",
         "tuyen dung",
         "ung",
         "ung tuyen",
         "viec",
+        "viet",
         "vfic",
         "voi",
     }
 )
+_IDENTITY_FUZZY_MIN_LENGTH = 5
+_IDENTITY_FUZZY_THRESHOLD = 0.86
 
 
 @dataclass(frozen=True)
@@ -59,6 +70,21 @@ class ActiveJob:
     salary_min: int | None = None
     salary_max: int | None = None
     vacancy_count: int | None = None
+    company_aliases: tuple[str, ...] = ()
+    project_name: str = ""
+    project_slug: str = ""
+    address: str = ""
+    shift: str = ""
+    gender_requirement: str = ""
+    age_min: int | None = None
+    age_max: int | None = None
+    experience_required: str = ""
+    accommodation_support: bool | None = None
+    meal_support: bool | None = None
+    transport_support: bool | None = None
+    description: str = ""
+    requirements: str = ""
+    benefits: str = ""
 
 
 @dataclass(frozen=True)
@@ -77,13 +103,33 @@ def vacancy_query_terms(query: str) -> tuple[str, ...]:
     terms: list[str] = []
     for token in tokens:
         if token in _QUERY_STOPWORDS or (
-            len(token) < 3 and not any(char.isdigit() for char in token)
+            len(token) < 2 and not any(char.isdigit() for char in token)
         ):
             continue
         if token not in seen:
             seen.add(token)
             terms.append(token)
     return tuple(terms)
+
+
+def _field_search_tokens(value: str) -> set[str]:
+    tokens = re.findall(r"[a-z0-9]+", normalize_vietnamese_text(value or ""))
+    searchable = set(tokens)
+    if len(tokens) >= 2:
+        acronym = "".join(token[0] for token in tokens if token)
+        if len(acronym) >= 2:
+            searchable.add(acronym)
+    return searchable
+
+
+def _matches_identity_typo(term: str, identity_tokens: set[str]) -> bool:
+    if len(term) < _IDENTITY_FUZZY_MIN_LENGTH:
+        return False
+    return any(
+        len(candidate) >= _IDENTITY_FUZZY_MIN_LENGTH
+        and SequenceMatcher(None, term, candidate).ratio() >= _IDENTITY_FUZZY_THRESHOLD
+        for candidate in identity_tokens
+    )
 
 
 def select_matching_active_jobs(
@@ -104,19 +150,24 @@ def select_matching_active_jobs(
     matches: list[ActiveJob] = []
     required = set(terms)
     for job in jobs:
-        haystack = " ".join(
-            part
-            for part in (
-                job.title,
-                job.company_name,
-                job.factory_name,
-                job.province,
-                job.district,
-            )
-            if part
+        identity_fields = (
+            job.company_name,
+            *job.company_aliases,
+            job.factory_name,
+            job.address,
+            job.province,
+            job.district,
+            job.project_name,
+            job.project_slug,
         )
-        job_tokens = set(re.findall(r"[a-z0-9]+", normalize_vietnamese_text(haystack)))
-        if required <= job_tokens:
+        identity_tokens = set().union(
+            *(_field_search_tokens(field) for field in identity_fields if field)
+        )
+        job_tokens = identity_tokens | _field_search_tokens(job.title)
+        if all(
+            term in job_tokens or _matches_identity_typo(term, identity_tokens)
+            for term in required
+        ):
             matches.append(job)
     return (
         ActiveJobLookup("matched", tuple(matches[:top_k]))

@@ -14,6 +14,7 @@ from typing import Awaitable, Callable, Literal, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.text import normalize_vietnamese_text
 from app.models.conversation import ConversationMode, ConversationStatus
 from app.models.lead import Lead
 from app.prompts.candidate_extraction import CANDIDATE_EXTRACT_SYSTEM_PROMPT
@@ -45,6 +46,49 @@ _HUMAN_REVIEW_INTENTS: frozenset[str] = frozenset(
     {"non_candidate", "spam", "bot_testing"}
 )
 HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.95
+_EXPLICIT_HUMAN_REVIEW_EVIDENCE: dict[ContactIntent, tuple[str, ...]] = {
+    "non_candidate": (
+        "khong phai ung vien",
+        "khong phai nguoi tim viec",
+        "khong tim viec",
+        "khong co nhu cau tim viec",
+        "toi khong can tim viec",
+        "minh khong can tim viec",
+        "toi la nha tuyen dung",
+        "minh la nha tuyen dung",
+        "toi muon tuyen nguoi",
+        "minh muon tuyen nguoi",
+        "toi dang tuyen nguoi",
+        "minh dang tuyen nguoi",
+    ),
+    "bot_testing": (
+        "toi dang kiem tra bot",
+        "minh dang kiem tra bot",
+        "toi dang kiem tra chatbot",
+        "minh dang kiem tra chatbot",
+        "toi dang kiem thu bot",
+        "minh dang kiem thu bot",
+        "toi dang test bot",
+        "minh dang test bot",
+        "toi dang test chatbot",
+        "minh dang test chatbot",
+    ),
+    "spam": (
+        "toi dang spam",
+        "minh dang spam",
+        "toi gui spam",
+        "minh gui spam",
+        "toi muon spam",
+        "minh muon spam",
+        "toi muon pha he thong",
+        "minh muon pha he thong",
+    ),
+}
+
+
+def has_explicit_human_review_evidence(user_text: str, intent: ContactIntent) -> bool:
+    normalized = normalize_vietnamese_text(user_text or "")
+    return any(phrase in normalized for phrase in _EXPLICIT_HUMAN_REVIEW_EVIDENCE.get(intent, ()))
 
 
 @dataclass(frozen=True)
@@ -237,6 +281,17 @@ class CandidateExtractionService:
         )
 
         if result.requires_human_review:
+            if not has_explicit_human_review_evidence(user_text, result.contact_intent):
+                logger.info(
+                    "candidate extraction escalation ignored without explicit evidence intent=%s",
+                    result.contact_intent,
+                )
+                return CandidateExtraction(
+                    lead_patch=None,
+                    memory_facts=[],
+                    contact_intent="uncertain",
+                    intent_confidence=0.0,
+                )
             if conversation is not None and expected_conversation_version is not None:
                 await conversation_service.escalate_extracted_intent(
                     conversation,

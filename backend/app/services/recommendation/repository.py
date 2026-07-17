@@ -19,7 +19,7 @@ from typing import Any, Literal
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.company import Company
+from app.models.company import Company, Project
 from app.models.job import Job
 from app.models.job import JobStatus
 from app.services.recommendation.availability import (
@@ -113,8 +113,9 @@ class RecommendationRepository:
                 predicates.append(Company.project_id.in_(project_ids))
             rows = (
                 await self.db.execute(
-                    select(Job, Company.name)
+                    select(Job, Company.name, Company.aliases, Project.name, Project.slug)
                     .join(Company, Job.company_id == Company.id)
+                    .join(Project, Company.project_id == Project.id)
                     .where(*predicates)
                     .order_by(Job.updated_at.desc())
                     .limit(self.CANDIDATE_LIMIT)
@@ -139,8 +140,23 @@ class RecommendationRepository:
                 salary_min=job.salary_min,
                 salary_max=job.salary_max,
                 vacancy_count=job.vacancy_count,
+                company_aliases=tuple(company_aliases or ()),
+                project_name=str(project_name or ""),
+                project_slug=str(project_slug or ""),
+                address=str(getattr(job, "address", "") or ""),
+                shift=str(getattr(job, "shift", "") or ""),
+                gender_requirement=str(getattr(job, "gender_requirement", "") or ""),
+                age_min=getattr(job, "age_min", None),
+                age_max=getattr(job, "age_max", None),
+                experience_required=str(getattr(job, "experience_required", "") or ""),
+                accommodation_support=getattr(job, "accommodation_support", None),
+                meal_support=getattr(job, "meal_support", None),
+                transport_support=getattr(job, "transport_support", None),
+                description=str(getattr(job, "description", "") or ""),
+                requirements=str(getattr(job, "requirements", "") or ""),
+                benefits=str(getattr(job, "benefits", "") or ""),
             )
-            for job, company_name in rows
+            for job, company_name, company_aliases, project_name, project_slug in rows
         ]
         return select_matching_active_jobs(query, jobs, top_k=top_k)
 

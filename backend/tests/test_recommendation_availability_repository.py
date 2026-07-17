@@ -29,6 +29,9 @@ async def test_find_active_jobs_filters_to_active_positive_vacancies():
                 vacancy_count=1,
             ),
             "Công ty A",
+            ["CTA"],
+            "Dự án A",
+            "du-an-a",
         )
     ]
     db.execute = AsyncMock(return_value=result)
@@ -37,6 +40,8 @@ async def test_find_active_jobs_filters_to_active_positive_vacancies():
 
     assert outcome.status == "matched"
     assert outcome.jobs[0].id == "job-1"
+    assert outcome.jobs[0].company_aliases == ("CTA",)
+    assert outcome.jobs[0].project_name == "Dự án A"
     statement = db.execute.await_args.args[0]
     sql = str(statement.compile(dialect=postgresql.dialect()))
     assert "jobs.status" in sql

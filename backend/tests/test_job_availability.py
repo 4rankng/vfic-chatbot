@@ -14,6 +14,12 @@ from app.graph.vacancy import (
 from app.services.recommendation.availability import ActiveJob, ActiveJobLookup, select_matching_active_jobs
 
 
+REPORTED_LG_QUERY = (
+    "mình nhà ở quoán toan _hp gần lG tràng duệ."
+    "bên lG tràng duệ mình đang tuyển ạ"
+)
+
+
 def _job(**overrides) -> ActiveJob:
     values = {
         "id": "job-1",
@@ -70,6 +76,118 @@ def test_exact_role_match_returns_same_active_job_evidence():
     assert "Thợ hàn CO2" in rendered
     assert "VFIC Manufacturing" in rendered
     assert "10-14 triệu" in rendered
+
+
+def test_candidate_home_context_does_not_block_company_vacancy_lookup():
+    job = _job(
+        title="Công nhân sản xuất",
+        company_name="LG Display",
+        factory_name="LG Display Tràng Duệ",
+        province="Hải Phòng",
+    )
+
+    focused_query = vacancy_lookup_query(REPORTED_LG_QUERY, [])
+    outcome = select_matching_active_jobs(focused_query or "", [job])
+
+    assert focused_query == "bên lG tràng duệ mình đang tuyển ạ"
+    assert outcome.status == "matched"
+    assert outcome.jobs == (job,)
+
+    no_punctuation = REPORTED_LG_QUERY.replace(".", " ")
+    assert vacancy_lookup_query(no_punctuation, []) == "bên lG tràng duệ mình đang tuyển ạ"
+
+
+def test_two_character_company_alias_is_not_discarded():
+    lg_job = _job(
+        title="Công nhân sản xuất",
+        company_name="Công ty TNHH Điện tử",
+        company_aliases=("LG", "LGD"),
+    )
+    unrelated_job = _job(
+        id="job-2",
+        title="Công nhân sản xuất",
+        company_name="Samsung Display",
+    )
+
+    outcome = select_matching_active_jobs("LG đang tuyển ạ", [unrelated_job, lg_job])
+
+    assert outcome.status == "matched"
+    assert outcome.jobs == (lg_job,)
+
+
+def test_company_typo_and_conversational_words_still_resolve_verified_job():
+    lg_job = _job(
+        title="Công nhân sản xuất",
+        company_name="LG Display",
+        company_aliases=("LG",),
+    )
+
+    outcome = select_matching_active_jobs(
+        "mình thấy LG dislay bạn viết là đang tuyển mà",
+        [lg_job],
+    )
+
+    assert outcome.status == "matched"
+    assert outcome.jobs == (lg_job,)
+
+
+def test_company_match_does_not_authorize_an_unmatched_role():
+    lg_operator = _job(title="Công nhân sản xuất", company_name="LG Display")
+
+    outcome = select_matching_active_jobs("LG tuyển thợ hàn không?", [lg_operator])
+
+    assert outcome.status == "no_match"
+
+
+def test_single_matched_job_renders_verified_advisory_details():
+    job = _job(
+        title="Công nhân thời vụ",
+        company_name="LG Display",
+        factory_name="Khu công nghiệp Tràng Duệ",
+        district="An Dương",
+        province="Hải Phòng",
+        age_min=18,
+        age_max=50,
+        gender_requirement="Nam/Nữ",
+        experience_required="Không yêu cầu kinh nghiệm, có đào tạo",
+        shift="Ca ngày hoặc ca đêm",
+        transport_support=True,
+        accommodation_support=True,
+        description="Sản xuất và kiểm tra màn hình.",
+        requirements="Hồ sơ gồm CCCD.",
+    )
+
+    rendered = format_vacancy_lookup(ActiveJobLookup("matched", (job,)))
+
+    assert "Đúng rồi ạ" in rendered
+    assert "LG Display" in rendered
+    assert "Khu công nghiệp Tràng Duệ, An Dương, Hải Phòng" in rendered
+    assert "Công nhân thời vụ" in rendered
+    assert "18–50 tuổi" in rendered
+    assert "Nam/Nữ" in rendered
+    assert "Không yêu cầu kinh nghiệm, có đào tạo" in rendered
+    assert "Hồ sơ gồm CCCD" in rendered
+    assert "xe đưa đón" in rendered
+    assert "chỗ ở" in rendered
+
+
+def test_single_matched_job_does_not_invent_missing_requirements():
+    rendered = format_vacancy_lookup(
+        ActiveJobLookup(
+            "matched",
+            (
+                _job(
+                    title="Công nhân sản xuất",
+                    company_name="LG Display",
+                    requirements="",
+                    experience_required="",
+                ),
+            ),
+        )
+    )
+
+    assert "CCCD" not in rendered
+    assert "không yêu cầu kinh nghiệm" not in rendered.lower()
 
 
 def test_nonmatching_catalog_like_words_do_not_match_welder_query():

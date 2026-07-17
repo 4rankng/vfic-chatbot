@@ -892,3 +892,224 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
     # conversation-scoped zalo_id and the external OA user id.
     assert len(enrich_calls) == 1
     assert enrich_calls[0] == {"zalo_id": "oa:user-123", "user_id": "user-123"}
+
+
+# ─── Phase 1 characterization: Zalo behaviors the neutral contracts must
+# preserve when Phase 3 wraps Bot/OA behind the channel-neutral ports.
+#
+# These tests freeze the shape and semantics — not the implementation — so a
+# Phase 3 refactor can prove it preserves them. They are additive and do not
+# change existing coverage.
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def test_phase1_bot_normalizer_emits_five_field_shape():
+    """The Bot normalizer emits exactly the fields the future neutral
+    ChannelInboundMessage will be built from: chat_id, channel, text, name,
+    msg_id (plus derived hash). Phase 3 wraps this; the shape must not drift.
+    """
+    from app.services.webhook import ZaloWebhookService
+
+    norm = ZaloWebhookService.normalize_bot(
+        {
+            "message": {
+                "message_id": 42,
+                "text": "Ứng tuyển",
+                "chat": {"id": "chat-1"},
+                "from": {"id": 7, "name": "An"},
+            }
+        }
+    )
+    assert norm is not None
+    # the five neutral-relevant fields
+    assert norm.zalo_chat_id == "chat-1"
+    assert norm.zalo_channel == "bot"
+    assert norm.user_text == "Ứng tuyển"
+    assert norm.user_name == "An"
+    assert norm.msg_id == "42"
+    # deterministic dedup hash derived from msg_id (the durable idempotency key)
+    assert norm.msg_hash == hashlib.sha256(b"42").hexdigest()[:32]
+
+
+def test_phase1_bot_normalizer_rejects_non_text_without_side_effect():
+    """Non-text events (media, location, sticker) must not produce a
+    NormalizedMessage — the Phase 5 Messenger edge mirrors this rule.
+    """
+    from app.services.webhook import ZaloWebhookService
+
+    # no text
+    assert (
+        ZaloWebhookService.normalize_bot(
+            {"message": {"chat": {"id": "c"}, "photo": "x"}}
+        )
+        is None
+    )
+    # no chat id
+    assert (
+        ZaloWebhookService.normalize_bot({"message": {"text": "hi"}}) is None
+    )
+
+
+def test_phase1_oa_scoped_chat_id_prefix_is_the_account_boundary():
+    """OA external ids are namespaced as ``oa:<user_id>`` — this prefix is the
+    seed for the neutral account-scoped identity (account_key separates the OA
+    account from the Bot account even before Phase 2 backfill). Phase 3 must
+    preserve this prefix behavior in the OA normalizer wrapper.
+    """
+    from app.services.webhook import ZaloWebhookService
+
+    norm = ZaloWebhookService.normalize_oa(
+        {
+            "event_name": "user_send_text",
+            "sender": {"id": "user-9", "name": "Bình"},
+            "message": {"text": "hello", "msg_id": "m9"},
+        }
+    )
+    assert norm is not None
+    assert norm.zalo_chat_id == "oa:user-9"
+    assert norm.zalo_channel == "oa"
+
+
+def test_phase1_channel_string_is_bot_or_oa_only():
+    """The two Zalo provider/channel strings that Phase 3 will register as
+    neutral provider ids. A third value must never appear from the normalizers.
+    """
+    from app.services.webhook import ZaloWebhookService
+
+    bot = ZaloWebhookService.normalize_bot(
+        {"message": {"text": "x", "chat": {"id": "c"}, "message_id": 1}}
+    )
+    oa = ZaloWebhookService.normalize_oa(
+        {
+            "event_name": "user_send_text",
+            "sender": {"id": "u"},
+            "message": {"text": "x", "msg_id": "m"},
+        }
+    )
+    assert bot.zalo_channel == "bot"
+    assert oa.zalo_channel == "oa"
+    assert {bot.zalo_channel, oa.zalo_channel} == {"bot", "oa"}
+
+
+def test_phase1_typing_difference_bot_fires_oa_does_not():
+    """Bot has a typing endpoint; OA does not. The neutral capability contract
+    (TypingCapability) must preserve this: the Bot wrapper will implement it,
+    the OA wrapper will not. This test freezes the *source* of that difference
+    by asserting the typing call site is *structurally nested* inside an
+    ``if norm.zalo_channel == "bot"`` guard — not merely textually after it.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from app.services.webhook import ZaloWebhookService
+
+    src = textwrap.dedent(inspect.getsource(ZaloWebhookService.handle))
+    tree = ast.parse(src)
+
+    # Walk with parent tracking so we can assert structural dominance, not
+    # just textual ordering. A bare line-order check would pass even if the
+    # call were moved into an unrelated later branch.
+    parent_map: dict[int, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parent_map[id(child)] = parent
+
+    typing_calls = [
+        n
+        for n in ast.walk(tree)
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "_fire_typing"
+        )
+    ]
+    assert len(typing_calls) == 1, "exactly one _fire_typing call site in handle()"
+    call = typing_calls[0]
+
+    # Walk up the parent chain; the nearest enclosing If must test
+    # `norm.zalo_channel == "bot"` (or the reverse). This is the real gate.
+    def _is_bot_channel_test(node: ast.AST) -> bool:
+        if not isinstance(node, ast.If):
+            return False
+        test = node.test
+        # match `X == "bot"` or `"bot" == X`
+        if not isinstance(test, ast.Compare):
+            return False
+        if not (test.ops and isinstance(test.ops[0], ast.Eq)):
+            return False
+        for operand in (test.left, *test.comparators):
+            if isinstance(operand, ast.Constant) and operand.value == "bot":
+                return True
+        return False
+
+    node: ast.AST = call
+    found_gate = False
+    while id(node) in parent_map:
+        parent = parent_map[id(node)]
+        if _is_bot_channel_test(parent):
+            found_gate = True
+            break
+        node = parent
+    assert found_gate, (
+        "_fire_typing call must be nested inside an "
+        "`if norm.zalo_channel == \"bot\"` guard (OA has no typing endpoint)"
+    )
+
+
+# ─── Phase 1 characterization: send-error classification taxonomy ────────────
+#
+# The neutral ChannelSendResult reuses the existing error_class taxonomy from
+# app.graph.send_classification. These tests freeze that mapping so Phase 3's
+# adapter wrappers and Phase 5's Messenger adapter cannot drift it.
+
+
+def test_phase1_ambiguous_transport_classes_map_to_send_unknown():
+    """The conservative classifier: any failure that MAY have reached the
+    provider after the request was written is non-retriable SEND_UNKNOWN.
+    """
+    from app.graph.send_classification import (
+        AMBIGUOUS_SEND_CLASSES,
+        delivery_status_for_send_error,
+    )
+    from app.models.conversation import DeliveryStatus
+
+    for cls in AMBIGUOUS_SEND_CLASSES:
+        assert (
+            delivery_status_for_send_error(cls, ok=False) is DeliveryStatus.SEND_UNKNOWN
+        ), f"{cls} should map to SEND_UNKNOWN"
+
+
+def test_phase1_connect_error_is_retryable_failed_not_send_unknown():
+    """A definite pre-send connection failure is retryable FAILED, not
+    terminal SEND_UNKNOWN. Phase 3/5 adapters must preserve this distinction.
+    """
+    from app.graph.send_classification import delivery_status_for_send_error
+
+    assert delivery_status_for_send_error("connect_error", ok=False) is None
+    # None → caller falls back to default FAILED (retryable)
+
+
+def test_phase1_send_classification_is_provider_neutral():
+    """The taxonomy module's executable code imports no provider module and
+    branches on no provider id — the proof that the SEND_UNKNOWN decision
+    does not branch on Zalo vs Facebook. Docstrings may mention Zalo as
+    historical context; the *code* must not.
+    """
+    import ast
+    import inspect
+
+    from app.graph import send_classification
+
+    src = inspect.getsource(send_classification)
+    # Strip docstrings and comments by parsing to AST and back, leaving only
+    # executable code. Provider names in prose are acceptable; in code they are not.
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+            node.value = ast.Constant(value="")  # strip docstring
+    code_only = ast.unparse(tree)
+    lowered = code_only.lower()
+    assert "zalo" not in lowered
+    assert "facebook" not in lowered
+    assert "messenger" not in lowered

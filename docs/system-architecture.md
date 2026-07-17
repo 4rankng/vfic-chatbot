@@ -303,9 +303,11 @@ sequenceDiagram
     rect rgb(235, 242, 255)
     Note over WK,DB: ── deterministic vacancy guard ──
     alt explicit vacancy question or factual follow-up
-        WK->>DB: find_active_jobs (ACTIVE + vacancy_count > 0)
+        WK->>WK: isolate vacancy clause from candidate-profile context
+        WK->>DB: find_active_jobs (ACTIVE + vacancy_count > 0)<br/>within active Agent KB projects
+        WK->>WK: match title/company/factory/project fields<br/>using configured Company aliases;<br/>bounded typo tolerance only for identity fields
         alt matched
-            WK->>WK: render facts from the matching job record
+            WK->>WK: render bounded verified Job facts<br/>(role, location, age, experience, requirements,<br/>salary, shift, support, benefits when present)
         else no match
             WK->>WK: deterministic "currently not recruiting" reply
         else lookup unavailable
@@ -398,9 +400,12 @@ thanks, goodbye, and simple help phrases out of the persistence queue entirely.
 
 The extraction result includes the structured fields `contact_intent` and
 `intent_confidence`. Only `non_candidate`, `spam`, or `bot_testing` at confidence
-`>= 0.95` triggers review. Candidate signals take priority, ambiguous content is
-`uncertain`, and bot output or previously generated notes are never evidence for
-the classification. The intent decision is not written into candidate notes.
+`>= 0.95` **and explicit deterministic evidence for that same negative intent in
+the current user message** triggers review. An unsupported negative model label
+is downgraded to `uncertain`; candidate/recruitment language therefore cannot
+silence future bot turns by itself. Bot output or previously generated notes are
+never evidence for the classification, and the intent decision is not written
+into candidate notes.
 
 On a positive result, one conditional transaction changes the conversation to
 `HUMAN` + `OPEN` with `needs_human=true`, clears any bot lease, and stores a fixed

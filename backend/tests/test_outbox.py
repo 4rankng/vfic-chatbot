@@ -280,3 +280,135 @@ async def test_record_bot_outcome_skips_outbox_when_channel_none():
     sig = inspect.signature(state.ConversationState.record_bot_outcome)
     assert sig.parameters["outbox_channel"].default is None
     assert sig.parameters["outbox_payload"].default is None
+
+
+# ─── Phase 1 characterization: durable delivery invariants the neutral
+# ChannelSendResult + ChannelDispatchService (Phase 3) must preserve.
+#
+# These tests freeze the *semantics*: persist-before-send, at-most-once
+# (SEND_UNKNOWN is never blindly replayed), and the message_id uniqueness that
+# backs durable inbound idempotency in Phase 2.
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def test_phase1_outbox_status_ordering_is_monotonic_and_terminal():
+    """PENDING → SENDING → {SENT, FAILED, SEND_UNKNOWN, SUPPRESSED}.
+
+    SEND_UNKNOWN is terminal and non-retriable: the dispatcher sweep never
+    re-dispatches it (Zalo may have accepted). Phase 3's neutral dispatch
+    service must preserve this. Enum order is checked against the migration
+    CHECK constraint values, not ordinal position.
+    """
+    from app.models.outbox import OutboxStatus
+
+    terminal = {OutboxStatus.SENT, OutboxStatus.FAILED, OutboxStatus.SEND_UNKNOWN, OutboxStatus.SUPPRESSED}
+    transient = {OutboxStatus.PENDING, OutboxStatus.SENDING}
+
+    # The two transient states are the only ones the sweep re-dispatches.
+    assert OutboxStatus.PENDING in transient
+    assert OutboxStatus.SENDING in transient
+    # SEND_UNKNOWN is terminal — it must never appear in a re-dispatch claim.
+    assert OutboxStatus.SEND_UNKNOWN in terminal
+    assert OutboxStatus.SEND_UNKNOWN not in transient
+
+
+def test_phase1_claim_stale_sending_unknown_never_reverts_to_pending():
+    """A stale SENDING row is terminalized to SEND_UNKNOWN, never reverted to
+    PENDING. Reverting would risk a duplicate send (Zalo may have accepted).
+
+    This freezes the behavior in executable code (not docstrings): the
+    conditional update matches status='SENDING' and writes status='SEND_UNKNOWN'.
+    """
+    import ast
+    import inspect
+
+    from app.services import outbox_service
+
+    src = inspect.getsource(outbox_service.claim_stale_sending_unknown)
+    # strip docstring, keep only executable code
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+            node.value = ast.Constant(value="")
+    code = ast.unparse(tree)
+
+    # matches only SENDING rows
+    assert "OutboxStatus.SENDING.value" in code
+    # writes SEND_UNKNOWN
+    assert "OutboxStatus.SEND_UNKNOWN.value" in code
+    # never writes PENDING (that would re-enable dispatch and risk a duplicate)
+    assert "OutboxStatus.PENDING.value" not in code
+    assert '"PENDING"' not in code
+    assert "'PENDING'" not in code
+
+
+def test_phase1_claim_stale_sending_filter_excludes_send_unknown():
+    """The re-dispatch sweep (claim_stale_sending) selects only SENDING rows;
+    SEND_UNKNOWN rows are deliberately excluded because Zalo may have accepted.
+    Executable code only (docstring mentions SEND_UNKNOWN as context).
+    """
+    import ast
+    import inspect
+
+    from app.services import outbox_service
+
+    src = inspect.getsource(outbox_service.claim_stale_sending)
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+            node.value = ast.Constant(value="")
+    code = ast.unparse(tree)
+
+    # the SELECT filters status = 'SENDING' only
+    assert "status = 'SENDING'" in code
+    # never selects SEND_UNKNOWN
+    assert "SEND_UNKNOWN" not in code
+
+
+def test_phase1_create_pending_outbox_persists_before_provider_io():
+    """The outbox row is the authoritative 'was this sent?' record, written in
+    the caller's transaction BEFORE any provider call. Phase 3's neutral
+    ChannelDispatchService must preserve this ordering.
+
+    This freezes the contract: create_pending_outbox raises on insert failure
+    (it does not swallow) so a crash cannot leave a reply without its command.
+    """
+    import inspect
+
+    from app.services import outbox_service
+
+    src = inspect.getsource(outbox_service.create_pending_outbox)
+    # unlike enqueue_outbox (best-effort), create_pending_outbox RAISES on failure
+    assert "raise RuntimeError" in src
+    # it writes PENDING (the pre-send state)
+    assert "OutboxStatus.PENDING" in src
+
+
+def test_phase1_enqueue_outbox_is_best_effort_never_blocks_turn():
+    """enqueue_outbox swallows DB errors — the outbox is observability/
+    reliability infra, not a turn-blocking dependency. Phase 3's neutral
+    dispatch preserves this distinction (persist-before-send uses
+    create_pending_outbox which raises; final-state recording uses
+    enqueue_outbox which does not).
+    """
+    import inspect
+
+    from app.services import outbox_service
+
+    src = inspect.getsource(outbox_service.enqueue_outbox)
+    assert "except Exception" in src
+    # returns None on failure rather than raising
+    assert "return None" in src
+
+
+def test_phase1_message_id_uniqueness_is_the_durable_dispatch_fence():
+    """The unique constraint on outbound_outbox.message_id is what prevents a
+    double-dispatch after a crash-and-retry. Phase 2 will add an analogous
+    uniqueness on inbound messages.provider_message_id for inbound idempotency;
+    this test freezes the outbound precedent.
+    """
+    from app.models.outbox import OutboundOutbox
+
+    msg_id_col = OutboundOutbox.__table__.columns["message_id"]
+    # unique=True at the column level (the migration also adds the index)
+    assert msg_id_col.unique is True

@@ -13,6 +13,7 @@ from app.services.candidate_extraction import (
     CandidateExtraction,
     CandidateExtractionService,
     candidate_turn,
+    has_explicit_human_review_evidence,
 )
 from app.services.lead.normalizers import (
     _pick,
@@ -28,6 +29,21 @@ from app.services.lead.normalizers import (
 from app.services.lead.repository import _UPSQL
 from app.services.lead.probing import lead_collection_question
 from app.services.memory_service import greeting_gate
+
+
+def test_human_review_evidence_requires_explicit_non_negated_language():
+    assert has_explicit_human_review_evidence(
+        "Tôi đang kiểm tra bot",
+        "bot_testing",
+    )
+    assert not has_explicit_human_review_evidence(
+        "Tôi không kiểm tra bot",
+        "bot_testing",
+    )
+    assert not has_explicit_human_review_evidence(
+        "Tôi không gửi spam",
+        "spam",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -679,6 +695,70 @@ class TestCandidateExtractionService:
         )
         upsert.assert_not_awaited()
         memory_save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_persist_does_not_escalate_recruitment_question_from_model_label(
+        self, monkeypatch
+    ):
+        db = object()
+        model_result = CandidateExtraction(
+            lead_patch=None,
+            memory_facts=[],
+            contact_intent="non_candidate",
+            intent_confidence=0.99,
+        )
+        extract = AsyncMock(return_value=model_result)
+        conversation = SimpleNamespace(
+            id="conversation-1",
+            mode="BOT",
+            status="OPEN",
+            version=1,
+        )
+        escalate = AsyncMock(return_value=True)
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return None
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return conversation
+
+            async def escalate_extracted_intent(self, *args, **kwargs) -> bool:
+                return await escalate(*args, **kwargs)
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", extract)
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+
+        persisted = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "zalo_1",
+            (
+                "mình nhà ở quoán toan _hp gần lG tràng duệ."
+                "bên lG tràng duệ mình đang tuyển ạ"
+            ),
+            "Hiện VFIC chưa tuyển vị trí này.",
+            expected_conversation_version=1,
+        )
+
+        assert persisted.contact_intent == "uncertain"
+        assert persisted.intent_confidence == 0.0
+        escalate.assert_not_awaited()
 
 
 def test_lead_upsert_deduplicates_individual_note_lines_atomically():
