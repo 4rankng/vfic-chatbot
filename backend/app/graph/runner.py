@@ -33,7 +33,12 @@ from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.direct_context import build_direct_system, build_direct_user_text
 from app.graph.prompts import ERROR_REPLY
-from app.graph.router import route_turn, routing_instruction, should_use_fast_model
+from app.graph.router import (
+    is_vacancy_lookup,
+    route_turn,
+    routing_instruction,
+    should_use_fast_model,
+)
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.safety import (
     blocklist_hit,
@@ -144,8 +149,18 @@ async def _agent_turn(
     timings: dict | None = None,
     manifest_policy=None,
 ) -> str:
+    route = route_turn(user_text)
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
-        return await run_manifest_composed_agent(user_text, deps, policy=manifest_policy)
+        if route.reason == "vacancy_terms" and not manifest_policy.tool_registry.allows(
+            "list_active_jobs"
+        ):
+            return VACANCY_LOOKUP_UNAVAILABLE_REPLY
+        return await run_manifest_composed_agent(
+            user_text,
+            deps,
+            policy=manifest_policy,
+            required_tool="list_active_jobs" if route.reason == "vacancy_terms" else None,
+        )
 
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
@@ -168,7 +183,6 @@ async def _agent_turn(
     lead_profile = ""
     lead_collection_question = ""
     lead_collection_instruction = ""
-    route = route_turn(user_text)
     if timings is not None:
         timings.setdefault("intent", route.intent)
         timings.setdefault("route_strategy", route.strategy)
@@ -272,7 +286,13 @@ async def _direct_context_turn(context, deps: GraphDeps, user_text: str, recent_
     )
 
 
-async def run_manifest_composed_agent(user_text: str, deps: GraphDeps, *, policy=None) -> str | None:
+async def run_manifest_composed_agent(
+    user_text: str,
+    deps: GraphDeps,
+    *,
+    policy=None,
+    required_tool: str | None = None,
+) -> str | None:
     """Run an active manifest policy without granting legacy tool authority."""
     if policy is None:
         if deps.runtime_policy is None:
@@ -282,15 +302,20 @@ async def run_manifest_composed_agent(user_text: str, deps: GraphDeps, *, policy
         return None
     from app.graph.runtime_policy import build_policy_system_prompt
 
+    agent_kwargs = {
+        "system": build_policy_system_prompt(policy),
+        "retrieval": deps.retrieval,
+        "embedder": deps.embedder,
+        "allowed_tools": tuple(sorted(policy.tool_registry.names)),
+        "resolved_tool_registry": policy.tool_registry.names,
+        "make_retrieval": deps.make_retrieval,
+        "lookup_query": user_text,
+    }
+    if required_tool is not None:
+        agent_kwargs["required_tool"] = required_tool
     return await deps.agent.agent(
         user_text,
-        system=build_policy_system_prompt(policy),
-        retrieval=deps.retrieval,
-        embedder=deps.embedder,
-        allowed_tools=tuple(sorted(policy.tool_registry.names)),
-        resolved_tool_registry=policy.tool_registry.names,
-        make_retrieval=deps.make_retrieval,
-        lookup_query=user_text,
+        **agent_kwargs,
     )
 
 
@@ -461,26 +486,6 @@ _FAQ_BYPASS_VOLATILE_MARKERS = (
     "số điện thoại",
     "hotline",
     "liên hệ",
-    "đang tuyển",
-    "còn tuyển",
-    "còn vị trí",
-    "tuyển",
-    "nhận",
-)
-
-_VACANCY_CONTEXT_MARKERS = (
-    "có nhận",
-    "còn nhận",
-    "đang nhận",
-    "có tuyển",
-    "còn tuyển",
-    "đang tuyển",
-    "cần tuyển",
-    "có việc",
-    "còn việc",
-    "con viec nay",
-    "viec nay",
-    "vi tri nay",
 )
 
 _VACANCY_FOLLOWUP_MARKERS = (
@@ -509,8 +514,8 @@ def _recent_vacancy_context(recent_messages: list[Message]) -> bool:
         sender_value = getattr(sender, "value", sender)
         if sender_value != "WORKER":
             continue
-        normalized = (getattr(message, "body", "") or "").casefold()
-        if any(marker in normalized for marker in _VACANCY_CONTEXT_MARKERS):
+        body = getattr(message, "body", "") or ""
+        if is_vacancy_lookup(body):
             return True
     return False
 
@@ -520,7 +525,7 @@ def _faq_bypass_allowed(user_text: str, recent_messages: list[Message]) -> bool:
     normalized = user_text.casefold()
     if any(marker in normalized for marker in _FAQ_BYPASS_VOLATILE_MARKERS):
         return False
-    if any(marker in normalized for marker in _VACANCY_CONTEXT_MARKERS):
+    if is_vacancy_lookup(user_text):
         return False
     if _recent_vacancy_context(recent_messages) and any(
         marker in normalized for marker in _VACANCY_FOLLOWUP_MARKERS
@@ -641,7 +646,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
         # Vacancy state is more volatile than an installation's static direct
         # context. Force those turns through the capability-gated ACTIVE-job tool.
-        if route_turn(state.user_text).reason == "vacancy_terms":
+        if is_vacancy_lookup(state.user_text):
             direct_context = None
         recruitment_capabilities = (
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None

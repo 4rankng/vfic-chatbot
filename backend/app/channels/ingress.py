@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from app.channels import types as ct
 
@@ -54,7 +54,7 @@ class IngressOutcome:
     persistence (non-text, or an inactive account scope).
     """
 
-    status: str  # "persisted" | "duplicate" | "ignored"
+    status: Literal["persisted", "duplicate", "ignored"]
     conversation_id: str | None = None
     dedup_key: str | None = None
 

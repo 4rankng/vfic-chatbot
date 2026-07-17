@@ -131,8 +131,25 @@ def test_vacancy_routing_instruction_requires_active_job_tool():
     assert "Bắt buộc gọi list_active_jobs" in routing_instruction(route)
 
 
-def test_vacancy_paraphrase_requires_active_job_tool():
-    route = route_turn("bên bạn có nhận thợ hàn không?")
+@pytest.mark.parametrize(
+    "query",
+    [
+        "bên bạn có nhận thợ hàn không?",
+        "bên bạn còn việc không?",
+        "bên bạn có việc không?",
+        "LG đang nhận công nhân không?",
+        "LG còn nhận công nhân không?",
+        "LG tuyển dụng thợ hàn không?",
+        "bên mình có việc làm không?",
+        "còn công việc nào không?",
+        "hiện có vị trí nào không?",
+        "LG đang tuyển thợ hàn, lương bao nhiêu?",
+        "LG còn tuyển vị trí nào, thu nhập thế nào?",
+        "bên mình có tuyển công nhân ca đêm không?",
+    ],
+)
+def test_vacancy_paraphrase_requires_active_job_tool(query):
+    route = route_turn(query)
 
     assert route.reason == "vacancy_terms"
     assert route.tools == ("list_active_jobs",)
@@ -141,9 +158,28 @@ def test_vacancy_paraphrase_requires_active_job_tool():
 @pytest.mark.parametrize(
     "query",
     [
+        "có nhân viên tư vấn không?",
+        "có nhân viên không?",
+        "bên bạn có nhận hồ sơ online không?",
+        "có nhận cuộc gọi ngoài giờ không?",
+        "tuyến xe chạy lúc mấy giờ?",
+    ],
+)
+def test_non_job_acceptance_questions_are_not_vacancy_listings(query):
+    route = route_turn(query)
+
+    assert route.reason != "vacancy_terms"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
         "hồ sơ tuyển dụng cần những gì?",
         "điều kiện tuyển dụng là gì?",
         "quy trình tuyển dụng thế nào?",
+        "hồ sơ tuyển thợ hàn cần gì?",
+        "điều kiện tuyển thợ hàn là gì?",
+        "quy trình tuyển thợ hàn thế nào?",
     ],
 )
 def test_recruitment_detail_questions_are_not_vacancy_listings(query):

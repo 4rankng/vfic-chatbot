@@ -196,7 +196,7 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
                 message_id=candidate.message_id,
                 ok=False,
                 error="runtime authority changed before outbound dispatch",
-                error_class="suppressed",
+                error_class="policy_suppressed",
                 suppressed=True,
             )
 
@@ -272,6 +272,13 @@ async def _try_neutral_dispatch(
 
     account_key = "default:zalo_oa" if provider == ct.PROVIDER_ZALO_OA else "default:zalo_bot"
 
+    # NOTE(Phase 4): legacy rows have channel_account_generation = NULL → coerced
+    # to 0 here. That is safe today because ChannelDispatchService is wired with
+    # account_resolver=None (the fence is skipped). The moment a resolver is
+    # wired, every legacy row will compare account.generation (≥1, from Alembic
+    # 0047) > 0 and be suppressed. Before wiring the resolver, either stamp
+    # channel_account_generation on create_pending_outbox or run a one-shot
+    # backfill re-stamping existing PENDING rows with the current generation.
     command = ct.OutboundTextCommand(
         provider=provider,
         account_key=account_key,
@@ -301,11 +308,14 @@ def _provider_for_outbox_channel(channel: str) -> str | None:
     The outbox ``channel`` column carries legacy Zalo values (``zalo_bot`` /
     ``zalo_oa``) which are the same as the neutral provider ids, so the mapping
     is identity for installed Zalo adapters. Returns ``None`` for any other
-    value so the caller falls back to the legacy sender.
+    value (including ``facebook_messenger`` — that adapter is registered in
+    Phase 5, not Phase 3) so the caller falls back to the legacy sender. This
+    keeps the neutral path exclusive to actually-installed providers and avoids
+    a silent flip when Phase 5 lands.
     """
     from app.channels import types as ct
 
-    if channel in (ct.PROVIDER_ZALO_BOT, ct.PROVIDER_ZALO_OA, ct.PROVIDER_FACEBOOK_MESSENGER):
+    if channel in (ct.PROVIDER_ZALO_BOT, ct.PROVIDER_ZALO_OA):
         return channel
     return None
 

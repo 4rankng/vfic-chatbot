@@ -42,8 +42,14 @@ class ZaloOAChannelAdapter(TextChannelAdapter, ReceiptCapability):
         return cls(ZaloOASender(access_token=config.oa_access_token, refresh=refresh))
 
     async def send_text(self, command: ct.OutboundTextCommand) -> ct.ChannelSendResult:
+        # OA conversations store the scoped chat id as "oa:<user_id>"; the OA
+        # Send API needs the raw user id. The legacy ZaloChannelSender stripped
+        # this prefix; the adapter owns that storage convention now.
+        recipient_id = command.recipient_id
+        if recipient_id.startswith("oa:"):
+            recipient_id = recipient_id.removeprefix("oa:")
         result = await self._sender.send_message(
-            command.recipient_id,
+            recipient_id,
             command.text,
             quote_message_id=command.reply_to_message_id or "",
         )

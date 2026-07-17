@@ -30,15 +30,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class DispatchError(RuntimeError):
-    """Raised when no adapter is registered for a command's provider.
-
-    Callers translate this into a fail-closed provider-suppression rather than
-    surfacing it as a transport error (a missing adapter is configuration, not
-    a transient failure that should be retried).
-    """
-
-
 class ChannelDispatchService:
     """Registry-driven provider-neutral send.
 
@@ -134,4 +125,4 @@ def build_zalo_registry_from_config(cfg, *, oa_refresh=None) -> ChannelAdapterRe
     return registry
 
 
-__all__ = ["ChannelDispatchService", "DispatchError", "build_zalo_registry_from_config"]
+__all__ = ["ChannelDispatchService", "build_zalo_registry_from_config"]

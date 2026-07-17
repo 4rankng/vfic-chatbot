@@ -138,16 +138,31 @@ _DETAIL_TERMS = (
     "gioi tinh",
 )
 
-_VACANCY_PHRASES = (
+_CURRENT_OPENING_PHRASES = (
     "dang tuyen",
     "con tuyen",
     "co tuyen",
+    "can tuyen",
+)
+
+_VACANCY_PHRASES = (
+    *_CURRENT_OPENING_PHRASES,
     "tuyen vi tri",
     "tuyen cong viec",
     "tuyen nhan vien",
     "tuyen dung vi tri",
     "tuyen dung cong viec",
-    "co nhan",
+)
+
+_NON_ROLE_ACCEPTANCE_PREFIXES = (
+    "vien",  # normalized "nhân viên": avoids treating "có nhân viên" as "có nhận"
+    "ho so",
+    "cuoc goi",
+    "tin nhan",
+    "dien thoai",
+    "thanh toan",
+    "don hang",
+    "hang ",
 )
 
 _INTERNAL_RETRY_PREFIX = "ban can viet lai cau tra loi"
@@ -175,6 +190,36 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", clean).strip()
 
 
+def is_vacancy_lookup(user_text: str) -> bool:
+    """Whether a turn asks about current openings and therefore needs live Job data."""
+    text = _normalize(user_text)
+    if not text:
+        return False
+    has_detail = _has_any(text, _DETAIL_TERMS)
+    if _has_any(text, _TIMETABLE_TERMS):
+        return False
+    if _has_any(text, _CURRENT_OPENING_PHRASES):
+        return True
+    if "tuyen" in text.split() and has_detail:
+        return False
+    if "tuyen" in text.split() or _has_any(text, _VACANCY_PHRASES):
+        return True
+    if re.search(
+        r"\b(?:hien\s+)?(?:co|con)\s+(?:viec(?:\s+lam)?|cong\s+viec|vi\s+tri)"
+        r"(?:\s+(?:gi|nao|trong))?\s+(?:khong|ko)\b",
+        text,
+    ):
+        return True
+    accepting = re.search(
+        r"\b(?:co|con|dang) nhan\s+(?P<object>.+?)(?:\s+(?:khong|ko))?[?.!]*$",
+        text,
+    )
+    if accepting is None:
+        return False
+    candidate_object = accepting.group("object").strip()
+    return not candidate_object.startswith(_NON_ROLE_ACCEPTANCE_PREFIXES)
+
+
 def route_turn(user_text: str) -> TurnRoute:
     """Classify a user turn into the first retrieval strategy to try.
 
@@ -199,11 +244,7 @@ def route_turn(user_text: str) -> TurnRoute:
 
     has_recommendation = _has_any(text, _RECOMMEND_TERMS)
     has_detail = _has_any(text, _DETAIL_TERMS)
-    recruitment_detail = "tuyen dung" in text and has_detail
-    is_vacancy_lookup = (
-        ("tuyen" in text.split() and "tuyen dung" not in text)
-        or _has_any(text, _VACANCY_PHRASES)
-    ) and not recruitment_detail
+    vacancy_lookup = is_vacancy_lookup(raw)
     has_phone = bool(_PHONE_RE.search(raw))
 
     if _has_any(text, _TIMETABLE_TERMS):
@@ -224,7 +265,7 @@ def route_turn(user_text: str) -> TurnRoute:
             confidence=0.9,
         )
 
-    if is_vacancy_lookup:
+    if vacancy_lookup:
         return TurnRoute(
             "recommend",
             "structured_lookup",

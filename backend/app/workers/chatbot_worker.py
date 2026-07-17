@@ -100,7 +100,9 @@ async def _bridge_typing(chat_id: str, bot_token: str | None = None) -> None:
     ``build_deps``. This bridge closes that gap so the indicator never vanishes
     during the preamble. It self-limits to a few pulses: once ``run_turn``'s
     heartbeat is running it is redundant, and the caller cancels it before send.
-    All failures are swallowed (typing is best-effort).
+    All failures are swallowed (typing is best-effort) — the bridge stops
+    pulsing if either DB resolution or the typing POST raises; it does NOT
+    fall back to the stale env ZALO_BOT_TOKEN (which 401s in prod).
 
     ``bot_token`` is accepted for backwards compatibility with legacy queued
     jobs that still carry it. When it is None (the v2 payload), the live token
@@ -113,8 +115,9 @@ async def _bridge_typing(chat_id: str, bot_token: str | None = None) -> None:
         try:
             token = bot_token
             if token is None:
-                # Resolve the live DB token (env ZALO_BOT_TOKEN is stale in prod).
-                # Best-effort: if resolution fails, _fire_typing falls back to env.
+                # Resolve the live DB token. If resolution raises (DB blip,
+                # cipher issue, empty config), the outer except stops the
+                # bridge — typing simply vanishes, which is safe.
                 from app.core.db import async_session
                 from app.services.integration_settings import IntegrationSettingsService
 

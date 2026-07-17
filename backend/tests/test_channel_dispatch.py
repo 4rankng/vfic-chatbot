@@ -247,3 +247,98 @@ async def test_dispatch_without_resolver_skips_fence():
     result = await svc.send(_command(ct.PROVIDER_ZALO_BOT, generation=1))
     assert result.ok
     assert len(bot.sent) == 1
+
+
+# ─── OA prefix regression (Critical finding from Phase 3 review) ────────────
+
+
+async def test_zalo_oa_adapter_strips_storage_prefix_from_recipient():
+    """OA conversations store the scoped chat id as 'oa:<user_id>'; the OA Send
+    API needs the raw user id. Regression guard: the legacy ZaloChannelSender
+    stripped this prefix; the neutral adapter must too, or every OA outbound
+    sends recipient.user_id='oa:...' and Zalo rejects it.
+    """
+    from app.channels.providers.zalo_oa import ZaloOAChannelAdapter
+
+    fake_sender = AsyncMock()
+    fake_sender.send_message = AsyncMock(return_value=SendResult(ok=True, msg_id="oa-1"))
+    adapter = ZaloOAChannelAdapter(fake_sender)
+    cmd = ct.OutboundTextCommand(
+        provider=ct.PROVIDER_ZALO_OA,
+        account_key="default:zalo_oa",
+        recipient_id="oa:user-42",  # the prefixed scoped chat id
+        text="reply",
+        channel_account_generation=1,
+    )
+    await adapter.send_text(cmd)
+    # The OA sender must receive the STRIPPED user id, not 'oa:user-42'.
+    sent_chat_id = fake_sender.send_message.await_args.args[0]
+    assert sent_chat_id == "user-42"
+    assert not sent_chat_id.startswith("oa:")
+
+
+async def test_try_neutral_dispatch_routes_oa_with_stripped_recipient():
+    """End-to-end regression: an outbox row with an OA-prefixed chat_id payload
+    dispatches through the neutral path and the underlying sender sees the
+    stripped user id. This is the exact path the Phase 3 review flagged.
+    """
+    from app.services.outbox_service import _try_neutral_dispatch, DispatchCandidate
+
+    received_chat_ids: list[str] = []
+
+    class _StubOA:
+        async def send_message(self, chat_id, text, *, quote_message_id=""):
+            received_chat_ids.append(chat_id)
+            from app.services.zalo_bot_service import SendResult
+
+            return SendResult(ok=True, msg_id="oa-mid")
+
+    # Patch build_zalo_registry_from_config to register a real OA adapter
+    # wrapping our stub sender.
+    from app.channels.providers.zalo_oa import ZaloOAChannelAdapter
+    import app.channels.dispatch as dispatch_mod
+
+    original_build = dispatch_mod.build_zalo_registry_from_config
+
+    def _fake_build(cfg, *, oa_refresh=None):
+        from app.channels.registry import ChannelAdapterRegistry
+
+        reg = ChannelAdapterRegistry()
+        # Bypass from_config; inject our stub-backed adapter directly.
+        reg.register(ZaloOAChannelAdapter(_StubOA()))
+        return reg
+
+    dispatch_mod.build_zalo_registry_from_config = _fake_build  # type: ignore[assignment]
+    try:
+        candidate = DispatchCandidate(
+            outbox_id=1,
+            message_id=10,
+            channel="zalo_oa",
+            payload={"chat_id": "oa:user-99", "text": "hi"},
+        )
+        outbox = type(
+            "Outbox",
+            (),
+            {"channel_account_generation": None},
+        )()
+        cfg = type("Cfg", (), {"bot_token": "t", "oa_access_token": "t"})()
+        result = await _try_neutral_dispatch(candidate, outbox, cfg, integration_settings=None)
+    finally:
+        dispatch_mod.build_zalo_registry_from_config = original_build  # type: ignore[assignment]
+
+    assert result is not None
+    assert result.ok
+    assert received_chat_ids == ["user-99"]  # stripped, not 'oa:user-99'
+    assert result.provider_message_id == "oa-mid"
+
+
+def test_provider_for_outbox_channel_excludes_facebook_messenger():
+    """Phase 3 registers only Zalo adapters. facebook_messenger must map to
+    None so the neutral path is NOT taken (legacy fallback instead) until
+    Phase 5 registers the Messenger adapter. Prevents a silent flip."""
+    from app.services.outbox_service import _provider_for_outbox_channel
+
+    assert _provider_for_outbox_channel("zalo_bot") == "zalo_bot"
+    assert _provider_for_outbox_channel("zalo_oa") == "zalo_oa"
+    assert _provider_for_outbox_channel("facebook_messenger") is None
+    assert _provider_for_outbox_channel("unknown") is None

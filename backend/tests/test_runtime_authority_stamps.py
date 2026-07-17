@@ -98,7 +98,9 @@ async def test_stale_runtime_outbox_is_suppressed_before_provider_dispatch(monke
 
     assert result is not None
     assert result.suppressed is True
-    assert result.error_class == "suppressed"
+    # Phase 3: the legacy "suppressed" error_class was renamed to
+    # "policy_suppressed" to align with the neutral ChannelErrorClass taxonomy.
+    assert result.error_class == "policy_suppressed"
     acquire_lock.assert_awaited_once()
     current.assert_awaited_once()
     claim.assert_awaited_once_with(db, outbox_id=11)

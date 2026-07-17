@@ -189,6 +189,41 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
     assert reply == "Thông tin có trong tài liệu."
 
 
+async def test_non_recruitment_manifest_without_job_authority_fails_closed_for_vacancy():
+    active, persona = _active(
+        capabilities=["conversation", "knowledge"], pack_key="customer_support"
+    )
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+    assert policy is not None
+
+    class _Agent:
+        calls = 0
+
+        async def agent(self, *_args, **_kwargs):
+            self.calls += 1
+            return "unsupported vacancy claim"
+
+    agent = _Agent()
+    deps = SimpleNamespace(
+        agent=agent,
+        retrieval=object(),
+        embedder=object(),
+        make_retrieval=None,
+    )
+
+    reply = await _agent_turn(
+        SimpleNamespace(),
+        deps,
+        "bên mình còn tuyển không?",
+        chat_id="chat-1",
+        recent_messages=[],
+        manifest_policy=policy,
+    )
+
+    assert "chưa thể kiểm tra" in reply.lower()
+    assert agent.calls == 0
+
+
 async def _value(value):
     return value
 
