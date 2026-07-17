@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   saveKnowledgeTemplate,
-  uploadKnowledgeFile,
+  createAndIngestKnowledgeBaseVersion,
 } from "@/lib/vfic/knowledgeService";
 import {
   ACCEPTED_KNOWLEDGE_TYPES,
@@ -60,8 +60,10 @@ export const InlineKnowledgeUploader = () => {
     setBusy(true);
     setValidationErrors([]);
     try {
-      await uploadKnowledgeFile(file, projectChoice);
-      notify("Đã tải lên. Pipeline đang xử lý ở nền.", { type: "success" });
+      await createAndIngestKnowledgeBaseVersion(projectChoice, file);
+      notify("Đã tạo phiên bản KB. Hãy xem lại rồi xuất bản khi sẵn sàng.", {
+        type: "success",
+      });
       setFile(null);
       refresh();
     } catch (err) {

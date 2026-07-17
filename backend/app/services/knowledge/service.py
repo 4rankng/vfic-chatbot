@@ -136,8 +136,7 @@ class KnowledgeService:
         version = await self._require_version(project_id, version_id)
         if version.status not in {KBVersionStatus.DRAFT, KBVersionStatus.FAILED}:
             raise ValueError("Only DRAFT or FAILED KB versions accept uploads.")
-        upload_format = _detect_upload_text_format(file_name, content_type)
-        raw = data.decode("utf-8", errors="replace")
+        raw, upload_format = _extract_kb_upload_text(file_name, content_type, data)
         stats = kb_text_stats(raw)
         if not stats.normalized_text:
             raise ValueError("Uploaded knowledge file is empty.")
@@ -607,6 +606,8 @@ class KnowledgeService:
 def _detect_upload_text_format(file_name: str, content_type: str) -> str:
     suffix = Path(file_name or "").suffix.lower()
     normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if suffix == ".docx" or normalized_type == DOCX_MIME_TYPE:
+        return "docx"
     if suffix == ".md":
         return "markdown"
     if suffix == ".txt":
@@ -619,7 +620,22 @@ def _detect_upload_text_format(file_name: str, content_type: str) -> str:
 
 
 def _mime_type_for_format(file_format: str, content_type: str) -> str:
+    if file_format == "docx":
+        return DOCX_MIME_TYPE
     normalized = (content_type or "").split(";", 1)[0].strip().lower()
     if normalized.startswith("text/"):
         return normalized
     return "text/markdown" if file_format == "markdown" else "text/plain"
+
+
+def _extract_kb_upload_text(
+    file_name: str, content_type: str, data: bytes
+) -> tuple[str, str]:
+    """Extract supported release-file text without falling back to direct ingest."""
+    file_format = _detect_upload_text_format(file_name, content_type)
+    if file_format != "docx":
+        return data.decode("utf-8", errors="replace"), file_format
+    raw = _extract_docx_text(data)
+    if not raw.strip():
+        raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
+    return raw, file_format

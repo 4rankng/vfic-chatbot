@@ -10,6 +10,8 @@ unit suite during the Supabase->FastAPI migration; they are skipped here.
 import io
 import json
 import uuid
+from xml.sax.saxutils import escape
+from zipfile import ZipFile
 
 import pytest
 
@@ -35,6 +37,22 @@ _integration_skip = pytest.mark.skip(
 )
 
 VEC = [0.01] * 3072
+
+
+def _docx_bytes(*paragraphs: str) -> bytes:
+    """Build the minimal DOCX archive accepted by the stdlib extractor."""
+    body = "".join(
+        f"<w:p><w:r><w:t>{escape(paragraph)}</w:t></w:r></w:p>"
+        for paragraph in paragraphs
+    )
+    document_xml = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", document_xml)
+    return buffer.getvalue()
 
 
 class _FakeEmbedder:
@@ -77,19 +95,25 @@ def test_extract_text_csv_txt_md():
 
 
 def test_extract_text_docx():
-    docx = pytest.importorskip("docx")
-
-    d = docx.Document()
-    d.add_paragraph("Dòng một LG Display")
-    d.add_paragraph("Dòng hai lương 10 triệu")
-    buf = io.BytesIO()
-    d.save(buf)
     txt = extract_text(
         "a.docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        buf.getvalue(),
+        _docx_bytes("Dòng một LG Display", "Dòng hai lương 10 triệu"),
     )
     assert "LG Display" in txt and "10 triệu" in txt
+
+
+def test_release_upload_extracts_docx_text():
+    from app.services.knowledge.service import _extract_kb_upload_text
+
+    text, file_format = _extract_kb_upload_text(
+        "tuyen-dung.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        _docx_bytes("Yêu cầu tuyển dụng có xe đưa đón"),
+    )
+
+    assert file_format == "docx"
+    assert "xe đưa đón" in text
 
 
 def test_extract_text_xlsx():

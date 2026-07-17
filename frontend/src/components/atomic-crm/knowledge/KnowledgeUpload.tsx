@@ -23,10 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   saveKnowledgeTemplate,
-  createKnowledgeBaseVersion,
-  ingestKnowledgeBaseVersion,
-  uploadKnowledgeBaseVersionFile,
-  uploadKnowledgeFile,
+  createAndIngestKnowledgeBaseVersion,
 } from "@/lib/vfic/knowledgeService";
 import { cn } from "@/lib/utils";
 import {
@@ -44,9 +41,8 @@ interface KnowledgeUploadProps {
   lockProject?: boolean;
 }
 
-// KB upload for a project (product). Two modes: pick a source file (.md/.txt/.docx),
-// or paste raw text. Paste is built into a .txt File so it reuses upload-file (which
-// enqueues the training pipeline) — the JSON /documents/upload route does NOT enqueue.
+// Every KB upload is staged in a project-scoped release. Paste becomes a text
+// file so it follows the same reviewed release path as uploaded files.
 export const KnowledgeUpload = ({
   open,
   onOpenChange,
@@ -61,7 +57,6 @@ export const KnowledgeUpload = ({
   const [pasteText, setPasteText] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [versionedIngestion, setVersionedIngestion] = useState(false);
 
   const effectiveProjectId = lockProject ? (initialProjectId ?? "") : projectId;
   const canSubmit =
@@ -80,7 +75,6 @@ export const KnowledgeUpload = ({
     setMode("file");
     setProjectId(initialProjectId ?? "");
     setValidationErrors([]);
-    setVersionedIngestion(false);
   };
 
   const handleRejectedFiles = (rejections: FileRejection[]) => {
@@ -131,21 +125,9 @@ export const KnowledgeUpload = ({
     setBusy(true);
     setValidationErrors([]);
     try {
-      if (versionedIngestion) {
-        if (payload.type.includes("word")) {
-          notify("Ingest theo mẫu hiện hỗ trợ Markdown hoặc TXT.", { type: "warning" });
-          return;
-        }
-        const version = await createKnowledgeBaseVersion(effectiveProjectId);
-        await uploadKnowledgeBaseVersionFile(effectiveProjectId, version.id, payload);
-        await ingestKnowledgeBaseVersion(effectiveProjectId, version.id);
-      } else {
-        await uploadKnowledgeFile(payload, effectiveProjectId);
-      }
+      await createAndIngestKnowledgeBaseVersion(effectiveProjectId, payload);
       notify(
-        versionedIngestion
-          ? "Đã tạo phiên bản KB theo mẫu và đưa vào hàng đợi. Hãy xem lại rồi xuất bản khi sẵn sàng."
-          : "Đã tải lên. Đang huấn luyện + trích xuất đặc điểm (chạy ở nền).",
+        "Đã tạo phiên bản KB và đưa vào hàng đợi. Hãy xem lại rồi xuất bản khi sẵn sàng.",
         {
           type: "success",
         },
@@ -223,22 +205,13 @@ export const KnowledgeUpload = ({
             </div>
           )}
 
-          <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-3">
+          <div className="rounded-lg border bg-muted/20 p-3">
             <div>
-              <p className="text-body font-medium">Ingest theo mẫu đã gán</p>
+              <p className="text-body font-medium">Phiên bản KB có kiểm soát</p>
               <p className="mt-1 text-helper text-muted-foreground">
-                Tạo một phiên bản KB riêng, ghim mẫu hiện tại và yêu cầu xem lại trước khi xuất bản.
+                Mỗi tệp tạo một phiên bản KB riêng và cần được xem lại trước khi xuất bản.
               </p>
             </div>
-            <Button
-              type="button"
-              variant={versionedIngestion ? "default" : "outline"}
-              size="sm"
-              onClick={() => setVersionedIngestion((value) => !value)}
-              disabled={busy}
-            >
-              {versionedIngestion ? "Đang dùng" : "Dùng mẫu"}
-            </Button>
           </div>
 
           <Tabs

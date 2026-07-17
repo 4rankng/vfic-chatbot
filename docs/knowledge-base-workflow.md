@@ -7,4 +7,6 @@ Each Agent is attached to exactly one standalone Knowledge Base (KB). A KB may b
 
 Administrators create KBs under **Cài đặt → Knowledge Base**, then select one when creating or editing an Agent. Projects must select a RAG KB. Direct KB configuration shows the active model capacity; save is rejected if the text cannot fit safely.
 
+For RAG knowledge, every administrator upload (including pasted text) creates a new KB release scoped to the selected Project. The release enters offline ingestion and is not used by the agent until an administrator reviews the completed result and publishes it. Publishing makes that reviewed Project release active.
+
 The one-time production mapping is operational data, not application configuration: rename the existing global Agent to `default`, create RAG KB `vfic`, and attach legacy Project `lg-display` through the parameterized bootstrap endpoint. Perform that only as part of an approved production release with a fresh backup.

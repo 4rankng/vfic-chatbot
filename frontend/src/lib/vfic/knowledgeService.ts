@@ -239,6 +239,15 @@ export const ingestKnowledgeBaseVersion = (projectId: string, versionId: string)
     { method: "POST" },
   );
 
+export const createAndIngestKnowledgeBaseVersion = async (
+  projectId: string,
+  file: File,
+) => {
+  const version = await createKnowledgeBaseVersion(projectId);
+  await uploadKnowledgeBaseVersionFile(projectId, version.id, file);
+  return ingestKnowledgeBaseVersion(projectId, version.id);
+};
+
 export const listKnowledgeBaseVersions = (projectId: string) =>
   apiJson<{ data: KnowledgeBaseVersion[]; total: number }>(
     `${proj(projectId)}/kb/versions`,
