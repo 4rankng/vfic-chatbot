@@ -460,12 +460,16 @@ async def _captured_attention_sql(recruiter_id: str | None, queue: str) -> str:
 @pytest.mark.asyncio
 async def test_lead_anchored_ctes_include_c_scope_in_left_join_immediate():
     """N1 fix: followup_overdue (the one lead-anchored CTE in the immediate
-    queue) must scope its LEFT JOIN to conversations on c_scope."""
+    queue) must scope its LEFT JOIN to conversations on c_scope.
+
+    The lead↔conversation link is the canonical contact_id (Alembic 0047),
+    replacing the legacy Zalo-only soft match.
+    """
     sql = await _captured_attention_sql(str(UID), "immediate")
     # The followup_overdue LEFT JOIN must carry the c_scope fragment so a
     # recruiter's lead does not surface another recruiter's conversation_id.
     assert (
-        "c.zalo_chat_id = l.zalo_id AND (c.assigned_recruiter_id = :uid "
+        "c.contact_id = l.contact_id AND (c.assigned_recruiter_id = :uid "
         "OR c.assigned_recruiter_id IS NULL)"
     ) in sql
 
@@ -476,7 +480,7 @@ async def test_lead_anchored_ctes_include_c_scope_in_left_join_today():
     CTEs in the today queue) must each scope their LEFT JOIN on c_scope."""
     sql = await _captured_attention_sql(str(UID), "today")
     expected_fragment = (
-        "c.zalo_chat_id = l.zalo_id AND (c.assigned_recruiter_id = :uid "
+        "c.contact_id = l.contact_id AND (c.assigned_recruiter_id = :uid "
         "OR c.assigned_recruiter_id IS NULL)"
     )
     # Three lead-anchored CTEs in the today queue: priority_no_action,
@@ -489,8 +493,9 @@ async def test_admin_attendance_rows_omits_c_scope_predicate():
     """For admin (recruiter_id is None), c_scope is a no-op '(TRUE)' — the LEFT
     JOIN keeps matching all conversations. Pins the admin/global branch."""
     sql = await _captured_attention_sql(None, "today")
-    # c_scope for admin collapses to (TRUE), so the join reads ... = l.zalo_id AND (TRUE)
-    assert "c.zalo_chat_id = l.zalo_id AND (TRUE)" in sql
+    # c_scope for admin collapses to (TRUE), so the join reads
+    # ... = l.contact_id AND (TRUE)
+    assert "c.contact_id = l.contact_id AND (TRUE)" in sql
     # and never references :uid on the admin path
     assert ":uid" not in sql
 
@@ -501,7 +506,7 @@ async def test_lead_anchored_left_join_is_outer_so_null_conversation_is_kept():
     matches, c.* is NULL and the lead-anchored row still surfaces with action=CALL
     + key='lead:<id>'. Pin that the join keyword is LEFT JOIN (not JOIN)."""
     sql = await _captured_attention_sql(str(UID), "immediate")
-    assert "LEFT JOIN conversations c ON c.zalo_chat_id = l.zalo_id" in sql
+    assert "LEFT JOIN conversations c ON c.contact_id = l.contact_id" in sql
 
 
 @pytest.mark.asyncio

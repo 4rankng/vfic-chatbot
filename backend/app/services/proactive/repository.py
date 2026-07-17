@@ -93,9 +93,9 @@ async def conversation_allowed_by_followup_rules(db, conv: Conversation) -> tupl
         await db.execute(
             text(
                 "SELECT lead_score::text AS lead_score, lead_stage::text AS lead_stage "
-                "FROM leads WHERE zalo_id = :zalo_id LIMIT 1"
+                "FROM leads WHERE contact_id = :contact_id LIMIT 1"
             ),
-            {"zalo_id": conv.zalo_chat_id},
+            {"contact_id": conv.contact_id},
         )
     ).first()
     if row is None:
@@ -146,7 +146,7 @@ async def find_eligible_conversations(db) -> list[Conversation]:
         """
         SELECT c.id, l.lead_score::text AS lead_score, l.lead_stage::text AS lead_stage
         FROM conversations c
-        JOIN leads l ON l.zalo_id = c.zalo_chat_id
+        JOIN leads l ON l.contact_id = c.contact_id
         WHERE c.mode IN ('BOT', 'SEMI_AUTO')
           AND c.status = 'OPEN'
           AND c.followup_opted_out = FALSE

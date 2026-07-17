@@ -335,16 +335,28 @@ class LeadService:
     # ── Private helpers ──────────────────────────────────────────────
 
     async def _conversation_for_lead(self, lead: Lead) -> Conversation | None:
-        if not lead.zalo_id:
-            return None
-        return (
-            await self.db.scalars(
-                select(Conversation)
-                .where(Conversation.zalo_chat_id == lead.zalo_id)
-                .order_by(desc(Conversation.updated_at))
-                .limit(1)
-            )
-        ).first()
+        # Canonical link is contact_id (Alembic 0047): every conversation and
+        # every backfilled lead carry one. Falls back to the legacy Zalo soft
+        # match for rows whose contact_id has not yet been resolved.
+        if lead.contact_id is not None:
+            return (
+                await self.db.scalars(
+                    select(Conversation)
+                    .where(Conversation.contact_id == lead.contact_id)
+                    .order_by(desc(Conversation.updated_at))
+                    .limit(1)
+                )
+            ).first()
+        if lead.zalo_id:
+            return (
+                await self.db.scalars(
+                    select(Conversation)
+                    .where(Conversation.zalo_chat_id == lead.zalo_id)
+                    .order_by(desc(Conversation.updated_at))
+                    .limit(1)
+                )
+            ).first()
+        return None
 
     async def _recent_messages(self, conversation: Conversation | None) -> list[Message]:
         if conversation is None:
@@ -401,7 +413,11 @@ class LeadService:
 
     def _unanswered_conversation_exists(self, viewer: User):
         conditions = [
-            Conversation.zalo_chat_id == Lead.zalo_id,
+            # Canonical link via contact_id (Alembic 0047). Both columns are
+            # NOT NULL on conversations and populated on backfilled leads, so
+            # this replaces the legacy Zalo-only soft match and also covers
+            # Messenger leads (which carry no zalo_id).
+            Conversation.contact_id == Lead.contact_id,
             Conversation.status == "OPEN",
             Conversation.mode.in_([ConversationMode.HUMAN, ConversationMode.SEMI_AUTO]),
             Conversation.last_inbound_at.is_not(None),

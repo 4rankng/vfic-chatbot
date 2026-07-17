@@ -177,7 +177,20 @@ class ConversationRepository:
         if needs_attention:
             base = base.where(_unanswered_inbound_condition())
         if q:
-            base = base.where(Conversation.zalo_chat_id.ilike(f"%{q}%"))
+            # Text search spans the Zalo compat alias and the neutral identity's
+            # external_id so Messenger conversations (zalo_chat_id IS NULL) are
+            # also searchable. The outerjoin is safe because every conversation
+            # has exactly one identity (NOT NULL after Alembic 0047).
+            pat = f"%{q}%"
+            base = base.outerjoin(
+                ContactChannelIdentity,
+                Conversation.channel_identity_id == ContactChannelIdentity.id,
+            ).where(
+                or_(
+                    Conversation.zalo_chat_id.ilike(pat),
+                    ContactChannelIdentity.external_id.ilike(pat),
+                )
+            )
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
         sort_col = _CONVERSATION_SORT.get((sort_by or "").lower()) or Conversation.updated_at
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()

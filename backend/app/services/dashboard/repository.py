@@ -234,8 +234,8 @@ class DashboardRepository:
     # form of each predicate; the service owns precedence ordering and assembly.
     # Viewer scope is applied to BOTH the anchor table AND every enrichment join
     # (Join & Dedup Contract) — leads and conversations carry INDEPENDENT
-    # assigned_recruiter_id columns with no FK between them, only the nullable
-    # soft match leads.zalo_id == conversations.zalo_chat_id.
+    # assigned_recruiter_id columns. The lead↔conversation link is the canonical
+    # contact_id (Alembic 0047), replacing the legacy Zalo-only soft match.
     #
     # Counter-to-reason mapping (documented for the reviewer):
     #   needs_reply = REPLY_OVERDUE + WAITING_REPLY + HUMAN_ESCALATION
@@ -340,7 +340,7 @@ class DashboardRepository:
 
         # --- Lead-anchored predicates (viewer scope on l.) -------------------
         # Excludes SKIPPED leads (LeadStage) from all lead-anchored reasons.
-        # zalo_id IS NULL leads are eligible ONLY for lead-anchored reasons.
+        # Leads with no linked contact are eligible ONLY for lead-anchored reasons.
         not_skipped = "l.lead_stage <> 'SKIPPED'"
 
         # FOLLOWUP_OVERDUE: pending follow-up past due. Anchor follow_up_tasks,
@@ -366,7 +366,7 @@ class DashboardRepository:
             "  l.updated_at > now() - interval '48 hours' "
             "  OR EXISTS ("
             "    SELECT 1 FROM conversations c "
-            "    WHERE c.zalo_chat_id = l.zalo_id "
+            "    WHERE c.contact_id = l.contact_id "
             "    AND (c.last_inbound_at > now() - interval '48 hours' "
             "         OR c.last_outbound_at > now() - interval '48 hours'))) "
             "AND " + l_scope
@@ -389,7 +389,7 @@ class DashboardRepository:
             "AND (l.next_action_at IS NULL OR l.next_action_at <= now()) "
             "AND NOT EXISTS ("
             "  SELECT 1 FROM conversations c "
-            "  WHERE c.zalo_chat_id = l.zalo_id "
+            "  WHERE c.contact_id = l.contact_id "
             "  AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id "
             "              AND m.sender = 'RECRUITER' "
             "              AND m.created_at > now() - interval '24 hours')) "
@@ -448,7 +448,7 @@ class DashboardRepository:
         # _conversation_for_lead helper (lead/service.py:340-347) tie-break.
 
         # Conversation-anchored reasons. Enrichment (name/phone/stage)
-        # comes from the latest-updated lead matching c.zalo_chat_id, with lead
+        # comes from the latest-updated lead matching c.contact_id, with lead
         # viewer scope applied independently (Join & Dedup Contract: if the
         # conversation and lead disagree on ownership, the row is dropped).
         delivery_review_cte = (
@@ -492,7 +492,7 @@ class DashboardRepository:
             "  f.due_at AS urgency_at, NULL::text AS delivery_status, "
             "  c.last_inbound_at, f.due_at AS due_at "
             "  FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
-            "  LEFT JOIN conversations c ON c.zalo_chat_id = l.zalo_id AND " + c_scope + " "
+            "  LEFT JOIN conversations c ON c.contact_id = l.contact_id AND " + c_scope + " "
             "  WHERE f.status = 'PENDING' AND f.due_at < now() "
             "  AND " + not_skipped + " AND " + l_scope + ")"
         )
@@ -514,14 +514,14 @@ class DashboardRepository:
             "  l.created_at AS urgency_at, NULL::text AS delivery_status, "
             "  c.last_inbound_at, NULL::timestamptz AS due_at "
             "  FROM leads l "
-            "  LEFT JOIN conversations c ON c.zalo_chat_id = l.zalo_id AND " + c_scope + " "
+            "  LEFT JOIN conversations c ON c.contact_id = l.contact_id AND " + c_scope + " "
             "  WHERE " + not_skipped + " "
             "  AND (l.lead_score = 'hot' OR (l.lead_stage = 'REGISTERED' "
             "       AND l.created_at >= now() - interval '7 days')) "
             "  AND NOT EXISTS (SELECT 1 FROM follow_up_tasks f WHERE f.lead_id = l.id "
             "    AND f.status = 'PENDING' AND f.due_at > now()) "
             "  AND (l.next_action_at IS NULL OR l.next_action_at <= now()) "
-            "  AND NOT EXISTS (SELECT 1 FROM conversations c2 WHERE c2.zalo_chat_id = l.zalo_id "
+            "  AND NOT EXISTS (SELECT 1 FROM conversations c2 WHERE c2.contact_id = l.contact_id "
             "    AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c2.id "
             "      AND m.sender = 'RECRUITER' AND m.created_at > now() - interval '24 hours')) "
             "  AND " + l_scope + ")"
@@ -533,7 +533,7 @@ class DashboardRepository:
             "  f.due_at AS urgency_at, NULL::text AS delivery_status, "
             "  c.last_inbound_at, f.due_at AS due_at "
             "  FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
-            "  LEFT JOIN conversations c ON c.zalo_chat_id = l.zalo_id AND " + c_scope + " "
+            "  LEFT JOIN conversations c ON c.contact_id = l.contact_id AND " + c_scope + " "
             "  WHERE f.status = 'PENDING' AND " + vn_today_due + " "
             "  AND " + not_skipped + " AND " + l_scope + ")"
         )
@@ -554,10 +554,10 @@ class DashboardRepository:
             "  l.updated_at AS urgency_at, NULL::text AS delivery_status, "
             "  c.last_inbound_at, NULL::timestamptz AS due_at "
             "  FROM leads l "
-            "  LEFT JOIN conversations c ON c.zalo_chat_id = l.zalo_id AND " + c_scope + " "
+            "  LEFT JOIN conversations c ON c.contact_id = l.contact_id AND " + c_scope + " "
             "  WHERE " + not_skipped + " "
             "  AND NOT (l.updated_at > now() - interval '48 hours' "
-            "    OR EXISTS (SELECT 1 FROM conversations c2 WHERE c2.zalo_chat_id = l.zalo_id "
+            "    OR EXISTS (SELECT 1 FROM conversations c2 WHERE c2.contact_id = l.contact_id "
             "      AND (c2.last_inbound_at > now() - interval '48 hours' "
             "           OR c2.last_outbound_at > now() - interval '48 hours'))) "
             "  AND " + l_scope + ")"
@@ -592,7 +592,7 @@ class DashboardRepository:
 
         # Enrichment: for each surviving candidate, pull name/phone/
         # desired_job/stage/score from the matching lead. Conversation-anchored
-        # rows match via leads.zalo_id = c.zalo_chat_id (latest updated_at wins,
+        # rows match via leads.contact_id = c.contact_id (latest updated_at wins,
         # tie-break per Join & Dedup Contract); lead-anchored rows already have
         # the lead_id. viewer_scope applied to the enrichment lead independently.
         # The recruiter dashboard needs the full phone number for follow-up.
@@ -619,18 +619,19 @@ class DashboardRepository:
         """Lead-enrichment join condition for ``attention_rows``.
 
         For a conversation-anchored candidate (conversation_id not null), match
-        the lead by ``leads.zalo_id = conversations.zalo_chat_id`` via the
-        candidate's conversation (pulled by id). For a lead-anchored candidate,
-        match by ``leads.id = candidate.lead_id`` directly. Viewer scope applies
-        to the enrichment lead (``l_scope``) independently of the conversation
-        scope; if the two disagree the candidate is dropped (no PII leak).
+        the lead by the canonical ``leads.contact_id = conversations.contact_id``
+        (Alembic 0047) via the candidate's conversation (pulled by id). For a
+        lead-anchored candidate, match by ``leads.id = candidate.lead_id``
+        directly. Viewer scope applies to the enrichment lead (``l_scope``)
+        independently of the conversation scope; if the two disagree the
+        candidate is dropped (no PII leak).
         """
         # cand.conversation_id is the deduped candidate's conversation; look up
-        # its zalo_chat_id, then match leads by zalo_id. Lead-anchored rows fall
-        # back to id = lead_id.
+        # its contact_id, then match leads by contact_id. Lead-anchored rows
+        # fall back to id = lead_id.
         return (
             "WHERE (cand.conversation_id IS NOT NULL "
-            "AND l.zalo_id = (SELECT c2.zalo_chat_id FROM conversations c2 "
+            "AND l.contact_id = (SELECT c2.contact_id FROM conversations c2 "
             "WHERE c2.id = cand.conversation_id) "
             "AND " + l_scope + ") "
             "OR (cand.conversation_id IS NULL AND cand.lead_id IS NOT NULL "
