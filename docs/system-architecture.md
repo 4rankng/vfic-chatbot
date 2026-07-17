@@ -301,20 +301,22 @@ sequenceDiagram
     WK->>Z: typing heartbeat (every 4s, bot channel)
 
     rect rgb(235, 242, 255)
-    Note over WK,DB: ── grounded LLM / live vacancy lookup ──
-    alt explicit vacancy question or vacancy-thread follow-up
-        WK->>WK: route_turn -> required list_active_jobs
-        WK->>DB: query active Job data
-        WK->>WK: validate ACTIVE_JOB_LOOKUP_JSON and render safe_reply
-    else direct-context KB assigned (non-vacancy facts)
+    Note over WK,DB: ── grounded published recruitment KB path ──
+    alt direct-context KB assigned and evidence block matches
+        WK->>WK: direct_context_evidence_answer(question, answer)
+        WK->>WK: return verbatim Question/Answer block
+    else direct-context KB assigned
         WK->>DB: load complete assigned KB text
         WK->>WK: one LLM call over persona + full KB + recent history
+    else vacancy-thread factual follow-up
+        WK->>WK: combine prior vacancy query + current question
+        WK->>WK: scope salary/details to the same company/recruitment evidence
     else RAG KB assigned
-        WK->>WK: route non-vacancy facts to search_knowledge
+        WK->>WK: route vacancy and document facts to search_knowledge
         WK->>DB: semantic retrieval within active Agent KB projects
         WK->>WK: inject retrieved evidence into one LLM generation
     end
-    WK->>WK: assert hiring/details only from safe_reply or retrieved KB evidence;<br/>otherwise say no verified information was found
+    WK->>WK: assert hiring/details only from published KB evidence or retrieved facts;<br/>otherwise say no verified information was found
     end
 
     rect rgb(230, 245, 235)
@@ -483,9 +485,10 @@ honestly as such.
 
 ```
 load_conversation_state -> typing -> direct_context?
-  direct_context (available, non-vacancy facts) -> one grounded LLM call over full assigned KB
+  direct_context (available) -> evidence block match -> verbatim Question/Answer block
+  direct_context (available) -> no evidence block match -> one grounded LLM call over full assigned KB
   direct_context (not available) -> fast lane / FAQ bypass / routed agent
-      explicit vacancy or vacancy-thread follow-up -> required list_active_jobs -> safe_reply
+      vacancy-thread follow-up -> combined vacancy query + current question -> KB answer
       other agent intent -> scoped tool-calling LLM
       agent (error) -> error_reply
       agent (ok)    -> fast_safety_filter -> combine_for_presend
@@ -498,21 +501,24 @@ load_conversation_state -> typing -> direct_context?
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
-- **Vacancy authority:** explicit vacancy questions and vacancy-thread factual
-  follow-ups are routed to required `list_active_jobs`, not to static direct
-  context. The tool returns `ACTIVE_JOB_LOOKUP_JSON`; when status is `matched`,
-  the client validates the payload and replaces model prose with the tool's
-  `safe_reply`. `search_knowledge` remains the document-fact path for contact,
-  admin, and FAQ detail turns; it is not the live vacancy authority. Missing,
-  failed, or malformed vacancy evidence becomes "no verified information
-  found", never a fabricated vacancy or a false "not recruiting" claim.
+- **Vacancy authority:** explicit vacancy questions use the published
+  recruitment KB as the answer source. In direct-context mode, the system first
+  tries to return a verbatim `Question:` / `Answer:` block from the assigned KB;
+  otherwise it falls through to the direct-context LLM call over that full KB.
+  For vacancy-thread factual follow-ups, the runner combines the prior vacancy
+  query with the current question so salary, benefits, and other details stay
+  scoped to the same company evidence. `search_knowledge` remains the path for
+  document facts, and `list_active_jobs` remains a structured recommendation
+  tool; an empty catalog does not block a real answer from published KB
+  evidence.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
   `_dispatch_tool` dispatch by name. The deterministic router prefetches
   `search_bus_timetable` for high-confidence timetable turns and
   `search_knowledge` for high-confidence contact/admin and FAQ-detail turns.
-  Vacancy turns use `list_active_jobs` as a required tool, and a valid active-
-  job payload short-circuits the final answer to the tool-rendered `safe_reply`
-  so the LLM does not restate or reinterpret live vacancy facts.
+  FAQ bypass is deterministic and can abstain on low confidence; when it hits,
+  curated FAQ text is returned verbatim. Vacancy-thread detail questions are
+  resolved from the same published recruitment evidence rather than from the
+  live recommendation catalog.
 - **Tool-loop ceiling:** `max_llm_calls_per_turn` (default 6).
 - **Typing heartbeat:** `_typing_heartbeat` sends `typing` to Zalo every 4s
   while a turn is processing (keeps the candidate's typing indicator alive).

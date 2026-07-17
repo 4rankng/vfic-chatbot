@@ -31,10 +31,14 @@ from app.graph import fast_lane
 from app.graph.outbound_telemetry import OutboundTelemetry
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.direct_context import build_direct_system, build_direct_user_text
+from app.graph.direct_context import (
+    build_direct_system,
+    build_direct_user_text,
+    direct_context_evidence_answer,
+)
 from app.graph.prompts import ERROR_REPLY
 from app.graph.router import (
-    TurnRoute,
+    is_generic_vacancy_listing,
     is_vacancy_lookup,
     route_turn,
     routing_instruction,
@@ -150,17 +154,24 @@ async def _agent_turn(
     timings: dict | None = None,
     manifest_policy=None,
 ) -> str:
-    route = _route_with_context(user_text, recent_messages)
+    route = route_turn(user_text)
+    vacancy_authority_tool = (
+        "list_active_jobs"
+        if route.reason == "vacancy_listing"
+        else "search_knowledge"
+        if route.reason == "vacancy_terms"
+        else None
+    )
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
-        if route.reason == "vacancy_terms" and not manifest_policy.tool_registry.allows(
-            "list_active_jobs"
+        if vacancy_authority_tool is not None and not manifest_policy.tool_registry.allows(
+            vacancy_authority_tool
         ):
             return VACANCY_LOOKUP_UNAVAILABLE_REPLY
         return await run_manifest_composed_agent(
             user_text,
             deps,
             policy=manifest_policy,
-            required_tool="list_active_jobs" if route.reason == "vacancy_terms" else None,
+            required_tool="list_active_jobs" if route.reason == "vacancy_listing" else None,
         )
 
     # System prompt = active persona + master index of active products (best-effort;
@@ -203,9 +214,9 @@ async def _agent_turn(
                 name for name in allowed_tools if name in resolved_tool_registry
             )
     if (
-        route.reason == "vacancy_terms"
+        vacancy_authority_tool is not None
         and resolved_tool_registry is not None
-        and "list_active_jobs" not in resolved_tool_registry
+        and vacancy_authority_tool not in resolved_tool_registry
     ):
         return VACANCY_LOOKUP_UNAVAILABLE_REPLY
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
@@ -260,12 +271,10 @@ async def _agent_turn(
         "allowed_tools": allowed_tools,
         "use_fast": use_fast,
         "make_retrieval": deps.make_retrieval,
-        "lookup_query": user_text,
+        "lookup_query": _vacancy_evidence_query(user_text, recent_messages) or user_text,
         "metrics": timings,
     }
-    if route.reason == "vacancy_terms" and (
-        resolved_tool_registry is None or "list_active_jobs" in resolved_tool_registry
-    ):
+    if route.reason == "vacancy_listing":
         agent_kwargs["required_tool"] = "list_active_jobs"
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
@@ -467,8 +476,10 @@ def _faq_should_abstain(bypass, settings) -> bool:
     return (bypass.score - bypass.runner_up_score) < margin
 
 
-# Volatile operational claims (pay/hours/transport/contact/vacancy) must never
-# be answered from FAQ prose. Duplicated in app.services.chatbot.paths.
+# Volatile operational claims normally avoid FAQ prose. Vacancy threads are the
+# exception: published, effective-dated canonical FAQ answers are deterministic
+# evidence and take precedence over free-form generation.
+# Duplicated in app.services.chatbot.paths.
 # _VOLATILE_FACT_MARKERS: the graph layer may not import service modules
 # (architecture-audit DI boundary), so keep the two in sync. When paths.py is
 # wired into the turn pipeline, inject this set through GraphDeps.
@@ -489,64 +500,38 @@ _FAQ_BYPASS_VOLATILE_MARKERS = (
     "liên hệ",
 )
 
-_VACANCY_FOLLOWUP_MARKERS = (
-    "lương",
-    "thu nhập",
-    "ca làm",
-    "giờ làm",
-    "tăng ca",
-    "phụ cấp",
-    "xe đưa đón",
-    "ktx",
-    "hồ sơ",
-    "kinh nghiệm",
-    "địa điểm",
-    "yêu cầu",
-    "độ tuổi",
-    "giới tính",
-    "nhà trọ",
-    "chỗ ở",
-)
-
-
-def _recent_vacancy_context(recent_messages: list[Message]) -> bool:
+def _recent_vacancy_query(recent_messages: list[Message]) -> str | None:
     for message in reversed(recent_messages):
         sender = getattr(message, "sender", "")
         sender_value = getattr(sender, "value", sender)
-        if sender_value != "WORKER":
-            continue
-        body = getattr(message, "body", "") or ""
-        if is_vacancy_lookup(body):
-            return True
-    return False
+        body = str(getattr(message, "body", "") or "")
+        if sender_value == "WORKER" and is_vacancy_lookup(body):
+            return body
+    return None
 
 
-def _route_with_context(user_text: str, recent_messages: list[Message]) -> TurnRoute:
-    """Keep volatile vacancy follow-ups on the same live Job authority path."""
-    route = route_turn(user_text)
-    if route.reason == "vacancy_terms":
-        return route
-    if route.intent == "faq_detail" and _recent_vacancy_context(recent_messages):
-        return TurnRoute(
-            "recommend",
-            "structured_lookup",
-            tools=("list_active_jobs",),
-            reason="vacancy_terms",
-            confidence=0.92,
-        )
-    return route
+def _vacancy_evidence_query(user_text: str, recent_messages: list[Message]) -> str | None:
+    """Scope vacancy facts and follow-ups to the same published recruitment evidence."""
+    if is_generic_vacancy_listing(user_text):
+        return None
+    if is_vacancy_lookup(user_text):
+        return user_text
+    if route_turn(user_text).intent != "faq_detail":
+        return None
+    vacancy_query = _recent_vacancy_query(recent_messages)
+    return f"{vacancy_query}\n{user_text}" if vacancy_query else None
 
 
 def _faq_bypass_allowed(user_text: str, recent_messages: list[Message]) -> bool:
-    """Volatile claims must use structured/live authority, never FAQ prose."""
+    """Prefer canonical vacancy FAQs; keep other volatile claims on live paths."""
+    if is_generic_vacancy_listing(user_text):
+        return False
     normalized = user_text.casefold()
+    if _vacancy_evidence_query(user_text, recent_messages) is not None:
+        # Published, effective-dated canonical FAQs are the preferred deterministic
+        # answer for vacancy threads; the confidence/margin gate still may abstain.
+        return True
     if any(marker in normalized for marker in _FAQ_BYPASS_VOLATILE_MARKERS):
-        return False
-    if is_vacancy_lookup(user_text):
-        return False
-    if _recent_vacancy_context(recent_messages) and any(
-        marker in normalized for marker in _VACANCY_FOLLOWUP_MARKERS
-    ):
         return False
     return True
 
@@ -661,8 +646,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         direct_context = (
             await deps.direct_context.active_context() if deps.direct_context is not None else None
         )
-        # Static KB text cannot establish volatile vacancy state or related pay/details.
-        if _route_with_context(state.user_text, recent_messages).reason == "vacancy_terms":
+        if is_generic_vacancy_listing(state.user_text):
+            # A single direct-context KB answer cannot represent the complete
+            # structured catalog requested by a generic listing question.
             direct_context = None
         recruitment_capabilities = (
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
@@ -721,7 +707,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     max(0.0, _remaining(state) - settings.send_margin_seconds),
                 )
                 bypass = await asyncio.wait_for(
-                    deps.faq_bypass.try_answer(state.user_text),
+                    deps.faq_bypass.try_answer(
+                        _vacancy_evidence_query(state.user_text, recent_messages)
+                        or state.user_text
+                    ),
                     timeout=bypass_budget,
                 )
             except asyncio.TimeoutError:
@@ -769,10 +758,23 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             bypass = None
 
         if direct_context is not None:
-            candidate = await _direct_context_turn(
-                direct_context, deps, state.user_text, recent_messages, timings
+            evidence_query = _vacancy_evidence_query(state.user_text, recent_messages)
+            evidence_answer = (
+                direct_context_evidence_answer(direct_context.knowledge_text, evidence_query)
+                if evidence_query is not None
+                else None
             )
-            outcome_label = "direct_context"
+            if evidence_answer is not None:
+                candidate = evidence_answer
+                timings["lane"] = "direct_context"
+                timings["direct_context_evidence"] = True
+                timings["direct_context_knowledge_base_id"] = direct_context.knowledge_base_id
+                outcome_label = "direct_context"
+            else:
+                candidate = await _direct_context_turn(
+                    direct_context, deps, state.user_text, recent_messages, timings
+                )
+                outcome_label = "direct_context"
         elif fast is not None:
             timings["lane"] = "fast_lane"
             candidate = fast.reply

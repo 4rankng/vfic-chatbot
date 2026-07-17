@@ -660,14 +660,18 @@ async def get_facebook_status(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> FacebookIntegrationOut:
-    """Safe status of all Facebook Page accounts (active + archived)."""
+    """Safe status of all Facebook Page accounts (active + archived).
+
+    ``enabled`` mirrors how Zalo Chatbot / Zalo OA are considered configured:
+    the channel is on when an admin has connected an active Page (an ACTIVE
+    ChannelAccount row exists). It is NOT a deploy-time env toggle.
+    """
     from app.channels.providers.facebook_account import FacebookAccountResolver
-    from app.core.config import get_settings
 
     resolver = FacebookAccountResolver(db)
     accounts = await resolver.list_facebook_accounts()
     return FacebookIntegrationOut(
-        enabled=get_settings().facebook_connection_enabled,
+        enabled=any(a.is_active for a in accounts),
         accounts=[
             FacebookAccountStatusOut(
                 page_id_suffix=(a.account_key[-4:] if a.account_key else ""),

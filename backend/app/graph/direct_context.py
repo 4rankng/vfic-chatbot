@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
+from app.core.text import normalize_vietnamese_text
 from app.models.conversation import DeliveryStatus, Message, MessageSender
 
 
@@ -12,6 +14,69 @@ class DirectContext:
     knowledge_base_id: str
     persona_body: str
     knowledge_text: str
+
+
+_QUESTION_ANSWER_BLOCK = re.compile(
+    r"(?ims)^\s*Question:\s*(?P<question>.+?)\s*\n+\s*Answer:\s*(?P<answer>.+?)"
+    r"(?=\n\s*(?:Question:|#{1,6}\s|Source:|Applies to:|Escalate when:|---)|\Z)"
+)
+_MATCH_STOPWORDS = frozenset(
+    {
+        "anh",
+        "ban",
+        "ben",
+        "cho",
+        "cua",
+        "dang",
+        "duoc",
+        "gan",
+        "hien",
+        "khong",
+        "minh",
+        "nha",
+        "the",
+        "thi",
+        "toi",
+        "vi",
+    }
+)
+
+
+def _evidence_terms(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", normalize_vietnamese_text(value or ""))
+        if (len(token) >= 3 or token == "lg") and token not in _MATCH_STOPWORDS
+    }
+
+
+def direct_context_evidence_answer(knowledge_text: str, query: str) -> str | None:
+    """Return the best verbatim FAQ answer when the published text supports the query.
+
+    The model is deliberately not involved: matching may select an answer, but it
+    cannot rewrite numbers, vacancy claims, or other operational facts.
+    """
+    query_terms = _evidence_terms(query)
+    if len(query_terms) < 2:
+        return None
+
+    best: tuple[int, int, str] | None = None
+    for block in _QUESTION_ANSWER_BLOCK.finditer(knowledge_text or ""):
+        question = block.group("question").strip()
+        answer = block.group("answer").strip()
+        question_hits = query_terms & _evidence_terms(question)
+        answer_hits = query_terms & _evidence_terms(answer)
+        distinct_hits = question_hits | answer_hits
+        score = (3 * len(question_hits)) + len(answer_hits)
+        if len(distinct_hits) < 2 or score < 5:
+            continue
+        candidate = (score, len(distinct_hits), answer)
+        if best is None or candidate[:2] > best[:2]:
+            best = candidate
+
+    if best is None:
+        return None
+    return best[2][:1200].strip()
 
 
 def _speaker(message: Message) -> str:

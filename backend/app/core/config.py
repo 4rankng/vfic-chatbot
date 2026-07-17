@@ -125,11 +125,14 @@ class Settings(BaseSettings):
     zalo_oa_access_token: str = ""
     zalo_oa_refresh_token: str = ""
 
-    # Facebook Messenger / Meta (Phase 4). All deployment-owned; implementation
-    # never edits .env. Fail-closed: when facebook_connection_enabled is True in
-    # production, startup requires meta_app_secret + meta_webhook_verify_token
-    # (checked in model_post_init). Graph API version is pinned centrally so a
-    # Meta deprecation surfaces as one config change, not a code hunt.
+    # Facebook Messenger / Meta (Phase 4). These are deployment-owned Meta App
+    # credentials only — they identify the Meta App to Graph API. Whether the
+    # Messenger CHANNEL is "on" is NOT a deploy-time toggle: it's driven by
+    # whether an admin has connected an active Facebook Page via the settings
+    # page (an active ChannelAccount row), exactly like how Zalo Chatbot / Zalo
+    # OA are considered configured once their credentials are in the integration
+    # settings. Graph API version is pinned centrally so a Meta deprecation
+    # surfaces as one config change, not a code hunt.
     meta_app_id: str = ""
     meta_app_secret: str = ""
     meta_login_config_id: str = ""
@@ -139,9 +142,6 @@ class Settings(BaseSettings):
     # Exact allowlist for OAuth callback redirect URIs (production origins).
     # Empty in dev (localhost callbacks permitted).
     facebook_callback_allowlist: list[str] = []
-    # Toggle: operators set this True once the Meta App is configured; production
-    # startup then fails closed if the verification secrets are absent.
-    facebook_connection_enabled: bool = False
 
     # LLM providers. These are bootstrap/dev defaults; production can override
     # enable/default/model choices from the admin-managed integration settings.
@@ -412,19 +412,6 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "INTEGRATION_SETTINGS_ENCRYPTION_KEY must be set outside development "
                 "so admin-managed integration secrets are encrypted at rest."
-            )
-        # Phase 4: a production instance that enables Facebook but forgets the
-        # Meta verification secrets would accept OAuth traffic it cannot validate
-        # (webhook signature, OAuth state). Fail closed at boot instead.
-        if (
-            self.app_env != "development"
-            and self.facebook_connection_enabled
-            and not (self.meta_app_secret and self.meta_webhook_verify_token)
-        ):
-            raise RuntimeError(
-                "FACEBOOK_CONNECTION_ENABLED is True but META_APP_SECRET and/or "
-                "META_WEBHOOK_VERIFY_TOKEN are unset. Configure them before enabling "
-                "the Facebook Messenger channel."
             )
         # allow_credentials=True is hardcoded in main.py (JWT in the Authorization
         # header needs credentialed CORS). A wildcard '*' origin with credentials

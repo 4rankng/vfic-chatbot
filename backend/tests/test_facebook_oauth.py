@@ -229,14 +229,13 @@ async def test_status_response_masks_page_id_and_carries_no_token(monkeypatch):
         "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
         _list,
     )
-    monkeypatch.setattr(
-        "app.core.config.get_settings",
-        lambda: SimpleNamespace(facebook_connection_enabled=True),
-    )
 
     db = MagicMock()
     admin = SimpleNamespace(id="admin", role="admin")
     response = await api.get_facebook_status(_admin=admin, db=db)
+    # `enabled` is derived from whether an active Page account exists — NOT from
+    # a deploy-time env toggle. Mirrors Zalo "configured" semantics.
+    assert response.enabled is True
     # The full page id never appears; only the 4-char suffix.
     dumped = response.model_dump_json()
     assert "1234567890" not in dumped

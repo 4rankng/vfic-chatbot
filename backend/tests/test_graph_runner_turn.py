@@ -37,14 +37,16 @@ CONV_ID = "00000000-0000-0000-0000-000000000001"
 def test_faq_bypass_refuses_volatile_operational_questions():
     assert runner._faq_bypass_allowed("Hồ sơ cần những gì?", []) is True
     assert runner._faq_bypass_allowed("Lương vị trí này bao nhiêu?", []) is False
-    assert runner._faq_bypass_allowed("Bên mình còn tuyển không?", []) is False
-    assert runner._faq_bypass_allowed("bên bạn có nhận thợ hàn không?", []) is False
+    assert runner._faq_bypass_allowed("Bên mình còn tuyển không?", []) is True
+    assert runner._faq_bypass_allowed("bên bạn có nhận thợ hàn không?", []) is True
+    assert runner._faq_bypass_allowed("bên mình đang tuyển gì?", []) is False
+    assert runner._faq_bypass_allowed("bên bạn còn việc không?", []) is False
     assert (
         runner._faq_bypass_allowed(
             "lương bao nhiêu?",
             [SimpleNamespace(sender="WORKER", body="bên bạn tuyển thợ hàn CO2 đúng ko?")],
         )
-        is False
+        is True
     )
 
 
@@ -201,13 +203,17 @@ def _state() -> BotRunState:
 
 
 @pytest.mark.asyncio
-async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
+async def test_vacancy_turn_uses_verbatim_direct_context_evidence(monkeypatch):
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
                 knowledge_base_id="kb-1",
                 persona_body="Bạn là tư vấn viên.",
-                knowledge_text="LG Display Tràng Duệ đang tuyển công nhân sản xuất.",
+                knowledge_text=(
+                    "Question: LG Display Hải Phòng tuyển vị trí gì?\n\n"
+                    "Answer: LG Display Hải Phòng tuyển công nhân thời vụ làm sản "
+                    "xuất tại Khu công nghiệp Tràng Duệ, An Dương, Hải Phòng."
+                ),
             )
 
     class _DirectAgent:
@@ -215,7 +221,7 @@ async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
 
         async def direct(self, user_text, *, system, metrics=None):
             self.calls += 1
-            raise AssertionError("vacancy state must not come from static direct-context text")
+            raise AssertionError("matched direct-context evidence must not be rewritten by an LLM")
 
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
@@ -224,8 +230,6 @@ async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
     direct_agent = _DirectAgent()
     deps.agent = direct_agent
     deps.direct_context = _DirectReader()
-
-    _stub_agent(monkeypatch, "VFIC hiện có các vị trí ACTIVE.")
 
     result = await run_turn(
         BotRunState(
@@ -239,19 +243,64 @@ async def test_vacancy_turn_bypasses_tool_free_direct_context(monkeypatch):
         deps,
     )
 
-    assert result["outcome"] == "sent"
-    assert result["reply"] == "VFIC hiện có các vị trí ACTIVE."
+    assert result["outcome"] == "direct_context"
+    assert result["reply"].startswith("LG Display Hải Phòng tuyển công nhân thời vụ")
     assert direct_agent.calls == 0
 
 
 @pytest.mark.asyncio
-async def test_vacancy_salary_followup_bypasses_tool_free_direct_context(monkeypatch):
+async def test_generic_vacancy_listing_bypasses_single_kb_answer(monkeypatch):
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
                 knowledge_base_id="kb-1",
                 persona_body="Bạn là tư vấn viên.",
-                knowledge_text="Tài liệu cũ ghi lương 30 triệu.",
+                knowledge_text=(
+                    "Question: LG Display tuyển gì?\n\n"
+                    "Answer: LG Display tuyển công nhân thời vụ."
+                ),
+            )
+
+    class _DirectAgent:
+        async def direct(self, *args, **kwargs):  # noqa: ARG002
+            raise AssertionError("generic listings must not use one direct-context answer")
+
+    async def _catalog_turn(*args, **kwargs):  # noqa: ARG001
+        return "Công việc A\nCông việc B"
+
+    monkeypatch.setattr(runner, "_agent_turn", _catalog_turn)
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    deps = _deps(_FakeZalo(), conversation=svc)
+    deps.agent = _DirectAgent()
+    deps.direct_context = _DirectReader()
+
+    result = await run_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="bên mình đang tuyển gì?",
+        ),
+        deps,
+    )
+
+    assert result == {"outcome": "sent", "reply": "Công việc A\nCông việc B"}
+
+
+@pytest.mark.asyncio
+async def test_vacancy_salary_followup_uses_verbatim_direct_context_evidence(monkeypatch):
+    class _DirectReader:
+        async def active_context(self):
+            return DirectContext(
+                knowledge_base_id="kb-1",
+                persona_body="Bạn là tư vấn viên.",
+                knowledge_text=(
+                    "Question: LG Display Hải Phòng tuyển vị trí gì?\n\n"
+                    "Answer: LG Display Hải Phòng tuyển công nhân thời vụ.\n\n"
+                    "Question: Lương của công nhân LG Display là bao nhiêu?\n\n"
+                    "Answer: Lương cơ bản hiện tại là 6.030.000 VNĐ/tháng; thu nhập "
+                    "ước tính 10-13 triệu VNĐ/tháng khi có tăng ca."
+                ),
             )
 
     class _DirectAgent:
@@ -259,7 +308,7 @@ async def test_vacancy_salary_followup_bypasses_tool_free_direct_context(monkeyp
 
         async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
             self.calls += 1
-            raise AssertionError("vacancy pay must be rechecked against live Job data")
+            raise AssertionError("matched salary evidence must not be rewritten by an LLM")
 
     history = [
         SimpleNamespace(
@@ -274,8 +323,6 @@ async def test_vacancy_salary_followup_bypasses_tool_free_direct_context(monkeyp
     direct_agent = _DirectAgent()
     deps.agent = direct_agent
     deps.direct_context = _DirectReader()
-    _stub_agent(monkeypatch, "Thu nhập đã xác minh từ Job ACTIVE.")
-
     result = await run_turn(
         BotRunState(
             conversation_id=CONV_ID,
@@ -285,8 +332,9 @@ async def test_vacancy_salary_followup_bypasses_tool_free_direct_context(monkeyp
         deps,
     )
 
-    assert result["outcome"] == "sent"
-    assert result["reply"] == "Thu nhập đã xác minh từ Job ACTIVE."
+    assert result["outcome"] == "direct_context"
+    assert "6.030.000 VNĐ/tháng" in result["reply"]
+    assert "10-13 triệu VNĐ/tháng" in result["reply"]
     assert direct_agent.calls == 0
 
 
@@ -330,12 +378,12 @@ async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_direct_vacancy_question_reaches_agent_and_skips_faq_bypass(monkeypatch):
+async def test_direct_vacancy_question_reaches_agent_when_faq_bypass_misses(monkeypatch):
     user_text = "bên bạn có nhận thợ hàn không?"
 
-    class _MustNotBypass:
+    class _MissBypass:
         async def try_answer(self, user_text):  # noqa: ARG002
-            raise AssertionError("FAQ bypass must not answer vacancy threads")
+            return None
 
     captured: dict[str, object] = {}
 
@@ -350,7 +398,7 @@ async def test_direct_vacancy_question_reaches_agent_and_skips_faq_bypass(monkey
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv)
     zalo = _FakeZalo()
-    deps = _deps(zalo, conversation=svc, faq_bypass=_MustNotBypass())
+    deps = _deps(zalo, conversation=svc, faq_bypass=_MissBypass())
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=user_text)
 
     result = await run_turn(state, deps)
@@ -360,6 +408,49 @@ async def test_direct_vacancy_question_reaches_agent_and_skips_faq_bypass(monkey
     assert captured["user_text"] == user_text
     assert captured["chat_id"] == "z1"
     assert recorded[0]["stage_timings"]["lane"] == "agent"
+
+
+@pytest.mark.asyncio
+async def test_exact_reported_vacancy_question_returns_canonical_faq_answer(monkeypatch):
+    from app.graph.ports import FaqBypassResult
+
+    user_text = (
+        "mình nhà ở quoán toan _hp gần lG tràng duệ."
+        "bên lG tràng duệ mình đang tuyển ạ"
+    )
+    canonical_answer = (
+        "LG Display Hải Phòng tuyển công nhân thời vụ làm sản xuất và kiểm tra "
+        "màn hình điện tử tại Khu công nghiệp Tràng Duệ, An Dương, Hải Phòng."
+    )
+
+    class _CanonicalFaq:
+        query = ""
+
+        async def try_answer(self, query):
+            self.query = query
+            return FaqBypassResult(
+                answer=canonical_answer,
+                faq_id="lg-display-vacancy",
+                tier="hybrid",
+                score=0.93,
+                runner_up_score=0.61,
+            )
+
+    async def _must_not_run(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("canonical vacancy evidence must answer before free-form generation")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    bypass = _CanonicalFaq()
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+
+    result = await run_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=user_text),
+        _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass),
+    )
+
+    assert result == {"outcome": "faq_bypass", "reply": canonical_answer}
+    assert bypass.query == user_text
 
 
 @pytest.mark.parametrize(
@@ -371,10 +462,10 @@ async def test_direct_vacancy_question_reaches_agent_and_skips_faq_bypass(monkey
     ],
 )
 @pytest.mark.asyncio
-async def test_vacancy_prompts_reach_agent_and_skip_faq_bypass(monkeypatch, user_text):
-    class _MustNotBypass:
+async def test_vacancy_prompts_reach_agent_when_faq_bypass_misses(monkeypatch, user_text):
+    class _MissBypass:
         async def try_answer(self, user_text):  # noqa: ARG002
-            raise AssertionError("FAQ bypass must not answer vacancy threads")
+            return None
 
     captured: dict[str, object] = {}
 
@@ -389,7 +480,7 @@ async def test_vacancy_prompts_reach_agent_and_skip_faq_bypass(monkeypatch, user
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv)
     zalo = _FakeZalo()
-    deps = _deps(zalo, conversation=svc, faq_bypass=_MustNotBypass())
+    deps = _deps(zalo, conversation=svc, faq_bypass=_MissBypass())
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=user_text)
 
     result = await run_turn(state, deps)
@@ -402,10 +493,13 @@ async def test_vacancy_prompts_reach_agent_and_skip_faq_bypass(monkeypatch, user
 
 
 @pytest.mark.asyncio
-async def test_vacancy_followup_reach_agent_without_faq_bypass(monkeypatch):
-    class _MustNotBypass:
-        async def try_answer(self, user_text):  # noqa: ARG002
-            raise AssertionError("FAQ bypass must stay off in vacancy threads")
+async def test_vacancy_followup_reaches_agent_with_scoped_query_when_faq_bypass_misses(monkeypatch):
+    class _MissBypass:
+        query = ""
+
+        async def try_answer(self, user_text):
+            self.query = user_text
+            return None
 
     history = [SimpleNamespace(sender="WORKER", body="bên bạn tuyển thợ hàn CO2 đúng ko?")]
     captured: dict[str, object] = {}
@@ -420,7 +514,8 @@ async def test_vacancy_followup_reach_agent_without_faq_bypass(monkeypatch):
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, messages=history)
     zalo = _FakeZalo()
-    deps = _deps(zalo, conversation=svc, faq_bypass=_MustNotBypass())
+    bypass = _MissBypass()
+    deps = _deps(zalo, conversation=svc, faq_bypass=bypass)
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="lương bao nhiêu?")
 
     result = await run_turn(state, deps)
@@ -429,6 +524,8 @@ async def test_vacancy_followup_reach_agent_without_faq_bypass(monkeypatch):
     assert result["reply"] == "LLM saw follow-up: lương bao nhiêu?"
     assert captured["user_text"] == "lương bao nhiêu?"
     assert captured["recent_messages"][0].body == "bên bạn tuyển thợ hàn CO2 đúng ko?"
+    assert "thợ hàn CO2" in bypass.query
+    assert "lương bao nhiêu" in bypass.query
     assert recorded[0]["stage_timings"]["lane"] == "agent"
 
 
@@ -1123,7 +1220,7 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rag_vacancy_turn_requires_active_job_tool_for_exact_reported_message(monkeypatch):
+async def test_rag_vacancy_turn_uses_assigned_knowledge_for_exact_reported_message(monkeypatch):
     from app.graph.runner import _agent_turn
 
     query = (
@@ -1165,13 +1262,57 @@ async def test_rag_vacancy_turn_requires_active_job_tool_for_exact_reported_mess
     )
 
     assert reply == "LG Display Tràng Duệ đang tuyển."
-    assert captured["allowed_tools"] == ("list_active_jobs",)
+    assert captured["allowed_tools"] == ("search_knowledge",)
     assert captured["lookup_query"] == query
+    assert "required_tool" not in captured
+
+
+@pytest.mark.asyncio
+async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    query = "bên mình đang tuyển gì?"
+    captured: dict[str, object] = {}
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured["user_text"] = user_text
+            captured.update(kwargs)
+            return "Danh sách việc đang tuyển."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=query),
+        deps,
+        query,
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+    )
+
+    assert reply == "Danh sách việc đang tuyển."
+    assert captured["allowed_tools"] == ("list_active_jobs",)
     assert captured["required_tool"] == "list_active_jobs"
 
 
 @pytest.mark.asyncio
-async def test_rag_vacancy_salary_followup_rechecks_active_jobs(monkeypatch):
+async def test_rag_vacancy_salary_followup_scopes_knowledge_query_to_vacancy_thread(monkeypatch):
     from app.graph.runner import _agent_turn
 
     query = "luong bao nhieu da"
@@ -1219,8 +1360,10 @@ async def test_rag_vacancy_salary_followup_rechecks_active_jobs(monkeypatch):
         timings={"lane": "agent"},
     )
 
-    assert captured["allowed_tools"] == ("list_active_jobs",)
-    assert captured["required_tool"] == "list_active_jobs"
+    assert captured["allowed_tools"] == ("get_product_features", "search_knowledge")
+    assert "lG tràng duệ" in str(captured["lookup_query"])
+    assert query in str(captured["lookup_query"])
+    assert "required_tool" not in captured
 
 
 @pytest.mark.asyncio
