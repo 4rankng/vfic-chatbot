@@ -12,6 +12,7 @@ stand in for the outside world. These are characterization tests — they pin
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -246,7 +247,8 @@ async def test_list_active_jobs_forwards_explicit_filters_and_bounds_top_k(no_ca
     assert calls == [
         {"role": "thợ hàn", "company": "LG", "location": "Hải Phòng", "top_k": 10}
     ]
-    assert out.startswith("STATUS: no_match")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["status"] == "no_match"
 
 
 @pytest.mark.asyncio
@@ -288,13 +290,17 @@ async def test_list_active_jobs_formats_bounded_evidence_with_groundable_uuid(no
 
     out = await list_active_jobs(retrieval=repo)
 
-    assert out.startswith("STATUS: matched\n")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["status"] == "matched"
     assert f"id={job_id}" in out
-    assert "title=Công nhân sản xuất" in out
-    assert "company=LG Display" in out
-    assert "vacancy_count=20" in out
-    assert "description=Sản xuất màn hình" in out
-    assert "accommodation_support=True" in out
+    assert payload["jobs"][0]["title"] == "Công nhân sản xuất"
+    assert payload["jobs"][0]["company"] == "LG Display"
+    assert payload["jobs"][0]["vacancy_count"] == 20
+    assert "description" not in payload["jobs"][0]
+    assert "requirements" not in payload["jobs"][0]
+    assert "benefits" not in payload["jobs"][0]
+    assert untrusted_id not in out
+    assert "SECURITY_BOUNDARY" in out
     assert extract_surfaced_job_ids([out]) == {job_id}
 
 
@@ -314,7 +320,8 @@ async def test_list_active_jobs_statuses_remain_honest(
 
     out = await list_active_jobs(retrieval=repo)
 
-    assert out.startswith(f"STATUS: {expected_status}")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["status"] == expected_status
     assert forbidden_claim not in out
 
 
@@ -325,8 +332,9 @@ async def test_list_active_jobs_exception_is_status_labelled_unavailable(no_cach
 
     out = await list_active_jobs(retrieval=_make_repo(list_active_jobs=_raise))
 
-    assert out.startswith("STATUS: unavailable")
-    assert "do not make a hiring claim" in out
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["status"] == "unavailable"
+    assert "chưa thể kiểm tra" in payload["safe_reply"]
 
 
 # ---------------------------------------------------------------------------

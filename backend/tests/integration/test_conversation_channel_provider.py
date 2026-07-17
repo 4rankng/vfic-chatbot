@@ -5,8 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 
-from app.models.conversation import ConversationMode
+from app.models.contact import Contact, ContactChannelIdentity
+from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
+from app.models.lead import Lead, LeadScore
 from app.models.user import Role, User
 from app.services.conversation import ConversationService
 from app.services.dashboard.repository import DashboardRepository
@@ -174,3 +177,129 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
             per_page=2,
         )
         assert reason_total >= 0
+
+
+async def test_lead_reason_suppression_is_scoped_to_selected_provider(
+    integration_session,
+) -> None:
+    """Activity on one adapter must not hide another adapter's lead action."""
+    now = datetime.now(timezone.utc)
+    old = now - timedelta(days=4)
+    contact = Contact(display_name="Shared adapter contact")
+    integration_session.add(contact)
+    await integration_session.flush()
+    bot_identity = ContactChannelIdentity(
+        contact_id=contact.id,
+        provider="zalo_bot",
+        account_key="shared-bot",
+        external_id="shared-candidate",
+    )
+    oa_identity = ContactChannelIdentity(
+        contact_id=contact.id,
+        provider="zalo_oa",
+        account_key="shared-oa",
+        external_id="shared-candidate",
+    )
+    integration_session.add_all([bot_identity, oa_identity])
+    await integration_session.flush()
+    bot_conversation = Conversation(
+        contact_id=contact.id,
+        channel_identity_id=bot_identity.id,
+        zalo_chat_id="shared-candidate",
+        updated_at=old,
+        last_inbound_at=now,
+        last_outbound_at=old,
+    )
+    oa_conversation = Conversation(
+        contact_id=contact.id,
+        channel_identity_id=oa_identity.id,
+        zalo_chat_id="oa:shared-candidate",
+        zalo_channel="oa",
+        updated_at=old,
+        last_inbound_at=old,
+        last_outbound_at=old,
+    )
+    integration_session.add_all([bot_conversation, oa_conversation])
+    await integration_session.flush()
+
+    lead = (
+        await integration_session.scalars(select(Lead).where(Lead.contact_id == contact.id))
+    ).one()
+    lead.lead_score = LeadScore.hot
+    lead.updated_at = old
+    integration_session.add(
+        Message(
+            conversation_id=bot_conversation.id,
+            sender=MessageSender.RECRUITER,
+            body="Bot-channel recruiter reply",
+            created_at=now,
+        )
+    )
+    await integration_session.flush()
+
+    repo = DashboardRepository(integration_session)
+
+    priority_ids, priority_total = await repo.attention_reason_page(
+        None,
+        reason="PRIORITY_NO_ACTION",
+        channel_provider="zalo_oa",
+        page=1,
+        per_page=10,
+    )
+    assert priority_ids == [oa_conversation.id]
+    assert priority_total == 1
+    _aggregate_priority_ids, aggregate_priority_total = await repo.attention_reason_page(
+        None,
+        reason="PRIORITY_NO_ACTION",
+        channel_provider=None,
+        page=1,
+        per_page=10,
+    )
+    assert aggregate_priority_total == 0
+
+    stalled_ids, stalled_total = await repo.attention_reason_page(
+        None,
+        reason="STALLED",
+        channel_provider="zalo_oa",
+        page=1,
+        per_page=10,
+    )
+    assert stalled_ids == [oa_conversation.id]
+    assert stalled_total == 1
+    _aggregate_stalled_ids, aggregate_stalled_total = await repo.attention_reason_page(
+        None,
+        reason="STALLED",
+        channel_provider=None,
+        page=1,
+        per_page=10,
+    )
+    assert aggregate_stalled_total == 0
+
+    # Same-provider recruiter reply and activity suppress the selected OA rows.
+    integration_session.add(
+        Message(
+            conversation_id=oa_conversation.id,
+            sender=MessageSender.RECRUITER,
+            body="OA-channel recruiter reply",
+            created_at=now,
+        )
+    )
+    oa_conversation.last_inbound_at = now
+    await integration_session.flush()
+
+    _priority_ids, priority_total = await repo.attention_reason_page(
+        None,
+        reason="PRIORITY_NO_ACTION",
+        channel_provider="zalo_oa",
+        page=1,
+        per_page=10,
+    )
+    _stalled_ids, stalled_total = await repo.attention_reason_page(
+        None,
+        reason="STALLED",
+        channel_provider="zalo_oa",
+        page=1,
+        per_page=10,
+    )
+    assert priority_total == 0
+    assert stalled_total == 0

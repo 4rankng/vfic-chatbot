@@ -183,7 +183,8 @@ def route_turn(user_text: str) -> TurnRoute:
     if fast_lane_match(raw) is not None:
         return TurnRoute("small_talk", "template", reason="fast_lane_match", confidence=0.95)
 
-    has_recommendation = _has_any(text, _RECOMMEND_TERMS) or "tuyen" in text.split()
+    is_vacancy_lookup = "tuyen" in text.split()
+    has_recommendation = _has_any(text, _RECOMMEND_TERMS)
     has_detail = _has_any(text, _DETAIL_TERMS)
     has_phone = bool(_PHONE_RE.search(raw))
 
@@ -203,6 +204,15 @@ def route_turn(user_text: str) -> TurnRoute:
             tools=("search_knowledge",),
             reason="contact_terms",
             confidence=0.9,
+        )
+
+    if is_vacancy_lookup:
+        return TurnRoute(
+            "recommend",
+            "structured_lookup",
+            tools=("list_active_jobs",),
+            reason="vacancy_terms",
+            confidence=0.92,
         )
 
     if has_recommendation:
@@ -240,11 +250,14 @@ def routing_instruction(route: TurnRoute) -> str:
     if route.intent == "small_talk":
         return "Ý định: trò chuyện xã giao. Trả lời ngắn gọn, thân thiện; không cần tra cứu nếu không có câu hỏi tuyển dụng."
     if route.intent == "recommend":
+        if route.reason == "vacancy_terms":
+            return (
+                "Ý định: kiểm tra các vị trí đang tuyển. Bắt buộc gọi list_active_jobs; "
+                "truyền role/company/location đã diễn giải và bỏ trống bộ lọc khi người dùng "
+                "muốn xem danh sách chung."
+            )
         return (
-            "Ý định: tư vấn việc đang tuyển hoặc gợi ý việc phù hợp. Với câu hỏi về vị trí "
-            "đang tuyển, phải gọi list_active_jobs với các bộ lọc role/company/location đã "
-            "diễn giải; bỏ trống tất cả bộ lọc khi ứng viên muốn xem danh sách chung. "
-            "Nếu đã có hồ sơ ứng viên (lương/khu vực/vị trí), "
+            "Ý định: gợi ý việc phù hợp. Nếu đã có hồ sơ ứng viên (lương/khu vực/vị trí), "
             "ưu tiên gọi recommend_jobs(chat_id) để gợi ý việc theo hồ sơ; nếu chưa đủ hồ sơ "
             "thì dùng recommend_projects. Sau đó gọi get_product_features cho slug dự án đã "
             "chọn để nêu lý do cụ thể. Chỉ gợi ý việc/dự án có trong dữ liệu."

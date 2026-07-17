@@ -134,6 +134,19 @@ class _RecordingLLM:
         return SimpleNamespace(content="ok", tool_calls=None)
 
 
+class _RequiredToolLLM:
+    def __init__(self, responses) -> None:
+        self.responses = iter(responses)
+        self.tool_choices: list[str | None] = []
+
+    def bind_tools(self, tools, *, tool_choice=None):
+        self.tool_choices.append(tool_choice)
+        return self
+
+    async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+        return next(self.responses)
+
+
 async def test_agent_passes_allowed_tools_to_bind_tools(monkeypatch):
     """MiniMaxAgent.agent must forward allowed_tools so a routed turn binds only its lane."""
     pytest.importorskip("langchain_core")  # agent imports langchain at call time
@@ -170,3 +183,72 @@ async def test_agent_without_allowed_tools_binds_full_registry():
     await agent.agent("hello", system="sys", retrieval=object(), embedder=None)
 
     assert recording.bound_names == _ALL_TOOL_NAMES
+
+
+async def test_required_vacancy_tool_is_forced_then_reply_is_rendered_from_evidence():
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    job_id = "11111111-1111-4111-8111-111111111111"
+    llm = _RequiredToolLLM(
+        [
+            SimpleNamespace(
+                content="",
+                tool_calls=[{"name": "list_active_jobs", "args": {}, "id": "call-1"}],
+            ),
+            SimpleNamespace(content="Bịa lương 30 triệu", tool_calls=None),
+        ]
+    )
+
+    class _Repo:
+        async def list_active_jobs(self, **kwargs):  # noqa: ARG002
+            return SimpleNamespace(
+                status="matched",
+                jobs=(
+                    SimpleNamespace(
+                        id=job_id,
+                        title="Công nhân sản xuất",
+                        company_name="LG Display",
+                        factory_name="Tràng Duệ",
+                        project_name="LG Display",
+                        project_slug="lg-display",
+                        province="Hải Phòng",
+                        district="An Dương",
+                        salary_min=10_000_000,
+                        salary_max=14_000_000,
+                        vacancy_count=20,
+                    ),
+                ),
+            )
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "giới thiệu các vị trí đang tuyển",
+        system="sys",
+        retrieval=_Repo(),
+        embedder=None,
+        allowed_tools=("list_active_jobs",),
+        required_tool="list_active_jobs",
+    )
+
+    assert llm.tool_choices == ["list_active_jobs", None]
+    assert "Công nhân sản xuất" in result
+    assert "10-14 triệu" in result
+    assert "30 triệu" not in result
+
+
+async def test_required_vacancy_tool_skip_fails_closed():
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _RequiredToolLLM([SimpleNamespace(content="LG đang tuyển", tool_calls=None)])
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        "LG đang tuyển gì?",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("list_active_jobs",),
+        required_tool="list_active_jobs",
+    )
+
+    assert llm.tool_choices == ["list_active_jobs"]
+    assert "chưa thể kiểm tra" in result.lower()

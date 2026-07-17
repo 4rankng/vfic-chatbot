@@ -264,16 +264,25 @@ class ConversationState:
         *,
         body: str,
         zalo_message_id: str | None = None,
+        provider_message_id: str | None = None,
         runtime_revision_id: uuid.UUID | None = None,
         authority_generation: int | None = None,
         runtime_fingerprint: str | None = None,
     ) -> Message:
-        """Persist an inbound worker message and update conversation attention state."""
+        """Persist an inbound worker message and update conversation attention state.
+
+        ``provider_message_id`` is the canonical neutral message id (Alembic
+        0047). ``zalo_message_id`` remains as a compatibility alias; when only
+        ``zalo_message_id`` is supplied, it is copied to ``provider_message_id``
+        so the durable inbound idempotency index applies to Zalo rows too.
+        """
+        neutral_id = provider_message_id or zalo_message_id
         msg = Message(
             conversation_id=conv.id,
             sender=MessageSender.WORKER,
             body=body,
             zalo_message_id=zalo_message_id,
+            provider_message_id=neutral_id,
             runtime_revision_id=runtime_revision_id,
             authority_generation=authority_generation,
             runtime_fingerprint=runtime_fingerprint,

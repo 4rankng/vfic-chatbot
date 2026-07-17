@@ -8,6 +8,7 @@ import time. Tool schemas + dispatch live in ``schemas.py``.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import unicodedata
@@ -18,6 +19,11 @@ from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
 
 logger = logging.getLogger(__name__)
+
+_VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
+    "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
+)
+_ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
 
 # ── LLM observability helpers (Redis-backed, process-agnostic) ──────────────
 _RKEY_429 = "llm:minimax_429s"  # INCR on 429, EXPIRE 60 (rolling minute)
@@ -130,12 +136,32 @@ def _is_429(exc: Exception) -> bool:
 
 
 def _ground_reply(reply: str, tool_results: list[str]) -> str:
-    """Post-generation grounding cross-check (Phase 3).
+    """Enforce deterministic vacancy evidence, then validate other job IDs.
 
-    Strips any job_id the reply cites that was not present in the tool results
-    the LLM was shown. Best-effort and never raises — on any error the original
-    reply passes through unchanged (grounding is a guardrail, not a hard gate).
+    Active-job lookups are a hard gate: malformed evidence fails closed and a
+    valid lookup replaces model prose with the tool-rendered safe reply. Other
+    tool paths retain the existing best-effort grounding behavior.
     """
+    for tool_result in reversed(tool_results or []):
+        first_line = str(tool_result).partition("\n")[0]
+        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+            continue
+        try:
+            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+        except (TypeError, ValueError):
+            logger.warning("active-job tool returned malformed grounding payload")
+            return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
+        safe_reply = (
+            payload["safe_reply"]
+            if isinstance(payload, dict) and "safe_reply" in payload
+            else None
+        )
+        if isinstance(safe_reply, str) and safe_reply.strip():
+            # Vacancy prose is rendered from verified tool evidence. The LLM owns
+            # semantic filter selection, but cannot contradict status or add facts.
+            return safe_reply.strip()
+        return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
+
     try:
         from app.core.config import get_settings
 
@@ -358,6 +384,7 @@ class MiniMaxAgent:
         make_retrieval=None,
         lookup_query: str | None = None,
         metrics: dict | None = None,
+        required_tool: str | None = None,
     ) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
         from app.graph.schemas import filter_tool_schemas
@@ -470,11 +497,15 @@ class MiniMaxAgent:
                     )
                 )
                 schemas = []
-        bound = (
-            active_llm.bind_tools(schemas)
-            if schemas and hasattr(active_llm, "bind_tools")
-            else active_llm
-        )
+        if schemas and hasattr(active_llm, "bind_tools"):
+            bound = (
+                active_llm.bind_tools(schemas, tool_choice=required_tool)
+                if required_tool
+                else active_llm.bind_tools(schemas)
+            )
+        else:
+            bound = active_llm
+        required_tool_called = False
         messages.append(HumanMessage(content=user_text))
         for _ in range(self.max_iters):
             if metrics is not None:
@@ -526,6 +557,9 @@ class MiniMaxAgent:
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
             if not calls:
+                if required_tool and not required_tool_called:
+                    logger.warning("required LLM tool was not called: %s", required_tool)
+                    return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
                 return _ground_reply(ai.content, tool_results)
             if metrics is not None:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
@@ -594,6 +628,8 @@ class MiniMaxAgent:
             # MiniMax occasionally omits tool_call.id; an empty tool_call_id
             # breaks the OpenAI tool protocol on the next turn. Synthesize one.
             for idx, (tc, out) in enumerate(zip(calls, outs)):
+                if (tc["name"] if "name" in tc else "") == required_tool:
+                    required_tool_called = True
                 tool_results.append(str(out))
                 messages.append(
                     ToolMessage(
@@ -601,6 +637,12 @@ class MiniMaxAgent:
                         tool_call_id=tc.get("id") or f"call_{idx}_{tc.get('name', 'tool')}",
                     )
                 )
+            if required_tool_called and schemas and hasattr(active_llm, "bind_tools"):
+                # Require the authority tool only on the first model round. After
+                # evidence is present, allow the model to produce its final turn.
+                bound = active_llm.bind_tools(schemas)
+        if required_tool and not required_tool_called:
+            return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
         final = messages[-1].content if hasattr(messages[-1], "content") else ""
         return _ground_reply(final, tool_results)
 

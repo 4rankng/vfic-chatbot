@@ -1,5 +1,7 @@
 """Tests for graph clients + tool schemas/dispatch."""
 
+import json
+
 import pytest
 
 from app.graph.clients import (
@@ -7,6 +9,7 @@ from app.graph.clients import (
     OpenRouterEmbedder,
     _active_llm_provider,
     _chat_for_role,
+    _ground_reply,
     _minimax_chat,
     build_embedder,
 )
@@ -50,6 +53,33 @@ _DISPATCHED = {
     "search_bus_timetable",
     "get_product_features",
 }
+
+
+def _vacancy_result(status: str, safe_reply: str) -> str:
+    payload = json.dumps(
+        {"status": status, "jobs": [], "safe_reply": safe_reply},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"ACTIVE_JOB_LOOKUP_JSON={payload}"
+
+
+def test_vacancy_tool_status_deterministically_overrides_model_claims():
+    no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
+    unavailable = _vacancy_result("unavailable", "Chưa thể kiểm tra tuyển dụng.")
+
+    assert _ground_reply("LG đang tuyển thợ hàn, lương 30 triệu.", [no_match]) == (
+        "Không có việc ACTIVE phù hợp."
+    )
+    assert _ground_reply("VFIC không còn tuyển vị trí nào.", [unavailable]) == (
+        "Chưa thể kiểm tra tuyển dụng."
+    )
+
+
+def test_malformed_vacancy_tool_payload_fails_closed():
+    assert "chưa thể kiểm tra" in _ground_reply(
+        "LG đang tuyển thợ hàn.", ["ACTIVE_JOB_LOOKUP_JSON={not-json}"]
+    ).lower()
 
 
 @pytest.mark.asyncio

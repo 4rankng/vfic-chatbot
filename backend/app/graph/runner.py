@@ -47,6 +47,9 @@ from app.models.conversation import DeliveryStatus, Message
 logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
+VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
+    "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
+)
 
 def _remaining(state: BotRunState) -> float:
     """Seconds left until the propagated turn deadline (``inf`` if unset).
@@ -184,6 +187,12 @@ async def _agent_turn(
             allowed_tools = tuple(
                 name for name in allowed_tools if name in resolved_tool_registry
             )
+    if (
+        route.reason == "vacancy_terms"
+        and resolved_tool_registry is not None
+        and "list_active_jobs" not in resolved_tool_registry
+    ):
+        return VACANCY_LOOKUP_UNAVAILABLE_REPLY
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
     # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
     # the switch when no fast model was injected (tests / un-configured deployments).
@@ -239,6 +248,10 @@ async def _agent_turn(
         "lookup_query": user_text,
         "metrics": timings,
     }
+    if route.reason == "vacancy_terms" and (
+        resolved_tool_registry is None or "list_active_jobs" in resolved_tool_registry
+    ):
+        agent_kwargs["required_tool"] = "list_active_jobs"
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
     reply = await deps.agent.agent(contextual_user_text, **agent_kwargs)
