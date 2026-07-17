@@ -37,7 +37,7 @@ CONV_ID = "00000000-0000-0000-0000-000000000001"
 def test_faq_bypass_refuses_volatile_operational_questions():
     assert runner._faq_bypass_allowed("Hồ sơ cần những gì?", []) is True
     assert runner._faq_bypass_allowed("Lương vị trí này bao nhiêu?", []) is False
-    assert runner._faq_bypass_allowed("Bên mình còn tuyển không?", []) is True
+    assert runner._faq_bypass_allowed("Bên mình còn tuyển không?", []) is False
     assert runner._faq_bypass_allowed("bên bạn có nhận thợ hàn không?", []) is True
     assert runner._faq_bypass_allowed("bên mình đang tuyển gì?", []) is False
     assert runner._faq_bypass_allowed("bên bạn còn việc không?", []) is False
@@ -48,6 +48,15 @@ def test_faq_bypass_refuses_volatile_operational_questions():
         )
         is True
     )
+
+
+def test_vacancy_evidence_query_stops_at_a_new_named_topic():
+    history = [
+        SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?"),
+        SimpleNamespace(sender="WORKER", body="Samsung có ca đêm không?"),
+    ]
+
+    assert runner._vacancy_evidence_query("lương bao nhiêu?", history) is None
 
 
 # ---------------------------------------------------------------------------
@@ -1309,6 +1318,7 @@ async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
     assert reply == "Danh sách việc đang tuyển."
     assert captured["allowed_tools"] == ("list_active_jobs",)
     assert captured["required_tool"] == "list_active_jobs"
+    assert captured["required_tool_args"] == {"top_k": 10}
 
 
 @pytest.mark.asyncio

@@ -38,3 +38,19 @@ def test_salary_followup_selects_salary_answer_from_same_vacancy_thread():
 
 def test_unrelated_query_does_not_select_recruitment_evidence():
     assert direct_context_evidence_answer(_KNOWLEDGE, "thời tiết hôm nay") is None
+
+
+def test_requested_role_absent_from_evidence_does_not_select_generic_vacancy_answer():
+    for query in (
+        "LG có tuyển kế toán không?",
+        "LG tuyển thợ hàn không?",
+        "LG đang tuyển bảo vệ không?",
+    ):
+        assert direct_context_evidence_answer(_KNOWLEDGE, query) is None
+
+
+def test_matched_evidence_answer_is_never_silently_truncated():
+    full_answer = "LG Display " + ("điều kiện đã xác minh. " * 100)
+    knowledge = "Question: LG Display thông báo đầy đủ?\n\n" f"Answer: {full_answer}"
+
+    assert direct_context_evidence_answer(knowledge, "LG Display thông báo đầy đủ?") == full_answer.rstrip()

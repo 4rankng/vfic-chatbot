@@ -55,15 +55,15 @@ EXPECTED_ROUTE_COUNTS = {
     "personas": 10,
     "projects": 14,
     "users": 10,
-    "webhooks": 2,
+    "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "befdf32e90f5012f212fb2436ac8c1a6b70345dd3987b34992db70147a74e82d"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "950486e9a9c82c1e9a774f188c062b0defb94cb791078293394045e14521a17f"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 69,  # Phase 4: +11 Facebook OAuth/account provider-boundary references
-    "queue_producer": 20,
+    "queue_producer": 22,  # Phase 5: +2 Facebook webhook queue producers
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "eb5697ab857fea9613c0cd3e87a9aa567b190517a7c249eb24607acb6fb45d75"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "68bda8fe3f720e5d27c3fd80e03f85c0a87e231fffe983fe98254784f1b19a56"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

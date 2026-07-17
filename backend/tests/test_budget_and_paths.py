@@ -152,6 +152,27 @@ async def test_path_b_volatile_question_bypasses_static_faq():
     db.execute.assert_not_called()
 
 
+async def test_path_b_allows_curated_vacancy_evidence_when_the_caller_scopes_it(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.knowledge.tools.domain_tools.get_faq_entry",
+        AsyncMock(return_value=MagicMock(found=True, data=[{"answer": "LG đang tuyển", "resolution_type": "static_answer"}])),
+    )
+    monkeypatch.setattr(
+        "app.services.knowledge.tools.domain_tools.format_faq", MagicMock(return_value="LG đang tuyển")
+    )
+
+    outcome = await path_b_faq(
+        user_text="LG đang tuyển không?",
+        normalized_question="lg dang tuyen khong",
+        db=MagicMock(),
+        budget=TurnBudget(),
+        published_vacancy_evidence=True,
+    )
+
+    assert outcome.reply == "LG đang tuyển"
+    assert outcome.outcome_label == "faq_cache"
+
+
 # ─── Path C: retrieval ───────────────────────────────────────────────────────
 
 

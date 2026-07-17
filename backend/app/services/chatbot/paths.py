@@ -22,10 +22,10 @@ from app.services.chatbot.budget import BudgetExhausted, CallKind, TurnBudget
 
 logger = logging.getLogger(__name__)
 
-# Volatile operational claims that must bypass the static FAQ path. Intentionally
-# duplicated as app.graph.runner._FAQ_BYPASS_VOLATILE_MARKERS: the graph/service
-# DI boundary forbids a shared import, so keep the two in sync. When this path
-# is wired into the runner, inject one set through GraphDeps.
+# Volatile operational claims normally bypass the static FAQ path. A caller that
+# has already established a specific published recruitment-evidence context may
+# opt in to returning the exact curated FAQ instead. Generic job listings must
+# still take the structured catalog path before reaching this function.
 _VOLATILE_FACT_MARKERS = (
     "lương",
     "thu nhập",
@@ -133,13 +133,17 @@ async def path_b_faq(
     db,
     budget: TurnBudget,
     active_kb_version_id: str | None = None,
+    published_vacancy_evidence: bool = False,
 ) -> PathOutcome:
     """Directive §2 Path B: FAQ lookup, zero LLM calls.
 
     Exact normalized-question match → stored answer. Dynamic FAQs (resolution_type='tool')
     signal cannot_handle so the runner routes to Path A's tool instead.
     """
-    if any(marker in user_text.casefold() for marker in _VOLATILE_FACT_MARKERS):
+    if (
+        any(marker in user_text.casefold() for marker in _VOLATILE_FACT_MARKERS)
+        and not published_vacancy_evidence
+    ):
         return PathOutcome(reply="", outcome_label="faq_volatile", cannot_handle=True)
 
     from app.services.knowledge.tools.domain_tools import format_faq, get_faq_entry

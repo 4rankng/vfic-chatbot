@@ -409,6 +409,7 @@ class MiniMaxAgent:
         lookup_query: str | None = None,
         metrics: dict | None = None,
         required_tool: str | None = None,
+        required_tool_args: dict | None = None,
     ) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
         from app.graph.schemas import filter_tool_schemas
@@ -625,7 +626,11 @@ class MiniMaxAgent:
             # fallback when there's only one call or no factory is wired (tests).
             async def _dispatch_one(tc: dict) -> str:
                 name = tc.get("name", "")
-                args = tc.get("args", {})
+                args = (
+                    dict(required_tool_args)
+                    if name == required_tool and required_tool_args is not None
+                    else tc.get("args", {})
+                )
                 tool_call_t0 = time.monotonic()
                 try:
                     if make_retrieval is not None:

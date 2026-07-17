@@ -21,12 +21,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from contextlib import suppress
 from inspect import iscoroutinefunction
 
 from app.core.config import get_settings
+from app.core.text import normalize_vietnamese_text
 from app.graph import fast_lane
 from app.graph.outbound_telemetry import OutboundTelemetry
 from app.graph.llm_semaphore import LLMThrottled
@@ -163,6 +165,13 @@ async def _agent_turn(
         else None
     )
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
+        allowed_tools = (
+            route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
+        )
+        if allowed_tools is not None:
+            allowed_tools = tuple(
+                name for name in allowed_tools if name in manifest_policy.tool_registry.names
+            )
         if vacancy_authority_tool is not None and not manifest_policy.tool_registry.allows(
             vacancy_authority_tool
         ):
@@ -171,7 +180,10 @@ async def _agent_turn(
             user_text,
             deps,
             policy=manifest_policy,
+            allowed_tools=allowed_tools,
+            lookup_query=_vacancy_evidence_query(user_text, recent_messages) or user_text,
             required_tool="list_active_jobs" if route.reason == "vacancy_listing" else None,
+            required_tool_args={"top_k": 10} if route.reason == "vacancy_listing" else None,
         )
 
     # System prompt = active persona + master index of active products (best-effort;
@@ -276,6 +288,7 @@ async def _agent_turn(
     }
     if route.reason == "vacancy_listing":
         agent_kwargs["required_tool"] = "list_active_jobs"
+        agent_kwargs["required_tool_args"] = {"top_k": 10}
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
     reply = await deps.agent.agent(contextual_user_text, **agent_kwargs)
@@ -301,7 +314,10 @@ async def run_manifest_composed_agent(
     deps: GraphDeps,
     *,
     policy=None,
+    allowed_tools: tuple[str, ...] | None = None,
+    lookup_query: str | None = None,
     required_tool: str | None = None,
+    required_tool_args: dict | None = None,
 ) -> str | None:
     """Run an active manifest policy without granting legacy tool authority."""
     if policy is None:
@@ -316,13 +332,19 @@ async def run_manifest_composed_agent(
         "system": build_policy_system_prompt(policy),
         "retrieval": deps.retrieval,
         "embedder": deps.embedder,
-        "allowed_tools": tuple(sorted(policy.tool_registry.names)),
+        "allowed_tools": (
+            tuple(sorted(policy.tool_registry.names))
+            if allowed_tools is None
+            else tuple(name for name in allowed_tools if name in policy.tool_registry.names)
+        ),
         "resolved_tool_registry": policy.tool_registry.names,
         "make_retrieval": deps.make_retrieval,
-        "lookup_query": user_text,
+        "lookup_query": lookup_query or user_text,
     }
     if required_tool is not None:
         agent_kwargs["required_tool"] = required_tool
+    if required_tool_args is not None:
+        agent_kwargs["required_tool_args"] = required_tool_args
     return await deps.agent.agent(
         user_text,
         **agent_kwargs,
@@ -479,10 +501,8 @@ def _faq_should_abstain(bypass, settings) -> bool:
 # Volatile operational claims normally avoid FAQ prose. Vacancy threads are the
 # exception: published, effective-dated canonical FAQ answers are deterministic
 # evidence and take precedence over free-form generation.
-# Duplicated in app.services.chatbot.paths.
-# _VOLATILE_FACT_MARKERS: the graph layer may not import service modules
-# (architecture-audit DI boundary), so keep the two in sync. When paths.py is
-# wired into the turn pipeline, inject this set through GraphDeps.
+# The legacy service path takes an explicit ``published_vacancy_evidence`` flag
+# when it is used; the graph cannot import service modules across this boundary.
 _FAQ_BYPASS_VOLATILE_MARKERS = (
     "lương",
     "thu nhập",
@@ -500,13 +520,61 @@ _FAQ_BYPASS_VOLATILE_MARKERS = (
     "liên hệ",
 )
 
+_VACANCY_THREAD_CONTINUATION_TERMS = frozenset(
+    {
+        "a",
+        "ah",
+        "anh",
+        "bao",
+        "ben",
+        "ca",
+        "cho",
+        "cung",
+        "dem",
+        "duoc",
+        "em",
+        "gio",
+        "giu",
+        "ho",
+        "khong",
+        "ko",
+        "lam",
+        "luong",
+        "minh",
+        "nao",
+        "nhe",
+        "nhap",
+        "o",
+        "phu",
+        "so",
+        "thu",
+        "tang",
+        "tro",
+        "tuyen",
+        "viec",
+        "xe",
+        "yeu",
+    }
+)
+
+def _changes_vacancy_topic(body: str) -> bool:
+    """Whether an intervening worker message introduces a new named subject."""
+    normalized = normalize_vietnamese_text(body or "")
+    terms = set(re.findall(r"[a-z0-9]+", normalized))
+    return bool(terms - _VACANCY_THREAD_CONTINUATION_TERMS)
+
+
 def _recent_vacancy_query(recent_messages: list[Message]) -> str | None:
     for message in reversed(recent_messages):
         sender = getattr(message, "sender", "")
         sender_value = getattr(sender, "value", sender)
         body = str(getattr(message, "body", "") or "")
-        if sender_value == "WORKER" and is_vacancy_lookup(body):
+        if sender_value != "WORKER":
+            continue
+        if is_vacancy_lookup(body):
             return body
+        if _changes_vacancy_topic(body):
+            return None
     return None
 
 

@@ -189,3 +189,242 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     code = 503 if result.get("status") == "start_failed" else 200
     await _stamp_ack(t0, code)
     return JSONResponse(result, status_code=code)
+
+
+# ─── Facebook Messenger webhook (Phase 5) ───────────────────────────────────
+#
+# Two routes, additive to the Zalo routes above. The shared helpers
+# (_stamp_ack, _runtime_authority_or_inactive) are reused. The body is NEVER
+# logged (it can carry candidate text); only bytes=N is logged, matching the
+# Zalo pattern. Signature verification runs over the RAW body before any JSON
+# parse or business write — re-serializing JSON breaks the HMAC.
+
+
+async def _resolve_active_facebook_page(db: AsyncSession):
+    """Return (FacebookRuntimeConfig, ChannelAccountRef) for the active Page, or (None, None)."""
+    from app.channels.providers.facebook_account import FacebookAccountResolver
+    from app.services.integration_settings import IntegrationSettingsService
+
+    resolver = FacebookAccountResolver(db)
+    active = await resolver.active_facebook_page()
+    if active is None or not active.is_active:
+        return None, None
+    settings_service = IntegrationSettingsService(db)
+    cfg = await settings_service.resolve_facebook(active.account_key)
+    return cfg, active
+
+
+@router.get("/facebook")
+async def facebook_webhook_verify(request: Request) -> JSONResponse:
+    """GET challenge — Meta subscribes a webhook URL by sending
+    ``hub.mode=subscribe`` + ``hub.verify_token`` + ``hub.challenge``.
+
+    Constant-time compare against ``meta_webhook_verify_token``; respond with
+    the challenge only on exact match. No DB mutation. A missing configured
+    verify token in non-dev refuses (503) rather than accepting blind.
+    """
+    from app.channels.providers.facebook_signature import constant_time_verify_token
+
+    mode = request.query_params.get("hub.mode") or ""
+    sent_token = request.query_params.get("hub.verify_token") or ""
+    challenge = request.query_params.get("hub.challenge") or ""
+    expected = _settings.meta_webhook_verify_token
+    if not expected and _settings.app_env != "development":
+        return JSONResponse(
+            {"detail": "webhook verification not configured"}, status_code=503
+        )
+    if mode == "subscribe" and constant_time_verify_token(sent=sent_token, expected=expected):
+        return JSONResponse({"hub.challenge": challenge}, status_code=200)
+    return JSONResponse({"detail": "verification failed"}, status_code=403)
+
+
+@router.post("/facebook")
+async def facebook_webhook(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> JSONResponse:
+    """POST event — verify the X-Hub-Signature-256 over the RAW body, then
+    normalize text events and apply receipts.
+
+    Invalid/missing signature → 200 ack with NO side effects. Meta retries on
+    non-2xx, so rejecting with 4xx would cause a retry loop for any malformed/
+    replayed request; ack-and-drop is the documented pattern. The body is never
+    logged (it can contain candidate text).
+    """
+    from app.channels.providers.facebook_messenger import FacebookMessengerNormalizer
+    from app.channels.providers.facebook_signature import verify_messenger_signature
+
+    t0 = time.time()
+    raw = await request.body()
+    logger.info("facebook webhook inbound bytes=%d", len(raw))
+
+    # 1. Signature verification over RAW bytes BEFORE any JSON parse / write.
+    app_secret = _settings.meta_app_secret
+    sig_header = request.headers.get("x-hub-signature-256") or ""
+    verification = verify_messenger_signature(
+        signature_header=sig_header, raw_body=raw, app_secret=app_secret
+    )
+    if not verification.verified:
+        # Ack-and-drop: no business write, no log of the body.
+        logger.info("facebook webhook signature rejected reason=%s", verification.reason)
+        await _stamp_ack(t0, 200)
+        return JSONResponse({"status": "ignored"}, status_code=200)
+
+    # 2. Parse the authenticated body.
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        await _stamp_ack(t0, 200)
+        return JSONResponse({"status": "ignored"}, status_code=200)
+
+    # 3. Resolve the connected Page. An inactive/missing Page acks events as
+    #    inactive (no message/bot turn) so a disconnected Page's traffic is
+    #    safely absorbed rather than dropping with an error.
+    cfg, active = await _resolve_active_facebook_page(db)
+    if cfg is None:
+        logger.info("facebook webhook accepted with no active Page")
+        await _stamp_ack(t0, 200)
+        return JSONResponse({"status": "inactive"}, status_code=200)
+
+    # 4. Normalize + dispatch receipts first (delivery/read), then text events.
+    normalizer = FacebookMessengerNormalizer()
+    messages, ignored = normalizer.normalize(payload)
+    receipt = normalizer.parse_receipt_from_payload(payload)
+    if receipt is not None:
+        try:
+            await _apply_messenger_receipt(db, receipt, active.account_key)
+        except Exception:  # noqa: BLE001 — receipts are best-effort; never fail the ack
+            logger.info("facebook receipt apply failed account_suffix=%s", active.account_key[-4:])
+
+    if ignored:
+        logger.info("facebook webhook ignored events reasons=%s", dict(ignored))
+
+    # 5. Feed each text event to the shared ingress pipeline.
+    from app.channels.ingress import ChannelIngressService
+
+    ingress = ChannelIngressService(db)
+    runtime_authority = await _runtime_authority_or_inactive(db, channel="facebook")
+    for msg in messages:
+        # Page id in the payload must match the connected active Page; a
+        # mismatched event is acknowledged and ignored (no cross-Page leak).
+        if msg.identity.account_key != active.account_key:
+            logger.info(
+                "facebook webhook event page mismatch (dropped) event_page_suffix=%s",
+                msg.identity.account_key[-4:],
+            )
+            continue
+        try:
+            outcome = await ingress.ingest(msg)
+        except Exception:  # noqa: BLE001 — one event must not fail the batch
+            logger.info("facebook ingress ingest failed status=error")
+            continue
+        if outcome.status != "persisted":
+            continue
+        # Enqueue a bot turn for the persisted message, mirroring the Zalo
+        # webhook flow. The v2 job payload carries only neutral ids.
+        try:
+            await _enqueue_facebook_turn(db, outcome, runtime_authority)
+        except Exception:  # noqa: BLE001 — enqueue failure is recovered by reconcile
+            logger.info("facebook turn enqueue failed conversation=%s", outcome.conversation_id)
+
+    await _stamp_ack(t0, 200)
+    return JSONResponse({"status": "processed"}, status_code=200)
+
+
+async def _apply_messenger_receipt(db: AsyncSession, receipt, account_key: str) -> None:
+    """Apply a neutral delivery/read receipt to outbound rows scoped by account.
+
+    SEND_UNKNOWN rows are NEVER upgraded by a Messenger receipt — only an exact
+    (provider, account, provider_message_id) match advances status, preserving
+    the at-most-once invariant. The conversation-wide null-ID fallback used by
+    Zalo OA is disabled for Messenger.
+    """
+    from app.models.conversation import DeliveryStatus, Message
+    from sqlalchemy import select
+
+    if not receipt.provider_message_ids:
+        # Read-by-watermark: no mids to match. Acknowledge and ignore in V1;
+        # mid-scoped read receipts are handled when mids are present.
+        return
+    rows = (
+        await db.scalars(
+            select(Message).where(
+                Message.provider_message_id.in_(receipt.provider_message_ids),
+                Message.sender.in_(("BOT", "RECRUITER")),
+            )
+        )
+    ).all()
+    delivered = receipt.kind == "delivered"
+    rank = {DeliveryStatus.SENT: 1, DeliveryStatus.DELIVERED: 2, DeliveryStatus.READ: 3}
+    target_rank = 2 if delivered else 3
+    for msg in rows:
+        current_rank = rank.get(msg.delivery_status, 0)
+        if current_rank >= target_rank or current_rank == 0:
+            continue  # monotonic + only SENT/DELIVERED/READ eligible
+        msg.delivery_status = (
+            DeliveryStatus.DELIVERED if delivered else DeliveryStatus.READ
+        )
+    await db.commit()
+
+
+async def _enqueue_facebook_turn(db: AsyncSession, outcome, runtime_authority) -> None:
+    """Enqueue a provider-neutral bot turn for one persisted Messenger inbound.
+
+    The v2 payload mirrors the Zalo webhook's shape (conversation_id, version,
+    user_text, lock_owner, trace_id, runtime authority). No provider token.
+    """
+    import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from app.models.conversation import Conversation, Message
+    from app.services.conversation import ConversationService
+
+    conv = await db.scalar(
+        select(Conversation).where(Conversation.id == _uuid.UUID(outcome.conversation_id))
+    )
+    if conv is None:
+        return
+    last_inbound = (
+        await db.scalars(
+            select(Message)
+            .where(Message.conversation_id == conv.id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(1)
+        )
+    ).first()
+    if last_inbound is None:
+        return
+    svc = ConversationService(db)
+    conv = await svc.get(conv.id)
+    if conv is None or not svc.run_start_guard(conv):
+        return
+    version_at_start = conv.version
+    lock_owner = await svc.acquire_lock(conv.id)
+    if lock_owner is None:
+        return
+    job = {
+        "v": 2,
+        "conversation_id": str(conv.id),
+        "version_at_start": version_at_start,
+        "user_text": last_inbound.body,
+        "user_name": "",
+        "reply_to_message_id": last_inbound.provider_message_id or "",
+        "lock_owner": str(lock_owner),
+        "execution_source": "queued",
+        "received_at": last_inbound.created_at.isoformat()
+        if last_inbound.created_at
+        else "",
+        "trace_id": "",
+        "runtime_revision_id": (
+            str(runtime_authority.revision_id) if runtime_authority is not None else ""
+        ),
+        "authority_generation": (
+            runtime_authority.authority_generation if runtime_authority is not None else None
+        ),
+        "runtime_fingerprint": (
+            runtime_authority.fingerprint if runtime_authority is not None else ""
+        ),
+    }
+    ok = enqueue_chat_run(job)
+    if ok is False:
+        await svc.release_lock(conv, lock_owner=lock_owner)

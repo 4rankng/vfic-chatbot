@@ -168,6 +168,47 @@ _GENERIC_VACANCY_LISTING_PATTERNS = tuple(
     )
 )
 
+_GENERIC_LISTING_WORDS = frozenset(
+    {
+        "a",
+        "ah",
+        "anh",
+        "ban",
+        "bay",
+        "ben",
+        "can",
+        "cac",
+        "cho",
+        "co",
+        "con",
+        "cua",
+        "dang",
+        "duoc",
+        "em",
+        "gio",
+        "gi",
+        "hien",
+        "hoi",
+        "job",
+        "khong",
+        "ko",
+        "lam",
+        "minh",
+        "nao",
+        "nhe",
+        "nhung",
+        "oi",
+        "tai",
+        "toi",
+        "tuyen",
+        "dung",
+        "vay",
+        "viec",
+        "vi",
+        "tri",
+    }
+)
+
 _NON_ROLE_ACCEPTANCE_PREFIXES = (
     "vien",  # normalized "nhân viên": avoids treating "có nhân viên" as "có nhận"
     "ho so",
@@ -237,7 +278,17 @@ def is_vacancy_lookup(user_text: str) -> bool:
 def is_generic_vacancy_listing(user_text: str) -> bool:
     """Whether the user asks for the full current catalog without a named target."""
     text = re.sub(r"[?.!,;:]+$", "", _normalize(user_text)).strip()
-    return any(pattern.fullmatch(text) for pattern in _GENERIC_VACANCY_LISTING_PATTERNS)
+    if any(pattern.fullmatch(text) for pattern in _GENERIC_VACANCY_LISTING_PATTERNS):
+        return True
+    if not is_vacancy_lookup(text):
+        return False
+
+    # Vietnamese candidates often add polite/discourse words around a broad
+    # request. Treat it as a catalog listing only when no company, location, or
+    # role term remains after removing the generic vocabulary.
+    without_listing_nouns = re.sub(r"\b(?:cong viec|viec lam|vi tri)\b", " ", text)
+    terms = set(re.findall(r"[a-z0-9]+", without_listing_nouns))
+    return bool(terms) and terms <= _GENERIC_LISTING_WORDS
 
 
 def route_turn(user_text: str) -> TurnRoute:

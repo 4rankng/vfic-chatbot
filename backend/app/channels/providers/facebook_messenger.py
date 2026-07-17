@@ -159,16 +159,19 @@ class FacebookMessengerNormalizer:
                     continue
                 if "delivery" in item and isinstance(item["delivery"], dict):
                     mids = item["delivery"].get("mids") or []
-                    watermarks = item["delivery"].get("watermark")
                     ts = item["delivery"].get("ts") or item.get("timestamp")
                 elif "read" in item and isinstance(item["read"], dict):
                     mids = []  # read events carry only a watermark, not mids
-                    watermarks = item["read"].get("watermark")
                     ts = item["read"].get("ts") or item.get("timestamp")
                 else:
                     continue
                 provider_mids = tuple(str(m) for m in mids if m)
-                if not provider_mids and watermarks is None:
+                # V1 handles only mid-scoped receipts (delivery events carry
+                # mids; read events carry only a watermark). A watermark-only
+                # read cannot be matched to a specific outbound message id
+                # without a range query, which is deferred. Return None so the
+                # caller acknowledges and ignores.
+                if not provider_mids:
                     continue
                 occurred_at = (
                     datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc)

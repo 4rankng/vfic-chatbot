@@ -40,6 +40,11 @@ _MATCH_STOPWORDS = frozenset(
         "vi",
     }
 )
+_ROLE_QUERY = re.compile(
+    r"\b(?:tuyen|nhan)\s+(?P<role>.+?)(?:\s+(?:khong|ko))?[?.!]*$",
+    re.IGNORECASE,
+)
+_GENERIC_ROLE_TERMS = frozenset({"cac", "cong", "dung", "gi", "lam", "nao", "nhung", "tri", "vi", "viec"})
 
 
 def _evidence_terms(value: str) -> set[str]:
@@ -50,6 +55,22 @@ def _evidence_terms(value: str) -> set[str]:
     }
 
 
+def _requested_role_terms(query: str) -> set[str]:
+    """Extract an explicitly requested role that a canonical answer must support."""
+    current_line = next(
+        (line for line in reversed((query or "").splitlines()) if line.strip()),
+        query or "",
+    )
+    match = _ROLE_QUERY.search(normalize_vietnamese_text(current_line))
+    if match is None:
+        return set()
+    return {
+        term
+        for term in re.findall(r"[a-z0-9]+", normalize_vietnamese_text(match.group("role")))
+        if len(term) >= 2 and term not in _GENERIC_ROLE_TERMS
+    }
+
+
 def direct_context_evidence_answer(knowledge_text: str, query: str) -> str | None:
     """Return the best verbatim FAQ answer when the published text supports the query.
 
@@ -57,6 +78,7 @@ def direct_context_evidence_answer(knowledge_text: str, query: str) -> str | Non
     cannot rewrite numbers, vacancy claims, or other operational facts.
     """
     query_terms = _evidence_terms(query)
+    requested_role_terms = _requested_role_terms(query)
     if len(query_terms) < 2:
         return None
 
@@ -66,6 +88,9 @@ def direct_context_evidence_answer(knowledge_text: str, query: str) -> str | Non
         answer = block.group("answer").strip()
         question_hits = query_terms & _evidence_terms(question)
         answer_hits = query_terms & _evidence_terms(answer)
+        block_terms = _evidence_terms(f"{question}\n{answer}")
+        if requested_role_terms and not requested_role_terms <= block_terms:
+            continue
         distinct_hits = question_hits | answer_hits
         score = (3 * len(question_hits)) + len(answer_hits)
         if len(distinct_hits) < 2 or score < 5:
@@ -76,7 +101,7 @@ def direct_context_evidence_answer(knowledge_text: str, query: str) -> str | Non
 
     if best is None:
         return None
-    return best[2][:1200].strip()
+    return best[2].strip()
 
 
 def _speaker(message: Message) -> str:

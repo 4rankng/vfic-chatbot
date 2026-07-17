@@ -226,7 +226,7 @@ async def test_vacancy_knowledge_route_prefetches_evidence_for_llm(monkeypatch):
     assert llm.bound_names is None
 
 
-async def test_required_vacancy_tool_is_forced_then_reply_is_rendered_from_evidence():
+async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
@@ -235,14 +235,23 @@ async def test_required_vacancy_tool_is_forced_then_reply_is_rendered_from_evide
         [
             SimpleNamespace(
                 content="",
-                tool_calls=[{"name": "list_active_jobs", "args": {}, "id": "call-1"}],
+                tool_calls=[
+                    {
+                        "name": "list_active_jobs",
+                        "args": {"company": "hallucinated filter"},
+                        "id": "call-1",
+                    }
+                ],
             ),
             SimpleNamespace(content="Bịa lương 30 triệu", tool_calls=None),
         ]
     )
 
     class _Repo:
-        async def list_active_jobs(self, **kwargs):  # noqa: ARG002
+        received: dict | None = None
+
+        async def list_active_jobs(self, **kwargs):
+            self.received = kwargs
             return SimpleNamespace(
                 status="matched",
                 jobs=(
@@ -262,19 +271,27 @@ async def test_required_vacancy_tool_is_forced_then_reply_is_rendered_from_evide
                 ),
             )
 
+    repo = _Repo()
     result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
         "giới thiệu các vị trí đang tuyển",
         system="sys",
-        retrieval=_Repo(),
+        retrieval=repo,
         embedder=None,
         allowed_tools=("list_active_jobs",),
         required_tool="list_active_jobs",
+        required_tool_args={"top_k": 10},
     )
 
     assert llm.tool_choices == ["list_active_jobs", None]
     assert "Công nhân sản xuất" in result
     assert "10-14 triệu" in result
     assert "30 triệu" not in result
+    assert repo.received == {
+        "role": None,
+        "company": None,
+        "location": None,
+        "top_k": 10,
+    }
 
 
 async def test_required_vacancy_tool_skip_fails_closed():

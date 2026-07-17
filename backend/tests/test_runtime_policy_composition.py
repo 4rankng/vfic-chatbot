@@ -257,6 +257,82 @@ async def test_manifest_without_job_catalog_authority_fails_closed_for_generic_l
     assert agent.calls == 0
 
 
+async def test_non_recruitment_manifest_preserves_generic_catalog_authority():
+    active, persona = _active(
+        capabilities=["conversation", "knowledge", "job_advisory"], pack_key="customer_support"
+    )
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+    assert policy is not None
+    calls: list[dict] = []
+
+    class _Agent:
+        async def agent(self, _text, **kwargs):
+            calls.append(kwargs)
+            return "catalog reply"
+
+    deps = SimpleNamespace(
+        agent=_Agent(),
+        retrieval=object(),
+        embedder=object(),
+        make_retrieval=None,
+    )
+
+    assert (
+        await _agent_turn(
+            SimpleNamespace(),
+            deps,
+            "Cho em hỏi bên mình đang tuyển gì ạ?",
+            chat_id="chat-1",
+            recent_messages=[],
+            manifest_policy=policy,
+        )
+        == "catalog reply"
+    )
+    assert calls[0]["allowed_tools"] == ("list_active_jobs",)
+    assert calls[0]["required_tool"] == "list_active_jobs"
+    assert calls[0]["required_tool_args"] == {"top_k": 10}
+
+
+async def test_non_recruitment_manifest_scopes_specific_vacancy_followup_to_knowledge():
+    active, persona = _active(
+        capabilities=["conversation", "knowledge", "job_advisory"], pack_key="customer_support"
+    )
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+    assert policy is not None
+    calls: list[dict] = []
+
+    class _Agent:
+        async def agent(self, _text, **kwargs):
+            calls.append(kwargs)
+            return "knowledge reply"
+
+    deps = SimpleNamespace(
+        agent=_Agent(),
+        retrieval=object(),
+        embedder=object(),
+        make_retrieval=None,
+    )
+    history = [
+        SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?"),
+        SimpleNamespace(sender="WORKER", body="cho nào cũng được"),
+    ]
+
+    assert (
+        await _agent_turn(
+            SimpleNamespace(),
+            deps,
+            "lương bao nhiêu?",
+            chat_id="chat-1",
+            recent_messages=history,
+            manifest_policy=policy,
+        )
+        == "knowledge reply"
+    )
+    assert calls[0]["allowed_tools"] == ("get_product_features", "search_knowledge")
+    assert "LG Tràng Duệ đang tuyển không?" in calls[0]["lookup_query"]
+    assert calls[0]["lookup_query"].endswith("lương bao nhiêu?")
+
+
 async def _value(value):
     return value
 

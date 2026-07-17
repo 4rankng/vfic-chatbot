@@ -11,7 +11,7 @@ The published recruitment KB already contained the valid LG Display Tràng Duệ
 
 ## What Happened
 
-We changed vacancy handling so `list_active_jobs` is no longer treated as the sole vacancy authority. `route_turn()` now sends vacancy questions to `search_knowledge`, and `run_turn()` can answer from assigned direct-context KB evidence before any LLM rewrite. Follow-up salary/detail questions now combine the prior vacancy query with the current question so the thread stays scoped to the same company evidence.
+We changed vacancy handling so authority follows the question. Generic requests for all current jobs use required `list_active_jobs`, while specific company, location, or role questions use `search_knowledge`. `run_turn()` can answer specific questions from assigned direct-context KB evidence before any LLM rewrite. Follow-up salary/detail questions combine the prior vacancy query with the current question so the thread stays scoped to the same company evidence.
 
 The direct-context side also gained deterministic `Question:` / `Answer:` matching. When the KB has a canonical FAQ block that matches the user query, the runner returns that answer verbatim instead of letting the model rewrite vacancy or salary facts.
 
@@ -21,10 +21,11 @@ This was a self-inflicted authority bug. We had the right published data and sti
 
 ## Decisions
 
-- The assigned published recruitment KB is the vacancy and document authority for candidate questions in both direct-context and RAG modes.
+- Generic “what is hiring?” questions use the complete structured ACTIVE Job catalog.
+- Specific company, location, or role questions use the assigned published recruitment KB in both direct-context and RAG modes.
 - Canonical FAQ direct-context matches must return verbatim answers; the model is not allowed to rewrite vacancy or salary facts.
 - Vacancy follow-ups must combine the prior vacancy query with the current question so salary and benefits stay anchored to the same thread.
-- `list_active_jobs` stays a structured recommendation tool only; it is not the general authority for published recruitment KB answers.
+- `list_active_jobs` is authoritative for generic full-catalog listings, but it does not override a specific published recruitment-KB answer.
 
 ## Next
 
