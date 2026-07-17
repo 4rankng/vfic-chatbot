@@ -7,7 +7,6 @@ const realtime = vi.hoisted(() => ({
 vi.mock("@/lib/vfic/realtimeSocket", () => realtime);
 
 import { useMessageStore } from "../conversations/messageStore";
-import { readyRecruitmentManifest } from "../capabilities/test-fixtures";
 import {
   abandonRuntimeGenerationForTests,
   ensureRuntimeGeneration,
@@ -30,11 +29,10 @@ describe("runtime generation reset", () => {
   });
 
   it("reuses the exact QueryClient and store for the same complete key", async () => {
-    const manifest = readyRecruitmentManifest();
-    const first = await ensureRuntimeGeneration(manifest);
+    const first = await ensureRuntimeGeneration(1);
     first.store.setItem("view", "same-generation");
 
-    const second = await ensureRuntimeGeneration({ ...manifest });
+    const second = await ensureRuntimeGeneration(1);
 
     expect(second).toBe(first);
     expect(second.queryClient).toBe(first.queryClient);
@@ -44,21 +42,13 @@ describe("runtime generation reset", () => {
   });
 
   it("abandons Query, message, socket and adapter state before mounting G8", async () => {
-    const first = await ensureRuntimeGeneration(
-      readyRecruitmentManifest({ authority_generation: 7 }),
-    );
+    const first = await ensureRuntimeGeneration(7);
     first.queryClient.setQueryData(["generation"], "G7");
     useMessageStore.getState().reset("conversation-g7");
     window.localStorage.setItem("vfic:chatops:active-filter:v1", "priority");
     const previousEpoch = getRuntimeEpoch();
 
-    const second = await ensureRuntimeGeneration(
-      readyRecruitmentManifest({
-        authority_generation: 8,
-        revision_id: "00000000-0000-4000-8000-000000000008",
-        manifest_checksum: "8".repeat(64),
-      }),
-    );
+    const second = await ensureRuntimeGeneration(8);
 
     expect(second).not.toBe(first);
     expect(second.queryClient).not.toBe(first.queryClient);
@@ -72,26 +62,20 @@ describe("runtime generation reset", () => {
     expect(realtime.closeRealtimeSocket).toHaveBeenCalledOnce();
   });
 
-  it("leaves no old generation active when the replacement fails compilation", async () => {
-    const first = await ensureRuntimeGeneration(readyRecruitmentManifest());
+  it("replaces an existing generation when authority changes without reusing its cache", async () => {
+    const first = await ensureRuntimeGeneration(1);
     first.queryClient.setQueryData(["old"], "value");
 
-    await expect(
-      ensureRuntimeGeneration(
-        readyRecruitmentManifest({
-          authority_generation: 2,
-          pack_contract_hash: "f".repeat(64),
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "PACK_HASH_MISMATCH" });
+    const replacement = await ensureRuntimeGeneration(2);
 
-    expect(getActiveRuntimeBundle()).toBeNull();
+    expect(getActiveRuntimeBundle()).toBe(replacement);
+    expect(replacement).not.toBe(first);
     expect(first.queryClient.getQueryData(["old"])).toBeUndefined();
     expect(realtime.closeRealtimeSocket).toHaveBeenCalledOnce();
   });
 
   it("fully abandons business state on an active to suspended transition", async () => {
-    const bundle = await ensureRuntimeGeneration(readyRecruitmentManifest());
+    const bundle = await ensureRuntimeGeneration(1);
     bundle.queryClient.setQueryData(["active"], true);
     useMessageStore.getState().reset("active-conversation");
 

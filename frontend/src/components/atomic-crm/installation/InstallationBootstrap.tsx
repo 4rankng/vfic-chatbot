@@ -1,4 +1,3 @@
-import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -8,7 +7,6 @@ import {
   type ReactNode,
 } from "react";
 
-import { Button } from "@/components/ui/button";
 import { applyRuntimeMetadata, resetRuntimeMetadata } from "../root/runtime-metadata";
 import { InstallationProvider } from "./InstallationContext";
 import type { InstallationContextValue } from "./installation-context";
@@ -16,65 +14,36 @@ import {
   fetchRuntimeManifest,
   type PublicRuntimeManifest,
 } from "./runtime-manifest";
-import { getRuntimeKey } from "../capabilities/compile-capabilities";
+import { getStaticRecruitmentRuntimeKey } from "../capabilities/static-recruitment-runtime";
 import { resetActiveRuntimeState } from "../root/reset-runtime-state";
 
 const LEGACY_CONFIGURATION_KEY = "app.configuration";
 const AUTOMATIC_ATTEMPTS = 2;
 
-type BootstrapState =
-  | { status: "loading" }
-  | { status: "error" }
-  | { status: "ready"; manifest: PublicRuntimeManifest };
-
-const NeutralSurface = ({
-  busy,
-  onRetry,
-}: {
-  busy: boolean;
-  onRetry?: () => void;
-}) => (
-  <main className="flex min-h-svh items-center justify-center bg-background px-5 py-10 text-foreground">
-    <section
-      className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-sm sm:p-8"
-      aria-busy={busy}
-      aria-live="polite"
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted">
-          {busy ? (
-            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-          ) : (
-            <AlertTriangle className="size-5" aria-hidden="true" />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-content-title font-semibold tracking-tight">
-            {busy ? "Đang kiểm tra cấu hình" : "Không thể xác minh cấu hình"}
-          </h1>
-          <p className="mt-2 text-body leading-6 text-muted-foreground">
-            {busy
-              ? "Hệ thống đang tải cấu hình an toàn từ máy chủ."
-              : "Không gian làm việc chưa được mở để tránh dùng cấu hình cũ hoặc không đầy đủ."}
-          </p>
-          {!busy && onRetry ? (
-            <Button
-              type="button"
-              className="mt-5 min-h-11 w-full sm:w-auto"
-              onClick={onRetry}
-            >
-              <RefreshCw className="size-4" aria-hidden="true" />
-              Thử lại
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </section>
-  </main>
-);
+const DEFAULT_RECRUITMENT_MANIFEST: PublicRuntimeManifest = {
+  schema_version: 1,
+  lifecycle: "UNCONFIGURED",
+  authority_generation: 0,
+  revision_id: null,
+  pack_key: null,
+  pack_version: null,
+  pack_contract_hash: null,
+  manifest_checksum: null,
+  customer_identity: null,
+  branding: null,
+  locale: null,
+  timezone: null,
+  currency: null,
+  terminology: null,
+  capability_ids: [],
+  legacy_workspace: false,
+  readiness_code: "SETUP_REQUIRED",
+};
 
 export const InstallationBootstrap = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<BootstrapState>({ status: "loading" });
+  const [manifest, setManifest] = useState<PublicRuntimeManifest>(
+    DEFAULT_RECRUITMENT_MANIFEST,
+  );
   const currentManifestRef = useRef<PublicRuntimeManifest | null>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
 
@@ -82,7 +51,6 @@ export const InstallationBootstrap = ({ children }: { children: ReactNode }) => 
     if (inFlightRef.current) return inFlightRef.current;
     const operation = (async () => {
       if (!currentManifestRef.current) {
-        setState({ status: "loading" });
         resetRuntimeMetadata();
       }
 
@@ -91,23 +59,23 @@ export const InstallationBootstrap = ({ children }: { children: ReactNode }) => 
         try {
           const manifest = await fetchRuntimeManifest();
           const previous = currentManifestRef.current;
-          if (previous && getRuntimeKey(previous) !== getRuntimeKey(manifest)) {
-            setState({ status: "loading" });
+          if (
+            previous &&
+            getStaticRecruitmentRuntimeKey(previous.authority_generation) !==
+              getStaticRecruitmentRuntimeKey(manifest.authority_generation)
+          ) {
             await resetActiveRuntimeState();
           }
           currentManifestRef.current = manifest;
           applyRuntimeMetadata(manifest);
-          setState({ status: "ready", manifest });
+          setManifest(manifest);
           return;
         } catch (error) {
           lastError = error;
         }
       }
       void lastError;
-      currentManifestRef.current = null;
-      setState({ status: "error" });
-      await resetActiveRuntimeState();
-      resetRuntimeMetadata();
+      if (!currentManifestRef.current) resetRuntimeMetadata();
     })();
     inFlightRef.current = operation;
     try {
@@ -137,20 +105,10 @@ export const InstallationBootstrap = ({ children }: { children: ReactNode }) => 
     };
   }, [load]);
 
-  const contextValue = useMemo<InstallationContextValue | null>(
-    () =>
-      state.status === "ready"
-        ? { manifest: state.manifest, refreshRuntime: load }
-        : null,
-    [load, state],
+  const contextValue = useMemo<InstallationContextValue>(
+    () => ({ manifest, refreshRuntime: load }),
+    [load, manifest],
   );
 
-  if (state.status === "loading") return <NeutralSurface busy />;
-  if (state.status === "error") {
-    return <NeutralSurface busy={false} onRetry={() => void load()} />;
-  }
-
-  return (
-    <InstallationProvider value={contextValue!}>{children}</InstallationProvider>
-  );
+  return <InstallationProvider value={contextValue}>{children}</InstallationProvider>;
 };

@@ -1,10 +1,12 @@
 import { cleanup, render } from "vitest-browser-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
 
 const mocks = vi.hoisted(() => ({
   fetchRuntimeManifest: vi.fn(),
   applyRuntimeMetadata: vi.fn(),
   resetRuntimeMetadata: vi.fn(),
+  resetActiveRuntimeState: vi.fn(),
 }));
 
 vi.mock("./runtime-manifest", () => ({
@@ -14,8 +16,12 @@ vi.mock("../root/runtime-metadata", () => ({
   applyRuntimeMetadata: mocks.applyRuntimeMetadata,
   resetRuntimeMetadata: mocks.resetRuntimeMetadata,
 }));
+vi.mock("../root/reset-runtime-state", () => ({
+  resetActiveRuntimeState: mocks.resetActiveRuntimeState,
+}));
 
 import { InstallationBootstrap } from "./InstallationBootstrap";
+import { useInstallationContext } from "./installation-context";
 
 const manifest = {
   schema_version: 1,
@@ -36,6 +42,11 @@ const manifest = {
   readiness_code: "SETUP_REQUIRED",
 };
 
+const manifestWithGeneration = (authorityGeneration: number) => ({
+  ...manifest,
+  authority_generation: authorityGeneration,
+});
+
 describe("InstallationBootstrap", () => {
   beforeEach(() => {
     window.localStorage.setItem("app.configuration", "old-customer");
@@ -47,10 +58,9 @@ describe("InstallationBootstrap", () => {
     window.localStorage.clear();
   });
 
-  it("fails closed after bounded runtime failures and exposes an explicit retry", async () => {
+  it("keeps the recruitment console available when runtime metadata is unavailable", async () => {
     mocks.fetchRuntimeManifest.mockRejectedValueOnce(new Error("network"));
     mocks.fetchRuntimeManifest.mockRejectedValueOnce(new Error("invalid schema"));
-    mocks.fetchRuntimeManifest.mockResolvedValueOnce(manifest);
 
     const screen = await render(
       <InstallationBootstrap>
@@ -58,14 +68,9 @@ describe("InstallationBootstrap", () => {
       </InstallationBootstrap>,
     );
 
-    await expect.element(screen.getByText("Không thể xác minh cấu hình")).toBeVisible();
-    await expect.element(screen.getByText("customer application")).not.toBeInTheDocument();
-    expect(mocks.fetchRuntimeManifest).toHaveBeenCalledTimes(2);
-
-    await screen.getByRole("button", { name: "Thử lại" }).click();
     await expect.element(screen.getByText("customer application")).toBeVisible();
-    expect(mocks.fetchRuntimeManifest).toHaveBeenCalledTimes(3);
-    expect(mocks.applyRuntimeMetadata).toHaveBeenCalledWith(manifest);
+    expect(mocks.fetchRuntimeManifest).toHaveBeenCalledTimes(2);
+    expect(mocks.applyRuntimeMetadata).not.toHaveBeenCalled();
   });
 
   it("purges the legacy browser configuration before rendering children", async () => {
@@ -78,5 +83,39 @@ describe("InstallationBootstrap", () => {
 
     await expect.element(screen.getByText("safe child")).toBeVisible();
     expect(window.localStorage.getItem("app.configuration")).toBeNull();
+  });
+
+  it("resets the previous authority generation before publishing a focus refresh", async () => {
+    const trace: string[] = [];
+    mocks.fetchRuntimeManifest
+      .mockResolvedValueOnce(manifestWithGeneration(4))
+      .mockResolvedValueOnce(manifestWithGeneration(5));
+    mocks.resetActiveRuntimeState.mockImplementation(async () => {
+      trace.push("reset");
+    });
+    mocks.applyRuntimeMetadata.mockImplementation((nextManifest) => {
+      trace.push(`metadata:${nextManifest.authority_generation}`);
+    });
+    const AuthorityGeneration = () => {
+      const { manifest: currentManifest } = useInstallationContext();
+      useEffect(() => {
+        trace.push(`child:${currentManifest.authority_generation}`);
+      }, [currentManifest.authority_generation]);
+      return <p>generation {currentManifest.authority_generation}</p>;
+    };
+
+    const screen = await render(
+      <InstallationBootstrap>
+        <AuthorityGeneration />
+      </InstallationBootstrap>,
+    );
+
+    await expect.element(screen.getByText("generation 4")).toBeVisible();
+    window.dispatchEvent(new Event("focus"));
+    await expect.element(screen.getByText("generation 5")).toBeVisible();
+
+    expect(mocks.resetActiveRuntimeState).toHaveBeenCalledTimes(1);
+    expect(trace.indexOf("reset")).toBeLessThan(trace.indexOf("metadata:5"));
+    expect(trace.indexOf("reset")).toBeLessThan(trace.indexOf("child:5"));
   });
 });

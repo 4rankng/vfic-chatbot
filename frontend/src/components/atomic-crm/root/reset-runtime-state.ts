@@ -3,17 +3,13 @@ import { localStorageStore } from "ra-core";
 
 import { closeRealtimeSocket } from "@/lib/vfic/realtimeSocket";
 import {
-  compileCapabilities,
-  getRuntimeKey,
-  materializeCompiledRuntime,
-} from "../capabilities/compile-capabilities";
-import { frontendCapabilityRegistry } from "../capabilities/registry";
+  buildStaticRecruitmentRuntime,
+  getStaticRecruitmentRuntimeKey,
+} from "../capabilities/static-recruitment-runtime";
 import type {
-  FrontendCapabilityRegistry,
   RuntimeGenerationBundle,
 } from "../capabilities/types";
 import { useMessageStore } from "../conversations/messageStore";
-import type { PublicRuntimeManifest } from "../installation/runtime-manifest";
 
 const LEGACY_ADAPTER_KEYS = [
   "vfic:chatops:saved-views:v1",
@@ -75,25 +71,24 @@ const storeKeyFor = (runtimeKey: string): string => {
 };
 
 export const ensureRuntimeGeneration = async (
-  manifest: PublicRuntimeManifest,
-  registry: FrontendCapabilityRegistry = frontendCapabilityRegistry,
+  authorityGeneration: number,
 ): Promise<RuntimeGenerationBundle> => {
-  const requestedKey = getRuntimeKey(manifest);
+  const requestedKey = getStaticRecruitmentRuntimeKey(authorityGeneration);
   if (activeBundle?.key === requestedKey) return activeBundle;
   if (inFlightBundle) {
     if (inFlightKey === requestedKey) return inFlightBundle;
     await inFlightBundle.catch(() => undefined);
-    return ensureRuntimeGeneration(manifest, registry);
+    return ensureRuntimeGeneration(authorityGeneration);
   }
 
   const operation = (async (): Promise<RuntimeGenerationBundle> => {
     if (activeBundle) await resetActiveRuntimeState();
 
-    // Compilation happens only after the previous generation has been fully
-    // abandoned. A failure therefore stays neutral and cannot restore old Admin.
+    // Static runtime creation happens only after the previous generation has
+    // been fully abandoned. A failure therefore stays neutral and cannot
+    // restore a stale Admin generation.
     const activationEpoch = runtimeEpoch;
-    const plan = compileCapabilities(manifest, registry);
-    const runtime = await materializeCompiledRuntime(plan);
+    const runtime = buildStaticRecruitmentRuntime(authorityGeneration);
     if (activationEpoch !== runtimeEpoch) {
       throw new Error("Runtime generation changed during materialization");
     }

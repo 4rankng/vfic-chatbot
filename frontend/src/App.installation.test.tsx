@@ -4,58 +4,32 @@ import type * as RuntimeStateModule from "@/components/atomic-crm/root/reset-run
 
 const state = vi.hoisted(() => ({
   manifest: {} as Record<string, unknown>,
-  refreshRuntime: vi.fn(async () => undefined),
-  failCompilation: false,
+  failStaticRuntime: false,
 }));
 
 vi.mock("@/components/atomic-crm/installation/installation-context", () => ({
   useInstallationContext: () => ({
     manifest: state.manifest,
-    refreshRuntime: state.refreshRuntime,
-  }),
-  hasReadyActiveRuntime: (manifest: { lifecycle?: string; readiness_code?: string }) =>
-    manifest.lifecycle === "ACTIVE" && manifest.readiness_code === "READY",
-}));
-vi.mock("@/components/atomic-crm/installation/runtime-manifest", () => ({
-  legacyRecruitmentWorkspaceManifest: () => ({
-    schema_version: 1,
-    lifecycle: "ACTIVE",
-    authority_generation: 0,
-    revision_id: "00000000-0000-4000-8000-000000000001",
-    pack_key: "recruitment",
-    pack_version: "1",
-    pack_contract_hash: "2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9",
-    manifest_checksum: "0".repeat(64),
-    customer_identity: { display_name: "Ting Ting" },
-    branding: { app_name: "Ting Ting" },
-    readiness_code: "READY",
-    locale: "vi-VN",
-    timezone: "Asia/Ho_Chi_Minh",
-    currency: "VND",
-    terminology: {},
-    capability_ids: ["conversation", "knowledge", "candidate_intake", "job_advisory", "channel.zalo"],
-    legacy_workspace: false,
   }),
 }));
 vi.mock("@/components/atomic-crm/root/CRM", () => ({
   CRM: () => <p>business-admin</p>,
 }));
 vi.mock("@/components/atomic-crm/providers/commons/i18nProvider", () => ({
-  createI18nProvider: () => ({}),
+  i18nProvider: {},
 }));
 vi.mock("@/components/atomic-crm/root/reset-runtime-state", async (importOriginal) => {
   const actual = await importOriginal<typeof RuntimeStateModule>();
   return {
     ...actual,
     ensureRuntimeGeneration: async (...args: Parameters<typeof actual.ensureRuntimeGeneration>) => {
-      if (state.failCompilation) throw new Error("Compilation failed");
+      if (state.failStaticRuntime) throw new Error("Static runtime failed");
       return actual.ensureRuntimeGeneration(...args);
     },
   };
 });
 
-import App, { RuntimeCompilationLoading } from "./App";
-import { readyRecruitmentManifest } from "./components/atomic-crm/capabilities/test-fixtures";
+import App, { RecruitmentWorkspaceLoading } from "./App";
 import {
   abandonRuntimeGenerationForTests,
   resetActiveRuntimeState,
@@ -65,27 +39,26 @@ afterEach(async () => {
   await cleanup();
   await resetActiveRuntimeState();
   abandonRuntimeGenerationForTests();
-  state.refreshRuntime.mockClear();
-  state.failCompilation = false;
+  state.failStaticRuntime = false;
 });
 
 describe("application lifecycle composition", () => {
-  it("announces the neutral runtime compilation state", async () => {
-    const screen = await render(<RuntimeCompilationLoading />);
+  it("announces the recruitment workspace loading state", async () => {
+    const screen = await render(<RecruitmentWorkspaceLoading />);
     await expect.element(screen.getByRole("status")).toHaveTextContent("Đang chuẩn bị không gian tuyển dụng");
     await expect.element(screen.getByRole("main")).toHaveAttribute("aria-live", "polite");
   });
   it.each(["UNCONFIGURED", "DRAFT", "VALIDATED", "SUSPENDED", "UPGRADE_REQUIRED"])(
     "opens the recruitment console without an installation screen for %s",
     async (lifecycle) => {
-      state.manifest = { lifecycle, readiness_code: "SETUP_REQUIRED", locale: null };
+      state.manifest = { lifecycle, readiness_code: "SETUP_REQUIRED", authority_generation: 0 };
       const screen = await render(<App />);
       await expect.element(screen.getByText("business-admin")).toBeVisible();
     },
   );
 
   it("mounts business Admin only for a ready ACTIVE runtime", async () => {
-    state.manifest = readyRecruitmentManifest();
+    state.manifest = { lifecycle: "ACTIVE", readiness_code: "READY", authority_generation: 1 };
     const screen = await render(<App />);
     await expect.element(screen.getByText("business-admin")).toBeVisible();
   });
@@ -95,25 +68,22 @@ describe("application lifecycle composition", () => {
       lifecycle: "UNCONFIGURED",
       readiness_code: "SETUP_REQUIRED",
       legacy_workspace: true,
-      locale: null,
+      authority_generation: 0,
     };
     const screen = await render(<App />);
 
     await expect.element(screen.getByText("business-admin")).toBeVisible();
   });
 
-  it("keeps an explicit retry when static recruitment composition cannot compile", async () => {
-    state.manifest = readyRecruitmentManifest();
-    state.failCompilation = true;
+  it("shows a reload action when static recruitment runtime creation fails", async () => {
+    state.manifest = { lifecycle: "ACTIVE", readiness_code: "READY", authority_generation: 1 };
+    state.failStaticRuntime = true;
     const screen = await render(<App />);
 
     await expect.element(
       screen.getByRole("heading", { name: "Không thể tải không gian tuyển dụng" }),
     ).toBeVisible();
     await expect.element(screen.getByText("business-admin")).not.toBeInTheDocument();
-    state.failCompilation = false;
-    await screen.getByRole("button", { name: "Tải lại không gian làm việc" }).click();
-    expect(state.refreshRuntime).toHaveBeenCalledOnce();
-    await expect.element(screen.getByText("business-admin")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Tải lại trang" })).toBeVisible();
   });
 });

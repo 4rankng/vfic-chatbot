@@ -10,58 +10,10 @@ import type {
 } from "react";
 import type { LucideIcon } from "lucide-react";
 
-import type { PublicRuntimeManifest } from "../installation/runtime-manifest";
 import type { Conversation } from "../types";
-
-export type ContributionKind =
-  | "resource"
-  | "route"
-  | "dashboard"
-  | "navigation"
-  | "conversation-slot";
 
 export type ConversationSlotName = "row" | "filters" | "context" | "actions";
 
-export type ContributionContract = Readonly<{
-  id: string;
-  kind: ContributionKind;
-  moduleId: string;
-  resourceName?: string;
-  routePath?: string;
-  routeLayout?: "layout" | "no-layout";
-  navigationPath?: string;
-  dashboardOwner?: string;
-  conversationSlot?: ConversationSlotName;
-}>;
-
-export type CapabilityContract = Readonly<{
-  id: string;
-  dependencies: readonly string[];
-  contributionIds: readonly string[];
-}>;
-
-export type PackContract = Readonly<{
-  key: string;
-  version: string;
-  kernelAbi: "1";
-  contractHash: string;
-  parityChecksum: string;
-  capabilityIds: readonly string[];
-  baseContributionIds: readonly string[];
-  contributionOrder?: readonly string[];
-  supportedLocales: readonly string[];
-  terminologyKeys: readonly string[];
-}>;
-
-export type RuntimeModuleLoader = () => Promise<ExecutableCapabilityModule>;
-
-export type FrontendCapabilityRegistry = Readonly<{
-  kernelAbi: "1";
-  packs: Readonly<Record<string, PackContract>>;
-  capabilities: Readonly<Record<string, CapabilityContract>>;
-  contributions: Readonly<Record<string, ContributionContract>>;
-  moduleLoaders: Readonly<Record<string, RuntimeModuleLoader>>;
-}>;
 
 export type ConversationRowPresentation = Readonly<{
   displayName: string;
@@ -161,14 +113,6 @@ export type ExecutableContribution =
 
 export type ExecutableCapabilityModule = Readonly<{
   contributions: Readonly<Record<string, ExecutableContribution>>;
-}>;
-
-export type CompiledRuntimePlan = Readonly<{
-  key: string;
-  manifest: PublicRuntimeManifest;
-  registry: FrontendCapabilityRegistry;
-  contributionIds: readonly string[];
-  availableResources: ReadonlySet<string>;
 }>;
 
 export type CompiledRuntime = Readonly<{

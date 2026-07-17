@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { apiUrl } from "../providers/rest/api";
-import { RECRUITMENT_V1_PARITY } from "../capabilities/recruitment-parity";
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 const nullableSha256Schema = sha256Schema.nullable();
@@ -159,44 +158,6 @@ export const isLegacyWorkspaceRuntime = (manifest: PublicRuntimeManifest): boole
   manifest.lifecycle === "UNCONFIGURED" &&
   manifest.readiness_code === "SETUP_REQUIRED" &&
   manifest.legacy_workspace;
-
-/**
- * Temporary display-only composition for installations that predate the
- * installation lifecycle. It does not declare backend runtime authority or
- * alter bot dispatch; it preserves the established recruitment console until
- * the workspace is explicitly adopted into the lifecycle.
- */
-export const legacyRecruitmentWorkspaceManifest = (): PublicRuntimeManifest => ({
-  schema_version: 1,
-  lifecycle: "ACTIVE",
-  authority_generation: 0,
-  revision_id: "00000000-0000-4000-8000-000000000001",
-  pack_key: RECRUITMENT_V1_PARITY.packKey,
-  pack_version: RECRUITMENT_V1_PARITY.packVersion,
-  pack_contract_hash: RECRUITMENT_V1_PARITY.packContractHash,
-  manifest_checksum: "0".repeat(64),
-  customer_identity: {
-    display_name: "Ting Ting",
-    legal_name: undefined,
-    support_name: undefined,
-    support_email: undefined,
-    support_phone: undefined,
-    website_url: undefined,
-    address: undefined,
-  },
-  branding: {
-    app_name: "Ting Ting",
-    primary_color: undefined,
-    secondary_color: undefined,
-  },
-  locale: "vi-VN",
-  timezone: "Asia/Ho_Chi_Minh",
-  currency: "VND",
-  terminology: {},
-  capability_ids: [...RECRUITMENT_V1_PARITY.capabilityIds],
-  readiness_code: "READY",
-  legacy_workspace: false,
-});
 
 type FetchRuntimeManifestOptions = {
   timeoutMs?: number;
