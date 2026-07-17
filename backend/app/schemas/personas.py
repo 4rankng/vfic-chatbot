@@ -106,6 +106,7 @@ class PersonaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     project_id: uuid.UUID | None = None
+    knowledge_base_id: uuid.UUID | None = None
     name: str
     slug: str
     body_md: str
@@ -145,6 +146,7 @@ class PersonaCreate(BaseModel):
 
     name: str = Field(min_length=1)
     body_md: str = Field(min_length=1)
+    knowledge_base_id: uuid.UUID
     slug: str | None = None  # derived from name if absent
     notes: str | None = None
     is_active: bool = False
@@ -158,6 +160,7 @@ class PersonaUpdate(BaseModel):
     body_md: str | None = None
     notes: str | None = None
     followup_rules: PersonaFollowupRules | None = None
+    knowledge_base_id: uuid.UUID | None = None
 
 
 class ProjectMini(BaseModel):

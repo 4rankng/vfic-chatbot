@@ -14,7 +14,10 @@ evolve without dragging the contract along.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from app.graph.direct_context import DirectContext
 
 
 @dataclass(frozen=True)
@@ -143,6 +146,8 @@ class RetrievalPort(Protocol):
 
     async def active_persona_body(self) -> str | None: ...
 
+    async def active_project_ids(self) -> list[str]: ...
+
     async def active_projects_with_card(self) -> list[Any]: ...
 
     async def match_memories(self, embedding: str, top_k: int, filters_json: str) -> list[Any]: ...
@@ -191,6 +196,10 @@ class FaqBypassPort(Protocol):
     async def try_answer(self, user_text: str) -> FaqBypassResult | None: ...
 
 
+class DirectContextPort(Protocol):
+    async def active_context(self) -> "DirectContext | None": ...
+
+
 __all__ = [
     "SendOutcome",
     "FaqBypassResult",
@@ -198,5 +207,6 @@ __all__ = [
     "ConversationPort",
     "ConversationStatePort",
     "LeadContextPort",
+    "DirectContextPort",
     "RetrievalPort",
 ]

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
 from app.models.persona import PersonaVersion
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseMode
 from app.models.user import Role, User
 from app.schemas.personas import PersonaCreate, PersonaUpdate
 from app.services.errors import ConflictError
@@ -27,10 +28,23 @@ async def test_persona_content_edits_append_versions_and_database_rejects_mutati
     )
     integration_session.add(actor)
     await integration_session.flush()
+    knowledge_base = KnowledgeBase(
+        name="Test RAG knowledge",
+        slug=f"test-rag-{uuid.uuid4().hex}",
+        mode=KnowledgeBaseMode.RAG,
+        created_by=actor.id,
+    )
+    integration_session.add(knowledge_base)
+    await integration_session.flush()
     service = PersonaService(integration_session)
 
     persona = await service.create(
-        PersonaCreate(name="Customer voice", body_md="Version one"), actor
+        PersonaCreate(
+            name="Customer voice",
+            body_md="Version one",
+            knowledge_base_id=knowledge_base.id,
+        ),
+        actor,
     )
     await service.update(persona.id, PersonaUpdate(body_md="Version two"), actor)
 

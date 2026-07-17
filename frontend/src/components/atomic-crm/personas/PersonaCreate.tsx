@@ -19,6 +19,7 @@ export const PersonaCreate = () => {
           name: v.name,
           body_md: v.body_md,
           notes: v.notes || null,
+          knowledge_base_id: v.knowledge_base_id,
           followup_rules: v.followup_rules,
         },
       });
@@ -54,6 +55,7 @@ export const PersonaCreate = () => {
                 name: "",
                 body_md: "",
                 notes: "",
+                knowledge_base_id: "",
                 followup_rules: undefined,
               }}
               submitLabel="Tạo Agent"

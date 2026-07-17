@@ -22,7 +22,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import type { Project } from "../types";
+import type { KnowledgeBase, Project } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { normalizeSearch, slugifyProject } from "./projectPickerUtils";
 export const ProjectPicker = ({
@@ -50,6 +50,13 @@ export const ProjectPicker = ({
     sort: { field: "name", order: "ASC" },
     filter: trimmedSearch ? { q: trimmedSearch } : {},
   });
+  const { data: knowledgeBases = [] } = useGetList<KnowledgeBase>("knowledge_bases", {
+    pagination: { page: 1, perPage: 100 },
+    sort: { field: "name", order: "ASC" },
+    filter: {},
+  });
+  const ragKnowledgeBases = knowledgeBases.filter((knowledgeBase) => knowledgeBase.mode === "RAG");
+  const creationKnowledgeBaseId = ragKnowledgeBases.length === 1 ? ragKnowledgeBases[0].id : null;
 
   const availableProjects = useMemo(() => {
     const map = new Map<string, Project>();
@@ -89,11 +96,21 @@ export const ProjectPicker = ({
     if (!canCreate || creating) return;
     setCreating(true);
     try {
+      if (!creationKnowledgeBaseId) {
+        notify(
+          ragKnowledgeBases.length === 0
+            ? "Tạo Knowledge Base RAG trước khi tạo dự án."
+            : "Tạo dự án trong trang Dự án để chọn Knowledge Base RAG.",
+          { type: "warning" },
+        );
+        return;
+      }
       const response = await dataProvider.create("projects", {
         data: {
           name: trimmedSearch,
           slug: slugifyProject(trimmedSearch),
           is_active: true,
+          knowledge_base_id: creationKnowledgeBaseId,
         },
       });
       const project = response.data as Project;

@@ -136,6 +136,7 @@ async def get_persona_template(_admin: User = Depends(require_admin)) -> PlainTe
 @router.post("/import", response_model=PersonaOut, status_code=status.HTTP_201_CREATED)
 async def import_persona(
     file: UploadFile = File(...),
+    knowledge_base_id: uuid.UUID | None = Query(None),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> PersonaOut:
@@ -148,7 +149,7 @@ async def import_persona(
             "Tệp không phải UTF-8 hợp lệ.",
         ) from None
     try:
-        persona = await PersonaService(db).import_persona(text, admin)
+        persona = await PersonaService(db).import_persona(text, admin, knowledge_base_id)
     except ValueError as exc:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,

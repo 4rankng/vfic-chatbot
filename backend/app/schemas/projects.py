@@ -28,6 +28,7 @@ class ProjectOut(BaseModel):
     summary: str | None = None
     index_card: dict[str, Any] = {}
     default_persona_id: uuid.UUID | None = None
+    knowledge_base_id: uuid.UUID | None = None
     knowledge_document_count: int = 0
     feature_readiness: FeatureReadiness = Field(
         default_factory=lambda: FeatureReadiness(ready=0, total=0)
@@ -46,6 +47,7 @@ class ProjectCreate(BaseModel):
 
     slug: str
     name: str
+    knowledge_base_id: uuid.UUID
     is_active: bool = True
 
 
@@ -55,6 +57,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = None
     is_active: bool | None = None
     default_persona_id: uuid.UUID | None = None
+    knowledge_base_id: uuid.UUID | None = None
 
 
 # --- Worker knowledge features (one row per catalog feature per project) ---

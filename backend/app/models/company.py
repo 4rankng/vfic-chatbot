@@ -36,6 +36,9 @@ class Project(Base):
     active_kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="SET NULL")
     )
+    knowledge_base_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge_bases.id", ondelete="RESTRICT")
+    )
     default_persona_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("personas.id", ondelete="SET NULL")
     )

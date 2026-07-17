@@ -38,6 +38,68 @@ class KBVersionStatus(str, enum.Enum):
     FAILED = "FAILED"
 
 
+class KnowledgeBaseMode(str, enum.Enum):
+    RAG = "RAG"
+    DIRECT_CONTEXT = "DIRECT_CONTEXT"
+
+
+class KnowledgeBase(Base):
+    """Standalone logical knowledge resource shared by one or more Agents."""
+
+    __tablename__ = "knowledge_bases"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    slug: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    mode: Mapped[KnowledgeBaseMode] = mapped_column(
+        Enum(KnowledgeBaseMode, name="knowledge_base_mode", create_type=False),
+        nullable=False,
+    )
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class KnowledgeBaseDirectFile(Base):
+    """The sole full-text source allowed for a direct-context KB."""
+
+    __tablename__ = "knowledge_base_direct_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_text: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    line_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 class KBVersion(Base):
     __tablename__ = "kb_versions"
 

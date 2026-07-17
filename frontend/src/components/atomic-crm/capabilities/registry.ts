@@ -27,6 +27,7 @@ const contributions = [
     moduleId: "kernel.workspace.v1",
     resourceName: "knowledge_sources",
   }),
+  contribution({ id: "kernel.resource.knowledge-bases", kind: "resource", moduleId: "kernel.workspace.v1", resourceName: "knowledge_bases" }),
   contribution({
     id: "kernel.resource.projects",
     kind: "resource",
@@ -144,6 +145,7 @@ export const frontendCapabilityRegistry: FrontendCapabilityRegistry = Object.fre
         "kernel.resource.conversations",
         "kernel.resource.bot-runs",
         "kernel.resource.knowledge-sources",
+        "kernel.resource.knowledge-bases",
         "kernel.resource.projects",
         "kernel.resource.personas",
         "kernel.resource.settings",
@@ -190,6 +192,7 @@ export const frontendCapabilityRegistry: FrontendCapabilityRegistry = Object.fre
       dependencies: ["conversation"],
       contributionIds: [
         "kernel.resource.knowledge-sources",
+        "kernel.resource.knowledge-bases",
         "kernel.resource.projects",
         "kernel.resource.personas",
         "kernel.navigation.projects",

@@ -34,6 +34,7 @@ const RESOURCE_PATH: Record<string, string> = {
   knowledge_sources: "knowledge/documents",
   projects: "knowledge/projects",
   personas: "knowledge/personas",
+  knowledge_bases: "knowledge-bases",
 };
 
 const pathFor = (resource: string): string =>

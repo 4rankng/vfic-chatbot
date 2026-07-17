@@ -56,6 +56,7 @@ describe("compileCapabilities", () => {
       "conversations",
       "bot_runs",
       "knowledge_sources",
+      "knowledge_bases",
       "projects",
       "personas",
       "settings",

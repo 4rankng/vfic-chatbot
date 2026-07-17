@@ -21,11 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import NS_PREAMBLE
+from app.models.knowledge import KnowledgeBase
 from app.models.persona import Persona, PersonaVersion
 from app.models.user import User
 from app.schemas.personas import PersonaCreate, PersonaUpdate, _slugify
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError
+from app.services.knowledge_base_capacity import require_direct_context_ready
 
 from .parsing import parse_persona_markdown
 from .repository import PersonaRepository
@@ -101,10 +103,15 @@ class PersonaService:
         return rows, int(total or 0)
 
     async def create(self, body: PersonaCreate, admin: User) -> Persona:
+        knowledge_base = await self.db.get(KnowledgeBase, body.knowledge_base_id)
+        if knowledge_base is None:
+            raise ConflictError("Knowledge base not found")
+        await require_direct_context_ready(self.db, knowledge_base, agent_markdown=body.body_md)
         slug = (body.slug or _slugify(body.name)).strip() or _slugify(body.name)
         persona = Persona(
             name=body.name.strip(),
             slug=slug,
+            knowledge_base_id=knowledge_base.id,
             body_md=body.body_md,
             followup_rules=body.followup_rules.model_dump(mode="json"),
             notes=body.notes,
@@ -140,6 +147,7 @@ class PersonaService:
 
     async def update(self, persona_id: uuid.UUID, body: PersonaUpdate, admin: User) -> Persona:
         persona = await self.repo.get_by_id(persona_id)
+        knowledge_base = None
         if body.name is not None:
             persona.name = body.name.strip()
         if body.body_md is not None:
@@ -148,6 +156,21 @@ class PersonaService:
             persona.notes = body.notes
         if body.followup_rules is not None:
             persona.followup_rules = body.followup_rules.model_dump(mode="json")
+        if "knowledge_base_id" in body.model_fields_set:
+            if body.knowledge_base_id is None:
+                raise ConflictError("An Agent must have exactly one knowledge base")
+            knowledge_base = await self.db.get(KnowledgeBase, body.knowledge_base_id)
+            if knowledge_base is None:
+                raise ConflictError("Knowledge base not found")
+            persona.knowledge_base_id = knowledge_base.id
+        if knowledge_base is None and persona.knowledge_base_id is not None:
+            knowledge_base = await self.db.get(KnowledgeBase, persona.knowledge_base_id)
+        if knowledge_base is not None:
+            await require_direct_context_ready(
+                self.db,
+                knowledge_base,
+                agent_markdown=body.body_md if body.body_md is not None else persona.body_md,
+            )
         if body.body_md is not None or body.followup_rules is not None:
             await self._append_version(persona, admin.id)
         await record_audit(
@@ -175,6 +198,12 @@ class PersonaService:
         persona = await self.repo.get_by_id(persona_id)
         if persona.project_id is not None:
             raise ValueError("activation is for global Agents only")
+        if persona.knowledge_base_id is None:
+            raise ConflictError("Attach a knowledge base before activating this Agent")
+        knowledge_base = await self.db.get(KnowledgeBase, persona.knowledge_base_id)
+        if knowledge_base is None:
+            raise ConflictError("Knowledge base not found")
+        await require_direct_context_ready(self.db, knowledge_base, agent_markdown=persona.body_md)
         return await self._activate(persona)
 
     async def assign_to_all_projects(self, persona_id: uuid.UUID, admin: User) -> int:
@@ -216,7 +245,9 @@ class PersonaService:
         await bump_cache_version(NS_PREAMBLE)
         return persona
 
-    async def import_persona(self, text: str, admin: User) -> Persona:
+    async def import_persona(
+        self, text: str, admin: User, knowledge_base_id: uuid.UUID | None = None
+    ) -> Persona:
         """Import a persona from a markdown file (with optional YAML frontmatter).
 
         If a persona with the same slug already exists, overwrites its ``body_md``
@@ -229,6 +260,14 @@ class PersonaService:
         existing = await self.repo.find_by_slug(derived_slug)
 
         if existing:
+            if existing.knowledge_base_id is None:
+                raise ConflictError("Attach a knowledge base before importing this Agent")
+            knowledge_base = await self.db.get(KnowledgeBase, existing.knowledge_base_id)
+            if knowledge_base is None:
+                raise ConflictError("Knowledge base not found")
+            await require_direct_context_ready(
+                self.db, knowledge_base, agent_markdown=body_md
+            )
             existing.name = name
             existing.body_md = body_md
             if notes is not None:
@@ -247,7 +286,15 @@ class PersonaService:
             return existing
 
         # New persona
-        body = PersonaCreate(name=name, body_md=body_md, slug=slug, notes=notes)
+        if knowledge_base_id is None:
+            raise ConflictError("Choose a knowledge base when importing a new Agent")
+        body = PersonaCreate(
+            name=name,
+            body_md=body_md,
+            slug=slug,
+            notes=notes,
+            knowledge_base_id=knowledge_base_id,
+        )
         return await self.create(body, admin)
 
     async def _append_version(

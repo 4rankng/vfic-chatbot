@@ -22,6 +22,7 @@ ROUTE_MODULE_CLASSIFICATION = {
     "leads": "capability.recruitment",
     "bot_runs": "active_kernel",
     "knowledge": "capability.knowledge",
+    "knowledge_bases": "capability.knowledge",
     "projects": "capability.recruitment",
     "personas": "auth_setup",
     "jobs": "capability.recruitment",
@@ -47,6 +48,7 @@ EXPECTED_ROUTE_COUNTS = {
     "installation": 8,
     "jobs": 7,
     "knowledge": 37,
+    "knowledge_bases": 11,
     "leads": 15,
     "main": 3,
     "performance": 2,
@@ -55,13 +57,13 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 2,
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "43df55fe0164672aeac100c4238e1748142ee1a8bd53078310360d60e5a3925a"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "fd5ea44ce89d104926a6f01e89453e24467ac691c17d7abdcc9bc4d877dace0d"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 56,
+    "provider_boundary": 58,
     "queue_producer": 20,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "920df55e486c5347db51b631af0b5a1ffcd5063a3e91fada465d21677511128f"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "44b0e084ea7dc79078b76a611b4059c13e73772d146228dde0aacf29a0457c77"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

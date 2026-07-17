@@ -5,6 +5,7 @@ import {
   useDataProvider,
   useNotify,
   useRedirect,
+  useGetList,
 } from "ra-core";
 import { Card, CardContent } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
@@ -12,14 +13,26 @@ import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
+import { SelectInput } from "@/components/admin/select-input";
+import type { KnowledgeBase } from "../types";
 
 export const ProjectCreate = () => {
   const notify = useNotify();
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
+  const { data: knowledgeBases = [] } = useGetList<KnowledgeBase>("knowledge_bases", {
+    pagination: { page: 1, perPage: 100 },
+    sort: { field: "name", order: "ASC" },
+    filter: {},
+  });
+  const ragKnowledgeBases = knowledgeBases.filter((knowledgeBase) => knowledgeBase.mode === "RAG");
 
   const onSubmit = async (data: Record<string, unknown>) => {
+    if (!data.knowledge_base_id) {
+      notify("Vui lòng chọn Knowledge Base RAG cho dự án.", { type: "warning" });
+      return;
+    }
     setSubmitting(true);
     try {
       await dataProvider.create("projects", { data });
@@ -55,12 +68,22 @@ export const ProjectCreate = () => {
                     label="Slug (không dấu, không khoảng cách)"
                     isRequired
                   />
+                  <SelectInput
+                    source="knowledge_base_id"
+                    label="Knowledge Base RAG"
+                    choices={ragKnowledgeBases.map((knowledgeBase) => ({
+                      id: knowledgeBase.id,
+                      name: knowledgeBase.name,
+                    }))}
+                    emptyText="Chọn Knowledge Base"
+                    isRequired
+                  />
                   <BooleanInput
                     source="is_active"
                     label="Đang hoạt động"
                     defaultValue={true}
                   />
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || ragKnowledgeBases.length === 0}>
                     Tạo dự án
                   </Button>
                 </div>

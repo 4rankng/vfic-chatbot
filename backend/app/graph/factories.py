@@ -69,6 +69,48 @@ class _LeadContextAdapter:
         return lead_collection_instruction(question=question)
 
 
+class _DirectContextAdapter:
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def active_context(self):
+        from sqlalchemy import select
+
+        from app.graph.direct_context import DirectContext
+        from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
+        from app.models.persona import Persona
+        from app.services.errors import ConflictError
+        from app.services.knowledge_base_capacity import require_direct_context_ready
+
+        row = (
+            await self._db.execute(
+                select(Persona, KnowledgeBase, KnowledgeBaseDirectFile)
+                .join(KnowledgeBase, Persona.knowledge_base_id == KnowledgeBase.id)
+                .outerjoin(
+                    KnowledgeBaseDirectFile,
+                    KnowledgeBaseDirectFile.knowledge_base_id == KnowledgeBase.id,
+                )
+                .where(Persona.is_active, Persona.project_id.is_(None))
+                .limit(1)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        persona, knowledge_base, direct_file = row
+        if knowledge_base.mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
+            return None
+        if direct_file is None:
+            raise ConflictError("The active direct-context knowledge base has no text file")
+        await require_direct_context_ready(
+            self._db, knowledge_base, agent_markdown=persona.body_md
+        )
+        return DirectContext(
+            knowledge_base_id=str(knowledge_base.id),
+            persona_body=persona.body_md,
+            knowledge_text=direct_file.normalized_text,
+        )
+
+
 class _FaqBypassAdapter:
     """FaqBypassPort backed by RetrievalRepository + the shared cached embedder.
 
@@ -94,14 +136,21 @@ class _FaqBypassAdapter:
         started = time.perf_counter()
         repo = RetrievalRepository(self._db)
         try:
+            active_project_ids = getattr(repo, "active_project_ids", None)
+            project_ids = await active_project_ids() if active_project_ids is not None else None
+            if project_ids == []:
+                return None
             emb = vec_literal(await _cached_embed(self._embedder, user_text))
             # Both arms are intentionally unscoped (no project_ids): the VFIC
             # deployment is single-tenant, mirroring search_bus_timetable's
             # deliberate NULL-slug choice. Re-scope only if the bot goes
             # multi-project (pass the conversation's project id into both calls).
-            vector_rows = await repo.match_faq(emb, top_k=fb.TOP_K, floor=fb.CANDIDATE_VECTOR_FLOOR)
+            faq_scope = {"project_ids": project_ids} if project_ids is not None else {}
+            vector_rows = await repo.match_faq(
+                emb, top_k=fb.TOP_K, floor=fb.CANDIDATE_VECTOR_FLOOR, **faq_scope
+            )
             lexical_rows = await repo.match_faq_lexical(
-                user_text, top_k=fb.TOP_K, threshold=fb.TRIGRAM_THRESHOLD
+                user_text, top_k=fb.TOP_K, threshold=fb.TRIGRAM_THRESHOLD, **faq_scope
             )
         except Exception:  # noqa: BLE001 — bypass must never break a turn
             logger.warning("faq_bypass retrieval failed; abstaining", exc_info=True)
@@ -418,6 +467,7 @@ async def build_deps(db, *, session_factory=None):
         faq_bypass=_FaqBypassAdapter(db, clients.embedder),
         followup_allowed=_make_followup_allowed(db),
         runtime_policy=_RuntimePolicyAdapter(db),
+        direct_context=_DirectContextAdapter(db),
     )
 
 

@@ -30,6 +30,7 @@ from app.core.config import get_settings
 from app.graph import fast_lane
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
+from app.graph.direct_context import build_direct_system, build_direct_user_text
 from app.graph.prompts import ERROR_REPLY
 from app.graph.router import route_turn, routing_instruction, should_use_fast_model
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
@@ -49,6 +50,7 @@ from app.models.conversation import DeliveryStatus, Message
 
 logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
+DIRECT_HISTORY_TOKEN_BUDGET = 12_000
 
 
 def _remaining(state: BotRunState) -> float:
@@ -232,6 +234,20 @@ async def _agent_turn(
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
     reply = await deps.agent.agent(contextual_user_text, **agent_kwargs)
     return reply
+
+
+async def _direct_context_turn(context, deps: GraphDeps, user_text: str, recent_messages: list[Message], timings: dict) -> str:
+    timings["lane"] = "direct_context"
+    timings["direct_context_knowledge_base_id"] = context.knowledge_base_id
+    return await deps.agent.direct(
+        build_direct_user_text(
+            current_user_text=user_text,
+            recent_messages=recent_messages,
+            history_token_budget=DIRECT_HISTORY_TOKEN_BUDGET,
+        ),
+        system=build_direct_system(context),
+        metrics=timings,
+    )
 
 
 async def run_manifest_composed_agent(user_text: str, deps: GraphDeps, *, policy=None) -> str | None:
@@ -557,6 +573,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         outcome_label = "sent"
         faq_metadata: dict | None = None
 
+        direct_context = (
+            await deps.direct_context.active_context() if deps.direct_context is not None else None
+        )
         vacancy_t0 = time.monotonic()
         recruitment_capabilities = (
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
@@ -564,7 +583,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         recruitment_enabled = manifest_policy is None or manifest_policy.pack_key == "recruitment"
         vacancy = (
             await _vacancy_reply(state.user_text, recent_messages, deps.retrieval)
-            if recruitment_enabled
+            if direct_context is None
+            and recruitment_enabled
             and (recruitment_capabilities is None or "job_advisory" in recruitment_capabilities)
             else None
         )
@@ -599,7 +619,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
         fast = (
             fast_lane.match(state.user_text)
-            if vacancy is None and allow_recruitment_fast_lane and settings.faq_fast_lane_enabled
+            if direct_context is None and vacancy is None and allow_recruitment_fast_lane and settings.faq_fast_lane_enabled
             else None
         )
 
@@ -611,7 +631,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # the turn deadline. None in graph unit tests (no bypass wired).
         bypass = None
         if (
-            vacancy is None
+            direct_context is None and vacancy is None
             and fast is None
             and allow_legacy_faq_bypass
             and deps.faq_bypass is not None
@@ -673,7 +693,12 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
             bypass = None
 
-        if vacancy is not None:
+        if direct_context is not None and vacancy is None:
+            candidate = await _direct_context_turn(
+                direct_context, deps, state.user_text, recent_messages, timings
+            )
+            outcome_label = "direct_context"
+        elif vacancy is not None:
             pass
         elif fast is not None:
             timings["lane"] = "fast_lane"

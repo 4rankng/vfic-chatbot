@@ -24,6 +24,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.graph import runner
+from app.graph.direct_context import DirectContext
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompts import ERROR_REPLY
 from app.graph.runner import run_turn
@@ -186,6 +187,51 @@ def _state() -> BotRunState:
     return BotRunState(
         conversation_id=CONV_ID, version_at_start=1, user_text="tôi muốn tìm việc lái xe"
     )
+
+
+@pytest.mark.asyncio
+async def test_direct_context_uses_one_tool_free_model_call(monkeypatch):
+    class _DirectReader:
+        async def active_context(self):
+            return DirectContext(
+                knowledge_base_id="kb-1",
+                persona_body="Bạn là tư vấn viên.",
+                knowledge_text="Nhà máy có xe đưa đón.",
+            )
+
+    class _DirectAgent:
+        calls = 0
+
+        async def direct(self, user_text, *, system, metrics=None):
+            self.calls += 1
+            assert "Nhà máy có xe đưa đón." in system
+            assert "bên mình còn tuyển không?" in user_text
+            return "Chào bạn, nhà máy có xe đưa đón."
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    deps = _deps(zalo, conversation=svc)
+    direct_agent = _DirectAgent()
+    deps.agent = direct_agent
+    deps.direct_context = _DirectReader()
+
+    async def _must_not_lookup(*_args, **_kwargs):
+        raise AssertionError("direct context must not use active-job lookup")
+
+    monkeypatch.setattr(runner, "_vacancy_reply", _must_not_lookup)
+
+    result = await run_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="bên mình còn tuyển không?",
+        ),
+        deps,
+    )
+
+    assert result["outcome"] == "direct_context"
+    assert direct_agent.calls == 1
 
 
 # ---------------------------------------------------------------------------

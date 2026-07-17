@@ -5,7 +5,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { useNotify } from "ra-core";
+import { useGetList, useNotify } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   BotMessageSquare,
   CheckCircle2,
@@ -28,6 +35,7 @@ import {
   type LeadStageValue,
   type PersonaFollowupRule,
   type PersonaFollowupRules,
+  type KnowledgeBase,
 } from "../types";
 import {
   composePersonaMarkdown,
@@ -76,6 +84,7 @@ export interface PersonaValues {
   name: string;
   body_md: string;
   notes: string;
+  knowledge_base_id: string;
   followup_rules?: PersonaFollowupRules;
 }
 
@@ -104,12 +113,20 @@ const PersonaForm = ({
     () => parsePersonaMarkdown(initial.body_md).extraMarkdown,
   );
   const [notes, setNotes] = useState(initial.notes ?? "");
+  const [knowledgeBaseId, setKnowledgeBaseId] = useState(initial.knowledge_base_id);
   const [followupRules, setFollowupRules] = useState<PersonaFollowupRules>(() =>
     normalizeFollowupRules(initial.followup_rules),
   );
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null);
+  const { data: knowledgeBases = [], isPending: knowledgeBasesPending } =
+    useGetList<KnowledgeBase>("knowledge_bases", {
+      pagination: { page: 1, perPage: 100 },
+      sort: { field: "name", order: "ASC" },
+      filter: {},
+    });
   const nameInputRef = useRef<HTMLInputElement>(null);
   const bodyMd = useMemo(
     () => composePersonaMarkdown(sectionValues, extraMarkdown),
@@ -131,13 +148,19 @@ const PersonaForm = ({
       nameInputRef.current?.focus();
       return;
     }
+    if (!knowledgeBaseId) {
+      setKnowledgeBaseError("Vui lòng chọn Knowledge Base cho Agent.");
+      return;
+    }
     setNameError(null);
+    setKnowledgeBaseError(null);
     setSubmitting(true);
     try {
       await onSubmit({
         name,
         body_md: bodyMd,
         notes,
+        knowledge_base_id: knowledgeBaseId,
         followup_rules: followupRules,
       });
     } finally {
@@ -164,6 +187,11 @@ const PersonaForm = ({
     event.target.value = "";
     if (!file) return;
 
+    if (!knowledgeBaseId) {
+      setKnowledgeBaseError("Chọn Knowledge Base trước khi nhập file Agent.");
+      return;
+    }
+
     const fileName = file.name.toLowerCase();
     if (!fileName.endsWith(".md") && !fileName.endsWith(".txt")) {
       notify("Vui lòng tải lên file .md hoặc .txt.", { type: "warning" });
@@ -172,7 +200,7 @@ const PersonaForm = ({
 
     setImporting(true);
     try {
-      const persona = await importPersona(file);
+      const persona = await importPersona(file, knowledgeBaseId);
       const parsed = parsePersonaMarkdown(persona.body_md);
       // Populate form with imported data
       setName(persona.name);
@@ -293,6 +321,39 @@ const PersonaForm = ({
               </p>
             ) : null}
           </div>
+          <div className="persona-edit-name-field">
+            <Label htmlFor="persona-knowledge-base" className="text-label font-semibold">
+              Knowledge Base <span aria-hidden="true" className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={knowledgeBaseId}
+              onValueChange={(value) => {
+                setKnowledgeBaseId(value);
+                setKnowledgeBaseError(null);
+              }}
+              disabled={knowledgeBasesPending || knowledgeBases.length === 0}
+            >
+              <SelectTrigger id="persona-knowledge-base" className="h-11 text-control lg:max-w-xl">
+                <SelectValue placeholder="Chọn Knowledge Base" />
+              </SelectTrigger>
+              <SelectContent>
+                {knowledgeBases.map((knowledgeBase) => (
+                  <SelectItem key={knowledgeBase.id} value={knowledgeBase.id}>
+                    {knowledgeBase.name} · {knowledgeBase.mode === "RAG" ? "RAG" : "Ngữ cảnh trực tiếp"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {knowledgeBaseError ? (
+              <p role="alert" className="text-helper font-medium text-destructive">
+                {knowledgeBaseError}
+              </p>
+            ) : knowledgeBases.length === 0 && !knowledgeBasesPending ? (
+              <p className="text-helper text-muted-foreground">
+                Tạo Knowledge Base trước khi tạo Agent.
+              </p>
+            ) : null}
+          </div>
         </section>
 
         <section
@@ -316,7 +377,7 @@ const PersonaForm = ({
             <Button
               type="button"
               variant="outline"
-              disabled={importing}
+              disabled={importing || !knowledgeBaseId}
               onClick={() => fileInputRef.current?.click()}
             >
               {importing ? (

@@ -185,6 +185,12 @@ async def search_knowledge(
         if pid is None:
             return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
         project_ids = [str(pid)]
+    else:
+        active_project_ids = getattr(repo, "active_project_ids", None)
+        if active_project_ids is not None:
+            project_ids = await active_project_ids()
+            if not project_ids:
+                return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
     s = get_settings()
     knowledge_version = await cache_version("knowledge") if s.rag_cache_enabled else "0"
     cache_key = (
@@ -228,7 +234,7 @@ async def search_knowledge(
     # personalized, non-scoped lookups (project_slug is the personalization
     # axis here; scoped lookups are already narrow). Gated by config so it can
     # be disabled without a redeploy if it misbehaves.
-    coalesce_enabled = getattr(s, "singleflight_enabled", False) and not project_slug
+    coalesce_enabled = getattr(s, "singleflight_enabled", False) and project_ids is None
     if coalesce_enabled:
         result = await _search_knowledge_coalesced(
             cache_key=cache_key,

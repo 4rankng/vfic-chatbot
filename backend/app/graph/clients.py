@@ -604,6 +604,33 @@ class MiniMaxAgent:
         final = messages[-1].content if hasattr(messages[-1], "content") else ""
         return _ground_reply(final, tool_results)
 
+    async def direct(self, user_text: str, *, system: str, metrics: dict | None = None) -> str:
+        """One model call for a direct-context KB; no schemas, tools, or prefetch."""
+        from app.graph.llm_semaphore import get_llm_semaphore
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        sem = get_llm_semaphore()
+        if metrics is not None:
+            metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
+            metrics["direct_context_llm_calls"] = metrics.get("direct_context_llm_calls", 0) + 1
+        sem_t0 = time.monotonic()
+        async with sem:
+            queue_ms = int((time.monotonic() - sem_t0) * 1000)
+            model_t0 = time.monotonic()
+            ai, backoff_ms = await _llm_call_with_retry(
+                self.llm,
+                [SystemMessage(content=system), HumanMessage(content=user_text)],
+                metrics=metrics,
+            )
+            model_ms = int((time.monotonic() - model_t0) * 1000)
+        total_ms = int((time.monotonic() - sem_t0) * 1000)
+        if metrics is not None:
+            metrics["llm_invoke_ms"] = metrics.get("llm_invoke_ms", 0) + total_ms
+            metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + queue_ms
+            metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
+        _record_llm_latency(total_ms)
+        return str(ai.content or "")
+
 
 class MiniMaxSafety:
     def __init__(self, llm) -> None:

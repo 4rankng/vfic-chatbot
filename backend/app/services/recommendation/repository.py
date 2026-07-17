@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from sqlalchemy import func, select, text
@@ -88,22 +89,33 @@ class RecommendationRepository:
         scored.sort(key=lambda s: (-s.score, s.job.title))
         return scored[: max(1, min(top_k, 10))]
 
-    async def find_active_jobs(self, query: str, *, top_k: int = 3) -> ActiveJobLookup:
+    async def find_active_jobs(
+        self,
+        query: str,
+        *,
+        top_k: int = 3,
+        project_ids: Sequence[str] | None = None,
+    ) -> ActiveJobLookup:
         """Find currently open jobs for an explicit vacancy-existence question.
 
         This is intentionally separate from profile-based recommendations: no lead
         data is required, and database failures remain distinguishable from a genuine
         no-match result.
         """
+        if project_ids == []:
+            return ActiveJobLookup("no_match")
         try:
+            predicates = [
+                Job.status == JobStatus.ACTIVE,
+                func.coalesce(Job.vacancy_count, 0) > 0,
+            ]
+            if project_ids is not None:
+                predicates.append(Company.project_id.in_(project_ids))
             rows = (
                 await self.db.execute(
                     select(Job, Company.name)
                     .join(Company, Job.company_id == Company.id)
-                    .where(
-                        Job.status == JobStatus.ACTIVE,
-                        func.coalesce(Job.vacancy_count, 0) > 0,
-                    )
+                    .where(*predicates)
                     .order_by(Job.updated_at.desc())
                     .limit(self.CANDIDATE_LIMIT)
                 )

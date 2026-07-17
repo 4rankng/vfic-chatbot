@@ -228,11 +228,32 @@ export type Project = {
   summary?: string | null;
   index_card?: ProjectIndexCard;
   default_persona_id?: string | null;
+  knowledge_base_id?: string | null;
   knowledge_document_count?: number;
   feature_readiness?: { ready: number; total: number };
   created_at: string;
   updated_at: string;
 } & Pick<RaRecord, "id">;
+
+export type KnowledgeBase = {
+  id: string;
+  name: string;
+  slug: string;
+  mode: "RAG" | "DIRECT_CONTEXT";
+  description?: string | null;
+  attached_agent_count: number;
+  project_count: number;
+} & Pick<RaRecord, "id">;
+
+export type KnowledgeBaseProject = {
+  id: string;
+  slug: string;
+  name: string;
+  is_active: boolean;
+  knowledge_document_count: number;
+  active_job_count: number;
+  factories: { name: string; aliases: string[] }[];
+};
 
 // A worker product feature value (one row per catalog feature per project), joined with
 // the catalog metadata. Populated by the LLM extraction step in the ingest pipeline and
@@ -291,6 +312,7 @@ export type BusTimetableList = {
 export type Persona = {
   id: string;
   project_id?: string | null;
+  knowledge_base_id?: string | null;
   name: string;
   slug: string;
   body_md: string;

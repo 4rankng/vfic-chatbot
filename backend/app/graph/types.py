@@ -11,6 +11,7 @@ from typing import Any, NotRequired, TypedDict
 from app.graph.llm import AgentModel, Embedder, SafetyModel
 from app.graph.ports import (
     ConversationPort,
+    DirectContextPort,
     FaqBypassPort,
     LeadContextPort,
     RetrievalPort,
@@ -134,6 +135,8 @@ class GraphDeps:
     # New manifest-composed runtime authority. It is intentionally not attached
     # to the legacy delivery path until Phase 7 has the full dispatch fence.
     runtime_policy: RuntimePolicyPort | None = None
+    # Resolves the active Agent's standalone KB without exposing retrieval/tools.
+    direct_context: DirectContextPort | None = None
 
 
 def _now() -> datetime:

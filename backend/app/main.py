@@ -18,6 +18,7 @@ from app.api import (
     installation,
     jobs,
     knowledge,
+    knowledge_bases,
     leads,
     performance,
     personas,
@@ -112,6 +113,7 @@ app.include_router(conversations.router, prefix=API_V1_PREFIX)
 app.include_router(leads.router, prefix=API_V1_PREFIX)
 app.include_router(bot_runs.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge.router, prefix=API_V1_PREFIX)
+app.include_router(knowledge_bases.router, prefix=API_V1_PREFIX)
 app.include_router(projects.router, prefix=API_V1_PREFIX)
 app.include_router(personas.router, prefix=API_V1_PREFIX)
 app.include_router(personas.versions_router, prefix=API_V1_PREFIX)

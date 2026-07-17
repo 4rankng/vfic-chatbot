@@ -39,6 +39,8 @@ class AgentModel(Protocol):
         metrics: dict | None = None,
     ) -> str: ...
 
+    async def direct(self, user_text: str, *, system: str, metrics: dict | None = None) -> str: ...
+
 
 class SafetyModel(Protocol):
     """Returns the raw M2.5 verdict text (JSON) for the candidate reply."""

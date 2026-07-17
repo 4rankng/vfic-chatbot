@@ -353,13 +353,16 @@ export type ImportedPersona = {
 };
 
 /** Import (upload) a persona from a markdown file. Creates or overwrites by slug. */
-export const importPersona = (file: File) => {
+export const importPersona = (file: File, knowledgeBaseId: string) => {
   const form = new FormData();
   form.append("file", file);
-  return apiJson<ImportedPersona>(`${BASE}/knowledge/personas/import`, {
+  return apiJson<ImportedPersona>(
+    `${BASE}/knowledge/personas/import?knowledge_base_id=${encodeURIComponent(knowledgeBaseId)}`,
+    {
     method: "POST",
     body: form,
-  });
+    },
+  );
 };
 
 export const reindexProject = (id: string) =>

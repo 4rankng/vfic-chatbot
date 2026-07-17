@@ -14,6 +14,7 @@ import users from "../../users";
 import conversations from "../../conversations";
 import automation from "../../automation";
 import knowledge from "../../knowledge";
+import knowledgeBases from "../../knowledge-base";
 import projects from "../../projects";
 import personas from "../../personas";
 import integrations from "../../integrations";
@@ -115,6 +116,7 @@ const navigation: readonly CompiledDestination[] = [
       pathStartsWith("/settings")(path) ||
       pathStartsWith("/zalo_integrations")(path) ||
       pathStartsWith("/knowledge_sources")(path) ||
+      pathStartsWith("/knowledge_bases")(path) ||
       pathStartsWith("/personas")(path),
   },
   {
@@ -200,6 +202,10 @@ const resourceContributions = {
       name: "knowledge_sources",
       props: knowledge,
     },
+  },
+  "kernel.resource.knowledge-bases": {
+    kind: "resource" as const,
+    resource: { id: "kernel.resource.knowledge-bases", name: "knowledge_bases", props: knowledgeBases },
   },
   "kernel.resource.projects": {
     kind: "resource" as const,

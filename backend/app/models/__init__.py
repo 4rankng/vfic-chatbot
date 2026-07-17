@@ -7,6 +7,9 @@ from app.models.audit import AuditEvent
 from app.models.base import Base
 from app.models.company import Company, Project
 from app.models.knowledge import (
+    KnowledgeBase,
+    KnowledgeBaseDirectFile,
+    KnowledgeBaseMode,
     KBTextFile,
     KBVersion,
     KBVersionStatus,
@@ -90,6 +93,9 @@ __all__ = [
     "Company",
     "Project",
     "KnowledgeChunk",
+    "KnowledgeBase",
+    "KnowledgeBaseDirectFile",
+    "KnowledgeBaseMode",
     "KnowledgeDocument",
     "KnowledgeStatus",
     "KBVersion",

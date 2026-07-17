@@ -43,6 +43,7 @@ const PersonaEditContent = () => {
           name: v.name,
           body_md: v.body_md,
           notes: v.notes,
+          knowledge_base_id: v.knowledge_base_id,
           followup_rules: v.followup_rules,
         },
       });
@@ -132,6 +133,7 @@ const PersonaEditContent = () => {
               name: persona.name,
               body_md: persona.body_md,
               notes: persona.notes ?? "",
+              knowledge_base_id: persona.knowledge_base_id ?? "",
               followup_rules: persona.followup_rules,
             }}
             submitLabel="Lưu"

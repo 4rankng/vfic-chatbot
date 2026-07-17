@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import NS_PREAMBLE
 from app.models.company import Project
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseMode
 from app.models.persona import Persona
 from app.models.user import Role, User
 from app.schemas.projects import (
@@ -147,9 +148,22 @@ class ProjectService:
         name = body.name.strip()
         existing = await self.repo.find_by_name(name)
         if existing is not None:
+            if existing.knowledge_base_id != body.knowledge_base_id:
+                raise ConflictError("Project already belongs to another knowledge base")
             return existing
 
-        proj = Project(slug=body.slug.strip(), name=name, is_active=body.is_active)
+        knowledge_base = await self.db.get(KnowledgeBase, body.knowledge_base_id)
+        if knowledge_base is None:
+            raise NotFoundError("Knowledge base not found")
+        if knowledge_base.mode is not KnowledgeBaseMode.RAG:
+            raise ConflictError("Projects can only be added to a RAG knowledge base")
+
+        proj = Project(
+            slug=body.slug.strip(),
+            name=name,
+            is_active=body.is_active,
+            knowledge_base_id=knowledge_base.id,
+        )
         self.db.add(proj)
         try:
             await self.db.commit()
@@ -182,6 +196,17 @@ class ProjectService:
                 if persona is None:
                     raise NotFoundError("Agent not found")
             proj.default_persona_id = body.default_persona_id
+        if "knowledge_base_id" in body.model_fields_set:
+            if actor.role != Role.admin:
+                raise ForbiddenError("admin only")
+            if body.knowledge_base_id is None:
+                raise ConflictError("A Project must belong to one RAG knowledge base")
+            knowledge_base = await self.db.get(KnowledgeBase, body.knowledge_base_id)
+            if knowledge_base is None:
+                raise NotFoundError("Knowledge base not found")
+            if knowledge_base.mode is not KnowledgeBaseMode.RAG:
+                raise ConflictError("Projects can only be added to a RAG knowledge base")
+            proj.knowledge_base_id = knowledge_base.id
         await record_audit(
             self.db,
             action="update_project",

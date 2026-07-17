@@ -571,16 +571,24 @@ class RetrievalRepository:
 
     async def project_id_by_slug(self, slug: str, *, active_only: bool = False) -> uuid.UUID | None:
         """Resolve a project id from its (unique) slug; optionally require ``is_active``."""
-        sql = "SELECT id FROM projects WHERE slug = :s"
+        sql = (
+            "SELECT p.id FROM projects p "
+            "JOIN personas pe ON pe.knowledge_base_id = p.knowledge_base_id "
+            "WHERE p.slug = :s AND pe.is_active AND pe.project_id IS NULL"
+        )
         if active_only:
-            sql += " AND is_active"
+            sql += " AND p.is_active"
         return (await self.db.execute(text(sql), {"s": slug})).scalar_one_or_none()
 
     async def list_active_projects(self) -> list:
         """name/slug/summary of active projects (catalog tool)."""
         return (
             await self.db.execute(
-                text("SELECT name, slug, summary FROM projects WHERE is_active ORDER BY name")
+                text(
+                    "SELECT p.name, p.slug, p.summary FROM projects p "
+                    "JOIN personas pe ON pe.knowledge_base_id = p.knowledge_base_id "
+                    "WHERE p.is_active AND pe.is_active AND pe.project_id IS NULL ORDER BY p.name"
+                )
             )
         ).all()
 
@@ -591,9 +599,10 @@ class RetrievalRepository:
                 text(
                     "SELECT p.name, p.slug, p.summary, p.index_card, "
                     "       pe.name AS persona_name, pe.body_md AS persona_body_md "
-                    "FROM projects p "
+                    "FROM projects p JOIN personas active_pe "
+                    "ON active_pe.knowledge_base_id = p.knowledge_base_id "
                     "LEFT JOIN personas pe ON pe.id = p.default_persona_id AND pe.is_active "
-                    "WHERE p.is_active "
+                    "WHERE p.is_active AND active_pe.is_active AND active_pe.project_id IS NULL "
                     "ORDER BY p.name"
                 )
             )
@@ -606,6 +615,16 @@ class RetrievalRepository:
                 text("SELECT body_md FROM personas WHERE is_active AND project_id IS NULL LIMIT 1")
             )
         ).scalar_one_or_none()
+
+    async def active_project_ids(self) -> list[str]:
+        rows = await self.db.scalars(
+            text(
+                "SELECT p.id::text FROM projects p JOIN personas pe "
+                "ON pe.knowledge_base_id = p.knowledge_base_id "
+                "WHERE p.is_active AND pe.is_active AND pe.project_id IS NULL"
+            )
+        )
+        return list(rows)
 
     async def search_bus_timetable(self, company: str, question: str, limit: int) -> list:
         """Complete route rows matching a bus timetable question.
@@ -819,10 +838,14 @@ class RetrievalRepository:
         return LeadJobRecommendation("matched", tuple(jobs))
 
     async def find_active_jobs(self, query: str, *, top_k: int = 3):
-        """Resolve an explicit role query against currently open jobs only."""
+        """Resolve an explicit role query within the active Agent RAG KB only."""
         from app.services.recommendation import RecommendationRepository
 
-        return await RecommendationRepository(self.db).find_active_jobs(query, top_k=top_k)
+        return await RecommendationRepository(self.db).find_active_jobs(
+            query,
+            top_k=top_k,
+            project_ids=await self.active_project_ids(),
+        )
 
 
 __all__ = ["RetrievalRepository"]
