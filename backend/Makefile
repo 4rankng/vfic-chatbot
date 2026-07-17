@@ -142,8 +142,18 @@ adminer:
 	@echo "    Server: postgres   DB: vfic   user/pass from $(PROD_DIR)/.env"
 	@echo "    Ctrl-C to close the tunnel."
 	@ssh root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose start adminer" 2>/dev/null || true
-	@(sleep 1 && (open http://localhost:18081 || xdg-open http://localhost:18081 || true)) &
-	@ssh -N -L 18081:127.0.0.1:8081 root@$(PROD_SERVER)
+	# Tunnel is blocking, so background it, poll until adminer actually serves
+	# over the tunnel, then open the browser — avoids the ERR_CONNECTION_REFUSED
+	# race where `open` fired before ssh had bound the local forward.
+	@ssh -N -L 18081:127.0.0.1:8081 root@$(PROD_SERVER) & pid=$$!; \
+		ok=0; \
+		for i in $$(seq 1 15); do \
+			if curl -sf -o /dev/null http://localhost:18081; then ok=1; break; fi; \
+			sleep 1; \
+		done; \
+		[ $$ok -eq 1 ] || echo "  adminer not responding yet — refresh http://localhost:18081 shortly, or 'docker compose logs adminer' on prod"; \
+		(open http://localhost:18081 || xdg-open http://localhost:18081 || true); \
+		wait $$pid
 
 # ---- Fast-track: pull, apply migrations, rolling-restart backend containers. ----
 # Used by root Makefile's deploy-backend after push. No compose sync, no

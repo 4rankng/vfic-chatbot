@@ -44,7 +44,7 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 1,
     "conversations": 17,
     "dashboard": 2,
-    "integrations": 11,
+    "integrations": 18,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
     "installation": 8,
     "jobs": 7,
     "knowledge": 20,
@@ -57,13 +57,13 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 2,
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "548f4030557c1690092df84d208734a6f9209f184db0176c4cd980182cc28cc5"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "befdf32e90f5012f212fb2436ac8c1a6b70345dd3987b34992db70147a74e82d"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 58,
+    "provider_boundary": 68,  # Phase 4: +10 Facebook OAuth/account provider-boundary references
     "queue_producer": 20,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "44b0e084ea7dc79078b76a611b4059c13e73772d146228dde0aacf29a0457c77"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "caf6d584a2e5172cc021823cf5130e935318036f06d49d12ed2841f681618cb3"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
