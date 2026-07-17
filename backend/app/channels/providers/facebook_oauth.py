@@ -56,8 +56,31 @@ class FacebookOAuthError(RuntimeError):
     """A definite failure in the OAuth exchange or Graph API call.
 
     Distinct from transport ambiguity — this is a provider-reported rejection
-    or a malformed envelope, not a timeout-then-accept risk.
+    or a malformed envelope, not a timeout-then-accept risk. Carries the Meta
+    error ``code`` when the Graph API returned a structured error envelope so
+    callers can classify (e.g. code 190 = auth-related → auth_revoked) without
+    brittle substring matching on the message text.
     """
+
+    def __init__(self, message: str, *, code: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _error_code_from_envelope(data: dict) -> int | None:
+    """Extract the Meta error code from a Graph API error envelope.
+
+    Meta returns ``{"error": {"code": <int>, "error_subcode": <int>, "message": ...}}``.
+    Code 190 = invalid/expired/revoked access token (the auth-revoked signal).
+    """
+    error = data.get("error")
+    if not isinstance(error, dict):
+        return None
+    code = error.get("code")
+    try:
+        return int(code) if code is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _graph_base() -> str:
@@ -237,7 +260,8 @@ async def send_message(
     )
     if data.get("error"):
         raise FacebookOAuthError(
-            f"send failed: {data['error'].get('message') or data['error']}"
+            "messenger send rejected",
+            code=_error_code_from_envelope(data),
         )
     return data
 

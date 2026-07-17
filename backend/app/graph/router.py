@@ -168,46 +168,47 @@ _GENERIC_VACANCY_LISTING_PATTERNS = tuple(
     )
 )
 
-_GENERIC_LISTING_WORDS = frozenset(
+_LISTING_CUE_TERMS = frozenset({"cac", "gi", "job", "nao", "nhung", "viec"})
+_ROLE_TAIL_GENERIC_TERMS = frozenset(
     {
         "a",
         "ah",
-        "anh",
-        "ban",
-        "bay",
-        "ben",
-        "can",
         "cac",
-        "cho",
-        "co",
-        "con",
-        "cua",
-        "dang",
         "duoc",
-        "em",
-        "gio",
+        "dung",
         "gi",
-        "hien",
-        "hoi",
-        "job",
         "khong",
         "ko",
-        "lam",
-        "minh",
         "nao",
-        "nhe",
+        "nhi",
         "nhung",
-        "oi",
-        "tai",
-        "toi",
-        "tuyen",
-        "dung",
-        "vay",
-        "viec",
-        "vi",
+        "the",
         "tri",
+        "vay",
+        "vi",
+        "viec",
     }
 )
+_PROPER_SUBJECT_STOPWORDS = frozenset(
+    {
+        "anh",
+        "ban",
+        "ben",
+        "cho",
+        "co",
+        "cong",
+        "da",
+        "dang",
+        "don",
+        "em",
+        "hien",
+        "hoi",
+        "minh",
+        "toi",
+        "xin",
+    }
+)
+_ROLE_TAIL = re.compile(r"\b(?:tuyen|nhan)\s+(?P<role>.+)$")
 
 _NON_ROLE_ACCEPTANCE_PREFIXES = (
     "vien",  # normalized "nhân viên": avoids treating "có nhân viên" as "có nhận"
@@ -275,6 +276,35 @@ def is_vacancy_lookup(user_text: str) -> bool:
     return not candidate_object.startswith(_NON_ROLE_ACCEPTANCE_PREFIXES)
 
 
+def _explicit_role_terms(text: str) -> set[str]:
+    match = _ROLE_TAIL.search(text)
+    if match is None:
+        return set()
+    return {
+        term
+        for term in re.findall(r"[a-z0-9]+", match.group("role"))
+        if term not in _ROLE_TAIL_GENERIC_TERMS
+    }
+
+
+def has_specific_vacancy_target(user_text: str) -> bool:
+    """Whether a turn positively names a company/location or a role target."""
+    normalized = _normalize(user_text)
+    if _explicit_role_terms(normalized):
+        return True
+    if "lg" in re.findall(r"[a-z0-9]+", normalized):
+        return True
+    for token in re.findall(r"[^\W\d_]+", user_text or "", flags=re.UNICODE):
+        normalized_token = normalize_vietnamese_text(token)
+        if (
+            token[:1].isupper()
+            and normalized_token not in _PROPER_SUBJECT_STOPWORDS
+            and len(normalized_token) >= 2
+        ):
+            return True
+    return False
+
+
 def is_generic_vacancy_listing(user_text: str) -> bool:
     """Whether the user asks for the full current catalog without a named target."""
     text = re.sub(r"[?.!,;:]+$", "", _normalize(user_text)).strip()
@@ -282,13 +312,17 @@ def is_generic_vacancy_listing(user_text: str) -> bool:
         return True
     if not is_vacancy_lookup(text):
         return False
-
-    # Vietnamese candidates often add polite/discourse words around a broad
-    # request. Treat it as a catalog listing only when no company, location, or
-    # role term remains after removing the generic vocabulary.
-    without_listing_nouns = re.sub(r"\b(?:cong viec|viec lam|vi tri)\b", " ", text)
-    terms = set(re.findall(r"[a-z0-9]+", without_listing_nouns))
-    return bool(terms) and terms <= _GENERIC_LISTING_WORDS
+    if has_specific_vacancy_target(user_text):
+        return False
+    if _LISTING_CUE_TERMS & set(re.findall(r"[a-z0-9]+", text)):
+        return True
+    return bool(
+        re.fullmatch(
+            r"(?:ben (?:minh|ban) )?(?:dang|con|co|can) tuyen(?: dung)?"
+            r"(?: khong| ko)?",
+            text,
+        )
+    )
 
 
 def route_turn(user_text: str) -> TurnRoute:

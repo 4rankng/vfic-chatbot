@@ -13,7 +13,7 @@ The published recruitment KB already contained the valid LG Display Tràng Duệ
 
 We changed vacancy handling so authority follows the question. Generic requests for all current jobs use required `list_active_jobs`, while specific company, location, or role questions use `search_knowledge`. `run_turn()` can answer specific questions from assigned direct-context KB evidence before any LLM rewrite. Follow-up salary/detail questions combine the prior vacancy query with the current question so the thread stays scoped to the same company evidence.
 
-The direct-context side also gained deterministic `Question:` / `Answer:` matching. When the KB has a canonical FAQ block that matches the user query, the runner returns that answer verbatim instead of letting the model rewrite vacancy or salary facts.
+The direct-context side also gained deterministic `Question:` / `Answer:` matching. When the KB has a canonical FAQ block that matches the user query, the runner returns that answer verbatim instead of letting the model rewrite vacancy or salary facts. A named role must appear in the matched evidence, and a later named topic stops an older vacancy thread from donating its salary or benefits to a new company.
 
 ## Reflection
 
@@ -24,8 +24,10 @@ This was a self-inflicted authority bug. We had the right published data and sti
 - Generic “what is hiring?” questions use the complete structured ACTIVE Job catalog.
 - Specific company, location, or role questions use the assigned published recruitment KB in both direct-context and RAG modes.
 - Canonical FAQ direct-context matches must return verbatim answers; the model is not allowed to rewrite vacancy or salary facts.
-- Vacancy follow-ups must combine the prior vacancy query with the current question so salary and benefits stay anchored to the same thread.
+- A requested role must be present in canonical evidence; otherwise the deterministic shortcut abstains.
+- Vacancy follow-ups must combine the prior vacancy query with the current question only until a newer named topic is introduced.
 - `list_active_jobs` is authoritative for generic full-catalog listings, but it does not override a specific published recruitment-KB answer.
+- Manifest-based installations preserve the same allowed tools, scoped lookup query, and forced catalog arguments as the recruitment path.
 
 ## Next
 

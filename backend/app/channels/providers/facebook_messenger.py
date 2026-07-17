@@ -227,9 +227,11 @@ class FacebookMessengerAdapter(TextChannelAdapter, ReceiptCapability):
             )
         except FacebookOAuthError as exc:
             # Classify auth-revoked distinctly so the resolver can mark the
-            # account unhealthy; everything else is a provider error.
-            msg = str(exc).lower()
-            if "token" in msg and ("invalid" in msg or "expired" in msg or "revoked" in msg):
+            # account unhealthy; everything else is a provider error. Meta's
+            # canonical auth signal is error code 190 (invalid/expired/revoked
+            # access token). Substring-matching the message text is unreliable
+            # (localized, varies by subcode), so branch on the structured code.
+            if exc.code == 190:
                 return ct.ChannelSendResult(
                     ok=False,
                     error="page access token invalid or revoked",

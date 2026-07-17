@@ -59,6 +59,27 @@ def test_vacancy_evidence_query_stops_at_a_new_named_topic():
     assert runner._vacancy_evidence_query("lương bao nhiêu?", history) is None
 
 
+def test_vacancy_evidence_query_keeps_acknowledgements_and_role_details_in_thread():
+    for body in (
+        "dạ vâng ạ",
+        "ok bạn",
+        "tôi hiểu rồi",
+        "công nhân ạ",
+        "ca làm thế nào",
+        "em ở An Dương",
+        "mình vẫn quan tâm",
+        "cảm ơn bạn",
+    ):
+        history = [
+            SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?"),
+            SimpleNamespace(sender="WORKER", body=body),
+        ]
+
+        scoped = runner._vacancy_evidence_query("lương bao nhiêu?", history)
+        assert scoped is not None
+        assert scoped.startswith("LG Tràng Duệ đang tuyển không?")
+
+
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------

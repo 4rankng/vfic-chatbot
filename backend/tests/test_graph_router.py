@@ -38,6 +38,14 @@ def test_route_generic_vacancy_listing_uses_active_job_catalog():
         "Cho em hỏi bên mình đang tuyển gì ạ?",
         "Hiện tại bên mình đang cần tuyển những vị trí nào?",
         "Có job nào đang tuyển không ạ?",
+        "Công ty mình đang tuyển gì ạ?",
+        "Đơn vị mình đang tuyển những vị trí nào?",
+        "Mình muốn hỏi bên mình đang tuyển gì ạ?",
+        "Bên mình có những việc mới nào đang tuyển?",
+        "Cho em hỏi hiện tại bên mình đang tuyển những vị trí nào thế ạ?",
+        "Dạ bên mình hiện đang tuyển gì vậy ạ?",
+        "Xin hỏi bên mình đang tuyển những vị trí nào?",
+        "Cho em hỏi bên mình đang tuyển vị trí nào nhỉ?",
     ):
         route = route_turn(query)
 

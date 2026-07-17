@@ -268,3 +268,85 @@ async def test_page_token_wrong_context_does_not_decrypt(integration_database):
         # page-B should NOT decrypt — the ciphertext was bound to page-A.
         cfg = await service.resolve_facebook("page-B")
         assert cfg is None, "wrong-context token decrypted — context binding failed"
+
+
+async def test_receipt_is_scoped_by_page_account_no_cross_contamination(
+    integration_database,
+):
+    """C1 regression (Phase 5 review): a delivery receipt for page-A's mid must
+    NOT advance a page-B outbound row that happens to share the same
+    provider_message_id. The receipt query joins Conversation→
+    ContactChannelIdentity and filters by provider + account_key.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.api.webhooks import _apply_messenger_receipt
+    from app.channels.types import ChannelReceipt
+    from app.core.db import async_session
+    from app.models.contact import Contact, ContactChannelIdentity
+    from app.models.conversation import (
+        Conversation,
+        ConversationMode,
+        DeliveryStatus,
+        Message,
+        MessageSender,
+    )
+
+    async with async_session() as db:
+        # Two Pages, each with contact + identity + conversation + a SENT
+        # outbound message sharing the SAME provider_message_id.
+        for page in ("page-A", "page-B"):
+            contact = Contact()
+            db.add(contact)
+            await db.flush()
+            ident = ContactChannelIdentity(
+                contact_id=contact.id,
+                provider="facebook_messenger",
+                account_key=page,
+                external_id=f"PSID-{page}",
+            )
+            db.add(ident)
+            await db.flush()
+            conv = Conversation(
+                zalo_channel="facebook_messenger",
+                contact_id=contact.id,
+                channel_identity_id=ident.id,
+                mode=ConversationMode.BOT,
+            )
+            db.add(conv)
+            await db.flush()
+            db.add(
+                Message(
+                    conversation_id=conv.id,
+                    sender=MessageSender.BOT,
+                    body="reply",
+                    delivery_status=DeliveryStatus.SENT,
+                    provider_message_id="mid-colliding",  # SAME mid on both pages
+                )
+            )
+        await db.commit()
+
+    # Apply a DELIVERED receipt for page-A's mid. page-B's row must stay SENT.
+    async with async_session() as db:
+        receipt = ChannelReceipt(
+            provider="facebook_messenger",
+            account_key="page-A",
+            provider_message_ids=("mid-colliding",),
+            kind="delivered",
+            occurred_at=datetime.now(timezone.utc),
+        )
+        await _apply_messenger_receipt(db, receipt, account_key="page-A")
+
+    async with async_session() as db:
+        rows = (
+            await db.scalars(
+                select(Message).where(Message.provider_message_id == "mid-colliding")
+            )
+        ).all()
+        # Exactly one row advanced to DELIVERED (page-A); the other stays SENT.
+        delivered = [r for r in rows if r.delivery_status == DeliveryStatus.DELIVERED]
+        sent = [r for r in rows if r.delivery_status == DeliveryStatus.SENT]
+        assert len(delivered) == 1, f"expected 1 delivered, got {[(r.delivery_status) for r in rows]}"
+        assert len(sent) == 1, f"expected 1 still-sent, got {[(r.delivery_status) for r in rows]}"

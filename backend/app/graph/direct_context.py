@@ -41,10 +41,35 @@ _MATCH_STOPWORDS = frozenset(
     }
 )
 _ROLE_QUERY = re.compile(
-    r"\b(?:tuyen|nhan)\s+(?P<role>.+?)(?:\s+(?:khong|ko))?[?.!]*$",
+    r"\b(?:tuyen|nhan)\s+(?P<role>.+)$",
     re.IGNORECASE,
 )
 _GENERIC_ROLE_TERMS = frozenset({"cac", "cong", "dung", "gi", "lam", "nao", "nhung", "tri", "vi", "viec"})
+_ROLE_CONFIRMATION_SUFFIXES = frozenset(
+    {
+        "a",
+        "ah",
+        "anh",
+        "ban",
+        "chi",
+        "duoc",
+        "dung",
+        "em",
+        "ha",
+        "khong",
+        "ko",
+        "la",
+        "ne",
+        "nhe",
+        "phai",
+        "roi",
+        "vay",
+        "voi",
+    }
+)
+_ROLE_TRAILING_DISCOURSE = re.compile(
+    r"\b(?:duoc\s+chu|giup(?:\s+(?:minh|em|toi|anh|chi|ban))?\s+voi|hay\s+sao)\s*$"
+)
 
 
 def _evidence_terms(value: str) -> set[str]:
@@ -64,11 +89,12 @@ def _requested_role_terms(query: str) -> set[str]:
     match = _ROLE_QUERY.search(normalize_vietnamese_text(current_line))
     if match is None:
         return set()
-    return {
-        term
-        for term in re.findall(r"[a-z0-9]+", normalize_vietnamese_text(match.group("role")))
-        if len(term) >= 2 and term not in _GENERIC_ROLE_TERMS
-    }
+    role = normalize_vietnamese_text(match.group("role")).strip("?.!,;: ")
+    role = _ROLE_TRAILING_DISCOURSE.sub("", role)
+    terms = re.findall(r"[a-z0-9]+", role)
+    while terms and terms[-1] in _ROLE_CONFIRMATION_SUFFIXES:
+        terms.pop()
+    return {term for term in terms if len(term) >= 2 and term not in _GENERIC_ROLE_TERMS}
 
 
 def direct_context_evidence_answer(knowledge_text: str, query: str) -> str | None:

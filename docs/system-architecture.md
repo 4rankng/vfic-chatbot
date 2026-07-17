@@ -303,10 +303,10 @@ sequenceDiagram
     rect rgb(235, 242, 255)
     Note over WK,DB: ── vacancy authority split ──
     alt generic request for all current jobs
-        WK->>WK: route to required list_active_jobs
+        WK->>WK: bypass FAQ/direct-context and route to required list_active_jobs(top_k=10)
         WK->>DB: load complete ACTIVE Job catalog
         WK->>WK: return deterministic safe list from tool evidence
-    else specific direct-context KB question and evidence block matches
+    else specific company/location/role question and evidence block supports the requested role
         WK->>WK: direct_context_evidence_answer(question, answer)
         WK->>WK: return verbatim Question/Answer block
     else direct-context KB assigned
@@ -314,7 +314,7 @@ sequenceDiagram
         WK->>WK: one LLM call over persona + full KB + recent history
     else vacancy-thread factual follow-up
         WK->>WK: combine prior vacancy query + current question
-        WK->>WK: scope salary/details to the same company/recruitment evidence
+        WK->>WK: stop at a newer named topic boundary; scope salary/details to the same company/recruitment evidence
     else RAG KB assigned
         WK->>WK: route vacancy and document facts to search_knowledge
         WK->>DB: semantic retrieval within active Agent KB projects
@@ -493,7 +493,7 @@ load_conversation_state -> typing -> direct_context?
   direct_context (available) -> evidence block match -> verbatim Question/Answer block
   direct_context (available) -> no evidence block match -> one grounded LLM call over full assigned KB
   direct_context (not available) -> fast lane / FAQ bypass / routed agent
-      vacancy-thread follow-up -> combined vacancy query + current question -> KB answer
+      vacancy-thread follow-up -> combined vacancy query + current question -> KB answer until a newer named topic boundary
       other agent intent -> scoped tool-calling LLM
       agent (error) -> error_reply
       agent (ok)    -> fast_safety_filter -> combine_for_presend
@@ -506,27 +506,38 @@ load_conversation_state -> typing -> direct_context?
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
-- **Vacancy authority:** generic requests such as “đang tuyển gì?” use required
-  `list_active_jobs` with no filters and return the complete structured ACTIVE
-  Job catalog. Specific company, location, or role questions use the published
-  recruitment KB as the answer source. In direct-context mode, the system first
-  tries to return a verbatim `Question:` / `Answer:` block from the assigned KB;
-  otherwise it falls through to the direct-context LLM call over that full KB.
-  For vacancy-thread factual follow-ups, the runner combines the prior vacancy
-  query with the current question so salary, benefits, and other details stay
-  scoped to the same company evidence. `search_knowledge` remains the path for
-  document facts. An empty catalog does not block a real answer from published
-  KB evidence for a specific vacancy question.
+- **Vacancy authority:** generic requests such as “đang tuyển gì?” bypass FAQ
+  and direct-context shortcuts and use required `list_active_jobs(top_k=10)`
+  with no filters, returning the complete structured ACTIVE Job catalog.
+  Specific company, location, or role questions use the published recruitment
+  KB as the answer source. In direct-context mode, the system first tries to
+  return a verbatim `Question:` / `Answer:` block from the assigned KB; a
+  canonical answer is only selected when any explicit requested role is
+  supported by that block. Otherwise it falls through to the direct-context
+  LLM call over that full KB. For vacancy-thread factual follow-ups, the runner
+  combines the prior vacancy query with the current question until a newer named
+  topic appears, so salary, benefits, and other details stay scoped to the same
+  company evidence. `search_knowledge` remains the path for document facts. An
+  empty catalog does not block a real answer from published KB evidence for a
+  specific vacancy question.
+- **Manifest-scoped runtime handoff:** when a manifest policy is active, the
+  runner preserves the same scoped `allowed_tools`, `lookup_query`, and
+  vacancy-only `required_tool_args` (`{"top_k": 10}` for `list_active_jobs`)
+  while filtering the allowed tools against the manifest's tool registry.
+  This keeps the runtime contract identical between the legacy recruitment path
+  and the manifest-composed path.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
   `_dispatch_tool` dispatch by name. The deterministic router prefetches
   `search_bus_timetable` for high-confidence timetable turns and
   `search_knowledge` for high-confidence contact/admin and FAQ-detail turns.
   FAQ bypass is deterministic and can abstain on low confidence; when it hits,
-  curated FAQ text is returned verbatim. Vacancy-thread detail questions are
+  curated FAQ text is returned verbatim. The legacy `path_b_faq` shortcut now
+  requires `published_vacancy_evidence=True` before it can return volatile
+  vacancy facts; otherwise it abstains. Vacancy-thread detail questions are
   resolved from the same published recruitment evidence rather than from the
-  live recommendation catalog. Generic full-list questions bypass FAQ and
-  direct-context shortcuts so one KB answer cannot masquerade as the full job
-  catalog.
+  live recommendation catalog, and follow-up scope ends once a newer named topic
+  appears. Generic full-list questions bypass FAQ and direct-context shortcuts
+  so one KB answer cannot masquerade as the full job catalog.
 - **Tool-loop ceiling:** `max_llm_calls_per_turn` (default 6).
 - **Typing heartbeat:** `_typing_heartbeat` sends `typing` to Zalo every 4s
   while a turn is processing (keeps the candidate's typing indicator alive).

@@ -106,12 +106,23 @@ class ChannelIngressService:
             return IngressOutcome(status="duplicate", dedup_key=dedup_key)
 
         svc = ConversationService(self.db)
+        # The legacy ``zalo_channel`` column is NOT NULL with a default, so it
+        # must be populated even for non-Zalo rows. Use the neutral provider id
+        # as the value for non-Zalo providers (meaningful for filtering and
+        # reconciliation), and keep the Zalo provider's actual channel value
+        # ("bot"/"oa") for Zalo rows.
+        if msg.identity.provider == ct.PROVIDER_ZALO_BOT:
+            channel_alias = "bot"
+        elif msg.identity.provider == ct.PROVIDER_ZALO_OA:
+            channel_alias = "oa"
+        else:
+            channel_alias = msg.identity.provider
         conv = await svc.ensure_by_identity(
             provider=msg.identity.provider,
             account_key=msg.identity.account_key,
             external_id=msg.identity.external_id,
             zalo_chat_id_alias=None,
-            zalo_channel_alias="bot",
+            zalo_channel_alias=channel_alias,
         )
         await self.db.refresh(conv)
 

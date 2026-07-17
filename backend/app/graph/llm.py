@@ -22,6 +22,8 @@ class AgentModel(Protocol):
     hard gate. ``None``/empty binds the full toolset (the pre-routing default).
     ``make_retrieval`` (optional) enables parallel tool dispatch: when provided and
     multiple tool calls arrive in one LLM response, each runs on its own session.
+    ``required_tool`` forces the first tool round to establish an authority source;
+    ``required_tool_args`` replaces model-supplied arguments for that tool.
     """
 
     async def agent(
@@ -37,6 +39,8 @@ class AgentModel(Protocol):
         make_retrieval: MakeRetrieval | None = None,
         lookup_query: str | None = None,
         metrics: dict | None = None,
+        required_tool: str | None = None,
+        required_tool_args: dict | None = None,
     ) -> str: ...
 
     async def direct(self, user_text: str, *, system: str, metrics: dict | None = None) -> str: ...

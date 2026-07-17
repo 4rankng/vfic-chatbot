@@ -261,13 +261,30 @@ async def test_adapter_auth_revoked_classification(monkeypatch):
     from app.channels.providers.facebook_oauth import FacebookOAuthError
 
     adapter = _adapter()
+    # Meta code 190 = invalid/expired/revoked access token. The adapter branches
+    # on the structured code, not brittle substring matching on the message.
     monkeypatch.setattr(
         "app.channels.providers.facebook_messenger.graph_send_message",
-        AsyncMock(side_effect=FacebookOAuthError("The access token is invalid")),
+        AsyncMock(side_effect=FacebookOAuthError("session invalidated", code=190)),
     )
     result = await adapter.send_text(_cmd())
     assert not result.ok
     assert result.error_class == "auth_revoked"
+
+
+async def test_adapter_auth_revoked_not_triggered_by_message_text(monkeypatch):
+    """A message containing 'token' + 'expired' but code != 190 must NOT
+    classify as auth_revoked — the structured code is the authority, not the
+    (localized, varying) message text."""
+    from app.channels.providers.facebook_oauth import FacebookOAuthError
+
+    adapter = _adapter()
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_messenger.graph_send_message",
+        AsyncMock(side_effect=FacebookOAuthError("The token expired", code=10)),
+    )
+    result = await adapter.send_text(_cmd())
+    assert result.error_class == "provider_error"
 
 
 async def test_adapter_generic_provider_error(monkeypatch):
@@ -456,3 +473,8 @@ async def test_webhook_post_inactive_page_acks_without_turn(monkeypatch):
     )
     assert response.status_code == 200
     assert json.loads(response.body)["status"] == "inactive"
+
+
+# (The cross-Page receipt-isolation regression test lives in
+# tests/integration/test_facebook_lifecycle.py where the integration_database
+# fixture is visible.)

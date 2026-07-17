@@ -45,6 +45,17 @@ _VOLATILE_FACT_MARKERS = (
     "còn tuyển",
     "còn vị trí",
 )
+_PUBLISHED_VACANCY_FACT_MARKERS = (
+    "lương",
+    "thu nhập",
+    "ca làm",
+    "giờ làm",
+    "tăng ca",
+    "phụ cấp",
+    "đang tuyển",
+    "còn tuyển",
+    "còn vị trí",
+)
 
 
 @dataclass(frozen=True)
@@ -140,10 +151,12 @@ async def path_b_faq(
     Exact normalized-question match → stored answer. Dynamic FAQs (resolution_type='tool')
     signal cannot_handle so the runner routes to Path A's tool instead.
     """
-    if (
-        any(marker in user_text.casefold() for marker in _VOLATILE_FACT_MARKERS)
-        and not published_vacancy_evidence
-    ):
+    normalized_user_text = user_text.casefold()
+    is_volatile = any(marker in normalized_user_text for marker in _VOLATILE_FACT_MARKERS)
+    is_published_vacancy_fact = any(
+        marker in normalized_user_text for marker in _PUBLISHED_VACANCY_FACT_MARKERS
+    )
+    if is_volatile and not (published_vacancy_evidence and is_published_vacancy_fact):
         return PathOutcome(reply="", outcome_label="faq_volatile", cannot_handle=True)
 
     from app.services.knowledge.tools.domain_tools import format_faq, get_faq_entry

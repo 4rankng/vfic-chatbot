@@ -21,14 +21,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 import uuid
 from contextlib import suppress
 from inspect import iscoroutinefunction
 
 from app.core.config import get_settings
-from app.core.text import normalize_vietnamese_text
 from app.graph import fast_lane
 from app.graph.outbound_telemetry import OutboundTelemetry
 from app.graph.llm_semaphore import LLMThrottled
@@ -40,6 +38,7 @@ from app.graph.direct_context import (
 )
 from app.graph.prompts import ERROR_REPLY
 from app.graph.router import (
+    has_specific_vacancy_target,
     is_generic_vacancy_listing,
     is_vacancy_lookup,
     route_turn,
@@ -520,48 +519,9 @@ _FAQ_BYPASS_VOLATILE_MARKERS = (
     "liên hệ",
 )
 
-_VACANCY_THREAD_CONTINUATION_TERMS = frozenset(
-    {
-        "a",
-        "ah",
-        "anh",
-        "bao",
-        "ben",
-        "ca",
-        "cho",
-        "cung",
-        "dem",
-        "duoc",
-        "em",
-        "gio",
-        "giu",
-        "ho",
-        "khong",
-        "ko",
-        "lam",
-        "luong",
-        "minh",
-        "nao",
-        "nhe",
-        "nhap",
-        "o",
-        "phu",
-        "so",
-        "thu",
-        "tang",
-        "tro",
-        "tuyen",
-        "viec",
-        "xe",
-        "yeu",
-    }
-)
-
 def _changes_vacancy_topic(body: str) -> bool:
-    """Whether an intervening worker message introduces a new named subject."""
-    normalized = normalize_vietnamese_text(body or "")
-    terms = set(re.findall(r"[a-z0-9]+", normalized))
-    return bool(terms - _VACANCY_THREAD_CONTINUATION_TERMS)
+    """Whether an intervening detail question positively names a new subject."""
+    return route_turn(body).intent == "faq_detail" and has_specific_vacancy_target(body)
 
 
 def _recent_vacancy_query(recent_messages: list[Message]) -> str | None:

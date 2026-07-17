@@ -337,8 +337,14 @@ async def _apply_messenger_receipt(db: AsyncSession, receipt, account_key: str) 
     (provider, account, provider_message_id) match advances status, preserving
     the at-most-once invariant. The conversation-wide null-ID fallback used by
     Zalo OA is disabled for Messenger.
+
+    Scope: the query joins Message → Conversation → ContactChannelIdentity and
+    filters by ``provider='facebook_messenger'`` AND ``account_key`` so a mid
+    collision across Pages (or between Messenger and Zalo, which share the same
+    provider_message_id column) cannot advance an unrelated outbound row.
     """
-    from app.models.conversation import DeliveryStatus, Message
+    from app.models.contact import ContactChannelIdentity
+    from app.models.conversation import Conversation, DeliveryStatus, Message
     from sqlalchemy import select
 
     if not receipt.provider_message_ids:
@@ -347,9 +353,17 @@ async def _apply_messenger_receipt(db: AsyncSession, receipt, account_key: str) 
         return
     rows = (
         await db.scalars(
-            select(Message).where(
+            select(Message)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .join(
+                ContactChannelIdentity,
+                Conversation.channel_identity_id == ContactChannelIdentity.id,
+            )
+            .where(
                 Message.provider_message_id.in_(receipt.provider_message_ids),
                 Message.sender.in_(("BOT", "RECRUITER")),
+                ContactChannelIdentity.provider == receipt.provider,
+                ContactChannelIdentity.account_key == account_key,
             )
         )
     ).all()
@@ -414,6 +428,11 @@ async def _enqueue_facebook_turn(db: AsyncSession, outcome, runtime_authority) -
         "received_at": last_inbound.created_at.isoformat()
         if last_inbound.created_at
         else "",
+        # Epoch anchor (not monotonic) so the RQ worker can compute remaining
+        # wall-clock budget across the process boundary (BotRunState). Without
+        # this, the SLA deadline_at_epoch defaults to 0 and the turn has no
+        # budget enforcement. Matches the Zalo webhook payload shape.
+        "received_at_epoch": time.time(),
         "trace_id": "",
         "runtime_revision_id": (
             str(runtime_authority.revision_id) if runtime_authority is not None else ""
@@ -425,6 +444,13 @@ async def _enqueue_facebook_turn(db: AsyncSession, outcome, runtime_authority) -
             runtime_authority.fingerprint if runtime_authority is not None else ""
         ),
     }
-    ok = enqueue_chat_run(job)
+    try:
+        ok = enqueue_chat_run(job)
+    except Exception:
+        # enqueue raised (Redis down / serialization) — release the lock so the
+        # stale-lock reconciler doesn't have to. Re-raise so the caller's
+        # per-event try/except logs and continues the batch.
+        await svc.release_lock(conv, lock_owner=lock_owner)
+        raise
     if ok is False:
         await svc.release_lock(conv, lock_owner=lock_owner)

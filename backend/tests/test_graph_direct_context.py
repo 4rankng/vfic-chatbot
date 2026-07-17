@@ -49,6 +49,31 @@ def test_requested_role_absent_from_evidence_does_not_select_generic_vacancy_ans
         assert direct_context_evidence_answer(_KNOWLEDGE, query) is None
 
 
+def test_supported_role_with_confirmation_suffix_selects_canonical_answer():
+    for query in (
+        "LG tuyển công nhân không ạ?",
+        "LG đang tuyển công nhân đúng không ạ?",
+        "LG tuyển công nhân phải không?",
+        "LG tuyển công nhân nhé?",
+    ):
+        answer = direct_context_evidence_answer(_KNOWLEDGE, query)
+
+        assert answer is not None
+        assert "công nhân thời vụ" in answer
+
+
+def test_supported_role_with_request_discourse_selects_canonical_answer():
+    for query in (
+        "LG tuyển công nhân được chứ?",
+        "LG tuyển công nhân giúp mình với?",
+        "LG tuyển công nhân hay sao?",
+    ):
+        answer = direct_context_evidence_answer(_KNOWLEDGE, query)
+
+        assert answer is not None
+        assert "công nhân thời vụ" in answer
+
+
 def test_matched_evidence_answer_is_never_silently_truncated():
     full_answer = "LG Display " + ("điều kiện đã xác minh. " * 100)
     knowledge = "Question: LG Display thông báo đầy đủ?\n\n" f"Answer: {full_answer}"

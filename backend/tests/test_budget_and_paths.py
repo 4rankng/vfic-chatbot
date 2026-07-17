@@ -173,6 +173,22 @@ async def test_path_b_allows_curated_vacancy_evidence_when_the_caller_scopes_it(
     assert outcome.outcome_label == "faq_cache"
 
 
+async def test_path_b_keeps_contact_and_transport_facts_out_of_vacancy_faq_scope():
+    for user_text in ("Hotline là số nào?", "LG có xe đưa đón không?"):
+        db = MagicMock()
+        outcome = await path_b_faq(
+            user_text=user_text,
+            normalized_question=user_text.casefold(),
+            db=db,
+            budget=TurnBudget(),
+            published_vacancy_evidence=True,
+        )
+
+        assert outcome.cannot_handle is True
+        assert outcome.outcome_label == "faq_volatile"
+        db.execute.assert_not_called()
+
+
 # ─── Path C: retrieval ───────────────────────────────────────────────────────
 
 
