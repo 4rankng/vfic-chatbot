@@ -11,11 +11,15 @@ vi.mock("../providers/rest/api", () => ({
   apiJson: mockApiJson,
 }));
 
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => false,
+}));
+
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
 
 describe("RecruitingCommandCenter candidate rows", () => {
   it("opens a conversation without rendering a redundant chevron", async () => {
-    mockApiJson.mockResolvedValueOnce({
+    const attention = {
       updated_at: "2026-07-12T10:00:00Z",
       counters: {
         needs_reply: 1,
@@ -43,7 +47,12 @@ describe("RecruitingCommandCenter candidate rows", () => {
         },
       ],
       today: [],
-    });
+    };
+    mockApiJson.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.startsWith("/api/v1/leads") ? { data: [], total: 0 } : attention,
+      ),
+    );
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -55,9 +64,13 @@ describe("RecruitingCommandCenter candidate rows", () => {
       </MemoryRouter>,
     );
 
-    await expect.element(
-      screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
-    ).toBeVisible();
-    expect(screen.container.querySelector(".dashboard-candidate-chevron")).toBeNull();
+    await expect
+      .element(
+        screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
+      )
+      .toBeVisible();
+    expect(
+      screen.container.querySelector(".dashboard-candidate-chevron"),
+    ).toBeNull();
   });
 });

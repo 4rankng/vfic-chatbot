@@ -12,8 +12,9 @@ const Header = () => {
   const title =
     manifest.lifecycle === "ACTIVE"
       ? manifest.branding?.app_name?.trim() ||
-        manifest.customer_identity?.display_name.trim()
-      : "";
+        manifest.customer_identity?.display_name.trim() ||
+        "Ting Ting"
+      : "Ting Ting";
   const { count } = useNotifications();
   const messagesDestination = getWorkspaceDestination(
     { id: "messages", to: "/conversations" },
@@ -23,6 +24,7 @@ const Header = () => {
   return (
     <header className="workspace-topbar">
       <Link to="/" className="workspace-topbar-brand" aria-label={title}>
+        <img src="/ttsoft-logo.png" alt="" aria-hidden="true" />
         <span>{title}</span>
       </Link>
 

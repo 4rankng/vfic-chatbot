@@ -6,9 +6,11 @@ import {
   UserRound,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { GroupedVirtuoso } from "react-virtuoso";
 import { useNavigate } from "react-router";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import {
   ATTENTION_QUERY_KEY,
@@ -17,6 +19,12 @@ import {
   fetchAttentionDashboard,
   formatElapsed,
 } from "./attentionDashboard";
+import {
+  CANDIDATES_QUERY_KEY,
+  type DashboardCandidate,
+  fetchDashboardCandidates,
+  groupCandidatesByDay,
+} from "./candidateDashboard";
 import { deriveCacheDiscriminators } from "./recruitingCommandCenterLogic";
 
 type RecruitingCommandCenterProps = {
@@ -81,14 +89,27 @@ export const RecruitingCommandCenter = ({
       staleTime: 25_000,
       gcTime: 5 * 60_000,
     });
+  const candidatesQuery = useQuery<DashboardCandidate[]>({
+    queryKey: CANDIDATES_QUERY_KEY,
+    queryFn: fetchDashboardCandidates,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    gcTime: 5 * 60_000,
+  });
 
   const shellClass =
     variant === "mobile"
       ? "recruiting-command recruiting-command-mobile"
       : "recruiting-command";
 
-  const immediateRows = data?.immediate ?? [];
-  const todayRows = data?.today ?? [];
+  const interventionRows = (data?.immediate ?? []).filter(
+    (row) => row.action === "OPEN_CONVERSATION" && row.conversation_id,
+  );
+  const candidateGroups = groupCandidatesByDay(candidatesQuery.data ?? []);
+  const candidateCount = candidateGroups.reduce(
+    (total, group) => total + group.candidates.length,
+    0,
+  );
 
   // Skeleton on first load only; cached data + refetch never flashes a skeleton.
   // Retained data + error banner on partial failure; retry pane on initial fail.
@@ -107,10 +128,11 @@ export const RecruitingCommandCenter = ({
           <h1>Tổng quan tuyển dụng</h1>
           <p>
             {dataUpdatedAt
-              ? `Cập nhật lúc ${formatClock(new Date(dataUpdatedAt).toISOString())}`
+              ? `Cập nhật lúc ${formatClock(new Date(Math.max(dataUpdatedAt, candidatesQuery.dataUpdatedAt)).toISOString())}`
               : "Đang tải hàng đợi tuyển dụng"}
           </p>
-          {showRefetchIndicator ? (
+          {showRefetchIndicator ||
+          (candidatesQuery.isFetching && candidatesQuery.data) ? (
             <span
               className="attention-refetch-indicator"
               aria-live="polite"
@@ -122,12 +144,18 @@ export const RecruitingCommandCenter = ({
         </div>
       </header>
 
-      {showPartialError ? (
+      {showPartialError || (candidatesQuery.isError && candidatesQuery.data) ? (
         <div className="dashboard-inline-error" role="status">
           <span>
             Không thể làm mới hàng đợi. Danh sách hiện tại vẫn được giữ lại.
           </span>
-          <button type="button" onClick={() => void refetch()}>
+          <button
+            type="button"
+            onClick={() => {
+              void refetch();
+              void candidatesQuery.refetch();
+            }}
+          >
             Thử lại
           </button>
         </div>
@@ -135,28 +163,26 @@ export const RecruitingCommandCenter = ({
 
       <section className="recruiting-two-column">
         <AttentionPanel
-          eyebrow="Cần phản hồi"
-          rows={immediateRows}
+          eyebrow="Cần can thiệp"
+          rows={interventionRows}
           state={{
             showSkeleton,
             showInitialError,
-            hasRows: immediateRows.length > 0,
+            hasRows: interventionRows.length > 0,
           }}
           navigate={navigate}
           onRetry={refetch}
         />
 
-        <AttentionPanel
-          eyebrow="Theo dõi hôm nay"
-          rows={todayRows}
+        <CandidatePanel
+          groups={candidateGroups}
+          count={candidateCount}
           state={{
-            showSkeleton,
-            showInitialError,
-            hasRows: todayRows.length > 0,
+            showSkeleton: candidatesQuery.isPending && !candidatesQuery.data,
+            showInitialError: candidatesQuery.isError && !candidatesQuery.data,
+            hasRows: candidateCount > 0,
           }}
-          navigate={navigate}
-          onRetry={refetch}
-          secondary
+          onRetry={candidatesQuery.refetch}
         />
       </section>
     </div>
@@ -175,7 +201,6 @@ type AttentionPanelProps = {
   state: PanelState;
   navigate: Navigate;
   onRetry: () => void;
-  secondary?: boolean;
 };
 
 const AttentionPanel = ({
@@ -184,7 +209,6 @@ const AttentionPanel = ({
   state,
   navigate,
   onRetry,
-  secondary,
 }: AttentionPanelProps) => {
   return (
     <article className="recruiting-panel">
@@ -204,11 +228,7 @@ const AttentionPanel = ({
           <DashboardListSkeleton />
         ) : state.showInitialError ? (
           <DashboardQueueError
-            label={
-              secondary
-                ? "Không tải được danh sách xử lý hôm nay."
-                : "Không tải được hàng đợi cần xử lý ngay."
-            }
+            label="Không tải được các hội thoại cần can thiệp."
             onRetry={onRetry}
           />
         ) : state.hasRows ? (
@@ -217,22 +237,91 @@ const AttentionPanel = ({
           ))
         ) : (
           <EmptyDashboardList
-            content={
-              secondary
-                ? {
-                    title: "Không có việc cần xử lý hôm nay",
-                    description:
-                      "Bạn đã hoàn thành tất cả công việc cần theo dõi.",
-                  }
-                : {
-                    title: "Không có ứng viên cần xử lý ngay",
-                    description: "Mọi cuộc trò chuyện hiện đã được xử lý.",
-                  }
-            }
+            content={{
+              title: "Không có hội thoại cần can thiệp",
+              description: "Mọi cuộc trò chuyện hiện đã được xử lý.",
+            }}
           />
         )}
       </div>
     </article>
+  );
+};
+
+const CandidatePanel = ({
+  groups,
+  count,
+  state,
+  onRetry,
+}: {
+  groups: ReturnType<typeof groupCandidatesByDay>;
+  count: number;
+  state: PanelState;
+  onRetry: () => void;
+}) => (
+  <article className="recruiting-panel recruiting-candidate-panel">
+    <div className="recruiting-panel-header">
+      <span className="recruiting-eyebrow">Ứng viên mới nhất</span>
+      <span
+        className="dashboard-panel-count"
+        aria-label={`${count} ứng viên có số điện thoại`}
+      >
+        {count}
+      </span>
+    </div>
+    <div className="dashboard-candidate-list">
+      {state.showSkeleton ? (
+        <DashboardListSkeleton />
+      ) : state.showInitialError ? (
+        <DashboardQueueError
+          label="Không tải được danh sách ứng viên."
+          onRetry={onRetry}
+        />
+      ) : state.hasRows ? (
+        <CandidateGroupedList groups={groups} count={count} />
+      ) : (
+        <EmptyDashboardList
+          content={{
+            title: "Chưa có ứng viên có số điện thoại",
+            description:
+              "Ứng viên sẽ xuất hiện tại đây sau khi cung cấp số liên hệ.",
+          }}
+        />
+      )}
+    </div>
+  </article>
+);
+
+const CandidateGroupedList = ({
+  groups,
+  count,
+}: {
+  groups: ReturnType<typeof groupCandidatesByDay>;
+  count: number;
+}) => {
+  const isMobile = useIsMobile();
+  const candidates = groups.flatMap((group) => group.candidates);
+  const desktopHeight = Math.min(720, count * 68 + groups.length * 32);
+
+  return (
+    <GroupedVirtuoso
+      className="dashboard-candidate-virtual-list"
+      data={candidates}
+      groupCounts={groups.map((group) => group.candidates.length)}
+      useWindowScroll={isMobile}
+      style={isMobile ? undefined : { height: desktopHeight }}
+      computeItemKey={(index, candidate) =>
+        candidate ? `candidate-${candidate.id}` : `group-${index}`
+      }
+      groupContent={(index) => (
+        <h2 className="dashboard-candidate-day-header">
+          {groups[index]?.label}
+        </h2>
+      )}
+      itemContent={(_index, _groupIndex, candidate) => (
+        <CandidateRow candidate={candidate} />
+      )}
+    />
   );
 };
 
@@ -312,6 +401,51 @@ const AttentionRow = ({
         {sub}
       </span>
       {meta}
+    </div>
+  );
+};
+
+const CandidateRow = ({ candidate }: { candidate: DashboardCandidate }) => {
+  const name = normalizeText(candidate.name) || "Ứng viên mới";
+  const phone = normalizeText(candidate.phone);
+  const desiredJob = normalizeText(candidate.desired_job);
+  const createdAt = new Date(candidate.created_at);
+  const time = Number.isNaN(createdAt.getTime())
+    ? ""
+    : new Intl.DateTimeFormat("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Ho_Chi_Minh",
+      }).format(createdAt);
+
+  return (
+    <div
+      className="dashboard-candidate-row is-static"
+      aria-label={`${name}, số điện thoại ${phone}${time ? `, lúc ${time}` : ""}`}
+    >
+      <CandidateAvatar />
+      <span className="dashboard-candidate-main">
+        <span className="dashboard-candidate-title">
+          <strong>{name}</strong>
+        </span>
+        <span className="dashboard-candidate-sub">
+          <span
+            className="dashboard-phone-hint"
+            aria-label={`Số điện thoại ${phone}`}
+          >
+            <Phone className="size-3" aria-hidden="true" />
+            {phone}
+          </span>
+          {desiredJob ? (
+            <span className="dashboard-job">{desiredJob}</span>
+          ) : null}
+        </span>
+      </span>
+      {time ? (
+        <span className="dashboard-candidate-meta">
+          <small>{time}</small>
+        </span>
+      ) : null}
     </div>
   );
 };
