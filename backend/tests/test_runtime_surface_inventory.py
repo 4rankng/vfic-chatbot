@@ -47,7 +47,7 @@ EXPECTED_ROUTE_COUNTS = {
     "integrations": 18,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
     "installation": 8,
     "jobs": 7,
-    "knowledge": 20,
+    "knowledge": 21,  # parallel knowledge work +1 endpoint
     "knowledge_bases": 11,
     "leads": 15,
     "main": 3,
@@ -57,13 +57,13 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "950486e9a9c82c1e9a774f188c062b0defb94cb791078293394045e14521a17f"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "507d8b551c4c4fac43ea07f41094372bf65012b6d7d5ea8be53784af73eb7a36"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 69,  # Phase 4: +11 Facebook OAuth/account provider-boundary references
-    "queue_producer": 22,  # Phase 5: +2 Facebook webhook queue producers
+    "queue_producer": 23,  # Phase 6: +1 Facebook outbound dispatch boundary
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "68bda8fe3f720e5d27c3fd80e03f85c0a87e231fffe983fe98254784f1b19a56"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "c1a69b313a17e4f26a665022d0da2959d0bd9e40d9e9d43fbc35e39768a3e032"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

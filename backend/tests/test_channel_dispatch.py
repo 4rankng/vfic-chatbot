@@ -322,7 +322,7 @@ async def test_try_neutral_dispatch_routes_oa_with_stripped_recipient():
             {"channel_account_generation": None},
         )()
         cfg = type("Cfg", (), {"bot_token": "t", "oa_access_token": "t"})()
-        result = await _try_neutral_dispatch(candidate, outbox, cfg, integration_settings=None)
+        result = await _try_neutral_dispatch(None, candidate, outbox, cfg, integration_settings=None)
     finally:
         dispatch_mod.build_zalo_registry_from_config = original_build  # type: ignore[assignment]
 
@@ -332,13 +332,13 @@ async def test_try_neutral_dispatch_routes_oa_with_stripped_recipient():
     assert result.provider_message_id == "oa-mid"
 
 
-def test_provider_for_outbox_channel_excludes_facebook_messenger():
-    """Phase 3 registers only Zalo adapters. facebook_messenger must map to
-    None so the neutral path is NOT taken (legacy fallback instead) until
-    Phase 5 registers the Messenger adapter. Prevents a silent flip."""
+def test_provider_for_outbox_channel_includes_facebook_messenger():
+    """Phase 6: the Messenger adapter is now registered for outbound dispatch,
+    so facebook_messenger maps to its provider id (not None). Unknown channels
+    still fall back to the legacy path."""
     from app.services.outbox_service import _provider_for_outbox_channel
 
     assert _provider_for_outbox_channel("zalo_bot") == "zalo_bot"
     assert _provider_for_outbox_channel("zalo_oa") == "zalo_oa"
-    assert _provider_for_outbox_channel("facebook_messenger") is None
+    assert _provider_for_outbox_channel("facebook_messenger") == "facebook_messenger"
     assert _provider_for_outbox_channel("unknown") is None

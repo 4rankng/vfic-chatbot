@@ -213,7 +213,7 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
     # Channel-neutral dispatch path (Phase 3): route through the registry when
     # the outbox channel maps to a registered provider. Falls back to the legacy
     # ZaloChannelSender for payloads that do not (e.g. a yet-unmapped channel).
-    dispatch_result = await _try_neutral_dispatch(candidate, outbox, cfg, integration_settings)
+    dispatch_result = await _try_neutral_dispatch(db, candidate, outbox, cfg, integration_settings)
     if dispatch_result is not None:
         return dispatch_result
 
@@ -232,6 +232,7 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
 
 
 async def _try_neutral_dispatch(
+    db: AsyncSession,
     candidate: DispatchCandidate,
     outbox: OutboundOutbox,
     cfg,
@@ -245,13 +246,25 @@ async def _try_neutral_dispatch(
     ``channel_account_generation`` when present (Phase 2 column).
     """
     from app.channels import types as ct
-    from app.channels.dispatch import ChannelDispatchService, build_zalo_registry_from_config
+    from app.channels.dispatch import (
+        ChannelDispatchService,
+        build_zalo_registry_from_config,
+    )
     from app.channels.registry import ChannelAdapterRegistry
 
     provider = _provider_for_outbox_channel(candidate.channel)
     if provider is None:
         return None  # unmapped channel → legacy path
 
+    if provider == ct.PROVIDER_FACEBOOK_MESSENGER:
+        # Messenger: resolve the active Page config + account_key from the
+        # conversation's channel identity. The Page token is decrypted
+        # server-side via the FacebookAccountResolver.
+        return await _dispatch_facebook(
+            db, candidate, outbox, integration_settings
+        )
+
+    # Zalo path: build a Zalo registry + hardcode the stable account keys.
     registry: ChannelAdapterRegistry = build_zalo_registry_from_config(
         cfg,
         oa_refresh=lambda: integration_settings.refresh_oa_access_token(),
@@ -302,20 +315,112 @@ async def _try_neutral_dispatch(
     )
 
 
+async def _dispatch_facebook(
+    db: AsyncSession,
+    candidate: DispatchCandidate,
+    outbox: OutboundOutbox,
+    integration_settings,
+) -> DispatchResult | None:
+    """Dispatch a Messenger outbound command through the neutral registry.
+
+    Resolves the active Page config (decrypting the Page token server-side),
+    the account_key + recipient from the conversation's channel identity, and
+    wires the :class:`FacebookAccountResolver` so the channel-account authority
+    fence (generation check) is enforced — a stale command queued across a
+    Page disconnect/reconnect is suppressed rather than sent.
+    """
+    from app.channels import types as ct
+    from app.channels.dispatch import ChannelDispatchService, build_facebook_registry
+    from app.channels.providers.facebook_account import FacebookAccountResolver
+
+    # 1. Resolve the conversation → channel identity → account_key + external_id.
+    from app.models.conversation import Conversation, Message
+    from app.models.contact import ContactChannelIdentity
+    from sqlalchemy import select
+
+    msg = await db.get(Message, candidate.message_id)
+    if msg is None:
+        return None
+    row = (
+        await db.execute(
+            select(
+                ContactChannelIdentity.account_key,
+                ContactChannelIdentity.external_id,
+            )
+            .select_from(Conversation)
+            .join(
+                ContactChannelIdentity,
+                Conversation.channel_identity_id == ContactChannelIdentity.id,
+            )
+            .where(Conversation.id == msg.conversation_id)
+        )
+    ).first()
+    if row is None:
+        return None  # no identity → legacy path cannot help either; suppress
+    account_key, recipient_id = row.account_key, row.external_id
+
+    # 2. Resolve the active Page config. resolve_facebook decrypts the Page
+    #    token with the page_id-bound AEAD context (Phase 4).
+    fb_cfg = await integration_settings.resolve_facebook(account_key)
+    if fb_cfg is None:
+        return DispatchResult(
+            outbox_id=candidate.outbox_id,
+            message_id=candidate.message_id,
+            ok=False,
+            error="facebook page token not resolvable (reconnect required)",
+            error_class="auth_revoked",
+            suppressed=True,
+        )
+
+    text = str(candidate.payload.get("text") or "")
+    if not text:
+        return DispatchResult(
+            outbox_id=candidate.outbox_id,
+            message_id=candidate.message_id,
+            ok=False,
+            error="outbound payload is missing text",
+            error_class="provider_error",
+        )
+
+    registry = build_facebook_registry(fb_cfg)
+    resolver = FacebookAccountResolver(db)
+    command = ct.OutboundTextCommand(
+        provider=ct.PROVIDER_FACEBOOK_MESSENGER,
+        account_key=account_key,
+        recipient_id=recipient_id,
+        text=text,
+        channel_account_generation=int(outbox.channel_account_generation or 0),
+        reply_to_message_id=candidate.payload.get("quote_message_id") or None,
+    )
+    svc = ChannelDispatchService(registry, account_resolver=resolver)
+    result = await svc.send(command)
+    return DispatchResult(
+        outbox_id=candidate.outbox_id,
+        message_id=candidate.message_id,
+        ok=result.ok,
+        zalo_message_id=result.provider_message_id,
+        provider_message_id=result.provider_message_id,
+        error=result.error,
+        error_class=result.error_class,
+        suppressed=result.suppressed,
+        telemetry=result.telemetry,
+    )
+
+
 def _provider_for_outbox_channel(channel: str) -> str | None:
     """Map the outbox row's channel string to a neutral provider id.
 
-    The outbox ``channel`` column carries legacy Zalo values (``zalo_bot`` /
-    ``zalo_oa``) which are the same as the neutral provider ids, so the mapping
-    is identity for installed Zalo adapters. Returns ``None`` for any other
-    value (including ``facebook_messenger`` — that adapter is registered in
-    Phase 5, not Phase 3) so the caller falls back to the legacy sender. This
-    keeps the neutral path exclusive to actually-installed providers and avoids
-    a silent flip when Phase 5 lands.
+    The outbox ``channel`` column carries provider ids directly
+    (``zalo_bot`` / ``zalo_oa`` / ``facebook_messenger``). Returns ``None`` for
+    any unrecognized value so the caller falls back to the legacy sender.
     """
     from app.channels import types as ct
 
-    if channel in (ct.PROVIDER_ZALO_BOT, ct.PROVIDER_ZALO_OA):
+    if channel in (
+        ct.PROVIDER_ZALO_BOT,
+        ct.PROVIDER_ZALO_OA,
+        ct.PROVIDER_FACEBOOK_MESSENGER,
+    ):
         return channel
     return None
 

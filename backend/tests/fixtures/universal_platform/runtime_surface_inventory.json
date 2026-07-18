@@ -151,6 +151,13 @@
     "category": "queue_producer",
     "count": 1,
     "file": "app/api/knowledge.py",
+    "scope": "reindex_all"
+  },
+  {
+    "call": "enqueue_ingest",
+    "category": "queue_producer",
+    "count": 1,
+    "file": "app/api/knowledge.py",
     "scope": "upload_file"
   },
   {

@@ -125,4 +125,24 @@ def build_zalo_registry_from_config(cfg, *, oa_refresh=None) -> ChannelAdapterRe
     return registry
 
 
-__all__ = ["ChannelDispatchService", "build_zalo_registry_from_config"]
+def build_facebook_registry(fb_cfg) -> ChannelAdapterRegistry:
+    """Build a registry with the Messenger adapter from a resolved Facebook config.
+
+    The caller resolves :class:`FacebookRuntimeConfig` for the active Page
+    (decrypting the Page token server-side via the account resolver). The
+    registry contains only the Messenger adapter — Zalo dispatch goes through
+    :func:`build_zalo_registry_from_config`.
+    """
+    from app.channels.providers.facebook_messenger import FacebookMessengerAdapter
+
+    registry = ChannelAdapterRegistry()
+    if fb_cfg is not None:
+        registry.register(FacebookMessengerAdapter(fb_cfg))
+    return registry
+
+
+__all__ = [
+    "ChannelDispatchService",
+    "build_zalo_registry_from_config",
+    "build_facebook_registry",
+]
