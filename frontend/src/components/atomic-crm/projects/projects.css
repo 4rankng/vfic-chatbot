@@ -43,15 +43,8 @@
   border-radius: 0;
 }
 
-.project-knowledge-card {
-  gap: 0;
-  overflow: hidden;
-}
-
 .project-knowledge-header {
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-hover) 24%, transparent);
+  padding: 2px 0 0;
 }
 
 .project-knowledge-title {
@@ -69,7 +62,7 @@
 .project-knowledge-content {
   display: grid;
   gap: 20px;
-  padding: 20px;
+  padding: 0;
 }
 
 .project-knowledge-description {
@@ -90,27 +83,34 @@
 .project-category-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  border-block: 1px solid var(--border);
 }
 
 .project-category-card {
   position: relative;
   min-height: 92px;
   padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-solid);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
   text-align: left;
   transition:
-    border-color 160ms var(--ease),
     background-color 160ms var(--ease),
     box-shadow 160ms var(--ease);
 }
 
+.project-category-card:nth-child(odd) {
+  border-right: 1px solid var(--border);
+}
+
+.project-category-card:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
 .project-category-card:hover {
-  border-color: color-mix(in srgb, var(--brand) 38%, var(--border));
-  background: color-mix(in srgb, var(--brand-light) 28%, var(--surface-solid));
+  background: color-mix(in srgb, var(--brand-light) 20%, transparent);
 }
 
 .project-category-card:focus-visible {
@@ -119,8 +119,7 @@
 }
 
 .project-category-card.is-selected {
-  border-color: var(--brand);
-  background: color-mix(in srgb, var(--brand-light) 56%, var(--surface-solid));
+  background: color-mix(in srgb, var(--brand-light) 48%, transparent);
   box-shadow: inset 3px 0 0 var(--brand);
 }
 
@@ -141,10 +140,7 @@
 
 .project-category-editor,
 .project-transport-panel {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-solid);
+  border-top: 1px solid var(--border);
 }
 
 .project-category-editor-header {
@@ -153,9 +149,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 16px 0 12px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-hover) 24%, transparent);
 }
 
 .project-category-editor-title {
@@ -171,13 +166,13 @@
 
 .project-category-editor-skeleton {
   height: 320px;
-  margin: 14px;
+  margin: 14px 0;
 }
 
 .project-category-textarea {
   min-height: 320px;
-  margin: 14px;
-  width: calc(100% - 28px);
+  margin: 14px 0;
+  width: 100%;
   resize: vertical;
   background: color-mix(
     in srgb,
@@ -187,11 +182,11 @@
 }
 
 .project-category-editor-footer {
-  padding: 0 14px 14px;
+  padding: 0 0 4px;
 }
 
 .project-transport-panel {
-  padding: 16px;
+  padding: 16px 0 0;
 }
 
 .project-transport-description {
@@ -615,6 +610,15 @@
 
   .project-category-card {
     min-height: 88px;
+    border-right: 0;
+  }
+
+  .project-category-card:nth-last-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .project-category-card:last-child {
+    border-bottom: 0;
   }
 
   .project-category-editor-header {

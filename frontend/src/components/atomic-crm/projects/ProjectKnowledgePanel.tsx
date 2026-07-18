@@ -397,14 +397,14 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     categories?.filter((item) => item.active_revision_id).length ?? 0;
 
   return (
-    <Card className="project-knowledge-card">
-      <CardHeader className="project-knowledge-header">
-        <h2 className="project-knowledge-title">
+    <section className="project-knowledge-panel" aria-labelledby="project-knowledge-title">
+      <header className="project-knowledge-header">
+        <h2 id="project-knowledge-title" className="project-knowledge-title">
           <Database className="size-5" aria-hidden="true" />
           Kiến thức theo danh mục
         </h2>
-      </CardHeader>
-      <CardContent className="project-knowledge-content">
+      </header>
+      <div className="project-knowledge-content">
         <p className="project-knowledge-description">
           Mỗi mục được cập nhật riêng. Cập nhật một mục không làm thay đổi các
           mục khác. Riêng Việc làm: có trong file nghĩa là đang tuyển; không còn
@@ -566,8 +566,8 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
             <BusTimetableSection projectId={String(project.id)} />
           </section>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 };
 

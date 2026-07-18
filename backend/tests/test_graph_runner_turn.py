@@ -861,21 +861,14 @@ async def test_fast_turn_sends_no_filler(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# FAQ / template fast lane (Slice D)
+# Final-answer routing
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_greeting_hits_fast_lane_without_enqueuing_extraction(monkeypatch):
-    """A pure greeting is answered by the fast lane: GREETING_REPLY, outcome=faq_cache,
-    the agent is never called, and pure pleasantries never reach extraction."""
-    from app.graph.fast_lane import GREETING_REPLY
-
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("agent must not be called for a fast-lane greeting")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
-
+async def test_greeting_reaches_agent_and_never_uses_a_template(monkeypatch):
+    """Every normal inbound message is finalized by the LLM, including greetings."""
+    _stub_agent(monkeypatch, "Chào bạn, tôi có thể hỗ trợ tìm việc tại LG Display.")
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
     persisted: list[dict] = []
@@ -884,10 +877,10 @@ async def test_greeting_hits_fast_lane_without_enqueuing_extraction(monkeypatch)
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="chào bạn")
     res = await run_turn(state, _deps(zalo, conversation=svc, persist=persisted.append))
 
-    assert res["outcome"] == "faq_cache"
-    assert res["reply"] == GREETING_REPLY
-    assert zalo.sent == [("z1", GREETING_REPLY)]
-    assert persisted == []
+    assert res["outcome"] == "sent"
+    assert res["reply"] == "Chào bạn, tôi có thể hỗ trợ tìm việc tại LG Display."
+    assert zalo.sent == [("z1", "Chào bạn, tôi có thể hỗ trợ tìm việc tại LG Display.")]
+    assert persisted[0]["user_text"] == "chào bạn"
 
 
 @pytest.mark.asyncio
@@ -895,11 +888,8 @@ async def test_greeting_hits_fast_lane_without_enqueuing_extraction(monkeypatch)
     "user_text",
     ["hello ban", "cảm ơn bạn nhe", "tạm biệt", "bye", "bạn giúp gì được"],
 )
-async def test_pure_fast_lane_variants_never_enqueue_extraction(monkeypatch, user_text):
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("agent must not be called for a pure fast-lane phrase")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+async def test_small_talk_variants_reach_agent(monkeypatch, user_text):
+    _stub_agent(monkeypatch, "Phản hồi từ LLM")
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
     persisted: list[dict] = []
@@ -909,16 +899,14 @@ async def test_pure_fast_lane_variants_never_enqueue_extraction(monkeypatch, use
         _deps(_FakeZalo(), conversation=svc, persist=persisted.append),
     )
 
-    assert result["outcome"] == "faq_cache"
-    assert persisted == []
+    assert result["outcome"] == "sent"
+    assert result["reply"] == "Phản hồi từ LLM"
+    assert persisted[0]["user_text"] == user_text
 
 
 @pytest.mark.asyncio
-async def test_mixed_fast_lane_message_still_enqueues_intent_extraction(monkeypatch):
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("fast-lane response should not call the agent")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+async def test_mixed_small_talk_message_reaches_agent(monkeypatch):
+    _stub_agent(monkeypatch, "Tôi đã ghi nhận.")
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
     persisted: list[dict] = []
@@ -929,7 +917,8 @@ async def test_mixed_fast_lane_message_still_enqueues_intent_extraction(monkeypa
         _deps(_FakeZalo(), conversation=svc, persist=persisted.append),
     )
 
-    assert result["outcome"] == "faq_cache"
+    assert result["outcome"] == "sent"
+    assert result["reply"] == "Tôi đã ghi nhận."
     assert persisted[0]["user_text"] == user_text
     assert persisted[0]["conversation_version"] == 1
 
@@ -1572,26 +1561,18 @@ async def test_agent_turn_does_not_append_collection_question(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stage_timings_records_fast_lane_without_lead_or_llm(monkeypatch):
-    """A fast-lane greeting tags lane='fast_lane' and skips the lead/llm stages."""
-    from app.graph.fast_lane import GREETING_REPLY
-
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("agent must not be called for a fast-lane greeting")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+async def test_stage_timings_records_agent_lane_for_greeting(monkeypatch):
+    """A greeting is attributed to the LLM agent lane, not a template lane."""
+    _stub_agent(monkeypatch, "Chào bạn!")
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, owned=True)
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="chào bạn")
     res = await run_turn(state, _deps(_FakeZalo(), conversation=svc))
 
-    assert res["outcome"] == "faq_cache"
-    assert res["reply"] == GREETING_REPLY
+    assert res["outcome"] == "sent"
+    assert res["reply"] == "Chào bạn!"
     st = recorded[0]["stage_timings"]
-    assert st["lane"] == "fast_lane"
-    assert "lead_ms" not in st
-    assert "llm_queue_ms" not in st
-    assert "llm_model_ms" not in st
+    assert st["lane"] == "agent"
     assert st["total_ms"] >= 0
 
 
