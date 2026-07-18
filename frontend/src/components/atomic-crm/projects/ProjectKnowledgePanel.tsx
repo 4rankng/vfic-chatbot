@@ -3,7 +3,6 @@ import { useDataProvider, useNotify, useRefresh } from "ra-core";
 import { ApiError } from "@/components/atomic-crm/providers/rest/api";
 import {
   AlertCircle,
-  CheckCircle2,
   Clipboard,
   Database,
   Download,
@@ -459,10 +458,12 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                         aria-hidden="true"
                       />
                     ) : isActive ? (
-                      <CheckCircle2
-                        className="size-4 text-emerald-600"
-                        aria-hidden="true"
-                      />
+                      <Badge
+                        variant="secondary"
+                        className="h-6 px-1.5 text-badge font-semibold"
+                      >
+                        v{category.active_revision_no ?? 1}
+                      </Badge>
                     ) : (
                       <span
                         className="project-category-empty-dot"
@@ -470,15 +471,17 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                       />
                     )}
                   </div>
-                  <p className="project-category-status">
-                    {isProcessing || hasPendingRevision
-                      ? "Đang xử lý"
-                      : hasError
-                        ? "Cập nhật lỗi — nội dung cũ vẫn đang dùng"
-                        : isActive
-                          ? `Đang dùng bản ${category.active_revision_no}`
-                          : "Chưa có dữ liệu"}
-                  </p>
+                  <div className="project-category-status">
+                    {isProcessing || hasPendingRevision ? (
+                      <span className="text-muted-foreground">Đang xử lý</span>
+                    ) : hasError ? (
+                      <span className="text-destructive">
+                        Cập nhật lỗi — nội dung cũ vẫn đang dùng
+                      </span>
+                    ) : !isActive ? (
+                      <span className="text-muted-foreground">Chưa có dữ liệu</span>
+                    ) : null}
+                  </div>
                   {category.updated_at && (
                     <p className="project-category-date">
                       Cập nhật {formatDate(category.updated_at)}

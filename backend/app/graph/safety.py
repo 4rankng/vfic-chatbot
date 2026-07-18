@@ -23,7 +23,10 @@ class FastSafetyResult(TypedDict):
 # --- Fast Safety Filter -------------------------------------------------------
 # Friendly fallback when the bot can't produce a good reply. Short, natural,
 # and redirects the user — not robotic filler.
-FALLBACK_REPLY = "Mình không trả lời được, bạn hỏi câu khác đi nhé 🙏"
+FALLBACK_REPLY = (
+    "Tôi chưa thể xác minh câu trả lời này. Bạn đang quan tâm vị trí tuyển dụng, "
+    "mức lương, xe đưa đón hay hồ sơ ứng tuyển để tôi kiểm tra đúng thông tin nhé?"
+)
 
 _RISK_RE = re.compile(
     # Structural markers are high-precision signals of leaked reasoning / tool
@@ -63,7 +66,14 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
         if too_long_for_chat
         else (cleaned or FALLBACK_REPLY)
     )
-    needs_llm_safety = empty_after_clean or too_long_for_chat or bool(_RISK_RE.search(raw))
+    # Risk scan runs against the CLEANED reply, not raw. Code fences / markdown
+    # are already stripped above, so a fence that the agent slipped in (but
+    # which never reaches the user) must not discard the whole reply. True
+    # leakage — JSON protocol keys, <minimax: tags, Vietnamese system-prompt
+    # phrases — survives cleaning and still trips the flag.
+    needs_llm_safety = (
+        empty_after_clean or too_long_for_chat or bool(_RISK_RE.search(cleaned))
+    )
 
     return {
         "output": output,
@@ -168,7 +178,7 @@ TECHNICAL_FALLBACK = (
     "tuyển dụng. Bạn đang muốn tìm việc ở khu vực nào nhỉ?"
 )
 # Friendly redirect when the bot can't produce a good reply.
-GENERIC_FALLBACK = "Mình không trả lời được, bạn hỏi câu khác đi nhé 🙏"
+GENERIC_FALLBACK = FALLBACK_REPLY
 
 
 def retry_exhausted_fallback(original_user_text: str) -> str:

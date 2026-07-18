@@ -738,21 +738,24 @@ async def test_llm_throttle_propagates_uncaught(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_flagged_reply_redirects_to_fallback_without_llm_judge(monkeypatch):
-    """A reply the fast filter flags (code/JSON/empty) is redirected to the
-    deterministic fallback — no second LLM call.
+    """A reply the fast filter flags (genuine protocol leakage) is redirected to
+    the deterministic fallback — no second LLM call.
 
     The safety LLM judge was removed (it p50'd at 10.3s, as expensive as the
-    agent itself). The fast filter already handles every trigger it caught:
-    code/JSON leakage → retry_exhausted_fallback redirect, empty → FALLBACK_REPLY,
-    over-long → truncate. This test pins the redirect path for a code-leakage
-    reply (the most common trigger).
+    agent itself). The fast filter handles every trigger it caught:
+    protocol-key/leakage → retry_exhausted_fallback redirect, empty → FALLBACK_REPLY,
+    over-long → truncate. This test pins the redirect path for a genuine
+    JSON-protocol leak (which survives the markdown/fence cleaning step).
     """
     from app.graph.safety import GENERIC_FALLBACK, retry_exhausted_fallback
 
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
-    # reply contains code fences -> fast filter flags needs_llm_safety
-    _stub_agent(monkeypatch, "viết code python ```print('x')```")
+    # Genuine protocol-key leakage — survives cleaning, still trips _RISK_RE.
+    _stub_agent(
+        monkeypatch,
+        'tool_call: {"safe_to_send": false, "final_answer": "leaked"}',
+    )
 
     class _MustNotJudge:
         async def safety(self, candidate: str) -> str:  # noqa: ARG002
@@ -771,6 +774,41 @@ async def test_flagged_reply_redirects_to_fallback_without_llm_judge(monkeypatch
     # The GENERIC_FALLBACK is what retry_exhausted_fallback returns for a
     # non-technical user (this test's user_text is a job query).
     assert expected == GENERIC_FALLBACK
+
+
+@pytest.mark.asyncio
+async def test_cleanable_code_fence_is_sent_not_discarded(monkeypatch):
+    """Regression: a real recruitment answer that merely contains a stray code
+    fence must be cleaned and SENT — not replaced with the generic fallback.
+
+    Previously _RISK_RE scanned the raw reply, so any fence discarded the whole
+    answer with "Mình không trả lời được, bạn hỏi câu khác đi nhé". The scan now
+    runs against the cleaned reply; the fence is stripped first, and the
+    remaining prose is sent.
+    """
+    from app.graph.safety import GENERIC_FALLBACK
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    # Stray fence around a fragment, but the reply is real recruitment content.
+    _stub_agent(monkeypatch, "Bạn cần mang CCCD. ```print(1)``` Hẹn gặp lúc 8h nhé.")
+
+    class _MustNotJudge:
+        async def safety(self, candidate: str) -> str:  # noqa: ARG002
+            raise AssertionError("LLM safety judge must not be called")
+
+    zalo = _FakeZalo()
+    res = await run_turn(
+        _state(),
+        _deps(zalo, conversation=svc, safety=_MustNotJudge()),
+    )
+
+    assert res["outcome"] == "sent"
+    # The cleaned reply is sent — NOT the generic fallback.
+    assert res["reply"] != GENERIC_FALLBACK
+    assert "CCCD" in res["reply"]
+    assert "```" not in res["reply"]
+    assert zalo.sent[0][1] == res["reply"]
 
 
 # ---------------------------------------------------------------------------

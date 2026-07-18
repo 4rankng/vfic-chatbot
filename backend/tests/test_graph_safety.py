@@ -19,12 +19,36 @@ def test_fast_safety_clean_reply_needs_no_llm():
     assert out["issue_type"] == "none"
 
 
-def test_fast_safety_strips_markdown_and_flags_code():
-    # markdown bold/headers get cleaned; mentions of code trigger LLM safety
-    out = fast_safety_filter("Đây là **code** python: ```print(1)```")
-    assert out["needs_llm_safety"] is True
+def test_fast_safety_strips_markdown_and_does_not_flag_cleaned_code():
+    # Markdown bold/headers/code fences are stripped before the risk scan. A
+    # reply whose cleaned form is plain prose must NOT trip the fallback —
+    # regression for the production bug where "Mình không trả lời được..."
+    # replaced a legitimate answer that merely contained a code fence.
+    out = fast_safety_filter("Đây là **code** python: ```print(1)``` bạn nhé.")
+    assert out["needs_llm_safety"] is False
+    assert out["safe_to_send"] is True
     assert "```" not in out["output"]
     assert "**" not in out["output"]
+
+
+def test_fast_safety_risk_scan_ignores_raw_fences_but_keeps_true_leakage():
+    # A stray code fence inside a real recruitment answer is cleaned away and
+    # must not discard the reply. Regression for the production bug where a
+    # fence in the agent output replaced the whole answer with the generic
+    # "Mình không trả lời được..." fallback.
+    legit_with_fence = (
+        "Bạn cần mang theo CCCD. ```print(1)``` Hẹn gặp bạn lúc 8h sáng nhé."
+    )
+    out_legit = fast_safety_filter(legit_with_fence)
+    assert out_legit["needs_llm_safety"] is False
+    assert out_legit["safe_to_send"] is True
+    assert "CCCD" in out_legit["output"]
+    assert "```" not in out_legit["output"]
+
+    # Genuine protocol-key leakage survives cleaning and still escalates.
+    leak = 'tool_call: {"safe_to_send": false, "final_answer": "x"}'
+    out_leak = fast_safety_filter(leak)
+    assert out_leak["needs_llm_safety"] is True
 
 
 def test_fast_safety_flags_internal_terms():
