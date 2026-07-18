@@ -463,7 +463,6 @@ async def test_direct_vacancy_question_reaches_agent_when_faq_bypass_misses(monk
         captured["recent_messages"] = list(recent_messages)
         return f"LLM saw: {user_text}"
 
-    monkeypatch.setattr(runner.fast_lane, "match", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runner, "_agent_turn", _grounded_agent)
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv)
@@ -542,7 +541,6 @@ async def test_vacancy_prompts_reach_agent_when_faq_bypass_misses(monkeypatch, u
         captured["recent_messages"] = list(recent_messages)
         return f"LLM saw: {user_text}"
 
-    monkeypatch.setattr(runner.fast_lane, "match", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runner, "_agent_turn", _grounded_agent)
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv)
@@ -576,7 +574,6 @@ async def test_vacancy_followup_reaches_agent_with_scoped_query_when_faq_bypass_
         captured["recent_messages"] = list(recent_messages)
         return f"LLM saw follow-up: {user_text}"
 
-    monkeypatch.setattr(runner.fast_lane, "match", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runner, "_agent_turn", _grounded_agent)
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, messages=history)
@@ -1715,9 +1712,6 @@ async def test_empty_agent_candidate_uses_safety_fallback(monkeypatch):
     async def _empty_agent(*args, **kwargs):  # noqa: ARG001
         return ""
 
-    # Fast lane must not short-circuit the empty candidate back to a template.
-    monkeypatch.setattr(runner, "fast_lane", SimpleNamespace(match=lambda _t: None))
-
     monkeypatch.setattr(runner, "_agent_turn", _empty_agent)
 
     conv = _FakeConv()
@@ -1726,7 +1720,7 @@ async def test_empty_agent_candidate_uses_safety_fallback(monkeypatch):
     state = BotRunState(
         conversation_id=CONV_ID,
         version_at_start=1,
-        # Non-greeting text so the fast lane (above also force-cleared) does not fire.
+        # Any message now reaches the agent before the empty-reply guard runs.
         user_text="bên bạn có tuyển dụng gì không?",
     )
 
@@ -1745,8 +1739,6 @@ async def test_whitespace_agent_candidate_uses_safety_fallback(monkeypatch, blan
 
     async def _blank_agent(*args, **kwargs):  # noqa: ARG001
         return blank
-
-    monkeypatch.setattr(runner, "fast_lane", SimpleNamespace(match=lambda _t: None))
 
     monkeypatch.setattr(runner, "_agent_turn", _blank_agent)
 
