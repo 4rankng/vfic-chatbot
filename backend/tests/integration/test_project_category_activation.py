@@ -57,7 +57,10 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         project_id=project.id,
         category_key="transportation",
     )
-    integration_session.add_all([jobs_category, benefits_category, transportation_category])
+    contacts_category = KnowledgeCategory(project_id=project.id, category_key="contacts")
+    integration_session.add_all(
+        [jobs_category, benefits_category, transportation_category, contacts_category]
+    )
     await integration_session.flush()
 
     jobs_source = (
@@ -217,3 +220,28 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     assert await integration_session.scalar(
         select(func.count(BusStop.id)).where(BusStop.route_id.in_(route_ids))
     ) == 4
+
+    contacts_source = (
+        "category: contacts\n"
+        "contacts:\n"
+        "  - id: recruiter\n"
+        "    name: Bộ phận tuyển dụng\n"
+        "    zalo: Zalo OA\n"
+    )
+    contacts_document = parse_category_yaml("contacts", contacts_source)
+    contacts_revision = KnowledgeCategoryRevision(
+        category_id=contacts_category.id,
+        revision_no=1,
+        status=KnowledgeCategoryRevisionStatus.STAGED,
+        source_filename="contacts.yaml",
+        source_yaml=contacts_source,
+        normalized_payload=contacts_document.model_dump(mode="json"),
+        content_sha256=category_checksum(contacts_document),
+        created_by=actor.id,
+    )
+    integration_session.add(contacts_revision)
+    await integration_session.commit()
+
+    await service.activate_revision(contacts_revision.id, _Embedder())
+    await integration_session.refresh(contacts_category)
+    assert contacts_category.active_revision_id == contacts_revision.id

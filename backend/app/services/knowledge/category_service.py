@@ -490,7 +490,10 @@ class KnowledgeCategoryService:
         jobs = await self._derived_jobs(project_id)
         definition = get_category_definition(key)
         for record in getattr(document, definition.list_field):
-            targets = _target_jobs(jobs, record.job_ids)
+            job_ids = getattr(record, "job_ids", None)
+            if job_ids is None:
+                continue
+            targets = _target_jobs(jobs, job_ids)
             if key is KnowledgeCategoryKey.COMPENSATION:
                 for job in targets:
                     job.salary_min = record.estimated_income_min_vnd or record.base_salary_vnd
