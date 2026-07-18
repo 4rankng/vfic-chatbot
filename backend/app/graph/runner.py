@@ -24,9 +24,10 @@ import logging
 import time
 import uuid
 from contextlib import suppress
-from inspect import iscoroutinefunction
+from inspect import Parameter, iscoroutinefunction, signature
 
 from app.core.config import get_settings
+from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.outbound_telemetry import OutboundTelemetry
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
@@ -143,14 +144,37 @@ def _stamp_outbound_telemetry(timings: dict | None, send_result) -> None:
         timings.update(telemetry.to_stage_timings())
 
 
+def _with_optional_trace(callable_obj, kwargs: dict, trace_sink) -> dict:
+    """Add the trace sink without breaking legacy adapters or test doubles.
+
+    The graph protocol keeps trace capture additive. Existing installations may
+    provide an agent implementation that predates the optional keyword, so the
+    runner feature-detects support at the call boundary.
+    """
+    if trace_sink is None:
+        return kwargs
+    try:
+        parameters = signature(callable_obj).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    supports_keyword = "trace_sink" in parameters or any(
+        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()
+    )
+    if not supports_keyword:
+        return kwargs
+    return {**kwargs, "trace_sink": trace_sink}
+
+
 async def _agent_turn(
     state: BotRunState,
     deps: GraphDeps,
     user_text: str,
     *,
+    provider: str,
     chat_id: str,
     recent_messages: list[Message],
     timings: dict | None = None,
+    trace_sink=None,
     manifest_policy=None,
     project_context=None,
 ) -> str:
@@ -175,12 +199,18 @@ async def _agent_turn(
         ):
             return await deps.agent.direct(
                 user_text,
-                system=(
+                **_with_optional_trace(
+                    deps.agent.direct,
+                    {
+                        "system": (
                     "Bạn là tư vấn viên tuyển dụng. Công cụ dữ liệu cần thiết hiện không khả dụng. "
                     "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra thông tin, không "
                     "khẳng định có việc và không bịa dữ liệu."
+                        ),
+                        "metrics": timings,
+                    },
+                    trace_sink,
                 ),
-                metrics=timings,
             )
         return await run_manifest_composed_agent(
             user_text,
@@ -190,6 +220,9 @@ async def _agent_turn(
             lookup_query=_vacancy_evidence_query(user_text, recent_messages) or user_text,
             required_tool="list_active_jobs" if route.reason == "vacancy_listing" else None,
             required_tool_args={"top_k": 10} if route.reason == "vacancy_listing" else None,
+            metrics=timings,
+            retry_empty_generation=True,
+            trace_sink=trace_sink,
         )
 
     # System prompt = active persona + master index of active products (best-effort;
@@ -201,7 +234,10 @@ async def _agent_turn(
     from app.graph.context import build_system_prompt
 
     sys_t0 = time.monotonic()
-    system, sys_prompt_hit = await build_system_prompt(deps.retrieval)
+    system, sys_prompt_hit = await build_system_prompt(
+        deps.retrieval,
+        provider=provider,
+    )
     if project_context is not None:
         if project_context.state == "FOCUSED":
             system += (
@@ -254,12 +290,18 @@ async def _agent_turn(
     ):
         return await deps.agent.direct(
             user_text,
-            system=(
+            **_with_optional_trace(
+                deps.agent.direct,
+                {
+                    "system": (
                 "Bạn là tư vấn viên tuyển dụng. Công cụ dữ liệu cần thiết hiện không khả dụng. "
                 "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra thông tin, không "
                 "khẳng định có việc và không bịa dữ liệu."
+                    ),
+                    "metrics": timings,
+                },
+                trace_sink,
             ),
-            metrics=timings,
         )
     focused_rag = (
         project_context is not None
@@ -273,12 +315,18 @@ async def _agent_turn(
         if resolved_tool_registry is not None and authority_tool not in resolved_tool_registry:
             return await deps.agent.direct(
                 user_text,
-                system=(
+                **_with_optional_trace(
+                    deps.agent.direct,
+                    {
+                        "system": (
                     "Bạn là tư vấn viên tuyển dụng. Dữ liệu của dự án hiện không thể tra cứu. "
                     "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa có thông tin đã xác minh, "
                     "không khẳng định có việc và không bịa dữ liệu."
+                        ),
+                        "metrics": timings,
+                    },
+                    trace_sink,
                 ),
-                metrics=timings,
             )
         # Detailed Project answers use only the Project-owned category authority.
         # This also keeps legacy global timetable/project tools out of a focused turn.
@@ -308,8 +356,8 @@ async def _agent_turn(
                 "lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True
             )
     if timings is not None:
-        # Accumulate so a safety-retry (a second _agent_turn call) adds to the
-        # first attempt rather than overwriting; total_ms still spans the turn.
+        # Accumulate because the shared timing dictionary may already include
+        # work from earlier reactive-turn stages.
         timings["lead_ms"] = timings.get("lead_ms", 0) + int(
             round((time.monotonic() - lead_t0) * 1000)
         )
@@ -337,6 +385,7 @@ async def _agent_turn(
         "make_retrieval": deps.make_retrieval,
         "lookup_query": _vacancy_evidence_query(user_text, recent_messages) or user_text,
         "metrics": timings,
+        "retry_empty_generation": True,
     }
     if focused_rag:
         agent_kwargs["forced_project_slug"] = project_context.project_slug
@@ -358,21 +407,35 @@ async def _agent_turn(
         }
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
-    reply = await deps.agent.agent(contextual_user_text, **agent_kwargs)
+    reply = await deps.agent.agent(
+        contextual_user_text,
+        **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
+    )
     return reply
 
 
-async def _direct_context_turn(context, deps: GraphDeps, user_text: str, recent_messages: list[Message], timings: dict) -> str:
+async def _direct_context_turn(
+    context,
+    deps: GraphDeps,
+    user_text: str,
+    recent_messages: list[Message],
+    timings: dict,
+    *,
+    trace_sink=None,
+) -> str:
     timings["lane"] = "direct_context"
     timings["direct_context_knowledge_base_id"] = context.knowledge_base_id
+    direct_kwargs = {
+        "system": build_direct_system(context),
+        "metrics": timings,
+    }
     return await deps.agent.direct(
         build_direct_user_text(
             current_user_text=user_text,
             recent_messages=recent_messages,
             history_token_budget=DIRECT_HISTORY_TOKEN_BUDGET,
         ),
-        system=build_direct_system(context),
-        metrics=timings,
+        **_with_optional_trace(deps.agent.direct, direct_kwargs, trace_sink),
     )
 
 
@@ -385,6 +448,9 @@ async def run_manifest_composed_agent(
     lookup_query: str | None = None,
     required_tool: str | None = None,
     required_tool_args: dict | None = None,
+    metrics: dict | None = None,
+    retry_empty_generation: bool = False,
+    trace_sink=None,
 ) -> str | None:
     """Run an active manifest policy without granting legacy tool authority."""
     if policy is None:
@@ -407,6 +473,8 @@ async def run_manifest_composed_agent(
         "resolved_tool_registry": policy.tool_registry.names,
         "make_retrieval": deps.make_retrieval,
         "lookup_query": lookup_query or user_text,
+        "metrics": metrics,
+        "retry_empty_generation": retry_empty_generation,
     }
     if required_tool is not None:
         agent_kwargs["required_tool"] = required_tool
@@ -414,7 +482,7 @@ async def run_manifest_composed_agent(
         agent_kwargs["required_tool_args"] = required_tool_args
     return await deps.agent.agent(
         user_text,
-        **agent_kwargs,
+        **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
     )
 
 
@@ -460,6 +528,7 @@ async def _finish_terminal_reply(
     *,
     status_task=None,
     stage_timings: dict | None = None,
+    trace_sink=None,
 ):
     """Send a terminal fallback (timeout / error) then record the outcome.
 
@@ -484,6 +553,9 @@ async def _finish_terminal_reply(
         outbox_channel=_channel_for_conversation(conv),
         outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
     )
+    if trace_sink is not None:
+        trace_sink.record_decision("ownership_verdict", "claimed" if owned else "suppressed")
+    decision_trace = trace_sink.snapshot_payload() if trace_sink is not None else None
     send_result = None
     if owned:
         send_t0 = time.monotonic()
@@ -522,6 +594,7 @@ async def _finish_terminal_reply(
         lock_owner=lock_owner,
         trace_id=state.trace_id or None,
         delivery_status=_override,
+        decision_trace=decision_trace,
         outbox_channel=_channel_for_conversation(conv),
         outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
     )
@@ -733,11 +806,16 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             0, int(round((turn_start_epoch - state.preamble_start_epoch) * 1000))
         )
     t0 = time.monotonic()
+    trace_sink = DecisionTraceBuilder()
+    trace_sink.record_decision("route_selected", route_turn(state.user_text).reason)
 
     try:
         candidate = ""
         outcome_label = "sent"
         faq_metadata: dict | None = None
+        from app.graph.provider_scope import provider_from_conversation
+
+        provider = provider_from_conversation(conv)
 
         project_context = None
         if deps.direct_context is not None:
@@ -851,15 +929,26 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             bypass = None
 
         if project_context is not None and project_context.clarification:
+            trace_sink.record_decision("context_selected", "project_clarification")
+            trace_sink.record_decision("lane_selected", "project_clarification")
             candidate = project_context.clarification
             timings["lane"] = "project_clarification"
             outcome_label = "project_clarification"
         elif direct_context is not None:
+            trace_sink.record_decision("context_selected", "direct_context")
+            trace_sink.record_decision("lane_selected", "direct_context")
             candidate = await _direct_context_turn(
-                direct_context, deps, state.user_text, recent_messages, timings
+                direct_context,
+                deps,
+                state.user_text,
+                recent_messages,
+                timings,
+                trace_sink=trace_sink,
             )
             outcome_label = "direct_context"
         elif bypass is not None:
+            trace_sink.record_decision("context_selected", "faq_bypass")
+            trace_sink.record_decision("lane_selected", "faq_bypass")
             timings["lane"] = "faq_bypass"
             timings["faq_bypass_ms"] = int(round(bypass.latency_ms))
             # Admin-authored canonical FAQ text — sent verbatim, like the template
@@ -882,6 +971,17 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 bypass.faq_id,
             )
         else:
+            trace_sink.record_decision(
+                "context_selected",
+                "focused_rag"
+                if (
+                    project_context is not None
+                    and project_context.state == "FOCUSED"
+                    and project_context.knowledge_mode == "RAG"
+                )
+                else "agent_graph",
+            )
+            trace_sink.record_decision("lane_selected", "agent")
             timings["lane"] = "agent"
             # --- agent (runs to completion; NO hard cap) ---
             # The propagated deadline is advisory only — it bounds the FAQ-bypass
@@ -892,6 +992,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             # turn is recovered by the reconcile sweep.
             try:
                 agent_kwargs = {
+                    "provider": provider,
                     "chat_id": conv.zalo_chat_id,
                     "recent_messages": recent_messages,
                     "timings": timings,
@@ -900,8 +1001,19 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     agent_kwargs["project_context"] = project_context
                 if manifest_policy is not None:
                     agent_kwargs["manifest_policy"] = manifest_policy
-                raw = await _agent_turn(state, deps, state.user_text, **agent_kwargs)
-            except LLMThrottled:
+                raw = await _agent_turn(
+                    state,
+                    deps,
+                    state.user_text,
+                    **_with_optional_trace(_agent_turn, agent_kwargs, trace_sink),
+                )
+            except LLMThrottled as exc:
+                # The worker owns the static degradation reply, but the
+                # request-local trace would otherwise be lost at this boundary.
+                # Transfer only the validated snapshot, never the live builder
+                # or any prompt, exception, or tool payload.
+                trace_sink.record_decision("degradation_reason", "llm_throttled")
+                exc.decision_trace = trace_sink.snapshot_payload()
                 raise  # let worker handle degradation msg (no LLM call)
             except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
                 logger.warning("agent error: %s", exc)
@@ -926,6 +1038,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     "error",
                     status_task=status_task,
                     stage_timings=timings,
+                    trace_sink=trace_sink,
                 )
 
             state.reply = raw
@@ -943,7 +1056,23 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             fs = fast_safety_filter(raw)
             candidate = fs["output"]
 
-            if blocklist_hit(raw) or (fs["needs_llm_safety"] and not fs["too_long"]):
+            blocklisted = blocklist_hit(raw)
+            if blocklisted:
+                timings["safety_trigger"] = "blocklist"
+                trace_sink.record_decision("safety_verdict", "blocklist_redirect")
+            elif fs["empty_after_clean"]:
+                timings["safety_trigger"] = "empty_after_clean"
+                trace_sink.record_decision("safety_verdict", "empty_after_clean")
+            elif fs["needs_llm_safety"] and not fs["too_long"]:
+                timings["safety_trigger"] = "risk_pattern"
+                trace_sink.record_decision("safety_verdict", "risk_redirect")
+            elif fs["too_long"]:
+                timings["safety_trigger"] = "truncated"
+                trace_sink.record_decision("safety_verdict", "truncated")
+            else:
+                trace_sink.record_decision("safety_verdict", "passed")
+
+            if blocklisted or (fs["needs_llm_safety"] and not fs["too_long"]):
                 candidate = retry_exhausted_fallback(state.user_text)
             # else: over-long was already truncated by fast_safety_filter; send it.
 
@@ -978,6 +1107,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
         _stamp_db(timings, "claim_send", db_t0)
         if owned:
+            trace_sink.record_decision("ownership_verdict", "claimed")
+            decision_trace = trace_sink.snapshot_payload()
             await _cancel_status_task(status_task)
             send_t0 = time.monotonic()
             send_result = await _dispatch_claimed_message(
@@ -1017,6 +1148,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 delivery_status=override_status,
                 trace_id=state.trace_id or None,
                 outcome_metadata=faq_metadata,
+                decision_trace=decision_trace,
                 outbox_channel=_channel_for_conversation(conv),
                 outbox_payload=_build_outbox_payload(
                     conv.zalo_chat_id, candidate, state.reply_to_message_id
@@ -1065,6 +1197,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
 
         timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
         _stamp_end_to_end(state, timings)
+        trace_sink.record_decision("ownership_verdict", "suppressed")
+        decision_trace = trace_sink.snapshot_payload()
         db_t0 = time.monotonic()
         await svc.record_bot_outcome(
             conv,
@@ -1077,6 +1211,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             lock_owner=lock_owner,
             trace_id=state.trace_id or None,
             outcome_metadata=faq_metadata,
+            decision_trace=decision_trace,
         )
         _stamp_db(timings, "record_bot_outcome", db_t0)
         return {"outcome": "suppressed", "reply": candidate}

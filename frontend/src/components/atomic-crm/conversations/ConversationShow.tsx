@@ -38,6 +38,7 @@ import {
   ConversationContextAdapter,
   useConversationCapabilitySlots,
 } from "./conversation-capability";
+import { DecisionTraceAction } from "../automation/DecisionTracePanel";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
 
@@ -186,6 +187,13 @@ export const ConversationShowContent = ({
             </div>
           </div>
           <div className="header-actions">
+            {permissions === "admin" && record ? (
+              <DecisionTraceAction
+                key={record.id}
+                permissions={permissions}
+                conversationId={String(record.id)}
+              />
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button

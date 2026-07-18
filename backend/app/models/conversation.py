@@ -232,6 +232,10 @@ class BotRun(Base):
     # decision_threshold, faq_document_id, abstained (bool). Surfaces the
     # abstention rate on the performance dashboard to tune the margin.
     outcome_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Versioned, bounded execution summary for admin observability. Stores only
+    # allowlisted control-flow events; never prompts, candidate text, evidence,
+    # tool payloads, or exception details. Nullable for legacy and expired rows.
+    decision_trace: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class Message(Base):

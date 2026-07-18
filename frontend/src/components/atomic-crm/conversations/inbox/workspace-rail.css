@@ -90,10 +90,8 @@
 
 .inbox-bg-container .channel-adapter-selector {
   min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: 8px;
 }
 
 .inbox-bg-container .channel-adapter-options {
@@ -110,26 +108,43 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--workspace-blue-line);
-  border-radius: 10px;
-  background: var(--workspace-bg);
+  border-radius: 14px;
+  background: var(--workspace-blue-wash);
   color: var(--workspace-muted);
-  box-shadow: none;
+  box-shadow: 0 2px 6px
+    color-mix(in srgb, var(--workspace-active) 10%, transparent);
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .inbox-bg-container .channel-adapter-option img {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
+  filter: drop-shadow(
+    0 1px 1px color-mix(in srgb, var(--workspace-ink) 18%, transparent)
+  );
 }
 
 .inbox-bg-container .channel-adapter-option[data-state="checked"] {
   border-color: var(--workspace-active);
-  background: var(--workspace-blue-wash);
-  box-shadow: inset 0 0 0 1px var(--workspace-active);
+  background: color-mix(
+    in srgb,
+    var(--workspace-active) 14%,
+    var(--workspace-bg)
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--workspace-active),
+    0 4px 10px
+      color-mix(in srgb, var(--workspace-active) 18%, transparent);
 }
 
 .inbox-bg-container .channel-adapter-option:hover {
   border-color: var(--workspace-active);
+  transform: translateY(-1px);
 }
 
 .inbox-bg-container .channel-adapter-badge {
@@ -148,22 +163,6 @@
   font-weight: var(--chat-fw-bold);
   line-height: 1;
   box-shadow: 0 0 0 2px var(--surface-solid);
-}
-
-.inbox-bg-container .channel-adapter-caption {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: var(--workspace-muted);
-  font-size: var(--chat-fs-caption);
-  line-height: var(--chat-lh-body);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inbox-bg-container .channel-adapter-caption strong {
-  color: var(--workspace-ink);
-  font-weight: var(--chat-fw-bold);
 }
 
 .inbox-bg-container .workspace-title {

@@ -14,7 +14,6 @@ import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
-import { ProjectPersonaPanel } from "./ProjectPersonaPanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
@@ -58,8 +57,7 @@ const ProjectEditContent = () => {
               Chỉnh sửa {project.name}
             </h1>
             <p className="mt-1 text-body text-muted-foreground">
-              Cập nhật trạng thái, Agent mặc định và nguồn tri thức dùng khi tư
-              vấn ứng viên.
+              Cập nhật trạng thái và nguồn tri thức dùng khi tư vấn ứng viên.
             </p>
           </div>
           {isAdmin && (
@@ -106,8 +104,6 @@ const ProjectEditContent = () => {
             </Form>
           </CardContent>
         </Card>
-
-        {isAdmin && <ProjectPersonaPanel project={project} />}
 
         <div className="project-detail-stack mt-4">
           <ProjectKnowledgePanel project={project} editable={isAdmin} />

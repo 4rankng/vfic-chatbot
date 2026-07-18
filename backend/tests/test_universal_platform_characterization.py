@@ -235,7 +235,8 @@ async def test_knowledge_version_creation_is_template_free(monkeypatch):
 async def test_current_system_prompt_uses_database_persona_but_appends_recruitment_rules(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    async def uncached(assemble):
+    async def uncached(assemble, *, key_suffix="default"):
+        assert key_suffix == "zalo_bot"
         return await assemble(), False
 
     retrieval = SimpleNamespace(
@@ -244,7 +245,7 @@ async def test_current_system_prompt_uses_database_persona_but_appends_recruitme
     )
     monkeypatch.setattr("app.graph.context.cached_system_prompt", uncached)
 
-    prompt, cache_hit = await build_system_prompt(retrieval)
+    prompt, cache_hit = await build_system_prompt(retrieval, provider="zalo_bot")
 
     assert prompt.startswith("Neutral configured persona")
     assert "đang tuyển" in prompt

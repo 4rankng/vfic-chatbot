@@ -22,30 +22,24 @@ from app.core.config import (
 )
 from app.models.conversation import Conversation
 from app.schemas.personas import PersonaFollowupRules, normalize_followup_rules
+from app.services.personas.providers import conversation_adapter_provider
+from app.services.personas.repository import PersonaRepository
 
 logger = logging.getLogger(__name__)
 
 
-async def active_followup_rules(db) -> PersonaFollowupRules:
-    """Return active global Agent follow-up rules, falling back to defaults.
-
-    This mirrors the current chatbot persona resolution model: the live bot uses
-    the active global Agent when no project-specific persona is selected.
-    """
-    raw = (
-        await db.execute(
-            text(
-                "SELECT followup_rules FROM personas "
-                "WHERE is_active AND project_id IS NULL "
-                "ORDER BY updated_at DESC "
-                "LIMIT 1"
-            )
-        )
-    ).scalar_one_or_none()
+async def active_followup_rules(db, *, provider: str = "zalo_bot") -> PersonaFollowupRules:
+    """Return the effective provider follow-up rules, falling back to defaults."""
+    persona = await PersonaRepository(db).effective_persona_for_provider(provider)
+    raw = None if persona is None else persona.followup_rules
     try:
         return normalize_followup_rules(raw)
     except Exception:  # noqa: BLE001
-        logger.warning("invalid active Agent follow-up rules; using defaults", exc_info=True)
+        logger.warning(
+            "invalid provider Agent follow-up rules; using defaults",
+            extra={"provider": provider},
+            exc_info=True,
+        )
         return normalize_followup_rules(None)
 
 
@@ -105,7 +99,7 @@ async def conversation_allowed_by_followup_rules(db, conv: Conversation) -> tupl
         conv,
         lead_score=row.lead_score,
         lead_stage=row.lead_stage,
-        rules=await active_followup_rules(db),
+        rules=await active_followup_rules(db, provider=conversation_adapter_provider(conv)),
         now=datetime.now(timezone.utc),
     )
 
@@ -139,8 +133,6 @@ async def find_eligible_conversations(db) -> list[Conversation]:
     now = datetime.now(timezone.utc)
     now_minus_margin = now - margin
     now_minus_cooldown = now - cooldown
-
-    rules = await active_followup_rules(db)
 
     sql = text(
         """
@@ -183,10 +175,16 @@ async def find_eligible_conversations(db) -> list[Conversation]:
     fetched = {str(conv.id): conv for conv in result.scalars().all()}
     candidates = [fetched[str(conv_id)] for conv_id in conv_ids if str(conv_id) in fetched]
 
-    # --- Python-side rule filter: score/stage/cadence are active-Agent config ---
+    # --- Python-side rule filter: score/stage/cadence are provider-Agent config ---
     eligible: list[Conversation] = []
+    rules_cache: dict[str, PersonaFollowupRules] = {}
     for conv in candidates:
         lead_score, lead_stage = lead_meta.get(str(conv.id), (None, None))
+        provider = conversation_adapter_provider(conv)
+        rules = rules_cache.get(provider)
+        if rules is None:
+            rules = await active_followup_rules(db, provider=provider)
+            rules_cache[provider] = rules
         allowed, _reason = _rule_allows(
             conv,
             lead_score=lead_score,

@@ -16,7 +16,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version
@@ -24,12 +24,21 @@ from app.core.preamble_cache import NS_PREAMBLE
 from app.models.knowledge import KnowledgeBase
 from app.models.persona import Persona, PersonaVersion
 from app.models.user import User
-from app.schemas.personas import PersonaCreate, PersonaUpdate, _slugify
+from app.schemas.personas import (
+    PersonaAssignmentOut,
+    PersonaAssignmentUpdate,
+    PersonaCreate,
+    PersonaOut,
+    PersonaUpdate,
+    SUPPORTED_ADAPTER_PROVIDERS,
+    _slugify,
+)
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError
 from app.services.knowledge_base_capacity import require_direct_context_ready
 
 from .parsing import parse_persona_markdown
+from .providers import adapter_provider_label, validate_adapter_provider
 from .repository import PersonaRepository
 
 logger = logging.getLogger(__name__)
@@ -48,11 +57,7 @@ class PersonaService:
 
     async def get(self, persona_id: uuid.UUID) -> Persona:
         persona = await self.repo.get_by_id(persona_id)
-        # Enrich with assigned projects (same as list).
-        try:
-            persona._assigned_projects = await self.repo.assigned_projects_for(persona_id)
-        except Exception:  # noqa: BLE001
-            persona._assigned_projects = []
+        await self._attach_effective_adapter_providers([persona])
         return persona
 
     async def list_versions(self, persona_id: uuid.UUID) -> list[PersonaVersion]:
@@ -92,14 +97,7 @@ class PersonaService:
                 )
             ).all()
         )
-        # Enrich with assigned projects (projects whose default_persona_id = persona.id).
-        try:
-            project_map = await self.repo.assigned_projects_map()
-            for persona in rows:
-                persona._assigned_projects = project_map.get(str(persona.id), [])
-        except Exception:  # noqa: BLE001
-            for persona in rows:
-                persona._assigned_projects = []
+        await self._attach_effective_adapter_providers(rows)
         return rows, int(total or 0)
 
     async def create(self, body: PersonaCreate, admin: User) -> Persona:
@@ -143,6 +141,7 @@ class PersonaService:
         if body.is_active:
             return await self._activate(persona)
         await bump_cache_version(NS_PREAMBLE)
+        await self._attach_effective_adapter_providers([persona])
         return persona
 
     async def update(self, persona_id: uuid.UUID, body: PersonaUpdate, admin: User) -> Persona:
@@ -184,6 +183,7 @@ class PersonaService:
         await self.db.commit()
         await self.db.refresh(persona)
         await bump_cache_version(NS_PREAMBLE)
+        await self._attach_effective_adapter_providers([persona])
         return persona
 
     async def delete(self, persona_id: uuid.UUID) -> None:
@@ -196,42 +196,63 @@ class PersonaService:
 
     async def activate(self, persona_id: uuid.UUID) -> Persona:
         persona = await self.repo.get_by_id(persona_id)
-        if persona.project_id is not None:
-            raise ValueError("activation is for global Agents only")
-        if persona.knowledge_base_id is None:
-            raise ConflictError("Attach a knowledge base before activating this Agent")
-        knowledge_base = await self.db.get(KnowledgeBase, persona.knowledge_base_id)
-        if knowledge_base is None:
-            raise ConflictError("Knowledge base not found")
-        await require_direct_context_ready(self.db, knowledge_base, agent_markdown=persona.body_md)
+        await self._require_ready_persona(persona)
         return await self._activate(persona)
 
-    async def assign_to_all_projects(self, persona_id: uuid.UUID, admin: User) -> int:
-        await self.repo.get_by_id(persona_id)
-        result = await self.db.execute(
-            text(
-                "UPDATE projects "
-                "SET default_persona_id = :persona_id "
-                "WHERE default_persona_id IS DISTINCT FROM :persona_id"
-            ),
-            {"persona_id": persona_id},
-        )
-        changed = int(result.rowcount or 0)
+    async def list_adapter_assignments(self) -> list[PersonaAssignmentOut]:
+        active = await self.repo.active_persona()
+        assignments = {
+            row.provider: row
+            for row in await self.repo.assignment_rows()
+        }
+        return [
+            PersonaAssignmentOut(
+                provider=provider,
+                label=adapter_provider_label(provider),
+                persona_id=assignments[provider].persona_id if provider in assignments else None,
+                effective_persona_id=(
+                    assignments[provider].persona_id if provider in assignments else active.id
+                    if active is not None
+                    else None
+                ),
+                is_default=provider not in assignments,
+            )
+            for provider in SUPPORTED_ADAPTER_PROVIDERS
+        ]
+
+    async def update_adapter_assignment(
+        self,
+        provider: str,
+        body: PersonaAssignmentUpdate,
+        admin: User,
+    ) -> PersonaAssignmentOut:
+        canonical_provider = validate_adapter_provider(provider)
+        if body.persona_id is not None:
+            target_persona = await self.repo.get_by_id(body.persona_id)
+            await self._require_ready_persona(target_persona)
+            await self.repo.set_assignment(canonical_provider, target_persona.id)
+        else:
+            await self.repo.clear_assignment(canonical_provider)
+
         await record_audit(
             self.db,
-            action="assign_persona_all_projects",
+            action="update_persona_assignment",
             actor_id=admin.id,
-            target_type="persona",
-            target_id=str(persona_id),
-            payload={"project_count": changed},
+            target_type="persona_assignment",
+            target_id=canonical_provider,
+            payload={"persona_id": str(body.persona_id) if body.persona_id is not None else None},
         )
         await self.db.commit()
         await bump_cache_version(NS_PREAMBLE)
-        return changed
+        return next(
+            item
+            for item in await self.list_adapter_assignments()
+            if item.provider == canonical_provider
+        )
 
     async def _activate(self, persona: Persona) -> Persona:
-        """Deactivate other global personas, then activate this one (one transaction)."""
-        await self.repo.deactivate_other_globals(persona.id)
+        """Deactivate other active personas, then activate this one (one transaction)."""
+        await self.repo.deactivate_other_active(persona.id)
         persona.is_active = True
         await record_audit(
             self.db,
@@ -243,6 +264,7 @@ class PersonaService:
         await self.db.commit()
         await self.db.refresh(persona)
         await bump_cache_version(NS_PREAMBLE)
+        await self._attach_effective_adapter_providers([persona])
         return persona
 
     async def import_persona(
@@ -283,6 +305,7 @@ class PersonaService:
             await self.db.commit()
             await self.db.refresh(existing)
             await bump_cache_version(NS_PREAMBLE)
+            await self._attach_effective_adapter_providers([existing])
             return existing
 
         # New persona
@@ -317,3 +340,24 @@ class PersonaService:
         self.db.add(version)
         await self.db.flush()
         return version
+
+    async def _attach_effective_adapter_providers(self, personas: list[Persona]) -> None:
+        provider_map = await self.repo.effective_provider_map()
+        for persona in personas:
+            persona._effective_adapter_providers = provider_map.get(str(persona.id), [])
+
+    async def _require_ready_persona(self, persona: Persona) -> None:
+        if persona.knowledge_base_id is None:
+            raise ConflictError("Attach a knowledge base before using this Agent")
+        knowledge_base = await self.db.get(KnowledgeBase, persona.knowledge_base_id)
+        if knowledge_base is None:
+            raise ConflictError("Knowledge base not found")
+        await require_direct_context_ready(self.db, knowledge_base, agent_markdown=persona.body_md)
+
+
+def persona_out_from_model(persona: Persona) -> PersonaOut:
+    out = PersonaOut.model_validate(persona)
+    out.effective_adapter_providers = list(
+        getattr(persona, "_effective_adapter_providers", [])
+    )
+    return out

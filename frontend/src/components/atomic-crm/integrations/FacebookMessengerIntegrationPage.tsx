@@ -240,211 +240,203 @@ export const FacebookMessengerIntegrationPage = () => {
 
   const needsPageListRecovery =
     pendingFlowId !== null &&
-    (isPageListError || (pageList !== undefined && pageList.pages.length === 0));
+    (isPageListError ||
+      (pageList !== undefined && pageList.pages.length === 0));
 
   return (
-    <div className="settings-console">
-      <div className="settings-main">
-        <section className="settings-section-panel">
-          <h2 className="settings-card-title">Facebook Messenger</h2>
-          <p className="settings-card-description">
-            Kết nối một Trang Facebook để nhận và trả lời tin nhắn ứng viên qua
-            Messenger. V1 hỗ trợ tối đa một Trang đang hoạt động.
+    <section className="settings-section-panel">
+      <h2 className="settings-card-title">Facebook Messenger</h2>
+      <p className="settings-card-description">
+        Kết nối một Trang Facebook để nhận và trả lời tin nhắn ứng viên qua
+        Messenger. V1 hỗ trợ tối đa một Trang đang hoạt động.
+      </p>
+
+      {error ? (
+        <div
+          className="settings-test-result settings-test-result-error"
+          role="alert"
+        >
+          {error}
+        </div>
+      ) : null}
+
+      {/* Active connection */}
+      {activeAccount ? (
+        <div className="settings-card">
+          <div className="settings-field">
+            <span className="settings-field-label">Trang đang kết nối</span>
+            <span className="settings-field-value">
+              <strong>{activeAccount.label}</strong>{" "}
+              <span className="settings-field-hint">
+                (…{activeAccount.page_id_suffix})
+              </span>
+            </span>
+          </div>
+          <div className="settings-oa-actions">
+            <button
+              type="button"
+              className="settings-test-button"
+              onClick={() => testConnection.mutate()}
+              disabled={testConnection.isPending}
+            >
+              {testConnection.isPending ? "Đang kiểm tra…" : "Kiểm tra kết nối"}
+            </button>
+            <button
+              type="button"
+              className="settings-test-button"
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+            >
+              {disconnect.isPending ? "Đang ngắt…" : "Ngắt kết nối"}
+            </button>
+          </div>
+          {testConnection.data ? (
+            <div
+              className={`settings-test-result ${
+                testConnection.data.healthy
+                  ? "settings-test-result-ok"
+                  : "settings-test-result-error"
+              }`}
+            >
+              {testConnection.data.healthy
+                ? "Kết nối Messenger hoạt động bình thường."
+                : (testConnection.data.error ?? "Kết nối không khả dụng.")}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="settings-card">
+          <p className="settings-field-hint">
+            Chưa có Trang Facebook nào được kết nối.
           </p>
+          <button
+            type="button"
+            className="settings-test-button"
+            onClick={() => startOAuth.mutate()}
+            disabled={startOAuth.isPending}
+          >
+            {startOAuth.isPending ? "Đang chuẩn bị…" : "Kết nối Facebook"}
+          </button>
+        </div>
+      )}
 
-          {error ? (
-            <div
-              className="settings-test-result settings-test-result-error"
-              role="alert"
-            >
-              {error}
-            </div>
-          ) : null}
-
-          {/* Active connection */}
-          {activeAccount ? (
-            <div className="settings-card">
-              <div className="settings-field">
-                <span className="settings-field-label">Trang đang kết nối</span>
-                <span className="settings-field-value">
-                  <strong>{activeAccount.label}</strong>{" "}
-                  <span className="settings-field-hint">
-                    (…{activeAccount.page_id_suffix})
-                  </span>
-                </span>
-              </div>
-              <div className="settings-oa-actions">
-                <button
-                  type="button"
-                  className="settings-test-button"
-                  onClick={() => testConnection.mutate()}
-                  disabled={testConnection.isPending}
-                >
-                  {testConnection.isPending
-                    ? "Đang kiểm tra…"
-                    : "Kiểm tra kết nối"}
-                </button>
-                <button
-                  type="button"
-                  className="settings-test-button"
-                  onClick={() => disconnect.mutate()}
-                  disabled={disconnect.isPending}
-                >
-                  {disconnect.isPending ? "Đang ngắt…" : "Ngắt kết nối"}
-                </button>
-              </div>
-              {testConnection.data ? (
-                <div
-                  className={`settings-test-result ${
-                    testConnection.data.healthy
-                      ? "settings-test-result-ok"
-                      : "settings-test-result-error"
-                  }`}
-                >
-                  {testConnection.data.healthy
-                    ? "Kết nối Messenger hoạt động bình thường."
-                    : (testConnection.data.error ?? "Kết nối không khả dụng.")}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="settings-card">
-              <p className="settings-field-hint">
-                Chưa có Trang Facebook nào được kết nối.
-              </p>
-              <button
-                type="button"
-                className="settings-test-button"
-                onClick={() => startOAuth.mutate()}
-                disabled={startOAuth.isPending}
-              >
-                {startOAuth.isPending ? "Đang chuẩn bị…" : "Kết nối Facebook"}
-              </button>
-            </div>
-          )}
-
-          {/* Page selection after OAuth callback */}
-          {pendingFlowId && pageList?.pages && pageList.pages.length > 0 ? (
-            <div className="settings-card">
-              <h3 className="settings-card-title">Chọn Trang để kích hoạt</h3>
-              <ul className="settings-page-list">
-                {pageList.pages.map((page) => (
-                  <li key={page.id}>
-                    <label>
-                      <input
-                        type="radio"
-                        name="facebook-page"
-                        value={page.id}
-                        checked={selectedPageId === page.id}
-                        onChange={() => setSelectedPageId(page.id)}
-                      />
-                      <span>{page.name}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                className="settings-test-button"
-                onClick={() =>
-                  selectedPageId &&
-                  completeOAuth.mutate({
-                    flow_id: pendingFlowId,
-                    page_id: selectedPageId,
-                  })
-                }
-                disabled={!selectedPageId || completeOAuth.isPending}
-              >
-                {completeOAuth.isPending
-                  ? "Đang kích hoạt…"
-                  : "Kích hoạt Trang"}
-              </button>
-            </div>
-          ) : null}
-
-          {needsPageListRecovery ? (
-            <div
-              className="settings-test-result settings-test-result-error"
-              role="alert"
-            >
-              <p>
-                {isPageListError
-                  ? "Không thể tải danh sách Trang. Mã phiên có thể không hợp lệ hoặc đã hết hạn."
-                  : "Không tìm thấy Trang Facebook nào trong phiên kết nối này."}
-              </p>
-              <p>Vui lòng kết nối lại hoặc nhập một mã phiên khác.</p>
-              <button
-                type="button"
-                className="settings-test-button"
-                onClick={resetPageSelection}
-              >
-                Quay lại kết nối
-              </button>
-            </div>
-          ) : null}
-
-          {/* Manual flow-id entry (after OAuth redirect back to frontend) */}
-          {!activeAccount && !pendingFlowId ? (
-            <div className="settings-card">
-              <details>
-                <summary className="settings-field-hint">
-                  Đã hoàn tất ủy quyền? Nhập mã phiên để tiếp tục.
-                </summary>
-                <form className="settings-field" onSubmit={loadManualFlow}>
-                  <label
-                    className="settings-field-label"
-                    htmlFor="facebook-oauth-flow-id"
-                  >
-                    Mã phiên OAuth
-                  </label>
+      {/* Page selection after OAuth callback */}
+      {pendingFlowId && pageList?.pages && pageList.pages.length > 0 ? (
+        <div className="settings-card">
+          <h3 className="settings-card-title">Chọn Trang để kích hoạt</h3>
+          <ul className="settings-page-list">
+            {pageList.pages.map((page) => (
+              <li key={page.id}>
+                <label>
                   <input
-                    id="facebook-oauth-flow-id"
-                    name="facebook-oauth-flow-id"
-                    type="text"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={flowIdDraft}
-                    onChange={(event) => setFlowIdDraft(event.target.value)}
+                    type="radio"
+                    name="facebook-page"
+                    value={page.id}
+                    checked={selectedPageId === page.id}
+                    onChange={() => setSelectedPageId(page.id)}
                   />
-                  <span className="settings-field-hint">
-                    Mã phiên chỉ dùng để tải các Trang đã được Facebook ủy
-                    quyền.
-                  </span>
-                  <button
-                    type="submit"
-                    className="settings-test-button"
-                    disabled={!flowIdDraft.trim()}
-                  >
-                    Tải danh sách Trang
-                  </button>
-                </form>
-              </details>
-            </div>
-          ) : null}
+                  <span>{page.name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="settings-test-button"
+            onClick={() =>
+              selectedPageId &&
+              completeOAuth.mutate({
+                flow_id: pendingFlowId,
+                page_id: selectedPageId,
+              })
+            }
+            disabled={!selectedPageId || completeOAuth.isPending}
+          >
+            {completeOAuth.isPending ? "Đang kích hoạt…" : "Kích hoạt Trang"}
+          </button>
+        </div>
+      ) : null}
 
-          {/* Archived Page scopes (read-only history) */}
-          {archivedAccounts.length > 0 ? (
-            <div className="settings-card">
-              <h3 className="settings-card-title">Trang đã ngắt kết nối</h3>
-              <p className="settings-field-hint">
-                Lịch sử hội thoại được giữ lại (chỉ xem). Kết nối lại cùng Trang
-                để tiếp tục trả lời.
-              </p>
-              <ul className="settings-page-list">
-                {archivedAccounts.map((a) => (
-                  <li key={a.page_id_suffix}>
-                    <span>{a.label}</span>{" "}
-                    <span className="settings-field-hint">
-                      (…{a.page_id_suffix}) ·{" "}
-                      {a.status === "INACTIVE" ? "Chỉ xem" : a.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
-      </div>
-    </div>
+      {needsPageListRecovery ? (
+        <div
+          className="settings-test-result settings-test-result-error"
+          role="alert"
+        >
+          <p>
+            {isPageListError
+              ? "Không thể tải danh sách Trang. Mã phiên có thể không hợp lệ hoặc đã hết hạn."
+              : "Không tìm thấy Trang Facebook nào trong phiên kết nối này."}
+          </p>
+          <p>Vui lòng kết nối lại hoặc nhập một mã phiên khác.</p>
+          <button
+            type="button"
+            className="settings-test-button"
+            onClick={resetPageSelection}
+          >
+            Quay lại kết nối
+          </button>
+        </div>
+      ) : null}
+
+      {/* Manual flow-id entry (after OAuth redirect back to frontend) */}
+      {!activeAccount && !pendingFlowId ? (
+        <div className="settings-card">
+          <details>
+            <summary className="settings-field-hint">
+              Đã hoàn tất ủy quyền? Nhập mã phiên để tiếp tục.
+            </summary>
+            <form className="settings-field" onSubmit={loadManualFlow}>
+              <label
+                className="settings-field-label"
+                htmlFor="facebook-oauth-flow-id"
+              >
+                Mã phiên OAuth
+              </label>
+              <input
+                id="facebook-oauth-flow-id"
+                name="facebook-oauth-flow-id"
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={flowIdDraft}
+                onChange={(event) => setFlowIdDraft(event.target.value)}
+              />
+              <span className="settings-field-hint">
+                Mã phiên chỉ dùng để tải các Trang đã được Facebook ủy quyền.
+              </span>
+              <button
+                type="submit"
+                className="settings-test-button"
+                disabled={!flowIdDraft.trim()}
+              >
+                Tải danh sách Trang
+              </button>
+            </form>
+          </details>
+        </div>
+      ) : null}
+
+      {/* Archived Page scopes (read-only history) */}
+      {archivedAccounts.length > 0 ? (
+        <div className="settings-card">
+          <h3 className="settings-card-title">Trang đã ngắt kết nối</h3>
+          <p className="settings-field-hint">
+            Lịch sử hội thoại được giữ lại (chỉ xem). Kết nối lại cùng Trang để
+            tiếp tục trả lời.
+          </p>
+          <ul className="settings-page-list">
+            {archivedAccounts.map((a) => (
+              <li key={a.page_id_suffix}>
+                <span>{a.label}</span>{" "}
+                <span className="settings-field-hint">
+                  (…{a.page_id_suffix}) ·{" "}
+                  {a.status === "INACTIVE" ? "Chỉ xem" : a.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
   );
 };

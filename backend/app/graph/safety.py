@@ -18,6 +18,8 @@ class FastSafetyResult(TypedDict):
     issue_type: str
     needs_llm_safety: bool
     too_long: bool
+    empty_after_clean: bool
+    retryable_empty: bool
 
 
 # --- Fast Safety Filter -------------------------------------------------------
@@ -44,7 +46,8 @@ _RISK_RE = re.compile(
 
 def fast_safety_filter(raw: str) -> FastSafetyResult:
     """Return whether an LLM safety check is needed plus a cleaned reply."""
-    raw = (raw or "").strip()
+    original_raw = (raw or "").strip()
+    raw = original_raw
     # MiniMax M2 reasoning models wrap deliberation in <think>…</think>; the
     # user-facing reply is what follows the last </think>. Never send reasoning.
     if re.search(r"</think\s*>", raw, flags=re.IGNORECASE):
@@ -74,6 +77,11 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
     needs_llm_safety = (
         empty_after_clean or too_long_for_chat or bool(_RISK_RE.search(cleaned))
     )
+    retryable_empty = (
+        empty_after_clean
+        and not _RISK_RE.search(original_raw)
+        and not blocklist_hit(original_raw)
+    )
 
     return {
         "output": output,
@@ -83,6 +91,8 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
         "issue_type": "needs_llm_safety_check" if needs_llm_safety else "none",
         "needs_llm_safety": needs_llm_safety,
         "too_long": too_long_for_chat,
+        "empty_after_clean": empty_after_clean,
+        "retryable_empty": retryable_empty,
     }
 
 

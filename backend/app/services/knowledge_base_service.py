@@ -24,7 +24,7 @@ from app.schemas.knowledge_bases import (
 )
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, NotFoundError
-from app.services.knowledge.text_ingestion import kb_text_stats
+from app.services.knowledge.text_ingestion import canonical_kb_text_stats
 from app.services.knowledge_base_capacity import require_direct_context_ready
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 
@@ -125,7 +125,7 @@ class KnowledgeBaseService:
         knowledge_base = await self.get(knowledge_base_id)
         if knowledge_base.mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
             raise ConflictError("Only direct-context knowledge bases accept a direct text file")
-        stats = kb_text_stats(body.text)
+        stats = canonical_kb_text_stats(body.text)
         if not stats.normalized_text:
             raise ConflictError("Direct-context knowledge text cannot be empty")
         direct_file = await self.db.scalar(

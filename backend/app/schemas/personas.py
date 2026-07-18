@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -13,6 +14,12 @@ from app.models.lead import LeadScore, LeadStage
 
 
 MAX_FOLLOWUP_CADENCE_HOURS = PROACTIVE_48H_WINDOW_SECONDS // 3600
+AdapterProvider = Literal["zalo_bot", "zalo_oa", "facebook_messenger"]
+SUPPORTED_ADAPTER_PROVIDERS: tuple[AdapterProvider, ...] = (
+    "zalo_bot",
+    "zalo_oa",
+    "facebook_messenger",
+)
 
 
 class PersonaFollowupRule(BaseModel):
@@ -105,7 +112,6 @@ def _slugify(name: str) -> str:
 class PersonaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-    project_id: uuid.UUID | None = None
     knowledge_base_id: uuid.UUID | None = None
     name: str
     slug: str
@@ -116,7 +122,7 @@ class PersonaOut(BaseModel):
     created_by: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
-    assigned_projects: list[ProjectMini] = []
+    effective_adapter_providers: list[AdapterProvider] = Field(default_factory=list)
 
 
 class PersonaListResponse(BaseModel):
@@ -163,9 +169,23 @@ class PersonaUpdate(BaseModel):
     knowledge_base_id: uuid.UUID | None = None
 
 
-class ProjectMini(BaseModel):
-    """Minimal project representation used in persona assignment lists."""
+class PersonaAssignmentOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    id: uuid.UUID
-    name: str
-    slug: str
+    provider: AdapterProvider
+    label: str
+    persona_id: uuid.UUID | None = None
+    effective_persona_id: uuid.UUID | None = None
+    is_default: bool
+
+
+class PersonaAssignmentListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[PersonaAssignmentOut]
+
+
+class PersonaAssignmentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    persona_id: uuid.UUID | None = None

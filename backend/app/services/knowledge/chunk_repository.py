@@ -86,7 +86,7 @@ class KnowledgeChunkRepo:
         category_revision_id: uuid.UUID,
         category_key: str,
         units_with_vectors: list[tuple[dict, list[float]]],
-    ) -> None:
+    ) -> int:
         """Insert deterministic category chunks without committing activation.
 
         The category service advances the active pointer in the same transaction,
@@ -131,6 +131,7 @@ class KnowledgeChunkRepo:
                     "forbidden": unit.get("forbidden_terms") or [],
                 },
             )
+        return len(units_with_vectors)
 
     async def attach_doc_chunks_to_file(
         self,

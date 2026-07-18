@@ -104,16 +104,34 @@ def test_oauth_client_permission_set_matches_messenger_requirements():
     }
 
 
-def test_build_authorization_url_includes_state_scope_and_config():
-    from app.channels.providers.facebook_oauth import build_authorization_url
+def test_build_authorization_url_includes_state_scope_and_config(monkeypatch):
+    import app.channels.providers.facebook_oauth as oauth
 
-    url = build_authorization_url(
-        state="opaque-state-123", redirect_uri="https://bot.example.com/fb/cb"
+    monkeypatch.setattr(
+        oauth,
+        "get_settings",
+        lambda: SimpleNamespace(
+            meta_app_id="app-123",
+            meta_graph_api_version="v25.0",
+            meta_login_config_id="login-config-456",
+        ),
     )
-    assert "dialog/oauth" in url
-    assert "state=opaque-state-123" in url
-    assert "pages_messaging" in url
-    assert "redirect_uri=https://bot.example.com/fb/cb" in url
+
+    redirect_uri = "https://bot.example.com/fb/cb?view=compact&source=settings"
+    url = oauth.build_authorization_url(
+        state="opaque-state-123", redirect_uri=redirect_uri
+    )
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "www.facebook.com"
+    assert parsed.path == "/v25.0/dialog/oauth"
+    assert query["client_id"] == ["app-123"]
+    assert query["config_id"] == ["login-config-456"]
+    assert query["state"] == ["opaque-state-123"]
+    assert query["redirect_uri"] == [redirect_uri]
+    assert "pages_messaging" in query["scope"][0].split(",")
 
 
 @pytest.mark.asyncio
@@ -226,7 +244,9 @@ async def test_oauth_state_is_single_use_and_admin_bound(monkeypatch):
 
     # 1. start — stores state bound to admin-A
     start = await api.start_facebook_oauth(admin=admin, _db=db)
-    assert "dialog/oauth" in start.authorization_url
+    authorization_url = urlparse(start.authorization_url)
+    assert authorization_url.netloc == "www.facebook.com"
+    assert authorization_url.path.endswith("/dialog/oauth")
 
     # 2. Reconstruct the state from the store (the URL carries it).
     state_key = next(k for k in state_store if k.startswith("fb_oauth_state:"))

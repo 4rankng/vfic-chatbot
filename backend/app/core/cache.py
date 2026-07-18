@@ -45,15 +45,20 @@ async def cache_version(namespace: str) -> str:
         return "1"
 
 
-async def bump_cache_version(namespace: str) -> None:
+async def bump_cache_version(namespace: str) -> bool:
     key = f"cachever:{namespace}"
     try:
-        await get_redis().incr(key)
+        redis = get_redis()
+        created = await redis.set(key, "2", nx=True)
+        if not created:
+            await redis.incr(key)
+        return True
     except Exception:  # noqa: BLE001
         logger.debug("cache version bump failed for namespace %s", namespace, exc_info=True)
+        return False
 
 
-async def bump_kb_caches() -> None:
+async def bump_kb_caches() -> bool:
     """Invalidate both KB-backed caches together on any KB content mutation.
 
     The exact-hash RAG cache (``rag:knowledge:{...}``) reads the ``knowledge``
@@ -62,5 +67,6 @@ async def bump_kb_caches() -> None:
     serve stale facts. Best-effort like the underlying helpers: a Redis failure
     is logged at debug and never surfaces to the caller.
     """
-    await bump_cache_version("knowledge")
-    await bump_cache_version("semantic_cache")
+    knowledge_ok = await bump_cache_version("knowledge")
+    semantic_ok = await bump_cache_version("semantic_cache")
+    return knowledge_ok and semantic_ok

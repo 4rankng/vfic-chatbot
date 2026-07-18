@@ -28,7 +28,7 @@ describe("ChannelAdapterSelector", () => {
       <div className="inbox-bg-container">
         <ChannelAdapterSelectorView
           provider="zalo_bot"
-          counts={{ zalo_bot: 0, zalo_oa: 135, facebook_messenger: 0 }}
+          counts={{ zalo_bot: 0, zalo_oa: 135 }}
           onProviderChange={onProviderChange}
         />
       </div>,
@@ -41,9 +41,11 @@ describe("ChannelAdapterSelector", () => {
     await expect
       .element(screen.getByRole("radio", { name: "Zalo Chatbot" }))
       .toBeChecked();
-    await expect
-      .element(screen.getByText("Kênh đang chọn:", { exact: false }))
-      .toHaveTextContent("Kênh đang chọn: Zalo Chatbot");
+    expect(screen.getByRole("radio").all()).toHaveLength(2);
+    expect(
+      screen.container.querySelector('[aria-label^="Messenger"]'),
+    ).toBeNull();
+    expect(screen.container.textContent).not.toContain("Kênh đang chọn:");
     await expect.element(screen.getByText("99+")).toBeVisible();
     expect(
       screen.container.querySelectorAll(".channel-adapter-badge"),
@@ -55,9 +57,13 @@ describe("ChannelAdapterSelector", () => {
     await expect.element(oaRadio).toBeVisible();
     const oaElement = screen.container.querySelector('[value="zalo_oa"]');
     expect(oaElement).not.toBeNull();
-    // The browser-test viewport is narrow, so the mobile 48 px target applies;
-    // the base CSS keeps the desktop target at 44 px.
     expect(getComputedStyle(oaElement as Element).width).toBe("48px");
+    expect(getComputedStyle(oaElement as Element).backgroundColor).not.toBe(
+      "rgb(255, 255, 255)",
+    );
+    expect(
+      getComputedStyle(oaElement?.querySelector("img") as Element).width,
+    ).toBe("40px");
     expect(
       oaElement?.querySelector('[data-slot="radio-group-indicator"]'),
     ).toBeNull();
@@ -93,15 +99,12 @@ describe("ChannelAdapterSelector", () => {
       </QueryClientProvider>,
     );
 
-    await expect.poll(() => mockApiJson.mock.calls.length).toBe(3);
+    await expect.poll(() => mockApiJson.mock.calls.length).toBe(2);
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=zalo_bot",
     );
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=zalo_oa",
-    );
-    expect(mockApiJson).toHaveBeenCalledWith(
-      "/api/v1/conversations/needs-attention?channel_provider=facebook_messenger",
     );
     expect(
       queryClient.getQueryData(["conversations-needs-attention", "zalo_bot"]),
@@ -109,12 +112,6 @@ describe("ChannelAdapterSelector", () => {
     expect(
       queryClient.getQueryData(["conversations-needs-attention", "zalo_oa"]),
     ).toEqual({ count: 4 });
-    await expect
-      .element(screen.getByText("Kênh đang chọn:", { exact: false }))
-      .toHaveTextContent(
-        "Kênh đang chọn: Zalo Chatbot · 2 hội thoại cần phản hồi",
-      );
-
     await screen
       .getByRole("radio", {
         name: "Zalo OA — 4 hội thoại cần phản hồi",

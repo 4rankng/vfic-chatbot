@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version
 from app.core.vector import vec_literal
+from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
 from app.services.retrieval import RetrievalRepository
 
@@ -20,12 +21,14 @@ class JobService:
         self.db = db
 
     async def get(self, job_id) -> Job | None:
-        return await self.db.get(Job, job_id)
+        return await self.db.scalar(
+            self._authority_query().where(Job.id == job_id)
+        )
 
     async def list(
         self, *, status_: JobStatus | None = None, page: int = 1, per_page: int = 25
     ) -> tuple[list[Job], int]:
-        q = select(Job)
+        q = self._authority_query()
         if status_ is not None:
             q = q.where(Job.status == status_)
         total = await self.db.scalar(select(func.count()).select_from(q.subquery()))
@@ -35,6 +38,26 @@ class JobService:
             )
         ).all()
         return list(rows), int(total or 0)
+
+    @staticmethod
+    def _authority_query():
+        return (
+            select(Job)
+            .join(Company, Company.id == Job.company_id)
+            .join(Project, Project.id == Company.project_id)
+            .where(
+                or_(
+                    and_(
+                        Project.category_authority_started.is_(True),
+                        Job.source_category_revision_id.is_not(None),
+                    ),
+                    and_(
+                        Project.category_authority_started.is_(False),
+                        Job.source_category_revision_id.is_(None),
+                    ),
+                )
+            )
+        )
 
     async def create(self, data: dict) -> Job:
         job = Job(**data)

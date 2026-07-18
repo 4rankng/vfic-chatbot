@@ -37,7 +37,7 @@ ChatBot/
 │   │   ├── realtime/     Socket.IO server + bridge         (~300 LOC)
 │   │   ├── prompts/
 │   │   └── main.py        FastAPI app + lifespan + ASGI wrap
-│   ├── alembic/          Hand-written migrations through 0048
+│   ├── alembic/          Hand-written migrations through 0050
 │   ├── mock_servers/     zalo_mock.py (local :8788)
 │   ├── scripts/          create_admin, seed_dev, prod-env,
 │   │                     benchmark_models, benchmark_rag,
@@ -131,8 +131,8 @@ ChatBot/
 | `components/atomic-crm/leads/` | Kanban board, lead show/edit, chatops actions. |
 | `components/atomic-crm/dashboard/` | RecruitingCommandCenter (Vietnamese metric cards). |
 | `components/atomic-crm/knowledge/` | KnowledgeIngestPanel (largest file, 763 LOC) + project workspace shell. |
-| `components/atomic-crm/projects/` | ProjectSidebar, ProjectWorkspaceShell, ProjectKnowledgePanel, ProjectPersonaPanel. |
-| `components/atomic-crm/personas/` | Persona CRUD + PersonaWorkspaceShell + personaMarkdown. |
+| `components/atomic-crm/projects/` | ProjectSidebar, ProjectWorkspaceShell, and ProjectKnowledgePanel. Projects own recruiting knowledge, not Agent selection. |
+| `components/atomic-crm/personas/` | Persona CRUD, adapter assignment, PersonaWorkspaceShell, and personaMarkdown. |
 | `components/atomic-crm/integrations/` | ZaloIntegrationPage + FacebookMessengerIntegrationPage (admin only). |
 | `lib/vfic/` | `config.ts` (API base resolution), `realtimeSocket.ts` (Socket.IO singleton), `humanReplyService.ts`, `knowledgeService.ts`. |
 | `lib/` | `utils.ts` (`cn()` = clsx + tailwind-merge), `toSlug.ts`, `vietnameseSearch.ts` (diacritic-insensitive). |
@@ -140,10 +140,11 @@ ChatBot/
 ## Project knowledge modes
 
 - `KnowledgeBaseMode` is owned by each Project through its linked KnowledgeBase.
-- `DIRECT_CONTEXT` stores one page and bypasses chunking, embeddings, and RAG retrieval.
+- `DIRECT_CONTEXT` stores one page and preserves both the raw page and the deterministic normalized page; it bypasses chunking, embeddings, and RAG retrieval.
 - `RAG` uses 12 independent YAML categories: jobs, compensation, requirements, work schedules, benefits, accommodation, meals, transportation, insurance, application, contacts, and FAQ.
+- Category revisions are shadow-prepared first and only become retrieval authority after an explicit Project-wide cutover. Rollback restores the saved pointers and legacy projections even after later category updates.
 - Conversation scope uses `EXPLORE` and `FOCUSED`, with `focused_project_id` carrying the active Project when a user switches context explicitly.
-- The legacy LG Display KB is linked by migration `0048_project_owned_knowledge_modes`; that migration is prepared in the worktree, but production cutover is still pending.
+- The legacy LG Display KB is linked by migration `0048_project_owned_knowledge_modes`; migration `0050_data_ingestion_recovery` adds lease, attempt, quality-result, and cutover-snapshot columns for the recovery flow.
 
 ## Key files table
 
@@ -162,12 +163,12 @@ ChatBot/
 | `backend/app/graph/tools.py` | `TOOL_SCHEMAS` + `_dispatch_tool`. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
 | `backend/app/graph/safety.py` | `fast_safety_filter`, `parse_verdict`, `build_retry_prompt`, `retry_exhausted_fallback`. |
 | `backend/app/graph/llm_semaphore.py` | Redis-backed cross-process LLM concurrency semaphore; `LLMThrottled`. |
-| `backend/app/api/projects.py` | Project CRUD plus single-page knowledge and 12-category replacement endpoints. |
+| `backend/app/api/projects.py` | Project CRUD plus single-page knowledge, 12-category replacement, clear, cutover, and rollback endpoints. |
 | `backend/app/services/zalo_sender.py` | `ZaloChannelSender` facade (line 19) — dispatches per `conv.zalo_channel`. |
 | `backend/app/services/zalo_bot_service.py` | `ZaloBotSender` (line 241); `send_message` (line 253); `send_chat_action` (line 335). Base `https://bot-api.zaloplatforms.com`. |
 | `backend/app/services/zalo_oa_service.py` | `ZaloOASender` (line 12); `POST /v3.0/oa/message/cs` (line 81). Base `https://openapi.zalo.me`. |
 | `backend/app/services/retrieval/repository.py` | pgvector halfvec HNSW + exact re-rank retrieval (line 160). |
-| `backend/app/services/knowledge/category_service.py` | Stages, activates, clears, and derives category revisions for Project-owned RAG categories. |
+| `backend/app/services/knowledge/category_service.py` | Stages, activates, clears, cuts over, rolls back, and derives category revisions for Project-owned RAG categories. |
 | `backend/app/workers/run_worker.py` | RQ worker container entrypoint; calls `Worker.clean_registries()` on startup. |
 | `backend/app/workers/chatbot.py` | Chat turn worker (consumes `webhook_high`, `persistence_low`). |
 | `backend/app/workers/reconcile.py` | Reconcile sweep (line 43); SETNX non-reentrancy guard; 7 Redis observability counters. |
@@ -177,6 +178,7 @@ ChatBot/
 | `backend/app/api/webhooks.py` | `POST /webhooks/zalo/chatbot` (line 34), `POST /webhooks/zalo/oa` (line 71), `_verify_oa_signature` (line 115). |
 | `backend/app/api/dependencies.py` | Auth dependencies plus dormant auth-first `get_active_installation` / `require_capability`; token-version gate remains the identity boundary. |
 | `backend/alembic/versions/0048_project_owned_knowledge_modes.py` | Additive Project-owned knowledge-mode migration: ownership links, 12 categories, EXPLORE/FOCUSED state, and LG Display backfill guardrails. |
+| `backend/alembic/versions/0050_data_ingestion_recovery.py` | Adds durable category processing leases, retry metadata, quality-result storage, and Project cutover snapshot columns. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
 | `backend/Makefile` | `dev`, `db`, `push`, `deploy`, `deploy-restart`, `deploy-restart-frontend`, `adminer`. |
 | `backend/docker-compose.yml` | 10-service prod stack (postgres, redis, web, worker-chatbot ×6, worker-ingest, scheduler, worker-followup, frontend, adminer, caddy). |

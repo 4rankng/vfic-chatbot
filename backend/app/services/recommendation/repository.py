@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company, Project
@@ -45,11 +45,18 @@ _MATCH_SQL = text(
         j.accommodation_support, j.meal_support, j.transport_support,
         j.vacancy_count
     FROM jobs j
+    JOIN companies c ON c.id = j.company_id
+    JOIN projects p ON p.id = c.project_id
     WHERE j.status = :status
       AND COALESCE(j.vacancy_count, 1) > 0
-      AND (:province IS NULL
-           OR normalize_search_text(j.province) ILIKE normalize_search_text(:province)
-           OR normalize_search_text(j.district) ILIKE normalize_search_text(:province))
+      AND (
+        (p.category_authority_started AND j.source_category_revision_id IS NOT NULL)
+        OR
+        (NOT p.category_authority_started AND j.source_category_revision_id IS NULL)
+      )
+      AND (CAST(:province AS text) IS NULL
+           OR normalize_search_text(j.province) ILIKE normalize_search_text(CAST(:province AS text))
+           OR normalize_search_text(j.district) ILIKE normalize_search_text(CAST(:province AS text)))
     ORDER BY j.updated_at DESC
     LIMIT :limit
     """
@@ -111,6 +118,16 @@ class RecommendationRepository:
                 Job.status == JobStatus.ACTIVE,
                 func.coalesce(Job.vacancy_count, 1) > 0,
                 Project.is_active.is_(True),
+                or_(
+                    and_(
+                        Project.category_authority_started.is_(True),
+                        Job.source_category_revision_id.is_not(None),
+                    ),
+                    and_(
+                        Project.category_authority_started.is_(False),
+                        Job.source_category_revision_id.is_(None),
+                    ),
+                ),
             ]
             if project_ids is not None:
                 predicates.append(Company.project_id.in_(project_ids))
@@ -129,7 +146,19 @@ class RecommendationRepository:
                     select(Job.id)
                     .join(Company, Job.company_id == Company.id)
                     .join(Project, Company.project_id == Project.id)
-                    .where(Project.is_active.is_(True))
+                    .where(
+                        Project.is_active.is_(True),
+                        or_(
+                            and_(
+                                Project.category_authority_started.is_(True),
+                                Job.source_category_revision_id.is_not(None),
+                            ),
+                            and_(
+                                Project.category_authority_started.is_(False),
+                                Job.source_category_revision_id.is_(None),
+                            ),
+                        ),
+                    )
                 )
                 if project_ids is not None:
                     catalog_query = catalog_query.where(Company.project_id.in_(project_ids))

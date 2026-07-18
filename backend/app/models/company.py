@@ -3,6 +3,7 @@
 A ``Project`` doubles as a "product" in the agent's master index: ``is_active``
 controls whether it appears in the catalog offered to candidates, and ``index_card``
 holds the LLM-generated catalog entry (summary/roles/location/highlights).
+Persona selection is provider-scoped and does not live on projects.
 """
 
 from __future__ import annotations
@@ -42,6 +43,8 @@ class Project(Base):
     category_authority_started: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    category_cutover_snapshot: Mapped[dict | None] = mapped_column(JSONB)
+    category_cutover_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     active_kb_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("kb_versions.id", ondelete="SET NULL")
     )
@@ -49,9 +52,6 @@ class Project(Base):
         UUID(as_uuid=True),
         ForeignKey("knowledge_bases.id", ondelete="RESTRICT"),
         unique=True,
-    )
-    default_persona_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("personas.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

@@ -6,6 +6,7 @@ import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass
+from typing import Any
 
 from app.core.text import normalize_vietnamese_text
 
@@ -18,7 +19,31 @@ class TextStats:
     line_count: int
 
 
+def normalize_kb_scalar(raw: str) -> str:
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\ufeff", "")
+    text = unicodedata.normalize("NFC", text)
+    text = "".join(ch for ch in text if ch == "\n" or ch == "\t" or ch >= " ")
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
+    return text.strip()
+
+
+def normalize_kb_value(value: Any) -> Any:
+    """Recursively normalize strings without coercing structured scalar types."""
+    if isinstance(value, str):
+        return normalize_kb_scalar(value)
+    if isinstance(value, list):
+        return [normalize_kb_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(normalize_kb_value(item) for item in value)
+    if isinstance(value, dict):
+        return {key: normalize_kb_value(item) for key, item in value.items()}
+    return value
+
+
 def normalize_kb_text(raw: str) -> str:
+    """Preserve the established legacy Markdown normalization/checksum contract."""
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
     text = text.replace("\ufeff", "")
     text = unicodedata.normalize("NFC", text)
@@ -29,6 +54,15 @@ def normalize_kb_text(raw: str) -> str:
 
 def kb_text_stats(raw: str) -> TextStats:
     normalized = normalize_kb_text(raw)
+    return _text_stats(normalized)
+
+
+def canonical_kb_text_stats(raw: str) -> TextStats:
+    """Stats for direct/category canonical text without changing the legacy lane."""
+    return _text_stats(normalize_kb_scalar(raw))
+
+
+def _text_stats(normalized: str) -> TextStats:
     return TextStats(
         normalized_text=normalized,
         content_sha256=hash_text(normalized),

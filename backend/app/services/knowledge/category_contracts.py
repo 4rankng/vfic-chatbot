@@ -10,17 +10,22 @@ from typing import Any
 
 import yaml
 from yaml.constructor import ConstructorError
-from yaml.events import AliasEvent
+from yaml.events import AliasEvent, CollectionEndEvent, CollectionStartEvent, ScalarEvent
 
 from app.schemas.knowledge_categories import (
     CATEGORY_DOCUMENT_MODELS,
+    MAX_CATEGORY_RECORDS,
     CategoryDocument,
     KnowledgeCategoryKey,
 )
+from app.services.knowledge.text_ingestion import normalize_kb_value
 
 
 _TEMPLATE_DIR = Path(__file__).with_name("templates") / "categories"
 MAX_CATEGORY_YAML_BYTES = 500_000
+MAX_CATEGORY_YAML_DEPTH = 32
+MAX_CATEGORY_YAML_NODES = 20_000
+MAX_CATEGORY_YAML_SCALAR_CHARS = 20_000
 
 
 class _StrictSafeLoader(yaml.SafeLoader):
@@ -149,8 +154,7 @@ def parse_category_yaml(
     if len(source_yaml.encode("utf-8")) > MAX_CATEGORY_YAML_BYTES:
         raise CategoryYamlError("category YAML exceeds the 500 KB limit")
     try:
-        if any(isinstance(event, AliasEvent) for event in yaml.parse(source_yaml)):
-            raise CategoryYamlError("YAML aliases are not supported")
+        _validate_yaml_events(source_yaml)
         documents = list(yaml.load_all(source_yaml, Loader=_StrictSafeLoader))
     except CategoryYamlError:
         raise
@@ -164,6 +168,34 @@ def parse_category_yaml(
     return validate_category_payload(key, payload, allow_empty=allow_empty)
 
 
+def _validate_yaml_events(source_yaml: str) -> None:
+    depth = 0
+    nodes = 0
+    for event in yaml.parse(source_yaml):
+        if isinstance(event, AliasEvent):
+            raise CategoryYamlError("YAML aliases are not supported")
+        if isinstance(event, CollectionStartEvent):
+            depth += 1
+            nodes += 1
+            if depth > MAX_CATEGORY_YAML_DEPTH:
+                raise CategoryYamlError(
+                    f"category YAML exceeds the depth limit of {MAX_CATEGORY_YAML_DEPTH}"
+                )
+        elif isinstance(event, CollectionEndEvent):
+            depth -= 1
+        elif isinstance(event, ScalarEvent):
+            nodes += 1
+            if len(event.value) > MAX_CATEGORY_YAML_SCALAR_CHARS:
+                raise CategoryYamlError(
+                    "category YAML scalar exceeds the "
+                    f"{MAX_CATEGORY_YAML_SCALAR_CHARS:,} character limit"
+                )
+        if nodes > MAX_CATEGORY_YAML_NODES:
+            raise CategoryYamlError(
+                f"category YAML exceeds the {MAX_CATEGORY_YAML_NODES:,} node limit"
+            )
+
+
 def validate_category_payload(
     key: KnowledgeCategoryKey | str,
     payload: dict[str, Any],
@@ -171,8 +203,14 @@ def validate_category_payload(
     allow_empty: bool = False,
 ) -> CategoryDocument:
     category_key = KnowledgeCategoryKey(key)
-    document = CATEGORY_DOCUMENT_MODELS[category_key].model_validate(payload)
     definition = get_category_definition(category_key)
+    records = payload.get(definition.list_field)
+    if isinstance(records, list) and len(records) > MAX_CATEGORY_RECORDS:
+        raise CategoryYamlError(
+            f"category exceeds the {MAX_CATEGORY_RECORDS:,} record limit"
+        )
+    normalized_payload = normalize_kb_value(payload)
+    document = CATEGORY_DOCUMENT_MODELS[category_key].model_validate(normalized_payload)
     if not allow_empty and not getattr(document, definition.list_field):
         raise EmptyCategoryError(
             "category replacement must contain at least one row; use the explicit clear action"

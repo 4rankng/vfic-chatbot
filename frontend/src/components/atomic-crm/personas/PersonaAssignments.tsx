@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useDataProvider, useGetList, useNotify, useRefresh } from "ra-core";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNotify, useRefresh } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,79 +9,232 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Globe2, Loader2, RefreshCcw, Workflow } from "lucide-react";
 import {
-  BotMessageSquare,
-  ChevronLeft,
-  ChevronRight,
-  Globe2,
-  Loader2,
-  Workflow,
-} from "lucide-react";
-import type { CrmDataProvider } from "../providers/rest/dataProvider";
-import type { Persona, Project } from "../types";
+  ADAPTER_PROVIDERS,
+  type AdapterPersonaAssignment,
+  type AdapterProvider,
+  type Persona,
+} from "../types";
 import {
   activatePersona,
-  assignPersonaToAllProjects,
+  listPersonaAssignments,
+  updatePersonaAssignment,
 } from "@/lib/vfic/knowledgeService";
 
 interface PersonaAssignmentsProps {
   persona: Persona;
 }
 
+type RowFeedback = {
+  pending: boolean;
+  success: string | null;
+  error: string | null;
+};
+
+const EMPTY_ROW_FEEDBACK: RowFeedback = {
+  pending: false,
+  success: null,
+  error: null,
+};
+
+const ADAPTER_LABELS: Record<AdapterProvider, string> = {
+  zalo_bot: "Zalo Chatbot",
+  zalo_oa: "Zalo OA",
+  facebook_messenger: "Messenger",
+};
+
+const initialFeedbackState = (): Record<AdapterProvider, RowFeedback> => ({
+  zalo_bot: { ...EMPTY_ROW_FEEDBACK },
+  zalo_oa: { ...EMPTY_ROW_FEEDBACK },
+  facebook_messenger: { ...EMPTY_ROW_FEEDBACK },
+});
+
+const normalizeAssignments = (
+  assignments: AdapterPersonaAssignment[],
+): AdapterPersonaAssignment[] =>
+  ADAPTER_PROVIDERS.map((provider) => {
+    const existing = assignments.find((item) => item.provider === provider);
+    return (
+      existing ?? {
+        provider,
+        label: ADAPTER_LABELS[provider],
+        persona_id: null,
+        effective_persona_id: null,
+        is_default: false,
+      }
+    );
+  });
+
+const badgeClassName = (variant: "brand" | "good" | "neutral") => {
+  if (variant === "brand") return "persona-studio-badge is-brand";
+  if (variant === "good") return "persona-studio-badge is-good";
+  return "persona-studio-badge";
+};
+
+const getAssignmentState = (
+  assignment: AdapterPersonaAssignment,
+  persona: Persona,
+) => {
+  if (assignment.persona_id === persona.id) {
+    return {
+      badge: "Gán riêng",
+      badgeVariant: "brand" as const,
+      summary: "Adapter này đang gán rõ ràng Agent này.",
+      actionLabel: "Trả về mặc định",
+      nextPersonaId: null as string | null,
+      actionDisabled: false,
+    };
+  }
+
+  if (assignment.is_default && assignment.effective_persona_id === persona.id) {
+    return {
+      badge: "Theo mặc định",
+      badgeVariant: "good" as const,
+      summary: "Adapter này đang kế thừa Agent này từ mặc định toàn hệ thống.",
+      actionLabel: "Agent mặc định",
+      nextPersonaId: null as string | null,
+      actionDisabled: true,
+    };
+  }
+
+  return {
+    badge: assignment.persona_id ? "Agent khác" : "Mặc định khác",
+    badgeVariant: "neutral" as const,
+    summary: assignment.persona_id
+      ? "Adapter này đang gán rõ ràng một Agent khác."
+      : "Adapter này đang kế thừa một Agent mặc định khác.",
+    actionLabel: "Gán Agent này",
+    nextPersonaId: persona.id,
+    actionDisabled: false,
+  };
+};
+
 export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   const notify = useNotify();
   const refresh = useRefresh();
-  const dataProvider = useDataProvider<CrmDataProvider>();
-  const [savingProjectId, setSavingProjectId] = useState<string | null>(null);
-  const [bulkSaving, setBulkSaving] = useState(false);
+  const [assignments, setAssignments] = useState<AdapterPersonaAssignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [feedbackByProvider, setFeedbackByProvider] = useState<
+    Record<AdapterProvider, RowFeedback>
+  >(initialFeedbackState);
   const [activating, setActivating] = useState(false);
-  const [page, setPage] = useState(1);
-  const perPage = 25;
-  const {
-    data: projects,
-    isPending,
-    total = 0,
-  } = useGetList<Project>("projects", {
-    pagination: { page, perPage },
-    sort: { field: "name", order: "ASC" },
-  });
-  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const assignmentRequestId = useRef(0);
 
-  const updateProjectPersona = async (
-    project: Project,
-    defaultPersonaId: string | null,
+  const setProviderFeedback = (
+    provider: AdapterProvider,
+    patch: Partial<RowFeedback>,
   ) => {
-    setSavingProjectId(project.id);
+    setFeedbackByProvider((current) => ({
+      ...current,
+      [provider]: {
+        ...current[provider],
+        ...patch,
+      },
+    }));
+  };
+
+  const loadAssignments = async (showLoading = false) => {
+    const requestId = ++assignmentRequestId.current;
+    if (showLoading) {
+      setLoading(true);
+    }
+    setLoadError(null);
     try {
-      await dataProvider.update("projects", {
-        id: project.id,
-        previousData: project,
-        data: { default_persona_id: defaultPersonaId },
-      });
-      notify("Đã cập nhật Agent cho dự án.", { type: "success" });
-      refresh();
-    } catch (e) {
-      notify((e as Error).message, { type: "error" });
+      const result = await listPersonaAssignments();
+      if (requestId === assignmentRequestId.current) {
+        setAssignments(normalizeAssignments(result.data));
+        return true;
+      }
+      return null;
+    } catch (error) {
+      if (requestId === assignmentRequestId.current) {
+        setLoadError(
+          (error as Error).message ?? "Không tải được cấu hình adapter.",
+        );
+        return false;
+      }
+      return null;
     } finally {
-      setSavingProjectId(null);
+      if (requestId === assignmentRequestId.current) {
+        setLoading(false);
+      }
     }
   };
 
-  const assignToAllProjects = async () => {
-    if (bulkSaving) return;
-    setBulkSaving(true);
+  useEffect(() => {
+    void loadAssignments(true);
+  }, []);
+
+  const usageSummary = useMemo(() => {
+    const effectiveCount = assignments.filter(
+      (assignment) => assignment.effective_persona_id === persona.id,
+    ).length;
+    const explicitCount = assignments.filter(
+      (assignment) => assignment.persona_id === persona.id,
+    ).length;
+    return { effectiveCount, explicitCount };
+  }, [assignments, persona.id]);
+
+  const refreshProvider = async (provider: AdapterProvider) => {
+    setProviderFeedback(provider, {
+      pending: true,
+      success: null,
+      error: null,
+    });
+    const ok = await loadAssignments();
+    if (ok == null) {
+      setProviderFeedback(provider, { pending: false });
+      return;
+    }
+    setProviderFeedback(provider, {
+      pending: false,
+      success: ok ? "Đã tải lại trạng thái adapter." : null,
+      error: ok ? null : "Không tải lại được trạng thái adapter.",
+    });
+  };
+
+  const saveAssignment = async (
+    provider: AdapterProvider,
+    personaId: string | null,
+  ) => {
+    setProviderFeedback(provider, {
+      pending: true,
+      success: null,
+      error: null,
+    });
     try {
-      const result = await assignPersonaToAllProjects(persona.id);
-      notify(`Đã gán Agent cho tất cả dự án (${result.updated} cập nhật).`, {
-        type: "success",
-      });
+      await updatePersonaAssignment(provider, personaId);
+      const ok = await loadAssignments();
+      if (ok == null) {
+        setProviderFeedback(provider, { pending: false });
+        return;
+      }
+      if (!ok) {
+        throw new Error("Đã cập nhật nhưng không tải lại được trạng thái.");
+      }
       refresh();
-    } catch (e) {
-      notify((e as Error).message, { type: "error" });
-    } finally {
-      setBulkSaving(false);
+      const successMessage =
+        personaId == null
+          ? "Đã trả adapter về Agent mặc định."
+          : "Đã gán Agent cho adapter.";
+      setProviderFeedback(provider, {
+        pending: false,
+        success: successMessage,
+        error: null,
+      });
+      notify(successMessage, { type: "success" });
+    } catch (error) {
+      const message =
+        (error as Error).message ?? "Không cập nhật được cấu hình adapter.";
+      setProviderFeedback(provider, {
+        pending: false,
+        success: null,
+        error: message,
+      });
+      notify(message, { type: "error" });
     }
   };
 
@@ -90,10 +243,11 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
     setActivating(true);
     try {
       await activatePersona(persona.id);
-      notify("Đã đặt làm Agent mặc định toàn hệ thống.", { type: "success" });
+      await loadAssignments();
       refresh();
-    } catch (e) {
-      notify((e as Error).message, { type: "error" });
+      notify("Đã đặt làm Agent mặc định toàn hệ thống.", { type: "success" });
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
     } finally {
       setActivating(false);
     }
@@ -106,10 +260,11 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
           <div>
             <CardTitle className="persona-assignment-title">
               <Workflow className="size-4 text-primary" />
-              Phạm vi sử dụng Agent
+              Phạm vi adapter
             </CardTitle>
             <CardDescription className="persona-assignment-description">
-              Chọn dự án dùng Agent này hoặc đặt làm mặc định toàn hệ thống.
+              Mỗi adapter dùng một Agent hiệu lực. Bạn có thể gán rõ ràng Agent
+              này cho từng adapter hoặc trả adapter về mặc định toàn hệ thống.
             </CardDescription>
           </div>
           <div className="persona-assignment-actions">
@@ -119,7 +274,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 className="gap-1 border-primary/20 bg-primary/5 text-primary"
               >
                 <Globe2 className="size-3.5" />
-                System Default
+                Agent mặc định
               </Badge>
             ) : (
               <Button
@@ -137,125 +292,131 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 Đặt mặc định
               </Button>
             )}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={assignToAllProjects}
-              disabled={bulkSaving || total === 0}
-            >
-              {bulkSaving ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <BotMessageSquare className="size-4" />
-              )}
-              Gán tất cả dự án
-            </Button>
           </div>
         </div>
       </CardHeader>
+
       <CardContent className="persona-assignment-content">
         <div className="persona-assignment-summary">
-          <div>
-            Tổng dự án
-          </div>
-          <strong>
-            {total}
-          </strong>
+          <div>Adapter đang dùng</div>
+          <strong>{usageSummary.effectiveCount}/3</strong>
           <p>
-            Danh sách bên phải được phân trang từ backend. Dùng nút gán tất cả
-            để áp dụng cho toàn bộ dự án.
+            Gán rõ ràng: {usageSummary.explicitCount}. Theo mặc định:{" "}
+            {usageSummary.effectiveCount - usageSummary.explicitCount}.
           </p>
         </div>
 
         <div className="persona-assignment-table">
           <div className="persona-assignment-table-head">
-            <span>
-              Dự án
-            </span>
-            <span>
-              {(projects ?? []).length} mục trên trang
-            </span>
+            <span>Adapter</span>
+            <span>3 kênh cố định</span>
           </div>
+
           <div className="persona-assignment-table-body">
-            {isPending ? (
+            {loading ? (
               <div className="space-y-3 p-4">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <Skeleton key={index} className="h-8 w-full" />
+                {ADAPTER_PROVIDERS.map((provider) => (
+                  <Skeleton
+                    key={provider}
+                    className="h-[84px] w-full rounded-[10px]"
+                  />
                 ))}
               </div>
-            ) : (projects ?? []).length === 0 ? (
-              <div role="status" className="p-4 text-body text-muted-foreground">
-                Chưa có dự án để gán Agent.
+            ) : loadError ? (
+              <div className="persona-assignment-empty-state" role="alert">
+                <p>{loadError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void loadAssignments(true)}
+                >
+                  <RefreshCcw className="size-4" />
+                  Tải lại
+                </Button>
               </div>
             ) : (
-              <div className="divide-y">
-                {(projects ?? []).map((project) => {
-                  const checked = project.default_persona_id === persona.id;
-                  const saving = savingProjectId === project.id;
-                  return (
-                    <label
-                      key={project.id}
-                      className="persona-assignment-row"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        disabled={saving || bulkSaving}
-                        onCheckedChange={(value) =>
-                          updateProjectPersona(
-                            project,
-                            value === true ? persona.id : null,
-                          )
-                        }
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">
-                          {project.name}
-                        </span>
-                        <span className="block truncate font-mono text-helper text-muted-foreground">
-                          {project.slug}
-                        </span>
-                      </span>
-                      {saving && <Loader2 className="size-4 animate-spin" />}
-                      {checked && (
-                        <Badge variant="outline" className="shrink-0">
-                          Đang gán
+              assignments.map((assignment) => {
+                const state = getAssignmentState(assignment, persona);
+                const feedback = feedbackByProvider[assignment.provider];
+                const missingAssignment = !assignment.effective_persona_id;
+
+                return (
+                  <section
+                    key={assignment.provider}
+                    className="persona-assignment-row persona-assignment-row-card"
+                    role="group"
+                    aria-label={assignment.label}
+                  >
+                    <div className="persona-assignment-row-copy">
+                      <div className="persona-assignment-row-title">
+                        <strong>{assignment.label}</strong>
+                        <Badge
+                          variant="outline"
+                          className={badgeClassName(state.badgeVariant)}
+                        >
+                          {missingAssignment ? "Thiếu dữ liệu" : state.badge}
                         </Badge>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
+                      </div>
+                      <p>
+                        {missingAssignment
+                          ? "Chưa nhận được Agent hiệu lực cho adapter này."
+                          : state.summary}
+                      </p>
+                      <div
+                        className="persona-assignment-row-feedback"
+                        aria-live="polite"
+                      >
+                        {feedback.error ? (
+                          <span className="is-error">{feedback.error}</span>
+                        ) : null}
+                        {!feedback.error && feedback.success ? (
+                          <span className="is-success">{feedback.success}</span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="persona-assignment-row-actions">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void refreshProvider(assignment.provider)}
+                        disabled={feedback.pending}
+                        aria-label={`Tải lại trạng thái ${assignment.label}`}
+                      >
+                        {feedback.pending ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <RefreshCcw className="size-4" />
+                        )}
+                        Tải lại
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() =>
+                          !state.actionDisabled
+                            ? void saveAssignment(
+                                assignment.provider,
+                                state.nextPersonaId,
+                              )
+                            : undefined
+                        }
+                        disabled={
+                          feedback.pending || state.actionDisabled
+                        }
+                        aria-label={`${state.actionLabel} cho ${assignment.label}`}
+                      >
+                        {feedback.pending ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : null}
+                        {state.actionLabel}
+                      </Button>
+                    </div>
+                  </section>
+                );
+              })
             )}
-          </div>
-          <div className="persona-assignment-pagination">
-            <span>
-              Trang {page} / {totalPages} ({total} dự án)
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-7"
-                disabled={isPending || page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                <ChevronLeft className="size-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-7"
-                disabled={isPending || page >= totalPages}
-                onClick={() =>
-                  setPage((value) => Math.min(totalPages, value + 1))
-                }
-              >
-                <ChevronRight className="size-3.5" />
-              </Button>
-            </div>
           </div>
         </div>
       </CardContent>

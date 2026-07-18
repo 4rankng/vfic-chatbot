@@ -93,9 +93,7 @@ describe("ZaloIntegrationPage navigation", () => {
       .element(screen.getByRole("heading", { name: "Facebook Messenger" }))
       .toBeVisible();
     await expect
-      .element(
-        screen.getByRole("radio", { name: "Ting Ting Tuyển dụng" }),
-      )
+      .element(screen.getByRole("radio", { name: "Ting Ting Tuyển dụng" }))
       .toBeVisible();
     await expect
       .poll(() =>
@@ -143,6 +141,17 @@ describe("ZaloIntegrationPage navigation", () => {
     await expect
       .element(screen.getByRole("button", { name: "Kết nối Facebook" }))
       .toBeVisible();
+
+    const settingsShells =
+      screen.container.querySelectorAll(".settings-console");
+    const settingsMains = screen.container.querySelectorAll(".settings-main");
+    const messengerSection = screen.container.querySelector(
+      ".settings-main > .settings-section-panel",
+    );
+
+    expect(settingsShells).toHaveLength(1);
+    expect(settingsMains).toHaveLength(1);
+    expect(messengerSection).not.toBeNull();
   });
 
   it("opens the existing Facebook Messenger integration from the mobile drawer", async () => {

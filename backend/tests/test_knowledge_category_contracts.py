@@ -195,6 +195,20 @@ def test_checksum_is_deterministic_for_equivalent_key_order():
     assert category_checksum(first) == category_checksum(second)
 
 
+def test_checksum_is_deterministic_for_unicode_and_line_ending_equivalence():
+    first = parse_category_yaml(
+        "contacts",
+        "category: contacts\r\ncontacts:\r\n  - id: recruiter\r\n    name: 'Tư vấn'\r\n",
+    )
+    second = parse_category_yaml(
+        "contacts",
+        "category: contacts\ncontacts:\n  - id: recruiter\n    name: 'Tư vấn'\n",
+    )
+
+    assert first.contacts[0].name == "Tư vấn"
+    assert category_checksum(first) == category_checksum(second)
+
+
 def test_yaml_parser_accepts_one_mapping_document():
     document = parse_category_yaml(
         "jobs",
@@ -222,6 +236,60 @@ def test_yaml_parser_rejects_ambiguous_document_shapes(source, message):
 def test_yaml_parser_rejects_oversized_source_before_parsing():
     with pytest.raises(CategoryYamlError, match="500 KB"):
         parse_category_yaml("jobs", "x" * 500_001)
+
+
+def test_yaml_parser_rejects_excessive_depth_before_construction():
+    nested = "value"
+    for index in range(34):
+        nested = f"level_{index}:\n  " + nested.replace("\n", "\n  ")
+
+    with pytest.raises(CategoryYamlError, match="depth limit"):
+        parse_category_yaml("jobs", nested)
+
+
+def test_yaml_parser_rejects_excessive_scalar_before_construction():
+    source = "category: jobs\njobs:\n  - id: one\n    title: '" + ("x" * 20_001) + "'\n"
+
+    with pytest.raises(CategoryYamlError, match="scalar exceeds"):
+        parse_category_yaml("jobs", source)
+
+
+def test_category_rejects_more_than_one_thousand_records():
+    rows = "\n".join(f"  - id: job-{index}\n    title: Job {index}" for index in range(1_001))
+
+    with pytest.raises(CategoryYamlError, match="1,000 record limit"):
+        parse_category_yaml("jobs", f"category: jobs\njobs:\n{rows}\n")
+
+
+def test_yaml_parser_rejects_excessive_nodes_before_construction():
+    source = "\n".join(f"key_{index}: value" for index in range(10_001))
+
+    with pytest.raises(CategoryYamlError, match="20,000 node limit"):
+        parse_category_yaml("jobs", source)
+
+
+@pytest.mark.parametrize(
+    ("category", "payload"),
+    [
+        (
+            "compensation",
+            {
+                "category": "compensation",
+                "compensation": [{"id": "pay", "base_salary_vnd": "1000000"}],
+            },
+        ),
+        (
+            "accommodation",
+            {
+                "category": "accommodation",
+                "accommodation": [{"id": "dorm", "available": "false"}],
+            },
+        ),
+    ],
+)
+def test_authoritative_numeric_and_boolean_fields_reject_quoted_values(category, payload):
+    with pytest.raises(ValidationError):
+        validate_category_payload(category, payload)
 
 
 @pytest.mark.parametrize(

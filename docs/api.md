@@ -44,8 +44,8 @@ The application registers the API routers in `backend/app/main.py` under
 | `leads` | `/api/v1/leads` | `leads` | JWT | Lead CRM pipeline |
 | `bot_runs` | `/api/v1/bot_runs` | `bot_runs` | JWT (read-only) | Bot turn audit log |
 | `knowledge` | `/api/v1/knowledge` | `knowledge` | `require_admin` | KB documents, chunks, versions |
-| `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project CRUD, FAQ, features |
-| `personas` | `/api/v1/knowledge/personas` | `personas` | `require_admin` | AI agent persona CRUD |
+| `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project knowledge CRUD, FAQ, features |
+| `personas` | `/api/v1/knowledge/personas`, `/api/v1/knowledge/persona-assignments` | `personas` | `require_admin` | AI agent persona CRUD and adapter assignment |
 | `jobs` | `/api/v1/jobs` | `jobs` | JWT (list/get); `require_admin` (create/update) | Job postings |
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
 | `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Performance observability |
@@ -107,6 +107,8 @@ workspace. An absent `installation_state` row is returned as `UNCONFIGURED`.
 | `POST /api/v1/admin/installation/suspend` | Admin | Suspend the active installation and advance authority generation. |
 | `POST /api/v1/admin/installation/resume` | Admin | Resume from current validation evidence and advance authority generation. |
 | `GET /api/v1/personas/{persona_id}/versions` | Admin | Immutable persona version metadata (`id`, version, checksum, timestamp) without persona content. |
+| `GET /api/v1/knowledge/persona-assignments` | Admin | Effective Agent assignment for Zalo Chatbot, Zalo OA, and Messenger. An adapter without an override inherits the global default Agent. |
+| `PUT /api/v1/knowledge/persona-assignments/{provider}` | Admin | Set one adapter override with `{ "persona_id": "<uuid>" }`, or send `{ "persona_id": null }` to return that adapter to the global default. |
 
 Installation lifecycle failures use the compatibility `detail` field plus
 stable machine-readable fields:
@@ -361,6 +363,22 @@ All endpoints below are admin-only and live below `/api/v1/knowledge`.
 Template previews are validation/extraction simulations. They do not activate a KB
 release or expose candidate-facing answers. Validation failures return `422`; stale
 draft or assignment revisions and invalid lifecycle transitions return `409`.
+
+## Project category authority
+
+The admin-only Project API exposes explicit authority transitions for RAG category data.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/v1/knowledge/projects/{project_id}/categories/cutover` | With JSON body `{ "confirmation": "CUTOVER" }`, require every category to be active or explicitly cleared, snapshot the prior authority, and switch retrieval to category revisions. |
+| `POST /api/v1/knowledge/projects/{project_id}/categories/rollback` | With JSON body `{ "confirmation": "ROLLBACK" }`, restore the saved legacy authority if category pointers have not changed since cutover. |
+
+Staging, activation, and clear operations do not implicitly change Project-wide retrieval
+authority. Failed or stale workers preserve the prior active pointers and expose stable,
+sanitized failure codes rather than source or provider content.
+
+The category clear/cutover/rollback request bodies all use the same required field name:
+`confirmation`.
 
 ### Resource path mapping
 | react-admin resource | API path |

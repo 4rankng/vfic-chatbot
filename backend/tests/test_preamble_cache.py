@@ -29,7 +29,16 @@ class _FakeRedis:
     async def get(self, key: str) -> str | None:
         return self._store.get(key)
 
-    async def set(self, key: str, value: str, *, ex: int | None = None) -> str:
+    async def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> str | bool:
+        if nx and key in self._store:
+            return False
         self._store[key] = value
         return "OK"
 
@@ -44,7 +53,14 @@ class _ExplodingRedis:
     async def get(self, key: str) -> str | None:
         raise RuntimeError("redis down")
 
-    async def set(self, key: str, value: str, *, ex: int | None = None) -> str:
+    async def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> str:
         raise RuntimeError("redis down")
 
     async def incr(self, key: str) -> int:
@@ -90,13 +106,7 @@ async def test_cached_value_version_bump_invalidates(monkeypatch):
     monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
     monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
 
-    # cache_version returns "1" for an absent key, and the first incr() also
-    # yields "1" — so a single bump from a fresh state is a no-op. In production
-    # the write path bumps during initial setup (before any chatbot read), which
-    # establishes the baseline. Mirror that here.
     from app.core.cache import bump_cache_version
-
-    await bump_cache_version("test_ns")  # baseline → version "1"
 
     calls = {"n": 0}
 
@@ -105,8 +115,7 @@ async def test_cached_value_version_bump_invalidates(monkeypatch):
         return f"v{calls['n']}"
 
     await cached_value(key_prefix="test:k", namespace="test_ns", ttl_seconds=60, loader=loader)
-    # Bump again — the next read must miss and re-load.
-    await bump_cache_version("test_ns")  # → version "2"
+    await bump_cache_version("test_ns")  # logical default 1 → version 2
     out = await cached_value(
         key_prefix="test:k", namespace="test_ns", ttl_seconds=60, loader=loader
     )
@@ -188,6 +197,28 @@ async def test_cached_system_prompt_round_trips_string(monkeypatch):
     assert value == "PERSONA+INDEX"
     assert hit is True
     assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_cached_system_prompt_is_isolated_by_provider_suffix(monkeypatch):
+    redis = _FakeRedis()
+    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
+    monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
+
+    calls = {"n": 0}
+
+    async def loader():
+        calls["n"] += 1
+        return f"PROMPT-{calls['n']}"
+
+    first, first_hit = await cached_system_prompt(loader, key_suffix="zalo_bot")
+    second, second_hit = await cached_system_prompt(loader, key_suffix="zalo_oa")
+    again, again_hit = await cached_system_prompt(loader, key_suffix="zalo_bot")
+
+    assert (first, first_hit) == ("PROMPT-1", False)
+    assert (second, second_hit) == ("PROMPT-2", False)
+    assert (again, again_hit) == ("PROMPT-1", True)
+    assert calls["n"] == 2
 
 
 # ── resolve_zalo is never cached (the token-rotation invariant) ───────────

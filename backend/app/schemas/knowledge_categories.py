@@ -11,11 +11,12 @@ from collections import Counter
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 
 StableId = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")]
 NonEmptyText = Annotated[str, Field(min_length=1, max_length=5000)]
+MAX_CATEGORY_RECORDS = 1_000
 
 
 class KnowledgeCategoryKey(StrEnum):
@@ -54,7 +55,7 @@ class JobItem(StrictModel):
     title: NonEmptyText
     aliases: list[str] = Field(default_factory=list, max_length=30)
     location: str | None = Field(default=None, max_length=500)
-    vacancies: int | None = Field(default=None, ge=1)
+    vacancies: StrictInt | None = Field(default=None, ge=1)
     employment_type: Literal["permanent", "temporary", "contract", "internship"] | None = None
     summary: str | None = Field(default=None, max_length=5000)
     keywords: list[str] = Field(default_factory=list, max_length=50)
@@ -62,7 +63,7 @@ class JobItem(StrictModel):
 
 class JobsDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.JOBS] = KnowledgeCategoryKey.JOBS
-    jobs: list[JobItem] = Field(default_factory=list)
+    jobs: list[JobItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
     @model_validator(mode="after")
     def validate_ids(self) -> JobsDocument:
@@ -72,7 +73,7 @@ class JobsDocument(CategoryDocument):
 
 class MoneyItem(StrictModel):
     name: NonEmptyText
-    amount_vnd: int = Field(ge=0)
+    amount_vnd: StrictInt = Field(ge=0)
     cadence: Literal["hour", "shift", "day", "week", "month", "year", "one_time"]
     conditions: str | None = Field(default=None, max_length=2000)
 
@@ -80,9 +81,9 @@ class MoneyItem(StrictModel):
 class CompensationItem(StrictModel):
     id: StableId
     job_ids: list[StableId] = Field(default_factory=list)
-    base_salary_vnd: int | None = Field(default=None, ge=0)
-    estimated_income_min_vnd: int | None = Field(default=None, ge=0)
-    estimated_income_max_vnd: int | None = Field(default=None, ge=0)
+    base_salary_vnd: StrictInt | None = Field(default=None, ge=0)
+    estimated_income_min_vnd: StrictInt | None = Field(default=None, ge=0)
+    estimated_income_max_vnd: StrictInt | None = Field(default=None, ge=0)
     allowances: list[MoneyItem] = Field(default_factory=list)
     bonuses: list[MoneyItem] = Field(default_factory=list)
     overtime_notes: str | None = Field(default=None, max_length=3000)
@@ -101,7 +102,9 @@ class CompensationItem(StrictModel):
 
 class CompensationDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.COMPENSATION] = KnowledgeCategoryKey.COMPENSATION
-    compensation: list[CompensationItem] = Field(default_factory=list)
+    compensation: list[CompensationItem] = Field(
+        default_factory=list, max_length=MAX_CATEGORY_RECORDS
+    )
 
     @model_validator(mode="after")
     def validate_ids(self) -> CompensationDocument:
@@ -112,8 +115,8 @@ class CompensationDocument(CategoryDocument):
 class RequirementItem(StrictModel):
     id: StableId
     job_ids: list[StableId] = Field(default_factory=list)
-    age_min: int | None = Field(default=None, ge=15, le=80)
-    age_max: int | None = Field(default=None, ge=15, le=80)
+    age_min: StrictInt | None = Field(default=None, ge=15, le=80)
+    age_max: StrictInt | None = Field(default=None, ge=15, le=80)
     genders: list[Literal["female", "male", "any"]] = Field(default_factory=list)
     education: str | None = Field(default=None, max_length=1000)
     experience: str | None = Field(default=None, max_length=1000)
@@ -131,7 +134,9 @@ class RequirementItem(StrictModel):
 
 class RequirementsDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.REQUIREMENTS] = KnowledgeCategoryKey.REQUIREMENTS
-    requirements: list[RequirementItem] = Field(default_factory=list)
+    requirements: list[RequirementItem] = Field(
+        default_factory=list, max_length=MAX_CATEGORY_RECORDS
+    )
 
     @model_validator(mode="after")
     def validate_ids(self) -> RequirementsDocument:
@@ -143,7 +148,7 @@ class ShiftItem(StrictModel):
     name: NonEmptyText
     start_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     end_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
-    crosses_midnight: bool = False
+    crosses_midnight: StrictBool = False
 
 
 class WorkScheduleItem(StrictModel):
@@ -159,7 +164,9 @@ class WorkScheduleItem(StrictModel):
 
 class WorkSchedulesDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.WORK_SCHEDULES] = KnowledgeCategoryKey.WORK_SCHEDULES
-    work_schedules: list[WorkScheduleItem] = Field(default_factory=list)
+    work_schedules: list[WorkScheduleItem] = Field(
+        default_factory=list, max_length=MAX_CATEGORY_RECORDS
+    )
 
     @model_validator(mode="after")
     def validate_ids(self) -> WorkSchedulesDocument:
@@ -177,7 +184,7 @@ class BenefitItem(StrictModel):
 
 class BenefitsDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.BENEFITS] = KnowledgeCategoryKey.BENEFITS
-    benefits: list[BenefitItem] = Field(default_factory=list)
+    benefits: list[BenefitItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
     @model_validator(mode="after")
     def validate_ids(self) -> BenefitsDocument:
@@ -188,11 +195,11 @@ class BenefitsDocument(CategoryDocument):
 class AccommodationItem(StrictModel):
     id: StableId
     job_ids: list[StableId] = Field(default_factory=list)
-    available: bool
+    available: StrictBool
     type: str | None = Field(default=None, max_length=500)
     address: str | None = Field(default=None, max_length=1000)
-    monthly_cost_vnd: int | None = Field(default=None, ge=0)
-    deposit_vnd: int | None = Field(default=None, ge=0)
+    monthly_cost_vnd: StrictInt | None = Field(default=None, ge=0)
+    deposit_vnd: StrictInt | None = Field(default=None, ge=0)
     included_services: list[str] = Field(default_factory=list)
     eligibility: str | None = Field(default=None, max_length=2000)
     notes: str | None = Field(default=None, max_length=3000)
@@ -200,7 +207,9 @@ class AccommodationItem(StrictModel):
 
 class AccommodationDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.ACCOMMODATION] = KnowledgeCategoryKey.ACCOMMODATION
-    accommodation: list[AccommodationItem] = Field(default_factory=list)
+    accommodation: list[AccommodationItem] = Field(
+        default_factory=list, max_length=MAX_CATEGORY_RECORDS
+    )
 
     @model_validator(mode="after")
     def validate_ids(self) -> AccommodationDocument:
@@ -211,9 +220,9 @@ class AccommodationDocument(CategoryDocument):
 class MealItem(StrictModel):
     id: StableId
     job_ids: list[StableId] = Field(default_factory=list)
-    provided: bool
-    meals_per_shift: int | None = Field(default=None, ge=0, le=10)
-    allowance_vnd: int | None = Field(default=None, ge=0)
+    provided: StrictBool
+    meals_per_shift: StrictInt | None = Field(default=None, ge=0, le=10)
+    allowance_vnd: StrictInt | None = Field(default=None, ge=0)
     menu_notes: str | None = Field(default=None, max_length=3000)
     eligibility: str | None = Field(default=None, max_length=2000)
     notes: str | None = Field(default=None, max_length=3000)
@@ -221,7 +230,7 @@ class MealItem(StrictModel):
 
 class MealsDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.MEALS] = KnowledgeCategoryKey.MEALS
-    meals: list[MealItem] = Field(default_factory=list)
+    meals: list[MealItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
     @model_validator(mode="after")
     def validate_ids(self) -> MealsDocument:
@@ -230,7 +239,7 @@ class MealsDocument(CategoryDocument):
 
 
 class BusStopItem(StrictModel):
-    order: int = Field(ge=1)
+    order: StrictInt = Field(ge=1)
     name: NonEmptyText
     time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     address: str | None = Field(default=None, max_length=1000)
@@ -243,7 +252,7 @@ class TransportationItem(StrictModel):
     direction: Literal["to_factory", "from_factory", "round_trip"]
     service_days: list[str] = Field(default_factory=list)
     shift: str | None = Field(default=None, max_length=200)
-    fee_vnd: int | None = Field(default=None, ge=0)
+    fee_vnd: StrictInt | None = Field(default=None, ge=0)
     stops: list[BusStopItem] = Field(default_factory=list)
     notes: str | None = Field(default=None, max_length=3000)
 
@@ -259,7 +268,9 @@ class TransportationItem(StrictModel):
 
 class TransportationDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.TRANSPORTATION] = KnowledgeCategoryKey.TRANSPORTATION
-    transportation: list[TransportationItem] = Field(default_factory=list)
+    transportation: list[TransportationItem] = Field(
+        default_factory=list, max_length=MAX_CATEGORY_RECORDS
+    )
 
     @model_validator(mode="after")
     def validate_ids(self) -> TransportationDocument:
@@ -282,7 +293,7 @@ class InsuranceItem(StrictModel):
 
 class InsuranceDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.INSURANCE] = KnowledgeCategoryKey.INSURANCE
-    insurance: list[InsuranceItem] = Field(default_factory=list)
+    insurance: list[InsuranceItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
     @model_validator(mode="after")
     def validate_ids(self) -> InsuranceDocument:
@@ -305,7 +316,9 @@ class ApplicationItem(StrictModel):
 
 class ApplicationDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.APPLICATION] = KnowledgeCategoryKey.APPLICATION
-    application: list[ApplicationItem] = Field(default_factory=list)
+    application: list[ApplicationItem] = Field(
+        default_factory=list, max_length=MAX_CATEGORY_RECORDS
+    )
 
     @model_validator(mode="after")
     def validate_ids(self) -> ApplicationDocument:
@@ -327,7 +340,7 @@ class ContactItem(StrictModel):
 
 class ContactsDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.CONTACTS] = KnowledgeCategoryKey.CONTACTS
-    contacts: list[ContactItem] = Field(default_factory=list)
+    contacts: list[ContactItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
     @model_validator(mode="after")
     def validate_ids(self) -> ContactsDocument:
@@ -346,7 +359,7 @@ class FaqItem(StrictModel):
 
 class FaqDocument(CategoryDocument):
     category: Literal[KnowledgeCategoryKey.FAQ] = KnowledgeCategoryKey.FAQ
-    faq: list[FaqItem] = Field(default_factory=list)
+    faq: list[FaqItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
     @model_validator(mode="after")
     def validate_ids(self) -> FaqDocument:

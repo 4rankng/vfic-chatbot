@@ -52,12 +52,12 @@ EXPECTED_ROUTE_COUNTS = {
     "leads": 15,
     "main": 3,
     "performance": 2,
-    "personas": 10,
-    "projects": 22,
+    "personas": 11,  # adapter assignment GET/PUT replace project bulk assignment
+    "projects": 24,
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "acac0b9ec301e48b50d6154412f2285cb2eaeca508ce68e754fa07711c1a39e3"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "5904b197b5ef73f5da4cad77a1720a4bcf765eb3732b8b2513a9251a6a2f955f"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 72,  # LLM-only evidence correction paths are explicit

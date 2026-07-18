@@ -19,6 +19,7 @@ orchestration live in ``coercion.py`` / ``pipeline.py``.
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.document_repository import (
     KnowledgeDocumentRepo,
+    mark_category_revision_failed_sync,
     mark_document_failed_sync,
     mark_version_failed_sync,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "KnowledgeDocumentRepo",
     "ProjectIndexRepo",
     "rebuild_bus_timetable",
+    "mark_category_revision_failed_sync",
     "mark_document_failed_sync",
     "mark_version_failed_sync",
 ]

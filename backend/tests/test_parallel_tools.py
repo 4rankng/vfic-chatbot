@@ -385,6 +385,162 @@ async def test_faq_detail_prefetches_grounded_context_without_tool_round(monkeyp
     assert metrics["prefetch_hit"] is True
 
 
+async def test_faq_detail_retries_one_empty_final_generation_with_same_evidence(monkeypatch):
+    """A transient empty final answer gets one model-only retry without repeating retrieval."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    dispatched: list[tuple[str, dict]] = []
+
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
+        dispatched.append((name, args))
+        return "LG Display: kiểm tra màn hình trước khi xuất xưởng."
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    grounded = "Công việc là kiểm tra màn hình trước khi xuất xưởng."
+    llm = _ScriptedLLM(["<think>reasoning only</think>", grounded])
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=1)
+    metrics: dict = {}
+    query = "kiem tra chat luong san pham cu the lam nhung gi"
+
+    reply = await agent.agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("get_product_features", "search_knowledge"),
+        lookup_query=query,
+        metrics=metrics,
+        retry_empty_generation=True,
+    )
+
+    assert reply == grounded
+    assert llm.calls == 2
+    assert dispatched == [("search_knowledge", {"query": query})]
+    assert metrics["generation_retry_count"] == 1
+    assert metrics["generation_retry_reason"] == "empty_after_clean"
+
+
+async def test_empty_generation_retry_is_bounded_and_unsafe_empty_is_not_retried():
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def handler(name, args):  # noqa: ARG001
+        return "unused"
+
+    empty_llm = _ScriptedLLM(["", ""])
+    empty_metrics: dict = {}
+    empty_reply = await MiniMaxAgent(empty_llm, embedder=None, max_iters=1).agent(
+        "context",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        allowed_tools=(),
+        metrics=empty_metrics,
+        retry_empty_generation=True,
+    )
+
+    unsafe_llm = _ScriptedLLM(['<think>tool_call: {"safe_to_send": false}</think>', "wrong"])
+    unsafe_reply = await MiniMaxAgent(unsafe_llm, embedder=None, max_iters=1).agent(
+        "context",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        allowed_tools=(),
+        metrics={},
+        retry_empty_generation=True,
+    )
+
+    assert empty_reply == ""
+    assert empty_llm.calls == 2
+    assert empty_metrics["generation_retry_count"] == 1
+    assert unsafe_reply == '<think>tool_call: {"safe_to_send": false}</think>'
+    assert unsafe_llm.calls == 1
+
+
+async def test_empty_generation_retry_failure_returns_empty_for_runner_fallback():
+    pytest.importorskip("langchain_core")
+    from langchain_core.messages import AIMessage
+
+    from app.graph.clients import MiniMaxAgent
+
+    class _RetryFailureLLM:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+            self.calls += 1
+            if self.calls == 1:
+                return AIMessage(content="")
+            raise RuntimeError("provider retry failed")
+
+    llm = _RetryFailureLLM()
+    metrics: dict = {}
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=(),
+        metrics=metrics,
+        retry_empty_generation=True,
+    )
+
+    assert reply == ""
+    assert llm.calls == 2
+    assert metrics["generation_retry_failure"] == "RuntimeError"
+
+
+async def test_empty_generation_retry_is_tool_free_after_a_tool_round():
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    dispatched: list[str] = []
+
+    async def handler(name, args):  # noqa: ARG001
+        dispatched.append(name)
+        return "verified evidence"
+
+    first_tool = [{"name": "list_active_projects", "args": {}, "id": "first"}]
+    attempted_retry_tool = [
+        {"name": "search_bus_timetable", "args": {"company": "LG"}, "id": "retry"}
+    ]
+    llm = _ScriptedLLM([first_tool, "", attempted_retry_tool])
+    metrics: dict = {}
+
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "context",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        metrics=metrics,
+        retry_empty_generation=True,
+    )
+
+    assert reply == ""
+    assert llm.calls == 3
+    assert dispatched == ["list_active_projects"]
+    assert metrics["tool_rounds"] == 1
+
+
+async def test_empty_generation_retry_is_disabled_by_default():
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _ScriptedLLM(["", "unexpected retry"])
+
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        "proactive context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=(),
+    )
+
+    assert reply == ""
+    assert llm.calls == 1
+
+
 async def test_faq_detail_prefetch_miss_preserves_scoped_tools(monkeypatch):
     """A knowledge miss leaves both routed FAQ tools available to the model."""
     pytest.importorskip("langchain_core")

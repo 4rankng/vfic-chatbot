@@ -38,9 +38,12 @@ from app.schemas.knowledge_bases import (
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.schemas.project_knowledge import (
     CategoryCatalogOut,
+    CategoryAuthorityOut,
+    CategoryCutoverRequest,
     CategoryClearRequest,
     CategoryReplaceOut,
     CategoryReplaceRequest,
+    CategoryRollbackRequest,
     CategoryRevisionOut,
     CategorySourceOut,
     CategoryTemplateOut,
@@ -269,6 +272,42 @@ async def clear_project_category(
         actor=admin,
     )
     return CategoryRevisionOut.model_validate(revision)
+
+
+@router.post("/{project_id}/categories/cutover", response_model=CategoryAuthorityOut)
+async def cutover_project_categories(
+    project_id: uuid.UUID,
+    _body: CategoryCutoverRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryAuthorityOut:
+    project = await KnowledgeCategoryService(db).cutover_category_authority(
+        project_id=project_id,
+        actor=admin,
+    )
+    return CategoryAuthorityOut(
+        project_id=project.id,
+        category_authority_started=project.category_authority_started,
+        category_cutover_at=project.category_cutover_at,
+    )
+
+
+@router.post("/{project_id}/categories/rollback", response_model=CategoryAuthorityOut)
+async def rollback_project_categories(
+    project_id: uuid.UUID,
+    _body: CategoryRollbackRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryAuthorityOut:
+    project = await KnowledgeCategoryService(db).rollback_category_authority(
+        project_id=project_id,
+        actor=admin,
+    )
+    return CategoryAuthorityOut(
+        project_id=project.id,
+        category_authority_started=project.category_authority_started,
+        category_cutover_at=project.category_cutover_at,
+    )
 
 
 @router.post("/{project_id}/reindex", response_model=ProjectOut)

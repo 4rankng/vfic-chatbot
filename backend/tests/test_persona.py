@@ -8,6 +8,7 @@ longer fixed, but every operational rule must remain present.
 """
 
 import uuid
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -23,7 +24,7 @@ from app.schemas.personas import (
     default_followup_rules_dict,
 )
 from app.services.errors import NotFoundError
-from app.services.persona_service import PersonaService
+from app.services.persona_service import PersonaService, persona_out_from_model
 
 # Operational rules that must survive any persona restructure. Each is a
 # behavior the agent must follow — losing any of these changes the bot's
@@ -146,7 +147,7 @@ def test_neutral_policy_does_not_change_legacy_persona_defaults():
 
 
 @pytest.mark.asyncio
-async def test_active_projects_index_includes_project_persona_overrides():
+async def test_active_projects_index_excludes_project_persona_overrides():
     class _Repo:
         async def active_projects_with_card(self):
             return [
@@ -164,10 +165,8 @@ async def test_active_projects_index_includes_project_persona_overrides():
 
     assert "=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ===" in prompt
     assert "lg-display (LG Display)" in prompt
-    assert "=== PERSONA RIÊNG THEO DỰ ÁN ===" in prompt
-    assert "Slug: lg-display" in prompt
-    assert "Agent: Persona LGD" in prompt
-    assert "Tư vấn riêng cho LG Display." in prompt
+    assert "=== PERSONA RIÊNG THEO DỰ ÁN ===" not in prompt
+    assert "Tư vấn riêng cho LG Display." not in prompt
 
 
 @pytest.mark.asyncio
@@ -181,3 +180,35 @@ async def test_persona_service_update_returns_404_for_missing_id():
 
     with pytest.raises(NotFoundError):
         await svc.update(uuid.uuid4(), PersonaUpdate(), admin)
+
+
+@pytest.mark.asyncio
+async def test_activate_path_attaches_effective_adapter_providers(monkeypatch):
+    persona = SimpleNamespace(
+        id=uuid.uuid4(),
+        knowledge_base_id=uuid.uuid4(),
+        body_md="body",
+        is_active=False,
+        name="Agent",
+        slug="agent",
+        followup_rules=default_followup_rules_dict(),
+        notes=None,
+        created_by=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db = AsyncMock()
+    svc = PersonaService(db)
+    svc.repo.deactivate_other_active = AsyncMock()
+
+    async def _attach(personas):
+        for row in personas:
+            row._effective_adapter_providers = ["zalo_bot"]
+
+    monkeypatch.setattr("app.services.personas.service.record_audit", AsyncMock())
+    monkeypatch.setattr(svc, "_attach_effective_adapter_providers", _attach)
+
+    result = await svc._activate(persona)
+
+    assert result.is_active is True
+    assert persona_out_from_model(result).effective_adapter_providers == ["zalo_bot"]

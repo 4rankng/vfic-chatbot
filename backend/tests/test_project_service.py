@@ -1,11 +1,9 @@
 import uuid
-from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
-from app.models.user import Role
-from app.schemas.projects import ProjectUpdate
-from app.services.errors import ForbiddenError
+from app.schemas.projects import ProjectOut, ProjectUpdate
 from app.services.project_service import ProjectService
 
 
@@ -64,82 +62,8 @@ async def test_list_faq_reads_source_anchor_from_chunk_metadata():
     assert response.data[0].source_anchor == "FAQ §1"
 
 
-class _FakeUpdateDb:
-    def __init__(self, project, persona=None):
-        self.project = project
-        self.persona = persona
-        self.added = []
-        self.commits = 0
-        self.flushes = 0
-        self.refreshed = []
+def test_project_schemas_no_longer_accept_or_serialize_default_persona_id() -> None:
+    with pytest.raises(ValidationError):
+        ProjectUpdate.model_validate({"default_persona_id": str(uuid.uuid4())})
 
-    async def get(self, model, row_id):
-        if model.__name__ == "Project" and row_id == self.project.id:
-            return self.project
-        if model.__name__ == "Persona" and self.persona and row_id == self.persona.id:
-            return self.persona
-        return None
-
-    def add(self, value):
-        self.added.append(value)
-
-    async def flush(self):
-        self.flushes += 1
-
-    async def commit(self):
-        self.commits += 1
-
-    async def refresh(self, value):
-        self.refreshed.append(value)
-
-
-def _actor(role: Role):
-    return SimpleNamespace(id=uuid.uuid4(), role=role)
-
-
-@pytest.mark.asyncio
-async def test_project_update_omitted_persona_leaves_assignment_unchanged():
-    persona_id = uuid.uuid4()
-    project = SimpleNamespace(id=uuid.uuid4(), name="LGD", default_persona_id=persona_id)
-    db = _FakeUpdateDb(project)
-
-    await ProjectService(db).update(
-        project.id,
-        ProjectUpdate(name="LG Display"),
-        _actor(Role.recruiter),
-    )
-
-    assert project.name == "LG Display"
-    assert project.default_persona_id == persona_id
-
-
-@pytest.mark.asyncio
-async def test_project_update_admin_can_clear_persona_assignment():
-    persona_id = uuid.uuid4()
-    project = SimpleNamespace(id=uuid.uuid4(), name="LGD", default_persona_id=persona_id)
-    db = _FakeUpdateDb(project)
-
-    await ProjectService(db).update(
-        project.id,
-        ProjectUpdate(default_persona_id=None),
-        _actor(Role.admin),
-    )
-
-    assert project.default_persona_id is None
-
-
-@pytest.mark.asyncio
-async def test_project_update_recruiter_cannot_change_persona_assignment():
-    persona_id = uuid.uuid4()
-    project = SimpleNamespace(id=uuid.uuid4(), name="LGD", default_persona_id=None)
-    persona = SimpleNamespace(id=persona_id)
-    db = _FakeUpdateDb(project, persona)
-
-    with pytest.raises(ForbiddenError):
-        await ProjectService(db).update(
-            project.id,
-            ProjectUpdate(default_persona_id=persona_id),
-            _actor(Role.recruiter),
-        )
-
-    assert project.default_persona_id is None
+    assert "default_persona_id" not in ProjectOut.model_json_schema()["properties"]

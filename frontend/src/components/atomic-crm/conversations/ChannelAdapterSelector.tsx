@@ -10,24 +10,24 @@ import {
 } from "@/components/ui/tooltip";
 import { apiJson } from "../providers/rest/api";
 import {
-  CONVERSATION_CHANNEL_PROVIDERS,
   type ConversationChannelProvider,
   getChannelProviderSearchParams,
 } from "./conversation-list-filters";
 
+type ChannelAdapterProvider = Exclude<
+  ConversationChannelProvider,
+  "facebook_messenger"
+>;
+
 type AdapterDefinition = {
-  provider: ConversationChannelProvider;
+  provider: ChannelAdapterProvider;
   label: string;
-  icon?: string;
-  // Text badge shown when no icon asset is available yet (e.g. Messenger
-  // before a branded icon is produced).
-  textBadge?: string;
+  icon: string;
 };
 
 const ADAPTERS: readonly AdapterDefinition[] = [
   { provider: "zalo_bot", label: "Zalo Chatbot", icon: zaloChatbotIcon },
   { provider: "zalo_oa", label: "Zalo OA", icon: zaloOaIcon },
-  { provider: "facebook_messenger", label: "Messenger", textBadge: "f" },
 ];
 
 type NeedsAttentionResponse = { count: number };
@@ -59,13 +59,9 @@ export const ChannelAdapterSelectorView = ({
   onProviderChange,
 }: {
   provider: ConversationChannelProvider;
-  counts: Readonly<Record<ConversationChannelProvider, number>>;
+  counts: Readonly<Record<ChannelAdapterProvider, number>>;
   onProviderChange: (provider: ConversationChannelProvider) => void;
 }) => {
-  const selected =
-    ADAPTERS.find((adapter) => adapter.provider === provider) ?? ADAPTERS[0];
-  const selectedCount = counts[selected.provider];
-
   return (
     <div className="channel-adapter-selector">
       <RadioGroupPrimitive.Root
@@ -73,12 +69,8 @@ export const ChannelAdapterSelectorView = ({
         aria-label="Chọn kênh hội thoại"
         value={provider}
         onValueChange={(value) => {
-          if (
-            CONVERSATION_CHANNEL_PROVIDERS.some(
-              (provider) => provider === value,
-            )
-          ) {
-            onProviderChange(value as ConversationChannelProvider);
+          if (ADAPTERS.some((adapter) => adapter.provider === value)) {
+            onProviderChange(value as ChannelAdapterProvider);
           }
         }}
       >
@@ -96,13 +88,7 @@ export const ChannelAdapterSelectorView = ({
                   className="channel-adapter-option"
                   aria-label={accessibleLabel}
                 >
-                  {adapter.icon ? (
-                    <img src={adapter.icon} alt="" aria-hidden="true" />
-                  ) : (
-                    <span className="channel-adapter-text-badge" aria-hidden="true">
-                      {adapter.textBadge ?? adapter.label[0]}
-                    </span>
-                  )}
+                  <img src={adapter.icon} alt="" aria-hidden="true" />
                   {count > 0 ? (
                     <span
                       className="channel-adapter-badge"
@@ -118,12 +104,6 @@ export const ChannelAdapterSelectorView = ({
           );
         })}
       </RadioGroupPrimitive.Root>
-      <p className="channel-adapter-caption" aria-live="polite">
-        Kênh đang chọn: <strong>{selected.label}</strong>
-        {selectedCount > 0 ? (
-          <span> · {selectedCount} hội thoại cần phản hồi</span>
-        ) : null}
-      </p>
     </div>
   );
 };
@@ -137,11 +117,10 @@ export const ChannelAdapterSelector = ({
   searchParams: URLSearchParams;
   onSearchParamsChange: (next: URLSearchParams) => void;
 }) => {
-  // Keep all provider queries mounted regardless of selection so badges stay
-  // warm and adapter switching never briefly shows an aggregate or stale count.
+  // Keep both displayed adapter queries mounted regardless of selection so
+  // badges stay warm and switching never briefly shows a stale count.
   const zaloBotCount = useScopedAttentionCount("zalo_bot");
   const zaloOaCount = useScopedAttentionCount("zalo_oa");
-  const messengerCount = useScopedAttentionCount("facebook_messenger");
 
   return (
     <ChannelAdapterSelectorView
@@ -149,7 +128,6 @@ export const ChannelAdapterSelector = ({
       counts={{
         zalo_bot: zaloBotCount,
         zalo_oa: zaloOaCount,
-        facebook_messenger: messengerCount,
       }}
       onProviderChange={(nextProvider) =>
         onSearchParamsChange(

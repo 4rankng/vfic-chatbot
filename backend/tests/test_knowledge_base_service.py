@@ -9,11 +9,13 @@ import pytest
 
 from app.models.knowledge import KnowledgeBaseMode
 from app.schemas.knowledge_bases import (
+    MAX_DIRECT_CONTEXT_CHARS,
     DirectContextFileUpsert,
     KnowledgeBaseCreate,
     LegacyKnowledgeBootstrap,
 )
 from app.services.errors import ConflictError
+from app.services import knowledge_base_service
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services import knowledge_base_capacity
 
@@ -70,6 +72,36 @@ async def test_direct_file_rejects_rag_knowledge_base() -> None:
 
 
 @pytest.mark.asyncio
+async def test_direct_file_preserves_raw_text_and_stores_normalized_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kb_id = uuid.uuid4()
+    kb = SimpleNamespace(id=kb_id, mode=KnowledgeBaseMode.DIRECT_CONTEXT)
+    db = _Db(get_values={("KnowledgeBase", kb_id): kb})
+    raw_text = "\ufeffDòng một\r\n\r\n\r\n\r\nDòng hai\r"
+
+    async def ready(_db, _knowledge_base) -> None:
+        return None
+
+    async def audit(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(knowledge_base_service, "require_direct_context_ready", ready)
+    monkeypatch.setattr(knowledge_base_service, "record_audit", audit)
+
+    direct_file = await KnowledgeBaseService(db).upsert_direct_file(
+        kb_id,
+        DirectContextFileUpsert(filename="context.md", text=raw_text),
+        _actor(),
+    )
+
+    assert direct_file.raw_text == raw_text
+    assert direct_file.normalized_text == "Dòng một\n\n\nDòng hai"
+    assert direct_file.content_sha256
+    assert db.commits == 1
+
+
+@pytest.mark.asyncio
 async def test_project_attachment_is_disabled_for_project_owned_modes() -> None:
     kb_id = uuid.uuid4()
     kb = SimpleNamespace(id=kb_id, mode=KnowledgeBaseMode.DIRECT_CONTEXT)
@@ -122,6 +154,14 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references() 
 def test_direct_context_file_requires_a_text_filename() -> None:
     with pytest.raises(ValueError, match=".txt or .md"):
         DirectContextFileUpsert(filename="knowledge.pdf", text="not supported")
+
+
+def test_direct_context_file_rejects_oversized_text_at_request_boundary() -> None:
+    with pytest.raises(ValueError, match="at most 300000 characters"):
+        DirectContextFileUpsert(
+            filename="knowledge.md",
+            text="x" * (MAX_DIRECT_CONTEXT_CHARS + 1),
+        )
 
 
 def test_rag_kb_schema_accepts_tenant_neutral_names() -> None:

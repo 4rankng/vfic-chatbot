@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, require_admin
 from app.core.db import get_db
 from app.models.conversation import BotRunOutcome
 from app.models.user import User
-from app.schemas.bot_run import BotRunListResponse, BotRunOut
+from app.schemas.bot_run import BotRunListResponse, BotRunOut, BotRunTraceDetailOut
 from app.services.bot_run_service import BotRunService
 
 router = APIRouter(prefix="/bot_runs", tags=["bot_runs"])
@@ -37,3 +37,15 @@ async def list_bot_runs(
         conversation_id=conversation_id, outcome=outcome, page=page, per_page=per_page
     )
     return BotRunListResponse(data=[BotRunOut.model_validate(r) for r in rows], total=total)
+
+
+@router.get("/{run_id}", response_model=BotRunTraceDetailOut)
+async def get_bot_run_detail(
+    run_id: int,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> BotRunTraceDetailOut:
+    detail = await BotRunService(db).get_trace_detail(run_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="bot run not found")
+    return detail

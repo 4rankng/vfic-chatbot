@@ -15,6 +15,7 @@ from app.api.dependencies import get_current_user, require_admin
 from app.core.db import get_db
 from app.models.conversation import Conversation, ConversationMode, ConversationStatus
 from app.models.user import Role, User
+from app.schemas.bot_run import BotRunTraceSummaryListResponse
 from app.schemas.conversation import (
     ConversationListResponse,
     ConversationOut,
@@ -23,6 +24,7 @@ from app.schemas.conversation import (
     SendMessageRequest,
 )
 from app.schemas.dashboard import AttentionReason
+from app.services.bot_run_service import BotRunService
 from app.services.conversation import ConversationConflict, ConversationService
 from app.workers.chatbot_worker import enqueue_chat_run
 
@@ -145,6 +147,23 @@ async def get_conversation(
     conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> ConversationOut:
     return ConversationOut.model_validate(await _load(conv_id, db, user))
+
+
+@router.get("/{conv_id}/bot-runs", response_model=BotRunTraceSummaryListResponse)
+async def list_conversation_bot_runs(
+    conv_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=50),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> BotRunTraceSummaryListResponse:
+    await _load(conv_id, db)
+    rows, total = await BotRunService(db).list_conversation_trace_summaries(
+        conversation_id=conv_id,
+        page=page,
+        per_page=per_page,
+    )
+    return BotRunTraceSummaryListResponse(data=rows, total=total)
 
 
 @router.delete("/{conv_id}", status_code=status.HTTP_204_NO_CONTENT)

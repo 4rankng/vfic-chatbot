@@ -95,12 +95,13 @@ class _DirectContextAdapter:
 
         from app.core.text import normalize_vietnamese_text
         from app.graph.direct_context import DirectContext, ProjectTurnContext
+        from app.graph.provider_scope import provider_from_conversation
         from app.graph.prompts import AGENT_SYSTEM_PROMPT
         from app.models.company import Project
         from app.models.conversation import ConversationProjectState
         from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
-        from app.models.persona import Persona
         from app.services.knowledge_base_capacity import require_direct_context_ready
+        from app.services.personas.repository import PersonaRepository
 
         rows = (
             await self._db.execute(
@@ -163,12 +164,10 @@ class _DirectContextAdapter:
 
         direct_context = None
         if knowledge_base.mode is KnowledgeBaseMode.DIRECT_CONTEXT:
-            persona = (
-                await self._db.get(Persona, project.default_persona_id)
-                if project.default_persona_id
-                else None
-            )
-            persona_body = persona.body_md if persona is not None else AGENT_SYSTEM_PROMPT
+            provider = provider_from_conversation(conversation)
+            persona_body = (
+                await PersonaRepository(self._db).active_persona_body(provider)
+            ) or AGENT_SYSTEM_PROMPT
             if direct_file is None:
                 direct_context = DirectContext(
                     knowledge_base_id=str(knowledge_base.id),

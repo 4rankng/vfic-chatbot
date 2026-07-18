@@ -1,11 +1,16 @@
 import { type ReactNode } from "react";
-import { ShowBase, useRecordContext } from "ra-core";
+import { useDataProvider, useGetIdentity } from "ra-core";
+import { useQuery } from "@tanstack/react-query";
+import { useParams } from "react-router";
 import { TopToolbar } from "../layout/TopToolbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BotRun } from "../types";
+import type { BotRunTraceDetail } from "../types";
 import { durationLabel, formatDateTime, outcomeMeta } from "./botRunMeta";
+import { DecisionTraceRenderer } from "./DecisionTracePanel";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import { DECISION_TRACE_QUERY_KEY } from "./decisionTraceQueries";
 
 const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
   <div className="flex flex-col gap-1 border-b py-3 last:border-0">
@@ -16,9 +21,7 @@ const Field = ({ label, value }: { label: string; value?: ReactNode }) => (
   </div>
 );
 
-const BotRunShowContent = () => {
-  const run = useRecordContext<BotRun>();
-  if (!run) return null;
+const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
   const meta = outcomeMeta(run.outcome);
   const dur = durationLabel(run);
 
@@ -41,36 +44,14 @@ const BotRunShowContent = () => {
         </CardHeader>
         <CardContent className="flex flex-col px-4 py-2">
           <Field
-            label="Câu trả lời đề xuất"
-            value={
-              run.proposed_reply ? (
-                <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-body">
-                  {run.proposed_reply}
-                </pre>
-              ) : (
-                "— không có —"
-              )
-            }
-          />
-          <Field
             label="Cuộc trò chuyện"
             value={
-              <span className="font-mono text-helper">{run.conversation_id}</span>
-            }
-          />
-          <Field label="Kết quả" value={meta.label} />
-          <Field
-            label="Phiên bản khi bắt đầu"
-            value={
-              <span>
-                {run.version_at_start}{" "}
-                <span className="text-helper text-muted-foreground">
-                  (conversations.version khi lần chạy bắt đầu — dùng cho cơ chế
-                  chống tranh chấp tiếp nhận)
-                </span>
+              <span className="font-mono text-helper">
+                {run.conversation_id}
               </span>
             }
           />
+          <Field label="Kết quả" value={meta.label} />
           <Field label="Bắt đầu" value={formatDateTime(run.started_at)} />
           <Field
             label="Kết thúc"
@@ -88,17 +69,59 @@ const BotRunShowContent = () => {
               ) : null
             }
           />
+          <div className="border-t py-4">
+            <h3 className="text-section-title font-semibold text-foreground">
+              Dấu vết quyết định
+            </h3>
+            <p className="mt-1 text-helper leading-5 text-muted-foreground">
+              Đây là tóm tắt quyết định từ luồng xử lý, không phải suy nghĩ nội
+              bộ của mô hình.
+            </p>
+            <div className="mt-3">
+              <DecisionTraceRenderer trace={run.decision_trace} />
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 };
 
-export const BotRunShow = () => (
-  <ShowBase>
-    <TopToolbar>
-      <h2 className="mr-auto text-content-title font-semibold">Lần chạy bot</h2>
-    </TopToolbar>
-    <BotRunShowContent />
-  </ShowBase>
-);
+export const BotRunShow = () => <BotRunShowPage />;
+
+const BotRunShowPage = () => {
+  const { id } = useParams();
+  const runId = Number(id);
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const { identity } = useGetIdentity();
+  const identityId = identity?.id ? String(identity.id) : "";
+  const detailQuery = useQuery({
+    queryKey: [...DECISION_TRACE_QUERY_KEY, identityId, "run", runId],
+    queryFn: () => dataProvider.getBotRunTrace(runId),
+    enabled: Boolean(identityId) && Number.isFinite(runId),
+    gcTime: 0,
+    staleTime: 0,
+    retry: false,
+  });
+
+  return (
+    <>
+      <TopToolbar>
+        <h2 className="mr-auto text-content-title font-semibold">
+          Lần chạy bot
+        </h2>
+      </TopToolbar>
+      {detailQuery.isPending ? (
+        <div role="status" className="mx-auto mt-4 max-w-3xl p-4 text-body">
+          Đang tải dấu vết…
+        </div>
+      ) : detailQuery.isError || !detailQuery.data ? (
+        <div role="status" className="mx-auto mt-4 max-w-3xl p-4 text-body">
+          Chưa tải được lần chạy bot. Hãy quay lại và thử lại.
+        </div>
+      ) : (
+        <BotRunShowContent run={detailQuery.data} />
+      )}
+    </>
+  );
+};

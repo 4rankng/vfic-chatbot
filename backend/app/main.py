@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
         from rq_scheduler import Scheduler
 
         from app.core.redis import get_redis_sync
+        from app.workers.decision_trace_retention_worker import run_decision_trace_retention_tick
         from app.workers.followup_worker import run_proactive_followup_tick
         from app.workers.outbound_dispatch_worker import run_outbound_dispatch_tick
         from app.workers.reconcile_worker import run_reconcile_tick
@@ -80,6 +81,18 @@ async def lifespan(app: FastAPI):
             )
         except Exception:  # noqa: BLE001
             logger.exception("outbound dispatcher scheduler registration failed (non-fatal)")
+        try:
+            register_unique_tick(
+                sched,
+                run_decision_trace_retention_tick,
+                settings.decision_trace_retention_interval_seconds,
+            )
+            logger.info(
+                "decision trace retention tick registered: interval=%ds",
+                settings.decision_trace_retention_interval_seconds,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("decision trace retention scheduler registration failed (non-fatal)")
     except Exception:  # noqa: BLE001
         logger.exception("rq-scheduler setup failed (non-fatal)")
 
@@ -116,6 +129,7 @@ app.include_router(knowledge.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge_bases.router, prefix=API_V1_PREFIX)
 app.include_router(projects.router, prefix=API_V1_PREFIX)
 app.include_router(personas.router, prefix=API_V1_PREFIX)
+app.include_router(personas.assignments_router, prefix=API_V1_PREFIX)
 app.include_router(personas.versions_router, prefix=API_V1_PREFIX)
 app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)

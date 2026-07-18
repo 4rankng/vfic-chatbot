@@ -6,7 +6,7 @@ import uuid
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_admin
@@ -211,10 +211,21 @@ async def list_knowledge_base_projects(
         await db.execute(
             select(Company.project_id, func.count(Job.id))
             .join(Job, Job.company_id == Company.id)
+            .join(Project, Project.id == Company.project_id)
             .where(
                 Company.project_id.in_(project_ids),
                 Job.status == JobStatus.ACTIVE,
                 func.coalesce(Job.vacancy_count, 0) > 0,
+                or_(
+                    and_(
+                        Project.category_authority_started.is_(True),
+                        Job.source_category_revision_id.is_not(None),
+                    ),
+                    and_(
+                        Project.category_authority_started.is_(False),
+                        Job.source_category_revision_id.is_(None),
+                    ),
+                ),
             )
             .group_by(Company.project_id)
         )

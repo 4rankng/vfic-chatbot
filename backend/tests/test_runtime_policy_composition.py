@@ -161,7 +161,10 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
     async def _prompt(_retrieval):
         return "system", True
 
-    monkeypatch.setattr("app.graph.context.build_system_prompt", _prompt)
+    async def _provider_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return await _prompt(retrieval)
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _provider_prompt)
 
     class _Agent:
         async def agent(self, _text, **kwargs):
@@ -181,6 +184,7 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
         SimpleNamespace(),
         deps,
         "Hồ sơ cần những gì?",
+        provider="zalo_bot",
         chat_id="chat-1",
         recent_messages=[],
         manifest_policy=policy,
@@ -216,6 +220,7 @@ async def test_non_recruitment_manifest_without_knowledge_authority_fails_closed
         SimpleNamespace(),
         deps,
         "bên mình còn tuyển không?",
+        provider="zalo_bot",
         chat_id="chat-1",
         recent_messages=[],
         manifest_policy=policy,
@@ -254,6 +259,7 @@ async def test_manifest_without_job_catalog_authority_fails_closed_for_generic_l
         SimpleNamespace(),
         deps,
         "bên mình đang tuyển gì?",
+        provider="zalo_bot",
         chat_id="chat-1",
         recent_messages=[],
         manifest_policy=policy,
@@ -288,6 +294,7 @@ async def test_non_recruitment_manifest_preserves_generic_catalog_authority():
             SimpleNamespace(),
             deps,
             "Cho em hỏi bên mình đang tuyển gì ạ?",
+            provider="zalo_bot",
             chat_id="chat-1",
             recent_messages=[],
             manifest_policy=policy,
@@ -328,6 +335,7 @@ async def test_non_recruitment_manifest_scopes_specific_vacancy_followup_to_know
             SimpleNamespace(),
             deps,
             "lương bao nhiêu?",
+            provider="zalo_bot",
             chat_id="chat-1",
             recent_messages=history,
             manifest_policy=policy,

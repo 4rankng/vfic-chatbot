@@ -683,6 +683,77 @@
   font-size: 12.5px;
 }
 
+.persona-assignment-row-card {
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 84px;
+  padding: 12px;
+}
+
+.persona-assignment-row-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.persona-assignment-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.persona-assignment-row-title strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.persona-assignment-row-copy p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.persona-assignment-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.persona-assignment-row-feedback {
+  min-height: 16px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.persona-assignment-row-feedback .is-error {
+  color: var(--destructive);
+}
+
+.persona-assignment-row-feedback .is-success {
+  color: var(--success);
+}
+
+.persona-assignment-empty-state {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.persona-assignment-empty-state p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .persona-assignment-row:last-child {
   border-bottom: 0;
 }
@@ -794,6 +865,11 @@
   .persona-assignment-actions {
     justify-content: flex-start;
   }
+
+  .persona-assignment-row-card,
+  .persona-assignment-row-actions {
+    display: grid;
+  }
 }
 
 @media (max-width: 600px) {
@@ -805,4 +881,3 @@
     border: 0;
   }
 }
-

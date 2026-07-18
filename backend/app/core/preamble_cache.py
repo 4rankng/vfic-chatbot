@@ -97,7 +97,9 @@ async def cached_zalo_config(loader: Callable[[], Awaitable[dict]]) -> dict:
     )
 
 
-async def cached_system_prompt(loader: Callable[[], Awaitable[str]]) -> tuple[str, bool]:
+async def cached_system_prompt(
+    loader: Callable[[], Awaitable[str]], *, key_suffix: str = "default"
+) -> tuple[str, bool]:
     """Cache the fully-assembled system prompt string (keyed by the preamble namespace).
 
     Returns ``(value, cache_hit)`` so the caller can record whether the prompt
@@ -107,7 +109,7 @@ async def cached_system_prompt(loader: Callable[[], Awaitable[str]]) -> tuple[st
     """
     # ``str`` is cached as a JSON string scalar; cache_get_json returns it as-is.
     version = await cache_version(NS_PREAMBLE)
-    key = f"preamble:system_prompt:v{version}"
+    key = f"preamble:system_prompt:{key_suffix}:v{version}"
     cached = await cache_get_json(key)
     if isinstance(cached, str) and cached:
         return cached, True

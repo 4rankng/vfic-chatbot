@@ -170,6 +170,14 @@ class KnowledgeCategoryRevision(Base):
     )
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
+    processing_token: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    failure_code: Mapped[str | None] = mapped_column(String(64))
+    quality_result: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
 
 
 class KBVersion(Base):

@@ -93,3 +93,35 @@ class CategoryClearRequest(BaseModel):
         if value.strip() != "CLEAR":
             raise ValueError("confirmation must be CLEAR")
         return "CLEAR"
+
+
+class CategoryCutoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmation: str
+
+    @field_validator("confirmation")
+    @classmethod
+    def require_confirmation(cls, value: str) -> str:
+        if value.strip() != "CUTOVER":
+            raise ValueError("confirmation must be CUTOVER")
+        return "CUTOVER"
+
+
+class CategoryRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmation: str
+
+    @field_validator("confirmation")
+    @classmethod
+    def require_confirmation(cls, value: str) -> str:
+        if value.strip() != "ROLLBACK":
+            raise ValueError("confirmation must be ROLLBACK")
+        return "ROLLBACK"
+
+
+class CategoryAuthorityOut(BaseModel):
+    project_id: uuid.UUID
+    category_authority_started: bool
+    category_cutover_at: datetime | None = None

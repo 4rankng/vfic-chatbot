@@ -90,6 +90,9 @@ class ConversationPort(Protocol):
         delivery_status: Any = None,
         trace_id: str | None = None,
         outcome_metadata: dict | None = None,
+        decision_trace: dict | None = None,
+        outbox_channel: str | None = None,
+        outbox_payload: dict | None = None,
     ) -> None: ...
 
     async def recheck_ownership(
@@ -141,7 +144,7 @@ class RuntimePolicyPort(Protocol):
 class RetrievalPort(Protocol):
     """Retrieval repository surface the agent tools + prompt assembly depend on."""
 
-    async def active_persona_body(self) -> str | None: ...
+    async def active_persona_body(self, provider: str | None = None) -> str | None: ...
 
     async def active_project_ids(self) -> list[str]: ...
 

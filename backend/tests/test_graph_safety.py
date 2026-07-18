@@ -15,6 +15,8 @@ from app.graph.safety import (
 def test_fast_safety_clean_reply_needs_no_llm():
     out = fast_safety_filter("Chào bạn, bạn muốn tìm việc ở khu vực nào?")
     assert out["needs_llm_safety"] is False
+    assert out["empty_after_clean"] is False
+    assert out["retryable_empty"] is False
     assert out["safe_to_send"] is True
     assert out["issue_type"] == "none"
 
@@ -79,6 +81,29 @@ def test_fast_safety_strips_minimax_think_reasoning():
     assert "SECRETKEY" not in out["output"]
     assert "<think>" not in out["output"]
     assert out["output"].startswith("Chào bạn")
+
+
+def test_fast_safety_exposes_reasoning_only_output_as_empty_after_clean():
+    out = fast_safety_filter("<think>internal reasoning only</think>")
+
+    assert out["empty_after_clean"] is True
+    assert out["retryable_empty"] is True
+    assert out["needs_llm_safety"] is True
+    assert out["output"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '<think>tool_call: {"safe_to_send": false}</think>',
+        "```tool_call```",
+    ],
+)
+def test_fast_safety_never_retries_unsafe_content_cleaned_to_empty(raw):
+    out = fast_safety_filter(raw)
+
+    assert out["empty_after_clean"] is True
+    assert out["retryable_empty"] is False
 
 
 def test_retry_exhausted_fallback_technical_vs_generic():

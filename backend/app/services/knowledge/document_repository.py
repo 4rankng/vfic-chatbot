@@ -71,3 +71,36 @@ def mark_version_failed_sync(database_url: str, version_id: str, error: str) -> 
             )
     finally:
         engine.dispose()
+
+
+def mark_category_revision_failed_sync(
+    database_url: str,
+    revision_id: str,
+    processing_token: str,
+    failure_code: str,
+) -> None:
+    """Fence an outer RQ failure to the exact category processing attempt."""
+    from sqlalchemy import create_engine
+
+    engine = create_engine(database_url, future=True)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE knowledge_category_revisions "
+                    "SET status = 'FAILED', failure_code = :failure_code, "
+                    "error_message = 'Category worker failed', processing_token = NULL, "
+                    "processing_started_at = NULL, lease_expires_at = NULL "
+                        "WHERE id = CAST(:id AS uuid) AND ("
+                        "(status = 'STAGED' AND processing_token IS NULL) OR "
+                        "(status = 'PROCESSING' "
+                        "AND processing_token = CAST(:processing_token AS uuid)))"
+                ),
+                {
+                    "id": revision_id,
+                    "processing_token": processing_token,
+                    "failure_code": failure_code,
+                },
+            )
+    finally:
+        engine.dispose()

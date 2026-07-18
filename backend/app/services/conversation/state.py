@@ -628,6 +628,7 @@ class ConversationState:
         delivery_status: DeliveryStatus | None = None,
         trace_id: str | None = None,
         outcome_metadata: dict | None = None,
+        decision_trace: dict | None = None,
         outbox_channel: str | None = None,
         outbox_payload: dict | None = None,
     ) -> Message:
@@ -680,6 +681,7 @@ class ConversationState:
             stage_timings=stage_timings,
             trace_id=trace_id or None,
             outcome_metadata=outcome_metadata,
+            decision_trace=decision_trace,
         )
         msg = None
         pending_msg = None
@@ -1467,6 +1469,18 @@ class ConversationState:
                             "execution_source": "outbox_recovery",
                             "lane": "outbox_recovery",
                             **telemetry_timings,
+                        },
+                        decision_trace={
+                            "version": 1,
+                            "events": [
+                                {
+                                    "seq": 1,
+                                    "kind": "decision",
+                                    "code": "recovery_reason",
+                                    "summary_code": "outbox_recovery",
+                                }
+                            ],
+                            "truncated": False,
                         },
                     )
                     self.db.add(run)

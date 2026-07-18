@@ -112,7 +112,8 @@ class RetrievalRepository:
             "d.status NOT IN ('ARCHIVED', 'FAILED') "
             "AND c.embedding IS NOT NULL "
             "AND ("
-            "  (c.category_revision_id IS NOT NULL AND EXISTS ("
+            "  (p.category_authority_started IS TRUE "
+            "   AND c.category_revision_id IS NOT NULL AND EXISTS ("
             "    SELECT 1 FROM knowledge_categories kc "
             "    WHERE kc.project_id = p.id AND kc.active_revision_id = c.category_revision_id"
             "  )) "
@@ -598,25 +599,52 @@ class RetrievalRepository:
         ).all()
 
     async def active_projects_with_card(self) -> list:
-        """Active projects for the master-index prompt, including persona overrides."""
+        """Active projects for the master-index prompt."""
         return (
             await self.db.execute(
                 text(
-                    "SELECT p.name, p.slug, p.summary, p.index_card, "
-                    "       pe.name AS persona_name, pe.body_md AS persona_body_md "
+                    "SELECT p.name, p.slug, p.summary, p.index_card "
                     "FROM projects p "
-                    "LEFT JOIN personas pe ON pe.id = p.default_persona_id AND pe.is_active "
                     "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
                     "ORDER BY p.name"
                 )
             )
         ).all()
 
-    async def active_persona_body(self) -> str | None:
-        """``body_md`` of the single active global persona, or None."""
+    async def active_persona_body(self, provider: str | None = None) -> str | None:
+        """Return the effective persona body for ``provider``, or None."""
+        if provider:
+            return (
+                await self.db.execute(
+                    text(
+                        """
+                        SELECT pe.body_md
+                        FROM personas AS pe
+                        WHERE pe.id = COALESCE(
+                            (
+                                SELECT apa.persona_id
+                                FROM adapter_persona_assignments AS apa
+                                WHERE apa.provider = :provider
+                            ),
+                            (
+                                SELECT active.id
+                                FROM personas AS active
+                                WHERE active.is_active
+                                ORDER BY active.updated_at DESC
+                                LIMIT 1
+                            )
+                        )
+                        """
+                    ),
+                    {"provider": provider},
+                )
+            ).scalar_one_or_none()
         return (
             await self.db.execute(
-                text("SELECT body_md FROM personas WHERE is_active AND project_id IS NULL LIMIT 1")
+                text(
+                    "SELECT body_md FROM personas "
+                    "WHERE is_active ORDER BY updated_at DESC LIMIT 1"
+                )
             )
         ).scalar_one_or_none()
 
@@ -695,15 +723,12 @@ class RetrievalRepository:
                     "mode": key[6],
                 }
             )
-        # Cap after processing ALL shifts so multi-shift queries aren't truncated.
-        route_keys = route_keys[:limit]
-
         # Filter out keys with NULL required fields (would fail JOIN on NULL = NULL).
         route_keys = [k for k in route_keys if k.get("company_name") and k.get("route_name")]
         if not route_keys:
             return fallback_rows
 
-        return (
+        complete_rows = (
             await self.db.execute(
                 text(
                     """
@@ -746,6 +771,15 @@ class RetrievalRepository:
                      AND COALESCE(br.direction, '') = COALESCE(cr.direction, '')
                      AND COALESCE(br.source_page, '') = COALESCE(cr.source_page, '')
                      AND COALESCE(br.mode, '') = COALESCE(cr.mode, '')
+                    JOIN projects p
+                      ON p.id = br.project_id
+                     AND (
+                       (p.category_authority_started
+                        AND br.source_category_revision_id IS NOT NULL)
+                       OR
+                       (NOT p.category_authority_started
+                        AND br.source_category_revision_id IS NULL)
+                     )
                     JOIN bus_stops bs ON bs.route_id = br.id
                     LEFT JOIN knowledge_sources ks ON ks.id = br.knowledge_source_id
                     ORDER BY
@@ -761,6 +795,25 @@ class RetrievalRepository:
                 },
             )
         ).all()
+        selected: list = []
+        selected_routes: set[tuple] = set()
+        for row in complete_rows:
+            mapping = row._mapping
+            route_key = (
+                mapping.get("company_name"),
+                mapping.get("route_name"),
+                mapping.get("route_variant"),
+                mapping.get("shift"),
+                mapping.get("direction"),
+                mapping.get("source_page"),
+                mapping.get("mode"),
+            )
+            if route_key not in selected_routes:
+                if len(selected_routes) >= limit:
+                    continue
+                selected_routes.add(route_key)
+            selected.append(row)
+        return selected
 
     async def job_features_for_project(self, project_id: uuid.UUID) -> list:
         """A project's active worker features in catalog display order.

@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-17
+**Last updated:** 2026-07-18
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -161,6 +161,20 @@ the first possible `runtime_ready=true` decision.
 ---
 
 ## 2. Request lifecycle — Zalo webhook to sent reply
+
+### 2.0 Agent assignment authority
+
+Agent configuration is channel-adapter scoped, never Project scoped. Exactly one
+global default Persona is the fallback for every installed adapter. Zalo
+Chatbot, Zalo OA, and Messenger may each store one optional Persona override;
+removing an override immediately returns that adapter to the global default.
+
+At turn time the canonical conversation channel identity supplies the provider.
+The runtime resolves the effective Persona from that provider before prompt or
+follow-up assembly. Project focus independently selects recruiting knowledge,
+so changing Project context cannot change the Agent's voice or follow-up policy.
+The assembled prompt cache includes the provider scope to prevent one adapter's
+override from leaking into another adapter's replies.
 
 ```
 Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
@@ -710,19 +724,32 @@ Knowledge mode is selected at the Project boundary. Each Project owns one
 be shared by another Project.
 
 - `DIRECT_CONTEXT` stores one replacement-only file and makes a tool-free LLM
-  call with the complete page plus bounded recent conversation history.
+  call with the complete page plus bounded recent conversation history. The raw
+  page and deterministic normalized text stay side by side in the database.
 - `RAG` owns twelve `knowledge_categories`. Immutable
-  `knowledge_category_revisions` are staged and embedded before a transaction
-  writes projections and advances only that category's active pointer. Revision
-  claims are atomic and each revision can own only one evidence document.
+  `knowledge_category_revisions` preserve raw YAML, normalized payloads, a
+  deterministic checksum, and recovery metadata (`processing_token`,
+  `lease_expires_at`, `attempt_count`, `quality_result`). Revisions are staged
+  and embedded before a transaction stores indexed evidence and advances only that
+  category's active pointer. Revision claims are atomic and each revision can
+  own only one evidence document.
+- Category activation is shadow-only until `project.category_authority_started`
+  flips during an explicit cutover. Before that flip, retrieval continues to
+  read legacy chunks, Jobs, and routes; live category projections are built only at cutover.
+- Cutover snapshots the legacy authority, active KB version, category pointers,
+  and project-level projection fields. Rollback restores the saved pointers and legacy
+  projections even after post-cutover category updates.
 - `conversations.project_context_state` and `focused_project_id` select
   `EXPLORE` or one `FOCUSED` Project. Focused tool arguments are server-forced to
   that Project slug; model-supplied cross-Project arguments are ignored.
-- Category-derived Jobs use presence as availability. Manual status is not an
+- Legacy and category-derived Jobs/routes coexist physically and every candidate/recruiter
+  consumer gates them with `category_authority_started`. Category-derived Jobs use presence as availability. Manual status is not an
   authority. A Jobs replacement replays active sibling projections; Transportation
   also replaces Project-scoped `bus_routes` and `bus_stops`.
 - Legacy Project document/version ingestion, reindex, and extraction mutations
-  are closed after Project-owned knowledge is established.
+  are closed after Project-owned knowledge is established. Migration
+  `0050_data_ingestion_recovery` adds the lease and cutover snapshot columns that
+  back this flow.
 
 - **Store:** pgvector `halfvec` with **HNSW** index on `knowledge_chunks`.
 - **Flow:** HNSW candidate generation (`rag_ann_candidates` default 200) →

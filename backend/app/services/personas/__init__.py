@@ -9,4 +9,8 @@ behind :class:`PersonaRepository` in ``repository.py``.
 from __future__ import annotations
 
 from app.services.personas.parsing import parse_persona_markdown  # noqa: F401
-from app.services.personas.service import PersonaService, load_persona_template  # noqa: F401
+from app.services.personas.service import (  # noqa: F401
+    PersonaService,
+    load_persona_template,
+    persona_out_from_model,
+)

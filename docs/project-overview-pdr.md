@@ -34,7 +34,7 @@ a human.
 | **Human inbox** | Realtime Socket.IO push, per-conversation rooms, take-over / release / semi-auto / close / reopen, virtualized thread (`virtua`). |
 | **Proactive follow-up** | 6h / 24h / 46h cadence, cap 3, 48h-Zalo-rule-safe (47h margin), Vietnamese opt-out phrase matching. |
 | **Knowledge base (RAG)** | Per-project docs ingested into pgvector halfvec HNSW + exact re-rank; versioned, re-indexable. |
-| **Personas** | Per-project agent personas (system prompt, tone, assignment) — CRUD + activate + import. |
+| **Personas** | Agent voice and follow-up policy — CRUD, activate, import, and optional assignment per messaging adapter. One global default serves every adapter unless that adapter selects another Agent. Projects remain knowledge-only. |
 | **Reliability** | Reconcile worker sweeps every 60s, recovers lost turns after worker crash (~3-4 min total recovery). Per-chat DB lock owner + optimistic ownership guard prevent stale-run sends. |
 | **Audit** | `bot_runs` resource exposes every bot execution for review. |
 | **Admin integrations** | Zalo / MiniMax / OpenRouter credentials managed in admin UI, encrypted at rest. |

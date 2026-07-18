@@ -20,7 +20,7 @@ from app.models.knowledge import (
 from app.models.lead import FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage, FollowUpTask
 from app.models.job import Job, JobStatus
 from app.models.integration import IntegrationSetting
-from app.models.persona import Persona, PersonaVersion
+from app.models.persona import AdapterPersonaAssignment, Persona, PersonaVersion
 from app.models.installation import (
     InstallationLifecycle,
     InstallationManifestRevision,
@@ -113,6 +113,7 @@ __all__ = [
     "IntegrationSetting",
     "Persona",
     "PersonaVersion",
+    "AdapterPersonaAssignment",
     "InstallationLifecycle",
     "InstallationManifestRevision",
     "InstallationManifestValidation",

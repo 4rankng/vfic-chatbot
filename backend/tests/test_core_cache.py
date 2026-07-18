@@ -26,6 +26,12 @@ class _FakeRedis:
     async def get(self, key: str) -> str | None:
         return self._store.get(key)
 
+    async def set(self, key: str, value: str, *, nx: bool = False) -> bool:
+        if nx and key in self._store:
+            return False
+        self._store[key] = value
+        return True
+
     async def incr(self, key: str) -> int:
         self.incr_calls.append(key)
         self._store[key] = str(int(self._store.get(key, "0")) + 1)
@@ -34,6 +40,9 @@ class _FakeRedis:
 
 class _ExplodingRedis:
     """Redis double that always raises on incr, simulating a Redis outage."""
+
+    async def set(self, key: str, value: str, *, nx: bool = False) -> bool:
+        raise RuntimeError("redis down")
 
     async def incr(self, key: str) -> int:
         raise RuntimeError("redis down")
@@ -51,10 +60,8 @@ async def test_bump_kb_caches_increments_both_namespaces(monkeypatch):
 
     await cache_mod.bump_kb_caches()
 
-    assert "cachever:knowledge" in redis.incr_calls
-    assert "cachever:semantic_cache" in redis.incr_calls
-    # Both bumped exactly once, in order (knowledge first, then semantic_cache).
-    assert redis.incr_calls == ["cachever:knowledge", "cachever:semantic_cache"]
+    assert redis._store["cachever:knowledge"] == "2"
+    assert redis._store["cachever:semantic_cache"] == "2"
 
 
 @pytest.mark.asyncio
@@ -75,7 +82,7 @@ async def test_bump_cache_version_increments_namespace(monkeypatch):
     await cache_mod.bump_cache_version("knowledge")
     await cache_mod.bump_cache_version("knowledge")
 
-    assert redis._store["cachever:knowledge"] == "2"
+    assert redis._store["cachever:knowledge"] == "3"
 
 
 @pytest.mark.asyncio
@@ -89,7 +96,7 @@ async def test_cache_version_returns_string_default(monkeypatch):
 
     # Reflects bumps.
     await cache_mod.bump_cache_version("known")
-    assert await cache_mod.cache_version("known") == "1"
+    assert await cache_mod.cache_version("known") == "2"
 
 
 # ── KB content mutation → cache invalidation contract ────────────────────
@@ -109,10 +116,6 @@ async def test_bump_kb_caches_invalidates_both_cache_namespaces(monkeypatch):
     redis = _FakeRedis()
     monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
 
-    # Establish a real baseline by bumping both once (simulating a prior KB
-    # write). Without this, the default version ("1") is indistinguishable
-    # from the value after the first incr (also "1").
-    await cache_mod.bump_kb_caches()
     kv_before = await cache_mod.cache_version("knowledge")
     sv_before = await cache_mod.cache_version("semantic_cache")
 
@@ -134,3 +137,12 @@ async def test_bump_kb_caches_invalidates_both_cache_namespaces(monkeypatch):
         "the semantic RAG cache could serve stale answers"
     )
 
+
+@pytest.mark.asyncio
+async def test_first_bump_advances_absent_namespace_from_logical_default(monkeypatch):
+    redis = _FakeRedis()
+    monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
+
+    assert await cache_mod.cache_version("fresh") == "1"
+    assert await cache_mod.bump_cache_version("fresh") is True
+    assert await cache_mod.cache_version("fresh") == "2"

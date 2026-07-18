@@ -52,7 +52,15 @@ class ProjectRepository:
         return int(
             (
                 await self.db.execute(
-                    text("SELECT count(*) FROM bus_routes WHERE project_id = :pid"),
+                    text(
+                        "SELECT count(*) FROM bus_routes br "
+                        "JOIN projects p ON p.id = br.project_id "
+                        "WHERE br.project_id = :pid AND ("
+                        "(p.category_authority_started "
+                        "AND br.source_category_revision_id IS NOT NULL) OR "
+                        "(NOT p.category_authority_started "
+                        "AND br.source_category_revision_id IS NULL))"
+                    ),
                     {"pid": str(project_id)},
                 )
             ).scalar()
@@ -66,10 +74,16 @@ class ProjectRepository:
             (
                 await self.db.execute(
                     text(
-                        "SELECT id, route_name, route_no, route_variant, shift, direction, "
-                        "       area, mode, source_page, notes "
-                        "FROM bus_routes "
-                        "WHERE project_id = :pid "
+                        "SELECT br.id, br.route_name, br.route_no, br.route_variant, "
+                        "       br.shift, br.direction, br.area, br.mode, "
+                        "       br.source_page, br.notes "
+                        "FROM bus_routes br JOIN projects p ON p.id = br.project_id "
+                        "WHERE br.project_id = :pid AND ("
+                        "  (p.category_authority_started "
+                        "   AND br.source_category_revision_id IS NOT NULL) OR "
+                        "  (NOT p.category_authority_started "
+                        "   AND br.source_category_revision_id IS NULL)"
+                        ") "
                         "ORDER BY route_name ASC, shift ASC, direction ASC, route_variant ASC "
                         "LIMIT :limit OFFSET :offset"
                     ),
@@ -114,10 +128,15 @@ class ProjectRepository:
                         "FROM knowledge_chunks kc "
                         "JOIN knowledge_documents kd ON kd.id = kc.document_id "
                         "JOIN projects p ON p.id = kd.project_id "
+                        "LEFT JOIN knowledge_categories cat "
+                        "  ON cat.project_id = p.id AND cat.category_key = 'faq' "
                         "LEFT JOIN kb_text_files ktf ON ktf.id = kc.file_id "
                         "WHERE kd.project_id = :pid "
                         "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
-                        "  AND kc.kb_version_id = p.active_kb_version_id "
+                        "  AND ((p.category_authority_started "
+                        "        AND kc.category_revision_id = cat.active_revision_id) "
+                        "       OR (NOT p.category_authority_started "
+                        "           AND kc.kb_version_id = p.active_kb_version_id)) "
                         "  AND kc.category = 'faq' "
                         "ORDER BY kc.created_at DESC, kc.chunk_index ASC "
                         "LIMIT :limit"
@@ -142,11 +161,16 @@ class ProjectRepository:
                         "FROM knowledge_chunks kc "
                         "JOIN knowledge_documents kd ON kd.id = kc.document_id "
                         "JOIN projects p ON p.id = kd.project_id "
+                        "LEFT JOIN knowledge_categories cat "
+                        "  ON cat.project_id = p.id AND cat.category_key = 'faq' "
                         "LEFT JOIN kb_text_files ktf ON ktf.id = kc.file_id "
                         "WHERE kd.project_id = :pid "
                         "  AND kc.id = :cid "
                         "  AND kd.status NOT IN ('ARCHIVED', 'FAILED') "
-                        "  AND kc.kb_version_id = p.active_kb_version_id "
+                        "  AND ((p.category_authority_started "
+                        "        AND kc.category_revision_id = cat.active_revision_id) "
+                        "       OR (NOT p.category_authority_started "
+                        "           AND kc.kb_version_id = p.active_kb_version_id)) "
                         "  AND kc.category = 'faq' "
                         "LIMIT 1"
                     ),

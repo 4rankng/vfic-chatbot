@@ -18,6 +18,9 @@ from app.api.dependencies import require_admin
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.personas import (
+    PersonaAssignmentListResponse,
+    PersonaAssignmentOut,
+    PersonaAssignmentUpdate,
     PersonaCreate,
     PersonaListResponse,
     PersonaOut,
@@ -25,10 +28,15 @@ from app.schemas.personas import (
     PersonaVersionListResponse,
     PersonaVersionMetadataOut,
 )
-from app.services.persona_service import PersonaService, load_persona_template
+from app.services.persona_service import (
+    PersonaService,
+    load_persona_template,
+    persona_out_from_model,
+)
 
 router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
 versions_router = APIRouter(prefix="/personas", tags=["personas"])
+assignments_router = APIRouter(prefix="/knowledge/persona-assignments", tags=["personas"])
 
 
 @router.get("", response_model=PersonaListResponse)
@@ -48,19 +56,35 @@ async def list_personas(
         sort_by=sort,
         order=order,
     )
-    out = []
-    for p in rows:
-        d = PersonaOut.model_validate(p)
-        d.assigned_projects = getattr(p, "_assigned_projects", [])
-        out.append(d)
-    return PersonaListResponse(data=out, total=total)
+    return PersonaListResponse(data=[persona_out_from_model(row) for row in rows], total=total)
+
+
+@assignments_router.get("", response_model=PersonaAssignmentListResponse)
+async def list_persona_assignments(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PersonaAssignmentListResponse:
+    return PersonaAssignmentListResponse(data=await PersonaService(db).list_adapter_assignments())
+
+
+@assignments_router.put("/{provider}", response_model=PersonaAssignmentOut)
+async def update_persona_assignment(
+    provider: str,
+    body: PersonaAssignmentUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PersonaAssignmentOut:
+    try:
+        return await PersonaService(db).update_adapter_assignment(provider, body, admin)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
 
 @router.post("", response_model=PersonaOut, status_code=status.HTTP_201_CREATED)
 async def create_persona(
     body: PersonaCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> PersonaOut:
-    return PersonaOut.model_validate(await PersonaService(db).create(body, admin))
+    return persona_out_from_model(await PersonaService(db).create(body, admin))
 
 
 @router.get("/{persona_id}", response_model=PersonaOut)
@@ -70,9 +94,7 @@ async def get_persona(
     db: AsyncSession = Depends(get_db),
 ) -> PersonaOut:
     persona = await PersonaService(db).get(persona_id)
-    out = PersonaOut.model_validate(persona)
-    out.assigned_projects = getattr(persona, "_assigned_projects", [])
-    return out
+    return persona_out_from_model(persona)
 
 
 @versions_router.get("/{persona_id}/versions", response_model=PersonaVersionListResponse)
@@ -94,7 +116,7 @@ async def update_persona(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> PersonaOut:
-    return PersonaOut.model_validate(await PersonaService(db).update(persona_id, body, admin))
+    return persona_out_from_model(await PersonaService(db).update(persona_id, body, admin))
 
 
 @router.delete("/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -109,19 +131,9 @@ async def activate_persona(
     persona_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> PersonaOut:
     try:
-        return PersonaOut.model_validate(await PersonaService(db).activate(persona_id))
+        return persona_out_from_model(await PersonaService(db).activate(persona_id))
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-
-
-@router.post("/{persona_id}/assign-all-projects")
-async def assign_persona_to_all_projects(
-    persona_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, int]:
-    count = await PersonaService(db).assign_to_all_projects(persona_id, admin)
-    return {"updated": count}
 
 
 @router.get("/format/template")
@@ -155,4 +167,4 @@ async def import_persona(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             str(exc),
         ) from exc
-    return PersonaOut.model_validate(persona)
+    return persona_out_from_model(persona)

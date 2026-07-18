@@ -13,6 +13,11 @@ import {
 } from "ra-core";
 import { apiJson, ApiError } from "./api";
 import { sendHumanReply } from "@/lib/vfic/humanReplyService";
+import type {
+  BotRunTraceDetail,
+  BotRunTraceSummary,
+  BotRunTraceSummaryList,
+} from "../../types";
 
 // REST dataProvider (replaces ra-supabase-core / PostgREST).
 //
@@ -197,6 +202,30 @@ const restProvider: DataProvider = {
 
 const getDataProviderWithCustomMethods = () => ({
   ...restProvider,
+
+  async getConversationBotRuns(
+    conversationId: string,
+  ): Promise<BotRunTraceSummaryList> {
+    const response = await apiJson<BotRunTraceSummaryList>(
+      `${BASE}/conversations/${encodeURIComponent(conversationId)}/bot-runs?page=1&per_page=10`,
+    );
+    return {
+      data: response.data.map((run) =>
+        normalize("bot_runs", run as unknown as ApiRecord),
+      ) as BotRunTraceSummary[],
+      total: response.total,
+    };
+  },
+
+  async getBotRunTrace(runId: number): Promise<BotRunTraceDetail> {
+    const response = await apiJson<BotRunTraceDetail>(
+      `${BASE}/bot_runs/${encodeURIComponent(String(runId))}`,
+    );
+    return normalize(
+      "bot_runs",
+      response as unknown as ApiRecord,
+    ) as BotRunTraceDetail;
+  },
 
   // Recruiter reply: ownership is established by the Bearer JWT (the backend
   // verifies the caller owns the conversation and mode=HUMAN). The body carries

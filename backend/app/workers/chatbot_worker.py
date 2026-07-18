@@ -360,13 +360,14 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
             started_at = _now()
             try:
                 await run_turn(state, deps)
-            except LLMThrottled:
+            except LLMThrottled as exc:
                 # LLM is throttled — send a static reply without another model call.
                 logger.warning(
                     "llm_throttled: sending degradation reply for %s",
                     job.get("conversation_id", "?"),
                 )
                 try:
+                    from app.graph.decision_trace import DecisionTraceBuilder
                     from app.services.conversation import ConversationService
 
                     svc = ConversationService(db)
@@ -374,6 +375,8 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                     if conv is not None:
                         await db.refresh(conv)
                         lock_owner = state.lock_owner or None
+                        trace_sink = DecisionTraceBuilder()
+                        trace_sink.record_decision("degradation_reason", "llm_throttled")
                         owned = await svc.claim_send(
                             conv,
                             version_at_start=state.version_at_start,
@@ -438,6 +441,13 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                                 and send_result.error_class in AMBIGUOUS_SEND_CLASSES
                             ):
                                 degradation_override = DeliveryStatus.SEND_UNKNOWN
+                        trace_sink.record_decision(
+                            "ownership_verdict",
+                            "claimed" if owned else "suppressed",
+                        )
+                        decision_trace = getattr(exc, "decision_trace", None)
+                        if decision_trace is None:
+                            decision_trace = trace_sink.snapshot_payload()
                         throttle_timings = _preamble_timings(
                             state, started_at, lane="agent", throttle=True
                         )
@@ -458,6 +468,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             stage_timings=throttle_timings,
                             lock_owner=lock_owner,
                             delivery_status=degradation_override,
+                            decision_trace=decision_trace,
                         )
                 except Exception:  # noqa: BLE001
                     logger.error("failed to send degradation reply", exc_info=True)

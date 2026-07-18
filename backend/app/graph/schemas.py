@@ -303,7 +303,7 @@ async def _dispatch_tool(
         elif name == "get_product_features":
             result = await get_product_features(retrieval, args.get("project_slug", ""))
         else:
-            logger.warning("unknown tool dispatched: %s (args=%s)", name, args)
+            logger.warning("unknown tool dispatched: %s", name)
             return "unknown tool"
         logger.debug(
             "tool %s completed in %.1fms (%d chars)",
@@ -312,6 +312,6 @@ async def _dispatch_tool(
             len(result),
         )
         return result
-    except Exception:
-        logger.warning("tool %s failed (args=%s)", name, args, exc_info=True)
+    except Exception as exc:
+        logger.warning("tool %s failed error_type=%s", name, type(exc).__name__)
         return f"Lỗi khi gọi tool '{name}': vui lòng thử lại hoặc dùng cách khác."

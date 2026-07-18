@@ -177,6 +177,8 @@ export type Message = {
 // A single bot execution against a conversation. `outcome` is the takeover
 // race-guard verdict: sent (delivered to Zalo), suppressed (a recruiter took
 // over mid-run — version mismatch), or error. Read-only ops data.
+export type BotRunOutcome = "sent" | "suppressed" | "error";
+
 export type BotRun = {
   id: number;
   conversation_id: string;
@@ -184,8 +186,50 @@ export type BotRun = {
   ended_at: string | null;
   version_at_start: number;
   proposed_reply: string | null;
-  outcome: "sent" | "suppressed" | "error";
+  outcome: BotRunOutcome;
 } & Pick<RaRecord, "id">;
+
+export type DecisionTraceDecisionEvent = {
+  seq: number;
+  kind: "decision";
+  code: string;
+  summary_code: string;
+};
+
+export type DecisionTraceToolEvent = {
+  seq: number;
+  kind: "tool";
+  name: string;
+  selected_by: "model" | "policy" | "prefetch";
+};
+
+export type DecisionTraceEvent =
+  | DecisionTraceDecisionEvent
+  | DecisionTraceToolEvent;
+
+export type DecisionTrace = {
+  version: number;
+  events: DecisionTraceEvent[];
+  truncated: boolean;
+};
+
+export type BotRunTraceSummary = {
+  id: number;
+  conversation_id: string;
+  started_at: string;
+  ended_at: string | null;
+  outcome: BotRunOutcome;
+  trace_available: boolean;
+};
+
+export type BotRunTraceDetail = BotRunTraceSummary & {
+  decision_trace: DecisionTrace | null;
+};
+
+export type BotRunTraceSummaryList = {
+  data: BotRunTraceSummary[];
+  total: number;
+};
 
 // Knowledge document (per-project RAG doc). Mirrors the backend
 // KnowledgeDocumentOut shape served at /api/v1/knowledge/documents. `stage` is the
@@ -234,7 +278,6 @@ export type Project = {
   summary?: string | null;
   index_card?: ProjectIndexCard;
   discovery_revision?: number;
-  default_persona_id?: string | null;
   knowledge_base_id?: string | null;
   knowledge_document_count?: number;
   feature_readiness?: { ready: number; total: number };
@@ -315,10 +358,31 @@ export type BusTimetableList = {
   per_page: number;
 };
 
+export const ADAPTER_PROVIDERS = [
+  "zalo_bot",
+  "zalo_oa",
+  "facebook_messenger",
+] as const;
+
+export type AdapterProvider = (typeof ADAPTER_PROVIDERS)[number];
+
+export const ADAPTER_PROVIDER_LABELS: Record<AdapterProvider, string> = {
+  zalo_bot: "Zalo Chatbot",
+  zalo_oa: "Zalo OA",
+  facebook_messenger: "Messenger",
+};
+
+export type AdapterPersonaAssignment = {
+  provider: AdapterProvider;
+  label: string;
+  persona_id: string | null;
+  effective_persona_id: string | null;
+  is_default: boolean;
+};
+
 // An agent persona (free-form markdown). Several stored; one global persona active.
 export type Persona = {
   id: string;
-  project_id?: string | null;
   knowledge_base_id?: string | null;
   name: string;
   slug: string;
@@ -329,7 +393,7 @@ export type Persona = {
   created_by?: string | null;
   created_at: string;
   updated_at: string;
-  assigned_projects?: { id: string; name: string; slug: string }[];
+  effective_adapter_providers?: AdapterProvider[];
 } & Pick<RaRecord, "id">;
 
 export type PersonaFollowupRule = {

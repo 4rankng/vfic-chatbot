@@ -33,13 +33,18 @@ def enqueue_ingest_version(version_id) -> str:
     from app.core.config import INGEST_JOB_TIMEOUT_SECONDS
     from app.workers.utils import enqueue_job
 
-    job = enqueue_job(
+    receipt_id = f"knowledge-version-{version_id}"
+    job_id = enqueue_job(
         "ingest",
         run_ingest_version_job,
         str(version_id),
         job_timeout=INGEST_JOB_TIMEOUT_SECONDS,
+        return_job_id=True,
+        job_id=receipt_id,
     )
-    return str(job.id)
+    if job_id is None:
+        raise RuntimeError("knowledge version enqueue failed")
+    return job_id
 
 
 def run_ingest_version_job(version_id: str) -> None:

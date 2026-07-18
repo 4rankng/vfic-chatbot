@@ -1,5 +1,4 @@
 import {
-  Bot,
   Boxes,
   CheckCircle2,
   FileText,
@@ -92,7 +91,7 @@ const SelectedProjectSummary = ({
         <EmptyState
           icon={<Boxes className="size-6" />}
           title="Chọn dự án"
-          description="Chọn một dự án để xem readiness, tài liệu và thiết lập agent."
+          description="Chọn một dự án để xem readiness, tài liệu và tóm tắt vận hành."
           className="project-spotlight-empty"
         />
       </aside>
@@ -151,13 +150,6 @@ const SelectedProjectSummary = ({
             Thông tin đủ
           </dt>
           <dd>{readinessText}</dd>
-        </div>
-        <div>
-          <dt>
-            <Bot className="size-3.5" />
-            Agent
-          </dt>
-          <dd>{project.default_persona_id ? "Đã chọn" : "Chưa chọn"}</dd>
         </div>
       </dl>
 

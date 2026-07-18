@@ -280,7 +280,7 @@
 
 .project-accordion-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 16px 0 0;
   border-block: 1px solid var(--border);
 }
@@ -348,7 +348,7 @@
 
 .project-fact-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 2px 0 0;
   border-block: 1px solid var(--border);
 }

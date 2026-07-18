@@ -32,7 +32,7 @@ import {
   UsersRound,
   Zap,
 } from "lucide-react";
-import type { Persona } from "../types";
+import { ADAPTER_PROVIDER_LABELS, type Persona } from "../types";
 import { activatePersona } from "@/lib/vfic/knowledgeService";
 import { toSlug } from "@/lib/toSlug";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
@@ -52,7 +52,8 @@ const FOLLOWUP_LABELS: Record<(typeof FOLLOWUP_KEYS)[number], string> = {
 };
 
 type PersonaDerivedStats = {
-  assignedCount: number;
+  adapterCount: number;
+  adapterLabels: string[];
   contentLength: number;
   followupEnabledCount: number;
   sectionCount: number;
@@ -69,14 +70,40 @@ const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   year: "numeric",
 });
 
+const getEffectiveAdapterLabels = (persona: Persona) =>
+  (persona.effective_adapter_providers ?? []).map(
+    (provider) => ADAPTER_PROVIDER_LABELS[provider],
+  );
+
 const getPersonaDerivedStats = (persona: Persona): PersonaDerivedStats => ({
-  assignedCount: persona.assigned_projects?.length ?? 0,
+  adapterCount: getEffectiveAdapterLabels(persona).length,
+  adapterLabels: getEffectiveAdapterLabels(persona),
   contentLength: getPersonaAuthoredContentLength(persona.body_md),
   followupEnabledCount: FOLLOWUP_KEYS.filter(
     (key) => persona.followup_rules?.[key]?.enabled,
   ).length,
   sectionCount: getCompletedPersonaSectionCount(persona.body_md),
 });
+
+const getScopeLabel = (persona: Persona, stats: PersonaDerivedStats) => {
+  if (stats.adapterCount > 0) {
+    return `${stats.adapterCount} adapter`;
+  }
+  if (persona.is_active) {
+    return "Mặc định";
+  }
+  return "Dự phòng";
+};
+
+const getAdapterScopeSummary = (persona: Persona, stats: PersonaDerivedStats) => {
+  if (stats.adapterCount > 0) {
+    return stats.adapterLabels.join(", ");
+  }
+  if (persona.is_active) {
+    return "Chưa có adapter gán riêng, sẽ kế thừa Agent mặc định này.";
+  }
+  return "Chưa adapter nào dùng Agent này.";
+};
 
 const getReadinessPercent = (sectionCount: number) =>
   Math.round(
@@ -206,8 +233,7 @@ const PersonaBubble = memo(
   ({ persona, isSelected, onSelect }: PersonaRowProps) => {
     const stats = getPersonaDerivedStats(persona);
     const shouldShowSlug = persona.slug !== toSlug(persona.name);
-    const scopeLabel =
-      stats.assignedCount > 0 ? `${stats.assignedCount} dự án` : "Global";
+    const scopeLabel = getScopeLabel(persona, stats);
 
     return (
       <article
@@ -249,8 +275,8 @@ const PersonaBubble = memo(
           {persona.is_active ? (
             <PersonaStatusIcon
               icon={<Star className="size-3.5" />}
-              label="Default"
-              description="Agent mặc định dùng cho dự án chưa gắn hồ sơ riêng."
+              label="Mặc định"
+              description="Agent mặc định áp dụng cho adapter chưa gán Agent riêng."
             />
           ) : null}
         </div>
@@ -297,12 +323,22 @@ const PersonaStudioOverview = ({
     return null;
   }
 
-  const projects = persona.assigned_projects ?? [];
   const readinessPercent = getReadinessPercent(stats.sectionCount);
   const updatedAt = formatDate(persona.updated_at);
   const createdAt = formatDate(persona.created_at);
   const sections = getPersonaSectionSummaries(persona.body_md);
   const ruleSections = sections.filter((_, index) => [2, 3, 5].includes(index));
+  const adapterScopeSummary = getAdapterScopeSummary(persona, stats);
+  const adapterModeLabel = persona.is_active
+    ? "Mặc định toàn hệ thống"
+    : stats.adapterCount > 0
+      ? "Đang dùng theo adapter"
+      : "Hồ sơ dự phòng";
+  const adapterActivitySummary = persona.is_active
+    ? "Kế thừa cho adapter chưa gán Agent riêng"
+    : stats.adapterCount > 0
+      ? `Đang hiệu lực trên ${stats.adapterCount} adapter`
+      : "Có thể gán cho từng adapter khi cần";
 
   return (
     <section className="persona-studio-sheet" aria-label="Hồ sơ Agent">
@@ -327,18 +363,18 @@ const PersonaStudioOverview = ({
                   }
                 >
                   <CheckCircle2 className="size-3" />
-                  {persona.is_active ? "Active" : "Đang xem"}
+                  {persona.is_active ? "Đang bật" : "Đang xem"}
                 </Badge>
                 {persona.is_active ? (
                   <Badge
                     variant="outline"
                     className="persona-studio-badge is-brand"
                   >
-                    Default
+                    Mặc định
                   </Badge>
                 ) : null}
                 <Badge variant="outline" className="persona-studio-badge">
-                  {projects.length > 0 ? `${projects.length} dự án` : "Global"}
+                  {getScopeLabel(persona, stats)}
                 </Badge>
               </div>
             </div>
@@ -355,7 +391,7 @@ const PersonaStudioOverview = ({
           <div className="persona-studio-section-title">
             <div>
               <h2>Mức sẵn sàng</h2>
-              <p>Agent có đủ prompt, follow-up và phạm vi áp dụng để vận hành.</p>
+              <p>Agent có đủ prompt, follow-up và cấu hình adapter để vận hành.</p>
             </div>
             <span>Cập nhật {updatedAt}</span>
           </div>
@@ -401,7 +437,7 @@ const PersonaStudioOverview = ({
               <span>
                 <strong>Phạm vi</strong>
                 <small>
-                  {projects.length > 0 ? `${projects.length} dự án` : "Global"}
+                  {adapterScopeSummary}
                 </small>
               </span>
             </div>
@@ -529,30 +565,24 @@ const PersonaStudioOverview = ({
         <section className="persona-studio-section">
           <div className="persona-studio-section-title">
             <div>
-              <h2>Phạm vi & nhật ký</h2>
-              <p>Agent đang áp dụng ở đâu và thay đổi gần nhất là gì.</p>
+              <h2>Adapter & nhật ký</h2>
+              <p>Agent đang hiệu lực trên adapter nào và thay đổi gần nhất là gì.</p>
             </div>
           </div>
           <div className="persona-scope-activity-grid">
             <div className="persona-scope-list">
               <div className="persona-scope-row">
                 <span>Loại agent</span>
-                <strong>
-                  {persona.is_active ? "System Default" : "Hồ sơ dự phòng"}
-                </strong>
+                <strong>{adapterModeLabel}</strong>
                 <Badge variant="outline" className="persona-studio-badge is-brand">
-                  {persona.is_active ? "Default" : "Draft"}
+                  {persona.is_active ? "Mặc định" : "Tuỳ chọn"}
                 </Badge>
               </div>
               <div className="persona-scope-row">
-                <span>Dự án riêng</span>
-                <strong>
-                  {projects.length > 0
-                    ? projects.slice(0, 2).map((project) => project.name).join(", ")
-                    : "Chưa gắn dự án cụ thể"}
-                </strong>
+                <span>Adapter hiệu lực</span>
+                <strong>{adapterScopeSummary}</strong>
                 <Button variant="outline" type="button" onClick={() => onEdit(persona)}>
-                  Gắn dự án
+                  Quản lý adapter
                 </Button>
               </div>
               <div className="persona-scope-row">
@@ -587,12 +617,8 @@ const PersonaStudioOverview = ({
                   <CheckCircle2 className="size-3.5" />
                 </span>
                 <p>
-                  <strong>{persona.is_active ? "Đang làm mặc định" : "Hồ sơ dự phòng"}</strong>
-                  <small>
-                    {persona.is_active
-                      ? "Áp dụng cho dự án chưa gắn agent"
-                      : "Có thể đặt làm mặc định khi cần"}
-                  </small>
+                  <strong>{persona.is_active ? "Đang làm mặc định" : "Trạng thái adapter"}</strong>
+                  <small>{adapterActivitySummary}</small>
                 </p>
               </div>
             </div>
@@ -649,8 +675,8 @@ const PersonaEmptyWorkspace = ({ onCreate }: { onCreate: () => void }) => (
       <div>
         <span className="persona-empty-step-index">2</span>
         <div>
-          <strong>Gán dự án</strong>
-          <p>Dùng chung cho toàn bộ chatbot hoặc gán riêng theo nhà máy.</p>
+          <strong>Thiết lập adapter</strong>
+          <p>Chọn adapter nào dùng Agent này hoặc để adapter kế thừa mặc định.</p>
         </div>
       </div>
       <div>
@@ -682,7 +708,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
         persona.name,
         persona.slug,
         persona.notes ?? "",
-        ...(persona.assigned_projects?.map((project) => project.name) ?? []),
+        ...getEffectiveAdapterLabels(persona),
       ]
         .join(" ")
         .toLowerCase();
@@ -729,7 +755,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Tìm Agent, slug hoặc dự án"
+              placeholder="Tìm Agent, slug hoặc adapter"
               aria-label="Tìm Agent"
             />
           </label>

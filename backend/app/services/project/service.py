@@ -30,8 +30,7 @@ from app.models.knowledge import (
     KnowledgeCategory,
     KnowledgeCategoryRevision,
 )
-from app.models.persona import Persona
-from app.models.user import Role, User
+from app.models.user import User
 from app.schemas.projects import (
     BusTimetableResponse,
     FeatureListResponse,
@@ -48,7 +47,7 @@ from app.schemas.projects import (
 )
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, ForbiddenError, NotFoundError
+from app.services.errors import ConflictError, NotFoundError
 from app.services.knowledge.repository import JobFeatureValueRepo
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.project.faq import ProjectFaqService
@@ -229,14 +228,6 @@ class ProjectService:
             proj.index_card = body.discovery_card
             proj.summary = body.discovery_card.get("summary")
             proj.discovery_revision += 1
-        if "default_persona_id" in body.model_fields_set:
-            if actor.role != Role.admin:
-                raise ForbiddenError("admin only")
-            if body.default_persona_id is not None:
-                persona = await self.db.get(Persona, body.default_persona_id)
-                if persona is None:
-                    raise NotFoundError("Agent not found")
-            proj.default_persona_id = body.default_persona_id
         await record_audit(
             self.db,
             action="update_project",

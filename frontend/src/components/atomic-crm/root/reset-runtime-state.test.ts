@@ -57,7 +57,9 @@ describe("runtime generation reset", () => {
     expect(second.queryClient.getQueryData(["generation"])).toBeUndefined();
     expect(useMessageStore.getState().conversations.size).toBe(0);
     expect(useMessageStore.getState().pendingOptimistic.size).toBe(0);
-    expect(window.localStorage.getItem("vfic:chatops:active-filter:v1")).toBeNull();
+    expect(
+      window.localStorage.getItem("vfic:chatops:active-filter:v1"),
+    ).toBeNull();
     expect(getRuntimeEpoch()).toBe(previousEpoch + 1);
     expect(realtime.closeRealtimeSocket).toHaveBeenCalledOnce();
   });
@@ -85,5 +87,18 @@ describe("runtime generation reset", () => {
     expect(bundle.queryClient.getQueryData(["active"])).toBeUndefined();
     expect(useMessageStore.getState().conversations.size).toBe(0);
     expect(realtime.closeRealtimeSocket).toHaveBeenCalledOnce();
+  });
+
+  it("removes sensitive decision traces during an explicit runtime reset", async () => {
+    const bundle = await ensureRuntimeGeneration(1);
+    bundle.queryClient.setQueryData(["decision-trace", "admin-1", "run", 71], {
+      decision_trace: { version: 1, events: [], truncated: false },
+    });
+
+    await resetActiveRuntimeState();
+
+    expect(
+      bundle.queryClient.getQueryData(["decision-trace", "admin-1", "run", 71]),
+    ).toBeUndefined();
   });
 });

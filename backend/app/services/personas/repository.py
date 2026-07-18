@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.persona import Persona, PersonaVersion
-from app.schemas.personas import ProjectMini
+from app.models.persona import AdapterPersonaAssignment, Persona, PersonaVersion
+from app.schemas.personas import AdapterProvider, SUPPORTED_ADAPTER_PROVIDERS
 from app.services.errors import NotFoundError
 
 
@@ -32,31 +33,85 @@ class PersonaRepository:
             raise NotFoundError("Agent not found")
         return p
 
-    async def assigned_projects_for(self, pid: uuid.UUID) -> list[ProjectMini]:
-        """Projects whose ``default_persona_id`` equals ``pid``."""
-        result = await self.db.execute(
-            text("SELECT id, name, slug FROM projects WHERE default_persona_id = :pid"),
-            {"pid": pid},
-        )
-        return [ProjectMini(id=r.id, name=r.name, slug=r.slug) for r in result.all()]
-
-    async def assigned_projects_map(self) -> dict[str, list[ProjectMini]]:
-        """Mapping of ``str(persona_id) -> [ProjectMini, ...]`` for all assigned personas."""
-        result = await self.db.execute(
-            text(
-                "SELECT id, name, slug, default_persona_id FROM projects WHERE default_persona_id IS NOT NULL"
-            )
-        )
-        project_map: dict[str, list[ProjectMini]] = {}
-        for r in result.all():
-            project_map.setdefault(str(r.default_persona_id), []).append(
-                ProjectMini(id=r.id, name=r.name, slug=r.slug)
-            )
-        return project_map
-
     async def find_by_slug(self, slug: str) -> Persona | None:
         """First persona matching ``slug``, or ``None``."""
         return (await self.db.scalars(select(Persona).where(Persona.slug == slug).limit(1))).first()
+
+    async def active_persona(self) -> Persona | None:
+        return (
+            await self.db.scalars(
+                select(Persona).where(Persona.is_active.is_(True)).order_by(Persona.updated_at.desc())
+            )
+        ).first()
+
+    async def assignment_for_provider(
+        self, provider: AdapterProvider
+    ) -> AdapterPersonaAssignment | None:
+        return await self.db.get(AdapterPersonaAssignment, provider)
+
+    async def assignment_rows(self) -> list[AdapterPersonaAssignment]:
+        return list(
+            (
+                await self.db.scalars(
+                    select(AdapterPersonaAssignment).order_by(AdapterPersonaAssignment.provider)
+                )
+            ).all()
+        )
+
+    async def set_assignment(self, provider: AdapterProvider, persona_id: uuid.UUID) -> None:
+        """Atomically create or replace one provider assignment."""
+        statement = insert(AdapterPersonaAssignment).values(
+            provider=provider,
+            persona_id=persona_id,
+        )
+        await self.db.execute(
+            statement.on_conflict_do_update(
+                index_elements=[AdapterPersonaAssignment.provider],
+                set_={
+                    "persona_id": statement.excluded.persona_id,
+                    "updated_at": func.now(),
+                },
+            )
+        )
+
+    async def clear_assignment(self, provider: AdapterProvider) -> None:
+        """Atomically remove a provider override so it inherits the default."""
+        await self.db.execute(
+            delete(AdapterPersonaAssignment).where(
+                AdapterPersonaAssignment.provider == provider
+            )
+        )
+
+    async def effective_provider_map(self) -> dict[str, list[AdapterProvider]]:
+        mapping: dict[str, list[AdapterProvider]] = {}
+        overrides = await self.assignment_rows()
+        overridden = {row.provider for row in overrides}
+        for row in overrides:
+            mapping.setdefault(str(row.persona_id), []).append(row.provider)  # type: ignore[arg-type]
+
+        active = await self.active_persona()
+        if active is not None:
+            providers = mapping.setdefault(str(active.id), [])
+            for provider in SUPPORTED_ADAPTER_PROVIDERS:
+                if provider not in overridden and provider not in providers:
+                    providers.append(provider)
+
+        for persona_id, providers in mapping.items():
+            mapping[persona_id] = sorted(
+                providers,
+                key=lambda provider: SUPPORTED_ADAPTER_PROVIDERS.index(provider),
+            )
+        return mapping
+
+    async def effective_persona_for_provider(self, provider: AdapterProvider) -> Persona | None:
+        assignment = await self.assignment_for_provider(provider)
+        if assignment is not None:
+            return await self.get_by_id(assignment.persona_id)
+        return await self.active_persona()
+
+    async def active_persona_body(self, provider: AdapterProvider) -> str | None:
+        persona = await self.effective_persona_for_provider(provider)
+        return None if persona is None else persona.body_md
 
     async def next_version_no(self, persona_id: uuid.UUID) -> int:
         current = await self.db.scalar(
@@ -87,12 +142,11 @@ class PersonaRepository:
             ).all()
         )
 
-    async def deactivate_other_globals(self, persona_id: uuid.UUID) -> None:
-        """Deactivate all other active global personas (project_id IS NULL)."""
+    async def deactivate_other_active(self, persona_id: uuid.UUID) -> None:
+        """Deactivate all other active personas before activating ``persona_id``."""
         await self.db.execute(
             update(Persona)
             .where(
-                Persona.project_id.is_(None),
                 Persona.is_active.is_(True),
                 Persona.id != persona_id,
             )

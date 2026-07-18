@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { ListBase, useListContext, useRedirect, useRefresh } from "ra-core";
-import { Bot, Boxes, CheckCircle2, FileText, Pencil, Plus } from "lucide-react";
+import { Boxes, CheckCircle2, FileText, Pencil, Plus } from "lucide-react";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { DeleteButton } from "@/components/admin";
 import {
@@ -203,15 +203,6 @@ export const ProjectAccordionList = ({
                       Thông tin đủ
                     </dt>
                     <dd>{readinessText}</dd>
-                  </div>
-                  <div>
-                    <dt>
-                      <Bot className="size-3.5" aria-hidden="true" />
-                      Agent
-                    </dt>
-                    <dd>
-                      {project.default_persona_id ? "Đã chọn" : "Chưa chọn"}
-                    </dd>
                   </div>
                 </dl>
 

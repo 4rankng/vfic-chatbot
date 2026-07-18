@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.knowledge import KnowledgeBaseMode
 
+MAX_DIRECT_CONTEXT_CHARS = 300_000
+
 
 class KnowledgeBaseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -30,7 +32,7 @@ class DirectContextFileUpsert(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     filename: str = Field(min_length=1, max_length=255)
-    text: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=MAX_DIRECT_CONTEXT_CHARS)
 
     @field_validator("filename")
     @classmethod

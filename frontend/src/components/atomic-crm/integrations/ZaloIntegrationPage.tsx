@@ -240,7 +240,7 @@ const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
   {
     itemId: "settings-agents",
     label: "Agents",
-    description: "Giọng trả lời theo dự án",
+    description: "Giọng trả lời theo adapter",
     Icon: Workflow,
     mode: "embedded",
   },
@@ -280,7 +280,7 @@ const SETTINGS_VIEW_COPY: Record<
   "settings-agents": {
     kicker: "Không gian cài đặt",
     title: "Agents",
-    description: "Quản lý giọng trả lời, prompt và phân công Agent theo dự án.",
+    description: "Quản lý giọng trả lời, prompt và phân công Agent theo adapter.",
   },
   "settings-users": {
     kicker: "Không gian cài đặt",

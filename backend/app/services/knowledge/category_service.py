@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
+from time import monotonic
 from typing import Protocol
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version, bump_kb_caches
@@ -42,6 +43,18 @@ from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 
 class CategoryEmbedder(Protocol):
     async def batch(self, texts: list[str]) -> list[list[float]]: ...
+
+
+CATEGORY_PROCESSING_LEASE_SECONDS = 3_900
+MAX_CATEGORY_PROCESSING_ATTEMPTS = 3
+CATEGORY_ACTIVATION_FAILURE = "category_activation_failed"
+CATEGORY_RETRY_EXHAUSTED = "category_retry_exhausted"
+
+
+class CategoryActivationError(RuntimeError):
+    def __init__(self, code: str = CATEGORY_ACTIVATION_FAILURE) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 class KnowledgeCategoryService:
@@ -138,44 +151,95 @@ class KnowledgeCategoryService:
             document = parse_category_yaml(category_key, source_yaml)
             await self._validate_active_job_references(project_id, document)
         except ValueError as exc:
-            raise ConflictError(str(exc)) from exc
+            raise ConflictError("Category YAML failed validation") from exc
         category = await self._locked_category(project_id, category_key)
-        latest = await self.db.scalar(
-            select(func.max(KnowledgeCategoryRevision.revision_no)).where(
-                KnowledgeCategoryRevision.category_id == category.id
+        checksum = category_checksum(document)
+        existing = await self.db.scalar(
+            select(KnowledgeCategoryRevision)
+            .where(
+                KnowledgeCategoryRevision.category_id == category.id,
+                KnowledgeCategoryRevision.source_filename == filename,
+                KnowledgeCategoryRevision.source_yaml == source_yaml,
+                KnowledgeCategoryRevision.status.in_(
+                    (
+                        KnowledgeCategoryRevisionStatus.STAGED,
+                        KnowledgeCategoryRevisionStatus.PROCESSING,
+                        KnowledgeCategoryRevisionStatus.ACTIVE,
+                        KnowledgeCategoryRevisionStatus.FAILED,
+                    )
+                ),
             )
+            .order_by(KnowledgeCategoryRevision.revision_no.desc())
+            .limit(1)
         )
-        revision = KnowledgeCategoryRevision(
-            category_id=category.id,
-            revision_no=int(latest or 0) + 1,
-            status=KnowledgeCategoryRevisionStatus.STAGED,
-            source_filename=filename,
-            source_yaml=source_yaml,
-            normalized_payload=document.model_dump(mode="json"),
-            content_sha256=category_checksum(document),
-            created_by=actor.id,
-        )
-        self.db.add(revision)
-        await self.db.flush()
-        await record_audit(
-            self.db,
-            action="stage_project_knowledge_category",
-            actor_id=actor.id,
-            target_type="knowledge_category_revision",
-            target_id=str(revision.id),
-            payload={"project_id": str(project_id), "category": category_key.value},
-        )
-        await self.db.commit()
-        await self.db.refresh(revision)
+        if existing is not None:
+            revision = existing
+            await self.db.commit()
+        else:
+            latest = await self.db.scalar(
+                select(func.max(KnowledgeCategoryRevision.revision_no)).where(
+                    KnowledgeCategoryRevision.category_id == category.id
+                )
+            )
+            revision = KnowledgeCategoryRevision(
+                category_id=category.id,
+                revision_no=int(latest or 0) + 1,
+                status=KnowledgeCategoryRevisionStatus.STAGED,
+                source_filename=filename,
+                source_yaml=source_yaml,
+                normalized_payload=document.model_dump(mode="json"),
+                content_sha256=checksum,
+                created_by=actor.id,
+            )
+            self.db.add(revision)
+            await self.db.flush()
+            await record_audit(
+                self.db,
+                action="stage_project_knowledge_category",
+                actor_id=actor.id,
+                target_type="knowledge_category_revision",
+                target_id=str(revision.id),
+                payload={"project_id": str(project_id), "category": category_key.value},
+            )
+            await self.db.commit()
+            await self.db.refresh(revision)
 
         from app.workers.category_worker import enqueue_category_revision
+        from app.workers.utils import EnqueueStatusUnknown
+
+        if revision.status is KnowledgeCategoryRevisionStatus.ACTIVE:
+            return revision, f"category-revision-{revision.id}"
+        if (
+            revision.status is KnowledgeCategoryRevisionStatus.FAILED
+            and revision.attempt_count >= MAX_CATEGORY_PROCESSING_ATTEMPTS
+        ):
+            revision.failure_code = CATEGORY_RETRY_EXHAUSTED
+            revision.error_message = "Category processing retry limit reached"
+            await self.db.commit()
+            raise ConflictError(
+                "Category processing retry limit reached; submit corrected content"
+            )
+        if (
+            revision.status is KnowledgeCategoryRevisionStatus.PROCESSING
+            and revision.lease_expires_at is not None
+            and revision.lease_expires_at > datetime.now(UTC)
+        ):
+            return revision, f"category-revision-{revision.id}"
 
         try:
             job_id = enqueue_category_revision(revision.id)
+        except EnqueueStatusUnknown as exc:
+            raise UpstreamError(
+                "Queue receipt is temporarily unconfirmed; retrying the same content is safe"
+            ) from exc
         except Exception as exc:
-            revision.status = KnowledgeCategoryRevisionStatus.FAILED
-            revision.error_message = "The processing queue is unavailable"
-            await self.db.commit()
+            if revision.status in {
+                KnowledgeCategoryRevisionStatus.STAGED,
+                KnowledgeCategoryRevisionStatus.FAILED,
+            }:
+                revision.status = KnowledgeCategoryRevisionStatus.FAILED
+                revision.error_message = "The processing queue is unavailable"
+                await self.db.commit()
             raise UpstreamError(
                 "Could not queue the category update; the active content is unchanged"
             ) from exc
@@ -215,55 +279,95 @@ class KnowledgeCategoryService:
         revision_id: uuid.UUID,
         embedder: CategoryEmbedder,
         *,
-        start_category_authority: bool = True,
+        start_category_authority: bool = False,
+        claim_token: uuid.UUID | None = None,
     ) -> None:
+        started_at = monotonic()
+        claim_token = claim_token or uuid.uuid4()
         revision = await self.db.get(KnowledgeCategoryRevision, revision_id)
         if revision is None:
             raise NotFoundError("Category revision not found")
         if revision.status is KnowledgeCategoryRevisionStatus.ACTIVE:
+            await self._repair_caches()
             return
         category = await self.db.get(KnowledgeCategory, revision.category_id)
         if category is None:
             raise NotFoundError("Category not found")
 
+        now = datetime.now(UTC)
         claim = await self.db.execute(
             update(KnowledgeCategoryRevision)
             .where(
                 KnowledgeCategoryRevision.id == revision_id,
-                KnowledgeCategoryRevision.status.in_(
-                    [
-                        KnowledgeCategoryRevisionStatus.STAGED,
-                        KnowledgeCategoryRevisionStatus.FAILED,
-                    ]
+                KnowledgeCategoryRevision.attempt_count < MAX_CATEGORY_PROCESSING_ATTEMPTS,
+                or_(
+                    KnowledgeCategoryRevision.status.in_(
+                        [
+                            KnowledgeCategoryRevisionStatus.STAGED,
+                            KnowledgeCategoryRevisionStatus.FAILED,
+                        ]
+                    ),
+                    and_(
+                        KnowledgeCategoryRevision.status
+                        == KnowledgeCategoryRevisionStatus.PROCESSING,
+                        KnowledgeCategoryRevision.lease_expires_at < now,
+                    ),
                 ),
             )
             .values(
                 status=KnowledgeCategoryRevisionStatus.PROCESSING,
                 error_message=None,
+                failure_code=None,
+                processing_token=claim_token,
+                processing_started_at=now,
+                lease_expires_at=now + timedelta(seconds=CATEGORY_PROCESSING_LEASE_SECONDS),
+                attempt_count=KnowledgeCategoryRevision.attempt_count + 1,
             )
         )
         await self.db.commit()
         if claim.rowcount != 1:
+            await self.db.refresh(revision)
+            if revision.attempt_count >= MAX_CATEGORY_PROCESSING_ATTEMPTS and revision.status in {
+                KnowledgeCategoryRevisionStatus.PROCESSING,
+                KnowledgeCategoryRevisionStatus.FAILED,
+            }:
+                revision.status = KnowledgeCategoryRevisionStatus.FAILED
+                revision.failure_code = CATEGORY_RETRY_EXHAUSTED
+                revision.error_message = "Category processing retry limit reached"
+                revision.lease_expires_at = None
+                revision.processing_token = None
+                await self.db.commit()
             return
+        await self.db.refresh(revision)
 
         try:
             document = validate_category_payload(
                 category.category_key,
                 revision.normalized_payload,
             )
-            await self._validate_active_job_references(category.project_id, document)
             units = _render_units(document)
+            embedding_started_at = monotonic()
             vectors = await embedder.batch([unit["content"] for unit in units])
+            embedding_duration_ms = round((monotonic() - embedding_started_at) * 1000)
             if len(vectors) != len(units):
                 raise RuntimeError("embedding provider returned an incomplete category batch")
 
+            project = await self._locked_project(category.project_id)
             category = await self._locked_category(
                 category.project_id,
                 KnowledgeCategoryKey(category.category_key),
             )
+            await self._validate_active_job_references(category.project_id, document)
             revision = await self.db.get(KnowledgeCategoryRevision, revision_id)
             if revision is None:
                 raise NotFoundError("Category revision not found")
+            if (
+                revision.processing_token != claim_token
+                or revision.lease_expires_at is None
+                or revision.lease_expires_at <= datetime.now(UTC)
+            ):
+                await self.db.rollback()
+                return
             latest_revision_no = await self.db.scalar(
                 select(func.max(KnowledgeCategoryRevision.revision_no)).where(
                     KnowledgeCategoryRevision.category_id == category.id
@@ -271,6 +375,9 @@ class KnowledgeCategoryService:
             )
             if revision.revision_no < int(latest_revision_no or revision.revision_no):
                 revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
+                revision.processing_started_at = None
+                revision.lease_expires_at = None
+                revision.processing_token = None
                 await self.db.commit()
                 return
             old_revision = (
@@ -295,35 +402,74 @@ class KnowledgeCategoryService:
             )
             self.db.add(knowledge_document)
             await self.db.flush()
-            await KnowledgeChunkRepo(self.db).insert_category_revision(
+            inserted_count = await KnowledgeChunkRepo(self.db).insert_category_revision(
                 document_id=knowledge_document.id,
                 project_id=category.project_id,
                 category_revision_id=revision.id,
                 category_key=category.category_key,
                 units_with_vectors=list(zip(units, vectors, strict=True)),
             )
-            await self._replace_projection(category.project_id, revision, document)
-            project = await self.db.get(Project, category.project_id)
-            if project is not None and start_category_authority:
-                project.category_authority_started = True
+            if inserted_count != len(units):
+                raise RuntimeError("category chunk insertion count mismatch")
+            if project.category_authority_started:
+                await self._replace_projection(category.project_id, revision, document)
             if old_revision is not None:
                 old_revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
             category.active_revision_id = revision.id
             category.updated_at = func.now()
             revision.status = KnowledgeCategoryRevisionStatus.ACTIVE
             revision.activated_at = datetime.now(UTC)
+            revision.processing_started_at = None
+            revision.lease_expires_at = None
+            revision.processing_token = None
+            revision.failure_code = None
+            revision.error_message = None
+            revision.quality_result = {
+                "record_count": len(units),
+                "embedding_count": len(vectors),
+                "inserted_chunk_count": inserted_count,
+                "projection": (
+                    "complete" if project.category_authority_started else "deferred_until_cutover"
+                ),
+                "reference_check": "passed",
+                "normalization_changed": (
+                    canonical_category_json(document) != revision.source_yaml
+                ),
+                "warning_codes": [],
+                "error_codes": [],
+                "checksum": revision.content_sha256,
+                "embedding_duration_ms": embedding_duration_ms,
+                "duration_ms": round((monotonic() - started_at) * 1000),
+            }
+            await record_audit(
+                self.db,
+                action="activate_project_knowledge_category",
+                target_type="knowledge_category_revision",
+                target_id=str(revision.id),
+                payload={
+                    "project_id": str(category.project_id),
+                    "category": category.category_key,
+                    "record_count": len(units),
+                    "embedding_count": len(vectors),
+                    "inserted_chunk_count": inserted_count,
+                    "duration_ms": revision.quality_result["duration_ms"],
+                },
+            )
             await self.db.commit()
-        except Exception as exc:
+        except Exception:
             await self.db.rollback()
             failed = await self.db.get(KnowledgeCategoryRevision, revision_id)
-            if failed is not None:
+            if failed is not None and failed.processing_token == claim_token:
                 failed.status = KnowledgeCategoryRevisionStatus.FAILED
-                failed.error_message = f"{type(exc).__name__}: {exc}"[:1000]
+                failed.failure_code = CATEGORY_ACTIVATION_FAILURE
+                failed.error_message = "Category activation failed"
+                failed.processing_started_at = None
+                failed.lease_expires_at = None
+                failed.processing_token = None
                 await self.db.commit()
-            raise
+            raise CategoryActivationError() from None
 
-        await bump_kb_caches()
-        await bump_cache_version("jobs")
+        await self._repair_caches()
 
     async def clear(
         self,
@@ -333,6 +479,7 @@ class KnowledgeCategoryService:
         actor: User,
     ) -> KnowledgeCategoryRevision:
         await self._require_rag_project(project_id)
+        project = await self._locked_project(project_id)
         category = await self._locked_category(project_id, category_key)
         latest = await self.db.scalar(
             select(func.max(KnowledgeCategoryRevision.revision_no)).where(
@@ -364,10 +511,8 @@ class KnowledgeCategoryService:
         )
         if old_revision is not None:
             old_revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
-        await self._clear_projection(project_id, category_key)
-        project = await self.db.get(Project, project_id)
-        if project is not None:
-            project.category_authority_started = True
+        if project.category_authority_started:
+            await self._clear_projection(project_id, category_key)
         category.active_revision_id = None
         category.updated_at = func.now()
         await self.db.flush()
@@ -381,9 +526,145 @@ class KnowledgeCategoryService:
         )
         await self.db.commit()
         await self.db.refresh(cleared)
-        await bump_kb_caches()
-        await bump_cache_version("jobs")
+        await self._repair_caches()
         return cleared
+
+    async def cutover_category_authority(
+        self,
+        *,
+        project_id: uuid.UUID,
+        actor: User,
+    ) -> Project:
+        await self._require_rag_project(project_id)
+        project = await self._locked_project(project_id)
+        if project.category_authority_started and project.category_cutover_snapshot:
+            await self.db.commit()
+            await self._repair_caches()
+            return project
+        categories = list(
+            (
+                await self.db.scalars(
+                    select(KnowledgeCategory)
+                    .where(KnowledgeCategory.project_id == project_id)
+                    .order_by(KnowledgeCategory.category_key)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        missing: list[str] = []
+        for category in categories:
+            if category.active_revision_id is not None:
+                continue
+            latest = await self.db.scalar(
+                select(KnowledgeCategoryRevision)
+                .where(KnowledgeCategoryRevision.category_id == category.id)
+                .order_by(KnowledgeCategoryRevision.revision_no.desc())
+                .limit(1)
+            )
+            if latest is None or latest.status is not KnowledgeCategoryRevisionStatus.CLEARED:
+                missing.append(category.category_key)
+        expected = {definition.key.value for definition in CATEGORY_DEFINITIONS}
+        missing.extend(sorted(expected - {category.category_key for category in categories}))
+        if missing:
+            raise ConflictError(
+                "Category cutover is not ready; prepare or explicitly clear: "
+                + ", ".join(sorted(set(missing)))
+            )
+        project.category_cutover_snapshot = {
+            "category_authority_started": project.category_authority_started,
+            "active_kb_version_id": (
+                str(project.active_kb_version_id) if project.active_kb_version_id else None
+            ),
+            "category_pointers": {
+                category.category_key: (
+                    str(category.active_revision_id) if category.active_revision_id else None
+                )
+                for category in categories
+            },
+            "project_projection": {
+                "summary": project.summary,
+                "index_card": project.index_card,
+                "is_active": project.is_active,
+                "discovery_revision": project.discovery_revision,
+            },
+        }
+        await self._rebuild_category_projections(project_id, categories)
+        project.category_authority_started = True
+        project.category_cutover_at = datetime.now(UTC)
+        await record_audit(
+            self.db,
+            action="cutover_project_category_authority",
+            actor_id=actor.id,
+            target_type="project",
+            target_id=str(project.id),
+            payload={"ready_category_count": len(categories)},
+        )
+        await self.db.commit()
+        await self._repair_caches()
+        return project
+
+    async def rollback_category_authority(
+        self,
+        *,
+        project_id: uuid.UUID,
+        actor: User,
+    ) -> Project:
+        await self._require_rag_project(project_id)
+        project = await self._locked_project(project_id)
+        snapshot = project.category_cutover_snapshot
+        if not snapshot:
+            raise ConflictError("Project has no category cutover snapshot to restore")
+        categories = list(
+            (
+                await self.db.scalars(
+                    select(KnowledgeCategory)
+                    .where(KnowledgeCategory.project_id == project_id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        snapshot_pointers = snapshot.get("category_pointers") or {}
+        for category in categories:
+            target_value = snapshot_pointers.get(category.category_key)
+            target_id = uuid.UUID(target_value) if target_value else None
+            if category.active_revision_id == target_id:
+                continue
+            if category.active_revision_id is not None:
+                current_revision = await self.db.get(
+                    KnowledgeCategoryRevision,
+                    category.active_revision_id,
+                )
+                if current_revision is not None:
+                    current_revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
+            if target_id is not None:
+                target_revision = await self.db.get(KnowledgeCategoryRevision, target_id)
+                if target_revision is None or target_revision.category_id != category.id:
+                    raise ConflictError("Category rollback snapshot is no longer restorable")
+                target_revision.status = KnowledgeCategoryRevisionStatus.ACTIVE
+            category.active_revision_id = target_id
+            category.updated_at = func.now()
+        project.category_authority_started = bool(snapshot["category_authority_started"])
+        active_version = snapshot.get("active_kb_version_id")
+        project.active_kb_version_id = uuid.UUID(active_version) if active_version else None
+        await self._delete_category_projections(project_id)
+        project_projection = snapshot.get("project_projection") or {}
+        project.summary = project_projection.get("summary")
+        project.index_card = project_projection.get("index_card") or {}
+        project.is_active = bool(project_projection.get("is_active"))
+        project.discovery_revision = int(project_projection.get("discovery_revision") or 0)
+        project.category_cutover_at = None
+        project.category_cutover_snapshot = None
+        await record_audit(
+            self.db,
+            action="rollback_project_category_authority",
+            actor_id=actor.id,
+            target_type="project",
+            target_id=str(project.id),
+            payload={"restored_legacy_authority": not project.category_authority_started},
+        )
+        await self.db.commit()
+        await self._repair_caches()
+        return project
 
     async def _require_rag_project(self, project_id: uuid.UUID) -> Project:
         project = await self.db.get(Project, project_id)
@@ -414,6 +695,19 @@ class KnowledgeCategoryService:
         if category is None:
             raise NotFoundError("Knowledge category not found")
         return category
+
+    async def _locked_project(self, project_id: uuid.UUID) -> Project:
+        project = await self.db.scalar(
+            select(Project).where(Project.id == project_id).with_for_update()
+        )
+        if project is None:
+            raise NotFoundError("Project not found")
+        return project
+
+    @staticmethod
+    async def _repair_caches() -> None:
+        await bump_kb_caches()
+        await bump_cache_version("jobs")
 
     async def _validate_active_job_references(
         self,
@@ -561,7 +855,12 @@ class KnowledgeCategoryService:
         revision: KnowledgeCategoryRevision,
         document: CategoryDocument,
     ) -> None:
-        await self.db.execute(delete(BusRoute).where(BusRoute.project_id == project_id))
+        await self.db.execute(
+            delete(BusRoute).where(
+                BusRoute.project_id == project_id,
+                BusRoute.source_category_revision_id.is_not(None),
+            )
+        )
         company = await self.db.scalar(
             select(Company).where(Company.project_id == project_id).order_by(Company.id)
         )
@@ -632,7 +931,12 @@ class KnowledgeCategoryService:
             self.db.add(company)
             await self.db.flush()
             companies = [company]
-        await self.db.execute(delete(Job).where(Job.company_id.in_([row.id for row in companies])))
+        await self.db.execute(
+            delete(Job).where(
+                Job.company_id.in_([row.id for row in companies]),
+                Job.source_category_revision_id.is_not(None),
+            )
+        )
         roles: list[str] = []
         locations: list[str] = []
         for item in document.jobs:
@@ -688,7 +992,12 @@ class KnowledgeCategoryService:
                 await self.db.scalars(select(Company.id).where(Company.project_id == project_id))
             )
             if company_ids:
-                await self.db.execute(delete(Job).where(Job.company_id.in_(company_ids)))
+                await self.db.execute(
+                    delete(Job).where(
+                        Job.company_id.in_(company_ids),
+                        Job.source_category_revision_id.is_not(None),
+                    )
+                )
             project = await self.db.get(Project, project_id)
             if project is not None:
                 project.index_card = {}
@@ -720,7 +1029,67 @@ class KnowledgeCategoryService:
         elif key is KnowledgeCategoryKey.TRANSPORTATION:
             for job in jobs:
                 job.transport_support = None
-            await self.db.execute(delete(BusRoute).where(BusRoute.project_id == project_id))
+            await self.db.execute(
+                delete(BusRoute).where(
+                    BusRoute.project_id == project_id,
+                    BusRoute.source_category_revision_id.is_not(None),
+                )
+            )
+
+    async def _delete_category_projections(self, project_id: uuid.UUID) -> None:
+        await self.db.execute(
+            delete(BusRoute).where(
+                BusRoute.project_id == project_id,
+                BusRoute.source_category_revision_id.is_not(None),
+            )
+        )
+        company_ids = list(
+            await self.db.scalars(select(Company.id).where(Company.project_id == project_id))
+        )
+        if company_ids:
+            await self.db.execute(
+                delete(Job).where(
+                    Job.company_id.in_(company_ids),
+                    Job.source_category_revision_id.is_not(None),
+                )
+            )
+
+    async def _rebuild_category_projections(
+        self,
+        project_id: uuid.UUID,
+        categories: list[KnowledgeCategory],
+    ) -> None:
+        await self._delete_category_projections(project_id)
+        by_key = {category.category_key: category for category in categories}
+        jobs_category = by_key.get(KnowledgeCategoryKey.JOBS.value)
+        if jobs_category is not None and jobs_category.active_revision_id is not None:
+            jobs_revision = await self.db.get(
+                KnowledgeCategoryRevision,
+                jobs_category.active_revision_id,
+            )
+            if jobs_revision is not None:
+                jobs_document = validate_category_payload(
+                    KnowledgeCategoryKey.JOBS,
+                    jobs_revision.normalized_payload,
+                )
+                await self._replace_jobs(project_id, jobs_revision, jobs_document)
+        for definition in CATEGORY_DEFINITIONS:
+            if definition.key is KnowledgeCategoryKey.JOBS:
+                continue
+            category = by_key.get(definition.key.value)
+            if category is None or category.active_revision_id is None:
+                continue
+            revision = await self.db.get(
+                KnowledgeCategoryRevision,
+                category.active_revision_id,
+            )
+            if revision is None:
+                continue
+            document = validate_category_payload(
+                definition.key,
+                revision.normalized_payload,
+            )
+            await self._apply_projection_records(project_id, document, revision)
 
     async def _derived_jobs(self, project_id: uuid.UUID) -> list[Job]:
         return list(

@@ -92,7 +92,15 @@ class _FakeAgent:
     def __init__(self, raw: str) -> None:
         self._raw = raw
 
-    async def agent(self, text, *, system, retrieval, embedder) -> str:
+    async def agent(
+        self,
+        text,
+        *,
+        system,
+        retrieval,
+        embedder,
+        retry_empty_generation=False,
+    ) -> str:
         return self._raw
 
 
@@ -127,7 +135,7 @@ def _stub_svc(*, acquired: bool = True, owned: bool = True):
 def _patch_lazy_helpers(monkeypatch) -> None:
     """Neutralize the lazy DB-hitting system-prompt build inside the turn."""
 
-    async def _system_prompt(db):
+    async def _system_prompt(db, *, provider=None):  # noqa: ARG001
         return "", True
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _system_prompt)

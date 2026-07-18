@@ -9,6 +9,8 @@ import {
   apiRequest,
 } from "@/components/atomic-crm/providers/rest/api";
 import type {
+  AdapterPersonaAssignment,
+  AdapterProvider,
   BusTimetableList,
   PersonaFollowupRules,
   ProductFeature,
@@ -17,7 +19,7 @@ import type {
 
 const BASE = "/api/v1";
 
-export type ApiRecord = Record<string, any>;
+export type ApiRecord = Record<string, unknown>;
 const doc = (id: string) =>
   `${BASE}/knowledge/documents/${encodeURIComponent(id)}`;
 const proj = (id: string) =>
@@ -201,10 +203,22 @@ export const activatePersona = (id: string) =>
     },
   );
 
-export const assignPersonaToAllProjects = (id: string) =>
-  apiJson<{ updated: number }>(
-    `${BASE}/knowledge/personas/${encodeURIComponent(id)}/assign-all-projects`,
-    { method: "POST" },
+export const listPersonaAssignments = () =>
+  apiJson<{ data: AdapterPersonaAssignment[] }>(
+    `${BASE}/knowledge/persona-assignments`,
+  );
+
+export const updatePersonaAssignment = (
+  provider: AdapterProvider,
+  personaId: string | null,
+) =>
+  apiJson<AdapterPersonaAssignment>(
+    `${BASE}/knowledge/persona-assignments/${encodeURIComponent(provider)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ persona_id: personaId }),
+      headers: { "Content-Type": "application/json" },
+    },
   );
 
 /** Download the persona template markdown file. */

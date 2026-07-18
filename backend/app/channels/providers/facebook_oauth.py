@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from urllib.parse import urlencode
 
 from app.core.config import get_settings
 from app.core.http import get_http_client
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
     from app.services.integration_settings import FacebookRuntimeConfig
 
 logger = logging.getLogger(__name__)
+
+_FACEBOOK_OAUTH_DIALOG_ORIGIN = "https://www.facebook.com"
 
 # Required permissions for Messenger Platform (revalidated 2026-07-17).
 MESSENGER_PERMISSIONS = (
@@ -116,14 +119,17 @@ def build_authorization_url(*, state: str, redirect_uri: str) -> str:
     ID selects the Login for Business flow (``meta_login_config_id``).
     """
     s = get_settings()
-    scope = ",".join(MESSENGER_PERMISSIONS)
+    query = urlencode(
+        {
+            "client_id": s.meta_app_id,
+            "redirect_uri": redirect_uri,
+            "state": state,
+            "scope": ",".join(MESSENGER_PERMISSIONS),
+            "config_id": s.meta_login_config_id,
+        }
+    )
     return (
-        f"{s.meta_graph_api_base.rstrip('/')}/{s.meta_graph_api_version}/dialog/oauth"
-        f"?client_id={s.meta_app_id}"
-        f"&redirect_uri={redirect_uri}"
-        f"&state={state}"
-        f"&scope={scope}"
-        f"&config_id={s.meta_login_config_id}"
+        f"{_FACEBOOK_OAUTH_DIALOG_ORIGIN}/{s.meta_graph_api_version}/dialog/oauth?{query}"
     )
 
 

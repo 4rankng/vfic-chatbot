@@ -178,7 +178,7 @@ def _active_job_safe_reply(tool_result: object) -> str | None:
     return safe_reply.strip()
 
 
-def _ground_reply(reply: str, tool_results: list[str]) -> str:
+def _ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> str:
     """Validate LLM prose against surfaced evidence without replacing it.
 
     Structured job payloads inform the model but never become a separately
@@ -196,19 +196,27 @@ def _ground_reply(reply: str, tool_results: list[str]) -> str:
         from app.core.config import get_settings
 
         if not getattr(get_settings(), "grounding_check_enabled", True):
+            if trace_sink is not None:
+                trace_sink.record_decision("grounding_verdict", "skipped")
             return reply
         from app.graph.grounding import extract_surfaced_job_ids, validate_grounding
 
         surfaced = extract_surfaced_job_ids(tool_results)
         result = validate_grounding(reply, surfaced)
         if not result.is_grounded:
+            if trace_sink is not None:
+                trace_sink.record_decision("grounding_verdict", "sanitized")
             logger.warning(
                 "grounding_hallucination_stripped: %s cited ids not in retrieved set",
                 len(result.hallucinated_ids),
             )
             return result.sanitized_reply
+        if trace_sink is not None:
+            trace_sink.record_decision("grounding_verdict", "grounded")
         return reply
     except Exception:  # noqa: BLE001
+        if trace_sink is not None:
+            trace_sink.record_decision("grounding_verdict", "skipped")
         logger.debug("grounding check skipped (non-fatal)", exc_info=True)
         return reply
 
@@ -488,6 +496,8 @@ class MiniMaxAgent:
         required_tool: str | None = None,
         required_tool_args: dict | None = None,
         forced_project_slug: str | None = None,
+        retry_empty_generation: bool = False,
+        trace_sink=None,
     ) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
         from app.graph.schemas import filter_tool_schemas
@@ -495,6 +505,10 @@ class MiniMaxAgent:
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
         active_llm = self.fast_llm if (use_fast and self.fast_llm is not None) else self.llm
+        if trace_sink is not None:
+            trace_sink.record_decision("model_selected", "fast" if use_fast else "primary")
+        if trace_sink is not None and required_tool is not None:
+            trace_sink.record_decision("required_tool_selected", required_tool)
         schemas = filter_tool_schemas(allowed_tools, resolved_registry=resolved_tool_registry)
         sem = get_llm_semaphore()
         messages = [SystemMessage(content=system)]
@@ -536,6 +550,8 @@ class MiniMaxAgent:
             and not faq_detail_route
         ):
             try:
+                if trace_sink is not None:
+                    trace_sink.record_tool_selection("search_knowledge", selected_by="policy")
                 prefetched = await _dispatch_tool(
                     retrieval,
                     embedder,
@@ -560,6 +576,8 @@ class MiniMaxAgent:
                     )
                 )
         if knowledge_lookup_route:
+            if trace_sink is not None:
+                trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
             prefetched, _ = await _prefetch_tool(
                 retrieval,
                 embedder,
@@ -586,6 +604,8 @@ class MiniMaxAgent:
             # model to repeat the same search in a second tool round.
             schemas = []
         elif timetable_route:
+            if trace_sink is not None:
+                trace_sink.record_tool_selection("search_bus_timetable", selected_by="prefetch")
             prefetched, prefetch_hit = await _prefetch_tool(
                 retrieval,
                 embedder,
@@ -614,6 +634,8 @@ class MiniMaxAgent:
                 # model→tool→model loop for already-resolved timetable data.
                 schemas = []
         elif faq_detail_route:
+            if trace_sink is not None:
+                trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
             prefetched, prefetch_hit = await _prefetch_tool(
                 retrieval,
                 embedder,
@@ -644,10 +666,16 @@ class MiniMaxAgent:
         else:
             bound = active_llm
         required_tool_called = False
+        empty_retry_available = retry_empty_generation
+        retrying_empty_generation = False
+        iterations_remaining = self.max_iters
         messages.append(HumanMessage(content=user_text))
-        for _ in range(self.max_iters):
+        while iterations_remaining > 0:
+            iterations_remaining -= 1
             if metrics is not None:
                 metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
+            was_empty_retry = retrying_empty_generation
+            invocation_llm = active_llm if was_empty_retry else bound
             # Split the LLM path into semaphore-queue wait vs. model inference.
             # Previously a single timer covered both, so a 34s "LLM" p95 was
             # ambiguous between a slow model and self-inflicted throttle wait.
@@ -656,11 +684,25 @@ class MiniMaxAgent:
                 async with sem:
                     sem_wait_ms = int((time.monotonic() - sem_t0) * 1000)
                     model_t0 = time.monotonic()
-                    ai, backoff_ms = await _llm_call_with_retry(bound, messages, metrics=metrics)
+                    ai, backoff_ms = await _llm_call_with_retry(
+                        invocation_llm, messages, metrics=metrics
+                    )
                     model_ms = int((time.monotonic() - model_t0) * 1000)
             except LLMThrottled:
+                if retrying_empty_generation:
+                    if metrics is not None:
+                        metrics["generation_retry_failure"] = "throttled"
+                    return ""
                 raise
             except Exception as exc:
+                if retrying_empty_generation:
+                    if metrics is not None:
+                        metrics["generation_retry_failure"] = type(exc).__name__
+                    logger.warning(
+                        "empty-generation retry failed error_type=%s",
+                        type(exc).__name__,
+                    )
+                    return ""
                 # Track non-retry-path 429s for observability (Phase 0 metric).
                 if _is_429(exc):
                     _record_llm_429()
@@ -692,9 +734,35 @@ class MiniMaxAgent:
                 )
                 metrics["cached_tokens"] = metrics.get("cached_tokens", 0) + usage.cached_tokens
             logger.info("llm_invoke", extra={"llm_latency_ms": iter_total_ms})
+            retrying_empty_generation = False
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
+            if was_empty_retry:
+                from app.graph.safety import fast_safety_filter
+
+                # Recovery is deliberately tool-free. Re-run the deterministic
+                # safety filter on the retry result and never dispatch tools.
+                retry_safety = fast_safety_filter(str(ai.content or ""))
+                if retry_safety["too_long"]:
+                    return _ground_reply(retry_safety["output"], tool_results, trace_sink=trace_sink)
+                return _ground_reply("", tool_results, trace_sink=trace_sink)
             if not calls:
+                from app.graph.safety import fast_safety_filter
+
+                safety = fast_safety_filter(str(ai.content or ""))
+                if (
+                    safety["retryable_empty"]
+                    and empty_retry_available
+                    and (required_tool is None or required_tool_called)
+                ):
+                    empty_retry_available = False
+                    retrying_empty_generation = True
+                    iterations_remaining += 1
+                    messages.pop()
+                    if metrics is not None:
+                        metrics["generation_retry_count"] = 1
+                        metrics["generation_retry_reason"] = "empty_after_clean"
+                    continue
                 if required_tool and not required_tool_called:
                     logger.warning("required LLM tool was not called: %s", required_tool)
                     return await self.direct(
@@ -705,6 +773,7 @@ class MiniMaxAgent:
                             "thể kiểm tra, không xác nhận có việc và không bịa dữ liệu."
                         ),
                         metrics=metrics,
+                        trace_sink=trace_sink,
                     )
                 negative_authority = _negative_job_authority(tool_results)
                 if negative_authority is not None and not _negative_job_reply_is_consistent(
@@ -719,6 +788,7 @@ class MiniMaxAgent:
                             f"{negative_authority}"
                         ),
                         metrics=metrics,
+                        trace_sink=trace_sink,
                     )
                 matched_authority = _matched_job_authority(tool_results)
                 if matched_authority is not None and not _matched_job_reply_is_consistent(
@@ -733,12 +803,17 @@ class MiniMaxAgent:
                             f"{matched_authority[1]}"
                         ),
                         metrics=metrics,
+                        trace_sink=trace_sink,
                     )
-                return _ground_reply(ai.content, tool_results)
+                return _ground_reply(ai.content, tool_results, trace_sink=trace_sink)
             if metrics is not None:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
                 metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
             tool_t0 = time.monotonic()
+
+            if trace_sink is not None:
+                for tool_call in calls:
+                    trace_sink.record_tool_selection(tool_call.get("name", ""), selected_by="model")
 
             # --- Tool dispatch -------------------------------------------------
             # When the LLM returns multiple tool_calls in one response, run them
@@ -826,6 +901,7 @@ class MiniMaxAgent:
                                 "không xác nhận có việc và không bịa dữ liệu."
                             ),
                             metrics=metrics,
+                            trace_sink=trace_sink,
                         )
                 tool_results.append(str(out))
                 messages.append(
@@ -847,6 +923,7 @@ class MiniMaxAgent:
                     "xác nhận có việc và không bịa dữ liệu."
                 ),
                 metrics=metrics,
+                trace_sink=trace_sink,
             )
         final = messages[-1].content if hasattr(messages[-1], "content") else ""
         negative_authority = _negative_job_authority(tool_results)
@@ -860,6 +937,7 @@ class MiniMaxAgent:
                     f"{negative_authority}"
                 ),
                 metrics=metrics,
+                trace_sink=trace_sink,
             )
         matched_authority = _matched_job_authority(tool_results)
         if matched_authority is not None and not _matched_job_reply_is_consistent(
@@ -874,15 +952,25 @@ class MiniMaxAgent:
                     f"{matched_authority[1]}"
                 ),
                 metrics=metrics,
+                trace_sink=trace_sink,
             )
-        return _ground_reply(final, tool_results)
+        return _ground_reply(final, tool_results, trace_sink=trace_sink)
 
-    async def direct(self, user_text: str, *, system: str, metrics: dict | None = None) -> str:
+    async def direct(
+        self,
+        user_text: str,
+        *,
+        system: str,
+        metrics: dict | None = None,
+        trace_sink=None,
+    ) -> str:
         """One model call for a direct-context KB; no schemas, tools, or prefetch."""
         from app.graph.llm_semaphore import get_llm_semaphore
         from langchain_core.messages import HumanMessage, SystemMessage
 
         sem = get_llm_semaphore()
+        if trace_sink is not None:
+            trace_sink.record_decision("model_selected", "direct")
         if metrics is not None:
             metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
             metrics["direct_context_llm_calls"] = metrics.get("direct_context_llm_calls", 0) + 1
@@ -902,6 +990,8 @@ class MiniMaxAgent:
             metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + queue_ms
             metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
         _record_llm_latency(total_ms)
+        if trace_sink is not None:
+            trace_sink.record_decision("grounding_verdict", "skipped")
         return str(ai.content or "")
 
 

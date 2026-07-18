@@ -15,6 +15,12 @@ Embedder = Callable[[str], Awaitable[list[float]]]
 MakeRetrieval = Callable[[], AsyncContextManager]
 
 
+class DecisionTraceSink(Protocol):
+    def record_decision(self, code: str, summary_code: str) -> None: ...
+
+    def record_tool_selection(self, name: str, *, selected_by: str) -> None: ...
+
+
 class AgentModel(Protocol):
     """A tool-calling agent: system prompt + user turn -> reply text.
 
@@ -41,9 +47,18 @@ class AgentModel(Protocol):
         metrics: dict | None = None,
         required_tool: str | None = None,
         required_tool_args: dict | None = None,
+        retry_empty_generation: bool = False,
+        trace_sink: DecisionTraceSink | None = None,
     ) -> str: ...
 
-    async def direct(self, user_text: str, *, system: str, metrics: dict | None = None) -> str: ...
+    async def direct(
+        self,
+        user_text: str,
+        *,
+        system: str,
+        metrics: dict | None = None,
+        trace_sink: DecisionTraceSink | None = None,
+    ) -> str: ...
 
 
 class SafetyModel(Protocol):

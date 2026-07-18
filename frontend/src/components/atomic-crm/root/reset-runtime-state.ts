@@ -6,10 +6,9 @@ import {
   buildStaticRecruitmentRuntime,
   getStaticRecruitmentRuntimeKey,
 } from "../capabilities/static-recruitment-runtime";
-import type {
-  RuntimeGenerationBundle,
-} from "../capabilities/types";
+import type { RuntimeGenerationBundle } from "../capabilities/types";
 import { useMessageStore } from "../conversations/messageStore";
+import { clearDecisionTraceQueries } from "../automation/decisionTraceQueries";
 
 const LEGACY_ADAPTER_KEYS = [
   "vfic:chatops:saved-views:v1",
@@ -24,8 +23,14 @@ let inFlightKey: string | null = null;
 let inFlightBundle: Promise<RuntimeGenerationBundle> | null = null;
 
 export const getRuntimeEpoch = (): number => runtimeEpoch;
-export const isRuntimeEpochCurrent = (epoch: number): boolean => epoch === runtimeEpoch;
-export const getActiveRuntimeBundle = (): RuntimeGenerationBundle | null => activeBundle;
+export const isRuntimeEpochCurrent = (epoch: number): boolean =>
+  epoch === runtimeEpoch;
+export const getActiveRuntimeBundle = (): RuntimeGenerationBundle | null =>
+  activeBundle;
+
+export const clearActiveDecisionTraceQueries = (): void => {
+  if (activeBundle) clearDecisionTraceQueries(activeBundle.queryClient);
+};
 
 export const createRuntimeQueryClient = (): QueryClient =>
   new QueryClient({
@@ -53,6 +58,7 @@ export const resetActiveRuntimeState = async (): Promise<void> => {
   useMessageStore.getState().resetAll();
 
   if (previous) {
+    clearDecisionTraceQueries(previous.queryClient);
     await previous.queryClient.cancelQueries();
     previous.queryClient.getMutationCache().clear();
     previous.queryClient.clear();
