@@ -259,13 +259,13 @@ export const DecisionTracePanel = ({
         <button
           type="button"
           className={cn("icon-btn ghost", className)}
-          aria-label="Dấu vết quyết định"
-          title="Dấu vết quyết định"
+          aria-label="Agent Thinking"
+          title="Agent Thinking"
           aria-expanded={open}
           aria-controls="decision-trace-sheet"
         >
           <History className="icon" aria-hidden="true" />
-          <span className="hidden xl:inline">Dấu vết quyết định</span>
+          <span className="hidden xl:inline">Agent Thinking</span>
         </button>
       </SheetTrigger>
       <SheetContent
@@ -274,7 +274,7 @@ export const DecisionTracePanel = ({
         className="w-full gap-0 overflow-hidden p-0 sm:max-w-lg"
       >
         <SheetHeader className="border-b px-5 py-4 pr-14">
-          <SheetTitle>Dấu vết quyết định</SheetTitle>
+          <SheetTitle>Agent Thinking</SheetTitle>
           <SheetDescription>
             10 lần chạy chatbot gần nhất của cuộc trò chuyện này.
           </SheetDescription>

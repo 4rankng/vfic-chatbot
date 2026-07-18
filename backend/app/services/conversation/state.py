@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, or_, select, text, update
 
 from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
+from app.schemas.bot_run import parse_decision_trace
 from app.models.conversation import (
     BotRun,
     BotRunOutcome,
@@ -671,6 +672,10 @@ class ConversationState:
             if sent
             else BotRunOutcome.SUPPRESSED
         )
+        parsed_trace = parse_decision_trace(decision_trace)
+        safe_decision_trace = (
+            parsed_trace.model_dump(mode="json") if parsed_trace is not None else None
+        )
         run = BotRun(
             conversation_id=conv.id,
             version_at_start=version_at_start,
@@ -681,7 +686,7 @@ class ConversationState:
             stage_timings=stage_timings,
             trace_id=trace_id or None,
             outcome_metadata=outcome_metadata,
-            decision_trace=decision_trace,
+            decision_trace=safe_decision_trace,
         )
         msg = None
         pending_msg = None

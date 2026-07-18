@@ -743,6 +743,12 @@ class MiniMaxAgent:
                 # Recovery is deliberately tool-free. Re-run the deterministic
                 # safety filter on the retry result and never dispatch tools.
                 retry_safety = fast_safety_filter(str(ai.content or ""))
+                if retry_safety["safe_to_send"]:
+                    return _ground_reply(
+                        retry_safety["output"],
+                        tool_results,
+                        trace_sink=trace_sink,
+                    )
                 if retry_safety["too_long"]:
                     return _ground_reply(retry_safety["output"], tool_results, trace_sink=trace_sink)
                 return _ground_reply("", tool_results, trace_sink=trace_sink)

@@ -81,8 +81,11 @@ class DecisionTraceBuilder:
         except ValidationError:
             logger.warning("decision trace validation failed")
             return None
-        except Exception:
-            logger.warning("decision trace serialization failed", exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "decision trace serialization failed error_type=%s",
+                type(exc).__name__,
+            )
             return None
         if len(rendered.encode("utf-8")) > self._max_bytes:
             logger.warning("decision trace serialization exceeded size cap")

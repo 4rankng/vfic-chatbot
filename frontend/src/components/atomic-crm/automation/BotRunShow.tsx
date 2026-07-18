@@ -71,7 +71,7 @@ const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
           />
           <div className="border-t py-4">
             <h3 className="text-section-title font-semibold text-foreground">
-              Dấu vết quyết định
+              Agent Thinking
             </h3>
             <p className="mt-1 text-helper leading-5 text-muted-foreground">
               Đây là tóm tắt quyết định từ luồng xử lý, không phải suy nghĩ nội

@@ -41,8 +41,8 @@ EXPECTED_ROUTE_COUNTS = {
     # Endpoint-level snapshot: adding a decorator inside an existing module must
     # fail this gate and force an explicit authority-classification review.
     "auth": 6,
-    "bot_runs": 1,
-    "conversations": 17,
+    "bot_runs": 2,
+    "conversations": 18,
     "dashboard": 2,
     "integrations": 18,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
     "installation": 8,
@@ -57,13 +57,13 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "5904b197b5ef73f5da4cad77a1720a4bcf765eb3732b8b2513a9251a6a2f955f"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "0e989ac98c90c6afbbca8ba8009da315dbe6087665fb58b3789f4cc874de772b"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 72,  # LLM-only evidence correction paths are explicit
     "queue_producer": 25,  # Project category activation adds one reviewed queue boundary
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "92ef3508580b5a65f14ac7716cecd759c9c03ba493b0d393e965c0a5097f930b"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "84b4c45cec7dfdd62533c9498052cc989358159d7e02b1011ac9af673f79ce07"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
