@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   apiJson: vi.fn(),
@@ -19,6 +19,11 @@ vi.mock("@/components/atomic-crm/providers/rest/api", () => ({
 }));
 
 import * as knowledgeService from "./knowledgeService";
+
+beforeEach(() => {
+  mocks.apiJson.mockReset();
+  mocks.apiRequest.mockReset();
+});
 
 describe("createAndIngestKnowledgeBaseVersion", () => {
   it("stages every upload in a KB version before enqueuing ingest", async () => {
@@ -67,5 +72,22 @@ describe("createAndIngestKnowledgeBaseVersion", () => {
     expect(knowledgeService).not.toHaveProperty("assignIngestionTemplate");
     expect(knowledgeService).not.toHaveProperty("listKnowledgeBaseVersionRuns");
     expect(knowledgeService).not.toHaveProperty("reviewKnowledgeIngestionRun");
+  });
+});
+
+describe("reindexAllKnowledge", () => {
+  it("posts once to the bulk reindex endpoint", async () => {
+    mocks.apiJson.mockResolvedValue({ status: "ok", queued: 7 });
+
+    await expect(knowledgeService.reindexAllKnowledge()).resolves.toEqual({
+      status: "ok",
+      queued: 7,
+    });
+
+    expect(mocks.apiJson).toHaveBeenCalledTimes(1);
+    expect(mocks.apiJson).toHaveBeenCalledWith(
+      "/api/v1/knowledge/reindex-all",
+      { method: "POST" },
+    );
   });
 });

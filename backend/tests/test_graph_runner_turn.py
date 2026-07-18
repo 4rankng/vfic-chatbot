@@ -318,6 +318,46 @@ async def test_generic_vacancy_listing_bypasses_single_kb_answer(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_terse_vacancy_followup_reaches_contextual_direct_llm():
+    class _DirectReader:
+        async def active_context(self):
+            return DirectContext(
+                knowledge_base_id="kb-1",
+                persona_body="Bạn là tư vấn viên.",
+                knowledge_text="LG Display Tràng Duệ đang tuyển công nhân thời vụ.",
+            )
+
+    class _DirectAgent:
+        calls = 0
+
+        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+            self.calls += 1
+            assert "ó viedjc gì" in user_text
+            return "LG Display đang tuyển công nhân thời vụ bạn nhé."
+
+    svc, _ = _stub_svc(conv=_FakeConv())
+    deps = _deps(_FakeZalo(), conversation=svc)
+    direct_agent = _DirectAgent()
+    deps.agent = direct_agent
+    deps.direct_context = _DirectReader()
+
+    result = await run_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="ó viedjc gì",
+        ),
+        deps,
+    )
+
+    assert result == {
+        "outcome": "direct_context",
+        "reply": "LG Display đang tuyển công nhân thời vụ bạn nhé.",
+    }
+    assert direct_agent.calls == 1
+
+
+@pytest.mark.asyncio
 async def test_vacancy_salary_followup_uses_verbatim_direct_context_evidence(monkeypatch):
     class _DirectReader:
         async def active_context(self):
@@ -1340,6 +1380,50 @@ async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
     assert captured["allowed_tools"] == ("list_active_jobs",)
     assert captured["required_tool"] == "list_active_jobs"
     assert captured["required_tool_args"] == {"top_k": 10}
+
+
+@pytest.mark.asyncio
+async def test_terse_vacancy_followup_uses_unconstrained_llm_route(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    query = "ó viedjc gì"
+    captured: dict[str, object] = {}
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured["user_text"] = user_text
+            captured.update(kwargs)
+            return "LG Display đang tuyển công nhân thời vụ."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=query),
+        deps,
+        query,
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+    )
+
+    assert reply == "LG Display đang tuyển công nhân thời vụ."
+    assert captured["allowed_tools"] is None
+    assert "required_tool" not in captured
 
 
 @pytest.mark.asyncio

@@ -107,6 +107,8 @@ def test_parse_full_template_document():
     assert len(doc.chunks) == 16
     categories = sorted({chunk.category for chunk in doc.chunks})
     assert categories == ["contact", "faq", "feature", "job", "policy", "schedule"]
+    job_chunk = next(chunk for chunk in doc.chunks if chunk.category == "job")
+    assert job_chunk.entities["job_title"] == "temporary workers"
     assert len(doc.bus_timetable.routes) == 1
     # 4 service-day lines × 5 service flags each
     assert len(doc.bus_timetable.service_days) == 20

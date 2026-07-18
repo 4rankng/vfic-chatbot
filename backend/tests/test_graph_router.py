@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.router import route_turn, routing_instruction
+from app.graph.router import is_generic_vacancy_listing, route_turn, routing_instruction
 from app.models.conversation import MessageSender
 
 
@@ -65,6 +65,18 @@ def test_route_specific_vacancy_question_uses_assigned_knowledge():
         assert route.intent == "recommend"
         assert route.strategy == "knowledge_lookup"
         assert route.tools == ("search_knowledge",)
+
+
+@pytest.mark.parametrize("query", ["có việc gì", "ó viedjc gì"])
+def test_route_terse_vacancy_followup_to_contextual_llm(query):
+    route = route_turn(query)
+
+    assert is_generic_vacancy_listing(query) is False
+    assert route.intent == "general"
+    assert route.strategy == "agent"
+    assert route.reason == "fallback"
+    assert route.tools == ()
+    assert route.confidence < 0.5
 
 
 def test_route_timetable_beats_broader_job_detail():

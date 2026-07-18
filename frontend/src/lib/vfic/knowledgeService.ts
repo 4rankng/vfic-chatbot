@@ -180,6 +180,16 @@ export const archiveKnowledge = (id: string) =>
 export const reindexKnowledge = (id: string) =>
   apiJson<ApiRecord>(`${doc(id)}/reindex`, { method: "POST" });
 
+export type ReindexAllKnowledgeResult = {
+  status: string;
+  queued: number;
+};
+
+export const reindexAllKnowledge = () =>
+  apiJson<ReindexAllKnowledgeResult>(`${BASE}/knowledge/reindex-all`, {
+    method: "POST",
+  });
+
 export const getKnowledgeUnits = (id: string, limit = 50) =>
   apiJson<KnowledgeUnitList>(`${doc(id)}/chunks?limit=${limit}`);
 

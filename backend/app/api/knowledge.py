@@ -16,11 +16,19 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_embedder, require_admin
+from app.core.cache import bump_cache_version
 from app.core.db import get_db
-from app.models.knowledge import KnowledgeStatus
+from app.models.knowledge import (
+    KBTextFile,
+    KBVersion,
+    KBVersionStatus,
+    KnowledgeDocument,
+    KnowledgeStatus,
+)
 from app.models.user import User
 from app.schemas.knowledge import (
     KBIngestResponse,
@@ -392,6 +400,55 @@ async def reindex(
     doc = await _load(doc_id, db)
     enqueue_ingest(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
+
+
+@router.post("/reindex-all")
+async def reindex_all(
+    admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Re-queue every RAG knowledge source for authoritative rebuilding.
+
+    The offline pipeline refreshes chunks and all structured projections,
+    including the KB-authoritative active-job catalog.
+    """
+    active_versioned_document_ids = (
+        select(KBTextFile.document_id)
+        .join(KBVersion, KBVersion.id == KBTextFile.kb_version_id)
+        .where(KBVersion.status == KBVersionStatus.ACTIVE)
+    )
+    has_version_file = exists(
+        select(KBTextFile.id).where(KBTextFile.document_id == KnowledgeDocument.id)
+    )
+    result = await db.execute(
+        select(KnowledgeDocument).where(
+            KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
+            KnowledgeDocument.project_id.is_not(None),
+            KnowledgeDocument.raw_text.is_not(None),
+            or_(
+                KnowledgeDocument.id.in_(active_versioned_document_ids),
+                ~has_version_file,
+            ),
+        )
+    )
+    docs = result.scalars().all()
+    for doc in docs:
+        enqueue_ingest(doc.id)
+    queued = len(docs)
+
+    # Bump caches so the bot picks up fresh chunks immediately.
+    await bump_cache_version("knowledge")
+    await bump_cache_version("semantic_cache")
+    await record_audit(
+        db,
+        action="knowledge_relearn_all_enqueued",
+        actor_id=admin.id,
+        target_type="knowledge",
+        target_id="all",
+        payload={"queued": queued},
+    )
+    await db.commit()
+
+    return {"status": "ok", "queued": queued}
 
 
 @router.post("/search-test", response_model=list[SearchTestResult])

@@ -94,6 +94,13 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
         if doc is None:
             logger.warning("ingest job: document %s not found", doc_id)
             return
+        from sqlalchemy import select
+
+        from app.models.knowledge import KBTextFile
+
+        version_file = await db.scalar(
+            select(KBTextFile).where(KBTextFile.document_id == doc.id).limit(1)
+        )
         is_canonical = (doc.metadata_ or {}).get("schema_version") in CANONICAL_SCHEMA_VERSIONS
         if _llm is not None:
             llm = _llm
@@ -111,6 +118,17 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
             )
         try:
             await KnowledgePipeline(db, embed, llm).run(doc)
+            if version_file is not None:
+                from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
+
+                await KnowledgeChunkRepo(db).attach_doc_chunks_to_file(
+                    doc_id=doc.id,
+                    kb_version_id=version_file.kb_version_id,
+                    file_id=version_file.id,
+                    project_id=version_file.project_id,
+                    source_text=version_file.normalized_text,
+                )
+                await db.commit()
         except Exception as exc:  # noqa: BLE001 — record + survive
             logger.exception("ingest pipeline failed for document %s", doc_id)
             doc.status = KnowledgeStatus.FAILED

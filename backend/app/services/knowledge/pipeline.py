@@ -147,6 +147,15 @@ class KnowledgePipeline:
             except Exception as exc:  # noqa: BLE001 — index refresh is best-effort
                 logger.warning("project index refresh failed: %s", exc)
 
+        if doc.project_id is not None:
+            from app.services.knowledge.derived_jobs import rebuild_project_jobs
+
+            await rebuild_project_jobs(
+                self.db,
+                project_id=doc.project_id,
+                source_document_id=doc.id,
+            )
+
         await self._set_stage(doc, "PUBLISHED", status="PUBLISHED")
         if canonical_doc is None:
             # Legacy LGDisplay parser fallback.
@@ -330,7 +339,13 @@ class KnowledgePipeline:
         summary = _canonical_project_summary(canonical_doc)
         card = {
             "summary": summary,
-            "key_roles": [],
+            "key_roles": list(
+                dict.fromkeys(
+                    str(chunk.entities.get("job_title") or "").strip()
+                    for chunk in canonical_doc.chunks
+                    if chunk.category == "job" and chunk.entities.get("job_title")
+                )
+            ),
             "location": _canonical_location(canonical_doc),
             "highlights": [],
             "company_name": company,

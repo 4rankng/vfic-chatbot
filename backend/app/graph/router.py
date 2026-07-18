@@ -308,10 +308,10 @@ def has_specific_vacancy_target(user_text: str) -> bool:
 def is_generic_vacancy_listing(user_text: str) -> bool:
     """Whether the user asks for the full current catalog without a named target."""
     text = re.sub(r"[?.!,;:]+$", "", _normalize(user_text)).strip()
-    if any(pattern.fullmatch(text) for pattern in _GENERIC_VACANCY_LISTING_PATTERNS):
-        return True
     if not is_vacancy_lookup(text):
         return False
+    if any(pattern.fullmatch(text) for pattern in _GENERIC_VACANCY_LISTING_PATTERNS):
+        return True
     if has_specific_vacancy_target(user_text):
         return False
     if _LISTING_CUE_TERMS & set(re.findall(r"[a-z0-9]+", text)):

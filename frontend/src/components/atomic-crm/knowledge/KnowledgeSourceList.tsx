@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ListBase, useRefresh } from "ra-core";
+import { ListBase, useNotify, usePermissions, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
 import { BookOpen, FileText, RefreshCw, Search, Upload } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Confirm } from "@/components/admin/confirm";
 import { ListPagination } from "@/components/admin/list-pagination";
 import {
   Select,
@@ -30,11 +31,83 @@ import {
 } from "./useKnowledgeSourceFilters";
 import { ProjectPicker } from "./ProjectPicker";
 import { InboxIcons } from "../conversations/InboxIcons";
+import { reindexAllKnowledge } from "@/lib/vfic/knowledgeService";
+import { cn } from "@/lib/utils";
 import "../conversations/inbox.css";
 import type { KnowledgeSource } from "../types";
 
+const RelearnIcon = ({ className }: { className?: string }) => (
+  <RefreshCw aria-hidden="true" className={className} />
+);
+
+export const KnowledgeRelearnAction = () => {
+  const { permissions } = usePermissions();
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reindexPending, setReindexPending] = useState(false);
+
+  if (permissions !== "admin") return null;
+
+  const handleReindexAll = async () => {
+    if (reindexPending) return;
+
+    setReindexPending(true);
+    try {
+      const result = await reindexAllKnowledge();
+      notify(`Đã xếp hàng học lại ${result.queued} nguồn kiến thức.`, {
+        type: "success",
+      });
+      setConfirmOpen(false);
+      refresh();
+    } catch (error) {
+      const detail =
+        error instanceof Error && error.message ? ` ${error.message}` : "";
+      notify(`Không thể xếp hàng học lại dữ liệu.${detail} Vui lòng thử lại.`, {
+        type: "error",
+      });
+    } finally {
+      setReindexPending(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={reindexPending}
+        onClick={() => setConfirmOpen(true)}
+        className="h-11 w-full rounded-[9px] sm:h-10 sm:w-fit"
+      >
+        <RelearnIcon
+          className={cn(
+            "size-4",
+            reindexPending && "animate-spin motion-reduce:animate-none",
+          )}
+        />
+        {reindexPending ? "Đang xếp hàng…" : "Học lại dữ liệu"}
+      </Button>
+      <Confirm
+        isOpen={confirmOpen}
+        loading={reindexPending}
+        title="Học lại toàn bộ dữ liệu?"
+        content="Hệ thống sẽ xếp hàng xử lý lại KB đã xuất bản, sau đó dựng lại dữ liệu có cấu trúc và việc làm từ nguồn kiến thức. Tác vụ chạy nền và có thể mất vài phút."
+        cancel="Hủy"
+        confirm={reindexPending ? "Đang xếp hàng…" : "Học lại dữ liệu"}
+        ConfirmIcon={RelearnIcon}
+        onClose={() => {
+          if (!reindexPending) setConfirmOpen(false);
+        }}
+        onConfirm={() => void handleReindexAll()}
+      />
+    </>
+  );
+};
+
 const KnowledgeSourceListContent = () => {
   const refresh = useRefresh();
+  const { permissions } = usePermissions();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const {
@@ -104,21 +177,26 @@ const KnowledgeSourceListContent = () => {
               )}
             </div>
           </div>
-          {hasSources && (
+          {(hasSources || permissions === "admin") && (
             <div className="flex w-full flex-col gap-2 sm:w-fit sm:flex-row">
-              <KnowledgeVersionManager
-                projectId={
-                  projectFilter !== ALL_PROJECTS ? projectFilter : undefined
-                }
-              />
-              <Button
-                type="button"
-                onClick={() => setUploadOpen(true)}
-                className="h-10 w-full rounded-[9px] sm:w-fit"
-              >
-                <Upload className="size-4" />
-                Thêm tệp
-              </Button>
+              <KnowledgeRelearnAction />
+              {hasSources && (
+                <>
+                  <KnowledgeVersionManager
+                    projectId={
+                      projectFilter !== ALL_PROJECTS ? projectFilter : undefined
+                    }
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => setUploadOpen(true)}
+                    className="h-10 w-full rounded-[9px] sm:w-fit"
+                  >
+                    <Upload className="size-4" />
+                    Thêm tệp
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </header>

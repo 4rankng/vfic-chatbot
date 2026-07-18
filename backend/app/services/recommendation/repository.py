@@ -46,7 +46,7 @@ _MATCH_SQL = text(
         j.vacancy_count
     FROM jobs j
     WHERE j.status = :status
-      AND COALESCE(j.vacancy_count, 0) > 0
+      AND COALESCE(j.vacancy_count, 1) > 0
       AND (:province IS NULL
            OR normalize_search_text(j.province) ILIKE normalize_search_text(:province)
            OR normalize_search_text(j.district) ILIKE normalize_search_text(:province))
@@ -109,7 +109,7 @@ class RecommendationRepository:
         try:
             predicates = [
                 Job.status == JobStatus.ACTIVE,
-                func.coalesce(Job.vacancy_count, 0) > 0,
+                func.coalesce(Job.vacancy_count, 1) > 0,
                 Project.is_active.is_(True),
             ]
             if project_ids is not None:

@@ -320,7 +320,11 @@ def _build_chunks(
         content = sections.get(section_title, "").strip()
         if not content:
             continue
-        chunks.append(_chunk(metadata, section_title, content, category))
+        entities = {"company": metadata.get("company_name")}
+        role = _explicit_job_role(content)
+        if role:
+            entities["job_title"] = role
+        chunks.append(_chunk(metadata, section_title, content, category, entities=entities))
     chunks.extend(_feature_chunks(metadata, sections.get("Worker Features", ""), errors))
     for section_title, category in (("Rules/Policies", "policy"), ("Contacts", "contact")):
         content = sections.get(section_title, "").strip()
@@ -344,6 +348,7 @@ def _chunk(
     tags: list[str] | None = None,
     required_terms: list[str] | None = None,
     forbidden_terms: list[str] | None = None,
+    entities: dict[str, Any] | None = None,
 ) -> ParsedKnowledgeChunk:
     title = metadata.get("title") or metadata.get("doc_id") or "Knowledge document"
     breadcrumb = f"{title} > {section_title}"
@@ -354,7 +359,7 @@ def _chunk(
         summary=_first_sentence(content),
         questions=questions or [f"{section_title} của {metadata.get('company_name')} là gì?"],
         category=category,
-        entities={"company": metadata.get("company_name")},
+        entities=entities or {"company": metadata.get("company_name")},
         citation=ParsedCitation(label=label, source_anchor=section_title),
         section_title=section_title,
         breadcrumb=breadcrumb,
@@ -428,6 +433,20 @@ def _faq_chunks(metadata: dict[str, Any], section: str) -> list[ParsedKnowledgeC
 def _first_sentence(content: str) -> str:
     text = " ".join(line.strip() for line in content.splitlines() if line.strip())
     return text[:220]
+
+
+def _explicit_job_role(content: str) -> str | None:
+    """Extract only a role explicitly attached to a recruiting verb."""
+    compact = " ".join(content.split())
+    patterns = (
+        r"\b(?:đang |cần )?tuyển(?: dụng)?\s+(.+?)(?=\s+(?:làm|tại|cho)\b|[.;]|$)",
+        r"\brecruiting\s+(.+?)(?=\s+(?:for|at|to)\b|[.;]|$)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, compact, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip(" -–—,.;:") or None
+    return None
 
 
 def _questions_from_content(content: str) -> list[str]:
