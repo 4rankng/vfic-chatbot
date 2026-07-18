@@ -653,18 +653,29 @@ class KnowledgeCategoryService:
                     description=item.summary,
                 )
             )
-        category_summary = next(
-            (item.summary for item in document.jobs if item.summary),
-            None,
+        card = dict(project.index_card or {})
+        location = ", ".join(dict.fromkeys(locations))
+        summary = str(project.summary or card.get("summary") or "").strip()
+        if not summary:
+            role_text = ", ".join(dict.fromkeys(roles[:3]))
+            summary = (
+                f"{project.name} đang tuyển {role_text} tại {location}."
+                if role_text and location
+                else f"{project.name} đang tuyển {role_text}."
+                if role_text
+                else f"Dự án tuyển dụng {project.name}."
+            )
+        card.update(
+            {
+                "summary": summary,
+                "roles": roles,
+                "location": location,
+            }
         )
-        project.index_card = {
-            "summary": category_summary or project.summary or f"Cơ hội việc làm tại {project.name}",
-            "roles": roles,
-            "location": ", ".join(dict.fromkeys(locations)),
-            "eligibility": [],
-            "highlights": [],
-        }
-        project.summary = project.index_card["summary"]
+        card.setdefault("eligibility", [])
+        card.setdefault("highlights", [])
+        project.index_card = card
+        project.summary = summary
         project.discovery_revision += 1
         project.is_active = bool(roles)
 

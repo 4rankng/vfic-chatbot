@@ -38,7 +38,13 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         password_hash="not-used",
         role=Role.admin,
     )
-    project = Project(name="Category Factory", slug=f"category-{uuid.uuid4().hex}")
+    admin_summary = "Dự án tuyển công nhân sản xuất tại Hải Phòng."
+    project = Project(
+        name="Category Factory",
+        slug=f"category-{uuid.uuid4().hex}",
+        summary=admin_summary,
+        index_card={"summary": admin_summary, "highlights": ["Có xe đưa đón"]},
+    )
     integration_session.add_all([actor, project])
     await integration_session.flush()
     knowledge_base = KnowledgeBase(
@@ -69,6 +75,7 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         "  - id: assembler\n"
         "    title: Công nhân lắp ráp\n"
         "    location: Hải Phòng\n"
+        "    summary: Chi tiết dài chỉ thuộc về vị trí tuyển dụng.\n"
     )
     jobs_document = parse_category_yaml("jobs", jobs_source)
     jobs_revision = KnowledgeCategoryRevision(
@@ -96,7 +103,9 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     assert jobs_category.active_revision_id == jobs_revision.id
     assert project.is_active is True
     assert project.category_authority_started is False
-    assert project.summary == "Cơ hội việc làm tại Category Factory"
+    assert project.summary == admin_summary
+    assert project.index_card["summary"] == admin_summary
+    assert project.index_card["highlights"] == ["Có xe đưa đón"]
     assert await integration_session.scalar(
         select(func.count(Job.id))
         .join(Company, Company.id == Job.company_id)
