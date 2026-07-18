@@ -355,12 +355,15 @@ async def _run(args: argparse.Namespace) -> int:
         return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
+async def _main(args: argparse.Namespace) -> int:
     try:
-        return asyncio.run(_run(args))
+        return await _run(args)
     finally:
-        asyncio.run(engine.dispose())
+        await engine.dispose()
+
+
+def main(argv: list[str] | None = None) -> int:
+    return asyncio.run(_main(_parse_args(argv)))
 
 
 if __name__ == "__main__":
