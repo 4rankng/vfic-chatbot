@@ -27,7 +27,6 @@ from contextlib import suppress
 from inspect import iscoroutinefunction
 
 from app.core.config import get_settings
-from app.graph import fast_lane
 from app.graph.outbound_telemetry import OutboundTelemetry
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
@@ -765,14 +764,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
         )
         recruitment_enabled = manifest_policy is None or manifest_policy.pack_key == "recruitment"
-        # --- FAQ / template fast lane (zero LLM calls) ---
-        # Greetings / thanks / goodbye / help return instant tôi/bạn templates with
-        # no LLM call. Factual questions are never templated — they fall through
-        # here, then through the FAQ-bypass cascade below, before reaching the
-        # RAG + agent path.
-        # These legacy shortcuts are recruitment-scoped. A manifest-composed
-        # installation must reach its own agent/tool policy instead of answering
-        # from the unscoped FAQ store or recruitment-specific canned replies.
+        # Candidate extraction remains recruitment-scoped. Final replies do not
+        # use a template fast lane: every normal user message reaches the LLM so
+        # it can use the current project context and conversation history.
         allow_recruitment_fast_lane = (
             recruitment_enabled
             and (
@@ -781,16 +775,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
         )
         allow_legacy_faq_bypass = False
-        fast = (
-            fast_lane.match(state.user_text)
-            if direct_context is None
-            and allow_recruitment_fast_lane
-            and settings.faq_fast_lane_enabled
-            else None
-        )
 
-        # --- deterministic FAQ-bypass cascade (zero LLM calls) ---
-        # Runs only for non-template traffic. On a high-confidence hit it answers
+        # --- deterministic FAQ-bypass cascade (retired as a final-answer path) ---
+        # If re-enabled in the future, it must only provide evidence to the LLM;
+        # it must never return a final answer directly. It is currently disabled.
+        # It formerly answered
         # directly from the knowledge base (0¢, sub-50ms on an embedding-cache hit);
         # on any miss / ambiguity / timeout it abstains (None) and the turn falls
         # through to the agent unchanged. Time-boxed so a cold embed can never burn
@@ -798,7 +787,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         bypass = None
         if (
             direct_context is None
-            and fast is None
             and allow_legacy_faq_bypass
             and deps.faq_bypass is not None
             and _faq_bypass_allowed(state.user_text, recent_messages)
@@ -871,10 +859,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 direct_context, deps, state.user_text, recent_messages, timings
             )
             outcome_label = "direct_context"
-        elif fast is not None:
-            timings["lane"] = "fast_lane"
-            candidate = fast.reply
-            outcome_label = "faq_cache"
         elif bypass is not None:
             timings["lane"] = "faq_bypass"
             timings["faq_bypass_ms"] = int(round(bypass.latency_ms))
@@ -1051,12 +1035,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     "reason": send_result.error,
                     "reply": candidate,
                 }
-            # The post-send extraction owns lead, memory, and contact intent. Enqueue
-            # every successfully sent turn; its greeting gate keeps pure pleasantries
-            # at zero extraction calls while substantive fast/FAQ turns are classified.
-            pure_fast_pleasantry = fast is not None and fast_lane.is_pure_pleasantry(
-                state.user_text
-            )
+            # The post-send extraction owns lead, memory, and contact intent. Every
+            # LLM-generated turn is eligible for recruitment extraction.
+            pure_fast_pleasantry = False
             # Candidate extraction owns recruitment lead/contact state. It is
             # not a generic post-send hook, so never enqueue it for a
             # manifest-composed non-recruitment installation.
