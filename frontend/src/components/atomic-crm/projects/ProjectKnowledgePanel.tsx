@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
+import { BusTimetableSection } from "./ProjectBusTimetable";
 import {
   clearProjectKnowledgeCategory,
   getProjectKnowledgeCategories,
@@ -84,9 +85,12 @@ const SinglePagePanel = ({ project, editable }: Props) => {
 
   const save = async () => {
     if (loadFailed) {
-      notify("Chưa tải được nội dung hiện tại. Vui lòng tải lại trang trước khi lưu.", {
-        type: "warning",
-      });
+      notify(
+        "Chưa tải được nội dung hiện tại. Vui lòng tải lại trang trước khi lưu.",
+        {
+          type: "warning",
+        },
+      );
       return;
     }
     if (!text.trim()) {
@@ -95,7 +99,9 @@ const SinglePagePanel = ({ project, editable }: Props) => {
     }
     if (
       hasCurrentPage &&
-      !window.confirm("Nội dung mới sẽ thay thế toàn bộ trang hiện tại. Tiếp tục?")
+      !window.confirm(
+        "Nội dung mới sẽ thay thế toàn bộ trang hiện tại. Tiếp tục?",
+      )
     ) {
       return;
     }
@@ -114,7 +120,9 @@ const SinglePagePanel = ({ project, editable }: Props) => {
   const readFile = async (file?: File) => {
     if (!file) return;
     if (!/\.(txt|md)$/i.test(file.name)) {
-      notify("Trang kiến thức chỉ nhận file .txt hoặc .md.", { type: "warning" });
+      notify("Trang kiến thức chỉ nhận file .txt hoặc .md.", {
+        type: "warning",
+      });
       return;
     }
     setFilename(file.name);
@@ -133,9 +141,9 @@ const SinglePagePanel = ({ project, editable }: Props) => {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-body text-muted-foreground">
-            Agent nhận toàn bộ trang này trong mỗi cuộc trò chuyện đã chọn dự án.
-            Trang này không được chia nhỏ hoặc tìm kiếm theo danh mục. Mỗi lần lưu sẽ
-            thay thế toàn bộ nội dung cũ.
+            Agent nhận toàn bộ trang này trong mỗi cuộc trò chuyện đã chọn dự
+            án. Trang này không được chia nhỏ hoặc tìm kiếm theo danh mục. Mỗi
+            lần lưu sẽ thay thế toàn bộ nội dung cũ.
           </p>
           {loading ? (
             <Skeleton className="h-72 w-full" />
@@ -158,7 +166,9 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                         type="file"
                         accept=".txt,.md,text/plain,text/markdown"
                         className="sr-only"
-                        onChange={(event) => void readFile(event.target.files?.[0])}
+                        onChange={(event) =>
+                          void readFile(event.target.files?.[0])
+                        }
                       />
                     </label>
                   </Button>
@@ -174,9 +184,14 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                 className="font-mono text-sm"
               />
               {editable && (
-                <Button onClick={() => void save()} disabled={saving || loadFailed}>
+                <Button
+                  onClick={() => void save()}
+                  disabled={saving || loadFailed}
+                >
                   {saving && <Loader2 className="size-4 animate-spin" />}
-                  {hasCurrentPage ? "Thay thế trang hiện tại" : "Lưu trang kiến thức"}
+                  {hasCurrentPage
+                    ? "Thay thế trang hiện tại"
+                    : "Lưu trang kiến thức"}
                 </Button>
               )}
             </>
@@ -190,7 +205,9 @@ const SinglePagePanel = ({ project, editable }: Props) => {
 
 const RagCategoriesPanel = ({ project, editable }: Props) => {
   const notify = useNotify();
-  const [categories, setCategories] = useState<KnowledgeCategoryStatus[] | null>(null);
+  const [categories, setCategories] = useState<
+    KnowledgeCategoryStatus[] | null
+  >(null);
   const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
   const [template, setTemplate] = useState("");
   const [blankTemplate, setBlankTemplate] = useState("");
@@ -198,7 +215,8 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
   const [filename, setFilename] = useState("jobs.yaml");
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [processingKey, setProcessingKey] = useState<KnowledgeCategoryKey | null>(null);
+  const [processingKey, setProcessingKey] =
+    useState<KnowledgeCategoryKey | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const loadCatalog = async () => {
@@ -251,7 +269,9 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
             notify("Dữ liệu mới đã sẵn sàng cho Agent.", { type: "success" });
           } else if (
             rows.some(
-              (row) => row.latest_revision_id === revisionId && row.status === "FAILED",
+              (row) =>
+                row.latest_revision_id === revisionId &&
+                row.status === "FAILED",
             )
           ) {
             setProcessingKey(null);
@@ -262,9 +282,12 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
             pollUntilActive(revisionId, attempts + 1);
           } else {
             setProcessingKey(null);
-            notify("Dữ liệu đang được xử lý. Bạn có thể quay lại kiểm tra sau.", {
-              type: "info",
-            });
+            notify(
+              "Dữ liệu đang được xử lý. Bạn có thể quay lại kiểm tra sau.",
+              {
+                type: "info",
+              },
+            );
           }
         })
         .catch(() => setProcessingKey(null));
@@ -276,7 +299,8 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
       notify("Vui lòng nhập nội dung YAML.", { type: "warning" });
       return;
     }
-    if (!window.confirm("Dữ liệu mới sẽ thay thế toàn bộ mục này. Tiếp tục?")) return;
+    if (!window.confirm("Dữ liệu mới sẽ thay thế toàn bộ mục này. Tiếp tục?"))
+      return;
     setSaving(true);
     try {
       const result = await replaceProjectKnowledgeCategory(
@@ -302,7 +326,11 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     const content = await file.text();
     setFilename(file.name);
     setTemplate(content);
-    if (!window.confirm("File này sẽ thay thế toàn bộ dữ liệu của mục đang chọn. Tiếp tục?")) {
+    if (
+      !window.confirm(
+        "File này sẽ thay thế toàn bộ dữ liệu của mục đang chọn. Tiếp tục?",
+      )
+    ) {
       return;
     }
     setSaving(true);
@@ -326,7 +354,11 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
 
   const clear = async () => {
     if (!window.confirm("Xóa toàn bộ dữ liệu đang dùng của mục này?")) return;
-    if (!window.confirm("Agent sẽ không còn dùng thông tin trong mục này. Xác nhận xóa?")) {
+    if (
+      !window.confirm(
+        "Agent sẽ không còn dùng thông tin trong mục này. Xác nhận xóa?",
+      )
+    ) {
       return;
     }
     setSaving(true);
@@ -361,39 +393,44 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
 
   const selectedCategory = categories?.find((item) => item.key === selected);
 
+  const activeCategoryCount =
+    categories?.filter((item) => item.active_revision_id).length ?? 0;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-section-title">
-          <Database className="size-5" />
-          Kiến thức theo từng mục
-            <Badge variant="outline">Theo danh mục</Badge>
-        </CardTitle>
+    <Card className="project-knowledge-card">
+      <CardHeader className="project-knowledge-header">
+        <h2 className="project-knowledge-title">
+          <Database className="size-5" aria-hidden="true" />
+          Kiến thức theo danh mục
+        </h2>
       </CardHeader>
-      <CardContent className="space-y-5">
-        <p className="text-body text-muted-foreground">
-          Mỗi mục được cập nhật riêng. Cập nhật một mục không làm thay đổi các mục khác.
-          Riêng Việc làm: có trong file nghĩa là đang tuyển; không còn trong file nghĩa là
-          không còn tuyển.
+      <CardContent className="project-knowledge-content">
+        <p className="project-knowledge-description">
+          Mỗi mục được cập nhật riêng. Cập nhật một mục không làm thay đổi các
+          mục khác. Riêng Việc làm: có trong file nghĩa là đang tuyển; không còn
+          trong file nghĩa là không còn tuyển.
         </p>
         {categories && (
-          <p className="font-medium">
-            {categories.filter((item) => item.active_revision_id).length}/12 danh mục đã có
-            nội dung
-          </p>
+          <div className="project-knowledge-progress" aria-live="polite">
+            <span>Tiến độ nội dung</span>
+            <strong>
+              {activeCategoryCount}/{categories.length} mục đã có dữ liệu
+            </strong>
+          </div>
         )}
         {!categories ? (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="project-category-grid">
             {Array.from({ length: 12 }).map((_, index) => (
               <Skeleton key={index} className="h-24" />
             ))}
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="project-category-grid">
             {categories.map((category) => {
               const isProcessing = processingKey === category.key;
               const hasPendingRevision =
-                category.status === "STAGED" || category.status === "PROCESSING";
+                category.status === "STAGED" ||
+                category.status === "PROCESSING";
               const hasError = category.status === "FAILED";
               const isActive = Boolean(category.active_revision_id);
               return (
@@ -403,33 +440,47 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                   onClick={() => setSelected(category.key)}
                   aria-pressed={selected === category.key}
                   className={cn(
-                    "rounded-lg border p-4 text-left transition-colors hover:bg-muted/40",
-                    selected === category.key && "border-primary bg-primary/5",
+                    "project-category-card",
+                    selected === category.key && "is-selected",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold">{category.label_vi}</span>
+                    <span className="project-category-name">
+                      {category.label_vi}
+                    </span>
                     {isProcessing || hasPendingRevision ? (
-                      <Loader2 className="size-4 animate-spin text-primary" />
+                      <Loader2
+                        className="size-4 animate-spin text-primary"
+                        aria-hidden="true"
+                      />
                     ) : hasError ? (
-                      <AlertCircle className="size-4 text-destructive" />
+                      <AlertCircle
+                        className="size-4 text-destructive"
+                        aria-hidden="true"
+                      />
                     ) : isActive ? (
-                      <CheckCircle2 className="size-4 text-emerald-600" />
+                      <CheckCircle2
+                        className="size-4 text-emerald-600"
+                        aria-hidden="true"
+                      />
                     ) : (
-                      <span className="size-2 rounded-full bg-muted-foreground/40" />
+                      <span
+                        className="project-category-empty-dot"
+                        aria-hidden="true"
+                      />
                     )}
                   </div>
-                  <p className="mt-2 text-helper text-muted-foreground">
+                  <p className="project-category-status">
                     {isProcessing || hasPendingRevision
                       ? "Đang xử lý"
                       : hasError
                         ? "Cập nhật lỗi — nội dung cũ vẫn đang dùng"
-                      : isActive
-                        ? `Đang dùng bản ${category.active_revision_no}`
-                        : "Chưa có dữ liệu"}
+                        : isActive
+                          ? `Đang dùng bản ${category.active_revision_no}`
+                          : "Chưa có dữ liệu"}
                   </p>
                   {category.updated_at && (
-                    <p className="mt-1 text-caption text-muted-foreground">
+                    <p className="project-category-date">
                       Cập nhật {formatDate(category.updated_at)}
                     </p>
                   )}
@@ -439,46 +490,55 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
           </div>
         )}
 
-        <div className="rounded-lg border p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="mr-auto font-semibold">
+        <section className="project-category-editor">
+          <div className="project-category-editor-header">
+            <h3 className="project-category-editor-title">
               {selectedCategory?.label_vi ?? selected}
             </h3>
-            <Button variant="outline" size="sm" onClick={() => void copyTemplate()}>
-              <Clipboard className="size-4" /> Sao chép mẫu
-            </Button>
-            <Button variant="outline" size="sm" onClick={downloadTemplate}>
-              <Download className="size-4" /> Tải mẫu
-            </Button>
-            {editable && (
-              <Button variant="outline" size="sm" asChild>
-                <label>
-                  <Upload className="size-4" /> Tải file YAML
-                  <input
-                    type="file"
-                    accept=".yaml,.yml,application/yaml,text/yaml"
-                    className="sr-only"
-                    onChange={(event) => void upload(event.target.files?.[0])}
-                  />
-                </label>
+            <div className="project-category-editor-actions">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void copyTemplate()}
+              >
+                <Clipboard className="size-4" /> Sao chép mẫu
               </Button>
-            )}
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                <Download className="size-4" /> Tải mẫu
+              </Button>
+              {editable && (
+                <Button variant="outline" size="sm" asChild>
+                  <label>
+                    <Upload className="size-4" /> Tải file YAML
+                    <input
+                      type="file"
+                      accept=".yaml,.yml,application/yaml,text/yaml"
+                      className="sr-only"
+                      onChange={(event) => void upload(event.target.files?.[0])}
+                    />
+                  </label>
+                </Button>
+              )}
+            </div>
           </div>
           {loadingTemplate ? (
-            <Skeleton className="mt-3 h-80" />
+            <Skeleton className="project-category-editor-skeleton" />
           ) : (
             <Textarea
               value={template}
               onChange={(event) => setTemplate(event.target.value)}
               readOnly={!editable}
               rows={20}
-              className="mt-3 font-mono text-sm"
+              className="project-category-textarea font-mono"
               aria-label="Nội dung YAML của mục kiến thức"
             />
           )}
           {editable && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button onClick={() => void replace()} disabled={saving || loadingTemplate}>
+            <div className="project-category-editor-footer">
+              <Button
+                onClick={() => void replace()}
+                disabled={saving || loadingTemplate}
+              >
                 {saving && <Loader2 className="size-4 animate-spin" />}
                 Kiểm tra và thay thế mục này
               </Button>
@@ -494,7 +554,18 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
               )}
             </div>
           )}
-        </div>
+        </section>
+
+        {selected === "transportation" && (
+          <section className="project-transport-panel">
+            <p className="project-transport-description">
+              Đây là lịch xe chi tiết Agent tra cứu khi ứng viên hỏi tuyến, điểm
+              đón hoặc giờ đón. Mỗi tuyến hiển thị toàn bộ điểm dừng và thời
+              gian hiện có trong dữ liệu đang dùng.
+            </p>
+            <BusTimetableSection projectId={String(project.id)} />
+          </section>
+        )}
       </CardContent>
     </Card>
   );
@@ -507,8 +578,12 @@ const DiscoveryCardEditor = ({ project }: { project: Project }) => {
   const card = project.index_card ?? {};
   const [summary, setSummary] = useState(card.summary ?? project.summary ?? "");
   const [location, setLocation] = useState(card.location ?? "");
-  const [roles, setRoles] = useState((card.roles ?? card.key_roles ?? []).join(", "));
-  const [highlights, setHighlights] = useState((card.highlights ?? []).join(", "));
+  const [roles, setRoles] = useState(
+    (card.roles ?? card.key_roles ?? []).join(", "),
+  );
+  const [highlights, setHighlights] = useState(
+    (card.highlights ?? []).join(", "),
+  );
   const [aliases, setAliases] = useState((project.aliases ?? []).join(", "));
   const [saving, setSaving] = useState(false);
 
@@ -529,7 +604,9 @@ const DiscoveryCardEditor = ({ project }: { project: Project }) => {
           },
         },
       });
-      notify("Đã cập nhật thẻ giúp ứng viên tìm thấy dự án.", { type: "success" });
+      notify("Đã cập nhật thẻ giúp ứng viên tìm thấy dự án.", {
+        type: "success",
+      });
       refresh();
     } catch (error) {
       notify((error as Error).message, { type: "error" });
@@ -541,14 +618,36 @@ const DiscoveryCardEditor = ({ project }: { project: Project }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-section-title">Thông tin dùng khi gợi ý dự án</CardTitle>
+        <CardTitle className="text-section-title">
+          Thông tin dùng khi gợi ý dự án
+        </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
-        <Input value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Tóm tắt" />
-        <Input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Địa điểm" />
-        <Input value={roles} onChange={(event) => setRoles(event.target.value)} placeholder="Vị trí, cách nhau bằng dấu phẩy" />
-        <Input value={highlights} onChange={(event) => setHighlights(event.target.value)} placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy" />
-        <Input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Tên gọi khác: LG, LGD..." />
+        <Input
+          value={summary}
+          onChange={(event) => setSummary(event.target.value)}
+          placeholder="Tóm tắt"
+        />
+        <Input
+          value={location}
+          onChange={(event) => setLocation(event.target.value)}
+          placeholder="Địa điểm"
+        />
+        <Input
+          value={roles}
+          onChange={(event) => setRoles(event.target.value)}
+          placeholder="Vị trí, cách nhau bằng dấu phẩy"
+        />
+        <Input
+          value={highlights}
+          onChange={(event) => setHighlights(event.target.value)}
+          placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy"
+        />
+        <Input
+          value={aliases}
+          onChange={(event) => setAliases(event.target.value)}
+          placeholder="Tên gọi khác: LG, LGD..."
+        />
         <div>
           <Button onClick={() => void save()} disabled={saving}>
             {saving && <Loader2 className="size-4 animate-spin" />}

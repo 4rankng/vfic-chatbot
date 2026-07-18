@@ -76,6 +76,28 @@ export const filterByCounter = (
   return rows.filter((row) => counterForReason(row.reason) === selected);
 };
 
+const HUMAN_INTERVENTION_REASONS: ReadonlySet<AttentionReason> = new Set([
+  "DELIVERY_REVIEW",
+  "HUMAN_ESCALATION",
+  "REPLY_OVERDUE",
+]);
+
+/**
+ * Keep the "Cần can thiệp" panel limited to conversations where a person must
+ * act. UNREAD only means the recruiter has not opened the chat, and
+ * WAITING_REPLY is still inside the bot's normal response grace period; neither
+ * is evidence that the bot failed to answer.
+ */
+export const filterHumanInterventions = (
+  rows: AttentionItem[],
+): AttentionItem[] =>
+  rows.filter(
+    (row) =>
+      HUMAN_INTERVENTION_REASONS.has(row.reason) &&
+      row.action === "OPEN_CONVERSATION" &&
+      row.conversation_id !== null,
+  );
+
 export type CacheDiscriminators = {
   /** Skeleton iff first load (isPending && no data yet). */
   showSkeleton: boolean;

@@ -112,7 +112,7 @@ const SelectedProjectSummary = ({
         <div className="min-w-0">
           <div className="project-selected-eyebrow">Tổng quan dự án</div>
           <h2>{project.name}</h2>
-          <div className="project-selected-slug">{project.slug}</div>
+          <div className="project-selected-slug">Mã dự án: {project.slug}</div>
         </div>
         <div className="project-selected-actions">
           {canEdit && (

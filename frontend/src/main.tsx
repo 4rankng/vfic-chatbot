@@ -4,6 +4,7 @@ import "./index.css";
 import "./flat-surfaces.css";
 import App from "./App.tsx";
 import { InstallationBootstrap } from "@/components/atomic-crm/installation/InstallationBootstrap";
+import { registerSW } from "virtual:pwa-register";
 
 // After a new deploy, the service worker may replace its pre-cache while
 // the page still holds old chunk references. A reload picks up the new
@@ -16,6 +17,12 @@ window.addEventListener("vite:preloadError", () => {
     window.location.reload();
   }
 });
+
+// Use vite-plugin-pwa's Workbox registration instead of the generated bare
+// registration script. In auto-update mode this reloads an open tab when a new
+// service worker takes control, so a deployed UI cannot keep running an old
+// application bundle until the user discovers that a hard refresh is needed.
+registerSW({ immediate: true });
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

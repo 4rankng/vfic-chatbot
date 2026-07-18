@@ -14,6 +14,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import {
   ATTENTION_QUERY_KEY,
+  REASON_LABELS,
   type AttentionDashboard,
   type AttentionItem,
   fetchAttentionDashboard,
@@ -25,7 +26,10 @@ import {
   fetchDashboardCandidates,
   groupCandidatesByDay,
 } from "./candidateDashboard";
-import { deriveCacheDiscriminators } from "./recruitingCommandCenterLogic";
+import {
+  deriveCacheDiscriminators,
+  filterHumanInterventions,
+} from "./recruitingCommandCenterLogic";
 
 type RecruitingCommandCenterProps = {
   variant?: "desktop" | "mobile";
@@ -102,9 +106,7 @@ export const RecruitingCommandCenter = ({
       ? "recruiting-command recruiting-command-mobile"
       : "recruiting-command";
 
-  const interventionRows = (data?.immediate ?? []).filter(
-    (row) => row.action === "OPEN_CONVERSATION" && row.conversation_id,
-  );
+  const interventionRows = filterHumanInterventions(data?.immediate ?? []);
   const candidateGroups = groupCandidatesByDay(candidatesQuery.data ?? []);
   const candidateCount = candidateGroups.reduce(
     (total, group) => total + group.candidates.length,
@@ -348,6 +350,7 @@ const AttentionRow = ({
   // number is available.
   const sub = (
     <span className="dashboard-candidate-sub">
+      <span className="dashboard-job">{REASON_LABELS[row.reason]}</span>
       {desiredJob ? <span className="dashboard-job">{desiredJob}</span> : null}
       {phone ? (
         <span

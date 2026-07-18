@@ -55,3 +55,17 @@ The implementer subagents' work landed as three commits on `main` (`6a686aae`, `
 - Run `alembic upgrade head` + `downgrade -1` against a dev DB before deploy to confirm `0034` reverses cleanly.
 - Eyeball the counters/queues against a seeded dev DB — the SQL has never touched real Postgres.
 - Decide whether the `REPLY_OVERDUE` asymmetry is acceptable for v1 or blocks the multi-reason `?reason=` follow-up.
+
+## 2026-07-18 intervention-panel correction
+
+The dashboard's later two-column redesign renamed the immediate queue to
+`Cần can thiệp` but continued showing every immediate reason. That incorrectly
+classified `UNREAD` and `WAITING_REPLY` conversations as human interventions;
+an otherwise answered bot conversation could remain visible solely because a
+recruiter had not opened it.
+
+The panel now includes only `HUMAN_ESCALATION`, `DELIVERY_REVIEW`, and
+`REPLY_OVERDUE`. Unread-only conversations and messages still inside the bot's
+normal response grace period remain available in the inbox but do not appear as
+requiring human intervention. Each remaining row displays its intervention
+reason so recruiters can see why it was surfaced before opening the chat.

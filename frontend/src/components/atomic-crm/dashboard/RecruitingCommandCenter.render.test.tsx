@@ -69,6 +69,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
         screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
       )
       .toBeVisible();
+    await expect.element(screen.getByText("Quá hạn phản hồi")).toBeVisible();
     expect(
       screen.container.querySelector(".dashboard-candidate-chevron"),
     ).toBeNull();
