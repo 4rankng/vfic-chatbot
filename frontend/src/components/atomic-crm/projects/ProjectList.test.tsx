@@ -59,9 +59,7 @@ describe("ProjectAccordionList", () => {
     });
 
     await expect.element(ragTrigger).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.container.querySelector('[data-testid="knowledge-rag-project"]'),
-    ).toBeNull();
+    expect(screen.container.querySelector('[data-testid="knowledge-rag-project"]')).toBeNull();
 
     await ragTrigger.click();
     await expect.element(ragTrigger).toHaveAttribute("aria-expanded", "true");
@@ -71,21 +69,13 @@ describe("ProjectAccordionList", () => {
 
     await singleTrigger.click();
     await expect.element(ragTrigger).toHaveAttribute("aria-expanded", "false");
-    await expect
-      .element(singleTrigger)
-      .toHaveAttribute("aria-expanded", "true");
+    await expect.element(singleTrigger).toHaveAttribute("aria-expanded", "true");
     await expect
       .element(screen.getByTestId("knowledge-single-project"))
       .toBeVisible();
 
     await singleTrigger.click();
-    await expect
-      .element(singleTrigger)
-      .toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.container.querySelector(
-        '[data-testid="knowledge-single-project"]',
-      ),
-    ).toBeNull();
+    await expect.element(singleTrigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.container.querySelector('[data-testid="knowledge-single-project"]')).toBeNull();
   });
 });

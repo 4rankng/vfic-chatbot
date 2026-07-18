@@ -490,7 +490,10 @@ class KnowledgeCategoryService:
         jobs = await self._derived_jobs(project_id)
         definition = get_category_definition(key)
         for record in getattr(document, definition.list_field):
-            targets = _target_jobs(jobs, record.job_ids)
+            job_ids = getattr(record, "job_ids", None)
+            if job_ids is None:
+                continue
+            targets = _target_jobs(jobs, job_ids)
             if key is KnowledgeCategoryKey.COMPENSATION:
                 for job in targets:
                     job.salary_min = record.estimated_income_min_vnd or record.base_salary_vnd
@@ -650,18 +653,27 @@ class KnowledgeCategoryService:
                     description=item.summary,
                 )
             )
-        category_summary = next(
-            (item.summary for item in document.jobs if item.summary),
-            None,
+        card = dict(project.index_card or {})
+        location = ", ".join(dict.fromkeys(locations))
+        role_text = ", ".join(dict.fromkeys(roles[:3]))
+        summary = (
+            f"{project.name} đang tuyển {role_text} tại {location}."
+            if role_text and location
+            else f"{project.name} đang tuyển {role_text}."
+            if role_text
+            else f"Dự án tuyển dụng {project.name}."
         )
-        project.index_card = {
-            "summary": category_summary or project.summary or f"Cơ hội việc làm tại {project.name}",
-            "roles": roles,
-            "location": ", ".join(dict.fromkeys(locations)),
-            "eligibility": [],
-            "highlights": [],
-        }
-        project.summary = project.index_card["summary"]
+        card.update(
+            {
+                "summary": summary,
+                "roles": roles,
+                "location": location,
+            }
+        )
+        card.setdefault("eligibility", [])
+        card.setdefault("highlights", [])
+        project.index_card = card
+        project.summary = summary
         project.discovery_revision += 1
         project.is_active = bool(roles)
 

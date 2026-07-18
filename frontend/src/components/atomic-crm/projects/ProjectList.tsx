@@ -101,7 +101,9 @@ const ProjectListContent = () => {
               projects={projects}
               isAdmin={isAdmin}
               canEdit={canEdit}
-              onEdit={(project) => redirect("edit", "projects", project.id)}
+              onEdit={(project) =>
+                redirect("edit", "projects", project.id)
+              }
               onDeleted={() => refresh()}
             />
           ) : (

@@ -38,7 +38,13 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         password_hash="not-used",
         role=Role.admin,
     )
-    project = Project(name="Category Factory", slug=f"category-{uuid.uuid4().hex}")
+    legacy_summary = "Chi tiết dài từ tài liệu cũ không phải là tóm tắt dự án."
+    project = Project(
+        name="Category Factory",
+        slug=f"category-{uuid.uuid4().hex}",
+        summary=legacy_summary,
+        index_card={"summary": legacy_summary, "highlights": ["Có xe đưa đón"]},
+    )
     integration_session.add_all([actor, project])
     await integration_session.flush()
     knowledge_base = KnowledgeBase(
@@ -57,7 +63,10 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         project_id=project.id,
         category_key="transportation",
     )
-    integration_session.add_all([jobs_category, benefits_category, transportation_category])
+    contacts_category = KnowledgeCategory(project_id=project.id, category_key="contacts")
+    integration_session.add_all(
+        [jobs_category, benefits_category, transportation_category, contacts_category]
+    )
     await integration_session.flush()
 
     jobs_source = (
@@ -66,6 +75,7 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         "  - id: assembler\n"
         "    title: Công nhân lắp ráp\n"
         "    location: Hải Phòng\n"
+        "    summary: Chi tiết dài chỉ thuộc về vị trí tuyển dụng.\n"
     )
     jobs_document = parse_category_yaml("jobs", jobs_source)
     jobs_revision = KnowledgeCategoryRevision(
@@ -93,7 +103,10 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     assert jobs_category.active_revision_id == jobs_revision.id
     assert project.is_active is True
     assert project.category_authority_started is False
-    assert project.summary == "Cơ hội việc làm tại Category Factory"
+    expected_summary = "Category Factory đang tuyển Công nhân lắp ráp tại Hải Phòng."
+    assert project.summary == expected_summary
+    assert project.index_card["summary"] == expected_summary
+    assert project.index_card["highlights"] == ["Có xe đưa đón"]
     assert await integration_session.scalar(
         select(func.count(Job.id))
         .join(Company, Company.id == Job.company_id)
@@ -217,3 +230,28 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     assert await integration_session.scalar(
         select(func.count(BusStop.id)).where(BusStop.route_id.in_(route_ids))
     ) == 4
+
+    contacts_source = (
+        "category: contacts\n"
+        "contacts:\n"
+        "  - id: recruiter\n"
+        "    name: Bộ phận tuyển dụng\n"
+        "    zalo: Zalo OA\n"
+    )
+    contacts_document = parse_category_yaml("contacts", contacts_source)
+    contacts_revision = KnowledgeCategoryRevision(
+        category_id=contacts_category.id,
+        revision_no=1,
+        status=KnowledgeCategoryRevisionStatus.STAGED,
+        source_filename="contacts.yaml",
+        source_yaml=contacts_source,
+        normalized_payload=contacts_document.model_dump(mode="json"),
+        content_sha256=category_checksum(contacts_document),
+        created_by=actor.id,
+    )
+    integration_session.add(contacts_revision)
+    await integration_session.commit()
+
+    await service.activate_revision(contacts_revision.id, _Embedder())
+    await integration_session.refresh(contacts_category)
+    assert contacts_category.active_revision_id == contacts_revision.id
