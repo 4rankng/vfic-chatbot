@@ -11,5 +11,6 @@ const ConversationShow = lazy(() =>
 export default {
   list: ConversationList,
   show: ConversationShow,
-  recordRepresentation: (record: Conversation) => record?.zalo_chat_id,
+  recordRepresentation: (record: Conversation) =>
+    record?.zalo_chat_id ?? record?.id ?? "Hội thoại",
 };

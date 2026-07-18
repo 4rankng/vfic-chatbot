@@ -442,7 +442,7 @@ const ConversationListPanel = ({
           _presentation:
             adapterPresentations.get(c.id) ??
             getGenericConversationPresentation(c),
-          _snippet: snippets[c.zalo_chat_id] ?? "",
+          _snippet: snippets[c.zalo_chat_id ?? c.id] ?? "",
         };
       })
       .filter((c) => {
@@ -457,7 +457,7 @@ const ConversationListPanel = ({
         }
         if (deferredQuery) {
           const haystack = [
-            c.zalo_chat_id,
+            c.zalo_chat_id ?? c.id,
             c._presentation.searchText,
             c._snippet,
           ]

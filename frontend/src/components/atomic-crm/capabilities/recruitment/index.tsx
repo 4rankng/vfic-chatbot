@@ -46,9 +46,10 @@ const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   }
   const presentations = new Map<string, ConversationRowPresentation>();
   for (const conversation of conversations) {
-    const lead = leadByZalo.get(conversation.zalo_chat_id);
+    const chatKey = conversation.zalo_chat_id ?? conversation.id;
+    const lead = leadByZalo.get(chatKey);
     const displayName =
-      lead?.name || `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`;
+      lead?.name || `Ứng viên · ${(chatKey || "").slice(-4)}`;
     const colors = getLeadStatusColor(lead);
     const priority = getLeadPriorityChip(lead);
     presentations.set(conversation.id, {

@@ -28,7 +28,7 @@ describe("ChannelAdapterSelector", () => {
       <div className="inbox-bg-container">
         <ChannelAdapterSelectorView
           provider="zalo_bot"
-          counts={{ zalo_bot: 0, zalo_oa: 135 }}
+          counts={{ zalo_bot: 0, zalo_oa: 135, facebook_messenger: 0 }}
           onProviderChange={onProviderChange}
         />
       </div>,
@@ -93,12 +93,15 @@ describe("ChannelAdapterSelector", () => {
       </QueryClientProvider>,
     );
 
-    await expect.poll(() => mockApiJson.mock.calls.length).toBe(2);
+    await expect.poll(() => mockApiJson.mock.calls.length).toBe(3);
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=zalo_bot",
     );
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=zalo_oa",
+    );
+    expect(mockApiJson).toHaveBeenCalledWith(
+      "/api/v1/conversations/needs-attention?channel_provider=facebook_messenger",
     );
     expect(
       queryClient.getQueryData(["conversations-needs-attention", "zalo_bot"]),

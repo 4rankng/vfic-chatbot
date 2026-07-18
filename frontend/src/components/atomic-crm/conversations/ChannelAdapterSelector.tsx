@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { apiJson } from "../providers/rest/api";
 import {
+  CONVERSATION_CHANNEL_PROVIDERS,
   type ConversationChannelProvider,
   getChannelProviderSearchParams,
 } from "./conversation-list-filters";
@@ -17,12 +18,16 @@ import {
 type AdapterDefinition = {
   provider: ConversationChannelProvider;
   label: string;
-  icon: string;
+  icon?: string;
+  // Text badge shown when no icon asset is available yet (e.g. Messenger
+  // before a branded icon is produced).
+  textBadge?: string;
 };
 
 const ADAPTERS: readonly AdapterDefinition[] = [
   { provider: "zalo_bot", label: "Zalo Chatbot", icon: zaloChatbotIcon },
   { provider: "zalo_oa", label: "Zalo OA", icon: zaloOaIcon },
+  { provider: "facebook_messenger", label: "Messenger", textBadge: "f" },
 ];
 
 type NeedsAttentionResponse = { count: number };
@@ -68,8 +73,12 @@ export const ChannelAdapterSelectorView = ({
         aria-label="Chọn kênh hội thoại"
         value={provider}
         onValueChange={(value) => {
-          if (value === "zalo_bot" || value === "zalo_oa") {
-            onProviderChange(value);
+          if (
+            CONVERSATION_CHANNEL_PROVIDERS.some(
+              (provider) => provider === value,
+            )
+          ) {
+            onProviderChange(value as ConversationChannelProvider);
           }
         }}
       >
@@ -87,7 +96,13 @@ export const ChannelAdapterSelectorView = ({
                   className="channel-adapter-option"
                   aria-label={accessibleLabel}
                 >
-                  <img src={adapter.icon} alt="" aria-hidden="true" />
+                  {adapter.icon ? (
+                    <img src={adapter.icon} alt="" aria-hidden="true" />
+                  ) : (
+                    <span className="channel-adapter-text-badge" aria-hidden="true">
+                      {adapter.textBadge ?? adapter.label[0]}
+                    </span>
+                  )}
                   {count > 0 ? (
                     <span
                       className="channel-adapter-badge"
@@ -122,15 +137,20 @@ export const ChannelAdapterSelector = ({
   searchParams: URLSearchParams;
   onSearchParamsChange: (next: URLSearchParams) => void;
 }) => {
-  // Keep both queries mounted regardless of selection so badges stay warm and
-  // adapter switching never briefly shows an aggregate or stale count.
+  // Keep all provider queries mounted regardless of selection so badges stay
+  // warm and adapter switching never briefly shows an aggregate or stale count.
   const zaloBotCount = useScopedAttentionCount("zalo_bot");
   const zaloOaCount = useScopedAttentionCount("zalo_oa");
+  const messengerCount = useScopedAttentionCount("facebook_messenger");
 
   return (
     <ChannelAdapterSelectorView
       provider={provider}
-      counts={{ zalo_bot: zaloBotCount, zalo_oa: zaloOaCount }}
+      counts={{
+        zalo_bot: zaloBotCount,
+        zalo_oa: zaloOaCount,
+        facebook_messenger: messengerCount,
+      }}
       onProviderChange={(nextProvider) =>
         onSearchParamsChange(
           getChannelProviderSearchParams(searchParams, nextProvider),

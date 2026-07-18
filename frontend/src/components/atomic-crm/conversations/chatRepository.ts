@@ -98,13 +98,17 @@ export const chatRepository = {
    * re-key by zalo_chat_id for the inbox consumers.
    */
   async getLastMessages(
-    conversations: { id: string; zalo_chat_id: string }[],
+    conversations: { id: string; zalo_chat_id?: string | null }[],
   ): Promise<Record<string, string>> {
     const epoch = getRuntimeEpoch();
     const out: Record<string, string> = {};
-    const valid = conversations.filter((c) => c?.id && c?.zalo_chat_id);
+    // Key by zalo_chat_id when present (Zalo), else fall back to the stable
+    // conversation id (Messenger rows carry no zalo_chat_id).
+    const valid = conversations.filter((c) => c?.id);
     if (valid.length === 0) return out;
-    const zaloById = new Map(valid.map((c) => [c.id, c.zalo_chat_id]));
+    const keyById = new Map(
+      valid.map((c) => [c.id, c.zalo_chat_id ?? c.id]),
+    );
     for (let i = 0; i < valid.length; i += 200) {
       const chunk = valid.slice(i, i + 200).map((c) => c.id);
       let snippets: Record<string, string> = {};
@@ -118,8 +122,8 @@ export const chatRepository = {
         snippets = {};
       }
       for (const [cid, text] of Object.entries(snippets)) {
-        const zalo = zaloById.get(cid);
-        if (zalo && text) out[zalo] = text;
+        const key = keyById.get(cid);
+        if (key && text) out[key] = text;
       }
     }
     requireCurrentEpoch(epoch);

@@ -114,7 +114,8 @@ export type LeadChatOpsActionResult = {
 
 export type Conversation = {
   id: string;
-  zalo_chat_id: string;
+  // Zalo compatibility aliases — nullable for non-Zalo (Messenger) conversations.
+  zalo_chat_id?: string | null;
   zalo_channel?: "bot" | "oa" | string;
   // Backend ConversationMode is BOT/HUMAN/SEMI_AUTO/CLOSED; the REST dataProvider
   // lower-cases it so render checks keep working.
@@ -149,7 +150,8 @@ export type Conversation = {
 
 export type Message = {
   id: string;
-  zalo_message_id: string;
+  // Zalo compatibility alias — nullable for non-Zalo (Messenger) messages.
+  zalo_message_id?: string | null;
   conversation_id: string;
   type: "inbound" | "outbound" | "system";
   content: string;
