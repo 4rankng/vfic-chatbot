@@ -236,6 +236,20 @@ def _report(documents: dict[KnowledgeCategoryKey, CategoryDocument]) -> dict[str
     }
 
 
+def _is_current_backfill_revision(
+    revision: KnowledgeCategoryRevision,
+    *,
+    expected_checksum: str,
+    expected_filename: str,
+) -> bool:
+    """Allow a one-time migration to resume after its projections change source row IDs."""
+
+    return (
+        revision.content_sha256 == expected_checksum
+        or revision.source_filename == expected_filename
+    )
+
+
 async def _apply(
     db: AsyncSession,
     project: Project,
@@ -274,9 +288,14 @@ async def _apply(
         if category is None:
             raise RuntimeError(f"missing category slot: {definition.key.value}")
         expected_checksum = category_checksum(document)
+        expected_filename = f"legacy-db-{definition.template_filename}"
         if category.active_revision_id is not None:
             active = await db.get(KnowledgeCategoryRevision, category.active_revision_id)
-            if active is not None and active.content_sha256 == expected_checksum:
+            if active is not None and _is_current_backfill_revision(
+                active,
+                expected_checksum=expected_checksum,
+                expected_filename=expected_filename,
+            ):
                 continue
             raise RuntimeError(
                 f"category {definition.key.value} already has different active content"
@@ -290,7 +309,7 @@ async def _apply(
             category_id=category.id,
             revision_no=int(latest or 0) + 1,
             status=KnowledgeCategoryRevisionStatus.STAGED,
-            source_filename=f"legacy-db-{definition.template_filename}",
+            source_filename=expected_filename,
             source_yaml=_source_yaml(document),
             normalized_payload=document.model_dump(mode="json"),
             content_sha256=expected_checksum,
