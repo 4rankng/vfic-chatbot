@@ -135,7 +135,7 @@ the canonical map; visit each on desktop **and** mobile (390×844) per run.
 | `#/projects` | `projects` | `projects/ProjectList.tsx` | CRUD cycle on a `QA-*` project; delete confirmation names target |
 | `#/personas` | `personas` | `personas/PersonaList.tsx` | Active persona marked; create/edit; assignments |
 | `#/users` | `users` (admin only) | `users/UserList.tsx` | List/sort/badges; create/edit/delete on `QA-*` user |
-| `#/settings` | `settings` | `integrations/ZaloIntegrationPage.tsx` | Zalo OA config form renders; secrets masked |
+| `#/settings` | `settings` | `integrations/ZaloIntegrationPage.tsx` | Zalo OA config form renders; Messenger section renders on desktop/mobile; secrets masked |
 
 ### Custom routes
 
@@ -155,6 +155,27 @@ the canonical map; visit each on desktop **and** mobile (390×844) per run.
 | `VITE_DISABLE_EMAIL_PASSWORD_AUTHENTICATION=true` | Hides email/password form (SSO-only) |
 
 If a feature looks missing during QA, check these before filing a bug.
+
+### 3.1 Messenger Settings smoke
+
+Use this when touching the Messenger Settings flow or its backend OAuth
+lifecycle.
+
+1. Open `#/settings` on desktop and mobile. Confirm both Zalo and Messenger
+   sections render in the side nav or drawer.
+2. Visit a callback-shaped hash such as
+   `#/settings?facebook_oauth_status=pending_selection&facebook_oauth_flow_id=<opaque>`.
+   Confirm the Messenger section opens, the page list loads, and the hash is
+   cleaned back to `#/settings` after the callback is consumed.
+3. Trigger the error path with
+   `facebook_oauth_status=error&facebook_oauth_error=<code>` and confirm the
+   alert stays generic Vietnamese text with no token, code, or provider payload
+   leakage.
+4. Click `Ngắt kết nối` and confirm the browser sends
+   `DELETE /api/v1/admin/integrations/facebook` with no `page_id` query
+   parameter.
+5. If the page list is empty or unavailable, confirm the recovery copy appears
+   and the `Quay lại kết nối` button resets the flow.
 
 ---
 

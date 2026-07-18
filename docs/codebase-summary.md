@@ -68,7 +68,7 @@ ChatBot/
 │   │   │       ├── knowledge/        KnowledgeIngestPanel + project workspace
 │   │   │       ├── personas/         persona CRUD + workspace
 │   │   │       ├── projects/         ProjectSidebar / BusTimetable / FaqEditor
-│   │   │       ├── integrations/     ZaloIntegrationPage
+│   │   │       ├── integrations/     ZaloIntegrationPage + FacebookMessengerIntegrationPage
 │   │   │       ├── providers/        dataProvider, authProvider, i18nProvider
 │   │   │       ├── layout/           Layout + MobileLayout
 │   │   │       ├── login/, settings/, profiles/, misc/, automation/
@@ -133,7 +133,7 @@ ChatBot/
 | `components/atomic-crm/knowledge/` | KnowledgeIngestPanel (largest file, 763 LOC) + project workspace shell. |
 | `components/atomic-crm/projects/` | ProjectSidebar, ProjectWorkspaceShell, ProjectKnowledgePanel, ProjectPersonaPanel. |
 | `components/atomic-crm/personas/` | Persona CRUD + PersonaWorkspaceShell + personaMarkdown. |
-| `components/atomic-crm/integrations/` | ZaloIntegrationPage (admin only). |
+| `components/atomic-crm/integrations/` | ZaloIntegrationPage + FacebookMessengerIntegrationPage (admin only). |
 | `lib/vfic/` | `config.ts` (API base resolution), `realtimeSocket.ts` (Socket.IO singleton), `humanReplyService.ts`, `knowledgeService.ts`. |
 | `lib/` | `utils.ts` (`cn()` = clsx + tailwind-merge), `toSlug.ts`, `vietnameseSearch.ts` (diacritic-insensitive). |
 

@@ -222,10 +222,11 @@ async def subscribe_app_to_page(page_id: str, page_access_token: str) -> None:
         params={"access_token": page_access_token},
         json_body={"subscribed_fields": "messages,messaging_postbacks"},
     )
-    if data.get("error"):
-        raise FacebookOAuthError(
-            f"page subscription failed: {data['error'].get('message') or data['error']}"
-        )
+    if data.get("success") is not True:
+        # Meta's contract is an explicit boolean acknowledgement. Empty,
+        # false, string, numeric, and error envelopes all fail closed without
+        # copying the provider response (which may contain sensitive context).
+        raise FacebookOAuthError("page subscription failed")
 
 
 async def unsubscribe_app_from_page(page_id: str, page_access_token: str) -> None:

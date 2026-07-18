@@ -54,6 +54,7 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
 | Recommendation | `test_recommendation_scoring.py` |
 | Workers | `test_persistence_worker.py`, `test_reconcile_worker.py`, `test_reconcile_repository.py`, `test_worker_async_runner.py`, `test_worker_preload.py`, `test_scheduler_registration.py` |
 | Auth / security | `test_security.py`, `test_password_reset_helpers.py`, `test_ratelimit.py` |
+| Messenger integration | `test_facebook_oauth.py` |
 | Concurrency | `test_concurrency.py`, `test_llm_semaphore.py`, `test_direct_lease.py`, `test_direct_turns.py`, `test_parallel_tools.py` |
 | Zalo | `test_zalo_bot_service.py`, `test_zalo_oa_*.py` (events, health, service, signature, test_connection, token_refresh) |
 
@@ -101,6 +102,7 @@ docker compose -f docker-compose.dev.yml up -d postgres
 | Location | Tests |
 |---|---|
 | `conversations/` | `chatRepository.test.ts`, `chatOpsWorkspace.test.ts`, `useConversationRealtime.test.ts` |
+| `integrations/` | `FacebookMessengerIntegrationPage.test.tsx`, `ZaloIntegrationPage.navigation.test.tsx` |
 | `knowledge/` | `knowledgePipelineUtils.test.ts` |
 | `layout/` | `workspace-navigation.test.ts` |
 | `providers/commons/` | `i18nProvider.test.ts` |
@@ -162,6 +164,7 @@ the E2E database during global teardown.
   The backend full suite includes the required PostgreSQL integration lane, so
   local PostgreSQL + pgvector must be available.
 - **If you touch a shared contract** (Pydantic schema, Protocol interface, API response shape), run tests in all modules that import it — not just the module you changed.
+- Messenger OAuth lifecycle changes are covered by `backend/tests/test_facebook_oauth.py` plus the frontend unit tests in `frontend/src/components/atomic-crm/integrations/FacebookMessengerIntegrationPage.test.tsx` and `frontend/src/components/atomic-crm/integrations/ZaloIntegrationPage.navigation.test.tsx`. Keep the backend and frontend assertions aligned when touching that flow.
 - **Coverage threshold:** Frontend app project requires 80% lines/functions/branches/statements on `src/components/atomic-crm/**` (excluding `types.ts`).
 
 ## Phase 1 Characterization Boundary

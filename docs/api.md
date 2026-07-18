@@ -49,7 +49,7 @@ The application registers the API routers in `backend/app/main.py` under
 | `jobs` | `/api/v1/jobs` | `jobs` | JWT (list/get); `require_admin` (create/update) | Job postings |
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
 | `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Performance observability |
-| `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` | Integration settings (Zalo, LLM) |
+| `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` | Integration settings (Zalo, Messenger, LLM) |
 | `installation` | `/api/v1/installation`, `/api/v1/admin/installation` | `installation` | Public-safe runtime projection; `require_admin` for lifecycle administration | Immutable installation revision lifecycle |
 | `realtime` | `/realtime` | — | JWT via `?token=` or Bearer | Legacy SSE endpoint |
 | `webhooks` | `/webhooks` | `webhooks` | HMAC signature (no JWT) | Zalo webhook receiver |
@@ -160,6 +160,30 @@ A `READY` response is not based only on the stored lifecycle flag. The service
 rechecks the active revision, validation, pack contract, immutable persona and
 template checksums, required integrations, and checksum-pinned active-KB
 evidence against PostgreSQL before reporting readiness.
+
+## Facebook Messenger settings flow
+
+The recruiter console now exposes a dedicated Messenger section under
+`/settings` for Page authorization and activation. This flow is admin-only
+except for the browser redirect callback, which cannot carry the app's JWT and
+is therefore authenticated by one-time state plus the admin session metadata
+stored with it.
+
+| Method and path | Auth | Result |
+|---|---|---|
+| `GET /api/v1/admin/integrations/facebook` | Admin | Returns the active/archived Page projection. The response masks the Page ID suffix; history is preserved. |
+| `POST /api/v1/admin/integrations/facebook/oauth/start` | Admin | Returns `authorization_url` and stores short-lived OAuth state bound to the initiating admin id and `token_version`. |
+| `GET /api/v1/admin/integrations/facebook/oauth/callback` | Public redirect | Validates the one-time state server-side, exchanges the code, stores an encrypted opaque flow capsule in Redis, and redirects back to `/#/settings` with `facebook_oauth_status` plus either `facebook_oauth_flow_id` or `facebook_oauth_error`. |
+| `GET /api/v1/admin/integrations/facebook/oauth/pages?flow_id=...` | Admin | Returns the safe Page list for the current authenticated admin session. |
+| `POST /api/v1/admin/integrations/facebook/oauth/complete` | Admin | Consumes the flow once, activates the selected Page, and invalidates the pending session record. |
+| `POST /api/v1/admin/integrations/facebook/test` | Admin | Probes the active Page connection. |
+| `DELETE /api/v1/admin/integrations/facebook` | Admin | Disconnects the single active Page server-side; no `page_id` query parameter is required. |
+
+The callback redirect target is built from the first allowlisted
+`facebook_callback_allowlist` origin (localhost fallback in dev). The frontend
+strips the Messenger callback flags from the hash after reading them, so the
+URL returns to a clean `#/settings` state after page selection or error
+handling.
 
 ## Rate-Limited Endpoints
 
@@ -291,8 +315,8 @@ after provider filtering, so pages never mix adapters.
 
 `GET /api/v1/conversations/needs-attention` accepts the same optional scope and
 returns `{"count": <number>}`. Omitting `channel_provider` keeps the aggregate
-count used by the global navigation badge. Unsupported providers return `422`;
-Messenger is not exposed until that adapter is released.
+count used by the global navigation badge. Unsupported providers return `422`.
+The Messenger settings flow lives under `/settings` and is documented below.
 
 ## Custom DataProvider Methods
 

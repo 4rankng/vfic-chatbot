@@ -60,10 +60,10 @@ EXPECTED_ROUTE_COUNTS = {
 EXPECTED_ROUTE_INVENTORY_SHA256 = "acac0b9ec301e48b50d6154412f2285cb2eaeca508ce68e754fa07711c1a39e3"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 71,  # LLM-only evidence correction paths are explicit
+    "provider_boundary": 72,  # LLM-only evidence correction paths are explicit
     "queue_producer": 25,  # Project category activation adds one reviewed queue boundary
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "2d32a43202ea2a1f3b49dea3942144084e9be9d975d97ebc7c14874c2c3c416a"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "92ef3508580b5a65f14ac7716cecd759c9c03ba493b0d393e965c0a5097f930b"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
@@ -129,7 +129,8 @@ class _BroadCallInventory(_CallInventory):
                 categories.append("queue_producer")
             if name.startswith("send_") or (
                 self.provider_transport
-                and name in {"get", "post", "put", "patch", "delete", "request"}
+                and name
+                in {"get", "getdel", "post", "put", "patch", "delete", "request"}
             ):
                 categories.append("provider_boundary")
         for category in categories:

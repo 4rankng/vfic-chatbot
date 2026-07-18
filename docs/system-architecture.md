@@ -466,10 +466,11 @@ or progress message.
 `ZaloChannelSender` selects the concrete Bot or OA adapter, while the graph only
 copies this common telemetry contract into the run. A future Facebook Page,
 Telegram, or WhatsApp adapter therefore implements the same result metadata
-without a graph-runner branch. The performance console groups p50/p95 provider
-and end-to-end timing by adapter. Provider-request timing ends when the
-provider API responds; candidate-device rendering needs channel delivery/read
-receipts and is not inferred.
+without a graph-runner branch. The admin console also exposes a Facebook
+Messenger Settings flow for Page authorization. The performance console groups
+p50/p95 provider and end-to-end timing by adapter. Provider-request timing ends
+when the provider API responds; candidate-device rendering needs channel
+delivery/read receipts and is not inferred.
 
 If the durable outbox recovers a command after a process crash, it writes the
 same adapter fields to the linked bot run. When the crash preceded creation of
@@ -762,6 +763,36 @@ be shared by another Project.
 - **Credentials** resolved at runtime from
   `IntegrationSettingsService(db).resolve_zalo()` (admin-managed, encrypted
   at rest), falling back to env bootstrap values in dev.
+
+### 11.1 Facebook Messenger settings lifecycle
+
+- **Frontend surface:** `components/atomic-crm/integrations/ZaloIntegrationPage.tsx`
+  now includes a separate Messenger section that mounts
+  `FacebookMessengerIntegrationPage.tsx` on desktop and mobile.
+- **Backend surface:** `backend/app/api/integrations.py` exposes the Messenger
+  OAuth lifecycle:
+  - `POST /api/v1/admin/integrations/facebook/oauth/start`
+  - `GET /api/v1/admin/integrations/facebook/oauth/callback`
+  - `GET /api/v1/admin/integrations/facebook/oauth/pages`
+  - `POST /api/v1/admin/integrations/facebook/oauth/complete`
+  - `POST /api/v1/admin/integrations/facebook/test`
+  - `DELETE /api/v1/admin/integrations/facebook`
+- **Callback model:** the browser redirect callback is public because the
+  provider redirect cannot carry the app JWT. It validates one-time state
+  against the initiating admin id and `token_version`, stores an encrypted
+  opaque flow capsule in Redis, and redirects back to `/#/settings` with only
+  safe status/error flags.
+- **Session binding:** the page list and completion steps are bound to the same
+  admin session and Redis flow key. The completion endpoint atomically consumes
+  the flow before any provider side effects, so replays fail with a stale-flow
+  error instead of double-activating a Page.
+- **Disconnect behavior:** the UI no longer passes a `page_id` query string.
+  The server resolves the active Page and disconnects it directly, preserving
+  history and keeping the masked Page ID suffix server-owned.
+- **Scope:** this subsection documents the admin Settings OAuth lifecycle and
+  page-management flow. Best-effort remote unsubscribe happens before the
+  local disconnect, and the live channel runtime is documented elsewhere in
+  this section.
 
 ---
 

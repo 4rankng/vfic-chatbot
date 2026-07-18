@@ -9,6 +9,7 @@ import {
   EyeOff,
   Menu,
   MessageCircle,
+  MessagesSquare,
   PlugZap,
   Settings,
   UsersRound,
@@ -45,6 +46,7 @@ import { InboxIcons } from "../conversations/InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PersonaList } from "../personas/PersonaList";
 import { UserList } from "../users/UserList";
+import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
 import "../conversations/inbox.css";
 import "./settings.css";
 
@@ -170,10 +172,31 @@ const OPENROUTER_MODEL_OPTIONS = [
 
 type SettingsItemId =
   | "settings-zalo-channel"
+  | "settings-facebook-messenger"
   | "settings-minimax"
   | "settings-openrouter"
   | "settings-agents"
   | "settings-users";
+
+const FACEBOOK_OAUTH_CALLBACK_KEYS = [
+  "facebook_oauth_status",
+  "facebook_oauth_flow_id",
+  "facebook_oauth_error",
+] as const;
+
+const resolveInitialSettingsItemId = (): SettingsItemId => {
+  if (typeof window === "undefined") return "settings-zalo-channel";
+
+  const queryIndex = window.location.hash.indexOf("?");
+  if (queryIndex === -1) return "settings-zalo-channel";
+
+  const params = new URLSearchParams(
+    window.location.hash.slice(queryIndex + 1),
+  );
+  return FACEBOOK_OAUTH_CALLBACK_KEYS.some((key) => params.has(key))
+    ? "settings-facebook-messenger"
+    : "settings-zalo-channel";
+};
 
 type SettingsNavMode = "integrations" | "embedded";
 
@@ -191,6 +214,13 @@ const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     label: "Zalo",
     description: "Bot Platform và OA",
     Icon: MessageCircle,
+    mode: "integrations",
+  },
+  {
+    itemId: "settings-facebook-messenger",
+    label: "Messenger",
+    description: "Trang Facebook",
+    Icon: MessagesSquare,
     mode: "integrations",
   },
   {
@@ -231,6 +261,11 @@ const SETTINGS_VIEW_COPY: Record<
     kicker: "Kênh liên lạc",
     title: "Zalo",
     description: "Cấu hình Bot Platform và Official Account dùng để nhắn tin.",
+  },
+  "settings-facebook-messenger": {
+    kicker: "Kênh liên lạc",
+    title: "Messenger",
+    description: "Kết nối Trang Facebook để nhận và trả lời tin nhắn ứng viên.",
   },
   "settings-minimax": {
     kicker: "Model chính",
@@ -676,7 +711,7 @@ export const ZaloIntegrationPage = () => {
     "deepseek/deepseek-v4-flash",
   );
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
-    "settings-zalo-channel",
+    resolveInitialSettingsItemId,
   );
   const [testingBot, setTestingBot] = useState(false);
   const [testingOa, setTestingOa] = useState(false);
@@ -1055,6 +1090,10 @@ export const ZaloIntegrationPage = () => {
           <UserList embedded />
         </section>
       );
+    }
+
+    if (activeItemId === "settings-facebook-messenger") {
+      return <FacebookMessengerIntegrationPage />;
     }
 
     if (activeItemId === "settings-zalo-channel") {
