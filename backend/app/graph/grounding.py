@@ -36,6 +36,7 @@ def extract_surfaced_job_ids(tool_results: list[str]) -> set[str]:
     surfaced: set[str] = set()
     for result in tool_results or []:
         surfaced |= _extract_ids(result, _JOB_ID_TAG_RE)
+        surfaced |= _extract_ids(result, _BARE_UUID_RE)
     return surfaced
 
 

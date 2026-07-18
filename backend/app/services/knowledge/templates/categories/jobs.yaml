@@ -1,0 +1,14 @@
+# Danh sách này là toàn bộ việc đang tuyển của dự án.
+# Xóa một việc khỏi lần cập nhật kế tiếp nghĩa là việc đó không còn tuyển.
+schema_version: "1.0"
+category: jobs
+jobs: []
+# Ví dụ cấu trúc (bỏ dấu # và thay bằng dữ liệu thật):
+#  - id: cong-nhan-san-xuat
+#    title: Công nhân sản xuất
+#    aliases: [Công nhân kiểm tra màn hình]
+#    location: Khu công nghiệp ...
+#    vacancies: 100
+#    employment_type: temporary  # permanent|temporary|contract|internship
+#    summary: Mô tả ngắn về công việc
+#    keywords: [điện tử, kiểm tra]

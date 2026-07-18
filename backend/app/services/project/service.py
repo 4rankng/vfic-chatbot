@@ -23,7 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import NS_PREAMBLE
 from app.models.company import Project
-from app.models.knowledge import KnowledgeBase, KnowledgeBaseMode
+from app.models.knowledge import (
+    KnowledgeBase,
+    KnowledgeBaseDirectFile,
+    KnowledgeBaseMode,
+    KnowledgeCategory,
+    KnowledgeCategoryRevision,
+)
 from app.models.persona import Persona
 from app.models.user import Role, User
 from app.schemas.projects import (
@@ -40,12 +46,15 @@ from app.schemas.projects import (
     ProjectOut,
     ProjectUpdate,
 )
+from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, ForbiddenError, NotFoundError, UpstreamError
+from app.services.errors import ConflictError, ForbiddenError, NotFoundError
 from app.services.knowledge.repository import JobFeatureValueRepo
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.project.faq import ProjectFaqService
 from app.services.project.features import ProjectFeatureService
 from app.services.project.repository import ProjectRepository, require_project
+from app.services.knowledge_base_service import KnowledgeBaseService
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +130,11 @@ class ProjectService:
         ready = await repo.readiness_by_project([p.id for p in rows])
         total = await repo.active_catalog_size()
         doc_counts = await self.repo.knowledge_document_counts([p.id for p in rows])
+        modes = await self._knowledge_modes([p.knowledge_base_id for p in rows])
         out: list[ProjectOut] = []
         for p in rows:
             o = ProjectOut.model_validate(p)
+            o.knowledge_mode = modes.get(p.knowledge_base_id)
             o.knowledge_document_count = doc_counts.get(p.id, 0)
             o.feature_readiness = FeatureReadiness(ready=ready.get(p.id, 0), total=total)
             out.append(o)
@@ -140,6 +151,9 @@ class ProjectService:
         total = await repo.active_catalog_size()
         doc_counts = await self.repo.knowledge_document_counts([proj.id])
         o = ProjectOut.model_validate(proj)
+        o.knowledge_mode = (await self._knowledge_modes([proj.knowledge_base_id])).get(
+            proj.knowledge_base_id
+        )
         o.knowledge_document_count = doc_counts.get(proj.id, 0)
         o.feature_readiness = FeatureReadiness(ready=ready.get(proj.id, 0), total=total)
         return o
@@ -148,36 +162,48 @@ class ProjectService:
         name = body.name.strip()
         existing = await self.repo.find_by_name(name)
         if existing is not None:
-            if existing.knowledge_base_id != body.knowledge_base_id:
-                raise ConflictError("Project already belongs to another knowledge base")
-            return existing
-
-        knowledge_base = await self.db.get(KnowledgeBase, body.knowledge_base_id)
-        if knowledge_base is None:
-            raise NotFoundError("Knowledge base not found")
-        if knowledge_base.mode is not KnowledgeBaseMode.RAG:
-            raise ConflictError("Projects can only be added to a RAG knowledge base")
+            raise ConflictError("Project name already exists")
 
         proj = Project(
             slug=body.slug.strip(),
             name=name,
             is_active=body.is_active,
-            knowledge_base_id=knowledge_base.id,
+            aliases=[value.strip() for value in body.aliases if value.strip()],
+            summary=(body.discovery_card or {}).get("summary"),
+            index_card=body.discovery_card or {},
         )
         self.db.add(proj)
         try:
+            await self.db.flush()
+            knowledge_base = KnowledgeBase(
+                project_id=proj.id,
+                name=f"{name} Knowledge",
+                slug=f"{body.slug.strip()}-kb",
+                mode=body.knowledge_mode,
+                created_by=admin.id,
+            )
+            self.db.add(knowledge_base)
+            await self.db.flush()
+            proj.knowledge_base_id = knowledge_base.id
+            if body.knowledge_mode is KnowledgeBaseMode.RAG:
+                self.db.add_all(
+                    [
+                        KnowledgeCategory(project_id=proj.id, category_key=key.value)
+                        for key in KnowledgeCategoryKey
+                    ]
+                )
+            await record_audit(
+                self.db,
+                action="create_project",
+                actor_id=admin.id,
+                target_type="project",
+                target_id=str(proj.id),
+                payload={"knowledge_mode": body.knowledge_mode.value},
+            )
             await self.db.commit()
         except Exception as exc:  # noqa: BLE001 — unique slug violation etc.
             await self.db.rollback()
             raise ConflictError(f"project create failed: {exc}") from exc
-        await record_audit(
-            self.db,
-            action="create_project",
-            actor_id=admin.id,
-            target_type="project",
-            target_id=str(proj.id),
-        )
-        await self.db.commit()
         await self.db.refresh(proj)
         await bump_cache_version(NS_PREAMBLE)
         return proj
@@ -187,7 +213,22 @@ class ProjectService:
         if body.name is not None:
             proj.name = body.name.strip()
         if body.is_active is not None:
+            if body.is_active:
+                await self._require_activation_ready(proj)
             proj.is_active = body.is_active
+        if body.aliases is not None:
+            proj.aliases = [value.strip() for value in body.aliases if value.strip()]
+        if "discovery_card" in body.model_fields_set:
+            mode = (await self._knowledge_modes([proj.knowledge_base_id])).get(
+                proj.knowledge_base_id
+            )
+            if mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
+                raise ConflictError("RAG discovery cards are derived from active categories")
+            if not body.discovery_card:
+                raise ConflictError("Single-page Projects require a discovery card")
+            proj.index_card = body.discovery_card
+            proj.summary = body.discovery_card.get("summary")
+            proj.discovery_revision += 1
         if "default_persona_id" in body.model_fields_set:
             if actor.role != Role.admin:
                 raise ForbiddenError("admin only")
@@ -196,17 +237,6 @@ class ProjectService:
                 if persona is None:
                     raise NotFoundError("Agent not found")
             proj.default_persona_id = body.default_persona_id
-        if "knowledge_base_id" in body.model_fields_set:
-            if actor.role != Role.admin:
-                raise ForbiddenError("admin only")
-            if body.knowledge_base_id is None:
-                raise ConflictError("A Project must belong to one RAG knowledge base")
-            knowledge_base = await self.db.get(KnowledgeBase, body.knowledge_base_id)
-            if knowledge_base is None:
-                raise NotFoundError("Knowledge base not found")
-            if knowledge_base.mode is not KnowledgeBaseMode.RAG:
-                raise ConflictError("Projects can only be added to a RAG knowledge base")
-            proj.knowledge_base_id = knowledge_base.id
         await record_audit(
             self.db,
             action="update_project",
@@ -232,36 +262,46 @@ class ProjectService:
         await self.db.commit()
         await bump_cache_version(NS_PREAMBLE)
 
+    async def get_single_page(self, project_id: uuid.UUID):
+        from app.models.knowledge import KnowledgeBaseDirectFile
+
+        project = await self._require_project(project_id)
+        knowledge_base = await self._require_project_mode(
+            project,
+            KnowledgeBaseMode.DIRECT_CONTEXT,
+        )
+        direct_file = await self.db.scalar(
+            select(KnowledgeBaseDirectFile).where(
+                KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+            )
+        )
+        if direct_file is None:
+            raise NotFoundError("Single-page knowledge has not been added yet")
+        return direct_file
+
+    async def replace_single_page(
+        self,
+        project_id: uuid.UUID,
+        body: DirectContextFileUpsert,
+        actor: User,
+    ):
+        project = await self._require_project(project_id)
+        knowledge_base = await self._require_project_mode(
+            project,
+            KnowledgeBaseMode.DIRECT_CONTEXT,
+        )
+        return await KnowledgeBaseService(self.db).upsert_direct_file(
+            knowledge_base.id,
+            body,
+            actor,
+        )
+
     async def reindex(self, project_id: uuid.UUID) -> Project:
         """Rebuild this project's catalog card (the master-index entry) from usable units."""
-        proj = await self._require_project(project_id)
-        # Imported lazily so langchain/provider deps stay out of the web-process import path.
-        from app.core.config import get_settings
-        from app.graph.clients import build_embedder
-        from app.graph.factories import make_minimax_llm_json
-        from app.services.integration_settings import IntegrationSettingsService
-        from app.services.knowledge import KnowledgePipeline
-
-        try:
-            integration_settings = IntegrationSettingsService(self.db)
-            minimax_config = await integration_settings.resolve_minimax()
-            openrouter_config = await integration_settings.resolve_openrouter()
-            # Web sync path: cap the LLM call at the request timeout (60s), NOT the digest
-            # ceiling (180s) — this runs in the web process (web_concurrency=2), so a slow
-            # MiniMax index rebuild must not stall the API.
-            await KnowledgePipeline(
-                self.db,
-                build_embedder(openrouter_api_key=openrouter_config.api_key),
-                make_minimax_llm_json(
-                    minimax_api_key=minimax_config.api_key,
-                    openrouter_api_key=openrouter_config.api_key,
-                ),
-                call_timeout=get_settings().active_llm_request_timeout,
-            ).build_project_index(proj.id)
-        except Exception as exc:  # noqa: BLE001
-            raise UpstreamError(f"index rebuild failed: {exc}") from exc
-        await self.db.refresh(proj)
-        return proj
+        await self._require_project(project_id)
+        raise ConflictError(
+            "Project knowledge is rebuilt only by replacing its Single-page content or category YAML"
+        )
 
     # ── FAQ delegates ──────────────────────────────────────────────────────
 
@@ -301,3 +341,61 @@ class ProjectService:
 
     async def _require_project(self, project_id: uuid.UUID) -> Project:
         return await require_project(self.db, project_id)
+
+    async def _knowledge_modes(
+        self, knowledge_base_ids: list[uuid.UUID | None]
+    ) -> dict[uuid.UUID, KnowledgeBaseMode]:
+        ids = [value for value in knowledge_base_ids if value is not None]
+        if not ids:
+            return {}
+        rows = (
+            await self.db.execute(
+                select(KnowledgeBase.id, KnowledgeBase.mode).where(KnowledgeBase.id.in_(ids))
+            )
+        ).all()
+        return dict(rows)
+
+    async def _require_project_mode(
+        self,
+        project: Project,
+        expected: KnowledgeBaseMode,
+    ) -> KnowledgeBase:
+        knowledge_base = (
+            await self.db.get(KnowledgeBase, project.knowledge_base_id)
+            if project.knowledge_base_id
+            else None
+        )
+        if knowledge_base is None or knowledge_base.mode is not expected:
+            raise ConflictError(f"This operation requires a {expected.value} Project")
+        return knowledge_base
+
+    async def _require_activation_ready(self, project: Project) -> None:
+        modes = await self._knowledge_modes([project.knowledge_base_id])
+        mode = modes.get(project.knowledge_base_id)
+        if mode is KnowledgeBaseMode.DIRECT_CONTEXT:
+            if not project.index_card:
+                raise ConflictError("Single-page Project needs a discovery card before activation")
+            direct_file = await self.db.scalar(
+                select(KnowledgeBaseDirectFile.id).where(
+                    KnowledgeBaseDirectFile.knowledge_base_id == project.knowledge_base_id
+                )
+            )
+            if direct_file is None:
+                raise ConflictError("Single-page Project needs its page before activation")
+            return
+        if mode is KnowledgeBaseMode.RAG:
+            category = await self.db.scalar(
+                select(KnowledgeCategory).where(
+                    KnowledgeCategory.project_id == project.id,
+                    KnowledgeCategory.category_key == KnowledgeCategoryKey.JOBS.value,
+                )
+            )
+            revision = (
+                await self.db.get(KnowledgeCategoryRevision, category.active_revision_id)
+                if category and category.active_revision_id
+                else None
+            )
+            if revision is None or not revision.normalized_payload.get("jobs"):
+                raise ConflictError("RAG Project needs an active Jobs category before activation")
+            return
+        raise ConflictError("Project has no owned knowledge base")

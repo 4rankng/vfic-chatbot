@@ -34,7 +34,6 @@ from app.graph.prompt_context import build_agent_user_text
 from app.graph.direct_context import (
     build_direct_system,
     build_direct_user_text,
-    direct_context_evidence_answer,
 )
 from app.graph.prompts import ERROR_REPLY
 from app.graph.router import (
@@ -154,6 +153,7 @@ async def _agent_turn(
     recent_messages: list[Message],
     timings: dict | None = None,
     manifest_policy=None,
+    project_context=None,
 ) -> str:
     route = route_turn(user_text)
     vacancy_authority_tool = (
@@ -174,7 +174,15 @@ async def _agent_turn(
         if vacancy_authority_tool is not None and not manifest_policy.tool_registry.allows(
             vacancy_authority_tool
         ):
-            return VACANCY_LOOKUP_UNAVAILABLE_REPLY
+            return await deps.agent.direct(
+                user_text,
+                system=(
+                    "Bạn là tư vấn viên tuyển dụng. Công cụ dữ liệu cần thiết hiện không khả dụng. "
+                    "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra thông tin, không "
+                    "khẳng định có việc và không bịa dữ liệu."
+                ),
+                metrics=timings,
+            )
         return await run_manifest_composed_agent(
             user_text,
             deps,
@@ -195,6 +203,22 @@ async def _agent_turn(
 
     sys_t0 = time.monotonic()
     system, sys_prompt_hit = await build_system_prompt(deps.retrieval)
+    if project_context is not None:
+        if project_context.state == "FOCUSED":
+            system += (
+                "\n\n=== DỰ ÁN ĐANG ĐƯỢC CHỌN ===\n"
+                f"Dự án: {project_context.project_name} "
+                f"(slug: {project_context.project_slug}).\n"
+                "Mọi tra cứu chi tiết trong lượt này phải giới hạn đúng slug trên. "
+                "Không được dùng dữ liệu chi tiết của dự án khác. Câu trả lời cuối cùng "
+                "phải do bạn diễn đạt từ bằng chứng tool trả về."
+            )
+        else:
+            system += (
+                "\n\n=== CHẾ ĐỘ KHÁM PHÁ ===\n"
+                "Ứng viên chưa chọn dự án. Chỉ dùng danh mục dự án và việc làm đang hoạt động "
+                "để gợi ý một nhóm nhỏ phù hợp; không tải kiến thức chi tiết của mọi dự án."
+            )
     if timings is not None:
         timings["system_prompt_ms"] = int(round((time.monotonic() - sys_t0) * 1000))
         timings["system_prompt_cache_hit"] = sys_prompt_hit
@@ -229,7 +253,37 @@ async def _agent_turn(
         and resolved_tool_registry is not None
         and vacancy_authority_tool not in resolved_tool_registry
     ):
-        return VACANCY_LOOKUP_UNAVAILABLE_REPLY
+        return await deps.agent.direct(
+            user_text,
+            system=(
+                "Bạn là tư vấn viên tuyển dụng. Công cụ dữ liệu cần thiết hiện không khả dụng. "
+                "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra thông tin, không "
+                "khẳng định có việc và không bịa dữ liệu."
+            ),
+            metrics=timings,
+        )
+    focused_rag = (
+        project_context is not None
+        and project_context.state == "FOCUSED"
+        and project_context.knowledge_mode == "RAG"
+    )
+    if focused_rag:
+        authority_tool = (
+            "list_active_jobs" if route.reason == "vacancy_listing" else "search_knowledge"
+        )
+        if resolved_tool_registry is not None and authority_tool not in resolved_tool_registry:
+            return await deps.agent.direct(
+                user_text,
+                system=(
+                    "Bạn là tư vấn viên tuyển dụng. Dữ liệu của dự án hiện không thể tra cứu. "
+                    "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa có thông tin đã xác minh, "
+                    "không khẳng định có việc và không bịa dữ liệu."
+                ),
+                metrics=timings,
+            )
+        # Detailed Project answers use only the Project-owned category authority.
+        # This also keeps legacy global timetable/project tools out of a focused turn.
+        allowed_tools = (authority_tool,)
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
     # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
     # the switch when no fast model was injected (tests / un-configured deployments).
@@ -285,9 +339,24 @@ async def _agent_turn(
         "lookup_query": _vacancy_evidence_query(user_text, recent_messages) or user_text,
         "metrics": timings,
     }
+    if focused_rag:
+        agent_kwargs["forced_project_slug"] = project_context.project_slug
     if route.reason == "vacancy_listing":
-        agent_kwargs["required_tool"] = "list_active_jobs"
-        agent_kwargs["required_tool_args"] = {"top_k": 10}
+        if project_context is not None and project_context.state == "EXPLORE":
+            agent_kwargs["required_tool"] = "recommend_jobs"
+            required_args = {"chat_id": chat_id, "top_k": 5}
+        else:
+            agent_kwargs["required_tool"] = "list_active_jobs"
+            required_args = {"top_k": 10}
+        if project_context is not None and project_context.state == "FOCUSED":
+            required_args["project_slug"] = project_context.project_slug
+        agent_kwargs["required_tool_args"] = required_args
+    elif focused_rag:
+        agent_kwargs["required_tool"] = "search_knowledge"
+        agent_kwargs["required_tool_args"] = {
+            "query": _vacancy_evidence_query(user_text, recent_messages) or user_text,
+            "project_slug": project_context.project_slug,
+        }
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
     reply = await deps.agent.agent(contextual_user_text, **agent_kwargs)
@@ -671,13 +740,27 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         outcome_label = "sent"
         faq_metadata: dict | None = None
 
-        direct_context = (
-            await deps.direct_context.active_context() if deps.direct_context is not None else None
-        )
-        if is_generic_vacancy_listing(state.user_text):
-            # A single direct-context KB answer cannot represent the complete
-            # structured catalog requested by a generic listing question.
-            direct_context = None
+        project_context = None
+        if deps.direct_context is not None:
+            if hasattr(deps.direct_context, "resolve"):
+                project_context = await deps.direct_context.resolve(conv, state.user_text)
+            elif hasattr(deps.direct_context, "active_context"):
+                from app.graph.direct_context import ProjectTurnContext
+
+                legacy_direct = await deps.direct_context.active_context()
+                if legacy_direct is not None:
+                    project_context = ProjectTurnContext(
+                        state="FOCUSED",
+                        knowledge_mode="DIRECT_CONTEXT",
+                        direct_context=legacy_direct,
+                    )
+        direct_context = project_context.direct_context if project_context is not None else None
+        if project_context is not None:
+            timings["project_context_state"] = project_context.state
+            if project_context.project_id:
+                timings["focused_project_id"] = project_context.project_id
+            if project_context.knowledge_mode:
+                timings["knowledge_mode"] = project_context.knowledge_mode
         recruitment_capabilities = (
             frozenset(manifest_policy.capability_ids) if manifest_policy is not None else None
         )
@@ -697,13 +780,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 or "candidate_intake" in recruitment_capabilities
             )
         )
-        allow_legacy_faq_bypass = (
-            recruitment_enabled
-            and (
-                recruitment_capabilities is None
-                or {"candidate_intake", "job_advisory"} <= recruitment_capabilities
-            )
-        )
+        allow_legacy_faq_bypass = False
         fast = (
             fast_lane.match(state.user_text)
             if direct_context is None
@@ -785,24 +862,15 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
             bypass = None
 
-        if direct_context is not None:
-            evidence_query = _vacancy_evidence_query(state.user_text, recent_messages)
-            evidence_answer = (
-                direct_context_evidence_answer(direct_context.knowledge_text, evidence_query)
-                if evidence_query is not None
-                else None
+        if project_context is not None and project_context.clarification:
+            candidate = project_context.clarification
+            timings["lane"] = "project_clarification"
+            outcome_label = "project_clarification"
+        elif direct_context is not None:
+            candidate = await _direct_context_turn(
+                direct_context, deps, state.user_text, recent_messages, timings
             )
-            if evidence_answer is not None:
-                candidate = evidence_answer
-                timings["lane"] = "direct_context"
-                timings["direct_context_evidence"] = True
-                timings["direct_context_knowledge_base_id"] = direct_context.knowledge_base_id
-                outcome_label = "direct_context"
-            else:
-                candidate = await _direct_context_turn(
-                    direct_context, deps, state.user_text, recent_messages, timings
-                )
-                outcome_label = "direct_context"
+            outcome_label = "direct_context"
         elif fast is not None:
             timings["lane"] = "fast_lane"
             candidate = fast.reply
@@ -844,6 +912,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     "recent_messages": recent_messages,
                     "timings": timings,
                 }
+                if project_context is not None:
+                    agent_kwargs["project_context"] = project_context
                 if manifest_policy is not None:
                     agent_kwargs["manifest_policy"] = manifest_policy
                 raw = await _agent_turn(state, deps, state.user_text, **agent_kwargs)

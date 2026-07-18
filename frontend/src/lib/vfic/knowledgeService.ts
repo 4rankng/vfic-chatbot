@@ -239,6 +239,147 @@ export const reindexProject = (id: string) =>
     },
   );
 
+// --- Project-owned exclusive knowledge modes ---
+
+export type KnowledgeCategoryKey =
+  | "jobs"
+  | "compensation"
+  | "requirements"
+  | "work_schedules"
+  | "benefits"
+  | "accommodation"
+  | "meals"
+  | "transportation"
+  | "insurance"
+  | "application"
+  | "contacts"
+  | "faq";
+
+export type KnowledgeCategoryStatus = {
+  key: KnowledgeCategoryKey;
+  label_vi: string;
+  active_revision_id?: string | null;
+  active_revision_no?: number | null;
+  active_checksum?: string | null;
+  latest_revision_id?: string | null;
+  latest_revision_no?: number | null;
+  status?: "STAGED" | "PROCESSING" | "ACTIVE" | "ARCHIVED" | "FAILED" | "CLEARED" | null;
+  updated_at?: string | null;
+  error_message?: string | null;
+};
+
+export type KnowledgeCategoryCatalog = {
+  data: KnowledgeCategoryStatus[];
+  total: number;
+};
+
+export type KnowledgeCategoryTemplate = {
+  key: KnowledgeCategoryKey;
+  label_vi: string;
+  filename: string;
+  content: string;
+};
+
+export type KnowledgeCategorySource = {
+  key: KnowledgeCategoryKey;
+  label_vi: string;
+  revision_id: string;
+  revision_no: number;
+  filename: string;
+  content: string;
+  checksum: string;
+  updated_at: string;
+};
+
+export type KnowledgeCategoryRevision = {
+  id: string;
+  category_id: string;
+  revision_no: number;
+  status: string;
+  source_filename: string;
+  content_sha256: string;
+  normalized_payload: Record<string, unknown>;
+  created_at: string;
+  activated_at?: string | null;
+  error_message?: string | null;
+};
+
+export type SinglePageKnowledge = {
+  id: string;
+  knowledge_base_id: string;
+  filename: string;
+  text: string;
+  char_count: number;
+  line_count: number;
+  content_sha256: string;
+  updated_at: string;
+};
+
+export const getProjectKnowledgeCategories = (projectId: string) =>
+  apiJson<KnowledgeCategoryCatalog>(`${proj(projectId)}/categories`);
+
+export const getProjectKnowledgeCategoryTemplate = (
+  projectId: string,
+  key: KnowledgeCategoryKey,
+) =>
+  apiJson<KnowledgeCategoryTemplate>(
+    `${proj(projectId)}/categories/${encodeURIComponent(key)}/template`,
+  );
+
+export const getProjectKnowledgeCategorySource = (
+  projectId: string,
+  key: KnowledgeCategoryKey,
+) =>
+  apiJson<KnowledgeCategorySource>(
+    `${proj(projectId)}/categories/${encodeURIComponent(key)}`,
+  );
+
+export const replaceProjectKnowledgeCategory = (
+  projectId: string,
+  key: KnowledgeCategoryKey,
+  filename: string,
+  content: string,
+) =>
+  apiJson<{ revision: KnowledgeCategoryRevision; job_id: string }>(
+    `${proj(projectId)}/categories/${encodeURIComponent(key)}`,
+    { method: "PUT", body: { filename, content } },
+  );
+
+export const uploadProjectKnowledgeCategory = (
+  projectId: string,
+  key: KnowledgeCategoryKey,
+  file: File,
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  return apiJson<{ revision: KnowledgeCategoryRevision; job_id: string }>(
+    `${proj(projectId)}/categories/${encodeURIComponent(key)}/upload`,
+    { method: "POST", body: form },
+  );
+};
+
+export const clearProjectKnowledgeCategory = (
+  projectId: string,
+  key: KnowledgeCategoryKey,
+) =>
+  apiJson<KnowledgeCategoryRevision>(
+    `${proj(projectId)}/categories/${encodeURIComponent(key)}/clear`,
+    { method: "POST", body: { confirmation: "CLEAR" } },
+  );
+
+export const getProjectSinglePage = (projectId: string) =>
+  apiJson<SinglePageKnowledge>(`${proj(projectId)}/single-page`);
+
+export const replaceProjectSinglePage = (
+  projectId: string,
+  filename: string,
+  text: string,
+) =>
+  apiJson<Omit<SinglePageKnowledge, "text"> & { text?: string }>(
+    `${proj(projectId)}/single-page`,
+    { method: "PUT", body: { filename, text } },
+  );
+
 // --- Worker product features (active per-project feature values) ---
 
 export const getProjectFeatures = (id: string) =>

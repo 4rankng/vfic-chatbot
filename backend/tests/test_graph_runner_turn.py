@@ -233,7 +233,7 @@ def _state() -> BotRunState:
 
 
 @pytest.mark.asyncio
-async def test_vacancy_turn_uses_verbatim_direct_context_evidence(monkeypatch):
+async def test_vacancy_turn_uses_direct_context_llm():
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
@@ -251,7 +251,8 @@ async def test_vacancy_turn_uses_verbatim_direct_context_evidence(monkeypatch):
 
         async def direct(self, user_text, *, system, metrics=None):
             self.calls += 1
-            raise AssertionError("matched direct-context evidence must not be rewritten by an LLM")
+            assert "KIẾN THỨC ĐƯỢC CUNG CẤP TOÀN VĂN" in system
+            return "LG Display Hải Phòng tuyển công nhân thời vụ."
 
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
@@ -274,12 +275,12 @@ async def test_vacancy_turn_uses_verbatim_direct_context_evidence(monkeypatch):
     )
 
     assert result["outcome"] == "direct_context"
-    assert result["reply"].startswith("LG Display Hải Phòng tuyển công nhân thời vụ")
-    assert direct_agent.calls == 0
+    assert result["reply"] == "LG Display Hải Phòng tuyển công nhân thời vụ."
+    assert direct_agent.calls == 1
 
 
 @pytest.mark.asyncio
-async def test_generic_vacancy_listing_bypasses_single_kb_answer(monkeypatch):
+async def test_generic_vacancy_listing_reaches_single_page_llm():
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
@@ -293,12 +294,7 @@ async def test_generic_vacancy_listing_bypasses_single_kb_answer(monkeypatch):
 
     class _DirectAgent:
         async def direct(self, *args, **kwargs):  # noqa: ARG002
-            raise AssertionError("generic listings must not use one direct-context answer")
-
-    async def _catalog_turn(*args, **kwargs):  # noqa: ARG001
-        return "Công việc A\nCông việc B"
-
-    monkeypatch.setattr(runner, "_agent_turn", _catalog_turn)
+            return "LG Display tuyển công nhân thời vụ."
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
     deps = _deps(_FakeZalo(), conversation=svc)
@@ -314,7 +310,10 @@ async def test_generic_vacancy_listing_bypasses_single_kb_answer(monkeypatch):
         deps,
     )
 
-    assert result == {"outcome": "sent", "reply": "Công việc A\nCông việc B"}
+    assert result == {
+        "outcome": "direct_context",
+        "reply": "LG Display tuyển công nhân thời vụ.",
+    }
 
 
 @pytest.mark.asyncio
@@ -358,7 +357,7 @@ async def test_terse_vacancy_followup_reaches_contextual_direct_llm():
 
 
 @pytest.mark.asyncio
-async def test_vacancy_salary_followup_uses_verbatim_direct_context_evidence(monkeypatch):
+async def test_vacancy_salary_followup_reaches_contextual_direct_llm():
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
@@ -378,7 +377,8 @@ async def test_vacancy_salary_followup_uses_verbatim_direct_context_evidence(mon
 
         async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
             self.calls += 1
-            raise AssertionError("matched salary evidence must not be rewritten by an LLM")
+            assert "luong bao nhieu da" in user_text
+            return "Lương cơ bản 6.030.000 VNĐ/tháng; thu nhập 10-13 triệu VNĐ/tháng."
 
     history = [
         SimpleNamespace(
@@ -405,7 +405,7 @@ async def test_vacancy_salary_followup_uses_verbatim_direct_context_evidence(mon
     assert result["outcome"] == "direct_context"
     assert "6.030.000 VNĐ/tháng" in result["reply"]
     assert "10-13 triệu VNĐ/tháng" in result["reply"]
-    assert direct_agent.calls == 0
+    assert direct_agent.calls == 1
 
 
 # ---------------------------------------------------------------------------
@@ -481,7 +481,7 @@ async def test_direct_vacancy_question_reaches_agent_when_faq_bypass_misses(monk
 
 
 @pytest.mark.asyncio
-async def test_exact_reported_vacancy_question_returns_canonical_faq_answer(monkeypatch):
+async def test_exact_reported_vacancy_question_still_reaches_llm(monkeypatch):
     from app.graph.ports import FaqBypassResult
 
     user_text = (
@@ -506,10 +506,7 @@ async def test_exact_reported_vacancy_question_returns_canonical_faq_answer(monk
                 runner_up_score=0.61,
             )
 
-    async def _must_not_run(*args, **kwargs):  # noqa: ARG001
-        raise AssertionError("canonical vacancy evidence must answer before free-form generation")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    _stub_agent(monkeypatch, canonical_answer)
     bypass = _CanonicalFaq()
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
@@ -519,8 +516,8 @@ async def test_exact_reported_vacancy_question_returns_canonical_faq_answer(monk
         _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass),
     )
 
-    assert result == {"outcome": "faq_bypass", "reply": canonical_answer}
-    assert bypass.query == user_text
+    assert result == {"outcome": "sent", "reply": canonical_answer}
+    assert bypass.query == ""
 
 
 @pytest.mark.parametrize(
@@ -594,8 +591,7 @@ async def test_vacancy_followup_reaches_agent_with_scoped_query_when_faq_bypass_
     assert result["reply"] == "LLM saw follow-up: lương bao nhiêu?"
     assert captured["user_text"] == "lương bao nhiêu?"
     assert captured["recent_messages"][0].body == "bên bạn tuyển thợ hàn CO2 đúng ko?"
-    assert "thợ hàn CO2" in bypass.query
-    assert "lương bao nhiêu" in bypass.query
+    assert bypass.query == ""
     assert recorded[0]["stage_timings"]["lane"] == "agent"
 
 
@@ -953,15 +949,11 @@ class _FakeFaqBypass:
 
 
 @pytest.mark.asyncio
-async def test_faq_bypass_hit_sends_answer_and_enqueues_intent_extraction(monkeypatch):
-    """A confident FAQ-bypass hit is sent directly (outcome=faq_bypass): the agent
-    is never called, while post-send extraction still classifies contact intent."""
+async def test_faq_bypass_hit_cannot_short_circuit_llm(monkeypatch):
+    """Even a confident legacy FAQ hit cannot become the final bot response."""
     from app.graph.ports import FaqBypassResult
 
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("agent must not be called on a FAQ-bypass hit")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    _stub_agent(monkeypatch, "Câu trả lời từ LLM")
 
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
@@ -976,14 +968,14 @@ async def test_faq_bypass_hit_sends_answer_and_enqueues_intent_extraction(monkey
         _deps(zalo, conversation=svc, persist=persisted.append, faq_bypass=bypass),
     )
 
-    assert res["outcome"] == "faq_bypass"
-    assert res["reply"] == "Câu trả lời FAQ"
-    assert zalo.sent == [("z1", "Câu trả lời FAQ")]
+    assert res["outcome"] == "sent"
+    assert res["reply"] == "Câu trả lời từ LLM"
+    assert zalo.sent == [("z1", "Câu trả lời từ LLM")]
     assert persisted == [
         {
             "chat_id": "z1",
             "user_text": "tôi muốn tìm việc lái xe",
-            "bot_output": "Câu trả lời FAQ",
+            "bot_output": "Câu trả lời từ LLM",
             "conversation_version": 1,
         }
     ]
@@ -1105,13 +1097,7 @@ async def test_overlong_clean_reply_is_truncated_and_sent(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_faq_bypass_failure_rolls_back_session_before_next_db_op(monkeypatch):
-    """A faq_bypass adapter shares the turn's session (RetrievalRepository on
-    deps.db). If its DB call fails, the session is left needing rollback; the
-    swallowing ``except`` in run_turn must roll back before continuing, else the
-    next DB op (the pre-send ``refresh``) raises a rollback error and the whole
-    turn is lost — repeating on every message until the worker is restarted.
-    """
+async def test_disabled_faq_bypass_is_not_called(monkeypatch):
     db = _FakeDB()
 
     class _BoomBypass:
@@ -1126,8 +1112,9 @@ async def test_faq_bypass_failure_rolls_back_session_before_next_db_op(monkeypat
     deps = _deps(_FakeZalo(), conversation=svc, faq_bypass=_BoomBypass(), db=db)
     res = await run_turn(_state(), deps)
 
-    assert db.rollbacks >= 1, "adapter error must roll back the shared session"
-    assert res["outcome"] == "sent", "turn must complete, not cascade into a rollback error"
+    assert db.rollbacks == 0
+    assert db._poisoned is False
+    assert res["outcome"] == "sent"
 
 
 @pytest.mark.asyncio
@@ -1335,6 +1322,59 @@ async def test_rag_vacancy_turn_uses_assigned_knowledge_for_exact_reported_messa
     assert captured["allowed_tools"] == ("search_knowledge",)
     assert captured["lookup_query"] == query
     assert "required_tool" not in captured
+
+
+@pytest.mark.asyncio
+async def test_focused_rag_detail_forces_project_scoped_category_search(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+
+    async def _fake_build_system_prompt(retrieval):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "Xe đưa đón theo dữ liệu LG."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+    context = SimpleNamespace(
+        state="FOCUSED",
+        knowledge_mode="RAG",
+        project_slug="lg-display",
+        project_name="LG Display",
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="xe đưa đón mấy giờ?"),
+        deps,
+        "xe đưa đón mấy giờ?",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        project_context=context,
+    )
+
+    assert reply == "Xe đưa đón theo dữ liệu LG."
+    assert captured["allowed_tools"] == ("search_knowledge",)
+    assert captured["required_tool"] == "search_knowledge"
+    assert captured["required_tool_args"] == {
+        "query": "xe đưa đón mấy giờ?",
+        "project_slug": "lg-display",
+    }
+    assert captured["forced_project_slug"] == "lg-display"
 
 
 @pytest.mark.asyncio
@@ -1556,14 +1596,11 @@ async def test_stage_timings_records_fast_lane_without_lead_or_llm(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stage_timings_records_faq_bypass_lane(monkeypatch):
-    """A FAQ-bypass hit tags lane='faq_bypass'."""
+async def test_faq_bypass_candidate_records_agent_lane(monkeypatch):
+    """Legacy FAQ candidates do not create a factual final-answer lane."""
     from app.graph.ports import FaqBypassResult
 
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("agent must not be called on a FAQ-bypass hit")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    _stub_agent(monkeypatch, "Trả lời từ agent")
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(
@@ -1571,20 +1608,15 @@ async def test_stage_timings_records_faq_bypass_lane(monkeypatch):
     )
     res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
 
-    assert res["outcome"] == "faq_bypass"
-    assert recorded[0]["stage_timings"]["lane"] == "faq_bypass"
+    assert res["outcome"] == "sent"
+    assert recorded[0]["stage_timings"]["lane"] == "agent"
 
 
 @pytest.mark.asyncio
-async def test_faq_bypass_high_margin_is_accepted_with_metadata(monkeypatch):
-    """High-margin FAQ match (score - runner_up > faq_abstain_margin) is accepted;
-    outcome_metadata carries similarity + runner_up + abstained=False."""
+async def test_faq_bypass_high_margin_does_not_replace_llm(monkeypatch):
     from app.graph.ports import FaqBypassResult
 
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("agent must not be called on a high-margin FAQ hit")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    _stub_agent(monkeypatch, "Trả lời từ agent")
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(
@@ -1598,17 +1630,12 @@ async def test_faq_bypass_high_margin_is_accepted_with_metadata(monkeypatch):
     )
     res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
 
-    assert res["outcome"] == "faq_bypass"
-    md = recorded[0]["outcome_metadata"]
-    assert md["abstained"] is False
-    assert md["similarity_score"] == 0.90
-    assert md["runner_up_score"] == 0.70
+    assert res == {"outcome": "sent", "reply": "Trả lời từ agent"}
+    assert recorded[0]["outcome_metadata"] is None
 
 
 @pytest.mark.asyncio
-async def test_faq_bypass_low_margin_abstains_to_agent(monkeypatch):
-    """Low-margin FAQ match (score - runner_up < faq_abstain_margin) falls through to
-    the LLM; outcome_metadata records abstained=True with the scores."""
+async def test_faq_bypass_low_margin_reaches_agent_without_bypass_metadata(monkeypatch):
     from app.graph.ports import FaqBypassResult
 
     conv = _FakeConv()
@@ -1625,26 +1652,17 @@ async def test_faq_bypass_low_margin_abstains_to_agent(monkeypatch):
     )
     res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
 
-    # Agent answered (not the FAQ), but the abstention is recorded in metadata.
     assert res["outcome"] == "sent"
     assert res["reply"] == "Trả lời từ agent"
-    md = recorded[0]["outcome_metadata"]
-    assert md["abstained"] is True
-    assert md["similarity_score"] == 0.85
-    assert md["runner_up_score"] == 0.84
-    # The timing lane is agent (fell through), but faq_abstained flag is stamped.
-    assert recorded[0]["stage_timings"].get("faq_abstained") is True
+    assert recorded[0]["outcome_metadata"] is None
+    assert recorded[0]["stage_timings"].get("faq_abstained") is None
 
 
 @pytest.mark.asyncio
-async def test_faq_bypass_no_runner_up_never_abstains(monkeypatch):
-    """Single-result FAQ match (runner_up_score=None) never abstains."""
+async def test_faq_bypass_without_runner_up_still_reaches_llm(monkeypatch):
     from app.graph.ports import FaqBypassResult
 
-    async def _must_not_run(state, deps, user_text, *, chat_id, recent_messages, timings=None):
-        raise AssertionError("agent must not be called when there's no runner-up")
-
-    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    _stub_agent(monkeypatch, "Trả lời từ agent")
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, owned=True)
     bypass = _FakeFaqBypass(
@@ -1658,8 +1676,8 @@ async def test_faq_bypass_no_runner_up_never_abstains(monkeypatch):
     )
     res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, faq_bypass=bypass))
 
-    assert res["outcome"] == "faq_bypass"
-    assert recorded[0]["outcome_metadata"]["abstained"] is False
+    assert res == {"outcome": "sent", "reply": "Trả lời từ agent"}
+    assert recorded[0]["outcome_metadata"] is None
 
 
 @pytest.mark.asyncio

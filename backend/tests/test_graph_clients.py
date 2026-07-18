@@ -10,7 +10,10 @@ from app.graph.clients import (
     _active_llm_provider,
     _chat_for_role,
     _ground_reply,
+    _negative_job_authority,
+    _negative_job_reply_is_consistent,
     _minimax_chat,
+    _scope_project_tool_args,
     build_embedder,
 )
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
@@ -64,22 +67,30 @@ def _vacancy_result(status: str, safe_reply: str) -> str:
     return f"ACTIVE_JOB_LOOKUP_JSON={payload}"
 
 
-def test_vacancy_tool_status_deterministically_overrides_model_claims():
+def test_vacancy_tool_status_does_not_replace_llm_final_answer():
     no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
     unavailable = _vacancy_result("unavailable", "Chưa thể kiểm tra tuyển dụng.")
 
     assert _ground_reply("LG đang tuyển thợ hàn, lương 30 triệu.", [no_match]) == (
-        "Không có việc ACTIVE phù hợp."
+        "LG đang tuyển thợ hàn, lương 30 triệu."
     )
     assert _ground_reply("VFIC không còn tuyển vị trí nào.", [unavailable]) == (
-        "Chưa thể kiểm tra tuyển dụng."
+        "VFIC không còn tuyển vị trí nào."
     )
 
 
-def test_malformed_vacancy_tool_payload_fails_closed():
-    assert "chưa thể kiểm tra" in _ground_reply(
+def test_negative_vacancy_authority_requires_llm_abstention_composition():
+    no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
+
+    assert _negative_job_authority([no_match]) == "Không có việc ACTIVE phù hợp."
+    assert _negative_job_reply_is_consistent("Hiện chưa tìm thấy việc phù hợp.") is True
+    assert _negative_job_reply_is_consistent("LG đang tuyển, lương 30 triệu.") is False
+
+
+def test_malformed_vacancy_tool_payload_does_not_short_circuit_llm_answer():
+    assert _ground_reply(
         "LG đang tuyển thợ hàn.", ["ACTIVE_JOB_LOOKUP_JSON={not-json}"]
-    ).lower()
+    ) == "LG đang tuyển thợ hàn."
 
 
 @pytest.mark.parametrize(
@@ -90,10 +101,10 @@ def test_malformed_vacancy_tool_payload_fails_closed():
         {"status": "no_match", "jobs": [{"id": "1", "title": "X"}], "safe_reply": "Không có."},
     ],
 )
-def test_semantically_invalid_vacancy_payload_fails_closed(payload):
+def test_semantically_invalid_vacancy_payload_does_not_replace_llm_answer(payload):
     result = "ACTIVE_JOB_LOOKUP_JSON=" + json.dumps(payload, ensure_ascii=False)
 
-    assert "chưa thể kiểm tra" in _ground_reply("LG đang tuyển.", [result]).lower()
+    assert _ground_reply("LG đang tuyển.", [result]) == "LG đang tuyển."
 
 
 @pytest.mark.asyncio
@@ -147,6 +158,7 @@ async def test_dispatch_list_active_jobs_forwards_optional_filters(monkeypatch):
     assert calls == [
         {
             "retrieval": retrieval,
+            "project_slug": None,
             "role": "thợ hàn",
             "company": "LG",
             "location": "Hải Phòng",
@@ -167,13 +179,38 @@ def test_list_active_jobs_schema_exposes_only_optional_bounded_filters():
     )
 
     assert "required" not in schema["parameters"]
-    assert set(schema["parameters"]["properties"]) == {"role", "company", "location", "top_k"}
+    assert set(schema["parameters"]["properties"]) == {
+        "project_slug",
+        "role",
+        "company",
+        "location",
+        "top_k",
+    }
     assert schema["parameters"]["properties"]["top_k"] == {
         "type": "integer",
         "minimum": 1,
         "maximum": 10,
         "description": "Số việc tối đa cần trả về, mặc định 3.",
     }
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "args", "expected"),
+    [
+        (
+            "search_knowledge",
+            {"query": "lương", "project_slug": "samsung"},
+            {"query": "lương", "project_slug": "lg-display"},
+        ),
+        (
+            "list_active_jobs",
+            {"top_k": 5},
+            {"top_k": 5, "project_slug": "lg-display"},
+        ),
+    ],
+)
+def test_focused_project_scope_overrides_model_tool_arguments(tool_name, args, expected):
+    assert _scope_project_tool_args(tool_name, args, "lg-display") == expected
 
 
 @pytest.mark.asyncio

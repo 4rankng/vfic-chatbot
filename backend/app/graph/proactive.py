@@ -236,6 +236,17 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     try:
         # 5. Build context
         system, _ = await build_system_prompt(deps.retrieval)
+        project_context = (
+            await deps.direct_context.resolve(conv, "")
+            if deps.direct_context is not None and hasattr(deps.direct_context, "resolve")
+            else None
+        )
+        if project_context is not None and project_context.state == "FOCUSED":
+            system += (
+                "\n\nDự án đang được chọn: "
+                f"{project_context.project_name} (slug: {project_context.project_slug}). "
+                "Không dùng dữ liệu chi tiết của dự án khác."
+            )
 
         # Fetch lead profile (best-effort — failure just skips injection)
         lead_profile = ""
@@ -256,12 +267,26 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         await deps.db.flush()
 
         # 6. Single LLM call → JSON decision
-        raw = await deps.agent.agent(
-            proactive_text,
-            system=system,
-            retrieval=deps.retrieval,
-            embedder=deps.embedder,
-        )
+        if project_context is not None and project_context.direct_context is not None:
+            from app.graph.direct_context import build_direct_system
+
+            raw = await deps.agent.direct(
+                proactive_text,
+                system=build_direct_system(project_context.direct_context),
+            )
+        else:
+            proactive_agent_kwargs = {
+                "system": system,
+                "retrieval": deps.retrieval,
+                "embedder": deps.embedder,
+            }
+            if (
+                project_context is not None
+                and project_context.state == "FOCUSED"
+                and project_context.knowledge_mode == "RAG"
+            ):
+                proactive_agent_kwargs["forced_project_slug"] = project_context.project_slug
+            raw = await deps.agent.agent(proactive_text, **proactive_agent_kwargs)
         decision = parse_proactive_decision(raw)
 
         # 7. Decision gate

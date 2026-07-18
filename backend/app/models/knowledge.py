@@ -43,6 +43,15 @@ class KnowledgeBaseMode(str, enum.Enum):
     DIRECT_CONTEXT = "DIRECT_CONTEXT"
 
 
+class KnowledgeCategoryRevisionStatus(str, enum.Enum):
+    STAGED = "STAGED"
+    PROCESSING = "PROCESSING"
+    ACTIVE = "ACTIVE"
+    ARCHIVED = "ARCHIVED"
+    FAILED = "FAILED"
+    CLEARED = "CLEARED"
+
+
 class KnowledgeBase(Base):
     """Standalone logical knowledge resource shared by one or more Agents."""
 
@@ -58,6 +67,9 @@ class KnowledgeBase(Base):
         nullable=False,
     )
     description: Mapped[str | None] = mapped_column(Text)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), unique=True
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -98,6 +110,66 @@ class KnowledgeBaseDirectFile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class KnowledgeCategory(Base):
+    """One independently replaceable RAG category owned by a Project."""
+
+    __tablename__ = "knowledge_categories"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    category_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    active_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_category_revisions.id", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class KnowledgeCategoryRevision(Base):
+    """Immutable validated YAML revision; active pointer lives on its category."""
+
+    __tablename__ = "knowledge_category_revisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge_categories.id", ondelete="CASCADE"), nullable=False
+    )
+    revision_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[KnowledgeCategoryRevisionStatus] = mapped_column(
+        Enum(
+            KnowledgeCategoryRevisionStatus,
+            name="knowledge_category_revision_status",
+            create_type=False,
+        ),
+        nullable=False,
+        default=KnowledgeCategoryRevisionStatus.STAGED,
+        server_default="STAGED",
+    )
+    source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_yaml: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
 
 
 class KBVersion(Base):
@@ -207,6 +279,11 @@ class KnowledgeDocument(Base):
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
     error: Mapped[str | None] = mapped_column(Text)
+    category_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_category_revisions.id", ondelete="CASCADE"),
+        unique=True,
+    )
 
     @property
     def is_canonical(self) -> bool:
@@ -229,6 +306,10 @@ class KnowledgeChunk(Base):
     )
     file_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("kb_text_files.id", ondelete="CASCADE")
+    )
+    category_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_category_revisions.id", ondelete="CASCADE"),
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     chunk_type: Mapped[str] = mapped_column(

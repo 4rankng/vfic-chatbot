@@ -38,6 +38,9 @@ class _Db:
     def add(self, value):
         self.added.append(value)
 
+    def add_all(self, values):
+        self.added.extend(values)
+
     async def flush(self):
         return None
 
@@ -67,12 +70,12 @@ async def test_direct_file_rejects_rag_knowledge_base() -> None:
 
 
 @pytest.mark.asyncio
-async def test_project_attachment_rejects_direct_knowledge_base() -> None:
+async def test_project_attachment_is_disabled_for_project_owned_modes() -> None:
     kb_id = uuid.uuid4()
     kb = SimpleNamespace(id=kb_id, mode=KnowledgeBaseMode.DIRECT_CONTEXT)
     db = _Db(get_values={("KnowledgeBase", kb_id): kb})
 
-    with pytest.raises(ConflictError, match="Only RAG"):
+    with pytest.raises(ConflictError, match="Projects own their knowledge mode"):
         await KnowledgeBaseService(db).attach_project(kb_id, uuid.uuid4(), _actor())
 
 
@@ -81,7 +84,7 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references() 
     persona_id = uuid.uuid4()
     kb_id = uuid.uuid4()
     project_id = uuid.uuid4()
-    kb = SimpleNamespace(id=kb_id, slug="shared", mode=KnowledgeBaseMode.RAG)
+    kb = SimpleNamespace(id=kb_id, slug="shared", mode=KnowledgeBaseMode.RAG, project_id=None)
     persona = SimpleNamespace(
         id=persona_id,
         knowledge_base_id=None,
@@ -110,6 +113,7 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references() 
     assert result is kb
     assert persona.knowledge_base_id == kb_id
     assert project.knowledge_base_id == kb_id
+    assert kb.project_id == project_id
     assert persona.name == "Default"
     assert persona.slug == "default"
     assert db.commits == 1

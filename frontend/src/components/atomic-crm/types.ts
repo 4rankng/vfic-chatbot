@@ -218,17 +218,22 @@ export type KnowledgeSource = {
 // index_card is the LLM-generated catalog entry (summary/roles/location/highlights).
 export interface ProjectIndexCard {
   summary?: string;
+  roles?: string[];
   key_roles?: string[];
   location?: string;
+  eligibility?: string[];
   highlights?: string[];
 }
 export type Project = {
   id: string;
   slug: string;
   name: string;
+  aliases?: string[];
   is_active: boolean;
+  knowledge_mode?: "RAG" | "DIRECT_CONTEXT" | null;
   summary?: string | null;
   index_card?: ProjectIndexCard;
+  discovery_revision?: number;
   default_persona_id?: string | null;
   knowledge_base_id?: string | null;
   knowledge_document_count?: number;

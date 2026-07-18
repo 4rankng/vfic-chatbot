@@ -1,0 +1,574 @@
+import { useEffect, useRef, useState } from "react";
+import { useDataProvider, useNotify, useRefresh } from "ra-core";
+import { ApiError } from "@/components/atomic-crm/providers/rest/api";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clipboard,
+  Database,
+  Download,
+  FileText,
+  Loader2,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import type { Project } from "../types";
+import {
+  clearProjectKnowledgeCategory,
+  getProjectKnowledgeCategories,
+  getProjectKnowledgeCategorySource,
+  getProjectKnowledgeCategoryTemplate,
+  getProjectSinglePage,
+  replaceProjectKnowledgeCategory,
+  replaceProjectSinglePage,
+  uploadProjectKnowledgeCategory,
+  type KnowledgeCategoryKey,
+  type KnowledgeCategoryStatus,
+} from "@/lib/vfic/knowledgeService";
+import { cn } from "@/lib/utils";
+
+type Props = {
+  project: Project;
+  editable?: boolean;
+};
+
+export const ProjectKnowledgePanel = ({ project, editable = false }: Props) => {
+  if (project.knowledge_mode === "DIRECT_CONTEXT") {
+    return <SinglePagePanel project={project} editable={editable} />;
+  }
+  return <RagCategoriesPanel project={project} editable={editable} />;
+};
+
+const SinglePagePanel = ({ project, editable }: Props) => {
+  const notify = useNotify();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [filename, setFilename] = useState("single-page.md");
+  const [text, setText] = useState("");
+  const [hasCurrentPage, setHasCurrentPage] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    getProjectSinglePage(String(project.id))
+      .then((page) => {
+        if (!active) return;
+        setFilename(page.filename);
+        setText(page.text);
+        setHasCurrentPage(true);
+        setLoadFailed(false);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        if (error instanceof ApiError && error.status === 404) {
+          setHasCurrentPage(false);
+          setLoadFailed(false);
+          return;
+        }
+        setLoadFailed(true);
+        notify((error as Error).message, { type: "error" });
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [notify, project.id]);
+
+  const save = async () => {
+    if (loadFailed) {
+      notify("Chưa tải được nội dung hiện tại. Vui lòng tải lại trang trước khi lưu.", {
+        type: "warning",
+      });
+      return;
+    }
+    if (!text.trim()) {
+      notify("Vui lòng nhập nội dung kiến thức.", { type: "warning" });
+      return;
+    }
+    if (
+      hasCurrentPage &&
+      !window.confirm("Nội dung mới sẽ thay thế toàn bộ trang hiện tại. Tiếp tục?")
+    ) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await replaceProjectSinglePage(String(project.id), filename, text);
+      setHasCurrentPage(true);
+      notify("Đã thay thế trang kiến thức của dự án.", { type: "success" });
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const readFile = async (file?: File) => {
+    if (!file) return;
+    if (!/\.(txt|md)$/i.test(file.name)) {
+      notify("Trang kiến thức chỉ nhận file .txt hoặc .md.", { type: "warning" });
+      return;
+    }
+    setFilename(file.name);
+    setText(await file.text());
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-section-title">
+            <FileText className="size-5" />
+            Trang kiến thức duy nhất
+            <Badge variant="outline">Gửi toàn bộ cho Agent</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-body text-muted-foreground">
+            Agent nhận toàn bộ trang này trong mỗi cuộc trò chuyện đã chọn dự án.
+            Trang này không được chia nhỏ hoặc tìm kiếm theo danh mục. Mỗi lần lưu sẽ
+            thay thế toàn bộ nội dung cũ.
+          </p>
+          {loading ? (
+            <Skeleton className="h-72 w-full" />
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={filename}
+                  onChange={(event) => setFilename(event.target.value)}
+                  className="max-w-sm"
+                  disabled={!editable}
+                  aria-label="Tên file trang kiến thức"
+                />
+                {editable && (
+                  <Button variant="outline" asChild>
+                    <label>
+                      <Upload className="size-4" />
+                      Chọn file
+                      <input
+                        type="file"
+                        accept=".txt,.md,text/plain,text/markdown"
+                        className="sr-only"
+                        onChange={(event) => void readFile(event.target.files?.[0])}
+                      />
+                    </label>
+                  </Button>
+                )}
+              </div>
+              <Textarea
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                rows={18}
+                readOnly={!editable}
+                placeholder="Dán toàn bộ kiến thức của dự án tại đây..."
+                aria-label="Nội dung trang kiến thức"
+                className="font-mono text-sm"
+              />
+              {editable && (
+                <Button onClick={() => void save()} disabled={saving || loadFailed}>
+                  {saving && <Loader2 className="size-4 animate-spin" />}
+                  {hasCurrentPage ? "Thay thế trang hiện tại" : "Lưu trang kiến thức"}
+                </Button>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+      {editable && <DiscoveryCardEditor project={project} />}
+    </div>
+  );
+};
+
+const RagCategoriesPanel = ({ project, editable }: Props) => {
+  const notify = useNotify();
+  const [categories, setCategories] = useState<KnowledgeCategoryStatus[] | null>(null);
+  const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
+  const [template, setTemplate] = useState("");
+  const [blankTemplate, setBlankTemplate] = useState("");
+  const [templateFilename, setTemplateFilename] = useState("jobs.yaml");
+  const [filename, setFilename] = useState("jobs.yaml");
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [processingKey, setProcessingKey] = useState<KnowledgeCategoryKey | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  const loadCatalog = async () => {
+    const catalog = await getProjectKnowledgeCategories(String(project.id));
+    setCategories(catalog.data);
+    return catalog.data;
+  };
+
+  useEffect(() => {
+    void loadCatalog().catch((error) =>
+      notify((error as Error).message, { type: "error" }),
+    );
+    return () => {
+      if (pollRef.current !== null) window.clearTimeout(pollRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id]);
+
+  useEffect(() => {
+    setLoadingTemplate(true);
+    setTemplate("");
+    setBlankTemplate("");
+    getProjectKnowledgeCategoryTemplate(String(project.id), selected)
+      .then(async (emptyTemplate) => {
+        setBlankTemplate(emptyTemplate.content);
+        setTemplateFilename(emptyTemplate.filename);
+        try {
+          const current = await getProjectKnowledgeCategorySource(
+            String(project.id),
+            selected,
+          );
+          setTemplate(current.content);
+          setFilename(current.filename);
+        } catch (error: unknown) {
+          if (!(error instanceof ApiError) || error.status !== 404) throw error;
+          setTemplate(emptyTemplate.content);
+          setFilename(emptyTemplate.filename);
+        }
+      })
+      .catch((error) => notify((error as Error).message, { type: "error" }))
+      .finally(() => setLoadingTemplate(false));
+  }, [notify, project.id, selected]);
+
+  const pollUntilActive = (revisionId: string, attempts = 0) => {
+    pollRef.current = window.setTimeout(() => {
+      void loadCatalog()
+        .then((rows) => {
+          if (rows.some((row) => row.active_revision_id === revisionId)) {
+            setProcessingKey(null);
+            notify("Dữ liệu mới đã sẵn sàng cho Agent.", { type: "success" });
+          } else if (
+            rows.some(
+              (row) => row.latest_revision_id === revisionId && row.status === "FAILED",
+            )
+          ) {
+            setProcessingKey(null);
+            notify("Nội dung mới có lỗi. Dữ liệu đang dùng không thay đổi.", {
+              type: "error",
+            });
+          } else if (attempts < 20) {
+            pollUntilActive(revisionId, attempts + 1);
+          } else {
+            setProcessingKey(null);
+            notify("Dữ liệu đang được xử lý. Bạn có thể quay lại kiểm tra sau.", {
+              type: "info",
+            });
+          }
+        })
+        .catch(() => setProcessingKey(null));
+    }, 2000);
+  };
+
+  const replace = async () => {
+    if (!template.trim()) {
+      notify("Vui lòng nhập nội dung YAML.", { type: "warning" });
+      return;
+    }
+    if (!window.confirm("Dữ liệu mới sẽ thay thế toàn bộ mục này. Tiếp tục?")) return;
+    setSaving(true);
+    try {
+      const result = await replaceProjectKnowledgeCategory(
+        String(project.id),
+        selected,
+        filename,
+        template,
+      );
+      setProcessingKey(selected);
+      notify("Đã nhận dữ liệu. Hệ thống đang kiểm tra và chuẩn bị cho Agent.", {
+        type: "info",
+      });
+      pollUntilActive(result.revision.id);
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const upload = async (file?: File) => {
+    if (!file) return;
+    const content = await file.text();
+    setFilename(file.name);
+    setTemplate(content);
+    if (!window.confirm("File này sẽ thay thế toàn bộ dữ liệu của mục đang chọn. Tiếp tục?")) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await uploadProjectKnowledgeCategory(
+        String(project.id),
+        selected,
+        file,
+      );
+      setProcessingKey(selected);
+      notify("Đã tải file. Hệ thống đang kiểm tra và chuẩn bị cho Agent.", {
+        type: "info",
+      });
+      pollUntilActive(result.revision.id);
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clear = async () => {
+    if (!window.confirm("Xóa toàn bộ dữ liệu đang dùng của mục này?")) return;
+    if (!window.confirm("Agent sẽ không còn dùng thông tin trong mục này. Xác nhận xóa?")) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await clearProjectKnowledgeCategory(String(project.id), selected);
+      await loadCatalog();
+      setTemplate(blankTemplate);
+      setFilename(templateFilename);
+      notify("Đã xóa dữ liệu của mục.", { type: "success" });
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyTemplate = async () => {
+    await navigator.clipboard.writeText(blankTemplate);
+    notify("Đã sao chép mẫu.", { type: "success" });
+  };
+
+  const downloadTemplate = () => {
+    const url = URL.createObjectURL(
+      new Blob([blankTemplate], { type: "application/yaml" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = templateFilename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const selectedCategory = categories?.find((item) => item.key === selected);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-section-title">
+          <Database className="size-5" />
+          Kiến thức theo từng mục
+            <Badge variant="outline">Theo danh mục</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <p className="text-body text-muted-foreground">
+          Mỗi mục được cập nhật riêng. Cập nhật một mục không làm thay đổi các mục khác.
+          Riêng Việc làm: có trong file nghĩa là đang tuyển; không còn trong file nghĩa là
+          không còn tuyển.
+        </p>
+        {categories && (
+          <p className="font-medium">
+            {categories.filter((item) => item.active_revision_id).length}/12 danh mục đã có
+            nội dung
+          </p>
+        )}
+        {!categories ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <Skeleton key={index} className="h-24" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {categories.map((category) => {
+              const isProcessing = processingKey === category.key;
+              const hasPendingRevision =
+                category.status === "STAGED" || category.status === "PROCESSING";
+              const hasError = category.status === "FAILED";
+              const isActive = Boolean(category.active_revision_id);
+              return (
+                <button
+                  key={category.key}
+                  type="button"
+                  onClick={() => setSelected(category.key)}
+                  aria-pressed={selected === category.key}
+                  className={cn(
+                    "rounded-lg border p-4 text-left transition-colors hover:bg-muted/40",
+                    selected === category.key && "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold">{category.label_vi}</span>
+                    {isProcessing || hasPendingRevision ? (
+                      <Loader2 className="size-4 animate-spin text-primary" />
+                    ) : hasError ? (
+                      <AlertCircle className="size-4 text-destructive" />
+                    ) : isActive ? (
+                      <CheckCircle2 className="size-4 text-emerald-600" />
+                    ) : (
+                      <span className="size-2 rounded-full bg-muted-foreground/40" />
+                    )}
+                  </div>
+                  <p className="mt-2 text-helper text-muted-foreground">
+                    {isProcessing || hasPendingRevision
+                      ? "Đang xử lý"
+                      : hasError
+                        ? "Cập nhật lỗi — nội dung cũ vẫn đang dùng"
+                      : isActive
+                        ? `Đang dùng bản ${category.active_revision_no}`
+                        : "Chưa có dữ liệu"}
+                  </p>
+                  {category.updated_at && (
+                    <p className="mt-1 text-caption text-muted-foreground">
+                      Cập nhật {formatDate(category.updated_at)}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="rounded-lg border p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="mr-auto font-semibold">
+              {selectedCategory?.label_vi ?? selected}
+            </h3>
+            <Button variant="outline" size="sm" onClick={() => void copyTemplate()}>
+              <Clipboard className="size-4" /> Sao chép mẫu
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadTemplate}>
+              <Download className="size-4" /> Tải mẫu
+            </Button>
+            {editable && (
+              <Button variant="outline" size="sm" asChild>
+                <label>
+                  <Upload className="size-4" /> Tải file YAML
+                  <input
+                    type="file"
+                    accept=".yaml,.yml,application/yaml,text/yaml"
+                    className="sr-only"
+                    onChange={(event) => void upload(event.target.files?.[0])}
+                  />
+                </label>
+              </Button>
+            )}
+          </div>
+          {loadingTemplate ? (
+            <Skeleton className="mt-3 h-80" />
+          ) : (
+            <Textarea
+              value={template}
+              onChange={(event) => setTemplate(event.target.value)}
+              readOnly={!editable}
+              rows={20}
+              className="mt-3 font-mono text-sm"
+              aria-label="Nội dung YAML của mục kiến thức"
+            />
+          )}
+          {editable && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button onClick={() => void replace()} disabled={saving || loadingTemplate}>
+                {saving && <Loader2 className="size-4 animate-spin" />}
+                Kiểm tra và thay thế mục này
+              </Button>
+              {selectedCategory?.active_revision_id && (
+                <Button
+                  variant="outline"
+                  className="text-destructive"
+                  onClick={() => void clear()}
+                  disabled={saving}
+                >
+                  <Trash2 className="size-4" /> Xóa dữ liệu mục
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const DiscoveryCardEditor = ({ project }: { project: Project }) => {
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const card = project.index_card ?? {};
+  const [summary, setSummary] = useState(card.summary ?? project.summary ?? "");
+  const [location, setLocation] = useState(card.location ?? "");
+  const [roles, setRoles] = useState((card.roles ?? card.key_roles ?? []).join(", "));
+  const [highlights, setHighlights] = useState((card.highlights ?? []).join(", "));
+  const [aliases, setAliases] = useState((project.aliases ?? []).join(", "));
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await dataProvider.update("projects", {
+        id: project.id,
+        previousData: project,
+        data: {
+          aliases: splitList(aliases),
+          discovery_card: {
+            summary: summary.trim(),
+            location: location.trim(),
+            roles: splitList(roles),
+            eligibility: [],
+            highlights: splitList(highlights),
+          },
+        },
+      });
+      notify("Đã cập nhật thẻ giúp ứng viên tìm thấy dự án.", { type: "success" });
+      refresh();
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-section-title">Thông tin dùng khi gợi ý dự án</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+        <Input value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Tóm tắt" />
+        <Input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Địa điểm" />
+        <Input value={roles} onChange={(event) => setRoles(event.target.value)} placeholder="Vị trí, cách nhau bằng dấu phẩy" />
+        <Input value={highlights} onChange={(event) => setHighlights(event.target.value)} placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy" />
+        <Input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Tên gọi khác: LG, LGD..." />
+        <div>
+          <Button onClick={() => void save()} disabled={saving}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Lưu thông tin gợi ý
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const splitList = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));

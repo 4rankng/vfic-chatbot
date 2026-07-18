@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models.conversation import (
     ConversationMode,
+    ConversationProjectState,
     ConversationStatus,
     DeliveryStatus,
     MessageSender,
@@ -51,6 +52,8 @@ class ConversationOut(BaseModel):
     needs_human: bool
     version: int
     assigned_recruiter_id: uuid.UUID | None = None
+    project_context_state: ConversationProjectState = ConversationProjectState.EXPLORE
+    focused_project_id: uuid.UUID | None = None
     # Canonical neutral identity (NOT NULL after Alembic 0047 backfill).
     contact_id: uuid.UUID | None = None
     channel_identity_id: uuid.UUID | None = None

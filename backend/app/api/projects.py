@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_admin, require_recruiter
@@ -30,7 +30,28 @@ from app.schemas.projects import (
     ProjectOut,
     ProjectUpdate,
 )
+from app.schemas.knowledge_bases import (
+    DirectContextFileDetailOut,
+    DirectContextFileOut,
+    DirectContextFileUpsert,
+)
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
+from app.schemas.project_knowledge import (
+    CategoryCatalogOut,
+    CategoryClearRequest,
+    CategoryReplaceOut,
+    CategoryReplaceRequest,
+    CategoryRevisionOut,
+    CategorySourceOut,
+    CategoryTemplateOut,
+)
+from app.services.knowledge.category_contracts import (
+    get_category_definition,
+    load_category_template,
+)
+from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.project import ProjectService
+from app.services.errors import ConflictError
 
 router = APIRouter(prefix="/knowledge/projects", tags=["projects"])
 
@@ -74,7 +95,8 @@ async def get_project(
 async def create_project(
     body: ProjectCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> ProjectOut:
-    return ProjectOut.model_validate(await ProjectService(db).create(body, admin))
+    project = await ProjectService(db).create(body, admin)
+    return await ProjectService(db).get_with_readiness(project.id)
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
@@ -84,7 +106,8 @@ async def update_project(
     actor: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectOut:
-    return ProjectOut.model_validate(await ProjectService(db).update(project_id, body, actor))
+    project = await ProjectService(db).update(project_id, body, actor)
+    return await ProjectService(db).get_with_readiness(project.id)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -94,6 +117,159 @@ async def delete_project(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await ProjectService(db).delete(project_id, admin)
+
+
+@router.get("/{project_id}/single-page", response_model=DirectContextFileDetailOut)
+async def get_project_single_page(
+    project_id: uuid.UUID,
+    _user: User = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_db),
+) -> DirectContextFileDetailOut:
+    direct_file = await ProjectService(db).get_single_page(project_id)
+    return DirectContextFileDetailOut(
+        **DirectContextFileOut.model_validate(direct_file).model_dump(),
+        text=direct_file.raw_text,
+    )
+
+
+@router.put("/{project_id}/single-page", response_model=DirectContextFileOut)
+async def replace_project_single_page(
+    project_id: uuid.UUID,
+    body: DirectContextFileUpsert,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DirectContextFileOut:
+    direct_file = await ProjectService(db).replace_single_page(project_id, body, admin)
+    return DirectContextFileOut.model_validate(direct_file)
+
+
+@router.get("/{project_id}/categories", response_model=CategoryCatalogOut)
+async def list_project_categories(
+    project_id: uuid.UUID,
+    _user: User = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryCatalogOut:
+    data = await KnowledgeCategoryService(db).list_catalog(project_id)
+    return CategoryCatalogOut(data=data, total=len(data))
+
+
+@router.get(
+    "/{project_id}/categories/{category_key}/template",
+    response_model=CategoryTemplateOut,
+)
+async def get_project_category_template(
+    project_id: uuid.UUID,
+    category_key: KnowledgeCategoryKey,
+    _user: User = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryTemplateOut:
+    await KnowledgeCategoryService(db).list_catalog(project_id)
+    definition = get_category_definition(category_key)
+    return CategoryTemplateOut(
+        key=category_key,
+        label_vi=definition.label_vi,
+        filename=definition.template_filename,
+        content=load_category_template(category_key),
+    )
+
+
+@router.get(
+    "/{project_id}/categories/{category_key}",
+    response_model=CategorySourceOut,
+)
+async def get_project_category_source(
+    project_id: uuid.UUID,
+    category_key: KnowledgeCategoryKey,
+    _user: User = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_db),
+) -> CategorySourceOut:
+    return await KnowledgeCategoryService(db).get_active_source(project_id, category_key)
+
+
+@router.put(
+    "/{project_id}/categories/{category_key}",
+    response_model=CategoryReplaceOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def replace_project_category(
+    project_id: uuid.UUID,
+    category_key: KnowledgeCategoryKey,
+    body: CategoryReplaceRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryReplaceOut:
+    revision, job_id = await KnowledgeCategoryService(db).stage_replacement(
+        project_id=project_id,
+        category_key=category_key,
+        filename=body.filename,
+        source_yaml=body.content,
+        actor=admin,
+    )
+    return CategoryReplaceOut(
+        revision=CategoryRevisionOut.model_validate(revision),
+        job_id=job_id,
+    )
+
+
+@router.post(
+    "/{project_id}/categories/{category_key}/upload",
+    response_model=CategoryReplaceOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def upload_project_category(
+    project_id: uuid.UUID,
+    category_key: KnowledgeCategoryKey,
+    file: UploadFile = File(...),
+    _intent: str = Form("replace"),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryReplaceOut:
+    filename = file.filename or f"{category_key.value}.yaml"
+    if not filename.lower().endswith((".yaml", ".yml")):
+        from app.services.errors import ConflictError
+
+        raise ConflictError("RAG category uploads accept only .yaml or .yml files")
+    raw = await file.read(500_001)
+    if len(raw) > 500_000:
+        from app.services.errors import ConflictError
+
+        raise ConflictError("Category YAML exceeds the 500 KB limit")
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        from app.services.errors import ConflictError
+
+        raise ConflictError("Category YAML must use UTF-8 encoding") from exc
+    revision, job_id = await KnowledgeCategoryService(db).stage_replacement(
+        project_id=project_id,
+        category_key=category_key,
+        filename=filename,
+        source_yaml=content,
+        actor=admin,
+    )
+    return CategoryReplaceOut(
+        revision=CategoryRevisionOut.model_validate(revision),
+        job_id=job_id,
+    )
+
+
+@router.post(
+    "/{project_id}/categories/{category_key}/clear",
+    response_model=CategoryRevisionOut,
+)
+async def clear_project_category(
+    project_id: uuid.UUID,
+    category_key: KnowledgeCategoryKey,
+    _body: CategoryClearRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryRevisionOut:
+    revision = await KnowledgeCategoryService(db).clear(
+        project_id=project_id,
+        category_key=category_key,
+        actor=admin,
+    )
+    return CategoryRevisionOut.model_validate(revision)
 
 
 @router.post("/{project_id}/reindex", response_model=ProjectOut)
@@ -148,7 +324,7 @@ async def create_project_faq(
     db: AsyncSession = Depends(get_db),
 ) -> ProjectFaqOut:
     """Create a question/answer pair in the project's FAQ knowledge."""
-    return await ProjectService(db).create_faq(project_id, body, actor)
+    raise ConflictError("FAQ is read-only here; update the Project FAQ YAML category")
 
 
 @router.patch("/{project_id}/faq/{faq_id}", response_model=ProjectFaqOut)
@@ -160,7 +336,7 @@ async def update_project_faq(
     db: AsyncSession = Depends(get_db),
 ) -> ProjectFaqOut:
     """Edit a question/answer pair in the project's FAQ knowledge."""
-    return await ProjectService(db).update_faq(project_id, faq_id, body, actor)
+    raise ConflictError("FAQ is read-only here; update the Project FAQ YAML category")
 
 
 @router.delete("/{project_id}/faq/{faq_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -171,7 +347,7 @@ async def delete_project_faq(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a question/answer pair from the project's FAQ knowledge."""
-    await ProjectService(db).delete_faq(project_id, faq_id, actor)
+    raise ConflictError("FAQ is read-only here; clear or replace the Project FAQ YAML category")
 
 
 @router.patch("/{project_id}/features/{feature_id}", response_model=FeatureOut)
@@ -183,7 +359,7 @@ async def update_project_feature(
     db: AsyncSession = Depends(get_db),
 ) -> FeatureOut:
     """Recruiter/admin review-edit of one feature value; re-syncs product highlights."""
-    return await ProjectService(db).update_feature(project_id, feature_id, body, actor)
+    raise ConflictError("Project features are read-only projections of category YAML")
 
 
 @router.post("/{project_id}/features/extract", response_model=FeatureListResponse)
@@ -191,4 +367,4 @@ async def extract_project_features(
     project_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> FeatureListResponse:
     """Synchronously re-extract active product features from the project's latest posting."""
-    return await ProjectService(db).extract_features(project_id, admin)
+    raise ConflictError("Project features are read-only projections of category YAML")

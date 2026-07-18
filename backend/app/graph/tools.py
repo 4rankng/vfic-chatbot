@@ -471,6 +471,7 @@ def _active_job_tool_result(status: str, jobs: list[dict[str, object]], safe_rep
 async def list_active_jobs(
     retrieval: RetrievalPort,
     *,
+    project_slug: str | None = None,
     role: str | None = None,
     company: str | None = None,
     location: str | None = None,
@@ -483,6 +484,7 @@ async def list_active_jobs(
         k = 3
     try:
         lookup = await retrieval.list_active_jobs(
+            project_slug=project_slug,
             role=role,
             company=company,
             location=location,
@@ -533,7 +535,7 @@ def _recommend_terms(query: str) -> list[str]:
 
 def _project_haystack(row) -> tuple[str, list[str], str]:
     card = getattr(row, "index_card", None) or {}
-    roles = [str(role) for role in (card.get("key_roles") or []) if role]
+    roles = [str(role) for role in (card.get("roles") or card.get("key_roles") or []) if role]
     location = str(card.get("location") or "")
     summary = str(getattr(row, "summary", "") or "")
     parts = [
@@ -618,19 +620,24 @@ async def recommend_projects(
 
 
 async def search_bus_timetable(
-    retrieval: RetrievalPort, company: str, question: str, limit: int = 50
+    retrieval: RetrievalPort,
+    company: str,
+    question: str,
+    limit: int = 50,
+    *,
+    strict_company: bool = False,
 ) -> str:
     s = get_settings()
     # Bus timetables change rarely; cache the formatted result for the TTL so
     # repeated timetable questions (a common pattern) skip the DB query.
-    cache_key = f"rag:bus_timetable:{_cache_digest(company, question, limit)}"
+    cache_key = f"rag:bus_timetable:{_cache_digest(company, question, limit, strict_company)}"
     if s.rag_cache_enabled:
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
             return cached
     repo = retrieval
     rows = await repo.search_bus_timetable(company, question, limit)
-    if not rows and company.strip():
+    if not rows and company.strip() and not strict_company:
         rows = await repo.search_bus_timetable("", question, limit)
     if not rows:
         logger.debug("search_bus_timetable: no rows for company=%s", company)

@@ -29,6 +29,7 @@ from app.models.knowledge import (
     KnowledgeDocument,
     KnowledgeStatus,
 )
+from app.models.company import Project
 from app.models.user import User
 from app.schemas.knowledge import (
     KBIngestResponse,
@@ -167,7 +168,9 @@ async def ingest_kb_version(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> KBIngestResponse:
-    await KnowledgeService(db)._require_version(project_id, version_id)
+    service = KnowledgeService(db)
+    await service._require_legacy_mutation_allowed(project_id)
+    await service._require_version(project_id, version_id)
     job_id = enqueue_ingest_version(version_id)
     await record_audit(
         db,
@@ -380,6 +383,7 @@ async def process(
 ) -> KnowledgeDocumentOut:
     """(Re)run the async LLM training pipeline for a document."""
     doc = await _load(doc_id, db)
+    await KnowledgeService(db)._require_legacy_mutation_allowed(doc.project_id)
     enqueue_ingest(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
 
@@ -398,6 +402,7 @@ async def reindex(
     doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> KnowledgeDocumentOut:
     doc = await _load(doc_id, db)
+    await KnowledgeService(db)._require_legacy_mutation_allowed(doc.project_id)
     enqueue_ingest(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
 
@@ -420,9 +425,12 @@ async def reindex_all(
         select(KBTextFile.id).where(KBTextFile.document_id == KnowledgeDocument.id)
     )
     result = await db.execute(
-        select(KnowledgeDocument).where(
+        select(KnowledgeDocument)
+        .join(Project, Project.id == KnowledgeDocument.project_id)
+        .where(
             KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
             KnowledgeDocument.project_id.is_not(None),
+            Project.knowledge_base_id.is_(None),
             KnowledgeDocument.raw_text.is_not(None),
             or_(
                 KnowledgeDocument.id.in_(active_versioned_document_ids),

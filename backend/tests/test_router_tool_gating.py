@@ -244,6 +244,10 @@ async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
                 ],
             ),
             SimpleNamespace(content="Bịa lương 30 triệu", tool_calls=None),
+            SimpleNamespace(
+                content="LG Display tuyển công nhân sản xuất, lương 10-14 triệu.",
+                tool_calls=None,
+            ),
         ]
     )
 
@@ -283,10 +287,9 @@ async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
     )
 
     assert llm.tool_choices == ["list_active_jobs", None]
-    assert "Công nhân sản xuất" in result
-    assert "10-14 triệu" in result
-    assert "30 triệu" not in result
+    assert result == "LG Display tuyển công nhân sản xuất, lương 10-14 triệu."
     assert repo.received == {
+        "project_slug": None,
         "role": None,
         "company": None,
         "location": None,
@@ -298,7 +301,12 @@ async def test_required_vacancy_tool_skip_fails_closed():
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
-    llm = _RequiredToolLLM([SimpleNamespace(content="LG đang tuyển", tool_calls=None)])
+    llm = _RequiredToolLLM(
+        [
+            SimpleNamespace(content="LG đang tuyển", tool_calls=None),
+            SimpleNamespace(content="Chưa thể kiểm tra tuyển dụng.", tool_calls=None),
+        ]
+    )
     result = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
         "LG đang tuyển gì?",
         system="sys",
@@ -327,6 +335,7 @@ async def test_required_vacancy_tool_dispatch_error_fails_closed(monkeypatch):
                 content="",
                 tool_calls=[{"name": "list_active_jobs", "args": {}, "id": "call-1"}],
             ),
+            SimpleNamespace(content="Chưa thể kiểm tra tuyển dụng.", tool_calls=None),
         ]
     )
 

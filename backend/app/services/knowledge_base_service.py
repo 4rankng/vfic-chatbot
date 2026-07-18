@@ -8,7 +8,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
-from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
+from app.models.knowledge import (
+    KnowledgeBase,
+    KnowledgeBaseDirectFile,
+    KnowledgeBaseMode,
+    KnowledgeCategory,
+)
 from app.models.persona import Persona
 from app.models.user import User
 from app.schemas.knowledge_bases import (
@@ -21,6 +26,7 @@ from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, NotFoundError
 from app.services.knowledge.text_ingestion import kb_text_stats
 from app.services.knowledge_base_capacity import require_direct_context_ready
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
 
 
 class KnowledgeBaseService:
@@ -106,26 +112,9 @@ class KnowledgeBaseService:
     async def attach_project(
         self, knowledge_base_id: uuid.UUID, project_id: uuid.UUID, actor: User
     ) -> Project:
-        knowledge_base = await self.get(knowledge_base_id)
-        if knowledge_base.mode is not KnowledgeBaseMode.RAG:
-            raise ConflictError("Only RAG knowledge bases can contain Projects")
-        project = await self.db.get(Project, project_id)
-        if project is None:
-            raise NotFoundError("Project not found")
-        if project.knowledge_base_id not in (None, knowledge_base.id):
-            raise ConflictError("Project already belongs to another knowledge base")
-        project.knowledge_base_id = knowledge_base.id
-        await record_audit(
-            self.db,
-            action="attach_project_to_knowledge_base",
-            actor_id=actor.id,
-            target_type="project",
-            target_id=str(project.id),
-            payload={"knowledge_base_id": str(knowledge_base.id)},
+        raise ConflictError(
+            "Projects own their knowledge mode; create the Project instead of attaching a shared KB"
         )
-        await self.db.commit()
-        await self.db.refresh(project)
-        return project
 
     async def upsert_direct_file(
         self,
@@ -183,7 +172,9 @@ class KnowledgeBaseService:
     async def bootstrap_legacy(
         self, body: LegacyKnowledgeBootstrap, actor: User
     ) -> KnowledgeBase:
-        """Idempotently bind an existing Agent and legacy Projects to a RAG KB."""
+        """Idempotently migrate one legacy Project to its owned RAG KB."""
+        if len(set(body.project_ids)) != 1:
+            raise ConflictError("Legacy migration requires exactly one Project per knowledge base")
         persona = await self.db.get(Persona, body.persona_id)
         if persona is None:
             raise NotFoundError("Agent not found")
@@ -215,13 +206,34 @@ class KnowledgeBaseService:
             if project.knowledge_base_id not in (None, knowledge_base.id):
                 raise ConflictError("A Project already belongs to another knowledge base")
 
+        project = projects[0]
+        if getattr(knowledge_base, "project_id", None) not in (None, project.id):
+            raise ConflictError("Knowledge base already belongs to another Project")
+
         persona.knowledge_base_id = knowledge_base.id
         if body.persona_name is not None:
             persona.name = body.persona_name.strip()
         if body.persona_slug is not None:
             persona.slug = body.persona_slug
-        for project in projects:
-            project.knowledge_base_id = knowledge_base.id
+        knowledge_base.project_id = project.id
+        project.knowledge_base_id = knowledge_base.id
+        existing_categories = {
+            str(value)
+            for value in (
+                await self.db.scalars(
+                    select(KnowledgeCategory.category_key).where(
+                        KnowledgeCategory.project_id == project.id
+                    )
+                )
+            ).all()
+        }
+        self.db.add_all(
+            [
+                KnowledgeCategory(project_id=project.id, category_key=key.value)
+                for key in KnowledgeCategoryKey
+                if key.value not in existing_categories
+            ]
+        )
         await record_audit(
             self.db,
             action="bootstrap_legacy_knowledge_base",

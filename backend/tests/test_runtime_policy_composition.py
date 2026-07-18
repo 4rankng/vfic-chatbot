@@ -201,6 +201,9 @@ async def test_non_recruitment_manifest_without_knowledge_authority_fails_closed
             self.calls += 1
             return "unsupported vacancy claim"
 
+        async def direct(self, *_args, **_kwargs):
+            return "Chưa thể kiểm tra thông tin tuyển dụng."
+
     agent = _Agent()
     deps = SimpleNamespace(
         agent=agent,
@@ -235,6 +238,9 @@ async def test_manifest_without_job_catalog_authority_fails_closed_for_generic_l
         async def agent(self, *_args, **_kwargs):
             self.calls += 1
             return "unsupported catalog claim"
+
+        async def direct(self, *_args, **_kwargs):
+            return "Chưa thể kiểm tra thông tin tuyển dụng."
 
     agent = _Agent()
     deps = SimpleNamespace(

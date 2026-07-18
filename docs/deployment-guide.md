@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last updated:** 2026-07-10
+**Last updated:** 2026-07-18
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
 **Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/ChatBotN8N.git` (`main`)
 
@@ -97,7 +97,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0045_runtime_authority_stamps` (15 Jul 2026).
+- **HEAD:** `0048_project_owned_knowledge_modes` (18 Jul 2026).
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.

@@ -1,0 +1,12 @@
+schema_version: "1.0"
+category: contacts
+contacts: []
+#  - id: tu-van-tuyen-dung
+#    name: Tên người hoặc bộ phận liên hệ
+#    role: Tư vấn tuyển dụng
+#    phone: "0123456789"
+#    zalo: "0123456789"
+#    email: null
+#    address: Địa chỉ văn phòng
+#    working_hours: Thứ 2–Thứ 7, 08:00–17:00
+#    notes: null

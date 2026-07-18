@@ -5,39 +5,62 @@ import {
   useDataProvider,
   useNotify,
   useRedirect,
-  useGetList,
 } from "ra-core";
 import { Card, CardContent } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
-import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
-import { SelectInput } from "@/components/admin/select-input";
-import type { KnowledgeBase } from "../types";
 
 export const ProjectCreate = () => {
   const notify = useNotify();
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
-  const { data: knowledgeBases = [] } = useGetList<KnowledgeBase>("knowledge_bases", {
-    pagination: { page: 1, perPage: 100 },
-    sort: { field: "name", order: "ASC" },
-    filter: {},
-  });
-  const ragKnowledgeBases = knowledgeBases.filter((knowledgeBase) => knowledgeBase.mode === "RAG");
+  const [mode, setMode] = useState<"" | "RAG" | "DIRECT_CONTEXT">("");
+  const [aliases, setAliases] = useState("");
+  const [summary, setSummary] = useState("");
+  const [location, setLocation] = useState("");
+  const [roles, setRoles] = useState("");
+  const [highlights, setHighlights] = useState("");
 
   const onSubmit = async (data: Record<string, unknown>) => {
-    if (!data.knowledge_base_id) {
-      notify("Vui lòng chọn Knowledge Base RAG cho dự án.", { type: "warning" });
-      return;
-    }
     setSubmitting(true);
     try {
-      await dataProvider.create("projects", { data });
+      if (!mode) {
+        notify("Chọn một cách lưu kiến thức để tiếp tục.", { type: "warning" });
+        setSubmitting(false);
+        return;
+      }
+      const discoveryCard =
+        mode === "DIRECT_CONTEXT"
+          ? {
+              summary: summary.trim(),
+              location: location.trim(),
+              roles: splitList(roles),
+              eligibility: [],
+              highlights: splitList(highlights),
+            }
+          : undefined;
+      if (mode === "DIRECT_CONTEXT" && (!summary.trim() || !location.trim())) {
+        notify("Vui lòng nhập tóm tắt và địa điểm để Agent có thể gợi ý dự án.", {
+          type: "warning",
+        });
+        setSubmitting(false);
+        return;
+      }
+      const created = await dataProvider.create("projects", {
+        data: {
+          ...data,
+          knowledge_mode: mode,
+          aliases: splitList(aliases),
+          discovery_card: discoveryCard,
+          is_active: false,
+        },
+      });
       notify("Đã tạo dự án.", { type: "success" });
-      redirect("/projects");
+      redirect("edit", "projects", created.data.id);
     } catch (e) {
       notify((e as Error).message, { type: "error" });
     } finally {
@@ -68,22 +91,64 @@ export const ProjectCreate = () => {
                     label="Slug (không dấu, không khoảng cách)"
                     isRequired
                   />
-                  <SelectInput
-                    source="knowledge_base_id"
-                    label="Knowledge Base RAG"
-                    choices={ragKnowledgeBases.map((knowledgeBase) => ({
-                      id: knowledgeBase.id,
-                      name: knowledgeBase.name,
-                    }))}
-                    emptyText="Chọn Knowledge Base"
-                    isRequired
+                  <fieldset className="grid gap-2">
+                    <legend className="font-medium">Cách lưu kiến thức</legend>
+                    <label className="flex cursor-pointer gap-3 rounded-lg border p-4">
+                      <input
+                        type="radio"
+                        name="knowledge-mode"
+                        value="DIRECT_CONTEXT"
+                        checked={mode === "DIRECT_CONTEXT"}
+                        onChange={() => setMode("DIRECT_CONTEXT")}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block font-semibold">Một trang</span>
+                        <span className="text-helper text-muted-foreground">
+                          Quản lý toàn bộ thông tin trong một nội dung duy nhất. Mỗi lần cập nhật
+                          sẽ thay thế toàn bộ nội dung cũ.
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-3 rounded-lg border p-4">
+                      <input
+                        type="radio"
+                        name="knowledge-mode"
+                        value="RAG"
+                        checked={mode === "RAG"}
+                        onChange={() => setMode("RAG")}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block font-semibold">Theo danh mục</span>
+                        <span className="text-helper text-muted-foreground">
+                          Chia kiến thức thành 12 nhóm để cập nhật từng phần độc lập.
+                        </span>
+                      </span>
+                    </label>
+                    <p className="text-helper text-muted-foreground">
+                      Không thể đổi cách lưu sau khi dự án đã có dữ liệu.
+                    </p>
+                  </fieldset>
+                  <Input
+                    value={aliases}
+                    onChange={(event) => setAliases(event.target.value)}
+                    placeholder="Tên gọi khác, ví dụ: LG, LGD"
+                    aria-label="Tên gọi khác của dự án"
                   />
-                  <BooleanInput
-                    source="is_active"
-                    label="Đang hoạt động"
-                    defaultValue={true}
-                  />
-                  <Button type="submit" disabled={submitting || ragKnowledgeBases.length === 0}>
+                  {mode === "DIRECT_CONTEXT" && (
+                    <div className="grid gap-3 rounded-lg border p-4">
+                      <p className="font-medium">Thông tin giúp ứng viên tìm thấy dự án</p>
+                      <Input value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Tóm tắt dự án" />
+                      <Input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Địa điểm" />
+                      <Input value={roles} onChange={(event) => setRoles(event.target.value)} placeholder="Vị trí, cách nhau bằng dấu phẩy" />
+                      <Input value={highlights} onChange={(event) => setHighlights(event.target.value)} placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy" />
+                    </div>
+                  )}
+                  <p className="text-helper text-muted-foreground">
+                    Dự án sẽ ở trạng thái tắt cho đến khi có kiến thức hợp lệ.
+                  </p>
+                  <Button type="submit" disabled={submitting}>
                     Tạo dự án
                   </Button>
                 </div>
@@ -95,3 +160,9 @@ export const ProjectCreate = () => {
     </CreateBase>
   );
 };
+
+const splitList = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);

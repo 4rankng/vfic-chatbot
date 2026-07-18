@@ -1,14 +1,11 @@
-import { useState } from "react";
 import { ShowBase, useRecordContext, useRedirect } from "ra-core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pencil, Upload } from "lucide-react";
+import { Pencil } from "lucide-react";
 import type { Project } from "../types";
-import { ProjectFeatures } from "./ProjectFeatures";
-import { ProjectFaqEditor } from "./ProjectFaqEditor";
+import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { DeleteButton } from "@/components/admin";
-import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 
@@ -16,7 +13,6 @@ const ProjectShowContent = () => {
   const project = useRecordContext<Project>();
   const redirect = useRedirect();
   const { isAdmin, canEdit } = useRoleActions();
-  const [uploadOpen, setUploadOpen] = useState(false);
   if (!project) return null;
 
   const card = project.index_card ?? {};
@@ -57,6 +53,16 @@ const ProjectShowContent = () => {
               </div>
               <div>
                 <div className="text-helper uppercase tracking-wide text-muted-foreground">
+                  Cách lưu kiến thức
+                </div>
+                <p>
+                  {project.knowledge_mode === "DIRECT_CONTEXT"
+                    ? "Một trang"
+                    : "Theo danh mục"}
+                </p>
+              </div>
+              <div>
+                <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Tóm tắt
                 </div>
                 <p>{project.summary ?? "—"}</p>
@@ -74,17 +80,6 @@ const ProjectShowContent = () => {
                 <p>{(card.key_roles ?? []).join(", ") || "—"}</p>
               </div>
               <div className="mt-1 flex flex-wrap gap-2">
-                {isAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                    onClick={() => setUploadOpen(true)}
-                  >
-                    <Upload className="size-4" />
-                    Thêm tệp
-                  </Button>
-                )}
                 {canEdit && (
                   <Button
                     variant="outline"
@@ -109,19 +104,8 @@ const ProjectShowContent = () => {
           </Card>
 
           <div className="project-detail-stack">
-            <ProjectFeatures
-              projectId={project.id}
-              editable={canEdit}
-              canExtract={isAdmin}
-            />
-            <ProjectFaqEditor projectId={project.id} editable={canEdit} />
+            <ProjectKnowledgePanel project={project} editable={isAdmin} />
           </div>
-          <KnowledgeUpload
-            open={uploadOpen}
-            onOpenChange={setUploadOpen}
-            initialProjectId={project.id}
-            lockProject
-          />
         </div>
       </div>
     </ProjectWorkspaceShell>

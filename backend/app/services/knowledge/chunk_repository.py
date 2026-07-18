@@ -78,6 +78,60 @@ class KnowledgeChunkRepo:
             {"vid": str(kb_version_id)},
         )
 
+    async def insert_category_revision(
+        self,
+        *,
+        document_id: uuid.UUID,
+        project_id: uuid.UUID,
+        category_revision_id: uuid.UUID,
+        category_key: str,
+        units_with_vectors: list[tuple[dict, list[float]]],
+    ) -> None:
+        """Insert deterministic category chunks without committing activation.
+
+        The category service advances the active pointer in the same transaction,
+        so these rows remain invisible until all projections also succeed.
+        """
+        for index, (unit, vector) in enumerate(units_with_vectors):
+            content = str(unit["content"])
+            metadata = dict(unit.get("metadata") or {})
+            await self.db.execute(
+                text(
+                    "INSERT INTO knowledge_chunks ("
+                    "document_id, category_revision_id, chunk_index, chunk_type, content, "
+                    "content_plain, token_count, chunk_sha256, embedding, metadata, project_id, "
+                    "source_quote, summary, questions, category, entities, confidence, search_text, "
+                    "required_terms, forbidden_terms"
+                    ") VALUES ("
+                    "CAST(:did AS uuid), CAST(:rid AS uuid), :idx, 'category_record', :content, "
+                    ":plain, :tokens, :sha, CAST(:embedding AS vector), CAST(:metadata AS jsonb), "
+                    "CAST(:pid AS uuid), :quote, :summary, CAST(:questions AS text[]), :category, "
+                    "CAST(:entities AS jsonb), 'high', public.normalize_search_text(:search_text), "
+                    "CAST(:required AS text[]), CAST(:forbidden AS text[])"
+                    ")"
+                ),
+                {
+                    "did": str(document_id),
+                    "rid": str(category_revision_id),
+                    "idx": index,
+                    "content": content,
+                    "plain": make_content_plain(content),
+                    "tokens": estimate_token_count(content),
+                    "sha": hash_text(content),
+                    "embedding": vec_literal(vector),
+                    "metadata": json.dumps(metadata, ensure_ascii=False),
+                    "pid": str(project_id),
+                    "quote": unit.get("source_quote") or content,
+                    "summary": unit.get("summary"),
+                    "questions": unit.get("questions") or [],
+                    "category": category_key,
+                    "entities": json.dumps(unit.get("entities") or {}, ensure_ascii=False),
+                    "search_text": unit.get("search_text") or content,
+                    "required": unit.get("required_terms") or [],
+                    "forbidden": unit.get("forbidden_terms") or [],
+                },
+            )
+
     async def attach_doc_chunks_to_file(
         self,
         *,
@@ -243,7 +297,13 @@ class KnowledgeChunkRepo:
                         "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
                         "AND c.embedding IS NOT NULL "
                         "AND d.project_id = CAST(:pid AS uuid) "
-                        "AND c.kb_version_id = p.active_kb_version_id "
+                        "AND ((c.category_revision_id IS NOT NULL AND EXISTS ("
+                        "  SELECT 1 FROM knowledge_categories kc "
+                        "  WHERE kc.project_id = p.id "
+                        "    AND kc.active_revision_id = c.category_revision_id"
+                        ")) OR (c.category_revision_id IS NULL "
+                        "  AND c.kb_version_id = p.active_kb_version_id "
+                        "  AND p.category_authority_started IS FALSE)) "
                         "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
                     ),
                     {"emb": emb, "k": top_k, "pid": str(project_id)},
@@ -259,7 +319,13 @@ class KnowledgeChunkRepo:
                         "JOIN projects p ON p.id = d.project_id "
                         "WHERE d.status NOT IN ('ARCHIVED', 'FAILED') "
                         "AND c.embedding IS NOT NULL "
-                        "AND c.kb_version_id = p.active_kb_version_id "
+                        "AND ((c.category_revision_id IS NOT NULL AND EXISTS ("
+                        "  SELECT 1 FROM knowledge_categories kc "
+                        "  WHERE kc.project_id = p.id "
+                        "    AND kc.active_revision_id = c.category_revision_id"
+                        ")) OR (c.category_revision_id IS NULL "
+                        "  AND c.kb_version_id = p.active_kb_version_id "
+                        "  AND p.category_authority_started IS FALSE)) "
                         "ORDER BY c.embedding <=> CAST(:emb AS vector) LIMIT :k"
                     ),
                     {"emb": emb, "k": top_k},

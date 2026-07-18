@@ -14,10 +14,7 @@ evolve without dragging the contract along.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
-
-if TYPE_CHECKING:
-    from app.graph.direct_context import DirectContext
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -185,6 +182,7 @@ class RetrievalPort(Protocol):
     async def list_active_jobs(
         self,
         *,
+        project_slug: str | None = None,
         role: str | None = None,
         company: str | None = None,
         location: str | None = None,
@@ -204,7 +202,7 @@ class FaqBypassPort(Protocol):
 
 
 class DirectContextPort(Protocol):
-    async def active_context(self) -> "DirectContext | None": ...
+    async def resolve(self, conversation: Any, user_text: str) -> Any: ...
 
 
 __all__ = [

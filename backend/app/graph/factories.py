@@ -30,6 +30,21 @@ from app.graph.types import GraphDeps
 logger = logging.getLogger(__name__)
 
 
+def _asks_to_explore(normalized_message: str) -> bool:
+    return any(
+        phrase in normalized_message
+        for phrase in (
+            "du an khac",
+            "cong ty khac",
+            "nha may khac",
+            "viec khac",
+            "xem tat ca",
+            "tat ca du an",
+            "quay lai tim viec",
+        )
+    )
+
+
 class _LeadContextAdapter:
     """LeadContextPort backed by the concrete lead service pieces.
 
@@ -73,41 +88,111 @@ class _DirectContextAdapter:
     def __init__(self, db) -> None:
         self._db = db
 
-    async def active_context(self):
+    async def resolve(self, conversation, user_text: str):
+        import re
+
         from sqlalchemy import select
 
-        from app.graph.direct_context import DirectContext
+        from app.core.text import normalize_vietnamese_text
+        from app.graph.direct_context import DirectContext, ProjectTurnContext
+        from app.graph.prompts import AGENT_SYSTEM_PROMPT
+        from app.models.company import Project
+        from app.models.conversation import ConversationProjectState
         from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
         from app.models.persona import Persona
-        from app.services.errors import ConflictError
         from app.services.knowledge_base_capacity import require_direct_context_ready
 
-        row = (
+        rows = (
             await self._db.execute(
-                select(Persona, KnowledgeBase, KnowledgeBaseDirectFile)
-                .join(KnowledgeBase, Persona.knowledge_base_id == KnowledgeBase.id)
+                select(Project, KnowledgeBase, KnowledgeBaseDirectFile)
+                .join(KnowledgeBase, Project.knowledge_base_id == KnowledgeBase.id)
                 .outerjoin(
                     KnowledgeBaseDirectFile,
                     KnowledgeBaseDirectFile.knowledge_base_id == KnowledgeBase.id,
                 )
-                .where(Persona.is_active, Persona.project_id.is_(None))
-                .limit(1)
+                .where(Project.is_active.is_(True))
+                .order_by(Project.name, Project.id)
             )
-        ).one_or_none()
-        if row is None:
-            return None
-        persona, knowledge_base, direct_file = row
-        if knowledge_base.mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
-            return None
-        if direct_file is None:
-            raise ConflictError("The active direct-context knowledge base has no text file")
-        await require_direct_context_ready(
-            self._db, knowledge_base, agent_markdown=persona.body_md
-        )
-        return DirectContext(
-            knowledge_base_id=str(knowledge_base.id),
-            persona_body=persona.body_md,
-            knowledge_text=direct_file.normalized_text,
+        ).all()
+        normalized_message = normalize_vietnamese_text(user_text)
+        matches = []
+        for row in rows:
+            project = row[0]
+            names = [project.slug, project.name, *(project.aliases or [])]
+            if any(
+                re.search(
+                    rf"(?<!\w){re.escape(normalize_vietnamese_text(name))}(?!\w)",
+                    normalized_message,
+                )
+                for name in names
+                if len(normalize_vietnamese_text(name)) >= 2
+            ):
+                matches.append(row)
+        if len(matches) > 1:
+            names = ", ".join(row[0].name for row in matches)
+            return ProjectTurnContext(
+                state="EXPLORE",
+                clarification=f"Bạn đang muốn hỏi dự án nào: {names}?",
+            )
+
+        selected = matches[0] if matches else None
+        focused_id = getattr(conversation, "focused_project_id", None)
+        if selected is None and _asks_to_explore(normalized_message):
+            conversation.project_context_state = ConversationProjectState.EXPLORE
+            conversation.focused_project_id = None
+            await self._db.commit()
+            return ProjectTurnContext(state="EXPLORE")
+        if selected is None and focused_id is not None:
+            selected = next((row for row in rows if row[0].id == focused_id), None)
+        if selected is None:
+            if focused_id is not None or getattr(
+                conversation, "project_context_state", "EXPLORE"
+            ) != ConversationProjectState.EXPLORE:
+                conversation.project_context_state = ConversationProjectState.EXPLORE
+                conversation.focused_project_id = None
+                await self._db.commit()
+            return ProjectTurnContext(state="EXPLORE")
+
+        project, knowledge_base, direct_file = selected
+        if focused_id != project.id or getattr(
+            conversation, "project_context_state", "EXPLORE"
+        ) != ConversationProjectState.FOCUSED:
+            conversation.project_context_state = ConversationProjectState.FOCUSED
+            conversation.focused_project_id = project.id
+            await self._db.commit()
+
+        direct_context = None
+        if knowledge_base.mode is KnowledgeBaseMode.DIRECT_CONTEXT:
+            persona = (
+                await self._db.get(Persona, project.default_persona_id)
+                if project.default_persona_id
+                else None
+            )
+            persona_body = persona.body_md if persona is not None else AGENT_SYSTEM_PROMPT
+            if direct_file is None:
+                direct_context = DirectContext(
+                    knowledge_base_id=str(knowledge_base.id),
+                    persona_body=persona_body,
+                    knowledge_text="",
+                )
+            else:
+                await require_direct_context_ready(
+                    self._db,
+                    knowledge_base,
+                    agent_markdown=persona_body,
+                )
+                direct_context = DirectContext(
+                    knowledge_base_id=str(knowledge_base.id),
+                    persona_body=persona_body,
+                    knowledge_text=direct_file.normalized_text,
+                )
+        return ProjectTurnContext(
+            state="FOCUSED",
+            project_id=str(project.id),
+            project_slug=project.slug,
+            project_name=project.name,
+            knowledge_mode=knowledge_base.mode.value,
+            direct_context=direct_context,
         )
 
 

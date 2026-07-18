@@ -16,6 +16,17 @@ class DirectContext:
     knowledge_text: str
 
 
+@dataclass(frozen=True)
+class ProjectTurnContext:
+    state: str
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_name: str | None = None
+    knowledge_mode: str | None = None
+    direct_context: DirectContext | None = None
+    clarification: str | None = None
+
+
 _QUESTION_ANSWER_BLOCK = re.compile(
     r"(?ims)^\s*Question:\s*(?P<question>.+?)\s*\n+\s*Answer:\s*(?P<answer>.+?)"
     r"(?=\n\s*(?:Question:|#{1,6}\s|Source:|Applies to:|Escalate when:|---)|\Z)"
@@ -148,7 +159,7 @@ def build_direct_user_text(
         message
         for message in recent_messages
         if (message.body or "").strip()
-        and message.delivery_status != DeliveryStatus.SUPPRESSED
+        and getattr(message, "delivery_status", None) != DeliveryStatus.SUPPRESSED
         and not (
             message.sender == MessageSender.WORKER
             and message.body.strip() == current_user_text.strip()

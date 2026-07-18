@@ -53,17 +53,17 @@ EXPECTED_ROUTE_COUNTS = {
     "main": 3,
     "performance": 2,
     "personas": 10,
-    "projects": 14,
+    "projects": 22,
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "507d8b551c4c4fac43ea07f41094372bf65012b6d7d5ea8be53784af73eb7a36"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "acac0b9ec301e48b50d6154412f2285cb2eaeca508ce68e754fa07711c1a39e3"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 69,  # Phase 4: +11 Facebook OAuth/account provider-boundary references
-    "queue_producer": 23,  # Phase 6: +1 Facebook outbound dispatch boundary
+    "provider_boundary": 71,  # LLM-only evidence correction paths are explicit
+    "queue_producer": 25,  # Project category activation adds one reviewed queue boundary
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "c1a69b313a17e4f26a665022d0da2959d0bd9e40d9e9d43fbc35e39768a3e032"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "2d32a43202ea2a1f3b49dea3942144084e9be9d975d97ebc7c14874c2c3c416a"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

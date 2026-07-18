@@ -85,7 +85,7 @@ async def active_projects_index(retrieval: RetrievalPort) -> str:
     persona_groups: dict[tuple[str, str], list[str]] = {}
     for r in rows:
         card = r.index_card or {}
-        roles = ", ".join(card.get("key_roles") or [])
+        roles = ", ".join(card.get("roles") or card.get("key_roles") or [])
         loc = card.get("location") or ""
         seg = f"- {r.slug} ({r.name})"
         if r.summary:

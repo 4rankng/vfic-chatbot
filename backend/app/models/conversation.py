@@ -38,6 +38,11 @@ class ConversationStatus(str, enum.Enum):
     CLOSED = "CLOSED"
 
 
+class ConversationProjectState(str, enum.Enum):
+    EXPLORE = "EXPLORE"
+    FOCUSED = "FOCUSED"
+
+
 class MessageSender(str, enum.Enum):
     WORKER = "WORKER"
     BOT = "BOT"
@@ -123,6 +128,15 @@ class Conversation(Base):
     )
     needs_human: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    project_context_state: Mapped[ConversationProjectState] = mapped_column(
+        String(16),
+        nullable=False,
+        default=ConversationProjectState.EXPLORE,
+        server_default="EXPLORE",
+    )
+    focused_project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL")
     )
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")

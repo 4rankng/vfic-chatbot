@@ -1,0 +1,11 @@
+schema_version: "1.0"
+category: meals
+meals: []
+#  - id: bua-an-ca
+#    job_ids: []
+#    provided: true
+#    meals_per_shift: 1
+#    allowance_vnd: 0
+#    menu_notes: Thông tin suất ăn
+#    eligibility: null
+#    notes: null

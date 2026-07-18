@@ -1,14 +1,86 @@
-# Knowledge Base workflow
+# Project knowledge workflow
 
-Each Agent is attached to exactly one standalone Knowledge Base (KB). A KB may be shared by multiple Agents and remains after an Agent is removed.
+Knowledge is owned by a Project, such as LG Display, Samsung, or PQC. A Project
+chooses exactly one mode when it is created. The mode cannot be changed after
+content exists.
 
-- **RAG KB:** contains one or more Projects. Each Project represents a factory/project and retains its existing files, versions, companies, and jobs. RAG catalog, FAQ, document retrieval, and active-job lookup are scoped to the active Agent's RAG KB. Its detail view lists Projects, factory names and aliases, document counts, and active-job counts; an administrator can attach an unassigned Project there.
-- **Direct-context KB:** contains exactly one `.txt` or `.md` file. The file is supplied in full with bounded recent conversation history in one model call. It never uses the ingestion pipeline, FAQ bypass, active-job lookup, embeddings, retrieval, or tools.
+## Single-page mode
 
-Administrators create KBs under **Cài đặt → Knowledge Base**, then select one when creating or editing an Agent. Projects must select a RAG KB. Direct KB configuration shows the active model capacity; save is rejected if the text cannot fit safely.
+- The Project has one `.txt` or `.md` page.
+- Saving replaces the whole existing page.
+- The complete page and bounded recent Zalo conversation history are supplied to
+  the LLM for every focused Project turn, including proactive turns.
+- The page never enters chunking, embedding, category ingestion, or RAG retrieval.
+- The Project must also have a compact discovery card so candidates can find it
+  while exploring across Projects.
 
-For RAG knowledge, every administrator upload (including pasted text) creates a new KB release scoped to the selected Project. The release enters offline ingestion and is not used by the agent until it is READY and an administrator publishes it. Publishing makes that Project release active.
+## Category mode
 
-Knowledge ingestion is fixed to the recruitment workflow. The product does not expose generic ingestion templates, industry starter packs, template assignment, structured-fact, or ingest-run review APIs. A release contains text sources, chunks, embeddings, and source provenance; it never creates or changes live job vacancy, salary, or status data.
+The Project has twelve independent YAML categories:
 
-The one-time production mapping is operational data, not application configuration: rename the existing global Agent to `default`, create RAG KB `vfic`, and attach legacy Project `lg-display` through the parameterized bootstrap endpoint. Perform that only as part of an approved production release with a fresh backup.
+1. Jobs
+2. Compensation
+3. Requirements
+4. Work schedules
+5. Benefits
+6. Accommodation
+7. Meals
+8. Transportation
+9. Insurance
+10. Application
+11. Contacts
+12. FAQ
+
+Each category uses its code-owned template. An administrator may paste YAML or
+upload a `.yaml`/`.yml` file. The system validates and embeds a staged revision,
+then atomically advances that category's active pointer. A failed revision leaves
+the previous active revision and all sibling categories unchanged. Clearing is an
+explicit category-only operation. Duplicate worker delivery is claimed once and
+cannot create duplicate evidence for the same revision.
+
+The Project supplies factory scope, so category files never repeat or reference a
+factory. Cross-category `job_ids` refer only to stable IDs in the same Project's
+Jobs category.
+
+Jobs are a derived read model. Every job present in the active Jobs YAML is
+available; a missing job is unavailable. There is no administrator-managed job
+status. Manual Job, FAQ, and feature mutation endpoints are read-only/conflict
+paths so YAML remains the authority. Replacing Jobs also reapplies every active
+sibling category to the recreated Job rows. Transportation replaces the Project's
+derived bus routes and stops as part of the same category activation.
+
+## Candidate conversation scope
+
+A conversation is either:
+
+- `EXPLORE`: no Project is selected. The Agent uses compact discovery cards,
+  active Jobs projections, candidate history, and profile context to recommend a
+  small relevant set.
+- `FOCUSED`: one Project is selected. Single-page Projects use their complete
+  page; category Projects use only Project-scoped active category evidence.
+
+An explicit Project name or alias selects or switches focus. An ambiguous alias
+asks for clarification. Explicit requests such as “dự án khác”, “việc khác”, or
+“xem tất cả” return the conversation to exploration.
+
+Normal factual answers are composed by the LLM. Empty-table handlers, legacy FAQ
+bypass results, and deterministic evidence renderers cannot become the final
+answer. If generated vacancy prose conflicts with the authoritative job result,
+the LLM rewrites it from the verified result; the common consistent path does not
+pay for an extra model call.
+
+Legacy version, document-ingest, reindex, and feature-extraction mutations are
+rejected once a Project owns either knowledge mode. They remain read-only only so
+pre-cutover LG evidence can be served until the first category activation.
+
+## LG Display migration
+
+Migration `0048_project_owned_knowledge_modes` links the existing sole production
+RAG knowledge base to the unambiguous LG Display Project and creates its twelve
+empty category slots. Existing LG chunks remain searchable while
+`category_authority_started` is false. The first deliberate category activation
+or clear switches the Project to category authority; legacy chunks do not reappear
+after that cutover.
+
+Execute the production migration only through the approved deployment workflow,
+after a fresh backup and migration dry run.

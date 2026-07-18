@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import unicodedata
 from typing import Literal
@@ -96,6 +97,16 @@ def _usable_retrieval_prefetch(result: object) -> bool:
     return not text.startswith(("Không tìm thấy", "Lỗi khi gọi tool", "unknown tool"))
 
 
+def _scope_project_tool_args(name: str, args: dict, project_slug: str | None) -> dict:
+    """Force project-aware tools to the conversation's focused Project."""
+    scoped = dict(args)
+    if not project_slug:
+        return scoped
+    if name in {"search_knowledge", "list_active_jobs", "get_product_features"}:
+        scoped["project_slug"] = project_slug
+    return scoped
+
+
 async def _prefetch_tool(
     retrieval,
     embedder,
@@ -168,23 +179,18 @@ def _active_job_safe_reply(tool_result: object) -> str | None:
 
 
 def _ground_reply(reply: str, tool_results: list[str]) -> str:
-    """Enforce deterministic vacancy evidence, then validate other job IDs.
+    """Validate LLM prose against surfaced evidence without replacing it.
 
-    Active-job lookups are a hard gate: malformed evidence fails closed and a
-    valid lookup replaces model prose with the tool-rendered safe reply. Other
-    tool paths retain the existing best-effort grounding behavior.
+    Structured job payloads inform the model but never become a separately
+    rendered final answer. This keeps every normal recruitment answer on the
+    LLM route while retaining the job-ID hallucination guard.
     """
     for tool_result in reversed(tool_results or []):
         first_line = str(tool_result).partition("\n")[0]
         if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
             continue
-        safe_reply = _active_job_safe_reply(tool_result)
-        if safe_reply is not None:
-            # Vacancy prose is rendered from verified tool evidence. The LLM owns
-            # semantic filter selection, but cannot contradict status or add facts.
-            return safe_reply
-        logger.warning("active-job tool returned malformed grounding payload")
-        return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
+        if _active_job_safe_reply(tool_result) is None:
+            logger.warning("active-job tool returned malformed grounding payload")
 
     try:
         from app.core.config import get_settings
@@ -205,6 +211,77 @@ def _ground_reply(reply: str, tool_results: list[str]) -> str:
     except Exception:  # noqa: BLE001
         logger.debug("grounding check skipped (non-fatal)", exc_info=True)
         return reply
+
+
+def _negative_job_authority(tool_results: list[str]) -> str | None:
+    """Return the trusted abstention text for a negative active-job lookup."""
+    for tool_result in reversed(tool_results or []):
+        first_line = str(tool_result).partition("\n")[0]
+        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+            continue
+        try:
+            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict) or payload.get("status") == "matched":
+            return None
+        safe_reply = _active_job_safe_reply(tool_result)
+        return safe_reply
+    return None
+
+
+def _negative_job_reply_is_consistent(reply: str) -> bool:
+    """Fast semantic guard; uncertain negative replies go through one LLM rewrite."""
+    normalized = _normalize_query_hint(reply)
+    affirmative = (
+        "dang tuyen",
+        "con tuyen",
+        "co viec",
+        "co vi tri",
+        "tuyen vi tri",
+        "luong ",
+    )
+    if any(marker in normalized for marker in affirmative):
+        return False
+    negative = (
+        "chua co",
+        "chua tim",
+        "chua the",
+        "khong co",
+        "khong con",
+        "khong tim",
+        "khong tuyen",
+        "hien chua",
+    )
+    return any(marker in normalized for marker in negative)
+
+
+def _matched_job_authority(tool_results: list[str]) -> tuple[str, str] | None:
+    """Return the matched tool payload and its trusted human-readable summary."""
+    for tool_result in reversed(tool_results or []):
+        first_line = str(tool_result).partition("\n")[0]
+        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+            continue
+        try:
+            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict) or payload.get("status") != "matched":
+            return None
+        safe_reply = _active_job_safe_reply(tool_result)
+        if safe_reply is None:
+            return None
+        return first_line, safe_reply
+    return None
+
+
+def _matched_job_reply_is_consistent(reply: str, authority_payload: str) -> bool:
+    """Reject invented numeric claims while preserving the normal two-call path."""
+    claimed_numbers = set(re.findall(r"(?<![\w-])\d+(?![\w-])", reply))
+    if not claimed_numbers:
+        return True
+    authority_numbers = set(re.findall(r"(?<![\w-])\d+(?![\w-])", authority_payload))
+    return claimed_numbers <= authority_numbers
 
 
 async def _llm_call_with_retry(bound, messages, *, metrics: dict | None = None):
@@ -410,6 +487,7 @@ class MiniMaxAgent:
         metrics: dict | None = None,
         required_tool: str | None = None,
         required_tool_args: dict | None = None,
+        forced_project_slug: str | None = None,
     ) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
         from app.graph.schemas import filter_tool_schemas
@@ -441,6 +519,10 @@ class MiniMaxAgent:
                 metrics.setdefault(key, 0)
             metrics.setdefault("llm_call_ms", [])
         effective_query = lookup_query or user_text
+
+        def scoped_args(name: str, args: dict) -> dict:
+            return _scope_project_tool_args(name, args, forced_project_slug)
+
         knowledge_lookup_route = allowed_tools == ("search_knowledge",)
         timetable_route = allowed_tools == ("search_bus_timetable",)
         faq_detail_route = allowed_tools == (
@@ -458,7 +540,7 @@ class MiniMaxAgent:
                     retrieval,
                     embedder,
                     "search_knowledge",
-                    {"query": effective_query},
+                    scoped_args("search_knowledge", {"query": effective_query}),
                     metrics=metrics,
                     resolved_registry=resolved_tool_registry,
                 )
@@ -482,7 +564,7 @@ class MiniMaxAgent:
                 retrieval,
                 embedder,
                 "search_knowledge",
-                {"query": effective_query},
+                scoped_args("search_knowledge", {"query": effective_query}),
                 metrics,
                 resolved_tool_registry,
             )
@@ -508,7 +590,10 @@ class MiniMaxAgent:
                 retrieval,
                 embedder,
                 "search_bus_timetable",
-                {"company": "", "question": effective_query},
+                scoped_args(
+                    "search_bus_timetable",
+                    {"company": "", "question": effective_query},
+                ),
                 metrics,
                 resolved_tool_registry,
             )
@@ -533,7 +618,7 @@ class MiniMaxAgent:
                 retrieval,
                 embedder,
                 "search_knowledge",
-                {"query": effective_query},
+                scoped_args("search_knowledge", {"query": effective_query}),
                 metrics,
                 resolved_tool_registry,
             )
@@ -612,7 +697,43 @@ class MiniMaxAgent:
             if not calls:
                 if required_tool and not required_tool_called:
                     logger.warning("required LLM tool was not called: %s", required_tool)
-                    return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
+                    return await self.direct(
+                        user_text,
+                        system=(
+                            "Bạn là tư vấn viên tuyển dụng. Dữ liệu tuyển dụng bắt buộc chưa được "
+                            "truy xuất thành công. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa "
+                            "thể kiểm tra, không xác nhận có việc và không bịa dữ liệu."
+                        ),
+                        metrics=metrics,
+                    )
+                negative_authority = _negative_job_authority(tool_results)
+                if negative_authority is not None and not _negative_job_reply_is_consistent(
+                    str(ai.content or "")
+                ):
+                    return await self.direct(
+                        user_text,
+                        system=(
+                            "Bạn là tư vấn viên tuyển dụng. Kết quả có thẩm quyền dưới đây xác nhận "
+                            "không có việc phù hợp hoặc chưa thể kiểm tra. Hãy diễn đạt tự nhiên bằng "
+                            "tiếng Việt, giữ nguyên ý nghĩa, không thêm công việc hay dữ liệu mới:\n\n"
+                            f"{negative_authority}"
+                        ),
+                        metrics=metrics,
+                    )
+                matched_authority = _matched_job_authority(tool_results)
+                if matched_authority is not None and not _matched_job_reply_is_consistent(
+                    str(ai.content or ""), matched_authority[0]
+                ):
+                    return await self.direct(
+                        user_text,
+                        system=(
+                            "Bạn là tư vấn viên tuyển dụng. Hãy trả lời tự nhiên bằng tiếng Việt "
+                            "chỉ từ danh sách việc đã xác minh dưới đây. Không thêm vị trí, số lượng, "
+                            "mức lương hoặc địa điểm mới:\n\n"
+                            f"{matched_authority[1]}"
+                        ),
+                        metrics=metrics,
+                    )
                 return _ground_reply(ai.content, tool_results)
             if metrics is not None:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
@@ -626,11 +747,19 @@ class MiniMaxAgent:
             # fallback when there's only one call or no factory is wired (tests).
             async def _dispatch_one(tc: dict) -> str:
                 name = tc.get("name", "")
-                args = (
+                raw_args = (
                     dict(required_tool_args)
                     if name == required_tool and required_tool_args is not None
                     else tc.get("args", {})
                 )
+                if forced_project_slug and name in {
+                    "list_active_projects",
+                    "recommend_projects",
+                    "recommend_jobs",
+                    "search_bus_timetable",
+                }:
+                    return "Công cụ khám phá nhiều dự án không khả dụng khi cuộc trò chuyện đang tập trung vào một dự án."
+                args = scoped_args(name, raw_args)
                 tool_call_t0 = time.monotonic()
                 try:
                     if make_retrieval is not None:
@@ -689,7 +818,15 @@ class MiniMaxAgent:
                     required_tool_called = True
                     if _active_job_safe_reply(out) is None:
                         logger.warning("required LLM tool returned invalid evidence: %s", required_tool)
-                        return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
+                        return await self.direct(
+                            user_text,
+                            system=(
+                                "Bạn là tư vấn viên tuyển dụng. Kết quả kiểm tra tuyển dụng không "
+                                "hợp lệ. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể xác minh, "
+                                "không xác nhận có việc và không bịa dữ liệu."
+                            ),
+                            metrics=metrics,
+                        )
                 tool_results.append(str(out))
                 messages.append(
                     ToolMessage(
@@ -702,8 +839,42 @@ class MiniMaxAgent:
                 # evidence is present, allow the model to produce its final turn.
                 bound = active_llm.bind_tools(schemas)
         if required_tool and not required_tool_called:
-            return _VACANCY_LOOKUP_UNAVAILABLE_REPLY
+            return await self.direct(
+                user_text,
+                system=(
+                    "Bạn là tư vấn viên tuyển dụng. Không có dữ liệu tuyển dụng đã xác minh cho "
+                    "lượt này. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra, không "
+                    "xác nhận có việc và không bịa dữ liệu."
+                ),
+                metrics=metrics,
+            )
         final = messages[-1].content if hasattr(messages[-1], "content") else ""
+        negative_authority = _negative_job_authority(tool_results)
+        if negative_authority is not None and not _negative_job_reply_is_consistent(str(final)):
+            return await self.direct(
+                user_text,
+                system=(
+                    "Bạn là tư vấn viên tuyển dụng. Kết quả có thẩm quyền dưới đây xác nhận không "
+                    "có việc phù hợp hoặc chưa thể kiểm tra. Hãy diễn đạt tự nhiên bằng tiếng Việt, "
+                    "giữ nguyên ý nghĩa, không thêm công việc hay dữ liệu mới:\n\n"
+                    f"{negative_authority}"
+                ),
+                metrics=metrics,
+            )
+        matched_authority = _matched_job_authority(tool_results)
+        if matched_authority is not None and not _matched_job_reply_is_consistent(
+            str(final), matched_authority[0]
+        ):
+            return await self.direct(
+                user_text,
+                system=(
+                    "Bạn là tư vấn viên tuyển dụng. Hãy trả lời tự nhiên bằng tiếng Việt chỉ từ "
+                    "danh sách việc đã xác minh dưới đây. Không thêm vị trí, số lượng, mức lương "
+                    "hoặc địa điểm mới:\n\n"
+                    f"{matched_authority[1]}"
+                ),
+                metrics=metrics,
+            )
         return _ground_reply(final, tool_results)
 
     async def direct(self, user_text: str, *, system: str, metrics: dict | None = None) -> str:

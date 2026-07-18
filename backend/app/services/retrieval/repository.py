@@ -111,7 +111,14 @@ class RetrievalRepository:
         return (
             "d.status NOT IN ('ARCHIVED', 'FAILED') "
             "AND c.embedding IS NOT NULL "
-            "AND c.kb_version_id = p.active_kb_version_id "
+            "AND ("
+            "  (c.category_revision_id IS NOT NULL AND EXISTS ("
+            "    SELECT 1 FROM knowledge_categories kc "
+            "    WHERE kc.project_id = p.id AND kc.active_revision_id = c.category_revision_id"
+            "  )) "
+            "  OR (c.category_revision_id IS NULL AND c.kb_version_id = p.active_kb_version_id "
+            "      AND p.category_authority_started IS FALSE)"
+            ") "
             "AND (CAST(:filter AS jsonb) = '{}'::jsonb OR c.metadata @> CAST(:filter AS jsonb)) "
             f"{project_clause} "
             "AND ("
@@ -573,8 +580,7 @@ class RetrievalRepository:
         """Resolve a project id from its (unique) slug; optionally require ``is_active``."""
         sql = (
             "SELECT p.id FROM projects p "
-            "JOIN personas pe ON pe.knowledge_base_id = p.knowledge_base_id "
-            "WHERE p.slug = :s AND pe.is_active AND pe.project_id IS NULL"
+            "WHERE p.slug = :s AND p.knowledge_base_id IS NOT NULL"
         )
         if active_only:
             sql += " AND p.is_active"
@@ -586,8 +592,7 @@ class RetrievalRepository:
             await self.db.execute(
                 text(
                     "SELECT p.name, p.slug, p.summary FROM projects p "
-                    "JOIN personas pe ON pe.knowledge_base_id = p.knowledge_base_id "
-                    "WHERE p.is_active AND pe.is_active AND pe.project_id IS NULL ORDER BY p.name"
+                    "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL ORDER BY p.name"
                 )
             )
         ).all()
@@ -599,10 +604,9 @@ class RetrievalRepository:
                 text(
                     "SELECT p.name, p.slug, p.summary, p.index_card, "
                     "       pe.name AS persona_name, pe.body_md AS persona_body_md "
-                    "FROM projects p JOIN personas active_pe "
-                    "ON active_pe.knowledge_base_id = p.knowledge_base_id "
+                    "FROM projects p "
                     "LEFT JOIN personas pe ON pe.id = p.default_persona_id AND pe.is_active "
-                    "WHERE p.is_active AND active_pe.is_active AND active_pe.project_id IS NULL "
+                    "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
                     "ORDER BY p.name"
                 )
             )
@@ -619,9 +623,8 @@ class RetrievalRepository:
     async def active_project_ids(self) -> list[str]:
         rows = await self.db.scalars(
             text(
-                "SELECT p.id::text FROM projects p JOIN personas pe "
-                "ON pe.knowledge_base_id = p.knowledge_base_id "
-                "WHERE p.is_active AND pe.is_active AND pe.project_id IS NULL"
+                "SELECT p.id::text FROM projects p "
+                "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL"
             )
         )
         return list(rows)
@@ -840,6 +843,7 @@ class RetrievalRepository:
     async def list_active_jobs(
         self,
         *,
+        project_slug: str | None = None,
         role: str | None = None,
         company: str | None = None,
         location: str | None = None,
@@ -849,7 +853,11 @@ class RetrievalRepository:
         from app.services.recommendation import ActiveJobLookup, RecommendationRepository
 
         try:
-            project_ids = await self.active_project_ids()
+            if project_slug:
+                project_id = await self.project_id_by_slug(project_slug, active_only=True)
+                project_ids = [str(project_id)] if project_id is not None else []
+            else:
+                project_ids = await self.active_project_ids()
         except Exception:
             logger.warning("active-project lookup failed for vacancy catalog", exc_info=True)
             return ActiveJobLookup("unavailable")

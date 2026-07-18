@@ -704,6 +704,25 @@ Per-chat bot locks are durable conversation-row fields:
 
 ## 10. RAG retrieval
 
+Knowledge mode is selected at the Project boundary. Each Project owns one
+`knowledge_bases` row in either `DIRECT_CONTEXT` or `RAG` mode; the same KB cannot
+be shared by another Project.
+
+- `DIRECT_CONTEXT` stores one replacement-only file and makes a tool-free LLM
+  call with the complete page plus bounded recent conversation history.
+- `RAG` owns twelve `knowledge_categories`. Immutable
+  `knowledge_category_revisions` are staged and embedded before a transaction
+  writes projections and advances only that category's active pointer. Revision
+  claims are atomic and each revision can own only one evidence document.
+- `conversations.project_context_state` and `focused_project_id` select
+  `EXPLORE` or one `FOCUSED` Project. Focused tool arguments are server-forced to
+  that Project slug; model-supplied cross-Project arguments are ignored.
+- Category-derived Jobs use presence as availability. Manual status is not an
+  authority. A Jobs replacement replays active sibling projections; Transportation
+  also replaces Project-scoped `bus_routes` and `bus_stops`.
+- Legacy Project document/version ingestion, reindex, and extraction mutations
+  are closed after Project-owned knowledge is established.
+
 - **Store:** pgvector `halfvec` with **HNSW** index on `knowledge_chunks`.
 - **Flow:** HNSW candidate generation (`rag_ann_candidates` default 200) →
   **exact vector re-rank** → return top-k. Exact re-rank preserves result

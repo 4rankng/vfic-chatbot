@@ -36,7 +36,7 @@ from app.models.knowledge import (
 from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
-from app.services.errors import NotFoundError
+from app.services.errors import ConflictError, NotFoundError
 from app.services.knowledge import LLMJson
 from app.services.knowledge.canonical import (
     CANONICAL_SCHEMA_VERSIONS,
@@ -76,6 +76,10 @@ class KnowledgeService:
         project = await self.db.scalar(select(Project).where(Project.id == project_id).with_for_update())
         if project is None:
             raise NotFoundError("project not found")
+        if getattr(project, "knowledge_base_id", None) is not None:
+            raise ConflictError(
+                "Project knowledge is managed only through its Single-page or category YAML API"
+            )
         next_version = int(
             await self.db.scalar(
                 select(func.coalesce(func.max(KBVersion.version_no), 0) + 1).where(
@@ -191,6 +195,7 @@ class KnowledgeService:
         *,
         llm_json: LLMJson,
     ) -> KBVersion:
+        await self._require_legacy_mutation_allowed(version.project_id)
         files = await self.list_version_files(version.id)
         if not files:
             raise ValueError("KB version has no uploaded text files.")
@@ -238,6 +243,7 @@ class KnowledgeService:
         return version
 
     async def publish_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
+        await self._require_legacy_mutation_allowed(project_id)
         # Serialize concurrent publishes per project so the archive-others-then-
         # activate pair cannot race the unique partial index on ACTIVE versions.
         locked_project = await self.db.scalar(
@@ -285,6 +291,7 @@ class KnowledgeService:
         drive_file_id: str | None = None,
         project_id: uuid.UUID | None = None,
     ) -> KnowledgeDocument:
+        await self._require_legacy_mutation_allowed(project_id)
         doc = KnowledgeDocument(
             file_name=file_name,
             drive_file_id=drive_file_id,
@@ -315,6 +322,7 @@ class KnowledgeService:
         canonical = parse_canonical_markdown(raw_text) if enforce_canonical else None
         if canonical is not None and project_id is None:
             project_id = await self._resolve_project_from_canonical(canonical)
+        await self._require_legacy_mutation_allowed(project_id)
         metadata, version = self._build_canonical_metadata(
             canonical, raw_text, extracted_text, repair
         )
@@ -420,6 +428,7 @@ class KnowledgeService:
         With ``llm_json`` -> full LLM ``KnowledgePipeline`` (digest/embed/index).
         Without -> mechanical 1-chunk fallback (legacy/tests).
         """
+        await self._require_legacy_mutation_allowed(doc.project_id)
         if llm_json is not None:
             from app.services.knowledge import KnowledgePipeline
 
@@ -447,6 +456,7 @@ class KnowledgeService:
         return doc
 
     async def archive(self, doc: KnowledgeDocument, *, actor: User) -> KnowledgeDocument:
+        await self._require_legacy_mutation_allowed(doc.project_id)
         doc.status = KnowledgeStatus.ARCHIVED
         await record_audit(
             self.db,
@@ -463,11 +473,13 @@ class KnowledgeService:
     async def update(
         self, doc: KnowledgeDocument, body: KnowledgeDocumentUpdate, *, actor: User
     ) -> KnowledgeDocument:
+        await self._require_legacy_mutation_allowed(doc.project_id)
         if body.file_name is not None:
             doc.file_name = body.file_name.strip()
         if "project_id" in body.model_fields_set:
             if body.project_id is not None and await self.db.get(Project, body.project_id) is None:
                 raise NotFoundError("project not found")
+            await self._require_legacy_mutation_allowed(body.project_id)
             doc.project_id = body.project_id
             await KnowledgeChunkRepo(self.db).reassign_project(doc.id, body.project_id)
         await record_audit(
@@ -482,6 +494,7 @@ class KnowledgeService:
         return doc
 
     async def delete(self, doc: KnowledgeDocument, *, actor: User) -> None:
+        await self._require_legacy_mutation_allowed(doc.project_id)
         target_id = str(doc.id)
         await record_audit(
             self.db,
@@ -590,6 +603,23 @@ class KnowledgeService:
         if version is None or version.project_id != project_id:
             raise NotFoundError("KB version not found")
         return version
+
+    async def _require_legacy_mutation_allowed(self, project_id: uuid.UUID | None) -> None:
+        """Keep Project-owned knowledge exclusive to its selected mode.
+
+        Unowned legacy Projects remain readable/mutable during migration, while
+        an owned Project can only change knowledge through Single-page PUT or a
+        category YAML replacement.
+        """
+        if project_id is None:
+            return
+        project = await self.db.get(Project, project_id)
+        if project is None:
+            raise NotFoundError("project not found")
+        if getattr(project, "knowledge_base_id", None) is not None:
+            raise ConflictError(
+                "Project knowledge is managed only through its Single-page or category YAML API"
+            )
 
 
 def _detect_upload_text_format(file_name: str, content_type: str) -> str:

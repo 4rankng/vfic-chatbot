@@ -20,6 +20,7 @@ from app.models.conversation import (
     BotRunOutcome,
     Conversation,
     ConversationMode,
+    ConversationProjectState,
     ConversationStatus,
     DeliveryStatus,
     Message,
@@ -1231,6 +1232,8 @@ class ConversationState:
         conv.last_followup_at = None
         conv.last_followup_attempt_at = None
         conv.followup_opted_out = False
+        conv.project_context_state = ConversationProjectState.EXPLORE
+        conv.focused_project_id = None
         conv.version += 1
         conv.conversation_seq += 1
         await record_audit(

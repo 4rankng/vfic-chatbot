@@ -1,7 +1,7 @@
 # Codebase Summary
 
 **Repo:** `git@github.com:4rankng/ChatBotN8N.git` (branch `main`)
-**Last updated:** 2026-07-17
+**Last updated:** 2026-07-18
 
 A monorepo with two deployable subprojects (`backend/`, `frontend/`) plus
 root-level ops scripts. DockerHub images: `franknguyenvd/vfic-backend:latest`
@@ -28,14 +28,16 @@ ChatBot/
 │   │   │                 dashboard/, personas/, project/,
 │   │   │                 retrieval/, proactive/ + installation,
 │   │   │                 generic workflow/contact/case services + flat
-│   │   │                 zalo_*, integration_settings, auth (~24,100 LOC)
+│   │   │                 project knowledge modes, zalo_*,
+│   │   │                 integration_settings, auth (~24,100 LOC)
 │   │   ├── workers/      run_worker, chatbot, persistence,
 │   │   │                 ingest, followup, reconcile,
-│   │   │                 async_runner, scheduler_utils     (~1,600 LOC)
+│   │   │                 category_worker, async_runner,
+│   │   │                 scheduler_utils                   (~1,600 LOC)
 │   │   ├── realtime/     Socket.IO server + bridge         (~300 LOC)
 │   │   ├── prompts/
 │   │   └── main.py        FastAPI app + lifespan + ASGI wrap
-│   ├── alembic/          Hand-written migrations through 0044
+│   ├── alembic/          Hand-written migrations through 0048
 │   ├── mock_servers/     zalo_mock.py (local :8788)
 │   ├── scripts/          create_admin, seed_dev, prod-env,
 │   │                     benchmark_models, benchmark_rag,
@@ -109,8 +111,8 @@ ChatBot/
 | `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools.py` tool dispatch; `safety.py` fast + LLM safety; `prompts.py`; `proactive/`. |
 | `models/` | SQLAlchemy 2.x ORM mirroring the schema. Retired universal-platform tables remain mapped for historical migration compatibility. **Does not generate migrations** — migrations remain hand-written. |
 | `schemas/` | Pydantic v2 request/response models. |
-| `services/` | Business logic, the largest subpackage. Includes recruitment services and installation lifecycle authority used by the admin Settings surface. |
-| `workers/` | RQ worker entrypoints + async bridge. `run_worker.py` is the container entrypoint. |
+| `services/` | Business logic, the largest subpackage. Includes recruitment services, project-owned knowledge modes, and installation lifecycle authority used by the admin Settings surface. |
+| `workers/` | RQ worker entrypoints + async bridge. `run_worker.py` is the container entrypoint; knowledge category activation/rebuild work has its own worker path. |
 | `realtime/` | Socket.IO ASGI server + cross-process emit bridge so workers can push to clients. |
 | `prompts/` | Prompt assets. |
 
@@ -129,11 +131,19 @@ ChatBot/
 | `components/atomic-crm/leads/` | Kanban board, lead show/edit, chatops actions. |
 | `components/atomic-crm/dashboard/` | RecruitingCommandCenter (Vietnamese metric cards). |
 | `components/atomic-crm/knowledge/` | KnowledgeIngestPanel (largest file, 763 LOC) + project workspace shell. |
-| `components/atomic-crm/projects/` | ProjectSidebar, ProjectWorkspaceShell, ProjectBusTimetable, ProjectFaqEditor, ProjectFeatures, ProjectPersonaPanel. |
+| `components/atomic-crm/projects/` | ProjectSidebar, ProjectWorkspaceShell, ProjectKnowledgePanel, ProjectPersonaPanel. |
 | `components/atomic-crm/personas/` | Persona CRUD + PersonaWorkspaceShell + personaMarkdown. |
 | `components/atomic-crm/integrations/` | ZaloIntegrationPage (admin only). |
 | `lib/vfic/` | `config.ts` (API base resolution), `realtimeSocket.ts` (Socket.IO singleton), `humanReplyService.ts`, `knowledgeService.ts`. |
 | `lib/` | `utils.ts` (`cn()` = clsx + tailwind-merge), `toSlug.ts`, `vietnameseSearch.ts` (diacritic-insensitive). |
+
+## Project knowledge modes
+
+- `KnowledgeBaseMode` is owned by each Project through its linked KnowledgeBase.
+- `DIRECT_CONTEXT` stores one page and bypasses chunking, embeddings, and RAG retrieval.
+- `RAG` uses 12 independent YAML categories: jobs, compensation, requirements, work schedules, benefits, accommodation, meals, transportation, insurance, application, contacts, and FAQ.
+- Conversation scope uses `EXPLORE` and `FOCUSED`, with `focused_project_id` carrying the active Project when a user switches context explicitly.
+- The legacy LG Display KB is linked by migration `0048_project_owned_knowledge_modes`; that migration is prepared in the worktree, but production cutover is still pending.
 
 ## Key files table
 
@@ -152,10 +162,12 @@ ChatBot/
 | `backend/app/graph/tools.py` | `TOOL_SCHEMAS` + `_dispatch_tool`. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
 | `backend/app/graph/safety.py` | `fast_safety_filter`, `parse_verdict`, `build_retry_prompt`, `retry_exhausted_fallback`. |
 | `backend/app/graph/llm_semaphore.py` | Redis-backed cross-process LLM concurrency semaphore; `LLMThrottled`. |
+| `backend/app/api/projects.py` | Project CRUD plus single-page knowledge and 12-category replacement endpoints. |
 | `backend/app/services/zalo_sender.py` | `ZaloChannelSender` facade (line 19) — dispatches per `conv.zalo_channel`. |
 | `backend/app/services/zalo_bot_service.py` | `ZaloBotSender` (line 241); `send_message` (line 253); `send_chat_action` (line 335). Base `https://bot-api.zaloplatforms.com`. |
 | `backend/app/services/zalo_oa_service.py` | `ZaloOASender` (line 12); `POST /v3.0/oa/message/cs` (line 81). Base `https://openapi.zalo.me`. |
 | `backend/app/services/retrieval/repository.py` | pgvector halfvec HNSW + exact re-rank retrieval (line 160). |
+| `backend/app/services/knowledge/category_service.py` | Stages, activates, clears, and derives category revisions for Project-owned RAG categories. |
 | `backend/app/workers/run_worker.py` | RQ worker container entrypoint; calls `Worker.clean_registries()` on startup. |
 | `backend/app/workers/chatbot.py` | Chat turn worker (consumes `webhook_high`, `persistence_low`). |
 | `backend/app/workers/reconcile.py` | Reconcile sweep (line 43); SETNX non-reentrancy guard; 7 Redis observability counters. |
@@ -164,7 +176,7 @@ ChatBot/
 | `backend/app/realtime/` | Socket.IO server + cross-process emit bridge (264 LOC). |
 | `backend/app/api/webhooks.py` | `POST /webhooks/zalo/chatbot` (line 34), `POST /webhooks/zalo/oa` (line 71), `_verify_oa_signature` (line 115). |
 | `backend/app/api/dependencies.py` | Auth dependencies plus dormant auth-first `get_active_installation` / `require_capability`; token-version gate remains the identity boundary. |
-| `backend/alembic/versions/0044_generic_contact_case_kernel.py` | Additive generic workflow/Contact/Case schema, installation workflow pins, nullable Conversation identity links, immutability and downgrade refusal. |
+| `backend/alembic/versions/0048_project_owned_knowledge_modes.py` | Additive Project-owned knowledge-mode migration: ownership links, 12 categories, EXPLORE/FOCUSED state, and LG Display backfill guardrails. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
 | `backend/Makefile` | `dev`, `db`, `push`, `deploy`, `deploy-restart`, `deploy-restart-frontend`, `adminer`. |
 | `backend/docker-compose.yml` | 10-service prod stack (postgres, redis, web, worker-chatbot ×6, worker-ingest, scheduler, worker-followup, frontend, adminer, caddy). |
@@ -179,11 +191,13 @@ ChatBot/
 | `frontend/src/components/atomic-crm/root/CRM.tsx` | Renders compiled direct React Admin Resources, CustomRoutes, dashboard, navigation, providers, and capability slots. |
 | `frontend/src/components/atomic-crm/capabilities/compile-capabilities.ts` | Pure compatibility/collision compiler; no database-selected imports. |
 | `frontend/src/components/atomic-crm/root/reset-runtime-state.ts` | Generation-owned Query/store/Socket.IO/Zustand/adapter teardown and stale-response isolation. |
+| `frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.tsx` | Project knowledge editor for direct-context pages and per-category RAG replacement. |
 | `frontend/src/components/atomic-crm/providers/rest/api.ts` | HTTP client; JWT in `Authorization: Bearer`; `apiRequest()` 401 retry via `refreshOnce()`; `friendlyApiMessage()` Vietnamese i18n. |
 | `frontend/src/components/atomic-crm/providers/rest/dataProvider.ts` | react-admin verb → `/api/v1/{resource}`; custom methods (takeOverConversation, etc.); `RESOURCE_PATH` aliases. |
 | `frontend/src/components/atomic-crm/providers/commons/i18nProvider.ts` | `polyglotI18nProvider(() => vietnameseCatalog, "vi", ...)`; `getInitialLocale()` hard-returns `"vi"`. |
 | `frontend/src/components/atomic-crm/conversations/messageStore.ts` | Zustand normalized message store (253 LOC); per-conv `Map<id,Message>` + lazily-recomputed sorted array. |
 | `frontend/src/components/atomic-crm/conversations/ChatThread.tsx` | Virtualized thread (`virtua` VList); at-bottom detection; double-RAF measure-before-scroll. |
+| `frontend/src/lib/vfic/knowledgeService.ts` | Client helpers for Project single-page and 12-category knowledge endpoints. |
 | `frontend/src/lib/vfic/config.ts` | API base resolution: `window.__VFIC__.API_BASE` → `VITE_API_BASE` → "" (same-origin). |
 | `frontend/src/lib/vfic/realtimeSocket.ts` | Socket.IO singleton; lazy autoConnect false; websocket-first; JWT re-read on reconnect. |
 | `frontend/src/conversations/inbox.css` | Barrel `@import`-ing 10 section files under `conversations/inbox/`. |

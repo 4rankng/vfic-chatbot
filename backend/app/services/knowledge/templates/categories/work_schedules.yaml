@@ -1,0 +1,15 @@
+schema_version: "1.0"
+category: work_schedules
+work_schedules: []
+#  - id: lich-lam-cong-nhan
+#    job_ids: [cong-nhan-san-xuat]
+#    work_days: [Thứ 2, Thứ 3, Thứ 4, Thứ 5, Thứ 6]
+#    shifts:
+#      - name: Ca ngày
+#        start_time: "08:00"
+#        end_time: "17:00"
+#        crosses_midnight: false
+#    rotation: Mô tả cách đổi ca
+#    breaks: []
+#    overtime: Mô tả lịch tăng ca
+#    notes: null

@@ -1,0 +1,13 @@
+schema_version: "1.0"
+category: application
+application: []
+#  - id: quy-trinh-ung-tuyen
+#    job_ids: []
+#    application_steps: [Đăng ký, Xác nhận lịch phỏng vấn]
+#    required_documents: [CCCD]
+#    interview_location: Địa điểm phỏng vấn
+#    interview_process: Nội dung phỏng vấn
+#    onboarding_steps: [Khám sức khỏe, Nhận việc]
+#    processing_time: Thời gian xử lý
+#    fees: Không thu phí
+#    notes: null

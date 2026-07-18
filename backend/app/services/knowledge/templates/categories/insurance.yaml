@@ -1,0 +1,13 @@
+schema_version: "1.0"
+category: insurance
+insurance: []
+#  - id: bao-hiem-bat-buoc
+#    job_ids: []
+#    name: Bảo hiểm bắt buộc
+#    provider: Đơn vị bảo hiểm
+#    employee_contribution: Mức người lao động đóng
+#    employer_contribution: Mức doanh nghiệp đóng
+#    coverage: [BHXH, BHYT, BHTN]
+#    starts_after: Thời điểm bắt đầu
+#    eligibility: Điều kiện tham gia
+#    notes: null

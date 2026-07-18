@@ -5,8 +5,25 @@ import asyncio
 import pytest
 
 from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
-from app.graph.factories import build_deps, make_minimax_llm_json, reset_client_cache
+from app.graph.factories import (
+    _asks_to_explore,
+    build_deps,
+    make_minimax_llm_json,
+    reset_client_cache,
+)
 from app.graph.types import GraphDeps
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["cho toi xem du an khac", "con viec khac khong", "quay lai tim viec"],
+)
+def test_explicit_exploration_request_releases_project_focus(message):
+    assert _asks_to_explore(message) is True
+
+
+def test_normal_project_followup_keeps_focus():
+    assert _asks_to_explore("luong bao nhieu") is False
 
 
 class _Settings:

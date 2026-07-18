@@ -6,7 +6,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.models.knowledge import KnowledgeBaseMode
 
 
 class FeatureReadiness(BaseModel):
@@ -24,9 +26,12 @@ class ProjectOut(BaseModel):
     id: uuid.UUID
     slug: str
     name: str
+    aliases: list[str] = Field(default_factory=list)
     is_active: bool
+    knowledge_mode: KnowledgeBaseMode | None = None
     summary: str | None = None
     index_card: dict[str, Any] = {}
+    discovery_revision: int = 0
     default_persona_id: uuid.UUID | None = None
     knowledge_base_id: uuid.UUID | None = None
     knowledge_document_count: int = 0
@@ -45,10 +50,23 @@ class ProjectListResponse(BaseModel):
 class ProjectCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    slug: str
-    name: str
-    knowledge_base_id: uuid.UUID
-    is_active: bool = True
+    slug: str = Field(min_length=1, max_length=96, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    name: str = Field(min_length=1, max_length=160)
+    knowledge_mode: KnowledgeBaseMode
+    aliases: list[str] = Field(default_factory=list, max_length=30)
+    discovery_card: dict[str, Any] | None = None
+    is_active: bool = False
+
+    @model_validator(mode="after")
+    def validate_mode_readiness(self) -> ProjectCreate:
+        if self.knowledge_mode is KnowledgeBaseMode.DIRECT_CONTEXT:
+            if not self.discovery_card:
+                raise ValueError("Single-page Projects require a discovery card")
+        elif self.discovery_card is not None:
+            raise ValueError("RAG discovery cards are derived from active categories")
+        if self.is_active:
+            raise ValueError("A new Project can be activated after its knowledge is ready")
+        return self
 
 
 class ProjectUpdate(BaseModel):
@@ -56,8 +74,9 @@ class ProjectUpdate(BaseModel):
 
     name: str | None = None
     is_active: bool | None = None
+    aliases: list[str] | None = Field(default=None, max_length=30)
+    discovery_card: dict[str, Any] | None = None
     default_persona_id: uuid.UUID | None = None
-    knowledge_base_id: uuid.UUID | None = None
 
 
 # --- Worker knowledge features (one row per catalog feature per project) ---

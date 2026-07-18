@@ -1,0 +1,16 @@
+schema_version: "1.0"
+category: compensation
+compensation: []
+#  - id: thu-nhap-cong-nhan
+#    job_ids: [cong-nhan-san-xuat]  # [] nghĩa là áp dụng chung
+#    base_salary_vnd: 7000000
+#    estimated_income_min_vnd: 10000000
+#    estimated_income_max_vnd: 13000000
+#    allowances:
+#      - name: Phụ cấp chuyên cần
+#        amount_vnd: 500000
+#        cadence: month  # hour|shift|day|week|month|year|one_time
+#        conditions: Đi làm đủ ngày
+#    bonuses: []
+#    overtime_notes: Mô tả cách tính tăng ca
+#    payment_notes: Ngày và hình thức trả lương

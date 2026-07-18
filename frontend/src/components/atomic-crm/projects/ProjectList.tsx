@@ -1,17 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ListBase, useListContext, useRedirect, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
-import { Boxes, Plus, Upload } from "lucide-react";
+import { Boxes, Plus } from "lucide-react";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { Project } from "../types";
-import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { useRoleActions } from "../hooks/useRoleActions";
-import { BusTimetableSection } from "./ProjectBusTimetable";
 import { ProjectOperationsPanel } from "./ProjectSidebar";
-import { ProjectFeatures } from "./ProjectFeatures";
-import { ProjectFaqEditor } from "./ProjectFaqEditor";
+import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 
 const ProjectListContent = () => {
@@ -19,7 +16,6 @@ const ProjectListContent = () => {
   const { isAdmin, canEdit } = useRoleActions();
   const refresh = useRefresh();
   const redirect = useRedirect();
-  const [uploadOpen, setUploadOpen] = useState(false);
 
   const projects = useMemo(() => data ?? [], [data]);
   const activeCount = useMemo(
@@ -74,23 +70,13 @@ const ProjectListContent = () => {
             </div>
             <div className="project-command-actions">
               {isAdmin && (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => setUploadOpen(true)}
-                    className="h-10 rounded-[8px]"
-                  >
-                    <Upload className="size-4" />
-                    Tải tài liệu
-                  </Button>
-                  <Button
-                    onClick={() => redirect("create", "projects")}
-                    className="h-10 rounded-[8px]"
-                  >
-                    <Plus className="size-4" />
-                    Tạo dự án
-                  </Button>
-                </>
+                <Button
+                  onClick={() => redirect("create", "projects")}
+                  className="h-10 rounded-[8px]"
+                >
+                  <Plus className="size-4" />
+                  Tạo dự án
+                </Button>
               )}
             </div>
           </header>
@@ -149,9 +135,6 @@ const ProjectListContent = () => {
           )}
         </div>
 
-        {isAdmin && (
-          <KnowledgeUpload open={uploadOpen} onOpenChange={setUploadOpen} />
-        )}
       </div>
     </ProjectWorkspaceShell>
   );
@@ -168,21 +151,10 @@ const ProjectDetailPanel = ({
 }) => {
   return (
     <div className="project-detail-stack">
-      <ProjectFeatures
+      <ProjectKnowledgePanel
         key={String(project.id)}
-        projectId={String(project.id)}
-        editable={canEdit}
-        canExtract={isAdmin}
-        extraContent={
-          <div className="space-y-5">
-            <ProjectFaqEditor
-              projectId={String(project.id)}
-              editable={canEdit}
-              embedded
-            />
-            <BusTimetableSection projectId={String(project.id)} />
-          </div>
-        }
+        project={project}
+        editable={isAdmin && canEdit}
       />
     </div>
   );

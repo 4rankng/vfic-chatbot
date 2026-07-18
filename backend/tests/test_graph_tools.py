@@ -245,7 +245,13 @@ async def test_list_active_jobs_forwards_explicit_filters_and_bounds_top_k(no_ca
     )
 
     assert calls == [
-        {"role": "thợ hàn", "company": "LG", "location": "Hải Phòng", "top_k": 10}
+        {
+            "project_slug": None,
+            "role": "thợ hàn",
+            "company": "LG",
+            "location": "Hải Phòng",
+            "top_k": 10,
+        }
     ]
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
     assert payload["status"] == "no_match"

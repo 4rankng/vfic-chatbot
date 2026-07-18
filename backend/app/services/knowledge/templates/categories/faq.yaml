@@ -1,0 +1,9 @@
+schema_version: "1.0"
+category: faq
+faq: []
+#  - id: cau-hoi-mau
+#    question: Câu hỏi thường gặp
+#    answer: Câu trả lời đã được xác nhận
+#    question_variants: []
+#    required_terms: []
+#    forbidden_terms: []

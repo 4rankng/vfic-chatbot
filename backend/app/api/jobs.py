@@ -25,6 +25,7 @@ from app.schemas.job import (
     JobUpdate,
 )
 from app.services.job_service import JobService
+from app.services.errors import ConflictError
 
 router = APIRouter(
     prefix="/jobs",
@@ -49,7 +50,7 @@ async def list_jobs(
 async def create_job(
     body: JobCreate, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> JobOut:
-    return JobOut.model_validate(await JobService(db).create(body.model_dump()))
+    raise ConflictError("Jobs are read-only projections; update the Project Jobs YAML category")
 
 
 @router.get("/{job_id}", response_model=JobOut)
@@ -69,32 +70,21 @@ async def update_job(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> JobOut:
-    job = await JobService(db).get(job_id)
-    if job is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
-    return JobOut.model_validate(
-        await JobService(db).update(job, body.model_dump(exclude_unset=True))
-    )
+    raise ConflictError("Jobs are read-only projections; update the Project Jobs YAML category")
 
 
 @router.post("/{job_id}/archive", response_model=JobOut)
 async def archive_job(
     job_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> JobOut:
-    job = await JobService(db).get(job_id)
-    if job is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
-    return JobOut.model_validate(await JobService(db).update(job, {"status": JobStatus.ARCHIVED}))
+    raise ConflictError("Jobs are read-only projections; remove the job from the Jobs YAML category")
 
 
 @router.post("/{job_id}/mark-full", response_model=JobOut)
 async def mark_full(
     job_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ) -> JobOut:
-    job = await JobService(db).get(job_id)
-    if job is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
-    return JobOut.model_validate(await JobService(db).update(job, {"status": JobStatus.FULL}))
+    raise ConflictError("Jobs have no manual status; remove unavailable jobs from the Jobs YAML")
 
 
 @router.post("/search", response_model=list[JobSearchResult])

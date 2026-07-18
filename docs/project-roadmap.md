@@ -1,6 +1,6 @@
 # Project Roadmap
 
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-18
 **Production:** `bot.tingting.vip` — stable, serving candidates over Zalo.
 
 ---
@@ -27,6 +27,23 @@ chatbot loop is live:
 
 Zalo Official Account integration is implemented in the working tree and
 documented here; verify maturity before relying on it in prod.
+
+### Project-owned knowledge modes
+
+This work is implemented in the current worktree and covered by integration
+tests, but it has not had a production cutover yet.
+
+- Each Project owns exactly one knowledge mode: `DIRECT_CONTEXT` or `RAG`.
+- `DIRECT_CONTEXT` stores one full page and replaces that page on save instead
+  of chunking, embedding, or RAG retrieval.
+- `RAG` replaces knowledge through 12 independent YAML categories: jobs,
+  compensation, requirements, work schedules, benefits, accommodation, meals,
+  transportation, insurance, application, contacts, and FAQ.
+- Conversation scope uses `EXPLORE` when no Project is selected and `FOCUSED`
+  when one Project is explicitly selected.
+- Migration `0048_project_owned_knowledge_modes` is prepared to link the legacy
+  LG Display KB and seed category rows; it has not been deployed to production.
+- Verification is local/integration only. Production validation remains pending.
 
 ### Phase 1 baseline milestone (2026-07-15)
 

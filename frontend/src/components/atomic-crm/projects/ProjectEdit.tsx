@@ -12,11 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { TextInput } from "@/components/admin/text-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
-import { Upload } from "lucide-react";
-import { KnowledgeUpload } from "../knowledge/KnowledgeUpload";
 import { useRoleActions } from "../hooks/useRoleActions";
-import { ProjectFeatures } from "./ProjectFeatures";
-import { ProjectFaqEditor } from "./ProjectFaqEditor";
+import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectPersonaPanel } from "./ProjectPersonaPanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
@@ -30,7 +27,6 @@ const ProjectEditContent = () => {
   const { isAdmin } = useRoleActions();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
   if (!project) return null;
 
   const onSubmit = async (data: Record<string, unknown>) => {
@@ -50,7 +46,6 @@ const ProjectEditContent = () => {
     }
   };
 
-  const card = project.index_card ?? {};
   return (
     <ProjectWorkspaceShell>
       <div className="project-workspace-content">
@@ -80,16 +75,23 @@ const ProjectEditContent = () => {
           <CardHeader>
             <CardTitle className="flex items-center justify-between text-section-title">
               <span>{project.name}</span>
-              <Badge
-                variant="outline"
-                className={
-                  project.is_active
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-border bg-muted/40 text-muted-foreground"
-                }
-              >
-                {project.is_active ? "Đang hoạt động" : "Tắt"}
-              </Badge>
+              <div className="flex gap-2">
+                <Badge variant="outline">
+                  {project.knowledge_mode === "DIRECT_CONTEXT"
+                    ? "Một trang"
+                    : "Theo danh mục"}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={
+                    project.is_active
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-border bg-muted/40 text-muted-foreground"
+                  }
+                >
+                  {project.is_active ? "Đang hoạt động" : "Tắt"}
+                </Badge>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-2">
@@ -107,59 +109,9 @@ const ProjectEditContent = () => {
 
         {isAdmin && <ProjectPersonaPanel project={project} />}
 
-        <Card className="mt-4 max-w-2xl">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-section-title">
-              <span>Thẻ danh mục (master index)</span>
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setUploadOpen(true)}
-                  title="Tải tin tuyển dụng lên cho dự án này"
-                >
-                  <Upload className="size-4" />
-                  Tải tin lên
-                </Button>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 pt-2 text-body">
-            <p>
-              <span className="text-muted-foreground">Tóm tắt: </span>
-              {project.summary ?? "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Địa điểm: </span>
-              {card.location ?? "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Vị trí: </span>
-              {(card.key_roles ?? []).join(", ") || "—"}
-            </p>
-            <p className="text-helper text-muted-foreground">
-              Thẻ được LLM tạo tự động khi huấn luyện cơ sở kiến thức của dự án.
-            </p>
-          </CardContent>
-        </Card>
-
         <div className="project-detail-stack mt-4">
-          <ProjectFeatures
-            projectId={project.id}
-            editable
-            canExtract={isAdmin}
-          />
-          <ProjectFaqEditor projectId={project.id} editable />
+          <ProjectKnowledgePanel project={project} editable={isAdmin} />
         </div>
-
-        {isAdmin && (
-          <KnowledgeUpload
-            open={uploadOpen}
-            onOpenChange={setUploadOpen}
-            initialProjectId={project.id}
-            lockProject
-          />
-        )}
       </div>
     </ProjectWorkspaceShell>
   );

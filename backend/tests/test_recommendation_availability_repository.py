@@ -165,7 +165,7 @@ async def test_retrieval_active_project_failure_returns_unavailable():
 
 
 @pytest.mark.asyncio
-async def test_project_slug_lookup_stays_inside_active_agent_knowledge_base():
+async def test_project_slug_lookup_uses_project_owned_knowledge_base():
     captured: dict[str, object] = {}
 
     class _Db:
@@ -178,5 +178,6 @@ async def test_project_slug_lookup_stays_inside_active_agent_knowledge_base():
     )
 
     assert project_id == "project-a"
-    assert "JOIN personas pe ON pe.knowledge_base_id = p.knowledge_base_id" in captured["sql"]
+    assert "p.knowledge_base_id IS NOT NULL" in captured["sql"]
+    assert "JOIN personas" not in captured["sql"]
     assert "p.is_active" in captured["sql"]

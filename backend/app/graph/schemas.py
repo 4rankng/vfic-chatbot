@@ -49,6 +49,10 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "project_slug": {
+                        "type": "string",
+                        "description": "Slug dự án để giới hạn việc làm; bắt buộc khi đã chọn dự án.",
+                    },
                     "role": {
                         "type": "string",
                         "description": "Tên vị trí/vai trò cần tìm, không kèm lời hội thoại.",
@@ -272,6 +276,7 @@ async def _dispatch_tool(
         elif name == "list_active_jobs":
             result = await list_active_jobs(
                 retrieval,
+                project_slug=args.get("project_slug"),
                 role=args.get("role"),
                 company=args.get("company"),
                 location=args.get("location"),
@@ -290,7 +295,10 @@ async def _dispatch_tool(
             )
         elif name == "search_bus_timetable":
             result = await search_bus_timetable(
-                retrieval, args.get("company", ""), args.get("question", "")
+                retrieval,
+                args.get("company", ""),
+                args.get("question", ""),
+                strict_company=bool(args.get("_strict_project_scope")),
             )
         elif name == "get_product_features":
             result = await get_product_features(retrieval, args.get("project_slug", ""))

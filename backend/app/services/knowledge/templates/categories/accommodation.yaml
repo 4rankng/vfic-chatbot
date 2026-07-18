@@ -1,0 +1,13 @@
+schema_version: "1.0"
+category: accommodation
+accommodation: []
+#  - id: ky-tuc-xa
+#    job_ids: []  # áp dụng chung cho dự án
+#    available: true
+#    type: Ký túc xá
+#    address: Địa chỉ
+#    monthly_cost_vnd: 0
+#    deposit_vnd: 0
+#    included_services: [Điện, Nước]
+#    eligibility: Điều kiện đăng ký
+#    notes: null

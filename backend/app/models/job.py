@@ -59,6 +59,11 @@ class Job(Base):
     source_document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="SET NULL")
     )
+    stable_key: Mapped[str | None] = mapped_column(String(64))
+    source_category_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_category_revisions.id", ondelete="CASCADE"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
