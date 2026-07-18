@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_admin, require_recruiter
@@ -220,7 +220,6 @@ async def upload_project_category(
     project_id: uuid.UUID,
     category_key: KnowledgeCategoryKey,
     file: UploadFile = File(...),
-    _intent: str = Form("replace"),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CategoryReplaceOut:
