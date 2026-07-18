@@ -89,6 +89,23 @@ Returned directly (no envelope):
 
 HTTP status codes follow REST conventions: 200 (OK), 201 (Created), 204 (No Content), 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 409 (Conflict), 422 (Validation Error), 429 (Too Many Requests), 502 (Bad Gateway).
 
+## Agent Thinking trace
+
+Administrators can inspect provider-returned reasoning and selected tool names for recent chatbot
+runs. Recruiters receive `403` from both trace routes.
+
+| Method and path | Result |
+|---|---|
+| `GET /api/v1/conversations/{conversation_id}/bot-runs` | Lean recent-run summaries with `trace_available`; no candidate reply |
+| `GET /api/v1/bot_runs/{run_id}` | One run with its versioned `decision_trace` |
+
+A version 2 trace contains only ordered `model_turn` events. Each event pairs the reasoning text
+returned by MiniMax or OpenRouter with tool names selected in that same invocation;
+`reasoning_status=not_returned` means the provider exposed none. Legacy version 1 execution-summary
+events remain parseable but are not presented as Agent Thinking. The contract adds no separate
+prompt, candidate-answer, tool-argument, tool-result, or evidence fields. Returned reasoning is
+free-form and may echo conversation context, so it is admin-only and expires after 30 days.
+
 ## Installation lifecycle and Settings configuration
 
 The runtime endpoint provides safe metadata for the authenticated recruitment

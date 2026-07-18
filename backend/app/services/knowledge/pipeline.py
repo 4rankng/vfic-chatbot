@@ -44,7 +44,7 @@ from app.services.knowledge.canonical import (
     checksum_text,
     parse_canonical_markdown,
 )
-from app.services.knowledge.extraction import split_for_digest
+from app.services.knowledge.extraction import DigestSections, split_for_digest
 from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
 from app.services.knowledge.repository import (
     JobFeatureValueRepo,
@@ -94,6 +94,7 @@ class KnowledgePipeline:
         """Full pipeline for ``doc`` (KnowledgeDocument). Mutates + commits."""
         raw = doc.raw_text or ""
         canonical_doc = None
+        digest_sections: DigestSections | None = None
         is_canonical = (doc.metadata_ or {}).get("schema_version") in CANONICAL_SCHEMA_VERSIONS
         await self._set_stage(doc, "DIGESTING", status="PROCESSING", error=None)
         if is_canonical:
@@ -106,7 +107,15 @@ class KnowledgePipeline:
             summary_parts = [canonical_doc.document_summary]
             sections = [raw] if raw.strip() else []
         else:
-            sections = split_for_digest(raw)
+            digest_sections = split_for_digest(raw)
+            sections = digest_sections.sections
+            if digest_sections.truncated:
+                logger.warning(
+                    "digest truncated for doc %s: %d of %d source chars not covered",
+                    doc.id,
+                    digest_sections.dropped_chars,
+                    digest_sections.total_chars,
+                )
             all_units = []
             summary_parts = []
             for section in sections:
@@ -126,6 +135,9 @@ class KnowledgePipeline:
             "section_count": len(sections),
             "unit_count": len(all_units),
             "flagged_unit_indexes": flagged,
+            "truncated": bool(digest_sections and digest_sections.truncated),
+            "dropped_chars": digest_sections.dropped_chars if digest_sections else 0,
+            "source_chars": digest_sections.total_chars if digest_sections else len(raw),
         }
 
         if doc.project_id is not None and canonical_doc is not None:

@@ -1,12 +1,14 @@
 """Tests for graph factories and GraphDeps wiring."""
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
 from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
 from app.graph.factories import (
     _asks_to_explore,
+    _build_fast_llm,
     build_deps,
     make_minimax_llm_json,
     reset_client_cache,
@@ -155,6 +157,33 @@ def test_chat_for_role_returns_openrouter_client_when_default(monkeypatch):
     assert isinstance(llm, ChatOpenAI)
     # The model name reflects the openrouter config, proving provider selection.
     assert "deepseek" in llm.model_name
+
+
+def test_openrouter_fast_tier_requests_returned_reasoning(monkeypatch):
+    captured: dict = {}
+    fast_client = object()
+
+    def fake_openrouter_chat(model, **kwargs):
+        captured.update({"model": model, **kwargs})
+        return fast_client
+
+    monkeypatch.setattr(
+        "app.graph.factories.get_settings",
+        lambda: SimpleNamespace(
+            minimax_fast_model="",
+            openrouter_fast_model="deepseek/deepseek-v4-flash",
+            openrouter_request_timeout=60,
+        ),
+    )
+    monkeypatch.setattr("app.graph.factories._openrouter_chat", fake_openrouter_chat)
+
+    result = _build_fast_llm(
+        minimax_config=SimpleNamespace(enabled=False, api_key="", default_provider="openrouter"),
+        openrouter_config=SimpleNamespace(enabled=True, api_key="test-key"),
+    )
+
+    assert result is fast_client
+    assert captured["capture_reasoning"] is True
 
 
 # ── US-001: LLM client cache ────────────────────────────────────────────────

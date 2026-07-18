@@ -80,7 +80,7 @@ describe("DecisionTraceAction", () => {
     ).toBeNull();
   });
 
-  it("loads detail only on expansion and renders legacy, truncated, and unknown codes safely", async () => {
+  it("loads detail only on expansion and does not present legacy execution events as thinking", async () => {
     mocks.getConversationBotRuns.mockResolvedValue({
       data: [
         {
@@ -157,10 +157,11 @@ describe("DecisionTraceAction", () => {
       )
       .toBeVisible();
     await expect
-      .element(screen.getByText("Quyết định chưa được hỗ trợ"))
-      .toBeVisible();
-    await expect
-      .element(screen.getByText("Công cụ chưa được hỗ trợ"))
+      .element(
+        screen.getByText(
+          "Lần chạy này không có dữ liệu suy luận do nhà cung cấp trả về.",
+        ),
+      )
       .toBeVisible();
     expect(screen.container.textContent).not.toContain("private-route-value");
     expect(screen.container.textContent).not.toContain(
@@ -172,6 +173,68 @@ describe("DecisionTraceAction", () => {
 });
 
 describe("DecisionTraceRenderer", () => {
+  it("renders provider-returned reasoning and tool choices for every model turn", async () => {
+    const screen = await render(
+      <DecisionTraceRenderer
+        trace={{
+          version: 2,
+          truncated: false,
+          events: [
+            {
+              seq: 1,
+              kind: "model_turn",
+              turn: 1,
+              phase: "tool_request",
+              provider: "minimax",
+              model: "MiniMax-M2.7",
+              reasoning_status: "returned",
+              reasoning: "Cần kiểm tra dữ liệu tuyển dụng hiện tại.",
+              tool_names: ["search_knowledge"],
+            },
+            {
+              seq: 2,
+              kind: "model_turn",
+              turn: 2,
+              phase: "final",
+              provider: "minimax",
+              model: "MiniMax-M2.7",
+              reasoning_status: "not_returned",
+              reasoning: null,
+              tool_names: [],
+            },
+            {
+              seq: 3,
+              kind: "model_turn",
+              turn: 3,
+              phase: "direct",
+              provider: "openrouter",
+              model: "deepseek/deepseek-v4-flash",
+              reasoning_status: "truncated",
+              reasoning: "Returned reasoning was capped.",
+              tool_names: [],
+            },
+          ],
+        }}
+      />,
+    );
+
+    await expect.element(screen.getByText("Lượt suy luận 1")).toBeVisible();
+    await expect
+      .element(screen.getByText("Cần kiểm tra dữ liệu tuyển dụng hiện tại."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Tra cứu cơ sở kiến thức"))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByText(
+          "Nhà cung cấp không trả về nội dung suy luận cho lượt này.",
+        ),
+      )
+      .toBeVisible();
+    await expect.element(screen.getByText("Thinking · đã rút gọn")).toBeVisible();
+  });
+
   it("does not expose raw fields from unsupported trace versions", async () => {
     const screen = await render(
       <DecisionTraceRenderer

@@ -39,6 +39,8 @@ class _ScriptedLLM:
         self.bind_calls = 0
         self.calls = 0
         self.messages = []
+        self.model_name = "scripted-model"
+        self.trace_provider = "minimax"
 
     def bind_tools(self, tools):
         self.bind_calls += 1
@@ -53,6 +55,8 @@ class _ScriptedLLM:
         if not self._replies:
             return AIMessage(content="done")
         entry = self._replies.pop(0)
+        if isinstance(entry, AIMessage):
+            return entry
         if isinstance(entry, str):
             return AIMessage(content=entry)
         # entry is a list of {"name", "args", "id"} dicts
@@ -220,6 +224,65 @@ async def test_agent_records_model_and_tool_round_metrics():
     assert metrics["tool_calls"] == 1
     assert metrics["tool_rounds"] == 1
     assert metrics["tool_ms"] >= 0
+
+
+async def test_agent_traces_reasoning_and_tool_names_for_each_model_call():
+    messages = pytest.importorskip("langchain_core.messages")
+    from app.graph.clients import MiniMaxAgent
+    from app.graph.decision_trace import DecisionTraceBuilder
+
+    async def handler(name, args):  # noqa: ARG001
+        return "LG Display is active"
+
+    tool_calls = [{"name": "list_active_projects", "args": {}, "id": "c1"}]
+    llm = _ScriptedLLM(
+        [
+            messages.AIMessage(
+                content="<think>I need the current project list.</think>",
+                tool_calls=tool_calls,
+            ),
+            messages.AIMessage(
+                content="<think>The tool confirms the project.</think>LG Display đang tuyển.",
+            ),
+        ]
+    )
+    trace = DecisionTraceBuilder()
+
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=5).agent(
+        "test",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        trace_sink=trace,
+    )
+
+    assert reply.endswith("LG Display đang tuyển.")
+    model_turns = [
+        event for event in trace.snapshot_payload()["events"] if event["kind"] == "model_turn"
+    ]
+    assert [{key: value for key, value in event.items() if key != "seq"} for event in model_turns] == [
+        {
+            "kind": "model_turn",
+            "turn": 1,
+            "phase": "tool_request",
+            "provider": "minimax",
+            "model": "scripted-model",
+            "reasoning_status": "returned",
+            "reasoning": "I need the current project list.",
+            "tool_names": ["list_active_projects"],
+        },
+        {
+            "kind": "model_turn",
+            "turn": 2,
+            "phase": "final",
+            "provider": "minimax",
+            "model": "scripted-model",
+            "reasoning_status": "returned",
+            "reasoning": "The tool confirms the project.",
+            "tool_names": [],
+        },
+    ]
+    assert all("LG Display đang tuyển." not in event["reasoning"] for event in model_turns)
 
 
 async def test_agent_records_failed_model_attempt():

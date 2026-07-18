@@ -46,6 +46,7 @@ PROACTIVE_OPTOUT_PHRASES: list[str] = [
 # Knowledge pipeline constants (not configurable via env)
 # ---------------------------------------------------------------------------
 DIGEST_SECTION_CHARS: int = 6000
+DIGEST_SECTION_OVERLAP: int = 400
 DIGEST_MAX_SECTIONS: int = 20
 INGEST_JOB_TIMEOUT_SECONDS: int = 3600
 

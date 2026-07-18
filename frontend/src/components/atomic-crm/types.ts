@@ -203,9 +203,22 @@ export type DecisionTraceToolEvent = {
   selected_by: "model" | "policy" | "prefetch";
 };
 
+export type DecisionTraceModelTurnEvent = {
+  seq: number;
+  kind: "model_turn";
+  turn: number;
+  phase: "tool_request" | "final" | "retry" | "direct";
+  provider: "minimax" | "openrouter" | "unknown";
+  model: string;
+  reasoning_status: "returned" | "not_returned" | "truncated";
+  reasoning: string | null;
+  tool_names: string[];
+};
+
 export type DecisionTraceEvent =
   | DecisionTraceDecisionEvent
-  | DecisionTraceToolEvent;
+  | DecisionTraceToolEvent
+  | DecisionTraceModelTurnEvent;
 
 export type DecisionTrace = {
   version: number;

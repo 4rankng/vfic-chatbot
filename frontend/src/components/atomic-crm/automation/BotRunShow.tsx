@@ -74,8 +74,8 @@ const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
               Agent Thinking
             </h3>
             <p className="mt-1 text-helper leading-5 text-muted-foreground">
-              Đây là tóm tắt quyết định từ luồng xử lý, không phải suy nghĩ nội
-              bộ của mô hình.
+              Hiển thị nội dung suy luận mà nhà cung cấp mô hình trả về cho từng
+              lượt, cùng các công cụ được mô hình chọn.
             </p>
             <div className="mt-3">
               <DecisionTraceRenderer trace={run.decision_trace} />

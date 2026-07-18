@@ -20,6 +20,16 @@ class DecisionTraceSink(Protocol):
 
     def record_tool_selection(self, name: str, *, selected_by: str) -> None: ...
 
+    def record_model_turn(
+        self,
+        *,
+        phase: str,
+        provider: str,
+        model: str,
+        reasoning: str | None,
+        tool_names: list[str] | None = None,
+    ) -> None: ...
+
 
 class AgentModel(Protocol):
     """A tool-calling agent: system prompt + user turn -> reply text.

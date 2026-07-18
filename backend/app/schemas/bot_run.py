@@ -11,8 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from app.models.conversation import BotRunOutcome
 
-MAX_DECISION_TRACE_EVENTS = 32
-MAX_DECISION_TRACE_BYTES = 16 * 1024
+MAX_DECISION_TRACE_EVENTS = 64
+MAX_DECISION_TRACE_BYTES = 128 * 1024
+MAX_MODEL_REASONING_CHARS = 16 * 1024
 
 
 class _TraceBaseModel(BaseModel):
@@ -89,6 +90,9 @@ DecisionTraceToolName = Literal[
 ]
 
 DecisionTraceToolSelectedBy = Literal["model", "policy", "prefetch"]
+DecisionTraceProvider = Literal["minimax", "openrouter", "unknown"]
+DecisionTraceModelPhase = Literal["tool_request", "final", "retry", "direct"]
+DecisionTraceReasoningStatus = Literal["returned", "not_returned", "truncated"]
 
 _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
     "route_selected": frozenset(
@@ -156,14 +160,34 @@ class DecisionTraceToolEvent(_TraceBaseModel):
     selected_by: DecisionTraceToolSelectedBy
 
 
+class DecisionTraceModelTurnEvent(_TraceBaseModel):
+    seq: int = Field(ge=1)
+    kind: Literal["model_turn"]
+    turn: int = Field(ge=1)
+    phase: DecisionTraceModelPhase
+    provider: DecisionTraceProvider
+    model: str = Field(min_length=1, max_length=128)
+    reasoning_status: DecisionTraceReasoningStatus
+    reasoning: str | None = Field(default=None, max_length=MAX_MODEL_REASONING_CHARS)
+    tool_names: list[DecisionTraceToolName] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_reasoning_status(self) -> "DecisionTraceModelTurnEvent":
+        if self.reasoning_status == "not_returned" and self.reasoning is not None:
+            raise ValueError("reasoning must be absent when it was not returned")
+        if self.reasoning_status != "not_returned" and not self.reasoning:
+            raise ValueError("returned reasoning must contain text")
+        return self
+
+
 DecisionTraceEvent = Annotated[
-    DecisionTraceDecisionEvent | DecisionTraceToolEvent,
+    DecisionTraceDecisionEvent | DecisionTraceToolEvent | DecisionTraceModelTurnEvent,
     Field(discriminator="kind"),
 ]
 
 
 class DecisionTrace(_TraceBaseModel):
-    version: Literal[1] = 1
+    version: Literal[1, 2] = 2
     events: list[DecisionTraceEvent] = Field(max_length=MAX_DECISION_TRACE_EVENTS)
     truncated: bool = False
 
@@ -173,6 +197,10 @@ class DecisionTrace(_TraceBaseModel):
         for event in self.events:
             if event.seq != expected:
                 raise ValueError("decision trace sequence must be contiguous")
+            if self.version == 1 and event.kind == "model_turn":
+                raise ValueError("model-turn events require decision trace version 2")
+            if self.version == 2 and event.kind != "model_turn":
+                raise ValueError("decision trace version 2 contains model-turn events only")
             expected += 1
         return self
 

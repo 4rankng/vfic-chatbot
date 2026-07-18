@@ -3,12 +3,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDataProvider, useGetIdentity } from "ra-core";
 import {
   AlertTriangle,
+  Brain,
   History,
   Info,
   LoaderCircle,
   RefreshCw,
-  Route,
-  Wrench,
 } from "lucide-react";
 
 import {
@@ -32,17 +31,17 @@ import type {
   BotRunTraceDetail,
   BotRunTraceSummary,
   DecisionTrace,
-  DecisionTraceEvent,
+  DecisionTraceModelTurnEvent,
 } from "../types";
 import { formatDateTime, outcomeMeta } from "./botRunMeta";
-import { decisionEventLabels, toolEventLabels } from "./decisionTraceMeta";
+import { modelPhaseLabel, toolNameLabel } from "./decisionTraceMeta";
 import {
   clearDecisionTraceQueries,
   DECISION_TRACE_QUERY_KEY,
 } from "./decisionTraceQueries";
 
 const TRACE_DISCLAIMER =
-  "Đây là tóm tắt quyết định từ luồng xử lý, không phải suy nghĩ nội bộ của mô hình.";
+  "Hiển thị nội dung suy luận mà nhà cung cấp mô hình trả về cho từng lượt, cùng các công cụ được mô hình chọn.";
 
 const TraceStatus = ({ children }: { children: ReactNode }) => (
   <div
@@ -53,29 +52,59 @@ const TraceStatus = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
-const DecisionTraceEventRow = ({ event }: { event: DecisionTraceEvent }) => {
-  const labels =
-    event.kind === "decision"
-      ? decisionEventLabels(event)
-      : toolEventLabels(event);
-  const Icon = event.kind === "decision" ? Route : Wrench;
-
-  return (
-    <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 py-3">
-      <span className="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Icon className="size-4" aria-hidden="true" />
-      </span>
-      <div className="min-w-0 pt-0.5">
-        <p className="break-words text-body font-medium text-foreground">
-          {labels.title}
+const ModelTurnEventRow = ({
+  event,
+}: {
+  event: DecisionTraceModelTurnEvent;
+}) => (
+  <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 py-4">
+    <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <Brain className="size-4" aria-hidden="true" />
+    </span>
+    <div className="min-w-0 space-y-2 pt-0.5">
+      <div>
+        <p className="break-words text-body font-semibold text-foreground">
+          Lượt suy luận {event.turn}
         </p>
         <p className="mt-0.5 break-words text-helper text-muted-foreground">
-          {labels.detail}
+          {modelPhaseLabel(event.phase)} · {event.provider} · {event.model}
         </p>
       </div>
-    </li>
-  );
-};
+      {event.reasoning_status === "not_returned" ? (
+        <p className="rounded-md border border-dashed px-3 py-2 text-helper text-muted-foreground">
+          Nhà cung cấp không trả về nội dung suy luận cho lượt này.
+        </p>
+      ) : (
+        <div className="rounded-md border bg-muted/40 p-3">
+          <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
+            Thinking
+            {event.reasoning_status === "truncated" ? " · đã rút gọn" : ""}
+          </p>
+          <p className="whitespace-pre-wrap break-words text-body leading-6 text-foreground">
+            {event.reasoning}
+          </p>
+        </div>
+      )}
+      {event.tool_names.length > 0 ? (
+        <div>
+          <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
+            Công cụ được chọn
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {event.tool_names.map((name, index) => (
+              <span
+                key={`${name}-${index}`}
+                className="rounded-full border bg-background px-2 py-1 text-helper text-foreground"
+              >
+                {toolNameLabel(name)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  </li>
+);
 
 export const DecisionTraceRenderer = ({
   trace,
@@ -85,7 +114,7 @@ export const DecisionTraceRenderer = ({
   if (!trace) {
     return <TraceStatus>Không có dấu vết cho lần chạy cũ này.</TraceStatus>;
   }
-  if (trace.version !== 1) {
+  if (trace.version !== 1 && trace.version !== 2) {
     return (
       <TraceStatus>
         Phiên bản dấu vết này chưa được hỗ trợ. Không có dữ liệu thô nào được
@@ -93,6 +122,13 @@ export const DecisionTraceRenderer = ({
       </TraceStatus>
     );
   }
+  const modelTurns =
+    trace.version === 2
+      ? trace.events.filter(
+          (event): event is DecisionTraceModelTurnEvent =>
+            event.kind === "model_turn",
+        )
+      : [];
 
   return (
     <div className="space-y-3">
@@ -109,15 +145,17 @@ export const DecisionTraceRenderer = ({
           đủ.
         </div>
       ) : null}
-      {trace.events.length === 0 ? (
-        <TraceStatus>Lần chạy này không ghi nhận quyết định nào.</TraceStatus>
+      {modelTurns.length === 0 ? (
+        <TraceStatus>
+          Lần chạy này không có dữ liệu suy luận do nhà cung cấp trả về.
+        </TraceStatus>
       ) : (
         <ol
           className="divide-y divide-border"
           aria-label="Các quyết định đã ghi nhận"
         >
-          {trace.events.map((event) => (
-            <DecisionTraceEventRow
+          {modelTurns.map((event) => (
+            <ModelTurnEventRow
               key={`${event.seq}-${event.kind}`}
               event={event}
             />

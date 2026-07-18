@@ -52,6 +52,7 @@
 | [0007](0007-react-admin-frontend.md) | react-admin for the recruiter console SPA | Accepted |
 | [0008](0008-tailwindcss-v4-css-first.md) | TailwindCSS v4 CSS-native config (no JS config) | Accepted |
 | [0009](0009-event-driven-ingestion.md) | Event-driven knowledge base ingestion | Accepted |
+| [0010](0010-provider-returned-agent-reasoning.md) | Preserve provider-returned agent reasoning | Accepted |
 
 ## When to Write a New ADR
 

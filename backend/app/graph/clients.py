@@ -13,6 +13,7 @@ import logging
 import re
 import time
 import unicodedata
+from functools import lru_cache
 from typing import Literal
 
 from app.core.config import get_settings
@@ -26,6 +27,110 @@ _VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
 )
 _ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
 _ACTIVE_JOB_LOOKUP_STATUSES = frozenset({"matched", "no_match", "catalog_empty", "unavailable"})
+_REASONING_RESPONSE_FIELDS = ("reasoning_details", "reasoning_content", "reasoning")
+_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>(.*?)</think\s*>", re.IGNORECASE | re.DOTALL)
+
+
+def _reasoning_text_from_value(value: object) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return "\n\n".join(
+            part for item in value if (part := _reasoning_text_from_value(item))
+        ).strip()
+    if isinstance(value, dict):
+        for key in ("text", "reasoning", "summary"):
+            if key in value and (text := _reasoning_text_from_value(value[key])):
+                return text
+    return ""
+
+
+def _extract_returned_reasoning(ai: object) -> str | None:
+    """Extract provider-returned reasoning without including the final answer."""
+    additional_kwargs = getattr(ai, "additional_kwargs", {})
+    if isinstance(additional_kwargs, dict):
+        for key in _REASONING_RESPONSE_FIELDS:
+            if key in additional_kwargs and (
+                text := _reasoning_text_from_value(additional_kwargs[key])
+            ):
+                return text
+
+    try:
+        content_blocks = getattr(ai, "content_blocks", [])
+    except Exception:  # noqa: BLE001 - provider message compatibility is best-effort
+        content_blocks = []
+    if isinstance(content_blocks, list):
+        reasoning_blocks = [
+            block
+            for block in content_blocks
+            if isinstance(block, dict)
+            and (block["type"] if "type" in block else None) in {"reasoning", "thinking"}
+        ]
+        if text := _reasoning_text_from_value(reasoning_blocks):
+            return text
+
+    content = getattr(ai, "content", "")
+    if isinstance(content, str):
+        blocks = [match.strip() for match in _THINK_BLOCK_RE.findall(content) if match.strip()]
+        if blocks:
+            return "\n\n".join(blocks)
+        opening = re.search(r"<think\b[^>]*>", content, re.IGNORECASE)
+        if opening and (unfinished := content[opening.end() :].strip()):
+            return unfinished
+    return None
+
+
+@lru_cache(maxsize=1)
+def _reasoning_chat_class():
+    """ChatOpenAI variant that preserves third-party reasoning fields.
+
+    LangChain's generic OpenAI adapter intentionally drops fields such as
+    ``reasoning_content`` and ``reasoning_details``. The subclass keeps those
+    fields on AIMessage.additional_kwargs and forwards them unchanged on later
+    tool-loop requests, as required by MiniMax/OpenRouter interleaved thinking.
+    """
+    from langchain_core.messages import AIMessage
+    from langchain_openai import ChatOpenAI
+
+    class ReasoningPreservingChatOpenAI(ChatOpenAI):
+        trace_provider: str = "unknown"
+
+        def _create_chat_result(self, response, generation_info=None):
+            response_dict = (
+                response
+                if isinstance(response, dict)
+                else response.model_dump(warnings=False)
+            )
+            result = super()._create_chat_result(response, generation_info)
+            choices = response_dict["choices"] if "choices" in response_dict else []
+            for generation, choice in zip(
+                result.generations,
+                choices or [],
+                strict=False,
+            ):
+                raw_message = choice["message"] if "message" in choice else {}
+                if not isinstance(generation.message, AIMessage):
+                    continue
+                for key in _REASONING_RESPONSE_FIELDS:
+                    if key in raw_message and raw_message[key] is not None:
+                        generation.message.additional_kwargs[key] = raw_message[key]
+            return result
+
+        def _get_request_payload(self, input_, *, stop=None, **kwargs):
+            source_messages = self._convert_input(input_).to_messages()
+            payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+            wire_messages = payload["messages"] if "messages" in payload else None
+            if not isinstance(wire_messages, list):
+                return payload
+            for source, wire in zip(source_messages, wire_messages, strict=False):
+                if not isinstance(source, AIMessage) or not isinstance(wire, dict):
+                    continue
+                for key in _REASONING_RESPONSE_FIELDS:
+                    if key in source.additional_kwargs and source.additional_kwargs[key] is not None:
+                        wire[key] = source.additional_kwargs[key]
+            return payload
+
+    return ReasoningPreservingChatOpenAI
 
 # ── LLM observability helpers (Redis-backed, process-agnostic) ──────────────
 _RKEY_429 = "llm:minimax_429s"  # INCR on 429, EXPIRE 60 (rolling minute)
@@ -737,6 +842,24 @@ class MiniMaxAgent:
             retrying_empty_generation = False
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
+            record_model_turn = getattr(trace_sink, "record_model_turn", None)
+            if callable(record_model_turn):
+                provider = getattr(active_llm, "trace_provider", "unknown")
+                if provider not in {"minimax", "openrouter"}:
+                    provider = "unknown"
+                model = str(
+                    getattr(active_llm, "model_name", None)
+                    or getattr(active_llm, "model", None)
+                    or "unknown"
+                )
+                phase = "retry" if was_empty_retry else "tool_request" if calls else "final"
+                record_model_turn(
+                    phase=phase,
+                    provider=provider,
+                    model=model,
+                    reasoning=_extract_returned_reasoning(ai),
+                    tool_names=[call["name"] if "name" in call else "" for call in calls or []],
+                )
             if was_empty_retry:
                 from app.graph.safety import fast_safety_filter
 
@@ -817,7 +940,9 @@ class MiniMaxAgent:
                 metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
             tool_t0 = time.monotonic()
 
-            if trace_sink is not None:
+            if trace_sink is not None and not callable(
+                getattr(trace_sink, "record_model_turn", None)
+            ):
                 for tool_call in calls:
                     trace_sink.record_tool_selection(tool_call.get("name", ""), selected_by="model")
 
@@ -997,6 +1122,22 @@ class MiniMaxAgent:
             metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
         _record_llm_latency(total_ms)
         if trace_sink is not None:
+            record_model_turn = getattr(trace_sink, "record_model_turn", None)
+            if callable(record_model_turn):
+                provider = getattr(self.llm, "trace_provider", "unknown")
+                if provider not in {"minimax", "openrouter"}:
+                    provider = "unknown"
+                record_model_turn(
+                    phase="direct",
+                    provider=provider,
+                    model=str(
+                        getattr(self.llm, "model_name", None)
+                        or getattr(self.llm, "model", None)
+                        or "unknown"
+                    ),
+                    reasoning=_extract_returned_reasoning(ai),
+                    tool_names=[],
+                )
             trace_sink.record_decision("grounding_verdict", "skipped")
         return str(ai.content or "")
 
@@ -1035,15 +1176,15 @@ def _minimax_chat(
     resolved_api_key = api_key or s.minimax_api_key
     if not resolved_api_key:
         raise RuntimeError("MINIMAX_API_KEY is required for MiniMax chat")
-    from langchain_openai import ChatOpenAI
-
-    return ChatOpenAI(
+    chat_class = _reasoning_chat_class()
+    return chat_class(
         model=model,
         api_key=resolved_api_key,
         base_url=s.minimax_base_url,
         timeout=s.minimax_request_timeout,
         temperature=temperature,
         max_retries=max_retries,
+        trace_provider="minimax",
     )
 
 
@@ -1055,22 +1196,27 @@ def _openrouter_chat(
     json_mode: bool = False,
     max_retries: int = 0,
     api_key: str | None = None,
+    capture_reasoning: bool = False,
 ):
     """OpenAI-compatible OpenRouter client from settings."""
     s = get_settings()
     resolved_api_key = api_key or s.openrouter_api_key
     if not resolved_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter chat")
-    from langchain_openai import ChatOpenAI
-
     kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
-    return ChatOpenAI(
+    if capture_reasoning:
+        kwargs["extra_body"] = {
+            "reasoning": {"effort": "high", "exclude": False},
+        }
+    chat_class = _reasoning_chat_class()
+    return chat_class(
         model=model,
         api_key=resolved_api_key,
         base_url=s.openrouter_base_url,
         timeout=timeout or s.openrouter_request_timeout,
         temperature=temperature,
         max_retries=max_retries,
+        trace_provider="openrouter",
         **kwargs,
     )
 
@@ -1157,6 +1303,7 @@ def _chat_for_role(
             timeout=timeout,
             json_mode=json_mode,
             api_key=resolved_openrouter_key,
+            capture_reasoning=role == "agent",
         )
 
     # minimax

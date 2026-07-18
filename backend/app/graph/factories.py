@@ -384,6 +384,7 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
                 temperature=0.3,
                 timeout=s.openrouter_request_timeout,
                 api_key=openrouter_config.api_key,
+                capture_reasoning=True,
             )
         return None
     except Exception:  # noqa: BLE001

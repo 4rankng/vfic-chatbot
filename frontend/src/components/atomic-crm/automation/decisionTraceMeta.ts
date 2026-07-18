@@ -72,6 +72,17 @@ const TOOL_LABELS: Readonly<Record<string, string>> = Object.freeze({
   search_user_memory: "Tra cứu thông tin đã ghi nhận",
 });
 
+export const toolNameLabel = (name: string): string =>
+  TOOL_LABELS[name] ?? "Công cụ chưa được hỗ trợ";
+
+export const modelPhaseLabel = (phase: string): string =>
+  ({
+    direct: "Trả lời trực tiếp",
+    final: "Tạo câu trả lời cuối",
+    retry: "Thử lại sau phản hồi trống",
+    tool_request: "Chọn công cụ",
+  })[phase] ?? "Lượt mô hình";
+
 const SELECTION_SOURCE_LABELS: Readonly<
   Record<DecisionTraceToolEvent["selected_by"], string>
 > = Object.freeze({
@@ -90,6 +101,6 @@ export const decisionEventLabels = (
 export const toolEventLabels = (
   event: DecisionTraceToolEvent,
 ): { title: string; detail: string } => ({
-  title: TOOL_LABELS[event.name] ?? "Công cụ chưa được hỗ trợ",
+  title: toolNameLabel(event.name),
   detail: `Được chọn bởi ${SELECTION_SOURCE_LABELS[event.selected_by]}`,
 });

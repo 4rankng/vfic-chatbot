@@ -492,6 +492,24 @@ that run, recovery creates an `outbox_recovery` run with the adapter timing only
 the original webhook-to-send interval is intentionally absent rather than
 guessed.
 
+### Admin Agent Thinking trace
+
+Each reactive `BotRun` may carry a versioned `decision_trace` JSON document. Version 2 records one
+`model_turn` event after every provider invocation: invocation number, phase, provider/model,
+reasoning status, the reasoning text returned by the provider, and the allowlisted names of tools
+selected in that same response. MiniMax reasoning is extracted from `<think>` blocks in message
+content. OpenRouter reasoning fields are preserved on the assistant message and forwarded unchanged
+into the next tool-loop request, so interleaved reasoning remains available to both the provider and
+the trace.
+
+The trace does not create separate prompt, candidate-answer, tool-argument, tool-result, or evidence
+fields. Provider reasoning is free-form and may repeat conversation context, so it is treated as
+sensitive data. If a provider returns no reasoning, the event records `not_returned`; the system
+cannot recover reasoning the provider withheld. Capture is fail-open and bounded to 64 events,
+16 KiB per reasoning block, and 128 KiB total. Trace detail and per-conversation summaries are
+admin-only, loaded on demand, and the trace JSON is cleared after 30 days while the operational
+`BotRun` row is retained.
+
 ---
 
 ## 3. Bot-turn pipeline topology

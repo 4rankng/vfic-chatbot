@@ -23,7 +23,7 @@ from app.services.knowledge.canonical import (
     load_template,
     parse_canonical_markdown,
 )
-from app.services.knowledge.extraction import split_for_digest
+from app.services.knowledge.extraction import DigestSections, split_for_digest
 from app.services.knowledge.file_extraction import (
     KnowledgeFileExtractionError,
     extract_text,
@@ -45,6 +45,7 @@ __all__ = [
     "LLMJson",
     "CANONICAL_SCHEMA_VERSIONS",
     "CanonicalValidationError",
+    "DigestSections",
     "SCHEMA_VERSION",
     "extract_text",
     "load_template",

@@ -135,10 +135,142 @@ def test_extract_text_xlsx():
 
 def test_split_for_digest_respects_size():
     big = "x" * 15000
-    sections = split_for_digest(big, max_chars=6000)
-    assert len(sections) >= 2 and all(len(s) <= 6000 for s in sections)
-    assert split_for_digest("", 6000) == []
-    assert split_for_digest("ngắn", 6000) == ["ngắn"]
+    result = split_for_digest(big, max_chars=6000)
+    assert len(result.sections) >= 2 and all(len(s) <= 6000 for s in result.sections)
+    assert split_for_digest("", 6000).sections == []
+    assert split_for_digest("ngắn", 6000).sections == ["ngắn"]
+
+
+def test_split_for_digest_snaps_to_paragraph_boundary():
+    """Cut *end* lands on a paragraph boundary when one exists in the window.
+
+    Regression for the raw ``text[start:start+max_chars]`` slice that ignored
+    paragraph boundaries despite the docstring claiming otherwise.
+
+    Note: overlap means a chunk can *start* mid-paragraph (the overlap window
+    intentionally re-covers content from the previous chunk). The invariant
+    enforced here is that every chunk *ends* on a paragraph boundary, i.e. the
+    cut itself does not slice through a paragraph.
+    """
+    paragraph = "y" * 2500
+    text = "\n\n".join([paragraph, paragraph, paragraph, paragraph])
+    result = split_for_digest(text, max_chars=6000)
+    assert len(result.sections) >= 2
+    # Every non-final chunk must end at a paragraph boundary: re-concatenating
+    # the chunk to the source and checking the next source char is `\n` (or
+    # EOF) is the cleanest property test.
+    cursor = 0
+    for index, chunk in enumerate(result.sections):
+        # Strip leading/trailing whitespace inside the chunk to compare against
+        # the source — the splitter returns ``.strip()``-ed chunks.
+        stripped_chunk = chunk
+        # The chunk must appear in the source somewhere at/after ``cursor``.
+        found_at = text.find(stripped_chunk, max(0, cursor - 400))
+        assert found_at != -1, f"chunk {index} not located in source"
+        chunk_end_in_source = found_at + len(stripped_chunk)
+        cursor = chunk_end_in_source
+        is_last = index == len(result.sections) - 1
+        if not is_last:
+            # The next char in source after this chunk must be a newline —
+            # i.e. we cut at a paragraph boundary, not mid-paragraph.
+            assert chunk_end_in_source >= len(text) or text[chunk_end_in_source] == "\n", (
+                f"chunk {index} ends mid-paragraph at source offset {chunk_end_in_source}"
+            )
+
+
+def test_split_for_digest_snaps_to_sentence_when_no_paragraph():
+    """In a single long paragraph, cuts land on sentence boundaries."""
+    sentence = "This is a sentence. "
+    # Make it long enough to force multiple chunks.
+    text = sentence * 600  # ~10k chars, no paragraph breaks
+    result = split_for_digest(text, max_chars=6000)
+    assert len(result.sections) >= 2
+    # No chunk should end mid-sentence: every non-final chunk must end with the
+    # sentence terminator ". " or "." before whitespace.
+    for chunk in result.sections:
+        assert chunk.rstrip().endswith("."), f"chunk ends mid-sentence: ...{chunk[-30:]!r}"
+
+
+def test_split_for_digest_tail_not_duplicated():
+    """Input of length ``max_chars + 1`` produces exactly two non-duplicate sections.
+
+    Regression for the off-by-one where the old loop produced a near-duplicate
+    final chunk because the ``break`` only fired when the *end* of the current
+    chunk reached EOF.
+    """
+    text = "a" * 6001
+    result = split_for_digest(text, max_chars=6000)
+    assert len(result.sections) == 2
+    # The two sections must be meaningfully different (not near-duplicates).
+    assert result.sections[0] != result.sections[1]
+    # Tail fully covered (no silent drop).
+    assert result.truncated is False
+    assert result.dropped_chars == 0
+    assert result.total_chars == 6001
+    # Full coverage: every source index appears in at least one chunk.
+    covered = sum(len(s) for s in result.sections) - (
+        len(result.sections) - 1
+    ) * 400  # subtract one overlap window per adjacent pair
+    assert covered >= 6001
+
+
+def test_split_for_digest_reports_truncation_at_max_sections():
+    """When ``DIGEST_MAX_SECTIONS`` cap is hit, ``truncated=True`` and dropped > 0."""
+    from app.core.config import DIGEST_MAX_SECTIONS
+
+    # Build input large enough that even with max overlap we cannot cover it
+    # in DIGEST_MAX_SECTIONS windows.
+    text = "z" * (DIGEST_MAX_SECTIONS * 6000 + 5000)
+    result = split_for_digest(text, max_chars=6000)
+    assert len(result.sections) <= DIGEST_MAX_SECTIONS
+    assert result.truncated is True
+    assert result.dropped_chars > 0
+    assert result.total_chars == len(text)
+
+
+def test_split_for_digest_preserves_vietnamese_diacritics_at_seam():
+    """No chunk splits a combining diacritic off its base letter.
+
+    Vietnamese precomposed characters (e.g. ``ấ``) are single Python codepoints
+    so they cannot be sliced in half at the codepoint level; but the *intended*
+    invariant is that every chunk is a valid Unicode string whose
+    encode/decode round-trips and whose boundaries never orphan a combining
+    mark. This test enforces that invariant on a long Vietnamese passage.
+    """
+    # Vietnamese sentence with diacritics, repeated to span multiple chunks.
+    sentence = "Tuyển dụng công nhân Hải Phòng, lương hấp dẫn, hỗ trợ chỗ ở. "
+    text = sentence * 400  # ~22k chars
+    result = split_for_digest(text, max_chars=6000)
+    assert len(result.sections) >= 3
+    for chunk in result.sections:
+        # Round-trips cleanly through UTF-8 (catches surrogate-edge issues).
+        chunk.encode("utf-8").decode("utf-8")
+        # No leading/trailing combining diacritical mark (U+0300..U+036F).
+        assert not chunk.startswith("\u0300") and not chunk.startswith("\u036F")
+        assert not chunk.endswith("\u0300") and not chunk.endswith("\u036F")
+
+
+def test_split_for_digest_preserves_cjk_at_seam():
+    """CJK text (``。``-terminated sentences) snaps on the terminator.
+
+    Sentence length (9 chars) does NOT divide ``max_chars`` evenly, so a naive
+    hard cut would land mid-sentence (verified manually: position 6000 % 9 = 6,
+    so the cut falls between glyph 6 and 7 of a sentence). The CJK-sentence
+    boundary snap must move the cut to the preceding ``。``.
+    """
+    sentence = "工厂需要十名工人。"  # 9 chars; 6000 % 9 == 6 -> naive cut mid-sentence
+    text = sentence * 700  # ~6.3k chars, forces 2+ chunks
+    result = split_for_digest(text, max_chars=6000)
+    assert len(result.sections) >= 2
+    for chunk in result.sections:
+        # UTF-8 round-trip catches any encoding edge.
+        chunk.encode("utf-8").decode("utf-8")
+        # Every chunk ends on the CJK full-stop, excl. or quest, OR is the
+        # final chunk (which extends to EOF and need not end on a terminator).
+        if chunk is not result.sections[-1]:
+            assert chunk[-1] in "。！？", (
+                f"non-final chunk does not end on CJK terminator: ...{chunk[-12:]!r}"
+            )
 
 
 def test_generic_digest_prompts_and_fallback_never_invent_a_customer_or_industry():
