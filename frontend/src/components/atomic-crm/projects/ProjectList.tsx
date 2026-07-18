@@ -1,13 +1,21 @@
 import { useMemo } from "react";
 import { ListBase, useListContext, useRedirect, useRefresh } from "ra-core";
-import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
-import { Boxes, Plus } from "lucide-react";
+import { Bot, Boxes, CheckCircle2, FileText, Pencil, Plus } from "lucide-react";
 import { ListPagination } from "@/components/admin/list-pagination";
+import { DeleteButton } from "@/components/admin";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import type { Project } from "../types";
 import { useRoleActions } from "../hooks/useRoleActions";
-import { ProjectOperationsPanel } from "./ProjectSidebar";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 
@@ -46,15 +54,7 @@ const ProjectListContent = () => {
     [projects],
   );
 
-  const { selectedId, setSelectedId } = useMasterDetailSelection<Project>({
-    data: projects,
-  });
   const projectTotal = total ?? projects.length;
-
-  const selectedProject =
-    projects.find((project) => project.id === selectedId) ??
-    projects[0] ??
-    null;
 
   return (
     <ProjectWorkspaceShell>
@@ -94,30 +94,16 @@ const ProjectListContent = () => {
             </section>
           )}
 
-          {selectedProject || isPending ? (
-            <>
-              <ProjectOperationsPanel
-                projects={projects}
-                selectedId={selectedId}
-                selectedProject={selectedProject}
-                isPending={isPending}
-                isAdmin={isAdmin}
-                canEdit={canEdit}
-                onSelect={setSelectedId}
-                onEdit={() =>
-                  selectedProject &&
-                  redirect("edit", "projects", selectedProject.id)
-                }
-                onDeleted={() => refresh()}
-              />
-              {selectedProject && (
-                <ProjectDetailPanel
-                  project={selectedProject}
-                  isAdmin={isAdmin}
-                  canEdit={canEdit}
-                />
-              )}
-            </>
+          {isPending ? (
+            <ProjectAccordionSkeleton />
+          ) : projects.length > 0 ? (
+            <ProjectAccordionList
+              projects={projects}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+              onEdit={(project) => redirect("edit", "projects", project.id)}
+              onDeleted={() => refresh()}
+            />
           ) : (
             <EmptyState
               icon={<Boxes className="size-6" />}
@@ -134,31 +120,154 @@ const ProjectListContent = () => {
             />
           )}
         </div>
-
       </div>
     </ProjectWorkspaceShell>
   );
 };
 
-const ProjectDetailPanel = ({
-  project,
+export const ProjectAccordionList = ({
+  projects,
   isAdmin,
   canEdit,
+  onEdit,
+  onDeleted,
 }: {
-  project: Project;
+  projects: Project[];
   isAdmin: boolean;
   canEdit: boolean;
+  onEdit: (project: Project) => void;
+  onDeleted: () => void;
 }) => {
   return (
-    <div className="project-detail-stack">
-      <ProjectKnowledgePanel
-        key={String(project.id)}
-        project={project}
-        editable={isAdmin && canEdit}
-      />
-    </div>
+    <Accordion type="single" collapsible className="project-accordion-list">
+      {projects.map((project) => {
+        const projectId = String(project.id);
+        const readinessReady = project.feature_readiness?.ready;
+        const readinessTotal = project.feature_readiness?.total ?? 16;
+        const readinessText =
+          typeof readinessReady === "number"
+            ? `${readinessReady}/${readinessTotal}`
+            : "Chưa đo";
+
+        return (
+          <AccordionItem
+            key={projectId}
+            value={projectId}
+            className="project-accordion-item"
+          >
+            <AccordionTrigger
+              className="project-accordion-trigger"
+              aria-label={`Mở hoặc đóng kiến thức dự án ${project.name}`}
+            >
+              <div className="project-accordion-summary">
+                <div className="project-accordion-heading">
+                  <div className="min-w-0">
+                    <span className="project-accordion-eyebrow">Dự án</span>
+                    <h2>{project.name}</h2>
+                    <span className="project-accordion-slug">
+                      Mã dự án: {project.slug}
+                    </span>
+                  </div>
+                  <div className="project-accordion-badges">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "border-border bg-muted/40 text-muted-foreground",
+                        project.is_active &&
+                          "border-emerald-200 bg-emerald-50 text-emerald-700",
+                      )}
+                    >
+                      {project.is_active ? "Đang hoạt động" : "Tắt"}
+                    </Badge>
+                    <Badge variant="outline">
+                      {project.knowledge_mode === "DIRECT_CONTEXT"
+                        ? "Một trang"
+                        : "Theo danh mục"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <dl className="project-accordion-facts">
+                  <div>
+                    <dt>
+                      <FileText className="size-3.5" aria-hidden="true" />
+                      Tài liệu
+                    </dt>
+                    <dd>{project.knowledge_document_count ?? 0}</dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                      Thông tin đủ
+                    </dt>
+                    <dd>{readinessText}</dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <Bot className="size-3.5" aria-hidden="true" />
+                      Agent
+                    </dt>
+                    <dd>
+                      {project.default_persona_id ? "Đã chọn" : "Chưa chọn"}
+                    </dd>
+                  </div>
+                </dl>
+
+                {(project.summary || project.index_card?.summary) && (
+                  <p className="project-accordion-description">
+                    {project.index_card?.summary ?? project.summary}
+                  </p>
+                )}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="project-accordion-content">
+              {(canEdit || isAdmin) && (
+                <div className="project-accordion-actions">
+                  {canEdit && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEdit(project)}
+                    >
+                      <Pencil className="size-4" aria-hidden="true" />
+                      Sửa dự án
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <DeleteButton
+                      record={project}
+                      resource="projects"
+                      label="Xóa dự án"
+                      size="sm"
+                      variant="outline"
+                      redirect={false}
+                      successMessage="Đã xóa dự án."
+                      mutationOptions={{ onSuccess: onDeleted }}
+                    />
+                  )}
+                </div>
+              )}
+              <ProjectKnowledgePanel
+                key={projectId}
+                project={project}
+                editable={isAdmin && canEdit}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        );
+      })}
+    </Accordion>
   );
 };
+
+const ProjectAccordionSkeleton = () => (
+  <div className="project-accordion-list" aria-label="Đang tải dự án">
+    {Array.from({ length: 3 }).map((_, index) => (
+      <Skeleton key={index} className="h-40 w-full rounded-xl" />
+    ))}
+  </div>
+);
 
 export const ProjectList = () => (
   <ListBase perPage={25} sort={{ field: "name", order: "ASC" }}>

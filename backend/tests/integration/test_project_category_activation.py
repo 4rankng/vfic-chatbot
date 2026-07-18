@@ -82,12 +82,17 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     await integration_session.commit()
 
     service = KnowledgeCategoryService(integration_session)
-    await service.activate_revision(jobs_revision.id, _Embedder())
+    await service.activate_revision(
+        jobs_revision.id,
+        _Embedder(),
+        start_category_authority=False,
+    )
 
     await integration_session.refresh(jobs_category)
     await integration_session.refresh(project)
     assert jobs_category.active_revision_id == jobs_revision.id
     assert project.is_active is True
+    assert project.category_authority_started is False
     assert project.summary == "Cơ hội việc làm tại Category Factory"
     assert await integration_session.scalar(
         select(func.count(Job.id))
@@ -120,6 +125,7 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
 
     await integration_session.refresh(jobs_category)
     await integration_session.refresh(benefits_category)
+    await integration_session.refresh(project)
     job = await integration_session.scalar(
         select(Job)
         .join(Company, Company.id == Job.company_id)
@@ -127,6 +133,7 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     )
     assert jobs_category.active_revision_id == jobs_revision.id
     assert benefits_category.active_revision_id == benefits_revision.id
+    assert project.category_authority_started is True
     assert job is not None
     assert "Khám sức khỏe định kỳ" in (job.benefits or "")
 

@@ -183,6 +183,69 @@
   letter-spacing: 0;
 }
 
+/* Project knowledge follows the shared role ladder: section, body, item,
+   metadata. Keeping the selectors here prevents feature CSS from inventing
+   another independent type scale. */
+.inbox-bg-container .project-knowledge-title {
+  color: var(--ink);
+  font-size: var(--fs-subsection);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  letter-spacing: 0;
+}
+
+.inbox-bg-container .project-selected-summary h2 {
+  font-size: var(--fs-subsection);
+}
+
+.inbox-bg-container
+  :is(.project-knowledge-description, .project-transport-description) {
+  color: var(--ink-muted);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+}
+
+.inbox-bg-container .project-knowledge-progress {
+  color: var(--ink-muted);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+}
+
+.inbox-bg-container .project-knowledge-progress strong {
+  color: var(--ink);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.inbox-bg-container
+  :is(.project-category-name, .project-category-editor-title) {
+  color: var(--ink);
+  font-size: var(--fs-card-title);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+
+.inbox-bg-container .project-category-status {
+  color: var(--ink-muted);
+  font-size: var(--fs-helper);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+}
+
+.inbox-bg-container .project-category-date {
+  color: var(--ink-faint);
+  font-size: var(--fs-helper);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+}
+
+.inbox-bg-container .project-category-textarea {
+  font-size: var(--fs-input);
+  line-height: var(--lh-normal);
+}
+
 :is(
     .inbox-bg-container,
     .mobile-dashboard-shell,

@@ -214,6 +214,8 @@ class KnowledgeCategoryService:
         self,
         revision_id: uuid.UUID,
         embedder: CategoryEmbedder,
+        *,
+        start_category_authority: bool = True,
     ) -> None:
         revision = await self.db.get(KnowledgeCategoryRevision, revision_id)
         if revision is None:
@@ -302,7 +304,7 @@ class KnowledgeCategoryService:
             )
             await self._replace_projection(category.project_id, revision, document)
             project = await self.db.get(Project, category.project_id)
-            if project is not None:
+            if project is not None and start_category_authority:
                 project.category_authority_started = True
             if old_revision is not None:
                 old_revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
@@ -648,8 +650,12 @@ class KnowledgeCategoryService:
                     description=item.summary,
                 )
             )
+        category_summary = next(
+            (item.summary for item in document.jobs if item.summary),
+            None,
+        )
         project.index_card = {
-            "summary": project.summary or f"Cơ hội việc làm tại {project.name}",
+            "summary": category_summary or project.summary or f"Cơ hội việc làm tại {project.name}",
             "roles": roles,
             "location": ", ".join(dict.fromkeys(locations)),
             "eligibility": [],

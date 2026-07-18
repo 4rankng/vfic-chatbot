@@ -26,6 +26,7 @@ import {
   continuationLabel,
   deriveCacheDiscriminators,
   filterByCounter,
+  filterHumanInterventions,
   representativeReasonForCounter,
   showContinuation,
 } from "./recruitingCommandCenterLogic";
@@ -178,6 +179,35 @@ describe("filterByCounter", () => {
     expect(
       filterByCounter(withWaiting, "needs_reply").map((r) => r.key),
     ).toEqual(["a", "f", "g"]);
+  });
+});
+
+describe("filterHumanInterventions", () => {
+  it("excludes answered chats that are only unread or still inside the bot grace period", () => {
+    const rows = [
+      row("unread", "UNREAD"),
+      row("waiting", "WAITING_REPLY"),
+      row("escalated", "HUMAN_ESCALATION"),
+      row("failed", "DELIVERY_REVIEW"),
+      row("overdue", "REPLY_OVERDUE"),
+    ];
+
+    expect(filterHumanInterventions(rows).map((item) => item.key)).toEqual([
+      "escalated",
+      "failed",
+      "overdue",
+    ]);
+  });
+
+  it("requires an openable conversation", () => {
+    expect(
+      filterHumanInterventions([
+        row("lead-only", "HUMAN_ESCALATION", {
+          conversation_id: null,
+          action: "CALL",
+        }),
+      ]),
+    ).toEqual([]);
   });
 });
 
