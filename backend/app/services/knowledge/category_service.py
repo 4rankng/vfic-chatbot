@@ -655,16 +655,14 @@ class KnowledgeCategoryService:
             )
         card = dict(project.index_card or {})
         location = ", ".join(dict.fromkeys(locations))
-        summary = str(project.summary or card.get("summary") or "").strip()
-        if not summary:
-            role_text = ", ".join(dict.fromkeys(roles[:3]))
-            summary = (
-                f"{project.name} đang tuyển {role_text} tại {location}."
-                if role_text and location
-                else f"{project.name} đang tuyển {role_text}."
-                if role_text
-                else f"Dự án tuyển dụng {project.name}."
-            )
+        role_text = ", ".join(dict.fromkeys(roles[:3]))
+        summary = (
+            f"{project.name} đang tuyển {role_text} tại {location}."
+            if role_text and location
+            else f"{project.name} đang tuyển {role_text}."
+            if role_text
+            else f"Dự án tuyển dụng {project.name}."
+        )
         card.update(
             {
                 "summary": summary,

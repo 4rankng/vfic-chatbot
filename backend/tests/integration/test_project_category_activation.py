@@ -38,12 +38,12 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         password_hash="not-used",
         role=Role.admin,
     )
-    admin_summary = "Dự án tuyển công nhân sản xuất tại Hải Phòng."
+    legacy_summary = "Chi tiết dài từ tài liệu cũ không phải là tóm tắt dự án."
     project = Project(
         name="Category Factory",
         slug=f"category-{uuid.uuid4().hex}",
-        summary=admin_summary,
-        index_card={"summary": admin_summary, "highlights": ["Có xe đưa đón"]},
+        summary=legacy_summary,
+        index_card={"summary": legacy_summary, "highlights": ["Có xe đưa đón"]},
     )
     integration_session.add_all([actor, project])
     await integration_session.flush()
@@ -103,8 +103,9 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     assert jobs_category.active_revision_id == jobs_revision.id
     assert project.is_active is True
     assert project.category_authority_started is False
-    assert project.summary == admin_summary
-    assert project.index_card["summary"] == admin_summary
+    expected_summary = "Category Factory đang tuyển Công nhân lắp ráp tại Hải Phòng."
+    assert project.summary == expected_summary
+    assert project.index_card["summary"] == expected_summary
     assert project.index_card["highlights"] == ["Có xe đưa đón"]
     assert await integration_session.scalar(
         select(func.count(Job.id))
