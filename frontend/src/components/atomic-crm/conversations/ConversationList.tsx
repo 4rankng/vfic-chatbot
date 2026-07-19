@@ -849,11 +849,11 @@ export const ConversationList = () => {
   const provider = getEffectiveConversationChannelProvider(searchParams);
   const rawProvider = searchParams.get("channel_provider");
   useEffect(() => {
-    if (rawProvider === provider) return;
+    if (rawProvider === null || rawProvider === provider) return;
     setSearchParams(
       (previous) => {
         const next = new URLSearchParams(previous);
-        next.set("channel_provider", provider);
+        next.delete("channel_provider");
         return next;
       },
       { replace: true },

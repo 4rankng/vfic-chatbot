@@ -147,6 +147,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .persona-scope-activity-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .persona-page-shell .persona-readiness-bar {
     grid-column: 1 / -1;
     grid-row: 2;

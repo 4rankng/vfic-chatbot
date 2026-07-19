@@ -58,7 +58,7 @@ export const ChannelAdapterSelectorView = ({
   counts,
   onProviderChange,
 }: {
-  provider: ConversationChannelProvider;
+  provider: ConversationChannelProvider | undefined;
   counts: Readonly<Record<ChannelAdapterProvider, number>>;
   onProviderChange: (provider: ConversationChannelProvider) => void;
 }) => {
@@ -67,7 +67,7 @@ export const ChannelAdapterSelectorView = ({
       <RadioGroupPrimitive.Root
         className="channel-adapter-options"
         aria-label="Chọn kênh hội thoại"
-        value={provider}
+        value={provider ?? ""}
         onValueChange={(value) => {
           if (ADAPTERS.some((adapter) => adapter.provider === value)) {
             onProviderChange(value as ChannelAdapterProvider);

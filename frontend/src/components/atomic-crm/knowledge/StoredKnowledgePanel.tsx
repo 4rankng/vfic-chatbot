@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, HelpCircle, Quote, RefreshCw, Tags } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getKnowledgeUnits,
@@ -54,7 +56,11 @@ const labelFromMap = (
   return key ? (labels[key] ?? key) : "";
 };
 
-export const localizeKnowledgeText = (value: string) => value;
+export const localizeKnowledgeText = (value: string) =>
+  value
+    .replace(/\r\n?/g, "\n")
+    .replace(/\\r\\n|\\n|\\r/g, "\n")
+    .trim();
 
 const COMPACT_MARKDOWN_CLASS =
   "[&_h1]:text-section-title [&_h2]:text-section-title [&_h3]:text-card-title [&_h4]:text-card-title [&_h5]:text-card-title [&_h6]:text-card-title [&_pre]:p-3 [&_table]:text-helper";
@@ -123,6 +129,7 @@ export const StoredKnowledgePanel = ({
 };
 
 const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const questionCount = unit.questions?.length ?? 0;
   const entityEntries = Object.entries(unit.entities ?? {}).filter(
     ([, value]) =>
@@ -154,11 +161,25 @@ const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
         </span>
       </div>
 
-      <Markdown
-        className={`mt-3 break-words text-body leading-6 text-foreground ${COMPACT_MARKDOWN_CLASS}`}
+      <div
+        className={`knowledge-unit-content mt-3 ${isExpanded ? "is-expanded" : ""}`}
       >
-        {localizeKnowledgeText(unit.content)}
-      </Markdown>
+        <Markdown
+          className={`break-words text-body leading-6 text-foreground ${COMPACT_MARKDOWN_CLASS}`}
+        >
+          {localizeKnowledgeText(unit.content)}
+        </Markdown>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="knowledge-unit-toggle mt-3 hidden rounded-[8px]"
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded((value) => !value)}
+      >
+        {isExpanded ? "Thu gọn" : "Xem toàn bộ"}
+      </Button>
 
       {unit.summary && (
         <div className="mt-3 border-l-2 border-border py-1 pl-3 text-helper leading-5 text-muted-foreground">

@@ -32,15 +32,14 @@ describe("getConversationListServerFilter", () => {
     });
   });
 
-  it("defaults missing and invalid providers synchronously to Zalo Chatbot", () => {
-    expect(getEffectiveConversationChannelProvider(new URLSearchParams())).toBe(
-      "zalo_bot",
-    );
+  it("keeps an unscoped inbox query cross-channel", () => {
+    expect(getEffectiveConversationChannelProvider(new URLSearchParams())).toBeUndefined();
+    expect(getConversationListServerFilter(new URLSearchParams())).toEqual({});
     expect(
       getEffectiveConversationChannelProvider(
         new URLSearchParams("channel_provider=messenger"),
       ),
-    ).toBe("zalo_bot");
+    ).toBeUndefined();
   });
 
   it("always composes a valid provider into normal and reason filters", () => {
@@ -78,5 +77,6 @@ describe("getConversationListServerFilter", () => {
         needs_attention: true,
       }),
     ).toBe("zalo_oa:needs-attention");
+    expect(getConversationListKey({})).toBe("all:all");
   });
 });

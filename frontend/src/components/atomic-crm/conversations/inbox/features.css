@@ -43,6 +43,24 @@
   box-shadow: none;
 }
 
+.knowledge-command-header h1 {
+  font-size: var(--fs-page-title);
+}
+
+@media (max-width: 760px) {
+  .knowledge-unit-content:not(.is-expanded) {
+    display: -webkit-box;
+    max-height: 15rem;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 10;
+  }
+
+  .knowledge-unit-toggle {
+    display: inline-flex;
+  }
+}
+
 .settings-workspace-content {
   --settings-accent: var(--workspace-action);
   --settings-accent-strong: var(--workspace-action-strong);
@@ -959,6 +977,28 @@
 
   .settings-card-content {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 900px) {
+  .settings-side-nav-list {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .settings-side-nav-link {
+    min-height: 50px;
+  }
+
+  .knowledge-command-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .knowledge-command-header > .flex {
+    align-self: flex-end;
   }
 }
 

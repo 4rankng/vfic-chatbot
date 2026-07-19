@@ -1,6 +1,10 @@
 import { MemoryRouter } from "react-router";
 import { render } from "vitest-browser-react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { mockUseNotifications } = vi.hoisted(() => ({
+  mockUseNotifications: vi.fn(),
+}));
 
 vi.mock("@/components/admin/user-menu", () => ({
   UserMenu: () => <div data-testid="user-menu" />,
@@ -17,13 +21,28 @@ vi.mock("../installation/installation-context", () => ({
 }));
 
 vi.mock("./topbar/useNotifications", () => ({
-  useNotifications: () => ({ count: 0 }),
+  useNotifications: mockUseNotifications,
+}));
+
+vi.mock("./topbar/useNeedsAttention", () => ({
+  useNeedsAttention: () => ({
+    rows: [],
+    total: 0,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 import Header from "./Header";
 
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("Header", () => {
   it("keeps the Ting Ting logo visible when the responsive layout hides the brand name", async () => {
+    mockUseNotifications.mockReturnValue({ count: 0 });
     const screen = await render(
       <MemoryRouter>
         <Header />
@@ -35,5 +54,24 @@ describe("Header", () => {
     expect(brand.element().querySelector("img")?.getAttribute("src")).toBe(
       "/ttsoft-logo.png",
     );
+  });
+
+  it("opens the notifications popover when the bell is clicked", async () => {
+    mockUseNotifications.mockReturnValue({ count: 2 });
+    const screen = await render(
+      <MemoryRouter>
+        <Header />
+      </MemoryRouter>,
+    );
+
+    const bell = screen.getByRole("button", {
+      name: "2 cuộc trò chuyện cần chú ý",
+    });
+    await expect.element(bell).toBeVisible();
+    await bell.click();
+
+    await expect
+      .element(screen.getByRole("dialog", { name: "Thông báo" }))
+      .toBeVisible();
   });
 });

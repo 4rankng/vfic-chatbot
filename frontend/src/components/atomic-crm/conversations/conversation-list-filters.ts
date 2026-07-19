@@ -30,11 +30,11 @@ export const isConversationChannelProvider = (
 
 export const getEffectiveConversationChannelProvider = (
   searchParams: URLSearchParams,
-): ConversationChannelProvider => {
+): ConversationChannelProvider | undefined => {
   const provider = searchParams.get("channel_provider");
   return isConversationChannelProvider(provider)
     ? provider
-    : DEFAULT_CONVERSATION_CHANNEL_PROVIDER;
+    : undefined;
 };
 
 /** Returns a shareable URL scope while retaining the current attention queue. */
@@ -52,7 +52,7 @@ export const isAttentionReason = (value: string | null): value is string =>
   value !== null && ATTENTION_REASON_KEYS.has(value);
 
 type ConversationListServerFilter = {
-  channel_provider: ConversationChannelProvider;
+  channel_provider?: ConversationChannelProvider;
   reason?: string;
   needs_attention?: true;
 };
@@ -65,11 +65,15 @@ export const getConversationListServerFilter = (
     getEffectiveConversationChannelProvider(searchParams);
   const reasonParam = searchParams.get("reason");
   if (isAttentionReason(reasonParam)) {
-    return { channel_provider, reason: reasonParam };
+    return channel_provider ? { channel_provider, reason: reasonParam } : { reason: reasonParam };
   }
   return searchParams.get("needs_attention") === "true"
-    ? { channel_provider, needs_attention: true }
-    : { channel_provider };
+    ? channel_provider
+      ? { channel_provider, needs_attention: true }
+      : { needs_attention: true }
+    : channel_provider
+      ? { channel_provider }
+      : {};
 };
 
 export const getConversationListKey = (
@@ -80,5 +84,5 @@ export const getConversationListKey = (
     : filter.needs_attention
       ? "needs-attention"
       : "all";
-  return `${filter.channel_provider}:${context}`;
+  return `${filter.channel_provider ?? "all"}:${context}`;
 };
