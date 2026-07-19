@@ -770,8 +770,8 @@
   }
 
   .inbox-bg-container .workspace-heading {
-    font-size: var(--chat-fs-page-title);
-    line-height: 1.08;
+    font-size: var(--chat-fs-section-title);
+    line-height: 1.2;
   }
 
   .inbox-bg-container .conversation {

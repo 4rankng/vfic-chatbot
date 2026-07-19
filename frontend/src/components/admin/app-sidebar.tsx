@@ -55,7 +55,7 @@ export function AppSidebar() {
             >
               <Link to="/">
                 <Shell className="!size-5" />
-                <span className="text-section-title font-semibold">Acme Inc.</span>
+                <span className="text-card-title font-semibold">Acme Inc.</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

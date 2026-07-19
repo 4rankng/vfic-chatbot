@@ -652,7 +652,7 @@
 }
 
 .persona-page-shell .persona-studio-section-title h2 {
-  font-size: var(--fs-nav);
+  font-size: var(--fs-subsection);
   font-weight: 780;
   line-height: 1.25;
 }

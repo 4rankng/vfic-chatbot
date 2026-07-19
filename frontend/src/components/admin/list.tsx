@@ -184,7 +184,7 @@ export const Empty = () => {
 
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-2 text-center">
-      <h2 className="text-page-title font-semibold">
+      <h2 className="text-section-title font-semibold">
         {translate(`resources.${resource}.empty`, {
           _: emptyMessage,
         })}

@@ -96,7 +96,7 @@ export const ForgotPasswordPage = () => {
         <section className="flex w-full flex-col justify-center">
           <div className="mb-6 space-y-3 text-center sm:mb-8">
             <div className="space-y-3">
-              <h1 className="kb-display text-balance text-display leading-none text-foreground">
+              <h1 className="kb-display text-balance text-page-title leading-none text-foreground">
                 Khôi phục mật khẩu
               </h1>
               <p className="mx-auto max-w-[360px] text-body leading-6 text-muted-foreground">

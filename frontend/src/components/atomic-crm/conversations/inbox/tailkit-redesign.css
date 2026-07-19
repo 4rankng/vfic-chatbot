@@ -1,0 +1,576 @@
+/* Tailkit application UI pass.
+   The workspace keeps its behavior and DOM ownership; this final cascade layer
+   applies the visual language shared by a-c-chat-09, a-c-list-groups-05,
+   a-c-avatars-03, a-c-buttons-03/04, a-c-form-elements-02/10, and
+   a-c-navigation-02. */
+
+.inbox-bg-container {
+  --tailkit-brand: #047857;
+  --tailkit-brand-hover: #059669;
+  --tailkit-brand-soft: #ecfdf5;
+  --tailkit-brand-line: #a7f3d0;
+  --tailkit-canvas: #f7f8f7;
+  --tailkit-shell: rgba(244, 244, 245, 0.78);
+  --tailkit-surface: #ffffff;
+  --tailkit-surface-muted: #f4f4f5;
+  --tailkit-ink: #18181b;
+  --tailkit-muted: #71717a;
+  --tailkit-faint: #a1a1aa;
+  --tailkit-line: #e4e4e7;
+  --tailkit-line-soft: rgba(228, 228, 231, 0.72);
+  --tailkit-shadow-xs: 0 1px 2px rgba(24, 24, 27, 0.05);
+
+  /* Keep existing functional components on the same emerald action role. */
+  --brand: var(--tailkit-brand);
+  --brand-hover: var(--tailkit-brand-hover);
+  --brand-light: var(--tailkit-brand-soft);
+  --inbox-accent: var(--tailkit-brand);
+  --primary-soft: var(--tailkit-brand-soft);
+  --workspace-active: var(--tailkit-brand);
+  --workspace-action: var(--tailkit-brand);
+  --workspace-action-strong: var(--tailkit-brand-hover);
+  --workspace-teal-soft: var(--tailkit-brand-soft);
+  --chat-bg: var(--tailkit-surface);
+  --chat-bubble-user: var(--tailkit-surface-muted);
+  --chat-bubble-user-text: var(--tailkit-ink);
+  --chat-bubble-bot: var(--tailkit-brand);
+  --chat-bubble-agent: var(--tailkit-brand);
+  --chat-bubble-agent-text: #ffffff;
+
+  padding: 12px;
+  background:
+    radial-gradient(circle at 8% 5%, rgba(5, 150, 105, 0.055), transparent 25%),
+    var(--tailkit-canvas);
+}
+
+/* Card-based application frame from Tailkit's nested alternate-card pattern. */
+.inbox-bg-container .app {
+  gap: 12px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.inbox-bg-container .left-panel,
+.inbox-bg-container .right-panel.context-persistent {
+  overflow: hidden;
+  border: 1px solid var(--tailkit-line-soft);
+  border-radius: 16px;
+  background: var(--tailkit-surface);
+  box-shadow: var(--tailkit-shadow-xs);
+}
+
+.inbox-bg-container .left-panel {
+  border-right: 1px solid var(--tailkit-line-soft);
+}
+
+.inbox-bg-container .center-panel {
+  gap: 0;
+  padding: 8px;
+  border: 1px solid var(--tailkit-line-soft);
+  border-radius: 16px;
+  background: var(--tailkit-shell);
+  box-shadow: var(--tailkit-shadow-xs);
+}
+
+/* Conversation directory: Tailkit list-group density, hover, and active state. */
+.inbox-bg-container .workspace-rail {
+  min-height: 186px;
+  gap: 12px;
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--tailkit-line-soft);
+  background: var(--tailkit-surface);
+}
+
+.inbox-bg-container .workspace-rail-kicker {
+  color: var(--tailkit-brand);
+  letter-spacing: 0.1em;
+}
+
+.inbox-bg-container .workspace-heading,
+.inbox-bg-container .conv-name {
+  color: var(--tailkit-ink);
+}
+
+.inbox-bg-container .workspace-conversation-count {
+  min-width: 28px;
+  height: 26px;
+  border-color: var(--tailkit-brand-line);
+  background: var(--tailkit-brand-soft);
+  color: var(--tailkit-brand);
+  box-shadow: none;
+}
+
+.inbox-bg-container .channel-adapter-option {
+  border-color: var(--tailkit-line);
+  border-radius: 12px;
+  background: var(--tailkit-surface-muted);
+  box-shadow: var(--tailkit-shadow-xs);
+}
+
+.inbox-bg-container .channel-adapter-option[data-state="checked"] {
+  border-color: var(--tailkit-brand-line);
+  background: var(--tailkit-brand-soft);
+  box-shadow: inset 0 0 0 1px var(--tailkit-brand);
+}
+
+.inbox-bg-container .search input {
+  min-height: 40px;
+  border-color: var(--tailkit-line);
+  border-radius: 10px;
+  background: var(--tailkit-surface);
+  color: var(--tailkit-ink);
+  box-shadow: none;
+}
+
+.inbox-bg-container .search input:focus {
+  border-color: var(--tailkit-brand-hover);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+.inbox-bg-container .conversation-filter {
+  border-color: var(--tailkit-line);
+  border-radius: 10px;
+  background: var(--tailkit-surface);
+  color: var(--tailkit-muted);
+  box-shadow: none;
+}
+
+.inbox-bg-container .conversation-filter:hover,
+.inbox-bg-container .conversation-filter[aria-pressed="true"] {
+  border-color: var(--tailkit-brand-line);
+  background: var(--tailkit-brand-soft);
+  color: var(--tailkit-brand);
+  box-shadow: none;
+  transform: none;
+}
+
+.inbox-bg-container .conversations {
+  padding: 10px;
+  background: var(--tailkit-surface);
+}
+
+.inbox-bg-container .conversation {
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 76px;
+  padding: 11px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--tailkit-surface);
+  color: var(--tailkit-muted);
+  box-shadow: none;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.inbox-bg-container .conversation + .conversation {
+  margin-top: 3px;
+}
+
+.inbox-bg-container .conversation:hover {
+  border-color: var(--tailkit-line-soft);
+  background: #fafafa;
+  transform: none;
+}
+
+.inbox-bg-container .conversation.active {
+  border-color: var(--tailkit-brand-line);
+  background: var(--tailkit-brand-soft);
+  box-shadow: none;
+}
+
+.inbox-bg-container .conversation.active::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 20px;
+  border-radius: 0 2px 2px 0;
+  background: var(--tailkit-brand);
+  transform: translateY(-50%);
+}
+
+.inbox-bg-container .conversation .avatar {
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--tailkit-line);
+}
+
+.inbox-bg-container .conv-preview,
+.inbox-bg-container .conv-time,
+.inbox-bg-container .conv-state-label {
+  color: var(--tailkit-muted);
+}
+
+.inbox-bg-container .conv-preview-icon {
+  color: var(--tailkit-faint);
+}
+
+/* a-c-chat-09 identity header: quiet outer chrome and compact actions. */
+.inbox-bg-container .chat-header {
+  min-height: 68px;
+  padding: 8px 12px 14px;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.inbox-bg-container .header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--tailkit-brand-soft);
+  color: var(--tailkit-brand);
+  box-shadow: inset 0 0 0 1px var(--tailkit-brand-line);
+}
+
+.inbox-bg-container .person-name {
+  color: var(--tailkit-ink);
+  font-weight: 700;
+}
+
+.inbox-bg-container .zalo-user-id {
+  margin-top: 1px;
+  color: var(--tailkit-muted);
+  font-weight: 500;
+}
+
+.inbox-bg-container .icon-btn,
+.inbox-bg-container .mode-menu-trigger {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tailkit-muted);
+  box-shadow: none;
+}
+
+.inbox-bg-container .icon-btn:hover,
+.inbox-bg-container .mode-menu-trigger:hover:not(:disabled) {
+  border-color: var(--tailkit-line);
+  background: var(--tailkit-surface);
+  color: var(--tailkit-ink);
+  box-shadow: var(--tailkit-shadow-xs);
+  transform: none;
+}
+
+.inbox-bg-container .mode-menu-trigger--primary,
+.inbox-bg-container .mode-menu-trigger--primary:hover:not(:disabled) {
+  border-color: var(--tailkit-line);
+  background: var(--tailkit-surface);
+  color: var(--tailkit-ink);
+}
+
+.inbox-bg-container .mode-menu-trigger-icon {
+  background: var(--tailkit-brand-soft);
+  color: var(--tailkit-brand);
+}
+
+/* Nested white transcript card — the defining a-c-chat-09 surface. */
+.inbox-bg-container .chat-scroll-shell {
+  overflow: hidden;
+  border: 1px solid var(--tailkit-line-soft);
+  border-radius: 12px;
+  background: var(--tailkit-surface);
+  box-shadow: var(--tailkit-shadow-xs);
+}
+
+.inbox-bg-container .chat-scroller {
+  padding: 22px 0 26px;
+  background: var(--tailkit-surface);
+}
+
+.inbox-bg-container .message-row {
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-inline: clamp(16px, 3vw, 38px);
+}
+
+.inbox-bg-container .message-avatar {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border: 1px solid var(--tailkit-line);
+  border-radius: 999px;
+  background: var(--tailkit-surface-muted);
+  color: var(--tailkit-muted);
+}
+
+.inbox-bg-container .bubble {
+  max-width: min(78%, 680px);
+  padding: 10px 13px;
+  border: 0;
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.inbox-bg-container .message-row.user .bubble {
+  border: 0;
+  border-bottom-left-radius: 4px;
+  background: var(--tailkit-surface-muted);
+  color: var(--tailkit-ink);
+}
+
+.inbox-bg-container .message-row.bot .bubble,
+.inbox-bg-container .message-row.agent .bubble {
+  border: 0;
+  border-bottom-right-radius: 4px;
+  background: var(--tailkit-brand);
+  color: #ffffff;
+}
+
+.inbox-bg-container
+  .message-row.bot
+  .bubble
+  :is(.bubble-time-inline, .delivery-status, .delivery-retry-count),
+.inbox-bg-container
+  .message-row.agent
+  .bubble
+  :is(.bubble-time-inline, .delivery-status, .delivery-retry-count) {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.inbox-bg-container .message-row.bot .delivery-retry-button,
+.inbox-bg-container .message-row.agent .delivery-retry-button,
+.inbox-bg-container .message-row.bot .delivery-error-detail,
+.inbox-bg-container .message-row.agent .delivery-error-detail {
+  color: #ffffff;
+}
+
+.inbox-bg-container .bubble-meta-inline {
+  gap: 5px;
+}
+
+/* Tailkit textarea + primary icon button, retained as a stable grid footer. */
+.inbox-bg-container .composer-wrap {
+  padding: 14px 12px 6px;
+  border: 0;
+  background: transparent;
+}
+
+.inbox-bg-container .composer {
+  min-height: 48px;
+  gap: 8px;
+  padding: 5px 5px 5px 12px;
+  border: 1px solid var(--tailkit-line);
+  border-radius: 10px;
+  background: var(--tailkit-surface);
+  box-shadow: none;
+}
+
+.inbox-bg-container .composer:focus-within {
+  border-color: var(--tailkit-brand-hover);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+.inbox-bg-container .composer textarea {
+  min-height: 38px;
+  height: 38px;
+  padding: 8px 2px;
+  color: var(--tailkit-ink);
+}
+
+.inbox-bg-container .composer textarea::placeholder {
+  color: var(--tailkit-muted);
+}
+
+.inbox-bg-container .composer-action.send {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--tailkit-brand);
+  border-radius: 9px;
+  background: var(--tailkit-brand);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.inbox-bg-container .composer-action.send:hover:not(:disabled) {
+  border-color: var(--tailkit-brand-hover);
+  background: var(--tailkit-brand-hover);
+}
+
+.inbox-bg-container .composer-action.send:disabled {
+  border-color: var(--tailkit-line);
+  background: var(--tailkit-surface-muted);
+  color: var(--tailkit-faint);
+}
+
+.inbox-bg-container .handoff-note,
+.inbox-bg-container .closed-note {
+  border-color: var(--tailkit-line);
+  border-radius: 10px;
+  background: var(--tailkit-surface);
+  box-shadow: none;
+}
+
+.inbox-bg-container .new-message-jump {
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(24, 24, 27, 0.1);
+}
+
+/* The center pane can become narrower than the viewport when the directory is
+   pinned beside it. Container queries keep the identity row compact at that
+   point without changing the full desktop header. */
+@container (max-width: 420px) {
+  .inbox-bg-container .person-copy,
+  .inbox-bg-container .person-name-row,
+  .inbox-bg-container .person-name-button {
+    max-width: 100%;
+  }
+
+  .inbox-bg-container .person-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inbox-bg-container .zalo-user-id,
+  .inbox-bg-container .mode-menu-trigger-label,
+  .inbox-bg-container .mode-menu-trigger-chevron {
+    display: none;
+  }
+
+  .inbox-bg-container .mode-menu-trigger--primary {
+    width: 44px;
+    padding-inline: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .workspace-frame-content .inbox-bg-container .app {
+    grid-template-columns: minmax(286px, 316px) minmax(0, 1fr);
+  }
+
+  .workspace-frame-content .inbox-bg-container .app.has-selected-conversation {
+    grid-template-columns: minmax(286px, 316px) minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .workspace-frame-content .inbox-bg-container .app.has-selected-conversation {
+    grid-template-columns: minmax(286px, 316px) minmax(0, 1fr) 360px;
+  }
+}
+
+@media (max-width: 767px) {
+  .inbox-bg-container {
+    padding: 0;
+    background: var(--tailkit-surface);
+  }
+
+  .inbox-bg-container .app {
+    gap: 0;
+    border-radius: 0;
+  }
+
+  .inbox-bg-container .left-panel {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .inbox-bg-container .center-panel {
+    padding: 6px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .inbox-bg-container .workspace-rail {
+    min-height: 132px;
+    padding: 14px 14px 12px;
+  }
+
+  .inbox-bg-container .conversations {
+    padding: 8px;
+  }
+
+  .inbox-bg-container .chat-header {
+    min-height: 62px;
+    padding: 6px 6px 10px;
+  }
+
+  .inbox-bg-container .person-copy,
+  .inbox-bg-container .person-name-row,
+  .inbox-bg-container .person-name-button {
+    max-width: 100%;
+  }
+
+  .inbox-bg-container .person-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The provider ID is useful in the desktop workspace but crowds the compact
+     mobile identity bar. The context sheet remains the detailed source. */
+  .inbox-bg-container .zalo-user-id {
+    display: none;
+  }
+
+  .inbox-bg-container .chat-scroll-shell {
+    border-radius: 10px;
+  }
+
+  .inbox-bg-container .message-row {
+    padding-inline: 12px;
+  }
+
+  .inbox-bg-container .bubble {
+    max-width: min(84%, calc(100% - 38px));
+  }
+
+  .inbox-bg-container .composer-wrap {
+    padding: 10px 6px 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-bg-container .conversation,
+  .inbox-bg-container .channel-adapter-option,
+  .inbox-bg-container .composer,
+  .inbox-bg-container .composer-action {
+    transition: none;
+  }
+}
+
+/* Narrow split-pane/mobile detail: the product has more header actions than
+   Tailkit's single-action example, so they receive their own toolbar row.
+   Identity never competes with the controls for horizontal space. */
+@container (max-width: 420px) {
+  .inbox-bg-container .chat-header {
+    display: grid;
+    grid-template-areas:
+      "toggle person"
+      "actions actions";
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 10px;
+    min-height: auto;
+    padding: 10px 10px 12px;
+  }
+
+  .inbox-bg-container .list-toggle {
+    grid-area: toggle;
+  }
+
+  .inbox-bg-container .header-person {
+    grid-area: person;
+    width: 100%;
+  }
+
+  .inbox-bg-container .header-actions {
+    grid-area: actions;
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--tailkit-line-soft);
+  }
+}

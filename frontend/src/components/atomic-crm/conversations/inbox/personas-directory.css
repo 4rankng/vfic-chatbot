@@ -493,7 +493,7 @@
 .persona-empty-copy h2 {
   margin: 0;
   color: var(--ink);
-  font-size: var(--crm-fs-title-lg);
+  font-size: var(--crm-fs-section-title);
   font-weight: var(--chat-fw-bold);
   letter-spacing: 0;
   line-height: var(--crm-lh-heading);

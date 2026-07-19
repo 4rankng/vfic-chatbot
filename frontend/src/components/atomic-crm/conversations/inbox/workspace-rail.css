@@ -213,9 +213,9 @@
 .inbox-bg-container .workspace-heading {
   margin: 0;
   color: var(--ink);
-  font-size: var(--chat-fs-page-title);
+  font-size: var(--chat-fs-section-title);
   font-weight: var(--chat-fw-bold);
-  line-height: 1.08;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
@@ -238,7 +238,7 @@
 
   .inbox-bg-container .workspace-heading {
     color: var(--workspace-ink);
-    font-size: var(--chat-fs-page-title);
+    font-size: var(--chat-fs-section-title);
   }
 }
 

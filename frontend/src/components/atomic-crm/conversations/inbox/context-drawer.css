@@ -64,7 +64,7 @@
   border-radius: 6px;
   background: var(--workspace-bg-deep);
   color: var(--ink-muted);
-  font-size: var(--fs-body-lg);
+  font-size: var(--fs-body);
   font-weight: 700;
   line-height: 1;
 }

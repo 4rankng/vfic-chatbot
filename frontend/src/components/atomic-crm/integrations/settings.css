@@ -89,7 +89,7 @@
 
   .settings-mobile-drawer-title {
     color: var(--ink);
-    font-size: var(--crm-fs-title-lg);
+    font-size: var(--crm-fs-section-title);
     font-weight: 800;
   }
 

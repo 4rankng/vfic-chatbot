@@ -59,7 +59,7 @@
   --crm-font-family:
     "Be Vietnam Pro", "SF Pro Text", -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
-  --crm-fs-display: var(--fs-page-title);
+  --crm-fs-display: var(--fs-display);
   --crm-fs-page-title: var(--fs-page-title);
   --crm-fs-section-title: var(--fs-section-title);
   --crm-fs-card-title: var(--fs-card-title);
@@ -152,6 +152,70 @@
 
   --workspace-blue-wash: #eef4ff;
   --workspace-blue-line: #d8dde6;
+
+  /* ───────────────────────────────────────────────────────────────────────
+     Tailkit-inspired token bridge (--tt-*)
+     ───────────────────────────────────────────────────────────────────────
+     These aliases expose a Tailkit-flavored vocabulary (slate sidebar, lifted
+     surface, page/card gap rhythm, ring separators, tight shadow lifts) on top
+     of the existing --workspace-* values. They are ADDITIVE — no existing token
+     is renamed or remapped. New kit/ primitives and restyled surfaces consume
+     --tt-*; legacy --workspace-* / tt-* callers keep working unchanged.
+
+     Light theme is the baseline here. Dark overrides follow in the .dark block
+     at the bottom of this file. */
+  --tt-sidebar: var(--workspace-shell);
+  --tt-sidebar-hover: var(--workspace-shell-hover);
+  --tt-sidebar-active: var(--workspace-shell-rail-active);
+  --tt-sidebar-border: color-mix(in srgb, var(--workspace-shell) 88%, black);
+  --tt-sidebar-ink: #f1f5f9;
+  --tt-sidebar-ink-muted: rgba(241, 245, 249, 0.72);
+  --tt-sidebar-accent: var(--workspace-teal);
+  --tt-sidebar-accent-soft: rgba(20, 184, 166, 0.16);
+
+  --tt-canvas: var(--workspace-canvas);
+  --tt-surface: var(--workspace-surface);
+  --tt-surface-muted: var(--workspace-surface-muted);
+  --tt-surface-lift: var(--card);
+  --tt-surface-hover: var(--workspace-hover);
+
+  --tt-ink: var(--workspace-ink);
+  --tt-ink-muted: var(--workspace-ink-muted);
+  --tt-ink-faint: var(--workspace-faint);
+
+  --tt-border: var(--workspace-border);
+  --tt-border-strong: var(--border-strong);
+  --tt-ring: var(--workspace-focus);
+
+  --tt-accent: var(--workspace-action);
+  --tt-accent-strong: var(--workspace-action-strong);
+  --tt-accent-soft: var(--workspace-teal-soft);
+  --tt-success: var(--workspace-success);
+  --tt-warning: var(--workspace-warning);
+  --tt-danger: var(--workspace-danger);
+
+  /* Tailkit spacing rhythm: page padding, card padding, gap scales.
+     Mapped to the existing --workspace-space-* ladder so the whole app
+     keeps one density system. */
+  --tt-gap-page: var(--workspace-space-6);
+  --tt-gap-section: var(--workspace-space-6);
+  --tt-gap-card: var(--workspace-space-4);
+  --tt-gap-row: var(--workspace-space-2);
+  --tt-pad-card: var(--workspace-space-4);
+  --tt-pad-page: var(--workspace-space-6);
+
+  /* Tailkit finish: tighter radii + shadow-xs lifts. */
+  --tt-radius: var(--workspace-radius-panel);
+  --tt-radius-control: var(--workspace-radius-control);
+  --tt-radius-pill: 9999px;
+  --tt-shadow-xs: var(--workspace-shadow-panel);
+  --tt-shadow-sm: var(--shadow-sm);
+  --tt-shadow-md: var(--shadow-md);
+  --tt-ring-inset: inset 0 0 0 1px var(--tt-border);
+
+  /* Motion — Tailkit uses 150ms for hover, 300ms for layout transitions. */
+  --tt-motion-fast: var(--workspace-motion-fast);
+  --tt-motion-standard: var(--workspace-motion-standard);
 }
 
 /* WorkspaceFrame deliberately wins over a global `.dark` preference. Legacy
@@ -248,4 +312,31 @@
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
+
+  /* Tailkit bridge — dark overrides. The dark sidebar surface is the same
+     slate the shell already uses; accent stays lifted teal. */
+  --tt-sidebar: #0b101c;
+  --tt-sidebar-hover: rgba(148, 163, 184, 0.16);
+  --tt-sidebar-active: var(--primary);
+  --tt-sidebar-border: rgba(148, 163, 184, 0.12);
+  --tt-sidebar-ink: #f1f5f9;
+  --tt-sidebar-ink-muted: rgba(241, 245, 249, 0.72);
+  --tt-sidebar-accent: var(--primary);
+  --tt-sidebar-accent-soft: color-mix(
+    in oklab,
+    var(--primary) 22%,
+    transparent
+  );
+
+  --tt-surface-lift: var(--surface-solid);
+  --tt-surface-hover: var(--surface-hover);
+  --tt-accent: var(--primary);
+  --tt-accent-strong: color-mix(in oklab, var(--primary) 88%, white);
+  --tt-accent-soft: var(--primary-soft);
+
+  --tt-ring: var(--primary);
+  --tt-border: var(--workspace-border);
+  --tt-border-strong: var(--border-strong);
+  --tt-shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --tt-ring-inset: inset 0 0 0 1px var(--tt-border);
 }
