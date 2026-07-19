@@ -1,9 +1,12 @@
 @media (max-width: 767px) {
   .workspace-navigation-mobile {
+    width: 100%;
+    max-width: none;
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
   }
 
   .workspace-navigation-mobile .workspace-navigation-items {
+    width: 100%;
     min-height: 64px;
     gap: 0;
     border: 1px solid

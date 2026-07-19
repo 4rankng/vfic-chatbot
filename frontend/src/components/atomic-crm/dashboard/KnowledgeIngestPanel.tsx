@@ -66,7 +66,7 @@ const V: Record<Variant, VariantConfig> = {
 const TONE_CLASS: Record<Tone, string> = {
   ok: "text-success bg-success/10 border-success/20",
   busy: "text-info bg-info/10 border-info/20",
-  warn: "text-warning bg-warning/10 border-warning/20",
+  warn: "text-warning-foreground bg-warning/10 border-warning/20",
   bad: "text-destructive bg-destructive/10 border-destructive/20",
   neutral: "text-muted-foreground bg-muted/35 border-border/70",
 };
@@ -651,7 +651,7 @@ const KnowledgeOpsCard = ({
         </div>
 
         {failedJobCount > 0 ? (
-          <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-helper font-medium text-warning">
+          <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-helper font-medium text-warning-foreground">
             {failedJobCount} RQ job failed. Kiểm tra worker/log trước khi retry
             hàng loạt.
           </div>

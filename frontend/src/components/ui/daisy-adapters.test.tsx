@@ -49,6 +49,9 @@ describe("daisyUI shared adapters", () => {
       .element(screen.getByRole("button", { name: "Tiếp tục" }))
       .toHaveClass("tt-btn-primary")
     await expect
+      .element(screen.getByRole("button", { name: "Tiếp tục" }))
+      .not.toHaveClass("text-primary-foreground")
+    await expect
       .element(screen.getByRole("button", { name: "Xem lại" }))
       .toHaveClass("tt-btn-outline")
     await expect

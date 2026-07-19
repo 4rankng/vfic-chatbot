@@ -139,7 +139,7 @@
   --color-accent-content: oklch(40% 0.075 252);
   --color-neutral: oklch(31% 0.035 255);
   --color-neutral-content: oklch(97% 0.006 255);
-  --color-info: oklch(56% 0.105 240);
+  --color-info: oklch(50% 0.105 240);
   --color-info-content: oklch(98% 0.005 244);
   --color-success: oklch(52% 0.11 158);
   --color-success-content: oklch(98% 0.01 160);
