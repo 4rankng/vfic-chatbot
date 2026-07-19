@@ -59,11 +59,16 @@ services:
     command: ["python", "-m", "app.workers.run_worker", "webhook_high"]
     stop_grace_period: 180s  # let rq finish the ≤60s turn on SIGTERM before SIGKILL
     deploy:
-      replicas: 1
+      replicas: 2  # 2 RQ workers consume webhook_high in parallel; per-conversation
+                   # locks (state.acquire_lock) serialize same-chat turns, so the 2nd
+                   # worker only helps cross-conversation throughput — exactly the
+                   # pattern behind the 7d p95 queue dwell (10–17s waiting for the
+                   # single worker to finish a different conversation's turn).
       resources:
         limits:
-          # TODO: measure real RSS under load (expect ~100-150M per worker).
-          # 512M leaves room for the single uvicorn web worker on the 2GB droplet.
+          # 2 instances × measured RSS ~145M ≈ 290M on the 2GB droplet. 512M cap
+          # per container lets Docker OOM-kill a runaway worker without taking
+          # the host down; host headroom verified at deploy time.
           memory: 512M
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
