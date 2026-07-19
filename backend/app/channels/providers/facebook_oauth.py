@@ -26,7 +26,7 @@ from app.core.config import get_settings
 from app.core.http import get_http_client
 
 if TYPE_CHECKING:
-    from app.services.integration_settings import FacebookRuntimeConfig
+    from app.services.integration_settings import FacebookOAuthConfig, FacebookRuntimeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +87,20 @@ def _error_code_from_envelope(data: dict) -> int | None:
 
 
 def _graph_base() -> str:
+    """Graph API base + pinned version. Version/base are not secrets and stay
+    env-owned (``meta_graph_api_version`` / ``meta_graph_api_base``) per the
+    user's scope choice; only the four app credentials move to DB control."""
     s = get_settings()
     return f"{s.meta_graph_api_base.rstrip('/')}/{s.meta_graph_api_version}"
+
+
+def _graph_base_for(config: "FacebookOAuthConfig") -> str:
+    """Variant of :func:`_graph_base` using the resolved config's version/base.
+
+    Used by OAuth-start and the code exchange, which already hold a resolved
+    :class:`FacebookOAuthConfig` and so avoid a second ``get_settings()`` read.
+    """
+    return f"{config.graph_api_base.rstrip('/')}/{config.graph_api_version}"
 
 
 async def _bounded_post(url: str, *, params: dict | None = None, json_body: dict | None = None) -> dict:
@@ -112,39 +124,47 @@ async def _bounded_get(url: str, *, params: dict | None = None) -> dict:
     return data
 
 
-def build_authorization_url(*, state: str, redirect_uri: str) -> str:
+def build_authorization_url(
+    *, state: str, redirect_uri: str, config: "FacebookOAuthConfig"
+) -> str:
     """Compose the official Facebook Login for Business authorization URL.
 
     ``state`` is the opaque, single-use, admin-bound Redis record. The config
-    ID selects the Login for Business flow (``meta_login_config_id``).
+    ID selects the Login for Business flow (``config.login_config_id``).
+    ``config`` is the DB-resolved (env-fallback) app-level credentials; it is
+    passed explicitly so this module never reads ``get_settings()`` for
+    secrets. Raises :class:`FacebookOAuthError` if ``app_id`` is empty so the
+    caller surfaces a clear 400 instead of a Facebook "Invalid app ID" page.
     """
-    s = get_settings()
+    if not config.app_id:
+        raise FacebookOAuthError("missing meta app id")
     query = urlencode(
         {
-            "client_id": s.meta_app_id,
+            "client_id": config.app_id,
             "redirect_uri": redirect_uri,
             "state": state,
             "scope": ",".join(MESSENGER_PERMISSIONS),
-            "config_id": s.meta_login_config_id,
+            "config_id": config.login_config_id,
         }
     )
     return (
-        f"{_FACEBOOK_OAUTH_DIALOG_ORIGIN}/{s.meta_graph_api_version}/dialog/oauth?{query}"
+        f"{_FACEBOOK_OAUTH_DIALOG_ORIGIN}/{config.graph_api_version}/dialog/oauth?{query}"
     )
 
 
-async def exchange_code_for_user_token(*, code: str, redirect_uri: str) -> str:
+async def exchange_code_for_user_token(
+    *, code: str, redirect_uri: str, config: "FacebookOAuthConfig"
+) -> str:
     """Exchange the OAuth code for a short-lived user access token.
 
     Server-side only; the code never reaches the browser. Raises
     :class:`FacebookOAuthError` on any definite failure.
     """
-    s = get_settings()
     data = await _bounded_post(
-        f"{_graph_base()}/oauth/access_token",
+        f"{_graph_base_for(config)}/oauth/access_token",
         params={
-            "client_id": s.meta_app_id,
-            "client_secret": s.meta_app_secret,
+            "client_id": config.app_id,
+            "client_secret": config.app_secret,
             "redirect_uri": redirect_uri,
             "code": code,
         },

@@ -234,3 +234,38 @@ class FacebookOAuthCompleteRequest(BaseModel):
 
     flow_id: str
     page_id: str
+
+
+class FacebookCredentialsOut(BaseModel):
+    """GET /facebook/credentials — safe status of the app-level Meta credentials.
+
+    ``app_id`` and ``login_config_id`` are not secret (they appear in the
+    browser OAuth URL) so their actual value is surfaced for editing.
+    ``app_secret`` and ``verify_token`` expose only a masked preview like other
+    secrets — leaving a field blank on PUT keeps the stored value unchanged.
+    """
+
+    facebook_app_id: PlainStatus
+    facebook_app_secret: SecretStatus
+    facebook_login_config_id: PlainStatus
+    facebook_webhook_verify_token: SecretStatus
+
+
+class FacebookCredentialsUpdate(BaseModel):
+    """PUT /facebook/credentials — partial update of Meta app credentials.
+
+    All fields are optional: a null / absent field is left unchanged ("leave
+    blank to keep current value" semantics). Empty / whitespace-only values
+    are dropped by the service layer before write.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    facebook_app_id: str | None = Field(default=None, min_length=1, max_length=128)
+    facebook_app_secret: str | None = Field(default=None, min_length=8, max_length=256)
+    facebook_login_config_id: str | None = Field(
+        default=None, min_length=1, max_length=256
+    )
+    facebook_webhook_verify_token: str | None = Field(
+        default=None, min_length=4, max_length=256
+    )

@@ -97,6 +97,21 @@ async def cached_zalo_config(loader: Callable[[], Awaitable[dict]]) -> dict:
     )
 
 
+async def cached_facebook_oauth_config(loader: Callable[[], Awaitable[dict]]) -> dict:
+    """Cache the Facebook/Meta OAuth config dict (keyed by the facebook namespace).
+
+    Same invalidation semantics as the other integration caches: an admin
+    ``PUT /admin/integrations/facebook/credentials`` bumps the namespace version
+    so the next read misses and re-reads from Postgres.
+    """
+    return await cached_value(
+        key_prefix="preamble:facebook_oauth",
+        namespace=NS_INTEGRATION_FACEBOOK,
+        ttl_seconds=_INTEGRATION_TTL_SECONDS,
+        loader=loader,
+    )
+
+
 async def cached_system_prompt(
     loader: Callable[[], Awaitable[str]], *, key_suffix: str = "default"
 ) -> tuple[str, bool]:

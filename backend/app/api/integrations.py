@@ -16,6 +16,8 @@ from app.models.user import Role, User
 from app.schemas.integrations import (
     FacebookAccountStatusOut,
     FacebookChannelTestOut,
+    FacebookCredentialsOut,
+    FacebookCredentialsUpdate,
     FacebookIntegrationOut,
     FacebookOAuthCompleteRequest,
     FacebookOAuthStartOut,
@@ -542,12 +544,27 @@ async def _load_facebook_oauth_flow(
 @router.post("/facebook/oauth/start", response_model=FacebookOAuthStartOut)
 async def start_facebook_oauth(
     admin: User = Depends(require_admin),
-    _db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> FacebookOAuthStartOut:
     """Begin Facebook Login for Business. Stores single-use state in Redis."""
     import secrets
 
     from app.channels.providers.facebook_oauth import build_authorization_url
+
+    # Resolve app credentials DB-first (env fallback). A missing app_id would
+    # otherwise build an OAuth URL with an empty client_id, which Facebook
+    # rejects with a generic "Invalid app ID" page. Surface a clear Vietnamese
+    # 400 here so the admin knows to configure credentials first.
+    settings_service = IntegrationSettingsService(db)
+    oauth_cfg = await settings_service.resolve_facebook_oauth()
+    if not oauth_cfg.app_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Chưa cấu hình Meta App ID. Vào Cài đặt → Facebook Messenger để "
+                "cấu hình thông tin ứng dụng Meta trước khi kết nối."
+            ),
+        )
 
     state = secrets.token_urlsafe(32)
     redis = await _redis()
@@ -565,7 +582,7 @@ async def start_facebook_oauth(
     )
     return FacebookOAuthStartOut(
         authorization_url=build_authorization_url(
-            state=state, redirect_uri=_fb_callback_url()
+            state=state, redirect_uri=_fb_callback_url(), config=oauth_cfg
         )
     )
 
@@ -615,7 +632,13 @@ async def facebook_oauth_callback(
         return _fb_oauth_redirect_error("missing_code")
 
     try:
-        user_token = await exchange_code_for_user_token(code=code, redirect_uri=_fb_callback_url())
+        # Resolve app credentials DB-first (env fallback) just before the
+        # exchange — the callback may have spent seconds in invalid-state /
+        # invalid-admin branches above where the config is not yet needed.
+        oauth_cfg = await IntegrationSettingsService(db).resolve_facebook_oauth()
+        user_token = await exchange_code_for_user_token(
+            code=code, redirect_uri=_fb_callback_url(), config=oauth_cfg
+        )
         pages = await list_pages(user_token)
     except (FacebookOAuthError, httpx.HTTPError, ValueError):
         return _fb_oauth_redirect_error("exchange_failed")
@@ -787,6 +810,40 @@ async def test_facebook_connection(
     except (FacebookOAuthError, httpx.HTTPError, ValueError):
         return FacebookChannelTestOut(healthy=False, error="Token Trang không hợp lệ hoặc đã bị thu hồi.")
     return FacebookChannelTestOut(healthy=True)
+
+
+@router.get("/facebook/credentials", response_model=FacebookCredentialsOut)
+async def get_facebook_credentials(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookCredentialsOut:
+    """Safe status of the app-level Meta credentials (configured flag + preview)."""
+    return FacebookCredentialsOut.model_validate(
+        await IntegrationSettingsService(db).admin_facebook_oauth_view()
+    )
+
+
+@router.put("/facebook/credentials", response_model=FacebookCredentialsOut)
+async def update_facebook_credentials(
+    body: FacebookCredentialsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookCredentialsOut:
+    """Partial update of the app-level Meta credentials.
+
+    All fields are optional; a missing or empty value leaves the stored value
+    unchanged. ``app_secret`` and ``verify_token`` are AES-GCM encrypted at
+    rest; ``app_id`` and ``login_config_id`` are stored as plaintext (they
+    appear in the browser OAuth URL anyway).
+    """
+    settings_service = IntegrationSettingsService(db)
+    await settings_service.update_facebook_oauth(
+        body.model_dump(exclude_unset=True),
+        actor_id=admin.id,
+    )
+    return FacebookCredentialsOut.model_validate(
+        await settings_service.admin_facebook_oauth_view()
+    )
 
 
 @router.delete("/facebook", response_model=FacebookAccountStatusOut)

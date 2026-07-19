@@ -12,7 +12,12 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
+import { useNotify } from "ra-core";
+import { Eye, EyeOff } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { apiJson } from "../providers/rest/api";
 import "../conversations/inbox.css";
 import "./settings.css";
@@ -52,6 +57,46 @@ type FacebookOAuthCompleteRequest = {
 type FacebookChannelTest = {
   healthy: boolean;
   error: string | null;
+};
+
+// App-level Meta credentials (configurable via the admin UI). Mirrors the
+// backend SecretStatus / PlainStatus shape.
+type SecretStatus = {
+  configured: boolean;
+  preview: string | null;
+};
+
+type PlainStatus = {
+  configured: boolean;
+  value: string | null;
+};
+
+type FacebookCredentials = {
+  facebook_app_id: PlainStatus;
+  facebook_app_secret: SecretStatus;
+  facebook_login_config_id: PlainStatus;
+  facebook_webhook_verify_token: SecretStatus;
+};
+
+type FacebookCredentialsUpdate = {
+  facebook_app_id?: string;
+  facebook_app_secret?: string;
+  facebook_login_config_id?: string;
+  facebook_webhook_verify_token?: string;
+};
+
+type CredentialsFormState = {
+  facebook_app_id: string;
+  facebook_app_secret: string;
+  facebook_login_config_id: string;
+  facebook_webhook_verify_token: string;
+};
+
+const EMPTY_CREDENTIALS_FORM: CredentialsFormState = {
+  facebook_app_id: "",
+  facebook_app_secret: "",
+  facebook_login_config_id: "",
+  facebook_webhook_verify_token: "",
 };
 
 const FACEBOOK_OAUTH_CALLBACK_KEYS = [
@@ -115,14 +160,104 @@ const consumeFacebookOAuthCallback = (): FacebookOAuthCallback | null => {
   return { flowId: null, errorMessage: GENERIC_OAUTH_ERROR };
 };
 
+// ─── Meta App credentials card ─────────────────────────────────────────────
+//
+// Lets an admin configure the four app-level Meta credentials (APP_ID,
+// APP_SECRET, LOGIN_CONFIG_ID, WEBHOOK_VERIFY_TOKEN) from the UI instead of
+// `.env`. Stored DB-first with env fallback on the backend; secrets are
+// AES-GCM encrypted at rest. Until app_id is configured, the "Connect"
+// button is disabled because Facebook rejects an empty client_id.
+
+type MetaAppFieldProps = {
+  id: keyof CredentialsFormState;
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (key: keyof CredentialsFormState, value: string) => void;
+};
+
+const MetaAppPlainField = ({
+  id,
+  label,
+  hint,
+  value,
+  onChange,
+}: MetaAppFieldProps) => (
+  <div className="settings-field">
+    <Label htmlFor={id}>{label}</Label>
+    <Input
+      id={id}
+      type="text"
+      autoComplete="off"
+      spellCheck={false}
+      value={value}
+      onChange={(event) => onChange(id, event.target.value)}
+      className="settings-input"
+    />
+    {hint ? <span className="settings-field-hint">{hint}</span> : null}
+  </div>
+);
+
+const MetaAppSecretField = ({
+  id,
+  label,
+  hint,
+  configured,
+  preview,
+  value,
+  onChange,
+}: MetaAppFieldProps & {
+  configured: boolean;
+  preview: string | null;
+}) => {
+  const [isVisible, setIsVisible] = useState(false);
+  return (
+    <div className="settings-field">
+      <div className="settings-field-label-row">
+        <Label htmlFor={id}>{label}</Label>
+        <span className={configured ? "is-configured" : ""}>
+          {configured ? "Đã lưu" : "Chưa cấu hình"}
+        </span>
+      </div>
+      <div className="settings-sensitive-input">
+        <Input
+          id={id}
+          type={isVisible ? "text" : "password"}
+          autoComplete="off"
+          spellCheck={false}
+          value={value}
+          placeholder={preview ? `Hiện tại: ${preview}` : "Nhập giá trị mới"}
+          className="settings-input"
+          onChange={(event) => onChange(id, event.target.value)}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="settings-input-action"
+          aria-label={isVisible ? `Ẩn ${label}` : `Hiện ${label}`}
+          onClick={() => setIsVisible((visible) => !visible)}
+        >
+          {isVisible ? <EyeOff /> : <Eye />}
+        </Button>
+      </div>
+      {hint ? <span className="settings-field-hint">{hint}</span> : null}
+    </div>
+  );
+};
+
 // ─── Component ─────────────────────────────────────────────────────────────
 
 export const FacebookMessengerIntegrationPage = () => {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [pendingFlowId, setPendingFlowId] = useState<string | null>(null);
   const [flowIdDraft, setFlowIdDraft] = useState("");
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [credentialsForm, setCredentialsForm] = useState<CredentialsFormState>(
+    EMPTY_CREDENTIALS_FORM,
+  );
 
   useEffect(() => {
     const callback = consumeFacebookOAuthCallback();
@@ -138,6 +273,91 @@ export const FacebookMessengerIntegrationPage = () => {
       apiJson<FacebookIntegrationStatus>("/api/v1/admin/integrations/facebook"),
     staleTime: 30_000,
   });
+
+  // App-level Meta credentials (DB-first, env fallback on the backend).
+  const { data: credentials } = useQuery<FacebookCredentials>({
+    queryKey: ["facebook-credentials"],
+    queryFn: () =>
+      apiJson<FacebookCredentials>(
+        "/api/v1/admin/integrations/facebook/credentials",
+      ),
+    staleTime: 30_000,
+  });
+
+  const saveCredentials = useMutation<
+    FacebookCredentials,
+    Error,
+    FacebookCredentialsUpdate
+  >({
+    mutationFn: (body) =>
+      apiJson<FacebookCredentials>(
+        "/api/v1/admin/integrations/facebook/credentials",
+        { method: "PUT", body },
+      ),
+    onSuccess: (data) => {
+      setError(null);
+      // Reset the form so secret fields go back to "leave blank to keep" mode.
+      setCredentialsForm({
+        ...EMPTY_CREDENTIALS_FORM,
+        facebook_app_id: data.facebook_app_id.value ?? "",
+        facebook_login_config_id: data.facebook_login_config_id.value ?? "",
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["facebook-credentials"],
+      });
+      notify("Đã lưu thông tin ứng dụng Meta.", { type: "success" });
+    },
+    onError: () => {
+      notify("Không thể lưu thông tin ứng dụng Meta.", { type: "error" });
+    },
+  });
+
+  const onCredentialChange = (
+    key: keyof CredentialsFormState,
+    value: string,
+  ) => {
+    setCredentialsForm((form) => ({ ...form, [key]: value }));
+  };
+
+  const submitCredentials = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    // Only send non-empty fields ("leave blank to keep" semantics).
+    const payload: FacebookCredentialsUpdate = {};
+    const trimmed: CredentialsFormState = {
+      facebook_app_id: credentialsForm.facebook_app_id.trim(),
+      facebook_app_secret: credentialsForm.facebook_app_secret.trim(),
+      facebook_login_config_id:
+        credentialsForm.facebook_login_config_id.trim(),
+      facebook_webhook_verify_token:
+        credentialsForm.facebook_webhook_verify_token.trim(),
+    };
+    (Object.keys(trimmed) as Array<keyof CredentialsFormState>).forEach(
+      (key) => {
+        if (trimmed[key]) payload[key] = trimmed[key];
+      },
+    );
+    if (Object.keys(payload).length === 0) {
+      notify("Chưa có trường nào để lưu.", { type: "info" });
+      return;
+    }
+    saveCredentials.mutate(payload);
+  };
+
+  const appIdConfigured = credentials?.facebook_app_id.configured ?? false;
+
+  // Seed the plaintext (non-secret) fields with the server's current value
+  // once on load. Secret fields stay empty ("leave blank to keep current value").
+  useEffect(() => {
+    if (!credentials) return;
+    setCredentialsForm((current) => ({
+      ...current,
+      facebook_app_id: current.facebook_app_id || credentials.facebook_app_id.value || "",
+      facebook_login_config_id:
+        current.facebook_login_config_id ||
+        credentials.facebook_login_config_id.value ||
+        "",
+    }));
+  }, [credentials]);
 
   // Pages available after OAuth callback (from the flow record).
   const { data: pageList, isError: isPageListError } =
@@ -260,6 +480,68 @@ export const FacebookMessengerIntegrationPage = () => {
         </div>
       ) : null}
 
+      {/* Meta App credentials (DB-first, env fallback). Required before the
+          OAuth flow can build a valid authorization URL. */}
+      <form
+        className="settings-card settings-messenger-card tt-card tt-card-border"
+        onSubmit={submitCredentials}
+      >
+        <div className="settings-card-content settings-messenger-card-content">
+          <h3 className="settings-messenger-card-title">
+            Thông tin ứng dụng Meta
+          </h3>
+          <p className="settings-field-hint">
+            Các giá trị này được dùng để kết nối Facebook Login for Business và
+            xác thực webhook. Bạn có thể tìm thấy chúng trong Meta Developer
+            Dashboard của ứng dụng Messenger. Bỏ trống trường bí mật để giữ giá
+            trị hiện tại.
+          </p>
+          <MetaAppPlainField
+            id="facebook_app_id"
+            label="App ID"
+            hint="App ID dạng số, từ App Settings → Basic."
+            value={credentialsForm.facebook_app_id}
+            onChange={onCredentialChange}
+          />
+          <MetaAppPlainField
+            id="facebook_login_config_id"
+            label="Configuration ID"
+            hint="Login for Business → Configurations. Có thể bỏ trống nếu dùng OAuth tiêu chuẩn."
+            value={credentialsForm.facebook_login_config_id}
+            onChange={onCredentialChange}
+          />
+          <MetaAppSecretField
+            id="facebook_app_secret"
+            label="App Secret"
+            hint="App Settings → Basic → App Secret."
+            configured={credentials?.facebook_app_secret.configured ?? false}
+            preview={credentials?.facebook_app_secret.preview ?? null}
+            value={credentialsForm.facebook_app_secret}
+            onChange={onCredentialChange}
+          />
+          <MetaAppSecretField
+            id="facebook_webhook_verify_token"
+            label="Webhook Verify Token"
+            hint="Sau khi đổi verify token, bạn phải vào Meta Developer Dashboard re-subscribe webhook với token mới để tiếp tục nhận tin nhắn."
+            configured={
+              credentials?.facebook_webhook_verify_token.configured ?? false
+            }
+            preview={credentials?.facebook_webhook_verify_token.preview ?? null}
+            value={credentialsForm.facebook_webhook_verify_token}
+            onChange={onCredentialChange}
+          />
+          <div className="settings-oa-actions settings-messenger-actions">
+            <Button
+              type="submit"
+              className="settings-test-button tt-btn tt-btn-primary tt-btn-sm text-primary-foreground"
+              disabled={saveCredentials.isPending}
+            >
+              {saveCredentials.isPending ? "Đang lưu…" : "Lưu thông tin"}
+            </Button>
+          </div>
+        </div>
+      </form>
+
       {/* Active connection */}
       {activeAccount ? (
         <div className="settings-card settings-messenger-card tt-card tt-card-border">
@@ -318,12 +600,22 @@ export const FacebookMessengerIntegrationPage = () => {
               <p className="settings-field-hint">
                 Kết nối để bắt đầu nhận tin nhắn Messenger.
               </p>
+              {!appIdConfigured ? (
+                <p className="settings-field-hint">
+                  Cần cấu hình "App ID" ở trên trước khi kết nối Trang.
+                </p>
+              ) : null}
             </div>
             <button
               type="button"
               className="settings-test-button settings-messenger-primary-action tt-btn tt-btn-primary tt-btn-sm text-primary-foreground"
               onClick={() => startOAuth.mutate()}
-              disabled={startOAuth.isPending}
+              disabled={startOAuth.isPending || !appIdConfigured}
+              title={
+                appIdConfigured
+                  ? undefined
+                  : "Cấu hình App ID trước khi kết nối"
+              }
             >
               {startOAuth.isPending ? "Đang chuẩn bị…" : "Kết nối Facebook"}
             </button>

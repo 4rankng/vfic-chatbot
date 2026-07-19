@@ -36,6 +36,33 @@ from app.channels.providers.facebook_signature import (
 )
 
 
+def _stub_facebook_oauth_service(monkeypatch, *, app_secret: str, verify_token: str) -> None:
+    """Make ``IntegrationSettingsService(db).resolve_facebook_oauth()`` return a
+    config with the given app_secret/verify_token without touching Postgres.
+
+    The webhook endpoints resolve app credentials DB-first (env fallback) so an
+    admin who rotates them via the UI takes effect on the next inbound; tests
+    stub the service instead of seeding the ``integration_settings`` table.
+    """
+
+    from app.api import webhooks
+    from app.services.integration_settings import FacebookOAuthConfig
+
+    class _SettingsService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_facebook_oauth(self):
+            return FacebookOAuthConfig(
+                app_id="test-app-id",
+                app_secret=app_secret,
+                login_config_id="test-cfg",
+                verify_token=verify_token,
+            )
+
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", _SettingsService)
+
+
 # ─── signature ──────────────────────────────────────────────────────────────
 
 
@@ -400,6 +427,10 @@ async def test_webhook_post_rejects_invalid_signature_before_any_write(monkeypat
     no ingress, no enqueue). Meta retries on non-2xx, so we ack-and-drop."""
     from app.api import webhooks
 
+    # Webhook reads app_secret via the DB-resolved OAuth config; stub the
+    # service so no Postgres hit is needed (the signature is invalid anyway,
+    # so the value is never actually used for verification here).
+    _stub_facebook_oauth_service(monkeypatch, app_secret="any", verify_token="any")
     # If any business path were reached, these would be called.
     monkeypatch.setattr(webhooks, "_resolve_active_facebook_page", AsyncMock(return_value=(None, None)))
     ingest = AsyncMock()
@@ -424,13 +455,15 @@ async def test_webhook_get_challenge_constant_time(monkeypatch):
     monkeypatch.setattr(
         webhooks,
         "_settings",
-        SimpleNamespace(app_env="development", meta_webhook_verify_token="verify-me"),
+        SimpleNamespace(app_env="development"),
     )
+    _stub_facebook_oauth_service(monkeypatch, app_secret="any", verify_token="verify-me")
     response = await webhooks.facebook_webhook_verify(
         _FakeRequest(
             b"",
             query={"hub.mode": "subscribe", "hub.verify_token": "verify-me", "hub.challenge": "CH-123"},
-        )
+        ),
+        db=MagicMock(),
     )
     assert response.status_code == 200
     assert json.loads(response.body)["hub.challenge"] == "CH-123"
@@ -440,13 +473,18 @@ async def test_webhook_get_challenge_constant_time(monkeypatch):
         _FakeRequest(
             b"",
             query={"hub.mode": "subscribe", "hub.verify_token": "wrong", "hub.challenge": "X"},
-        )
+        ),
+        db=MagicMock(),
     )
     assert response.status_code == 403
 
     # Wrong mode → 403.
     response = await webhooks.facebook_webhook_verify(
-        _FakeRequest(b"", query={"hub.mode": "denied", "hub.verify_token": "verify-me", "hub.challenge": "X"})
+        _FakeRequest(
+            b"",
+            query={"hub.mode": "denied", "hub.verify_token": "verify-me", "hub.challenge": "X"},
+        ),
+        db=MagicMock(),
     )
     assert response.status_code == 403
 
@@ -463,8 +501,9 @@ async def test_webhook_post_inactive_page_acks_without_turn(monkeypatch):
     monkeypatch.setattr(
         webhooks,
         "_settings",
-        SimpleNamespace(app_env="development", meta_app_secret=app_secret, meta_webhook_verify_token="t"),
+        SimpleNamespace(app_env="development"),
     )
+    _stub_facebook_oauth_service(monkeypatch, app_secret=app_secret, verify_token="t")
     monkeypatch.setattr(webhooks, "_resolve_active_facebook_page", AsyncMock(return_value=(None, None)))
     body = json.dumps({"entry": [{"messaging": [_msg_event(mid="m.1", text="hi")]}]}).encode()
     response = await webhooks.facebook_webhook(

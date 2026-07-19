@@ -27,6 +27,7 @@ from app.core.preamble_cache import (
     NS_INTEGRATION_MINIMAX,
     NS_INTEGRATION_OPENROUTER,
     NS_INTEGRATION_ZALO,
+    cached_facebook_oauth_config,
     cached_minimax_config,
     cached_openrouter_config,
     cached_zalo_config,
@@ -69,9 +70,16 @@ ZALO_SETTING_KEYS = (
 # Facebook Messenger (Phase 4). Page tokens are stored per-Page under
 # "facebook_page_token:<page_id>" with context-bound ciphertext (the page_id
 # is the AEAD associated data, so a row moved between Pages fails to decrypt).
+FB_APP_ID = "facebook_app_id"
 FB_APP_SECRET = "facebook_app_secret"
+FB_LOGIN_CONFIG_ID = "facebook_login_config_id"
+FB_WEBHOOK_VERIFY_TOKEN = "facebook_webhook_verify_token"
 FB_PAGE_TOKEN_PREFIX = "facebook_page_token:"  # + page_id → encrypted Page token
-FB_SETTING_KEYS = (FB_APP_SECRET,)  # per-Page tokens are dynamic, listed separately
+# Per-Page tokens are dynamic (keyed by page_id) and listed separately.
+FB_SETTING_KEYS = (FB_APP_ID, FB_APP_SECRET, FB_LOGIN_CONFIG_ID, FB_WEBHOOK_VERIFY_TOKEN)
+# Secrets are AES-GCM encrypted at rest; app_id and login_config_id are not
+# sensitive (they appear in the browser OAuth URL) and stored as plaintext.
+FB_SECRET_KEYS = (FB_APP_SECRET, FB_WEBHOOK_VERIFY_TOKEN)
 
 MINIMAX_SETTING_KEYS = (MINIMAX_API_KEY, MINIMAX_ENABLE, LLM_DEFAULT_PROVIDER)
 OPENROUTER_SETTING_KEYS = (
@@ -110,6 +118,23 @@ class FacebookRuntimeConfig:
     app_secret: str = ""
     page_id: str = ""
     page_access_token: str = ""
+    verify_token: str = ""
+    graph_api_version: str = "v25.0"
+    graph_api_base: str = "https://graph.facebook.com"
+
+
+@dataclass(frozen=True)
+class FacebookOAuthConfig:
+    """Resolved Meta App credentials used to drive OAuth + webhook verification.
+
+    These are the app-level secrets configurable via the admin UI (DB-first,
+    ``Settings.meta_*`` env fallback). Unlike :class:`FacebookRuntimeConfig`,
+    they are NOT bound to a specific Page — they describe the Meta App itself.
+    """
+
+    app_id: str = ""
+    app_secret: str = ""
+    login_config_id: str = ""
     verify_token: str = ""
     graph_api_version: str = "v25.0"
     graph_api_base: str = "https://graph.facebook.com"
@@ -623,22 +648,108 @@ class IntegrationSettingsService:
         """
         if not page_id:
             return None
-        s = self.settings
+        oauth = await self.resolve_facebook_oauth()
         token = await self._stored_value_with_context(
             self._fb_page_token_key(page_id), page_id
         )
-        app_secret = (await self._stored_values((FB_APP_SECRET,))).get(FB_APP_SECRET) or s.meta_app_secret
         if not token:
             return None
         return FacebookRuntimeConfig(
-            app_id=s.meta_app_id,
-            app_secret=app_secret,
+            app_id=oauth.app_id,
+            app_secret=oauth.app_secret,
             page_id=page_id,
             page_access_token=token,
-            verify_token=s.meta_webhook_verify_token,
-            graph_api_version=s.meta_graph_api_version,
-            graph_api_base=s.meta_graph_api_base,
+            verify_token=oauth.verify_token,
+            graph_api_version=oauth.graph_api_version,
+            graph_api_base=oauth.graph_api_base,
         )
+
+    async def resolve_facebook_oauth(self) -> FacebookOAuthConfig:
+        """Resolve the app-level OAuth/webhook credentials (DB-first, env fallback).
+
+        Cached under the Facebook namespace so admin writes invalidate via
+        ``bump_cache_version(NS_INTEGRATION_FACEBOOK)``. Env vars remain the
+        seed/default; DB rows override per field when non-empty.
+        """
+        s = self.settings
+
+        async def _load() -> dict:
+            stored = await self._stored_values(FB_SETTING_KEYS)
+            return FacebookOAuthConfig(
+                app_id=stored.get(FB_APP_ID) or s.meta_app_id,
+                app_secret=stored.get(FB_APP_SECRET) or s.meta_app_secret,
+                login_config_id=stored.get(FB_LOGIN_CONFIG_ID) or s.meta_login_config_id,
+                verify_token=(
+                    stored.get(FB_WEBHOOK_VERIFY_TOKEN) or s.meta_webhook_verify_token
+                ),
+                graph_api_version=s.meta_graph_api_version,
+                graph_api_base=s.meta_graph_api_base,
+            ).__dict__
+
+        cached = await cached_facebook_oauth_config(_load)
+        return FacebookOAuthConfig(**cached)
+
+    async def admin_facebook_oauth_view(self) -> dict:
+        """Safe status view for the admin UI (configured flag + masked preview).
+
+        ``app_id`` and ``login_config_id`` are not secret (they appear in the
+        browser OAuth URL), so the actual value is surfaced. ``app_secret`` and
+        ``verify_token`` show only a masked preview like other secrets.
+        """
+        cfg = await self.resolve_facebook_oauth()
+        return {
+            "facebook_app_id": {
+                "configured": bool(cfg.app_id),
+                "value": cfg.app_id or None,
+            },
+            "facebook_app_secret": {
+                "configured": bool(cfg.app_secret),
+                "preview": _preview(cfg.app_secret),
+            },
+            "facebook_login_config_id": {
+                "configured": bool(cfg.login_config_id),
+                "value": cfg.login_config_id or None,
+            },
+            "facebook_webhook_verify_token": {
+                "configured": bool(cfg.verify_token),
+                "preview": _preview(cfg.verify_token),
+            },
+        }
+
+    async def update_facebook_oauth(
+        self, values: dict[str, str | None], *, actor_id
+    ) -> list[str]:
+        """Persist app-level Facebook credentials. Returns the changed keys.
+
+        ``app_id`` and ``login_config_id`` are stored as plaintext
+        (``is_secret=False``); ``app_secret`` and ``verify_token`` are
+        AES-GCM encrypted. Empty / whitespace-only values are ignored so a
+        PUT with only some fields populated leaves the others unchanged.
+        """
+        changed: list[str] = []
+        for key, value in values.items():
+            if key not in FB_SETTING_KEYS or value is None:
+                continue
+            if await self._write_setting(
+                key,
+                str(value),
+                actor_id=actor_id,
+                is_secret=key in FB_SECRET_KEYS,
+            ):
+                changed.append(key)
+
+        if changed:
+            await record_audit(
+                self.db,
+                action="update_facebook_integration_settings",
+                actor_id=actor_id,
+                target_type="integration_settings",
+                target_id="facebook",
+                payload={"changed_keys": changed},
+            )
+            await self.db.commit()
+            await bump_cache_version(NS_INTEGRATION_FACEBOOK)
+        return changed
 
     async def _stored_value_with_context(self, key: str, context: str) -> str:
         """Fetch one encrypted setting row and decrypt with AEAD context.

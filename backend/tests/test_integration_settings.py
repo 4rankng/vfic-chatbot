@@ -3,6 +3,10 @@ import uuid
 import pytest
 
 from app.services.integration_settings import (
+    FB_APP_ID,
+    FB_APP_SECRET,
+    FB_LOGIN_CONFIG_ID,
+    FB_WEBHOOK_VERIFY_TOKEN,
     IntegrationSettingsService,
     MINIMAX_API_KEY,
     OPENROUTER_API_KEY,
@@ -33,6 +37,13 @@ class _Settings:
     openrouter_embedding_model = "openai/text-embedding-3-large"
     embedding_dim = 3072
     llm_default_provider = "minimax"
+    # Meta / Facebook app credentials (env defaults — DB overrides per field).
+    meta_app_id = ""
+    meta_app_secret = ""
+    meta_login_config_id = ""
+    meta_webhook_verify_token = ""
+    meta_graph_api_version = "v25.0"
+    meta_graph_api_base = "https://graph.facebook.com"
 
 
 class _Row:
@@ -290,3 +301,152 @@ async def test_openrouter_admin_view_uses_stored_routing_and_model():
     assert view["openrouter_enable"] is True
     assert view["llm_default_provider"] == "openrouter"
     assert view["openrouter_agent_model"] == "deepseek/deepseek-v4-flash"
+
+
+# ─── Facebook OAuth credentials (DB-first, env fallback) ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_facebook_oauth_admin_view_marks_unconfigured_when_empty():
+    service = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+
+    view = await service.admin_facebook_oauth_view()
+
+    assert view["facebook_app_id"] == {"configured": False, "value": None}
+    assert view["facebook_app_secret"] == {"configured": False, "preview": None}
+    assert view["facebook_login_config_id"] == {
+        "configured": False,
+        "value": None,
+    }
+    assert view["facebook_webhook_verify_token"] == {
+        "configured": False,
+        "preview": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_facebook_oauth_admin_view_masks_secrets_and_surfaces_plaintext():
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    encrypted_secret = seed.cipher.encrypt("1234567890abcdef")
+    encrypted_verify = seed.cipher.encrypt("my-verify-token-1234")
+    service = IntegrationSettingsService(
+        _ReadDb(
+            [
+                _Row(FB_APP_ID, "fb-app-123"),
+                _Row(FB_APP_SECRET, encrypted_secret),
+                _Row(FB_LOGIN_CONFIG_ID, "login-cfg-9"),
+                _Row(FB_WEBHOOK_VERIFY_TOKEN, encrypted_verify),
+            ]
+        ),
+        settings=_Settings(),
+    )
+
+    view = await service.admin_facebook_oauth_view()
+
+    # Plaintext fields surface their actual value (they appear in the browser
+    # OAuth URL anyway).
+    assert view["facebook_app_id"] == {"configured": True, "value": "fb-app-123"}
+    assert view["facebook_login_config_id"] == {
+        "configured": True,
+        "value": "login-cfg-9",
+    }
+    # Secrets are masked.
+    assert view["facebook_app_secret"] == {
+        "configured": True,
+        "preview": "1234...cdef",
+    }
+    assert view["facebook_webhook_verify_token"] == {
+        "configured": True,
+        "preview": "my-v...1234",
+    }
+
+
+@pytest.mark.asyncio
+async def test_facebook_oauth_resolves_db_first_with_env_fallback():
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    encrypted_secret = seed.cipher.encrypt("db-app-secret-value")
+    service = IntegrationSettingsService(
+        _ReadDb([_Row(FB_APP_SECRET, encrypted_secret)]),
+        settings=_Settings(),
+    )
+
+    cfg = await service.resolve_facebook_oauth()
+
+    # DB wins over the (empty) env default.
+    assert cfg.app_secret == "db-app-secret-value"
+    # Fields absent from DB fall back to the env default (empty here).
+    assert cfg.app_id == ""
+    assert cfg.graph_api_version == "v25.0"
+
+
+@pytest.mark.asyncio
+async def test_update_facebook_oauth_encrypts_secrets_keeps_plaintext_ids(monkeypatch):
+    async def fake_record_audit(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.record_audit", fake_record_audit
+    )
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+    actor_id = uuid.uuid4()
+
+    changed = await service.update_facebook_oauth(
+        {
+            FB_APP_ID: "fb-app-123",
+            FB_APP_SECRET: "1234567890abcdef",
+            FB_LOGIN_CONFIG_ID: "login-cfg-9",
+            FB_WEBHOOK_VERIFY_TOKEN: "verify-token-1234",
+        },
+        actor_id=actor_id,
+    )
+
+    assert changed == [
+        FB_APP_ID,
+        FB_APP_SECRET,
+        FB_LOGIN_CONFIG_ID,
+        FB_WEBHOOK_VERIFY_TOKEN,
+    ]
+    assert db.committed
+
+    # Secrets are encrypted at rest.
+    assert db.rows[FB_APP_SECRET].encrypted_value.startswith("v1:")
+    assert db.rows[FB_WEBHOOK_VERIFY_TOKEN].encrypted_value.startswith("v1:")
+    assert "1234567890abcdef" not in db.rows[FB_APP_SECRET].encrypted_value
+    assert db.rows[FB_APP_SECRET].is_secret is True
+    assert db.rows[FB_WEBHOOK_VERIFY_TOKEN].is_secret is True
+
+    # Non-secret identifiers are stored as plaintext and flagged is_secret=False.
+    assert db.rows[FB_APP_ID].encrypted_value == "fb-app-123"
+    assert db.rows[FB_APP_ID].is_secret is False
+    assert db.rows[FB_LOGIN_CONFIG_ID].encrypted_value == "login-cfg-9"
+    assert db.rows[FB_LOGIN_CONFIG_ID].is_secret is False
+
+
+@pytest.mark.asyncio
+async def test_update_facebook_oauth_skips_blank_fields_leaving_them_unchanged(
+    monkeypatch,
+):
+    """A PUT with only some fields populated must leave the others untouched
+    ("leave blank to keep current value" semantics)."""
+    async def fake_record_audit(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.record_audit", fake_record_audit
+    )
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    changed = await service.update_facebook_oauth(
+        {FB_APP_ID: "   ", FB_APP_SECRET: None, FB_LOGIN_CONFIG_ID: "  cfg-9  "},
+        actor_id=uuid.uuid4(),
+    )
+
+    # Only the populated, non-whitespace field is written.
+    assert changed == [FB_LOGIN_CONFIG_ID]
+    assert FB_APP_ID not in db.rows
+    assert FB_APP_SECRET not in db.rows
+    assert db.rows[FB_LOGIN_CONFIG_ID].encrypted_value == "cfg-9"

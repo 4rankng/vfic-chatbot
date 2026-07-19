@@ -104,22 +104,22 @@ def test_oauth_client_permission_set_matches_messenger_requirements():
     }
 
 
-def test_build_authorization_url_includes_state_scope_and_config(monkeypatch):
+def test_build_authorization_url_includes_state_scope_and_config():
     import app.channels.providers.facebook_oauth as oauth
+    from app.services.integration_settings import FacebookOAuthConfig
 
-    monkeypatch.setattr(
-        oauth,
-        "get_settings",
-        lambda: SimpleNamespace(
-            meta_app_id="app-123",
-            meta_graph_api_version="v25.0",
-            meta_login_config_id="login-config-456",
-        ),
+    cfg = FacebookOAuthConfig(
+        app_id="app-123",
+        app_secret="app-secret",
+        login_config_id="login-config-456",
+        verify_token="verify",
+        graph_api_version="v25.0",
+        graph_api_base="https://graph.facebook.com",
     )
 
     redirect_uri = "https://bot.example.com/fb/cb?view=compact&source=settings"
     url = oauth.build_authorization_url(
-        state="opaque-state-123", redirect_uri=redirect_uri
+        state="opaque-state-123", redirect_uri=redirect_uri, config=cfg
     )
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
@@ -132,6 +132,19 @@ def test_build_authorization_url_includes_state_scope_and_config(monkeypatch):
     assert query["state"] == ["opaque-state-123"]
     assert query["redirect_uri"] == [redirect_uri]
     assert "pages_messaging" in query["scope"][0].split(",")
+
+
+def test_build_authorization_url_rejects_missing_app_id():
+    """A missing app_id must fail closed here, not produce a broken URL that
+    Facebook rejects with a generic "Invalid app ID" page."""
+    import app.channels.providers.facebook_oauth as oauth
+    from app.services.integration_settings import FacebookOAuthConfig
+
+    cfg = FacebookOAuthConfig(app_id="", app_secret="s", login_config_id="c")
+    with pytest.raises(oauth.FacebookOAuthError):
+        oauth.build_authorization_url(
+            state="s", redirect_uri="https://example.com/cb", config=cfg
+        )
 
 
 @pytest.mark.asyncio
@@ -175,6 +188,36 @@ async def test_subscribe_app_rejects_missing_or_malformed_acknowledgement(
 
 
 @pytest.mark.asyncio
+async def test_oauth_start_returns_400_when_app_id_not_configured(monkeypatch):
+    """A missing Meta App ID surfaces a clear Vietnamese 400 instead of building
+    an OAuth URL with an empty ``client_id`` that Facebook rejects generically."""
+    import app.api.integrations as api
+    from fastapi import HTTPException
+
+    from app.services.integration_settings import FacebookOAuthConfig
+
+    class _SettingsService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_facebook_oauth(self):
+            # No app_id — simulates an admin who has not yet configured Meta App
+            # credentials via the UI and has no META_APP_ID env var either.
+            return FacebookOAuthConfig(app_id="")
+
+    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await api.start_facebook_oauth(
+            admin=SimpleNamespace(id=UUID(int=1), token_version=1),
+            db=MagicMock(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "Meta App ID" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
 async def test_facebook_endpoints_require_admin(monkeypatch):
     """Non-admin users cannot initiate, complete, inspect, test, or disconnect.
 
@@ -191,6 +234,7 @@ async def test_facebook_endpoints_require_admin(monkeypatch):
         "/admin/integrations/facebook/oauth/callback",
         "/admin/integrations/facebook/oauth/pages",
         "/admin/integrations/facebook/oauth/complete",
+        "/admin/integrations/facebook/credentials",
         "/admin/integrations/facebook",
         "/admin/integrations/facebook/test",
     }
@@ -214,6 +258,7 @@ async def test_oauth_state_is_single_use_and_admin_bound(monkeypatch):
     """A used state cannot be replayed; a state from admin-A cannot be used by
     admin-B. Drives the callback handler with a stubbed Redis + Graph client."""
     import app.api.integrations as api
+    from app.services.integration_settings import FacebookOAuthConfig
 
     state_store: dict[str, str] = {}
 
@@ -242,8 +287,27 @@ async def test_oauth_state_is_single_use_and_admin_bound(monkeypatch):
     db = MagicMock()
     db.get = AsyncMock(return_value=admin)
 
+    # Stub the settings service so start + callback resolve app credentials
+    # without hitting Postgres (the callback now reads the DB-resolved config
+    # before exchanging the code).
+    _oauth_cfg = FacebookOAuthConfig(
+        app_id="app-123",
+        app_secret="app-secret",
+        login_config_id="cfg-1",
+        verify_token="verify",
+    )
+
+    class _SettingsService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_facebook_oauth(self):
+            return _oauth_cfg
+
+    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+
     # 1. start — stores state bound to admin-A
-    start = await api.start_facebook_oauth(admin=admin, _db=db)
+    start = await api.start_facebook_oauth(admin=admin, db=db)
     authorization_url = urlparse(start.authorization_url)
     assert authorization_url.netloc == "www.facebook.com"
     assert authorization_url.path.endswith("/dialog/oauth")
@@ -341,6 +405,22 @@ async def test_oauth_callback_safely_redirects_expected_provider_failures(
         )
     )
 
+    from app.services.integration_settings import FacebookOAuthConfig
+
+    class _SettingsService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_facebook_oauth(self):
+            return FacebookOAuthConfig(
+                app_id="app-123",
+                app_secret="app-secret",
+                login_config_id="cfg-1",
+                verify_token="verify",
+            )
+
+    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+
     response = await api.facebook_oauth_callback(
         state="provider-failure", code="secret-provider-code", db=db
     )
@@ -434,6 +514,22 @@ async def test_oauth_callback_redirect_is_allowlisted_and_opaque(monkeypatch):
             id=admin_id, role="admin", disabled=False, token_version=3
         )
     )
+
+    from app.services.integration_settings import FacebookOAuthConfig
+
+    class _SettingsService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_facebook_oauth(self):
+            return FacebookOAuthConfig(
+                app_id="app-123",
+                app_secret="app-secret",
+                login_config_id="cfg-1",
+                verify_token="verify",
+            )
+
+    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
 
     response = await api.facebook_oauth_callback(
         state="valid", code="provider-secret-code", db=db

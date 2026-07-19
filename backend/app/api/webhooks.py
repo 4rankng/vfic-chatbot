@@ -215,7 +215,9 @@ async def _resolve_active_facebook_page(db: AsyncSession):
 
 
 @router.get("/facebook")
-async def facebook_webhook_verify(request: Request) -> JSONResponse:
+async def facebook_webhook_verify(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> JSONResponse:
     """GET challenge — Meta subscribes a webhook URL by sending
     ``hub.mode=subscribe`` + ``hub.verify_token`` + ``hub.challenge``.
 
@@ -228,7 +230,10 @@ async def facebook_webhook_verify(request: Request) -> JSONResponse:
     mode = request.query_params.get("hub.mode") or ""
     sent_token = request.query_params.get("hub.verify_token") or ""
     challenge = request.query_params.get("hub.challenge") or ""
-    expected = _settings.meta_webhook_verify_token
+    # Resolve verify_token DB-first (env fallback) so an admin who rotates it
+    # via the UI does not have to redeploy for Meta's re-subscribe challenge.
+    oauth_cfg = await IntegrationSettingsService(db).resolve_facebook_oauth()
+    expected = oauth_cfg.verify_token
     if not expected and _settings.app_env != "development":
         return JSONResponse(
             {"detail": "webhook verification not configured"}, status_code=503
@@ -258,7 +263,10 @@ async def facebook_webhook(
     logger.info("facebook webhook inbound bytes=%d", len(raw))
 
     # 1. Signature verification over RAW bytes BEFORE any JSON parse / write.
-    app_secret = _settings.meta_app_secret
+    # Resolve app_secret DB-first (env fallback) so an admin who rotates it via
+    # the UI takes effect on the next inbound without a redeploy.
+    oauth_cfg = await IntegrationSettingsService(db).resolve_facebook_oauth()
+    app_secret = oauth_cfg.app_secret
     sig_header = request.headers.get("x-hub-signature-256") or ""
     verification = verify_messenger_signature(
         signature_header=sig_header, raw_body=raw, app_secret=app_secret

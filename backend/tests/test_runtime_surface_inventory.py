@@ -44,7 +44,8 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 18,
     "dashboard": 2,
-    "integrations": 18,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
+    "integrations": 20,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
+    # Meta App credentials UI: +2 (GET/PUT /facebook/credentials)
     "installation": 8,
     "jobs": 7,
     "knowledge": 21,  # parallel knowledge work +1 endpoint
@@ -57,13 +58,13 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "0e989ac98c90c6afbbca8ba8009da315dbe6087665fb58b3789f4cc874de772b"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "d1e5b80a0c17603b324ab90c1b097ee53df512fb890ba458f03821fd02ebd92f"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 72,  # LLM-only evidence correction paths are explicit
+    "provider_boundary": 74,  # +2 Meta App credentials UI (GET/PUT /facebook/credentials)
     "queue_producer": 25,  # Project category activation adds one reviewed queue boundary
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "84b4c45cec7dfdd62533c9498052cc989358159d7e02b1011ac9af673f79ce07"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "cff1a386ebe094a791b24121fce0d087a8553eae22796ba327d816c597d8b072"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
