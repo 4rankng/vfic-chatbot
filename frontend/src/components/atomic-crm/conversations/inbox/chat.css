@@ -16,8 +16,8 @@
 }
 
 .inbox-bg-container .chat-header .icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
 }
 
 .inbox-bg-container .header-person {
@@ -89,7 +89,7 @@
   display: inline-block;
   margin-left: 4px;
   color: var(--brand);
-  font-size: 1.1em;
+  font-size: var(--fs-subsection);
   font-weight: var(--chat-fw-bold);
   line-height: 1;
 }
@@ -236,7 +236,7 @@
 }
 .inbox-bg-container .mode-segment {
   min-width: clamp(78px, 8vw, 108px);
-  min-height: 34px;
+  min-height: 40px;
   padding: 4px 8px;
   display: inline-flex;
   align-items: center;
@@ -329,7 +329,7 @@
   height: 15px;
 }
 .inbox-bg-container .mode-menu-trigger {
-  min-height: 34px;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -502,7 +502,7 @@
 .mode-menu-title {
   overflow: hidden;
   color: #1d2939;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   font-weight: 600;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -511,7 +511,7 @@
 .mode-menu-description {
   overflow: hidden;
   color: #667085;
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
   font-weight: 450;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -595,8 +595,8 @@
   opacity: 0.72;
 }
 .inbox-bg-container .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
@@ -612,8 +612,8 @@
   transform: none;
 }
 .inbox-bg-container .icon-btn.small {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
 }
 .inbox-bg-container .icon-btn.ghost {
   border-color: transparent;
@@ -1258,7 +1258,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  font-size: 19px;
+  font-size: var(--fs-section-title);
   line-height: 1;
   cursor: pointer;
   transition: var(--transition);

@@ -1,9 +1,9 @@
 # Typography System
 
 > Single source of truth for text styling across the VFIC recruiter console.
-> Established 2026-07-12. Revised 2026-07-15 (token scale completed, mobile
-> behavior rewritten, dual px/rem scale unified). Read this before adding any
-> font size to the app.
+> Established 2026-07-12. Revised 2026-07-19 (all frontend surfaces migrated,
+> legacy exemptions removed, and inline-style enforcement added). Read this
+> before adding any font size to the app.
 
 ## The scale
 
@@ -35,6 +35,7 @@ Desktop sizes shown; see "Responsive behavior" for the mobile scale.
 | Card title | `text-card-title` | `--fs-card-title` | 14px | `<CardTitle>`, card/row headers |
 | Row title | `text-row-title` | `--fs-row-title` | 14px | List row primary text |
 | Body | `text-body` | `--fs-body` | 14px | Default body text, paragraphs |
+| Body large | `text-body-lg` | `--fs-body-lg` | 16px | Emphasized body copy and spacious empty states |
 | Body small | `text-body-sm` | `--fs-body-sm` | 13px | Secondary body, item descriptions |
 | Control | `text-control` | `--fs-control` | 14px | `<Input>`/`<Select>`/`<Textarea>` control text |
 | Label | `text-label` | `--fs-label` | 14px | Form field labels (weight 600) |
@@ -74,8 +75,8 @@ mobile, so rem math is identical everywhere and predictable.
 
 - **Mobile scale** is applied by a single centralized override at
   `@media (max-width: 767px) { :root { --text-*: ... } }` in `index.css`. Each
-  role steps down (page-title→22px, section-title→18px, nav→13px, body→12px,
-  helper→11px). Components do **not** set their own mobile font sizes — they
+  role steps down (page-title→22px, section-title→18px, nav→13px, body→14px,
+  helper→12px). Components do **not** set their own mobile font sizes — they
   inherit the token.
 - **Form controls on touch** (`input`/`textarea`/`select`) are kept at 16px on
   mobile via the `text-control`/`text-label` tokens (overridden to 1rem in the
@@ -112,8 +113,6 @@ mobile, so rem math is identical everywhere and predictable.
 | Login / Forgot password `<h1>` | Fraunces display face (`kb-display` class) + `text-display` | Brand identity on auth surface only |
 | Knowledge center stamps | `.kb-stamp` uses Fraunces at 10.5px uppercase | Rubber-stamp status motif — branding |
 | Knowledge center body | `.kb-display` / `.kb-mono` use Fraunces / IBM Plex Mono | Editorial knowledge-base identity |
-| KPI / metric large numbers | `--crm-fs-value-xl/lg/md` (30/22/20px px literals) | Data-viz number sizing, not text roles |
-| Unread-count badge | `fontSize: 10` inline in `ConversationList` | Notification pip; pre-dates the scale |
 
 ## Dual scale (retired 2026-07-15)
 
@@ -133,5 +132,7 @@ values and reports violations. Run it locally or wire it into CI:
 node scripts/check-typography.mjs
 ```
 
-Exits non-zero if any `text-[<number>]` or out-of-scale `font-size:` is found
-outside the allowlist (`index.css`, `tokens.css`, documented branding files).
+Exits non-zero if any raw Tailwind size, `text-[<number>]`, numeric inline
+`fontSize`, or out-of-scale component `font-size:` is found. Only the central
+token owners (`index.css`, `tokens.css`) and documented branding motifs may
+define fixed values.

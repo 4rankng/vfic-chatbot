@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   ArrowRight,
   KeyRound,
-  Loader2,
   Lock,
   Mail,
   RotateCcw,
@@ -21,6 +20,7 @@ import {
 } from "./passwordRecoveryService";
 import { useResendCooldown } from "./useResendCooldown";
 import { useInstallationContext } from "../installation/installation-context";
+import { AuthShell } from "./AuthShell";
 
 type Step = "email" | "otp";
 
@@ -88,14 +88,13 @@ export const ForgotPasswordPage = () => {
     }
   };
 
+  const productName = activeName ?? "Ting Ting";
+
   return (
-    <div className="kb-scope login-paper min-h-svh overflow-hidden text-foreground">
-      <main className="mx-auto flex min-h-svh w-full max-w-[620px] items-center justify-center px-5 py-8 sm:px-8">
-        <section className="mx-auto flex w-full max-w-[470px] flex-col justify-center">
+    <>
+      <AuthShell productName={productName}>
+        <section className="flex w-full flex-col justify-center">
           <div className="mb-6 space-y-3 text-center sm:mb-8">
-            <p className="text-content-title font-semibold leading-none tracking-tight text-foreground sm:text-page-title">
-              {activeName ?? "Thiết lập hệ thống"}
-            </p>
             <div className="space-y-3">
               <h1 className="kb-display text-balance text-display leading-none text-foreground">
                 Khôi phục mật khẩu
@@ -108,7 +107,7 @@ export const ForgotPasswordPage = () => {
             </div>
           </div>
 
-          <div className="rounded-md border border-border bg-card/92 p-4 shadow-xs backdrop-blur sm:p-6">
+          <div className="tt-card rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
             {step === "email" ? (
               <Form className="space-y-4" onSubmit={submitEmail}>
                 <RecoveryField
@@ -124,7 +123,12 @@ export const ForgotPasswordPage = () => {
                   className="mt-2 h-12 w-full cursor-pointer rounded-md text-button font-semibold"
                   disabled={loading}
                 >
-                  {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {loading ? (
+                    <span
+                      className="tt-loading tt-loading-spinner tt-loading-sm"
+                      aria-hidden="true"
+                    />
+                  ) : null}
                   Gửi mã OTP
                   {!loading ? <ArrowRight className="size-4" /> : null}
                 </Button>
@@ -166,7 +170,12 @@ export const ForgotPasswordPage = () => {
                   className="mt-2 h-12 w-full cursor-pointer rounded-md text-button font-semibold"
                   disabled={loading}
                 >
-                  {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {loading ? (
+                    <span
+                      className="tt-loading tt-loading-spinner tt-loading-sm"
+                      aria-hidden="true"
+                    />
+                  ) : null}
                   Đổi mật khẩu
                   {!loading ? <ArrowRight className="size-4" /> : null}
                 </Button>
@@ -178,7 +187,10 @@ export const ForgotPasswordPage = () => {
                   onClick={() => resendOtp(email)}
                 >
                   {isResending ? (
-                    <Loader2 className="size-4 animate-spin" />
+                    <span
+                      className="tt-loading tt-loading-spinner tt-loading-sm"
+                      aria-hidden="true"
+                    />
                   ) : (
                     <RotateCcw className="size-4" />
                   )}
@@ -202,9 +214,9 @@ export const ForgotPasswordPage = () => {
             Khôi phục quyền truy cập an toàn
           </p>
         </section>
-      </main>
+      </AuthShell>
       <Notification />
-    </div>
+    </>
   );
 };
 

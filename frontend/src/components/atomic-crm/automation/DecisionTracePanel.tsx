@@ -1,14 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDataProvider, useGetIdentity } from "ra-core";
-import {
-  AlertTriangle,
-  Brain,
-  History,
-  Info,
-  LoaderCircle,
-  RefreshCw,
-} from "lucide-react";
+import { AlertTriangle, Brain, History, Info, RefreshCw } from "lucide-react";
 
 import {
   Accordion,
@@ -46,7 +39,7 @@ const TRACE_DISCLAIMER =
 const TraceStatus = ({ children }: { children: ReactNode }) => (
   <div
     role="status"
-    className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-body text-muted-foreground"
+    className="tt-alert rounded-lg border border-dashed border-border px-4 py-6 text-center text-body text-muted-foreground"
   >
     {children}
   </div>
@@ -135,10 +128,10 @@ export const DecisionTraceRenderer = ({
       {trace.truncated ? (
         <div
           role="status"
-          className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-body text-foreground"
+          className="tt-alert tt-alert-warning tt-alert-soft flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-body text-foreground"
         >
           <AlertTriangle
-            className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+            className="mt-0.5 size-4 shrink-0 text-warning"
             aria-hidden="true"
           />
           Dấu vết đã đạt giới hạn lưu trữ. Danh sách dưới đây có thể chưa đầy
@@ -192,7 +185,10 @@ const BotRunTraceDetailContent = ({
     return (
       <TraceStatus>
         <span className="inline-flex items-center gap-2">
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          <span
+            className="tt-loading tt-loading-spinner tt-loading-sm"
+            aria-hidden="true"
+          />
           Đang tải dấu vết…
         </span>
       </TraceStatus>
@@ -303,7 +299,6 @@ export const DecisionTracePanel = ({
           aria-controls="decision-trace-sheet"
         >
           <History className="icon" aria-hidden="true" />
-          <span className="hidden xl:inline">Agent Thinking</span>
         </button>
       </SheetTrigger>
       <SheetContent
@@ -326,8 +321,8 @@ export const DecisionTracePanel = ({
           {summariesQuery.isPending ? (
             <TraceStatus>
               <span className="inline-flex items-center gap-2">
-                <LoaderCircle
-                  className="size-4 animate-spin"
+                <span
+                  className="tt-loading tt-loading-spinner tt-loading-sm"
                   aria-hidden="true"
                 />
                 Đang tải các lần chạy…

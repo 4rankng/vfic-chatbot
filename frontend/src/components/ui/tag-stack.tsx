@@ -17,12 +17,9 @@ export interface TagStackTag {
 
 const toneClass: Record<TagTone, string> = {
   default: "bg-secondary text-secondary-foreground border-transparent",
-  success:
-    "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
-  warning:
-    "bg-amber-500/12 text-amber-700 dark:text-amber-400 border-amber-500/20",
-  destructive:
-    "bg-rose-500/12 text-rose-700 dark:text-rose-400 border-rose-500/20",
+  success: "bg-success/12 text-success border-success/20",
+  warning: "bg-warning/12 text-warning border-warning/20",
+  destructive: "bg-destructive/12 text-destructive border-destructive/20",
 }
 
 function TagStack({

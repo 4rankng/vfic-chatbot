@@ -6,10 +6,6 @@ import {
   usePermissions,
   useTranslate,
 } from "ra-core";
-import { DataTable } from "@/components/admin/data-table";
-import { TextField } from "@/components/admin/text-field";
-import { DateField } from "@/components/admin/date-field";
-import { TopToolbar } from "../layout/TopToolbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +21,7 @@ import { Link } from "react-router";
 import { UserActions } from "./UserActions";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
 import type { UserAccount } from "../types";
+import "./users.css";
 
 type UserListProps = {
   embedded?: boolean;
@@ -84,76 +81,48 @@ const UserListContent = ({
         : "mx-auto w-full max-w-[1440px] px-4 py-5 pb-24 md:px-6 md:py-6 md:pb-6 lg:px-8"
     }
   >
-    <TopToolbar className="flex-nowrap items-start gap-3">
+    <header className="user-directory-toolbar">
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-page-title font-bold tracking-tight">
+        <h2 className="truncate text-content-title font-semibold tracking-tight">
           {title}
         </h2>
-        <p className="mt-1 text-body text-muted-foreground lg:hidden">
+        <p className="mt-1 text-body-sm text-muted-foreground">
           Quản lý tài khoản và quyền truy cập nội bộ.
         </p>
       </div>
       <CreateUserButton />
-    </TopToolbar>
-    <UserMobileList />
-    <div className="mt-4 hidden lg:block">
-      <UserDesktopTable />
-    </div>
+    </header>
+    <UserAccountList />
   </div>
 );
 
 const CreateUserButton = () => {
   const createPath = useCreatePath();
   return (
-    <Button asChild variant="outline" className="h-11 shrink-0 rounded-xl px-3">
+    <Button asChild size="sm" className="user-directory-create shrink-0">
       <Link to={createPath({ resource: "users", type: "create" })}>
         <Plus className="size-4" />
-        <span className="hidden min-[360px]:inline">Tạo</span>
+        <span>Tạo tài khoản</span>
       </Link>
     </Button>
   );
 };
 
-const UserDesktopTable = () => (
-  <DataTable bulkActionButtons={false}>
-    <DataTable.Col source="full_name" label="Họ tên">
-      <TextField source="full_name" className="font-semibold" />
-    </DataTable.Col>
-    <DataTable.Col source="email" label="Email" />
-    <DataTable.Col source="role" label="Vai trò">
-      <UserRoleBadge />
-    </DataTable.Col>
-    <DataTable.Col source="disabled" label="Trạng thái">
-      <UserStatusBadge />
-    </DataTable.Col>
-    <DataTable.Col source="created_at" label="Ngày tạo">
-      <DateField source="created_at" showTime />
-    </DataTable.Col>
-    <DataTable.Col
-      label="Thao tác"
-      disableSort
-      className="w-20 min-w-20 text-right"
-    >
-      <UserActions />
-    </DataTable.Col>
-  </DataTable>
-);
-
-const UserMobileList = () => {
+const UserAccountList = () => {
   const { data, isPending } = useListContext<UserAccount>();
 
   if (isPending) {
     return (
-      <div className="mt-4 space-y-3 lg:hidden">
+      <div className="tt-card tt-card-border user-directory-card" aria-busy="true">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Card key={index} className="gap-3 p-4">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-4 w-56" />
-            <div className="flex gap-2">
-              <Skeleton className="h-7 w-20 rounded-full" />
-              <Skeleton className="h-7 w-28 rounded-full" />
+          <div key={index} className="user-directory-skeleton">
+            <Skeleton className="size-9 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-40 max-w-full" />
+              <Skeleton className="h-3 w-56 max-w-full" />
             </div>
-          </Card>
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
         ))}
       </div>
     );
@@ -161,7 +130,7 @@ const UserMobileList = () => {
 
   if (!data || data.length === 0) {
     return (
-      <Card role="status" className="mt-4 p-8 text-center lg:hidden">
+      <Card role="status" className="user-directory-empty mt-4 p-8 text-center">
         <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-muted">
           <UserCog className="size-5 text-muted-foreground" />
         </div>
@@ -174,39 +143,51 @@ const UserMobileList = () => {
   }
 
   return (
-    <div className="mt-4 space-y-3 lg:hidden">
-      {data.map((user) => (
-        <RecordContextProvider key={user.id} value={user}>
-          <Card className="gap-3 overflow-hidden rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-body font-bold text-muted-foreground">
-                <UserRound className="size-5" aria-hidden="true" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start gap-2">
-                  <h3 className="min-w-0 flex-1 truncate text-section-title font-semibold leading-6">
-                    {user.full_name || "Chưa có tên"}
-                  </h3>
-                  <UserActions />
+    <section className="tt-card tt-card-border user-directory-card">
+      <div className="user-directory-columns" aria-hidden="true">
+        <span />
+        <span>Người dùng</span>
+        <span>Vai trò</span>
+        <span>Trạng thái</span>
+        <span>Ngày tạo</span>
+        <span />
+      </div>
+      <ul className="tt-list user-directory-list">
+        {data.map((user) => (
+          <RecordContextProvider key={user.id} value={user}>
+            <li className="tt-list-row user-directory-row">
+              <div className="tt-avatar tt-avatar-placeholder user-directory-avatar">
+                <div>
+                  <UserRound className="size-4" aria-hidden="true" />
                 </div>
-                <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-body text-muted-foreground">
-                  <Mail className="size-3.5 shrink-0" />
-                  <span className="truncate">{user.email}</span>
+              </div>
+              <div className="user-directory-identity">
+                <h3>{user.full_name || "Chưa có tên"}</h3>
+                <p>
+                  <Mail className="size-3.5" aria-hidden="true" />
+                  <span>{user.email}</span>
                 </p>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 pl-13">
-              <UserRoleBadge />
-              <UserStatusBadge />
-            </div>
-            <p className="flex items-center gap-1.5 pl-13 text-helper text-muted-foreground">
-              <CalendarDays className="size-3.5" />
-              Tạo {formatDate(user.created_at)}
-            </p>
-          </Card>
-        </RecordContextProvider>
-      ))}
-    </div>
+              <div className="user-directory-meta">
+                <div className="user-directory-role">
+                  <UserRoleBadge />
+                </div>
+                <div className="user-directory-status">
+                  <UserStatusBadge />
+                </div>
+                <p className="user-directory-created">
+                  <CalendarDays className="size-3.5" aria-hidden="true" />
+                  <span>{formatDate(user.created_at)}</span>
+                </p>
+              </div>
+              <div className="user-directory-actions">
+                <UserActions />
+              </div>
+            </li>
+          </RecordContextProvider>
+        ))}
+      </ul>
+    </section>
   );
 };
 

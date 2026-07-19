@@ -93,7 +93,7 @@ describe("runtime metadata", () => {
   it("resets every customer-controlled metadata surface to neutral", () => {
     resetRuntimeMetadata();
 
-    expect(document.title).toBe("Thiết lập hệ thống");
+    expect(document.title).toBe("Ting Ting");
     expect(document.documentElement.lang).toBe("vi");
     expect(metadataContent('meta[name="theme-color"]')).toBe("");
     expect(metadataContent('meta[name="description"]')).toBe("");
@@ -149,7 +149,7 @@ describe("runtime metadata", () => {
       }),
     );
 
-    expect(document.title).toBe("Thiết lập hệ thống");
+    expect(document.title).toBe("Ting Ting");
     expect(document.documentElement.lang).toBe("vi");
     expect(metadataContent('meta[name="theme-color"]')).toBe("");
   });

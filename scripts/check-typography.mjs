@@ -16,7 +16,7 @@
  *   - Raw Tailwind font-size utilities: text-sm, text-xs, text-base, text-lg,
  *     text-xl, text-2xl, text-3xl (swept out 2026-07-15 — use a token instead)
  *   - Arbitrary font-size utilities: text-[11px], text-[1.25rem], text-[clamp(...)]
- *   - Raw px/rem font-size in component CSS (outside the allowlist files)
+ *   - Raw px/rem font-size in component CSS (outside token-owner files)
  *
  * Usage: node scripts/check-typography.mjs
  */
@@ -43,27 +43,6 @@ const BRANDING_ALLOWLIST = new Set([
   // Knowledge-center rubber-stamp motif (Fraunces, 10.5px uppercase).
   "frontend/src/index.css", // .kb-stamp lives here
 ]);
-
-// Legacy surfaces under incremental migration. These files predate the token
-// scale and still hold raw px/rem font-sizes. They are allowed for now so the
-// check acts as a RATCHET — it blocks NEW hard-coded sizes while the legacy
-// files migrate incrementally. Each entry must have a removal plan.
-// See docs/typography-system.md → "Deferred work".
-const LEGACY_ALLOWLIST = [
-  // Chat surface: the inbox sub-CSS system uses the legacy --crm-fs-* / --chat-*
-  // px-based tokens. Internally consistent; highest-traffic UI — migrate last.
-  /^frontend\/src\/components\/atomic-crm\/conversations\/inbox\//,
-  // Dashboard & performance page CSS: hero/outlier values were tokenized in the
-  // 2026-07-12 migration; remaining values are small in-spec sizes pending sweep.
-  "frontend/src/components/atomic-crm/dashboard/dashboard.css",
-  "frontend/src/components/atomic-crm/performance/performance.css",
-];
-
-function isLegacy(rel) {
-  return LEGACY_ALLOWLIST.some((entry) =>
-    entry instanceof RegExp ? entry.test(rel) : entry === rel,
-  );
-}
 
 function walk(dir, acc = []) {
   for (const entry of readdirSync(dir)) {
@@ -101,7 +80,7 @@ const RAW_FS_CLASS = new RegExp(
   // optional variant prefix (e.g. "md:", "hover:", "group-hover:", "max-sm:")
   "(?:\\b[a-z0-9-]+:)*" +
   // the utility, not preceded by "-" (to skip text-9 → text-\[9\]) and at a class boundary
-  `text-(?:${RAW_SIZE_UTILITIES.join("|")})\\b`,
+  `text-(?:${RAW_SIZE_UTILITIES.join("|")})(?![\\w-])`,
 );
 
 for (const rel of files) {
@@ -122,7 +101,6 @@ for (const rel of files) {
     // may reference the raw names in comments/aliases) and legacy CSS surfaces.
     if (
       !CSS_ALLOWLIST.has(rel) &&
-      !isLegacy(rel) &&
       RAW_FS_CLASS.test(line)
     ) {
       const match = line.match(RAW_FS_CLASS);
@@ -158,9 +136,7 @@ for (const rel of files) {
           value.startsWith("var(") || value.includes("var(--fs") || value.includes("var(--crm-fs") || value.includes("var(--chat-fs") || value.includes("var(--text-");
         if (!consumesToken) {
           const allowed =
-            CSS_ALLOWLIST.has(rel) ||
-            BRANDING_ALLOWLIST.has(rel) ||
-            isLegacy(rel);
+            CSS_ALLOWLIST.has(rel) || BRANDING_ALLOWLIST.has(rel);
           if (!allowed) {
             violations.push({
               file: rel,
@@ -171,6 +147,23 @@ for (const rel of files) {
             });
           }
         }
+      }
+    }
+
+    // Raw React style font sizes bypass Tailwind and the CSS role aliases too.
+    // A semantic CSS variable is valid: fontSize: "var(--fs-badge)".
+    if (!rel.endsWith(".css")) {
+      const inlineMatch = line.match(
+        /fontSize\s*:\s*(?:\d+(?:\.\d+)?|["']\d+(?:\.\d+)?(?:px|rem|em)["'])/,
+      );
+      if (inlineMatch) {
+        violations.push({
+          file: rel,
+          line: lineno,
+          kind: "raw-inline-font-size",
+          detail: inlineMatch[0],
+          source: line.trim(),
+        });
       }
     }
   });

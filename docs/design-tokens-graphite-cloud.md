@@ -1,40 +1,69 @@
-# Design Tokens — Ting Ting Console Blue
+# Design Tokens — Ting Ting Recruiting Control Room
 
-The authenticated operations workspace uses these semantic roles.
-`frontend/src/index.css` owns the shared `--workspace-*` roles; inbox aliases
-and typography live in `conversations/inbox/tokens.css`. Settings and
-performance may define feature-scoped aliases when a component needs a local
-surface role.
+The authenticated recruiter console uses a custom daisyUI v5 theme as its
+visual foundation. `frontend/src/index.css` owns the light-only `tingting`
+theme and maps it onto the stable `--workspace-*` roles used by feature styles.
+Inbox aliases and typography remain in
+`conversations/inbox/tokens.css`.
 
-| Role | Token | Value |
+The theme provider always removes stale `.dark` state, applies `.light`, and
+sets `data-theme="tingting"`. Stored preferences and OS color-scheme settings do
+not alter the recruiter console. Feature components must not introduce
+independent theme state or a theme toggle.
+
+## Theme roles
+
+| Product role | daisyUI role | Compatibility token |
 |---|---|---|
-| Application shell | `--workspace-shell` | `#506EAE` |
-| Shell active | `--workspace-shell-active` | `#394F79` |
-| Rail active | `--workspace-rail-active` | `#304062` |
-| Main canvas | `--workspace-canvas` | `#F1F3F6` |
-| Conversation canvas | `--chat-bg` (inbox scope) | `#E4DFD8` |
-| Secondary surface | `--workspace-surface-muted` | `#EAECF0` |
-| Primary surface | `--workspace-surface` | `#FFFFFF` |
-| Elevated settings surface | `--settings-elevated` (settings scope) | `#FFFFFF` |
-| Selected surface | `--workspace-teal-soft` | `#E4EFFF` |
-| Outgoing message | `--bubble-agent-bg`, `--bubble-bot-bg` | `#DCF8C7` |
-| Primary text | `--workspace-ink` | `#344054` |
-| Secondary text | `--workspace-ink-muted` | `#667085` |
-| Border | `--workspace-border` | `#D8DDE6` |
-| Brand/focus | `--workspace-action`, `--workspace-focus` | `#1777FF` |
-| Active text | `--workspace-teal-strong` | `#0267E8` |
-| Brand pressed | `--workspace-action-strong` | `#0267E8` |
-| Success | `--workspace-success` | `#16835D` |
-| Warning | `--workspace-warning` | `#B7791F` |
-| Error | `--workspace-danger` | `#C2414B` |
+| Main content surface | `base-100` | `--workspace-surface` |
+| Cloud canvas | `base-200` | `--workspace-canvas` |
+| Muted/selected surface | `base-300`, `accent` | `--workspace-surface-muted`, `--workspace-teal-soft` |
+| Primary text | `base-content` | `--workspace-ink` |
+| Navigation shell | `secondary` | `--workspace-shell` |
+| Primary action and focus | `primary` | `--workspace-action`, `--workspace-focus` |
+| Success | `success` | `--workspace-success` |
+| Warning | `warning` | `--workspace-warning` |
+| Error | `error` | `--workspace-danger` |
 
-Use console blue for the global topbar, icon rail, focus, selection, and primary
-actions. Keep the conversation queue and information panel white, and reserve
-the warm neutral canvas for message history. Green outgoing bubbles indicate
-messages sent by Ting Ting Soft; green is not a global brand color.
+The console uses cool cloud surfaces, deep denim navigation, and one restrained
+steel-blue action accent. Color is never the only status cue: labels or icons accompany
+selection, warning, delivery, and intervention states.
 
-The login entry point follows the same console roles rather than introducing a
-separate marketing palette. On desktop it pairs the blue shell with the
-`ttsoft-logo.png` lockup and a subdued recruitment-workspace illustration; on
-mobile it uses a dedicated, low-contrast recruitment-workspace backdrop behind
-the blue top rule, compact logo lockup, and form.
+## Component contract
+
+- daisyUI classes use the `tt-` prefix. Never use unprefixed generic classes
+  such as `btn`, `card`, `menu`, `chat`, or `input`.
+- Use daisyUI for presentational anatomy such as buttons, badges, alerts,
+  skeletons, avatars, chat bubbles, forms, tables, pagination, collapsible
+  settings, and simple surface groups.
+- Shared primitives under `frontend/src/components/ui/` are the migration
+  boundary. Buttons, inputs, textareas, badges, alerts, cards, breadcrumbs,
+  pagination, selections, tables, tabs, dialogs, checkboxes, radios, toggles,
+  loading states, and skeletons expose prefixed daisyUI anatomy so every admin
+  resource inherits the same system.
+- Keep Radix/Shadcn as the behavior owner for dialogs, sheets, selects,
+  dropdowns, checkboxes, radios, toggles, and other focus-managed controls;
+  daisyUI owns their visual anatomy without replacing focus management or
+  keyboard behavior.
+- The plugin `include` list contains only component families present in
+  production markup. MCP references may cover more families during design,
+  but unused CSS must not enter the bundle.
+- Avoid wrapper elements inside virtualized rows. Add presentational classes to
+  stable existing nodes so scroll measurement and anchoring remain unchanged.
+- Controls are 40px on precise-pointer desktop and at least 44px on touch.
+  Mobile inputs remain 16px to prevent browser focus zoom.
+- Be Vietnam Pro is the console typeface at weights 400, 500, 600, and 700.
+  Body/list text is at least 14px on mobile; metadata is at least 12px.
+
+The dashboard and ordinary secondary workspaces use document scrolling on
+mobile. Conversation detail is intentionally different: the transcript remains
+the single virtualized overflow owner and the composer remains a stable footer
+boundary. Do not convert the transcript to document scroll or add another
+nested scrolling region.
+
+The login and password-recovery entry points use the shared light-only daisyUI
+hero/card shell, the Ting Ting logo lockup, and the project-owned
+`login-recruiting-console-v2.webp` illustration. Desktop keeps the artwork and
+form in a balanced split view; mobile crops the same visual into a compact
+banner above the form. Authentication copy stays intentionally brief and must
+not expose installation-state language such as “Thiết lập hệ thống”.

@@ -16,15 +16,14 @@
   /* Private inbox accent. Renamed from --accent to
      avoid colliding with the shadcn --accent hover-surface token, which is
      defined globally in index.css and consumed by ~50 primitives app-wide.
-     --brand stays teal: it is the inbox's accent identity (used by ~120
-     icon/border/highlight call-sites), distinct from the ink --primary that
-     fills primary buttons. Teal = selection/active/healthy; ink = action. */
-  --primary-soft: #e4efff;
-  --primary-soft-border: #bdd5f7;
-  --inbox-accent: #1777ff;
+     --brand follows the shared action role so the inbox cannot drift from the
+     rest of the console. */
+  --primary-soft: var(--workspace-teal-soft);
+  --primary-soft-border: color-mix(in srgb, var(--workspace-action) 32%, var(--workspace-border));
+  --inbox-accent: var(--workspace-action);
   --inbox-accent-light: var(--primary-soft);
-  --brand: #1777ff;
-  --brand-hover: #0267e8;
+  --brand: var(--workspace-action);
+  --brand-hover: var(--workspace-action-strong);
   --brand-light: var(--primary-soft);
 
   --success: #16835d;
@@ -54,8 +53,8 @@
        card/row/message/body→body, body-sm→body-sm, meta→helper, caption/badge→caption,
        control→control, input→input. */
   --crm-font-family:
-    Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Be Vietnam Pro", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
   --crm-fs-display: var(--fs-page-title);
   --crm-fs-page-title: var(--fs-page-title);
   --crm-fs-section-title: var(--fs-section-title);
@@ -75,9 +74,9 @@
   --crm-control-radius: 8px;
   --crm-control-icon: 16px;
   --crm-control-pad-x: 12px;
-  --crm-fs-value-xl: 30px;
-  --crm-fs-value-lg: 22px;
-  --crm-fs-value-md: 20px;
+  --crm-fs-value-xl: var(--fs-display);
+  --crm-fs-value-lg: var(--fs-metric);
+  --crm-fs-value-md: var(--fs-metric);
   --crm-lh-heading: 1.12;
   --crm-lh-title: 1.25;
   --crm-lh-body: 1.5;
@@ -140,11 +139,11 @@
   --workspace-muted: #667085;
   --workspace-faint: #98a2b3;
   --workspace-hover: #f2f4f7;
-  --workspace-active: #1777ff;
+  --workspace-active: var(--workspace-action);
   --workspace-active-border: var(--primary-soft-border);
-  --workspace-switcher-bg: #506eae;
-  --workspace-switcher-bg-deep: #506eae;
-  --workspace-switcher-active: #304062;
+  --workspace-switcher-bg: var(--workspace-shell);
+  --workspace-switcher-bg-deep: var(--workspace-shell);
+  --workspace-switcher-active: var(--workspace-shell-rail-active);
   --workspace-switcher-hover: #f8fafc;
 
   --workspace-blue-wash: #eef4ff;
@@ -161,17 +160,17 @@
   --ink-muted: var(--muted-foreground);
   --border-strong: var(--border);
   --border-glass: rgba(199, 205, 188, 0.62);
-  --primary-soft: #e4efff;
-  --primary-soft-border: #bdd5f7;
-  --inbox-accent: #1777ff;
-  --brand: #1777ff;
-  --brand-hover: #0267e8;
-  --brand-light: #e4efff;
+  --primary-soft: var(--workspace-teal-soft);
+  --primary-soft-border: color-mix(in srgb, var(--workspace-action) 32%, var(--workspace-border));
+  --inbox-accent: var(--workspace-action);
+  --brand: var(--workspace-action);
+  --brand-hover: var(--workspace-action-strong);
+  --brand-light: var(--workspace-teal-soft);
   --workspace-bg: var(--card);
   --workspace-bg-deep: var(--secondary);
   --workspace-muted: var(--muted-foreground);
   --workspace-hover: var(--secondary);
-  --workspace-active: #1777ff;
+  --workspace-active: var(--workspace-action);
 }
 
 /* Mobile design tokens stay identical to desktop — visual parity is a hard

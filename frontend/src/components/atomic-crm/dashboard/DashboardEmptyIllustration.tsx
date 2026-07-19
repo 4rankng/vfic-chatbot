@@ -22,7 +22,7 @@ const InboxClearIllustration = () => (
   >
     <path
       d="M32 82.5V35.5c0-5.5 4.5-10 10-10h54c5.5 0 10 4.5 10 10v47c0 5.5-4.5 10-10 10H42c-5.5 0-10-4.5-10-10Z"
-      fill="var(--workspace-teal-soft, #e4efff)"
+      fill="var(--workspace-teal-soft, #e8eff5)"
       stroke="var(--workspace-border, #d8dde6)"
       strokeWidth="1.5"
     />
@@ -46,12 +46,12 @@ const InboxClearIllustration = () => (
       cx="56"
       cy="59"
       r="5"
-      fill="var(--workspace-action, #1777ff)"
+      fill="var(--workspace-action, #456f96)"
       opacity=".18"
     />
     <path
       d="M52.8 61.4c.8-2.4 2.1-3.6 3.9-3.6s3.1 1.2 3.9 3.6"
-      stroke="var(--workspace-action, #1777ff)"
+      stroke="var(--workspace-action, #456f96)"
       strokeWidth="1.5"
       strokeLinecap="round"
     />
@@ -59,7 +59,7 @@ const InboxClearIllustration = () => (
       cx="56.7"
       cy="55.8"
       r="2.3"
-      stroke="var(--workspace-action, #1777ff)"
+      stroke="var(--workspace-action, #456f96)"
       strokeWidth="1.5"
     />
     <path
@@ -81,7 +81,7 @@ const InboxClearIllustration = () => (
       strokeWidth="1.5"
       strokeLinecap="round"
     />
-    <circle cx="112" cy="36" r="17" fill="var(--workspace-action, #1777ff)" />
+    <circle cx="112" cy="36" r="17" fill="var(--workspace-action, #456f96)" />
     <path
       d="m104.7 36.2 4.8 4.8 9.8-10"
       stroke="#fff"
@@ -106,7 +106,7 @@ const TodayClearIllustration = () => (
       width="73"
       height="70"
       rx="11"
-      fill="var(--workspace-teal-soft, #e4efff)"
+      fill="var(--workspace-teal-soft, #e8eff5)"
       stroke="var(--workspace-border, #d8dde6)"
       strokeWidth="1.5"
     />
@@ -117,7 +117,7 @@ const TodayClearIllustration = () => (
     />
     <path
       d="M57 18v10M92 18v10"
-      stroke="var(--workspace-action, #1777ff)"
+      stroke="var(--workspace-action, #456f96)"
       strokeWidth="2"
       strokeLinecap="round"
     />
@@ -131,7 +131,7 @@ const TodayClearIllustration = () => (
     />
     <path
       d="m53.2 57.4 2.1 2.1 3.8-4.1"
-      stroke="var(--workspace-action, #1777ff)"
+      stroke="var(--workspace-action, #456f96)"
       strokeWidth="1.55"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -152,7 +152,7 @@ const TodayClearIllustration = () => (
     />
     <path
       d="m53.2 74.4 2.1 2.1 3.8-4.1"
-      stroke="var(--workspace-action, #1777ff)"
+      stroke="var(--workspace-action, #456f96)"
       strokeWidth="1.55"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -163,7 +163,7 @@ const TodayClearIllustration = () => (
       strokeWidth="1.5"
       strokeLinecap="round"
     />
-    <circle cx="113" cy="78" r="17" fill="var(--workspace-action, #1777ff)" />
+    <circle cx="113" cy="78" r="17" fill="var(--workspace-action, #456f96)" />
     <path
       d="m105.7 78.2 4.8 4.8 9.8-10"
       stroke="#fff"

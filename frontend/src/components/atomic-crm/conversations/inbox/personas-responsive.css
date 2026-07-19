@@ -1,8 +1,4 @@
 @media (max-width: 1320px) {
-  .persona-studio-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .persona-studio-body {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -31,10 +27,6 @@
 
   .inbox-bg-container .app.project-app {
     grid-template-columns: 56px minmax(0, 1fr);
-  }
-
-  .persona-studio-layout {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .persona-studio-body {
@@ -83,7 +75,9 @@
   }
 
   .persona-agent-picker {
-    padding: 14px 14px 0;
+    padding: 14px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .persona-followup-grid,
@@ -124,23 +118,8 @@
     border-inline: 0;
   }
 
-  .persona-studio-topbar {
-    min-height: auto;
-    flex-wrap: wrap;
-    padding: 10px 12px;
-  }
-
-  .persona-studio-crumbs {
-    flex-basis: 100%;
-  }
-
-  .persona-studio-command {
-    order: 3;
-    width: 100%;
-  }
-
   .persona-studio-body {
-    padding: 12px;
+    padding: 0;
   }
 
   .persona-agent-bubbles {
@@ -156,13 +135,41 @@
   }
 
   .persona-studio-profile-actions {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .persona-page-shell .persona-readiness-bar-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .persona-scope-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .persona-page-shell .persona-readiness-bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .persona-page-shell .persona-readiness-bar-card > [data-slot="badge"] {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .persona-page-shell .persona-studio-profile-head {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .persona-page-shell .persona-studio-profile-actions {
+    grid-column: 1 / -1;
     width: 100%;
     margin-left: 0;
   }
 
-  .persona-readiness-bar-card,
-  .persona-scope-row {
-    grid-template-columns: minmax(0, 1fr);
+  .persona-page-shell .persona-studio-updated {
+    margin-right: auto;
   }
 
   .persona-channel-header,
@@ -241,24 +248,22 @@
     height: 44px;
   }
 
-  .persona-directory-status-actions {
-    gap: 18px;
-  }
-
   .persona-directory-main {
-    padding-right: 82px;
+    padding-right: 10px;
   }
 
   .persona-directory-status-icon,
   .persona-directory-info-icon {
     position: relative;
+    width: 44px;
+    height: 44px;
   }
 
   .persona-directory-status-icon::after,
   .persona-directory-info-icon::after {
     content: "";
     position: absolute;
-    inset: -9px;
+    inset: 0;
   }
 
   .ops-command-mark {
@@ -388,6 +393,25 @@
     width: 100%;
   }
 
+  .knowledge-selector-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .knowledge-selector-header > :first-child {
+    display: grid;
+    gap: 6px;
+  }
+
+  .knowledge-selector-header .ops-meta-text {
+    width: 100%;
+  }
+
+  .knowledge-selector-header [data-slot="select-trigger"] {
+    width: 100%;
+  }
+
   .settings-command-header {
     min-height: auto;
     padding: 14px;
@@ -422,7 +446,7 @@
   .profile-input,
   .profile-select-trigger {
     min-height: 44px;
-    font-size: 16px;
+    font-size: var(--fs-body-lg);
   }
 
   .persona-pagination,

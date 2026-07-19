@@ -64,25 +64,25 @@ const V: Record<Variant, VariantConfig> = {
 };
 
 const TONE_CLASS: Record<Tone, string> = {
-  ok: "text-emerald-600 bg-emerald-500/10 border-emerald-500/20",
-  busy: "text-sky-600 bg-sky-500/10 border-sky-500/20",
-  warn: "text-amber-600 bg-amber-500/10 border-amber-500/20",
+  ok: "text-success bg-success/10 border-success/20",
+  busy: "text-info bg-info/10 border-info/20",
+  warn: "text-warning bg-warning/10 border-warning/20",
   bad: "text-destructive bg-destructive/10 border-destructive/20",
   neutral: "text-muted-foreground bg-muted/35 border-border/70",
 };
 
 const BAR_CLASS: Record<Tone, string> = {
-  ok: "bg-emerald-500",
-  busy: "bg-sky-500",
-  warn: "bg-amber-500",
+  ok: "bg-success",
+  busy: "bg-info",
+  warn: "bg-warning",
   bad: "bg-destructive",
   neutral: "bg-muted-foreground",
 };
 
 const DONUT_COLOR: Record<Tone, string> = {
   ok: "oklch(0.6222 0.1338 155.6)",
-  busy: "oklch(0.72 0.14 74)",
-  warn: "oklch(0.72 0.14 74)",
+  busy: "var(--info)",
+  warn: "var(--warning)",
   bad: "var(--destructive)",
   neutral: "var(--primary)",
 };
@@ -651,7 +651,7 @@ const KnowledgeOpsCard = ({
         </div>
 
         {failedJobCount > 0 ? (
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-helper font-medium text-amber-700">
+          <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-helper font-medium text-warning">
             {failedJobCount} RQ job failed. Kiểm tra worker/log trước khi retry
             hàng loạt.
           </div>

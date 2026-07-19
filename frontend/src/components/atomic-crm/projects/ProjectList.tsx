@@ -174,9 +174,9 @@ export const ProjectAccordionList = ({
                     <Badge
                       variant="outline"
                       className={cn(
-                        "border-border bg-muted/40 text-muted-foreground",
-                        project.is_active &&
-                          "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        project.is_active
+                          ? "tt-badge-success tt-badge-soft border-transparent text-success"
+                          : "border-border bg-muted/40 text-muted-foreground",
                       )}
                     >
                       {project.is_active ? "Đang hoạt động" : "Tắt"}

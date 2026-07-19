@@ -70,9 +70,9 @@
   }
 
   .settings-mobile-drawer {
-    --settings-accent: #0f8a68;
-    --settings-accent-strong: #08765a;
-    --settings-accent-soft: #dff3ec;
+    --settings-accent: var(--workspace-action);
+    --settings-accent-strong: var(--workspace-action-strong);
+    --settings-accent-soft: var(--workspace-teal-soft);
     --settings-border: #d4dce6;
     --ink: #111827;
     --ink-muted: #4b5563;
@@ -305,12 +305,95 @@
 
 /* ─── Facebook Messenger integration page (Phase 6) ────────────────────── */
 
+.settings-messenger-card-content {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 20px;
+}
+
+.settings-messenger-card-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--crm-fs-body);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
+}
+
+.settings-messenger-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-messenger-empty-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.settings-messenger-empty-copy .settings-field-hint {
+  margin: 0;
+}
+
+.settings-messenger .settings-messenger-primary-action {
+  width: auto;
+  min-width: max-content;
+  flex: 0 0 auto;
+}
+
+.settings-messenger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 0;
+}
+
+.settings-messenger-result {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.settings-messenger-recovery {
+  display: block;
+}
+
+.settings-messenger-recovery-summary {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--ink);
+  padding: 14px 52px 14px 20px;
+  font-size: var(--crm-fs-body-sm);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
+}
+
+.settings-messenger-recovery-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-messenger-recovery-content {
+  border-top: 1px solid var(--settings-border);
+  padding: 18px 20px 20px;
+}
+
+.settings-messenger-recovery-form {
+  max-width: 38rem;
+}
+
+.settings-messenger-recovery-form .settings-test-button {
+  width: max-content;
+  margin-top: 4px;
+}
+
 .settings-page-list {
   list-style: none;
-  padding: 0;
-  margin: 0.5rem 0;
   display: grid;
   gap: 0.4rem;
+  margin: 0;
+  padding: 0;
 }
 
 .settings-page-list li {
@@ -332,14 +415,14 @@
 
 .settings-field-hint {
   color: var(--ink-muted, #64748b);
-  font-size: 0.85rem;
+  font-size: var(--fs-body-sm);
 }
 
 .settings-test-result {
   margin-top: 0.5rem;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
 }
 
 .settings-test-result-ok {
@@ -350,4 +433,40 @@
 .settings-test-result-error {
   background: oklch(0.95 0.05 25);
   color: oklch(0.4 0.12 25);
+}
+
+@media (max-width: 767px) {
+  .settings-messenger-card-content {
+    padding: 16px;
+  }
+
+  .settings-messenger-empty {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .settings-messenger .settings-messenger-primary-action {
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .settings-messenger-recovery-form .settings-test-button {
+    width: 100%;
+  }
+
+  .settings-messenger-recovery-summary {
+    min-height: 60px;
+    padding: 14px 48px 14px 16px;
+  }
+
+  .settings-messenger-recovery-content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-messenger .settings-messenger-primary-action {
+    width: 100%;
+  }
 }

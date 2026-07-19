@@ -231,7 +231,7 @@ export const FileInput = (props: FileInputProps) => {
       <div
         {...getRootProps({
           className: cn(
-            "border-2 border-dashed border-muted rounded-lg p-6 text-center transition-colors",
+            "tt-card tt-card-dash border-2 border-dashed border-muted rounded-lg p-6 text-center transition-colors",
             "hover:border-sidebar-ring focus:outline-none",
             disabled || readOnly
               ? "bg-muted cursor-not-allowed"

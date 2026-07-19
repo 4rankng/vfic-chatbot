@@ -931,32 +931,71 @@ class KnowledgeCategoryService:
             self.db.add(company)
             await self.db.flush()
             companies = [company]
-        await self.db.execute(
-            delete(Job).where(
-                Job.company_id.in_([row.id for row in companies]),
-                Job.source_category_revision_id.is_not(None),
-            )
-        )
+        # --- KB-authoritative job sync with manual-job protection ---
+        # Policy:
+        #   1. Only touch jobs where source_category_revision_id IS NOT NULL
+        #      (KB-derived). Manually created jobs (NULL) are never touched.
+        #   2. Preserve the status of jobs marked FULL, EXPIRED, or ARCHIVED —
+        #      a re-learn must never reactivate a closed/full/expired position.
+        #   3. Upsert by stable_key: if the job already exists with a terminal
+        #      status, update its fields but keep the status. If it's new, create
+        #      it as ACTIVE.
+        existing_jobs: dict[str, Job] = {}
+        if company:
+            existing_jobs = {
+                j.stable_key: j
+                for j in (
+                    await self.db.scalars(
+                        select(Job).where(
+                            Job.company_id == company.id,
+                            Job.source_category_revision_id.is_not(None),
+                            Job.stable_key.is_not(None),
+                        )
+                    )
+                ).all()
+            }
+
+        # Terminal statuses that must be preserved across re-learns.
+        _TERMINAL_STATUSES = {JobStatus.FULL, JobStatus.EXPIRED, JobStatus.ARCHIVED}
+
+        # Keys present in the new KB revision.
+        new_keys: set[str] = set()
+
         roles: list[str] = []
         locations: list[str] = []
         for item in document.jobs:
             roles.append(item.title)
             if item.location:
                 locations.append(item.location)
-            self.db.add(
-                Job(
-                    company_id=company.id,
-                    stable_key=item.id,
-                    source_category_revision_id=revision.id,
-                    title=item.title,
-                    factory_name=company.name,
-                    province=item.location,
-                    address=item.location,
-                    vacancy_count=item.vacancies or 1,
-                    status=JobStatus.ACTIVE,
-                    description=item.summary,
+            new_keys.add(item.id)
+            existing = existing_jobs.get(item.id)
+            if existing is not None:
+                # Upsert: update mutable fields, preserve terminal status.
+                existing.title = item.title
+                existing.factory_name = company.name
+                existing.province = item.location
+                existing.address = item.location
+                existing.vacancy_count = item.vacancies or 1
+                existing.description = item.summary
+                existing.source_category_revision_id = revision.id
+                # Only set ACTIVE if the job isn't in a terminal state.
+                if existing.status not in _TERMINAL_STATUSES:
+                    existing.status = JobStatus.ACTIVE
+            else:
+                self.db.add(
+                    Job(
+                        company_id=company.id,
+                        stable_key=item.id,
+                        source_category_revision_id=revision.id,
+                        title=item.title,
+                        factory_name=company.name,
+                        province=item.location,
+                        address=item.location,
+                        vacancy_count=item.vacancies or 1,
+                        status=JobStatus.ACTIVE,
+                        description=item.summary,
+                    )
                 )
-            )
         card = dict(project.index_card or {})
         location = ", ".join(dict.fromkeys(locations))
         role_text = ", ".join(dict.fromkeys(roles[:3]))

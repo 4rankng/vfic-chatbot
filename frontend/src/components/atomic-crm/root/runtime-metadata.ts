@@ -14,7 +14,7 @@ const setMetaContent = (selector: string, value: string): void => {
 };
 
 export const resetRuntimeMetadata = (): void => {
-  document.title = "Thiết lập hệ thống";
+  document.title = "Ting Ting";
   document.documentElement.lang = "vi";
   for (const selector of METADATA_SELECTORS) setMetaContent(selector, "");
   document.head

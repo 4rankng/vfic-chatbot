@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import { BusFront, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { BusFront, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,11 +71,16 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
         <div className="flex items-center gap-2">
           {loading ? (
             <span className="inline-flex items-center gap-1.5 text-body text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin text-primary" />
+              <span
+                className="tt-loading tt-loading-spinner tt-loading-sm text-primary"
+                aria-hidden="true"
+              />
               Đang tải…
             </span>
           ) : (
-            <span className="text-body text-muted-foreground">{total} tuyến</span>
+            <span className="text-body text-muted-foreground">
+              {total} tuyến
+            </span>
           )}
           {total > BUS_ROUTE_PAGE_SIZE && (
             <span className="text-helper text-muted-foreground">

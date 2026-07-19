@@ -5,6 +5,7 @@
 
   .workspace-navigation-mobile .workspace-navigation-items {
     min-height: 64px;
+    gap: 0;
     border: 1px solid
       color-mix(
         in srgb,
@@ -12,23 +13,19 @@
         transparent
       );
     border-radius: 24px;
-    background: color-mix(
-      in srgb,
-      var(--workspace-surface, white) 94%,
-      transparent
-    );
+    background: var(--workspace-surface, white);
     box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
-    backdrop-filter: blur(16px);
   }
 
   .workspace-navigation-mobile .workspace-navigation-link {
+    min-width: 0;
     min-height: 56px;
     gap: 4px;
     border-radius: 16px;
-    padding: 8px 4px;
+    padding: 8px 2px;
     font-size: var(--fs-helper);
     font-weight: 600;
-    line-height: 12px;
+    line-height: 1.3;
     transition:
       background-color 180ms ease,
       color 180ms ease,
@@ -44,12 +41,6 @@
     color: var(--workspace-action, var(--primary));
   }
 
-  .workspace-navigation-mobile
-    .workspace-navigation-link.is-active
-    .workspace-navigation-icon {
-    transform: translateY(-1px);
-  }
-
   .workspace-navigation-mobile .workspace-navigation-icon {
     width: 20px;
     height: 20px;
@@ -57,10 +48,31 @@
   }
 
   .workspace-navigation-mobile .workspace-navigation-label {
-    overflow: hidden;
-    max-width: 100%;
-    text-overflow: ellipsis;
+    display: block;
+    max-width: none;
+    min-height: 1.3em;
+    overflow: visible;
+    font-size: var(--fs-caption);
+    letter-spacing: -0.025em;
+    line-height: 1.3;
+    text-overflow: clip;
     white-space: nowrap;
+  }
+
+  @media (max-width: 340px) {
+    .workspace-navigation-mobile {
+      padding-right: 4px;
+      padding-left: 4px;
+    }
+
+    .workspace-navigation-mobile .workspace-navigation-items {
+      padding-right: 3px;
+      padding-left: 3px;
+    }
+
+    .workspace-navigation-mobile .workspace-navigation-label {
+      letter-spacing: -0.035em;
+    }
   }
 
   .mobile-nav-more-sheet {

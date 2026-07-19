@@ -216,7 +216,7 @@
   }
 
   .inbox-bg-container .workspace-empty-copy h2 {
-    font-size: 16px;
+    font-size: var(--fs-body-lg);
   }
 
   .inbox-bg-container .conversation {
@@ -239,7 +239,7 @@
   }
 
   .inbox-bg-container .conversation.active {
-    background: #d8ecff;
+    background: var(--brand-light);
   }
 
   .inbox-bg-container .conversation.needs-attention {
@@ -267,7 +267,7 @@
   }
 
   .inbox-bg-container .conv-name {
-    font-size: 15px;
+    font-size: var(--fs-nav);
     font-weight: var(--chat-fw-bold);
     line-height: 1.25;
   }
@@ -280,7 +280,7 @@
   }
 
   .inbox-bg-container .conv-preview {
-    font-size: 14px;
+    font-size: var(--fs-body);
     line-height: 1.35;
   }
 
@@ -417,7 +417,7 @@
   .inbox-bg-container .mode-segment {
     width: auto;
     min-width: 0;
-    min-height: 36px;
+    min-height: 44px;
     padding: 0;
   }
   .inbox-bg-container .mode-segment-copy {

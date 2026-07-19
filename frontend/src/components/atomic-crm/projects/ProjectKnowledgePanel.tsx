@@ -7,7 +7,6 @@ import {
   Database,
   Download,
   FileText,
-  Loader2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -180,14 +179,19 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                 readOnly={!editable}
                 placeholder="Dán toàn bộ kiến thức của dự án tại đây..."
                 aria-label="Nội dung trang kiến thức"
-                className="font-mono text-sm"
+                className="font-mono text-body"
               />
               {editable && (
                 <Button
                   onClick={() => void save()}
                   disabled={saving || loadFailed}
                 >
-                  {saving && <Loader2 className="size-4 animate-spin" />}
+                  {saving ? (
+                    <span
+                      className="tt-loading tt-loading-spinner tt-loading-sm"
+                      aria-hidden="true"
+                    />
+                  ) : null}
                   {hasCurrentPage
                     ? "Thay thế trang hiện tại"
                     : "Lưu trang kiến thức"}
@@ -396,7 +400,10 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     categories?.filter((item) => item.active_revision_id).length ?? 0;
 
   return (
-    <section className="project-knowledge-panel" aria-labelledby="project-knowledge-title">
+    <section
+      className="project-knowledge-panel"
+      aria-labelledby="project-knowledge-title"
+    >
       <header className="project-knowledge-header">
         <h2 id="project-knowledge-title" className="project-knowledge-title">
           <Database className="size-5" aria-hidden="true" />
@@ -448,8 +455,8 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                       {category.label_vi}
                     </span>
                     {isProcessing || hasPendingRevision ? (
-                      <Loader2
-                        className="size-4 animate-spin text-primary"
+                      <span
+                        className="tt-loading tt-loading-spinner tt-loading-sm text-primary"
                         aria-hidden="true"
                       />
                     ) : hasError ? (
@@ -479,7 +486,9 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                         Cập nhật lỗi — nội dung cũ vẫn đang dùng
                       </span>
                     ) : !isActive ? (
-                      <span className="text-muted-foreground">Chưa có dữ liệu</span>
+                      <span className="text-muted-foreground">
+                        Chưa có dữ liệu
+                      </span>
                     ) : null}
                   </div>
                   {category.updated_at && (
@@ -542,7 +551,12 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                 onClick={() => void replace()}
                 disabled={saving || loadingTemplate}
               >
-                {saving && <Loader2 className="size-4 animate-spin" />}
+                {saving ? (
+                  <span
+                    className="tt-loading tt-loading-spinner tt-loading-sm"
+                    aria-hidden="true"
+                  />
+                ) : null}
                 Kiểm tra và thay thế mục này
               </Button>
               {selectedCategory?.active_revision_id && (
@@ -653,7 +667,12 @@ const DiscoveryCardEditor = ({ project }: { project: Project }) => {
         />
         <div>
           <Button onClick={() => void save()} disabled={saving}>
-            {saving && <Loader2 className="size-4 animate-spin" />}
+            {saving ? (
+              <span
+                className="tt-loading tt-loading-spinner tt-loading-sm"
+                aria-hidden="true"
+              />
+            ) : null}
             Lưu thông tin gợi ý
           </Button>
         </div>

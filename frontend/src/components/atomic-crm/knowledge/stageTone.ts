@@ -2,15 +2,15 @@
 // Unknown values fall back to muted.
 export const stageTone = (stage?: string | null, status?: string): string => {
   const s = (status ?? stage ?? "").toUpperCase();
-  if (s === "PUBLISHED") return "bg-emerald-500 text-white";
-  if (s === "FAILED") return "bg-rose-500 text-white";
+  if (s === "PUBLISHED") return "bg-success text-white";
+  if (s === "FAILED") return "bg-destructive text-white";
   if (
     s === "DIGESTING" ||
     s === "EMBEDDING" ||
     s === "INDEXING" ||
     s === "PROCESSING"
   )
-    return "bg-sky-500 text-white";
+    return "bg-info text-white";
   return "bg-muted text-muted-foreground";
 };
 

@@ -244,7 +244,7 @@ const ChatMessageRow = memo(
         )
       ) : null;
     const bubble = (
-      <div className="bubble">
+      <div className="bubble tt-chat-bubble">
         <div className="bubble-content">
           <div className="message-text">
             {textBlocks.map((block, index) =>
@@ -297,7 +297,7 @@ const ChatMessageRow = memo(
 
     return (
       <div
-        className={`message-row ${kind} ${isGrouped ? "grouped" : ""}`}
+        className={`message-row tt-chat ${kind === "user" ? "tt-chat-start" : "tt-chat-end"} ${kind} ${isGrouped ? "grouped" : ""}`}
         data-message-id={m.id}
       >
         {kind === "user" ? (
@@ -748,10 +748,14 @@ export const ChatThread = ({
             </div>
           )}
           {historyError && messages.length > 0 ? (
-            <div className="chat-history-error" role="status">
+            <div
+              className="chat-history-error tt-alert tt-alert-warning tt-alert-soft"
+              role="status"
+            >
               <span>Không tải được tin nhắn cũ hơn.</span>
               <button
                 type="button"
+                className="tt-btn tt-btn-sm tt-btn-outline"
                 onClick={() => retryHistory(messages[0].id)}
               >
                 Thử lại
@@ -759,11 +763,18 @@ export const ChatThread = ({
             </div>
           ) : null}
           {messages.length === 0 && initialError ? (
-            <div className="chat-empty chat-load-error" role="status">
+            <div
+              className="chat-empty chat-load-error tt-alert tt-alert-error tt-alert-soft"
+              role="status"
+            >
               <span>
                 Không thể tải tin nhắn. Nội dung chưa được xác nhận là trống.
               </span>
-              <button type="button" onClick={retryInitial}>
+              <button
+                className="tt-btn tt-btn-sm tt-btn-outline"
+                type="button"
+                onClick={retryInitial}
+              >
                 Thử lại
               </button>
             </div>
@@ -782,7 +793,7 @@ export const ChatThread = ({
         {isAwayFromBottom ? (
           <button
             type="button"
-            className={`new-message-jump${hasUnseenLatest ? " has-unseen" : ""}`}
+            className={`new-message-jump tt-btn tt-btn-sm${hasUnseenLatest ? " has-unseen tt-btn-primary" : ""}`}
             aria-label={
               hasUnseenLatest
                 ? "Cuộn đến tin nhắn mới"
@@ -802,7 +813,7 @@ export const ChatThread = ({
           a stable boundary in every mode. No position:fixed/overlay. */}
       <footer ref={composerWrapRef} className="composer-wrap">
         {showTakeoverNotice && (
-          <div className="handoff-note">
+          <div className="handoff-note tt-alert tt-alert-info tt-alert-soft">
             <Bot className="icon" />
             <span>
               {needsClaim
@@ -811,7 +822,7 @@ export const ChatThread = ({
             </span>
             <button
               type="button"
-              className="inline-takeover-btn"
+              className="inline-takeover-btn tt-btn tt-btn-sm tt-btn-outline"
               onClick={handleTakeover}
             >
               Tiếp quản
@@ -825,6 +836,7 @@ export const ChatThread = ({
           >
             <textarea
               ref={textareaRef}
+              className="tt-textarea"
               rows={1}
               placeholder={canHumanReply ? "Nhập tin nhắn..." : "Chưa sẵn sàng"}
               disabled={!canHumanReply || isSending}
@@ -839,7 +851,7 @@ export const ChatThread = ({
             />
             <button
               type="submit"
-              className="composer-action send"
+              className="composer-action send tt-btn tt-btn-primary tt-btn-circle text-primary-foreground"
               aria-label="Gửi tin nhắn"
               disabled={!canHumanReply || isSending || !reply.trim()}
             >
@@ -857,7 +869,9 @@ export const ChatThread = ({
             tabIndex={-1}
           >
             <Bot className="icon" aria-hidden="true" />
-            <span>Hội thoại đã đóng. Không thể gửi tin nhắn cho người trò chuyện.</span>
+            <span>
+              Hội thoại đã đóng. Không thể gửi tin nhắn cho người trò chuyện.
+            </span>
           </div>
         )}
       </footer>

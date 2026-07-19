@@ -39,22 +39,14 @@
 
 .knowledge-detail-panel {
   border-color: var(--border);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-solid) 96%, transparent),
-      color-mix(in srgb, var(--surface-solid) 90%, transparent)
-    ),
-    var(--surface-solid);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.42),
-    0 16px 42px rgba(15, 23, 42, 0.035);
+  background: var(--surface-solid);
+  box-shadow: none;
 }
 
 .settings-workspace-content {
-  --settings-accent: #0f8a68;
-  --settings-accent-strong: #08765a;
-  --settings-accent-soft: #dff3ec;
+  --settings-accent: var(--workspace-action);
+  --settings-accent-strong: var(--workspace-action-strong);
+  --settings-accent-soft: var(--workspace-teal-soft);
   --settings-canvas: var(--workspace-canvas);
   --settings-surface: #fafbfc;
   --settings-elevated: #ffffff;

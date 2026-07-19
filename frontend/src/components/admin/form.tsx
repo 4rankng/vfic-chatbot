@@ -14,7 +14,7 @@ import {
   ValidationError,
   warning,
 } from "ra-core";
-import { Loader2, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { Slot } from "@radix-ui/react-slot";
 import { FormProvider, useFormContext, useFormState } from "react-hook-form";
@@ -243,7 +243,14 @@ const SaveButton = <RecordType extends RaRecord = RaRecord>(
       )}
       {...rest}
     >
-      {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : icon}
+      {isSubmitting ? (
+        <span
+          className="tt-loading tt-loading-spinner tt-loading-sm"
+          aria-hidden="true"
+        />
+      ) : (
+        icon
+      )}
       {displayedLabel}
     </Button>
   );

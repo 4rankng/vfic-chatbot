@@ -74,4 +74,25 @@ describe("RecruitingCommandCenter candidate rows", () => {
       screen.container.querySelector(".dashboard-candidate-chevron"),
     ).toBeNull();
   });
+
+  it("does not report an active queue while initial requests are failing", async () => {
+    mockApiJson.mockRejectedValue(new Error("network unavailable"));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <RecruitingCommandCenter />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await expect
+      .element(screen.getByText("Đang chờ kết nối dữ liệu"))
+      .toBeVisible();
+    expect(screen.container.textContent).not.toContain(
+      "Hàng đợi đang hoạt động",
+    );
+  });
 });

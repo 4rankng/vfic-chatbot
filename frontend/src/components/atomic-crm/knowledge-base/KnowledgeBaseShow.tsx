@@ -115,7 +115,7 @@ const Content = () => {
 
   return (
     <div className="p-4 lg:p-6">
-      <h1 className="text-2xl font-bold tracking-tight">{kb.name}</h1>
+        <h1 className="text-page-title font-bold tracking-tight">{kb.name}</h1>
       <p className="mb-6 text-muted-foreground">
         {kb.mode === "RAG"
           ? "RAG: nhiều dự án, nhà máy, vị trí và pipeline hiện có."
@@ -142,11 +142,11 @@ const Content = () => {
                   {projects.map((project) => (
                     <li key={project.id} className="border-b pb-3 last:border-0 last:pb-0">
                       <p className="font-medium">{project.name}</p>
-                      <p className="text-sm text-muted-foreground">
+              <p className="text-body-sm text-muted-foreground">
                         {project.knowledge_document_count} tệp · {project.active_job_count} vị trí đang tuyển
                       </p>
                       {project.factories.length > 0 && (
-                        <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-body-sm text-muted-foreground">
                           Nhà máy: {project.factories.map((factory) =>
                             [factory.name, ...factory.aliases].join(" · "),
                           ).join("; ")}

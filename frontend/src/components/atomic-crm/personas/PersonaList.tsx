@@ -1,5 +1,4 @@
 import { memo, useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import {
   ListBase,
   useListContext,
@@ -9,11 +8,6 @@ import {
 } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin/list-pagination";
 import {
@@ -21,20 +15,14 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
-  Eye,
-  FileText,
   Hash,
-  MessageSquareText,
   Pencil,
   Plus,
   Search,
-  Star,
-  UsersRound,
   Zap,
 } from "lucide-react";
 import { ADAPTER_PROVIDER_LABELS, type Persona } from "../types";
 import { activatePersona } from "@/lib/vfic/knowledgeService";
-import { toSlug } from "@/lib/toSlug";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 import {
   getCompletedPersonaSectionCount,
@@ -95,7 +83,10 @@ const getScopeLabel = (persona: Persona, stats: PersonaDerivedStats) => {
   return "Dự phòng";
 };
 
-const getAdapterScopeSummary = (persona: Persona, stats: PersonaDerivedStats) => {
+const getAdapterScopeSummary = (
+  persona: Persona,
+  stats: PersonaDerivedStats,
+) => {
   if (stats.adapterCount > 0) {
     return stats.adapterLabels.join(", ");
   }
@@ -150,7 +141,9 @@ const PersonaFormattedContent = ({
         const separatorIndex = item.indexOf(":");
         const hasLeadLabel = separatorIndex > 0 && separatorIndex <= 72;
         const label = hasLeadLabel ? item.slice(0, separatorIndex + 1) : null;
-        const detail = hasLeadLabel ? item.slice(separatorIndex + 1).trim() : item;
+        const detail = hasLeadLabel
+          ? item.slice(separatorIndex + 1).trim()
+          : item;
 
         return (
           <li key={`${index}-${item}`}>
@@ -163,66 +156,6 @@ const PersonaFormattedContent = ({
   );
 };
 
-const PersonaStatusIcon = ({
-  icon,
-  label,
-  description,
-}: {
-  icon: ReactNode;
-  label: string;
-  description: string;
-}) => (
-  <Popover>
-    <PopoverTrigger asChild>
-      <button
-        type="button"
-        className="persona-directory-status-icon"
-        aria-label={label}
-      >
-        {icon}
-      </button>
-    </PopoverTrigger>
-    <PopoverContent
-      align="end"
-      className="persona-directory-status-popover"
-      sideOffset={6}
-    >
-      <strong>{label}</strong>
-      <p>{description}</p>
-    </PopoverContent>
-  </Popover>
-);
-
-const PersonaInfoIcon = ({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-}) => (
-  <Popover>
-    <PopoverTrigger asChild>
-      <button
-        type="button"
-        className="persona-directory-info-icon"
-        aria-label={`${label}: ${value}`}
-      >
-        {icon}
-      </button>
-    </PopoverTrigger>
-    <PopoverContent
-      align="center"
-      className="persona-directory-status-popover"
-      sideOffset={6}
-    >
-      <strong>{label}</strong>
-      <p>{value}</p>
-    </PopoverContent>
-  </Popover>
-);
-
 type PersonaRowProps = {
   persona: Persona;
   isSelected: boolean;
@@ -232,12 +165,11 @@ type PersonaRowProps = {
 const PersonaBubble = memo(
   ({ persona, isSelected, onSelect }: PersonaRowProps) => {
     const stats = getPersonaDerivedStats(persona);
-    const shouldShowSlug = persona.slug !== toSlug(persona.name);
     const scopeLabel = getScopeLabel(persona, stats);
 
     return (
       <article
-        className={`persona-directory-row ${persona.is_active ? "is-active" : ""} ${
+        className={`tt-list-row persona-directory-row ${persona.is_active ? "is-active" : ""} ${
           isSelected ? "is-selected" : ""
         }`}
       >
@@ -254,54 +186,16 @@ const PersonaBubble = memo(
             <span className="persona-directory-title-line">
               <span className="min-w-0">
                 <span className="persona-directory-name">{persona.name}</span>
-                {shouldShowSlug ? (
-                  <span className="persona-directory-slug">
-                    <Hash className="size-3" />
-                    {persona.slug}
-                  </span>
-                ) : null}
+                <span className="persona-directory-slug">
+                  <Hash className="size-3" />
+                  {persona.slug}
+                </span>
               </span>
             </span>
+            <span className="persona-directory-scope">{scopeLabel}</span>
           </span>
+          <ChevronRight className="persona-directory-chevron size-4" />
         </button>
-        <div className="persona-directory-status-actions">
-          {isSelected ? (
-            <PersonaStatusIcon
-              icon={<Eye className="size-3.5" />}
-              label="Đang xem"
-              description="Hồ sơ này đang mở trong bảng chi tiết bên dưới."
-            />
-          ) : null}
-          {persona.is_active ? (
-            <PersonaStatusIcon
-              icon={<Star className="size-3.5" />}
-              label="Mặc định"
-              description="Agent mặc định áp dụng cho adapter chưa gán Agent riêng."
-            />
-          ) : null}
-        </div>
-        <div className="persona-directory-meta">
-          <PersonaInfoIcon
-            icon={<FileText className="size-3.5" />}
-            label="Nội dung"
-            value={`${stats.sectionCount}/${PERSONA_SECTION_TOTAL} phần đã viết`}
-          />
-          <PersonaInfoIcon
-            icon={<MessageSquareText className="size-3.5" />}
-            label="Follow-up"
-            value={`${stats.followupEnabledCount}/${FOLLOWUP_TOTAL} kịch bản đang bật`}
-          />
-          <PersonaInfoIcon
-            icon={<UsersRound className="size-3.5" />}
-            label="Phạm vi"
-            value={scopeLabel}
-          />
-          <PersonaInfoIcon
-            icon={<Clock3 className="size-3.5" />}
-            label="Cập nhật"
-            value={formatDate(persona.updated_at)}
-          />
-        </div>
       </article>
     );
   },
@@ -324,6 +218,10 @@ const PersonaStudioOverview = ({
   }
 
   const readinessPercent = getReadinessPercent(stats.sectionCount);
+  const hasCompleteContent = stats.sectionCount >= PERSONA_SECTION_TOTAL;
+  const hasCompleteFollowups = stats.followupEnabledCount >= FOLLOWUP_TOTAL;
+  const hasAssignedScope = persona.is_active || stats.adapterCount > 0;
+  const hasAuthoredContent = stats.contentLength > 0;
   const updatedAt = formatDate(persona.updated_at);
   const createdAt = formatDate(persona.created_at);
   const sections = getPersonaSectionSummaries(persona.body_md);
@@ -342,301 +240,353 @@ const PersonaStudioOverview = ({
 
   return (
     <section className="persona-studio-sheet" aria-label="Hồ sơ Agent">
-        <div className="persona-studio-profile">
-          <div className="persona-studio-profile-head">
-            <div className="persona-studio-avatar" aria-hidden="true">
-              AI
+      <div className="persona-studio-profile">
+        <div className="persona-studio-profile-head">
+          <div className="persona-studio-avatar" aria-hidden="true">
+            AI
+          </div>
+          <div className="min-w-0">
+            <h1>{persona.name}</h1>
+            <p>
+              <Hash className="size-3.5" />
+              {persona.slug}
+            </p>
+            <div className="persona-studio-status-row">
+              <Badge
+                variant="outline"
+                className={
+                  persona.is_active
+                    ? "persona-studio-badge is-good"
+                    : "persona-studio-badge"
+                }
+              >
+                <CheckCircle2 className="size-3" />
+                {persona.is_active ? "Đang bật" : "Đang xem"}
+              </Badge>
+              {persona.is_active ? (
+                <Badge
+                  variant="outline"
+                  className="persona-studio-badge is-brand"
+                >
+                  Mặc định
+                </Badge>
+              ) : null}
+              <Badge variant="outline" className="persona-studio-badge">
+                {getScopeLabel(persona, stats)}
+              </Badge>
             </div>
-            <div className="min-w-0">
-              <h1>{persona.name}</h1>
-              <p>
-                <Hash className="size-3.5" />
-                {persona.slug}
-              </p>
-              <div className="persona-studio-status-row">
+          </div>
+          <div className="persona-studio-profile-actions">
+            <span className="persona-studio-updated">Cập nhật {updatedAt}</span>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => onEdit(persona)}
+            >
+              <Pencil className="size-3.5" />
+              Sửa Agent
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <section className="persona-studio-section">
+        <div className="persona-studio-section-title">
+          <div>
+            <h2>Mức sẵn sàng</h2>
+            <p>
+              Agent có đủ prompt, follow-up và cấu hình adapter để vận hành.
+            </p>
+          </div>
+        </div>
+        <div className="persona-readiness-bar-card">
+          <div>
+            <span>Sẵn sàng</span>
+            <strong>{readinessPercent}%</strong>
+          </div>
+          <progress
+            className="tt-progress tt-progress-success persona-readiness-bar"
+            value={readinessPercent}
+            max={100}
+            aria-label={`Sẵn sàng ${readinessPercent}%`}
+          />
+          <Badge
+            variant="outline"
+            className={`persona-studio-badge ${readinessPercent >= 100 ? "is-good" : ""}`}
+          >
+            {readinessPercent >= 100 ? "Đạt" : "Đang thiếu"}
+          </Badge>
+        </div>
+        <div className="persona-studio-checklist">
+          <div>
+            {hasCompleteContent ? (
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Clock3 className="is-incomplete size-3.5" aria-hidden="true" />
+            )}
+            <span>
+              <strong>Nội dung</strong>
+              <small>
+                {stats.sectionCount} / {PERSONA_SECTION_TOTAL} phần
+              </small>
+            </span>
+          </div>
+          <div>
+            {hasCompleteFollowups ? (
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Clock3 className="is-incomplete size-3.5" aria-hidden="true" />
+            )}
+            <span>
+              <strong>Follow-up</strong>
+              <small>
+                {stats.followupEnabledCount} / {FOLLOWUP_TOTAL} kịch bản
+              </small>
+            </span>
+          </div>
+          <div>
+            {hasAssignedScope ? (
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Clock3 className="is-incomplete size-3.5" aria-hidden="true" />
+            )}
+            <span>
+              <strong>Phạm vi</strong>
+              <small>{adapterScopeSummary}</small>
+            </span>
+          </div>
+          <div>
+            {hasAuthoredContent ? (
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Clock3 className="is-incomplete size-3.5" aria-hidden="true" />
+            )}
+            <span>
+              <strong>Dung lượng</strong>
+              <small>{numberFormatter.format(stats.contentLength)} ký tự</small>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="persona-studio-section">
+        <div className="persona-studio-section-title">
+          <div>
+            <h2>Prompt Agent</h2>
+            <p>Nội dung quyết định agent nói gì, hỏi gì và tránh điều gì.</p>
+          </div>
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => onEdit(persona)}
+          >
+            <Pencil className="size-3.5" />
+            Sửa prompt
+          </Button>
+        </div>
+        <div className="persona-prompt-list">
+          {sections.map((section) => (
+            <article
+              key={section.title}
+              className="persona-prompt-card tt-card"
+            >
+              <div>
+                <strong>{section.title}</strong>
                 <Badge
                   variant="outline"
                   className={
-                    persona.is_active
+                    section.content
                       ? "persona-studio-badge is-good"
                       : "persona-studio-badge"
                   }
                 >
-                  <CheckCircle2 className="size-3" />
-                  {persona.is_active ? "Đang bật" : "Đang xem"}
-                </Badge>
-                {persona.is_active ? (
-                  <Badge
-                    variant="outline"
-                    className="persona-studio-badge is-brand"
-                  >
-                    Mặc định
-                  </Badge>
-                ) : null}
-                <Badge variant="outline" className="persona-studio-badge">
-                  {getScopeLabel(persona, stats)}
+                  {section.content ? "Đã viết" : "Thiếu"}
                 </Badge>
               </div>
+              <PersonaFormattedContent
+                content={section.content}
+                emptyText="Chưa có nội dung cho phần này."
+              />
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="persona-studio-section">
+        <div className="persona-studio-section-title">
+          <div>
+            <h2>Luật phản hồi</h2>
+            <p>Những nguyên tắc quan trọng nhất agent phải tuân thủ.</p>
+          </div>
+        </div>
+        <div className="persona-prompt-list">
+          {ruleSections.map((section) => (
+            <article key={section.title} className="persona-rule-card tt-card">
+              <div>
+                <Badge
+                  variant="outline"
+                  className={
+                    section.content
+                      ? "persona-studio-badge is-good"
+                      : "persona-studio-badge"
+                  }
+                >
+                  {section.content ? "Bật" : "Thiếu"}
+                </Badge>
+                <strong>{section.title}</strong>
+              </div>
+              <PersonaFormattedContent
+                content={section.content}
+                emptyText="Chưa có luật phản hồi cho phần này."
+              />
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="persona-studio-section">
+        <div className="persona-studio-section-title">
+          <div>
+            <h2>Tự động follow-up</h2>
+            <p>Lịch nhắc lại theo mức ưu tiên của ứng viên.</p>
+          </div>
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => onEdit(persona)}
+          >
+            <Pencil className="size-3.5" />
+            Sửa follow-up
+          </Button>
+        </div>
+        <div className="persona-followup-grid">
+          {FOLLOWUP_KEYS.map((key) => {
+            const rule = persona.followup_rules?.[key];
+            return (
+              <article key={key} className="persona-followup-card tt-card">
+                <div>
+                  <strong>{FOLLOWUP_LABELS[key]}</strong>
+                  <Badge
+                    variant="outline"
+                    className={
+                      rule?.enabled
+                        ? "persona-studio-badge is-good"
+                        : "persona-studio-badge"
+                    }
+                  >
+                    {rule?.enabled ? "Bật" : "Tắt"}
+                  </Badge>
+                </div>
+                <p>
+                  {rule?.cadence_hours?.length
+                    ? `Nhắc sau ${rule.cadence_hours.join(", ")} giờ`
+                    : "Chưa đặt lịch nhắc"}
+                </p>
+                <small>
+                  Giai đoạn: {rule?.eligible_stages?.join(", ") || "Chưa chọn"}
+                </small>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="persona-studio-section">
+        <div className="persona-studio-section-title">
+          <div>
+            <h2>Adapter & nhật ký</h2>
+            <p>
+              Agent đang hiệu lực trên adapter nào và thay đổi gần nhất là gì.
+            </p>
+          </div>
+        </div>
+        <div className="persona-scope-activity-grid">
+          <div className="persona-scope-list">
+            <div className="persona-scope-row">
+              <span>Loại agent</span>
+              <strong>{adapterModeLabel}</strong>
+              <Badge
+                variant="outline"
+                className="persona-studio-badge is-brand"
+              >
+                {persona.is_active ? "Mặc định" : "Tuỳ chọn"}
+              </Badge>
             </div>
-            <div className="persona-studio-profile-actions">
-              <Button variant="outline" type="button" onClick={() => onEdit(persona)}>
-                <Pencil className="size-3.5" />
-                Sửa Agent
+            <div className="persona-scope-row">
+              <span>Adapter hiệu lực</span>
+              <strong>{adapterScopeSummary}</strong>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => onEdit(persona)}
+              >
+                Quản lý adapter
+              </Button>
+            </div>
+            <div className="persona-scope-row">
+              <span>Ghi chú nội bộ</span>
+              <strong>{persona.notes?.trim() || "Chưa có ghi chú"}</strong>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => onEdit(persona)}
+              >
+                Thêm
               </Button>
             </div>
           </div>
+          <div className="persona-activity is-expanded">
+            <div>
+              <span>
+                <Pencil className="size-3.5" />
+              </span>
+              <p>
+                <strong>Cập nhật cấu hình</strong>
+                <small>{updatedAt}</small>
+              </p>
+            </div>
+            <div>
+              <span>
+                <Clock3 className="size-3.5" />
+              </span>
+              <p>
+                <strong>Tạo Agent</strong>
+                <small>{createdAt}</small>
+              </p>
+            </div>
+            <div>
+              <span>
+                <CheckCircle2 className="size-3.5" />
+              </span>
+              <p>
+                <strong>
+                  {persona.is_active
+                    ? "Đang làm mặc định"
+                    : "Trạng thái adapter"}
+                </strong>
+                <small>{adapterActivitySummary}</small>
+              </p>
+            </div>
+          </div>
         </div>
+      </section>
 
-        <section className="persona-studio-section">
-          <div className="persona-studio-section-title">
-            <div>
-              <h2>Mức sẵn sàng</h2>
-              <p>Agent có đủ prompt, follow-up và cấu hình adapter để vận hành.</p>
-            </div>
-            <span>Cập nhật {updatedAt}</span>
-          </div>
-          <div className="persona-readiness-bar-card">
-            <div>
-              <span>Sẵn sàng</span>
-              <strong>{readinessPercent}%</strong>
-            </div>
-            <div
-              className="persona-readiness-bar"
-              aria-label={`Sẵn sàng ${readinessPercent}%`}
-            >
-              <span style={{ width: `${readinessPercent}%` }} />
-            </div>
-            <Badge
-              variant="outline"
-              className={`persona-studio-badge ${readinessPercent >= 100 ? "is-good" : ""}`}
-            >
-              {readinessPercent >= 100 ? "Đạt" : "Đang thiếu"}
-            </Badge>
-          </div>
-          <div className="persona-studio-checklist">
-            <div>
-              <CheckCircle2 className="size-3.5" />
-              <span>
-                <strong>Nội dung</strong>
-                <small>
-                  {stats.sectionCount} / {PERSONA_SECTION_TOTAL} phần
-                </small>
-              </span>
-            </div>
-            <div>
-              <CheckCircle2 className="size-3.5" />
-              <span>
-                <strong>Follow-up</strong>
-                <small>
-                  {stats.followupEnabledCount} / {FOLLOWUP_TOTAL} kịch bản
-                </small>
-              </span>
-            </div>
-            <div>
-              <CheckCircle2 className="size-3.5" />
-              <span>
-                <strong>Phạm vi</strong>
-                <small>
-                  {adapterScopeSummary}
-                </small>
-              </span>
-            </div>
-            <div>
-              <CheckCircle2 className="size-3.5" />
-              <span>
-                <strong>Dung lượng</strong>
-                <small>{numberFormatter.format(stats.contentLength)} ký tự</small>
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section className="persona-studio-section">
-          <div className="persona-studio-section-title">
-            <div>
-              <h2>Prompt Agent</h2>
-              <p>Nội dung quyết định agent nói gì, hỏi gì và tránh điều gì.</p>
-            </div>
-            <Button variant="outline" type="button" onClick={() => onEdit(persona)}>
-              <Pencil className="size-3.5" />
-              Sửa prompt
-            </Button>
-          </div>
-          <div className="persona-prompt-list">
-            {sections.map((section) => (
-              <article key={section.title} className="persona-prompt-card">
-                <div>
-                  <strong>{section.title}</strong>
-                  <Badge
-                    variant="outline"
-                    className={
-                      section.content
-                        ? "persona-studio-badge is-good"
-                        : "persona-studio-badge"
-                    }
-                  >
-                    {section.content ? "Đã viết" : "Thiếu"}
-                  </Badge>
-                </div>
-                <PersonaFormattedContent
-                  content={section.content}
-                  emptyText="Chưa có nội dung cho phần này."
-                />
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="persona-studio-section">
-          <div className="persona-studio-section-title">
-            <div>
-              <h2>Luật phản hồi</h2>
-              <p>Những nguyên tắc quan trọng nhất agent phải tuân thủ.</p>
-            </div>
-          </div>
-          <div className="persona-prompt-list">
-            {ruleSections.map((section) => (
-              <article key={section.title} className="persona-rule-card">
-                <div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      section.content
-                        ? "persona-studio-badge is-good"
-                        : "persona-studio-badge"
-                    }
-                  >
-                    {section.content ? "Bật" : "Thiếu"}
-                  </Badge>
-                  <strong>{section.title}</strong>
-                </div>
-                <PersonaFormattedContent
-                  content={section.content}
-                  emptyText="Chưa có luật phản hồi cho phần này."
-                />
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="persona-studio-section">
-          <div className="persona-studio-section-title">
-            <div>
-              <h2>Tự động follow-up</h2>
-              <p>Lịch nhắc lại theo mức ưu tiên của ứng viên.</p>
-            </div>
-            <Button variant="outline" type="button" onClick={() => onEdit(persona)}>
-              <Pencil className="size-3.5" />
-              Sửa follow-up
-            </Button>
-          </div>
-          <div className="persona-followup-grid">
-            {FOLLOWUP_KEYS.map((key) => {
-              const rule = persona.followup_rules?.[key];
-              return (
-                <article key={key} className="persona-followup-card">
-                  <div>
-                    <strong>{FOLLOWUP_LABELS[key]}</strong>
-                    <Badge
-                      variant="outline"
-                      className={
-                        rule?.enabled
-                          ? "persona-studio-badge is-good"
-                          : "persona-studio-badge"
-                      }
-                    >
-                      {rule?.enabled ? "Bật" : "Tắt"}
-                    </Badge>
-                  </div>
-                  <p>
-                    {rule?.cadence_hours?.length
-                      ? `Nhắc sau ${rule.cadence_hours.join(", ")} giờ`
-                      : "Chưa đặt lịch nhắc"}
-                  </p>
-                  <small>
-                    Giai đoạn: {rule?.eligible_stages?.join(", ") || "Chưa chọn"}
-                  </small>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="persona-studio-section">
-          <div className="persona-studio-section-title">
-            <div>
-              <h2>Adapter & nhật ký</h2>
-              <p>Agent đang hiệu lực trên adapter nào và thay đổi gần nhất là gì.</p>
-            </div>
-          </div>
-          <div className="persona-scope-activity-grid">
-            <div className="persona-scope-list">
-              <div className="persona-scope-row">
-                <span>Loại agent</span>
-                <strong>{adapterModeLabel}</strong>
-                <Badge variant="outline" className="persona-studio-badge is-brand">
-                  {persona.is_active ? "Mặc định" : "Tuỳ chọn"}
-                </Badge>
-              </div>
-              <div className="persona-scope-row">
-                <span>Adapter hiệu lực</span>
-                <strong>{adapterScopeSummary}</strong>
-                <Button variant="outline" type="button" onClick={() => onEdit(persona)}>
-                  Quản lý adapter
-                </Button>
-              </div>
-              <div className="persona-scope-row">
-                <span>Ghi chú nội bộ</span>
-                <strong>{persona.notes?.trim() || "Chưa có ghi chú"}</strong>
-                <Button variant="outline" type="button" onClick={() => onEdit(persona)}>
-                  Thêm
-                </Button>
-              </div>
-            </div>
-            <div className="persona-activity is-expanded">
-              <div>
-                <span>
-                  <Pencil className="size-3.5" />
-                </span>
-                <p>
-                  <strong>Cập nhật cấu hình</strong>
-                  <small>{updatedAt}</small>
-                </p>
-              </div>
-              <div>
-                <span>
-                  <Clock3 className="size-3.5" />
-                </span>
-                <p>
-                  <strong>Tạo Agent</strong>
-                  <small>{createdAt}</small>
-                </p>
-              </div>
-              <div>
-                <span>
-                  <CheckCircle2 className="size-3.5" />
-                </span>
-                <p>
-                  <strong>{persona.is_active ? "Đang làm mặc định" : "Trạng thái adapter"}</strong>
-                  <small>{adapterActivitySummary}</small>
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {!persona.is_active ? (
-          <footer className="persona-profile-footer">
-          <Button variant="outline" type="button" onClick={() => onEdit(persona)}>
+      {!persona.is_active ? (
+        <footer className="persona-profile-footer">
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => onEdit(persona)}
+          >
             <Pencil className="size-3.5" />
             Sửa
           </Button>
-            <Button type="button" onClick={() => onActivate(persona)}>
-              <Zap className="size-3.5" />
-              Đặt mặc định
-            </Button>
-          </footer>
-        ) : null}
+          <Button type="button" onClick={() => onActivate(persona)}>
+            <Zap className="size-3.5" />
+            Đặt mặc định
+          </Button>
+        </footer>
+      ) : null}
     </section>
   );
 };
@@ -676,7 +626,9 @@ const PersonaEmptyWorkspace = ({ onCreate }: { onCreate: () => void }) => (
         <span className="persona-empty-step-index">2</span>
         <div>
           <strong>Thiết lập adapter</strong>
-          <p>Chọn adapter nào dùng Agent này hoặc để adapter kế thừa mặc định.</p>
+          <p>
+            Chọn adapter nào dùng Agent này hoặc để adapter kế thừa mặc định.
+          </p>
         </div>
       </div>
       <div>
@@ -719,12 +671,26 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
     () => personas.find((persona) => persona.is_active) ?? personas[0] ?? null,
     [personas],
   );
-  const selectedPersona = useMemo(
-    () =>
-      personas.find((persona) => persona.id === selectedPersonaId) ??
-      defaultPersona,
-    [defaultPersona, personas, selectedPersonaId],
-  );
+  const selectedPersona = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return (
+        personas.find((persona) => persona.id === selectedPersonaId) ??
+        defaultPersona
+      );
+    }
+    return (
+      filteredPersonas.find((persona) => persona.id === selectedPersonaId) ??
+      filteredPersonas.find((persona) => persona.is_active) ??
+      filteredPersonas[0] ??
+      null
+    );
+  }, [
+    defaultPersona,
+    filteredPersonas,
+    personas,
+    searchQuery,
+    selectedPersonaId,
+  ]);
   const selectedPersonaStats = selectedPersona
     ? getPersonaDerivedStats(selectedPersona)
     : null;
@@ -743,39 +709,13 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
   const content = (
     <div className="persona-workspace-content">
       <div className="persona-page-shell">
-        <header className="persona-studio-topbar">
-          <div className="persona-studio-crumbs">
-            <span>Hồ sơ Agent</span>
-            <ChevronRight className="size-4" aria-hidden="true" />
-            <strong>{selectedPersona?.name ?? "Agent"}</strong>
-          </div>
-          <label className="persona-studio-command">
-            <Search className="size-4" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Tìm Agent, slug hoặc adapter"
-              aria-label="Tìm Agent"
-            />
-          </label>
-          <Button
-            type="button"
-            className="persona-create-action"
-            onClick={() => redirect("create", "personas")}
-          >
-            <Plus className="size-4" />
-            Tạo Agent
-          </Button>
-        </header>
-
         {isEmpty ? (
           <PersonaEmptyWorkspace
             onCreate={() => redirect("create", "personas")}
           />
         ) : (
           <>
-            <div className="persona-studio-layout persona-agent-stack">
+            <div className="tt-card tt-card-border persona-studio-layout persona-agent-stack">
               <section
                 className="persona-agent-picker"
                 aria-label="Danh sách Agent"
@@ -793,6 +733,26 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                   </Badge>
                 </div>
 
+                <label className="tt-input persona-studio-command">
+                  <Search className="size-4" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Tìm Agent"
+                    aria-label="Tìm Agent"
+                  />
+                </label>
+
+                <Button
+                  type="button"
+                  className="persona-create-action"
+                  onClick={() => redirect("create", "personas")}
+                >
+                  <Plus className="size-4" />
+                  Tạo Agent
+                </Button>
+
                 {isPending ? (
                   <div className="persona-directory-loading">
                     {Array.from({ length: 4 }).map((_, i) => (
@@ -807,7 +767,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                     ))}
                   </div>
                 ) : (
-                  <div className="persona-directory-list persona-agent-bubbles">
+                  <div className="tt-list persona-directory-list persona-agent-bubbles">
                     {filteredPersonas.length > 0 ? (
                       filteredPersonas.map((p) => (
                         <PersonaBubble
@@ -833,9 +793,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                   persona={selectedPersona}
                   stats={selectedPersonaStats}
                   onActivate={onActivatePersona}
-                  onEdit={(persona) =>
-                    redirect("edit", "personas", persona.id)
-                  }
+                  onEdit={(persona) => redirect("edit", "personas", persona.id)}
                 />
               </div>
             </div>

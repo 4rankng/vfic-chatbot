@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Globe2, Loader2, RefreshCcw, Workflow } from "lucide-react";
+import { Globe2, RefreshCcw, Workflow } from "lucide-react";
 import {
   ADAPTER_PROVIDERS,
   type AdapterPersonaAssignment,
@@ -114,12 +114,13 @@ const getAssignmentState = (
 export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   const notify = useNotify();
   const refresh = useRefresh();
-  const [assignments, setAssignments] = useState<AdapterPersonaAssignment[]>([]);
+  const [assignments, setAssignments] = useState<AdapterPersonaAssignment[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [feedbackByProvider, setFeedbackByProvider] = useState<
-    Record<AdapterProvider, RowFeedback>
-  >(initialFeedbackState);
+  const [feedbackByProvider, setFeedbackByProvider] =
+    useState<Record<AdapterProvider, RowFeedback>>(initialFeedbackState);
   const [activating, setActivating] = useState(false);
   const assignmentRequestId = useRef(0);
 
@@ -285,7 +286,10 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 disabled={activating}
               >
                 {activating ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <span
+                    className="tt-loading tt-loading-spinner tt-loading-sm"
+                    aria-hidden="true"
+                  />
                 ) : (
                   <Globe2 className="size-4" />
                 )}
@@ -343,7 +347,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 return (
                   <section
                     key={assignment.provider}
-                    className="persona-assignment-row persona-assignment-row-card"
+                    className="persona-assignment-row persona-assignment-row-card tt-card"
                     role="group"
                     aria-label={assignment.label}
                   >
@@ -380,12 +384,17 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => void refreshProvider(assignment.provider)}
+                        onClick={() =>
+                          void refreshProvider(assignment.provider)
+                        }
                         disabled={feedback.pending}
                         aria-label={`Tải lại trạng thái ${assignment.label}`}
                       >
                         {feedback.pending ? (
-                          <Loader2 className="size-4 animate-spin" />
+                          <span
+                            className="tt-loading tt-loading-spinner tt-loading-sm"
+                            aria-hidden="true"
+                          />
                         ) : (
                           <RefreshCcw className="size-4" />
                         )}
@@ -402,13 +411,14 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                               )
                             : undefined
                         }
-                        disabled={
-                          feedback.pending || state.actionDisabled
-                        }
+                        disabled={feedback.pending || state.actionDisabled}
                         aria-label={`${state.actionLabel} cho ${assignment.label}`}
                       >
                         {feedback.pending ? (
-                          <Loader2 className="size-4 animate-spin" />
+                          <span
+                            className="tt-loading tt-loading-spinner tt-loading-sm"
+                            aria-hidden="true"
+                          />
                         ) : null}
                         {state.actionLabel}
                       </Button>

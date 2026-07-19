@@ -203,7 +203,11 @@ const PerformanceLoading = () => (
 const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
   const navigate = useNavigate();
   return (
-    <section className="performance-state" role="status" aria-live="polite">
+    <section
+      className="performance-state tt-alert"
+      role="status"
+      aria-live="polite"
+    >
       <AlertCircle aria-hidden="true" />
       <h2>Không tải được số liệu hiệu suất</h2>
       <p>
@@ -234,7 +238,7 @@ const TrendChart = ({
   const totalErrors = trend.reduce((sum, bucket) => sum + bucket.errors, 0);
   const axisTicks = getTrendAxisTicks(trend, window === "7d");
   return (
-    <section className="performance-panel performance-trend-panel">
+    <section className="performance-panel performance-trend-panel tt-card tt-card-border">
       <div className="performance-section-heading">
         <div>
           <h2>Xu hướng độ trễ ứng viên chờ</h2>
@@ -383,7 +387,7 @@ const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
       icon: CheckCircle2,
     });
   return (
-    <section className="performance-panel performance-attention-panel">
+    <section className="performance-panel performance-attention-panel tt-card tt-card-border">
       <div className="performance-section-heading">
         <div>
           <h2>
@@ -466,7 +470,7 @@ const StageMatrix = ({ data }: { data: PerfMetrics }) => {
   const candidate = rows.filter((key) => CANDIDATE_STAGES.has(key));
   const internal = rows.filter((key) => !CANDIDATE_STAGES.has(key));
   return (
-    <section className="performance-panel performance-matrix">
+    <section className="performance-panel performance-matrix tt-card tt-card-border">
       <div className="performance-section-heading">
         <div>
           <h2>Chẩn đoán độ trễ</h2>
@@ -488,7 +492,7 @@ const StageMatrix = ({ data }: { data: PerfMetrics }) => {
             aria-label="Bảng chẩn đoán độ trễ"
             tabIndex={0}
           >
-            <table>
+            <table className="tt-table tt-table-sm">
               <thead>
                 <tr>
                   <th>Giai đoạn</th>
@@ -534,21 +538,28 @@ const ADAPTER_LABELS: Record<string, string> = {
 const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
   const rows = data.by_adapter ?? [];
   return (
-    <section className="performance-panel performance-matrix">
+    <section className="performance-panel performance-matrix tt-card tt-card-border">
       <div className="performance-section-heading">
         <div>
           <h2>So sánh kênh giao gửi</h2>
           <p>
-            Các số liệu cùng một hợp đồng adapter; thời gian dừng khi nhà cung cấp
-            nhận yêu cầu, không phải lúc ứng viên nhìn thấy tin nhắn.
+            Các số liệu cùng một hợp đồng adapter; thời gian dừng khi nhà cung
+            cấp nhận yêu cầu, không phải lúc ứng viên nhìn thấy tin nhắn.
           </p>
         </div>
       </div>
       {rows.length === 0 ? (
-        <p className="performance-empty">Chưa có lượt gửi đã được đo theo adapter.</p>
+        <p className="performance-empty">
+          Chưa có lượt gửi đã được đo theo adapter.
+        </p>
       ) : (
-        <div className="performance-table-wrap" role="region" aria-label="So sánh kênh giao gửi" tabIndex={0}>
-          <table>
+        <div
+          className="performance-table-wrap"
+          role="region"
+          aria-label="So sánh kênh giao gửi"
+          tabIndex={0}
+        >
+          <table className="tt-table tt-table-sm">
             <thead>
               <tr>
                 <th>Kênh</th>
@@ -561,11 +572,25 @@ const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.adapter}>
-                  <td><strong>{ADAPTER_LABELS[row.adapter] ?? row.adapter}</strong></td>
-                  <td>{row.sent}/{row.turns}</td>
-                  <td>{fmtShortMs(row.provider_p50_ms)} / {fmtShortMs(row.provider_p95_ms)}</td>
-                  <td>{fmtShortMs(row.end_to_end_p50_ms)} / {fmtShortMs(row.end_to_end_p95_ms)}</td>
-                  <td>{row.retry_count} / {row.refresh_count}</td>
+                  <td>
+                    <strong>
+                      {ADAPTER_LABELS[row.adapter] ?? row.adapter}
+                    </strong>
+                  </td>
+                  <td>
+                    {row.sent}/{row.turns}
+                  </td>
+                  <td>
+                    {fmtShortMs(row.provider_p50_ms)} /{" "}
+                    {fmtShortMs(row.provider_p95_ms)}
+                  </td>
+                  <td>
+                    {fmtShortMs(row.end_to_end_p50_ms)} /{" "}
+                    {fmtShortMs(row.end_to_end_p95_ms)}
+                  </td>
+                  <td>
+                    {row.retry_count} / {row.refresh_count}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -760,7 +785,7 @@ const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   return (
     <section
-      className="performance-panel performance-slow-turns"
+      className="performance-panel performance-slow-turns tt-card tt-card-border"
       id="slow-turns"
     >
       <div className="performance-section-heading">
@@ -783,7 +808,7 @@ const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
             aria-label="Bảng lượt cần xem"
             tabIndex={0}
           >
-            <table>
+            <table className="tt-table tt-table-sm">
               <thead>
                 <tr>
                   <th>Mức độ</th>

@@ -64,7 +64,7 @@
   border-radius: 6px;
   background: var(--workspace-bg-deep);
   color: var(--ink-muted);
-  font-size: 16px;
+  font-size: var(--fs-body-lg);
   font-weight: 700;
   line-height: 1;
 }
@@ -859,7 +859,7 @@
 .inbox-bg-container .workspace-empty-copy h2 {
   margin: 0;
   color: var(--workspace-ink);
-  font-size: 16px;
+  font-size: var(--fs-body-lg);
   font-weight: var(--chat-fw-semibold);
   line-height: 1.25;
 }
@@ -867,7 +867,7 @@
 .inbox-bg-container .workspace-empty-copy > p:last-child {
   margin: 0;
   color: var(--workspace-muted);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: var(--chat-fw-regular);
   line-height: 1.55;
 }

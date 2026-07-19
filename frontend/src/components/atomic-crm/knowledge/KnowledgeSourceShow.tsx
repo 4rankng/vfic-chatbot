@@ -106,7 +106,7 @@ const KnowledgeSourceShowContent = () => {
           {source.error && (
             <Field
               label="Lỗi"
-              value={<span className="text-rose-600">{source.error}</span>}
+              value={<span className="text-destructive">{source.error}</span>}
             />
           )}
           <Field label="Ngày tạo" value={formatDateTime(source.created_at)} />

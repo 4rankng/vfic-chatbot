@@ -64,7 +64,7 @@ const WorkspaceNavigation = ({
           : "Lối tắt không gian làm việc"
       }
       className={cn(
-        "workspace-navigation",
+        "workspace-navigation tt-menu",
         surface === "mobile"
           ? "workspace-navigation-mobile"
           : "workspace-navigation-rail",
@@ -80,10 +80,7 @@ const WorkspaceNavigation = ({
         {destinations.map(({ id, label, to, Icon, isActive }) => {
           const active = isActive(path);
           const badge = id === "messages" ? attentionCount : 0;
-          const destination = getWorkspaceDestination(
-            { id, to },
-            badge,
-          );
+          const destination = getWorkspaceDestination({ id, to }, badge);
 
           return (
             <Link
@@ -91,7 +88,7 @@ const WorkspaceNavigation = ({
               to={destination}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "workspace-navigation-link",
+                "workspace-navigation-link tt-btn tt-btn-ghost",
                 id === "account" && "workspace-navigation-link--account",
                 active && "is-active",
               )}
@@ -99,7 +96,7 @@ const WorkspaceNavigation = ({
               <span className="workspace-navigation-icon" aria-hidden="true">
                 <Icon />
                 {badge > 0 ? (
-                  <span className="workspace-navigation-badge">
+                  <span className="workspace-navigation-badge tt-badge tt-badge-error tt-badge-xs">
                     {badge > 99 ? "99+" : badge}
                   </span>
                 ) : null}
@@ -122,7 +119,7 @@ const WorkspaceNavigation = ({
                 aria-label="Mở thêm mục điều hướng"
                 aria-pressed={isMoreOpen}
                 className={cn(
-                  "workspace-navigation-link",
+                  "workspace-navigation-link tt-btn tt-btn-ghost",
                   "workspace-navigation-more",
                   isOverflowActive && "is-active",
                 )}
@@ -143,7 +140,7 @@ const WorkspaceNavigation = ({
                         to={to}
                         aria-current={isActive(path) ? "page" : undefined}
                         className={cn(
-                          "mobile-nav-more-link",
+                          "mobile-nav-more-link tt-btn tt-btn-ghost",
                           isActive(path) && "is-active",
                         )}
                       >

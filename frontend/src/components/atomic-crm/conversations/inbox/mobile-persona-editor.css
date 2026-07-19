@@ -30,7 +30,7 @@
   gap: 5px;
   padding: 0 6px;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 700;
 }
 
@@ -64,7 +64,7 @@
 .persona-editor-heading-line h1 {
   margin: 0;
   color: var(--ink);
-  font-size: 20px;
+  font-size: var(--fs-section-title);
   font-weight: 800;
   line-height: 1.15;
 }
@@ -73,7 +73,7 @@
   max-width: 72ch;
   margin: 3px 0 0;
   color: var(--ink-muted);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   line-height: 1.35;
 }
 
@@ -102,7 +102,7 @@
   align-items: center;
   gap: 5px;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 800;
   letter-spacing: 0.06em;
   line-height: 1.1;
@@ -113,7 +113,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: 15px;
+  font-size: var(--fs-nav);
   font-weight: 800;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -157,7 +157,7 @@
 .persona-edit-formbar-title strong {
   display: block;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 800;
   line-height: 1.2;
 }
@@ -166,7 +166,7 @@
   display: block;
   margin-top: 1px;
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: var(--fs-caption);
   line-height: 1.25;
 }
 
@@ -192,7 +192,7 @@
 .persona-edit-name-field [data-slot="input"] {
   height: 36px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   line-height: 1.35;
 }
 
@@ -233,7 +233,7 @@
 .persona-edit-import-copy strong {
   display: block;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 820;
   line-height: 1.2;
 }
@@ -241,7 +241,7 @@
 .persona-edit-import-copy p {
   margin: 2px 0 0;
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: var(--fs-caption);
   line-height: 1.35;
 }
 
@@ -257,7 +257,7 @@
   height: 32px;
   padding-inline: 10px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 750;
   line-height: 1;
 }
@@ -285,7 +285,7 @@
 
 .persona-edit-section-heading span {
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: var(--fs-caption);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -294,7 +294,7 @@
 .persona-edit-section-heading h2 {
   margin: 2px 0 0;
   color: var(--ink);
-  font-size: 15px;
+  font-size: var(--fs-nav);
   font-weight: 820;
   line-height: 1.2;
 }
@@ -303,7 +303,7 @@
   max-width: 52ch;
   margin: 0;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
   text-align: right;
 }
@@ -340,7 +340,7 @@
 .persona-edit-prompt-head span {
   display: block;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 850;
   letter-spacing: 0.07em;
   line-height: 1.2;
@@ -351,7 +351,7 @@
   display: block;
   margin-top: 2px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 800;
   line-height: 1.25;
 }
@@ -362,19 +362,19 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface-hover) 22%, transparent);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   line-height: 1.5;
   box-shadow: none;
 }
 
 .persona-edit-surface :is(input, textarea) {
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   line-height: 1.45;
 }
 
 .persona-edit-surface :is(input, textarea)::placeholder {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   line-height: 1.45;
 }
 
@@ -385,7 +385,7 @@
 
 .persona-edit-textarea.is-mono {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .persona-edit-rail {
@@ -417,7 +417,7 @@
   align-items: center;
   gap: 7px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 800;
   line-height: 1.2;
 }
@@ -425,7 +425,7 @@
 .persona-edit-rail-card p {
   margin: 0;
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: var(--fs-caption);
   line-height: 1.35;
 }
 
@@ -459,7 +459,7 @@
 .persona-followup-editor-head strong {
   display: block;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 800;
   line-height: 1.2;
 }
@@ -468,7 +468,7 @@
 .persona-followup-label {
   display: block;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 700;
   line-height: 1.25;
 }
@@ -482,14 +482,14 @@
   height: 28px;
   min-height: 28px;
   border-radius: 7px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1;
 }
 
 .persona-followup-editor-card input {
   height: 28px;
   min-height: 28px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.2;
 }
 
@@ -510,7 +510,7 @@
   align-items: center;
   gap: 5px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 700;
   line-height: 1.2;
 }
@@ -532,7 +532,7 @@
   min-height: 92px;
   resize: vertical;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   line-height: 1.45;
 }
 
@@ -580,7 +580,7 @@
   align-items: center;
   gap: 7px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 820;
   line-height: 1.25;
 }
@@ -588,7 +588,7 @@
 .persona-assignment-description {
   margin-top: 4px;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
 }
 
@@ -616,7 +616,7 @@
 
 .persona-assignment-summary div {
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: var(--fs-caption);
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -626,7 +626,7 @@
   display: block;
   margin-top: 6px;
   color: var(--ink);
-  font-size: 26px;
+  font-size: var(--fs-page-title);
   font-weight: 820;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -635,7 +635,7 @@
 .persona-assignment-summary p {
   margin: 8px 0 0;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.45;
 }
 
@@ -658,7 +658,7 @@
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-hover) 26%, transparent);
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 760;
 }
 
@@ -680,7 +680,7 @@
   padding: 9px 12px;
   border-bottom: 1px solid var(--border);
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 
 .persona-assignment-row-card {
@@ -706,7 +706,7 @@
 
 .persona-assignment-row-title strong {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 760;
   line-height: 1.2;
 }
@@ -714,7 +714,7 @@
 .persona-assignment-row-copy p {
   margin: 0;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.45;
 }
 
@@ -729,7 +729,7 @@
 .persona-assignment-row-feedback {
   min-height: 16px;
   color: var(--ink-faint);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   line-height: 1.35;
 }
 
@@ -750,7 +750,7 @@
 .persona-assignment-empty-state p {
   margin: 0;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.45;
 }
 

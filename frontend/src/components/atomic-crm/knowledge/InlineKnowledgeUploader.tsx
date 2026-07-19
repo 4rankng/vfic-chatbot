@@ -127,7 +127,7 @@ export const InlineKnowledgeUploader = () => {
           <div
             {...getRootProps({
               className: cn(
-                "group grid min-h-36 cursor-pointer place-items-center rounded-[12px] border border-dashed border-[var(--kb-line-strong)] bg-background/70 px-5 py-6 text-center transition-colors outline-none",
+                "tt-card tt-card-dash group grid min-h-36 cursor-pointer place-items-center rounded-[12px] border border-dashed border-[var(--kb-line-strong)] bg-background/70 px-5 py-6 text-center transition-colors outline-none",
                 "hover:border-[var(--kb-teal)] hover:bg-[var(--kb-teal-soft)]/55 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                 isDragActive &&
                   "border-[var(--kb-teal)] bg-[var(--kb-teal-soft)]",
@@ -164,7 +164,7 @@ export const InlineKnowledgeUploader = () => {
         </div>
 
         {validationErrors.length > 0 && (
-          <div className="rounded-[10px] border border-destructive/30 bg-destructive/10 p-3 text-body text-destructive">
+          <div className="tt-alert tt-alert-error tt-alert-soft rounded-[10px] border border-destructive/30 bg-destructive/10 p-3 text-body text-destructive">
             <p className="font-medium">Tệp chưa đúng định dạng:</p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {validationErrors.map((error) => (

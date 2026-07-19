@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Form, required, useInput, useLogin, useNotify } from "ra-core";
 import type { FieldValues, SubmitHandler } from "react-hook-form";
 import { Link } from "react-router";
-import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 
 import { Notification } from "@/components/admin/notification";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useInstallationContext } from "../installation/installation-context";
+import { AuthShell } from "./AuthShell";
 
 export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
   const { manifest } = useInstallationContext();
@@ -35,43 +36,52 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
       .finally(() => setLoading(false));
   };
 
-  return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/30 px-5 py-10 text-foreground">
-      <section className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm sm:p-8" aria-labelledby="login-title">
-        <div className="mb-7 flex items-start gap-4">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-background">
-            <ShieldCheck className="size-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <p className="break-words text-body font-medium text-muted-foreground">
-              {activeName ?? "Thiết lập hệ thống"}
-            </p>
-            <h1 id="login-title" className="mt-1 text-page-title font-semibold tracking-tight">
-              Đăng nhập quản trị
-            </h1>
-            <p className="mt-2 text-body leading-6 text-muted-foreground">
-              Đăng nhập bằng tài khoản đã được quản trị viên cấp.
-            </p>
-          </div>
-        </div>
+  const productName = activeName ?? "Ting Ting";
 
-        <Form className="grid gap-4" onSubmit={handleSubmit}>
-          <EmailField />
-          <PasswordField disabled={loading} />
-          <Button type="submit" className="mt-2 min-h-12 w-full" disabled={loading}>
-            {loading ? <Loader2 className="animate-spin" /> : null}
+  return (
+    <>
+      <AuthShell productName={productName}>
+        <section
+          aria-labelledby="login-title"
+          className="tt-card tt-card-border rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-7"
+        >
+          <h1
+            id="login-title"
+            className="mb-5 text-page-title font-semibold tracking-tight"
+          >
             Đăng nhập
-            {!loading ? <ArrowRight /> : null}
-          </Button>
-        </Form>
-        <p className="mt-5 text-center text-body text-muted-foreground">
-          <Link to="/forgot-password" className="font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4">
-            Quên mật khẩu?
-          </Link>
-        </p>
-      </section>
+          </h1>
+
+          <Form className="grid gap-5" onSubmit={handleSubmit}>
+            <EmailField />
+            <PasswordField disabled={loading} />
+            <Button
+              type="submit"
+              className="mt-2 min-h-12 w-full"
+              disabled={loading}
+            >
+              {loading ? (
+                <span
+                  className="tt-loading tt-loading-spinner tt-loading-sm"
+                  aria-hidden="true"
+                />
+              ) : null}
+              Đăng nhập
+              {!loading ? <ArrowRight /> : null}
+            </Button>
+          </Form>
+          <p className="mt-5 border-t border-base-300 pt-5 text-center text-body text-muted-foreground">
+            <Link
+              to="/forgot-password"
+              className="font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
+            >
+              Quên mật khẩu?
+            </Link>
+          </p>
+        </section>
+      </AuthShell>
       <Notification />
-    </main>
+    </>
   );
 };
 
@@ -85,8 +95,18 @@ const EmailField = () => {
     <div className="grid gap-2">
       <Label htmlFor={id}>Email</Label>
       <div className="relative">
-        <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input id={id} type="email" autoComplete="email" required={isRequired} className="min-h-12 pl-11" {...field} />
+        <Mail
+          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          id={id}
+          type="email"
+          autoComplete="email"
+          required={isRequired}
+          className="min-h-12 pl-11"
+          {...field}
+        />
       </div>
     </div>
   );
@@ -103,9 +123,25 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
     <div className="grid gap-2">
       <Label htmlFor={id}>Mật khẩu</Label>
       <div className="relative">
-        <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input id={id} type={visible ? "text" : "password"} autoComplete="current-password" required={isRequired} disabled={disabled} className="min-h-12 px-11" {...field} />
-        <button type="button" className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-md focus-visible:outline-2" aria-label={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setVisible((current) => !current)}>
+        <Lock
+          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          id={id}
+          type={visible ? "text" : "password"}
+          autoComplete="current-password"
+          required={isRequired}
+          disabled={disabled}
+          className="min-h-12 px-11"
+          {...field}
+        />
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-md focus-visible:outline-2"
+          aria-label={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          onClick={() => setVisible((current) => !current)}
+        >
           {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
         </button>
       </div>

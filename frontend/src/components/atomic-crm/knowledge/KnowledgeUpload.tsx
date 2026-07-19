@@ -205,11 +205,12 @@ export const KnowledgeUpload = ({
             </div>
           )}
 
-          <div className="rounded-lg border bg-muted/20 p-3">
+          <div className="tt-alert tt-alert-info tt-alert-soft rounded-lg border bg-muted/20 p-3">
             <div>
               <p className="text-body font-medium">Phiên bản KB có kiểm soát</p>
               <p className="mt-1 text-helper text-muted-foreground">
-                Mỗi tệp tạo một phiên bản KB riêng và cần được xem lại trước khi xuất bản.
+                Mỗi tệp tạo một phiên bản KB riêng và cần được xem lại trước khi
+                xuất bản.
               </p>
             </div>
           </div>
@@ -236,7 +237,7 @@ export const KnowledgeUpload = ({
               <div
                 {...getRootProps({
                   className: cn(
-                    "group flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 px-6 py-8 text-center transition-colors outline-none",
+                    "tt-card tt-card-dash group flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 px-6 py-8 text-center transition-colors outline-none",
                     "hover:border-primary/50 hover:bg-primary/5 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                     isDragActive && "border-primary bg-primary/10",
                     isDragReject && "border-destructive bg-destructive/10",
@@ -316,7 +317,7 @@ export const KnowledgeUpload = ({
           </Tabs>
 
           {validationErrors.length > 0 && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-body text-destructive">
+            <div className="tt-alert tt-alert-error tt-alert-soft rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-body text-destructive">
               <p className="font-medium">Tệp chưa đúng định dạng:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 {validationErrors.map((error) => (
@@ -326,7 +327,7 @@ export const KnowledgeUpload = ({
             </div>
           )}
 
-          <div className="rounded-lg border bg-muted/30 p-3">
+          <div className="tt-alert tt-alert-info tt-alert-soft rounded-lg border bg-muted/30 p-3">
             <div className="flex items-start gap-3">
               <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border">
                 {busy ? (

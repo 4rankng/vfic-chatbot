@@ -36,7 +36,7 @@ const ProjectShowContent = () => {
                   variant="outline"
                   className={
                     project.is_active
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      ? "tt-badge-success tt-badge-soft border-transparent text-success"
                       : "border-border bg-muted/40 text-muted-foreground"
                   }
                 >

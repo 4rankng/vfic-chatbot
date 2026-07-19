@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import type { RuntimeGenerationBundle } from "@/components/atomic-crm/capabilities/types";
 import { ensureRuntimeGeneration } from "@/components/atomic-crm/root/reset-runtime-state";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 
 /**
  * Application entry point
@@ -31,7 +30,11 @@ import { Loader2 } from "lucide-react";
  *    />
  * );
  */
-const ReadyRecruitmentApplication = ({ authorityGeneration }: { authorityGeneration: number }) => {
+const ReadyRecruitmentApplication = ({
+  authorityGeneration,
+}: {
+  authorityGeneration: number;
+}) => {
   const [bundle, setBundle] = useState<RuntimeGenerationBundle | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -56,11 +59,14 @@ const ReadyRecruitmentApplication = ({ authorityGeneration }: { authorityGenerat
 
   if (failed) {
     return (
-      <main className="flex min-h-svh items-center justify-center bg-background p-5">
-        <section className="w-full max-w-lg rounded-xl border bg-card p-6 text-center shadow-sm">
-          <h1 className="text-content-title font-semibold">Không thể tải không gian tuyển dụng</h1>
+      <main className="flex min-h-svh items-center justify-center bg-base-200 p-5">
+        <section className="tt-card tt-card-border w-full max-w-lg rounded-xl border bg-base-100 p-6 text-center shadow-sm">
+          <h1 className="text-content-title font-semibold">
+            Không thể tải không gian tuyển dụng
+          </h1>
           <p className="mt-2 text-body leading-6 text-muted-foreground">
-            Giao diện tuyển dụng chưa tải được. Vui lòng tải lại trang để nhận phiên bản mới nhất.
+            Giao diện tuyển dụng chưa tải được. Vui lòng tải lại trang để nhận
+            phiên bản mới nhất.
           </p>
           <Button className="mt-5" onClick={() => window.location.reload()}>
             Tải lại trang
@@ -74,9 +80,18 @@ const ReadyRecruitmentApplication = ({ authorityGeneration }: { authorityGenerat
 };
 
 export const RecruitmentWorkspaceLoading = () => (
-  <main className="flex min-h-svh items-center justify-center bg-background p-5" aria-live="polite">
-    <section className="flex items-center gap-3 rounded-xl border bg-card px-5 py-4 shadow-sm" role="status">
-      <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+  <main
+    className="flex min-h-svh items-center justify-center bg-base-200 p-5"
+    aria-live="polite"
+  >
+    <section
+      className="tt-alert flex items-center gap-3 rounded-xl border bg-base-100 px-5 py-4 shadow-sm"
+      role="status"
+    >
+      <span
+        className="tt-loading tt-loading-spinner tt-loading-sm"
+        aria-hidden="true"
+      />
       <span>Đang chuẩn bị không gian tuyển dụng</span>
     </section>
   </main>

@@ -121,6 +121,31 @@ export const RecruitingCommandCenter = ({
     showPartialError,
     showRefetchIndicator,
   } = deriveCacheDiscriminators({ isPending, isFetching, isError, data });
+  const queueHealth =
+    showInitialError || (candidatesQuery.isError && !candidatesQuery.data)
+      ? {
+          tone: "warning",
+          title: "Đang chờ kết nối dữ liệu",
+          detail: "Thử lại để tải hàng đợi",
+        }
+      : showPartialError ||
+          (candidatesQuery.isError && Boolean(candidatesQuery.data))
+        ? {
+            tone: "warning",
+            title: "Đang hiển thị dữ liệu gần nhất",
+            detail: "Kết nối làm mới đang gián đoạn",
+          }
+        : showSkeleton || (candidatesQuery.isPending && !candidatesQuery.data)
+          ? {
+              tone: "neutral",
+              title: "Đang kết nối hàng đợi",
+              detail: "Đang tải dữ liệu tuyển dụng",
+            }
+          : {
+              tone: "success",
+              title: "Hàng đợi đang hoạt động",
+              detail: "Tự làm mới mỗi 30 giây",
+            };
 
   return (
     <div className={shellClass}>
@@ -144,15 +169,29 @@ export const RecruitingCommandCenter = ({
             </span>
           ) : null}
         </div>
+        <div
+          className={`dashboard-live-status is-${queueHealth.tone}`}
+          role="status"
+        >
+          <span className="dashboard-live-dot" aria-hidden="true" />
+          <div>
+            <strong>{queueHealth.title}</strong>
+            <span>{queueHealth.detail}</span>
+          </div>
+        </div>
       </header>
 
       {showPartialError || (candidatesQuery.isError && candidatesQuery.data) ? (
-        <div className="dashboard-inline-error" role="status">
+        <div
+          className="dashboard-inline-error tt-alert tt-alert-error tt-alert-soft"
+          role="status"
+        >
           <span>
             Không thể làm mới hàng đợi. Danh sách hiện tại vẫn được giữ lại.
           </span>
           <button
             type="button"
+            className="tt-btn tt-btn-sm tt-btn-error tt-btn-outline"
             onClick={() => {
               void refetch();
               void candidatesQuery.refetch();
@@ -213,13 +252,14 @@ const AttentionPanel = ({
   onRetry,
 }: AttentionPanelProps) => {
   return (
-    <article className="recruiting-panel">
+    <article className="recruiting-panel tt-card tt-card-border bg-base-100">
       <div className="recruiting-panel-header">
         <div>
-          <span className="recruiting-eyebrow">{eyebrow}</span>
+          <span className="recruiting-eyebrow">Hàng đợi ưu tiên</span>
+          <h2>{eyebrow}</h2>
         </div>
         <span
-          className="dashboard-panel-count"
+          className="dashboard-panel-count tt-badge tt-badge-error tt-badge-soft"
           aria-label={`${rows.length} mục đang hiển thị`}
         >
           {rows.length}
@@ -261,11 +301,14 @@ const CandidatePanel = ({
   state: PanelState;
   onRetry: () => void;
 }) => (
-  <article className="recruiting-panel recruiting-candidate-panel">
+  <article className="recruiting-panel recruiting-candidate-panel tt-card tt-card-border bg-base-100">
     <div className="recruiting-panel-header">
-      <span className="recruiting-eyebrow">Ứng viên mới nhất</span>
+      <div>
+        <span className="recruiting-eyebrow">Cập nhật theo thời gian</span>
+        <h2>Ứng viên mới nhất</h2>
+      </div>
       <span
-        className="dashboard-panel-count"
+        className="dashboard-panel-count tt-badge tt-badge-primary tt-badge-soft"
         aria-label={`${count} ứng viên có số điện thoại`}
       >
         {count}
@@ -328,8 +371,13 @@ const CandidateGroupedList = ({
 };
 
 const CandidateAvatar = () => (
-  <span className="dashboard-candidate-avatar" aria-hidden>
-    <UserRound className="size-5" />
+  <span
+    className="dashboard-candidate-avatar tt-avatar tt-avatar-placeholder"
+    aria-hidden
+  >
+    <span>
+      <UserRound className="size-5" />
+    </span>
   </span>
 );
 
@@ -482,7 +530,11 @@ const DashboardQueueError = ({
   <div className="dashboard-empty-list dashboard-queue-error" role="status">
     <AlertTriangle className="size-4" aria-hidden="true" />
     <span>{label}</span>
-    <button type="button" onClick={() => void onRetry()}>
+    <button
+      className="tt-btn tt-btn-sm tt-btn-outline"
+      type="button"
+      onClick={() => void onRetry()}
+    >
       Thử lại
     </button>
   </div>
@@ -492,7 +544,7 @@ const DashboardListSkeleton = () => (
   <>
     {Array.from({ length: 3 }).map((_, index) => (
       <div key={index} className="dashboard-candidate-row is-skeleton">
-        <Skeleton shimmer className="dashboard-candidate-avatar" />
+        <Skeleton shimmer className="dashboard-candidate-avatar tt-skeleton" />
         <span className="dashboard-candidate-main">
           <Skeleton shimmer className="h-4 w-32 rounded-md" />
           <Skeleton shimmer className="h-3 w-48 rounded-md" />

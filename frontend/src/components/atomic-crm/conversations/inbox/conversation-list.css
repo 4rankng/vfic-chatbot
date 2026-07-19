@@ -32,7 +32,7 @@
   }
 
   .inbox-bg-container .conversation.active {
-    background: #d8ecff;
+    background: var(--brand-light);
     box-shadow: none;
   }
 
@@ -163,7 +163,7 @@
   background: var(--surface-solid);
 }
 .inbox-bg-container .conversation.active {
-  background: #d8ecff;
+  background: var(--brand-light);
   border-color: transparent;
   box-shadow: none;
 }
@@ -316,7 +316,7 @@
   min-height: 20px;
   padding: 0 8px;
   border-radius: 2px;
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: var(--chat-fw-regular);
   line-height: 20px;
   white-space: nowrap;
@@ -393,6 +393,7 @@
     grid-template-columns: 44px minmax(0, 1fr);
     align-items: center;
     gap: 12px;
+    height: auto;
     min-height: 76px;
     padding: 10px 14px 10px 16px;
     border: 0;
@@ -401,6 +402,13 @@
     background: var(--surface-solid);
     color: var(--workspace-muted);
     box-shadow: none;
+  }
+
+  /* Priority and escalation chips add a third text row. Let those queue items
+     grow instead of inheriting daisyUI's fixed button height and painting the
+     chip across the item divider. */
+  .inbox-bg-container .conversation:has(.conv-meta-row:not(:empty)) {
+    min-height: 90px;
   }
 
   .inbox-bg-container .conversation + .conversation {
@@ -415,7 +423,7 @@
 
   .inbox-bg-container .conversation.active {
     border-color: var(--workspace-blue-line);
-    background: #d8ecff;
+    background: var(--brand-light);
     box-shadow: none;
   }
 
@@ -428,7 +436,7 @@
   }
 
   .inbox-bg-container .conversation.active.needs-attention {
-    background: #d8ecff;
+    background: var(--brand-light);
   }
 
   .inbox-bg-container .conversation::after {
@@ -459,7 +467,7 @@
 
   .inbox-bg-container .conv-name {
     color: var(--workspace-ink);
-    font-size: 15px;
+    font-size: var(--fs-nav);
     font-weight: var(--chat-fw-medium);
     line-height: 1.45;
   }
@@ -482,7 +490,7 @@
   .inbox-bg-container .conv-preview {
     display: flex;
     color: var(--workspace-muted);
-    font-size: 13.5px;
+    font-size: var(--fs-body-sm);
     line-height: var(--chat-lh-body);
     overflow: hidden;
     overflow-wrap: break-word;
@@ -505,7 +513,7 @@
     min-height: 20px;
     padding: 0 8px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--fs-caption);
     line-height: 20px;
   }
 }

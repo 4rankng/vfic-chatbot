@@ -280,7 +280,8 @@ const SETTINGS_VIEW_COPY: Record<
   "settings-agents": {
     kicker: "Không gian cài đặt",
     title: "Agents",
-    description: "Quản lý giọng trả lời, prompt và phân công Agent theo adapter.",
+    description:
+      "Quản lý giọng trả lời, prompt và phân công Agent theo adapter.",
   },
   "settings-users": {
     kicker: "Không gian cài đặt",
@@ -507,21 +508,25 @@ const SettingsCard = ({
   if (isMobile) {
     return (
       <details
-        className={`settings-card settings-mobile-card ${className}`}
+        className={`settings-card settings-mobile-card tt-collapse tt-collapse-arrow tt-card tt-card-border ${className}`}
         id={id}
         open={defaultOpen}
       >
-        <summary className="settings-mobile-card-summary">
+        <summary className="settings-mobile-card-summary tt-collapse-title">
           {header}
-          <ChevronDown aria-hidden="true" />
         </summary>
-        <div className="settings-card-content">{children}</div>
+        <div className="settings-card-content tt-collapse-content">
+          {children}
+        </div>
       </details>
     );
   }
 
   return (
-    <section className={`settings-card ${className}`} id={id}>
+    <section
+      className={`settings-card tt-card tt-card-border ${className}`}
+      id={id}
+    >
       {header}
       <div className="settings-card-content">{children}</div>
     </section>
@@ -936,7 +941,9 @@ export const ZaloIntegrationPage = () => {
         // invalid but access token still works — will break on next refresh).
         const warnings: string[] = [];
         if (result.oa_secret_valid === false) {
-          warnings.push("⚠️ Secret Key không hợp lệ — sẽ lỗi khi làm mới token");
+          warnings.push(
+            "⚠️ Secret Key không hợp lệ — sẽ lỗi khi làm mới token",
+          );
         }
         if (warnings.length > 0) {
           notify(`Kết nối ${label} thành công, nhưng: ${warnings.join("; ")}`, {
@@ -1127,7 +1134,7 @@ export const ZaloIntegrationPage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  className="settings-test-button"
+                  className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
                   onClick={testBotConnection}
                   disabled={testingBot || !settings}
                 >
@@ -1202,7 +1209,7 @@ export const ZaloIntegrationPage = () => {
                   <Button
                     type="button"
                     variant="outline"
-                    className="settings-test-button"
+                    className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
                     onClick={testOaConnection}
                     disabled={testingOa || !settings}
                   >
@@ -1210,8 +1217,8 @@ export const ZaloIntegrationPage = () => {
                     {testingOa ? "Đang kiểm tra" : "Lưu & kiểm tra"}
                   </Button>
                 </div>
-                <details className="settings-advanced settings-webhook-health">
-                  <summary className="settings-advanced-summary">
+                <details className="settings-advanced settings-webhook-health tt-collapse tt-collapse-arrow">
+                  <summary className="settings-advanced-summary tt-collapse-title">
                     Webhook
                   </summary>
                   <p
@@ -1263,7 +1270,7 @@ export const ZaloIntegrationPage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  className="settings-test-button"
+                  className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
                   onClick={testMinimaxConnection}
                   disabled={testingMinimax || !minimaxSettings}
                 >
@@ -1330,7 +1337,7 @@ export const ZaloIntegrationPage = () => {
               <Button
                 type="button"
                 variant="outline"
-                className="settings-test-button"
+                className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
                 onClick={testOpenRouterConnection}
                 disabled={testingOpenRouter || !openRouterSettings}
               >

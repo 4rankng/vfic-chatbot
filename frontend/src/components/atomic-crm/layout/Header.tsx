@@ -22,16 +22,16 @@ const Header = () => {
   );
 
   return (
-    <header className="workspace-topbar">
+    <header className="workspace-topbar tt-navbar">
       <Link to="/" className="workspace-topbar-brand" aria-label={title}>
         <img src="/ttsoft-logo.png" alt="" aria-hidden="true" />
         <span>{title}</span>
       </Link>
 
-      <div className="workspace-topbar-actions">
+      <div className="workspace-topbar-actions tt-navbar-end">
         <Link
           to={messagesDestination}
-          className="workspace-topbar-notifications"
+          className="workspace-topbar-notifications tt-btn tt-btn-ghost tt-btn-circle"
           aria-label={
             count > 0
               ? `${count} cuộc trò chuyện cần chú ý`
@@ -40,7 +40,7 @@ const Header = () => {
         >
           <Bell aria-hidden="true" />
           {count > 0 ? (
-            <span className="workspace-topbar-badge">
+            <span className="workspace-topbar-badge tt-badge tt-badge-error tt-badge-xs">
               {count > 99 ? "99+" : count}
             </span>
           ) : null}

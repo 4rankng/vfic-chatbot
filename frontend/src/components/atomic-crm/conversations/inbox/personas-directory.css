@@ -25,7 +25,7 @@
 
 .persona-panel-eyebrow {
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 850;
   letter-spacing: 0.06em;
   line-height: 1.2;
@@ -35,7 +35,7 @@
 .persona-channel-header h1 {
   margin: 0;
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--fs-body-lg);
   font-weight: 740;
   line-height: 1.15;
 }
@@ -43,7 +43,7 @@
 .persona-channel-header p {
   margin: 2px 0 0;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 620;
   line-height: 1.25;
 }
@@ -56,7 +56,7 @@
   justify-content: center;
   gap: 5px;
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: var(--fs-caption);
   font-weight: 650;
 }
 
@@ -73,7 +73,7 @@
 
 .persona-channel-stats strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 720;
   font-variant-numeric: tabular-nums;
 }
@@ -87,7 +87,7 @@
   padding: 0 9px;
   background: color-mix(in srgb, var(--primary) 92%, black);
   box-shadow: none;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   font-weight: 650;
   line-height: 1;
   letter-spacing: 0;
@@ -107,7 +107,7 @@
   border-radius: 7px;
   background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 760;
   white-space: nowrap;
 }
@@ -127,7 +127,7 @@
 }
 
 .persona-panel-header {
-  min-height: 42px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -140,8 +140,8 @@
 .persona-panel-header h2 {
   margin: 2px 0 0;
   color: var(--ink);
-  font-size: 13px;
-  font-weight: 740;
+  font-size: var(--fs-body-lg);
+  font-weight: 760;
   line-height: 1.2;
 }
 
@@ -151,52 +151,50 @@
 }
 
 .persona-directory-loading {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
 }
 
 .persona-directory-skeleton {
   display: flex;
   gap: 12px;
-  width: min(100%, 280px);
-  padding: 12px 14px;
+  width: 100%;
+  padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--surface-solid);
 }
 
 .persona-agent-bubbles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding-bottom: 14px;
+  display: grid;
+  gap: 6px;
+  padding: 2px 0 0;
 }
 
 .inbox-bg-container .persona-workspace-content .persona-directory-row {
   position: relative;
-  display: grid;
-  grid-template-rows: auto auto;
-  width: min(100%, 236px);
-  min-height: 104px;
-  max-width: min(100%, 236px);
-  padding: 10px;
+  display: block;
+  width: 100%;
+  min-height: 68px;
+  max-width: 100%;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface-solid) 94%, transparent);
   color: var(--ink);
   cursor: default;
   align-items: start;
-  gap: 8px;
   text-align: left;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+  box-shadow: none;
   transition:
     border-color 160ms ease,
     background-color 160ms ease,
     box-shadow 160ms ease;
 }
 
-.inbox-bg-container .persona-workspace-content .persona-directory-row.is-active {
+.inbox-bg-container
+  .persona-workspace-content
+  .persona-directory-row.is-active {
   border-color: color-mix(in srgb, var(--brand) 28%, var(--border));
   background: color-mix(in srgb, var(--brand-light) 32%, var(--surface-solid));
 }
@@ -210,24 +208,30 @@
 
 .inbox-bg-container .persona-workspace-content .persona-directory-row:hover {
   border-color: color-mix(in srgb, var(--brand) 38%, var(--border));
-  background: color-mix(in srgb, var(--surface-hover) 54%, var(--surface-solid));
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 8%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--surface-hover) 54%,
+    var(--surface-solid)
+  );
+  box-shadow: none;
   transform: none;
 }
 
-.inbox-bg-container .persona-workspace-content .persona-directory-row.is-selected::before {
+.inbox-bg-container
+  .persona-workspace-content
+  .persona-directory-row.is-selected::before {
   content: none;
 }
 
 .persona-directory-main {
   min-width: 0;
   width: 100%;
-  min-height: 42px;
+  min-height: 68px;
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  padding: 0 58px 0 0;
+  padding: 9px 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -271,7 +275,7 @@
   .persona-workspace-content
   .persona-directory-row:has(.persona-directory-status-actions)
   .persona-directory-main {
-  padding-right: 58px;
+  padding-right: 10px;
 }
 
 .inbox-bg-container
@@ -282,8 +286,8 @@
 }
 
 .persona-workspace-content .persona-directory-avatar {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   box-shadow: none;
 }
@@ -292,7 +296,7 @@
   min-width: 0;
   width: 100%;
   display: grid;
-  gap: 4px;
+  gap: 3px;
   overflow: hidden;
 }
 
@@ -308,8 +312,8 @@
   display: block;
   max-width: 100%;
   color: var(--ink);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--fs-body);
+  font-weight: 720;
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -324,10 +328,10 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-top: 2px;
+  margin-top: 1px;
   color: var(--ink-muted);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-caption);
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -335,6 +339,23 @@
   white-space: nowrap;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+.persona-directory-scope {
+  color: var(--ink-muted);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.persona-directory-chevron {
+  color: var(--ink-faint);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.persona-directory-row.is-selected .persona-directory-chevron {
+  color: var(--brand);
+  transform: translateX(2px);
 }
 
 .persona-directory-slug svg {
@@ -352,8 +373,8 @@
 
 .persona-directory-status-icon,
 .persona-directory-info-icon {
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
@@ -400,7 +421,7 @@
 
 .persona-directory-status-popover strong {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 780;
   line-height: 1.25;
 }
@@ -408,7 +429,7 @@
 .persona-directory-status-popover p {
   margin: 4px 0 0;
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: var(--fs-caption);
   font-weight: 560;
   line-height: 1.45;
 }
@@ -482,7 +503,7 @@
   max-width: 52ch;
   margin: 0 0 4px;
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: var(--fs-body-sm);
   font-weight: 560;
   line-height: 1.55;
 }
@@ -517,7 +538,7 @@
   background: var(--surface-solid);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 850;
   line-height: 1;
 }
@@ -525,7 +546,7 @@
 .persona-empty-guide strong {
   display: block;
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   font-weight: 780;
   line-height: 1.25;
 }
@@ -533,7 +554,7 @@
 .persona-empty-guide p {
   margin: 4px 0 0;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 560;
   line-height: 1.45;
 }

@@ -97,7 +97,7 @@ const UNREAD_BADGE_COUNT_STYLE: React.CSSProperties = {
   borderRadius: 9999,
   background: "var(--ember)",
   color: "var(--primary-foreground)",
-  fontSize: 10,
+  fontSize: "var(--fs-badge)",
   fontWeight: 700,
   lineHeight: "18px",
   textAlign: "center",
@@ -176,7 +176,7 @@ const ConversationListItem = memo(
 
     return (
       <button
-        className={`conversation ${isActive ? "active" : ""} ${
+        className={`conversation tt-btn tt-btn-ghost ${isActive ? "active" : ""} ${
           needsAttention ? "needs-attention" : ""
         }`}
         onClick={() => onSelect(conversation)}
@@ -252,7 +252,11 @@ ConversationListItem.displayName = "ConversationListItem";
 // loads (replaces the previous "flash of empty-state" on slow connections).
 const ConversationListItemSkeleton = () => (
   <div className="conversation" aria-hidden style={{ cursor: "default" }}>
-    <Skeleton shimmer className="!rounded-full" style={SKELETON_AVATAR_STYLE} />
+    <Skeleton
+      shimmer
+      className="!rounded-full tt-skeleton"
+      style={SKELETON_AVATAR_STYLE}
+    />
     <div className="conv-body" style={SKELETON_BODY_STYLE}>
       <Skeleton shimmer style={SKELETON_LINE_1_STYLE} />
       <Skeleton shimmer style={SKELETON_LINE_2_STYLE} />
@@ -302,7 +306,11 @@ const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
         <span>{content.description}</span>
       </div>
       {content.action && onAction ? (
-        <button type="button" className="list-retry" onClick={onAction}>
+        <button
+          type="button"
+          className="list-retry tt-btn tt-btn-sm tt-btn-outline"
+          onClick={onAction}
+        >
           {kind === "error" ? <RefreshCw aria-hidden="true" /> : null}
           {content.action}
         </button>
@@ -535,6 +543,7 @@ const ConversationListPanel = ({
               </svg>
               <input
                 type="search"
+                className="tt-input"
                 placeholder="Tìm kiếm"
                 aria-label={
                   slots.row ? "Tìm ứng viên hoặc số điện thoại" : "Tìm liên hệ"
@@ -556,7 +565,7 @@ const ConversationListPanel = ({
                 <button
                   key={value}
                   type="button"
-                  className={`conversation-filter is-${value}`}
+                  className={`conversation-filter tt-btn tt-btn-ghost tt-btn-square is-${value}`}
                   aria-label={label}
                   aria-pressed={isQueueFilterActive(value)}
                   title={label}

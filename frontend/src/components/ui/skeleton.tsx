@@ -9,7 +9,7 @@ function Skeleton({
     <div
       data-slot="skeleton"
       className={cn(
-        "bg-accent rounded-md",
+        "tt-skeleton bg-accent rounded-md",
         shimmer ? "animate-shimmer" : "animate-pulse",
         className
       )}

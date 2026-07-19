@@ -43,14 +43,14 @@ const BotRunListContent = () => {
   const { data, isPending } = useListContext<BotRun>();
 
   return (
-    <div className="px-4 py-5 md:px-0 md:py-0">
-      <TopToolbar>
-        <h2 className="mr-auto text-page-title font-bold tracking-tight text-foreground">
+    <div className="mx-auto w-full max-w-[1180px] px-4 py-5 pb-24 md:px-6 md:py-6 md:pb-6">
+      <TopToolbar className="min-h-0 px-0 py-0">
+        <h1 className="mr-auto text-content-title font-semibold tracking-tight text-foreground">
           Lần chạy bot
-        </h2>
+        </h1>
       </TopToolbar>
-      <Card className="mt-4 overflow-hidden p-0 py-0">
-        <div className="flex h-[min(620px,calc(100dvh-160px))] min-h-[400px] flex-col overflow-hidden rounded-[inherit] lg:h-[calc(100vh-220px)]">
+      <Card className="mt-3 overflow-hidden p-0 py-0">
+        <div className="flex min-h-[360px] flex-col overflow-hidden rounded-[inherit] md:h-[min(620px,calc(100dvh-170px))] lg:h-[calc(100vh-190px)]">
           {isPending ? (
             <div className="flex flex-col">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -82,7 +82,7 @@ const BotRunListContent = () => {
       </Card>
       <ListPagination
         rowsPerPageOptions={[10, 25, 50, 100]}
-        className="mt-4 justify-center"
+        className="mt-3 justify-center"
       />
     </div>
   );

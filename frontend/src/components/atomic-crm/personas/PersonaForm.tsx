@@ -25,7 +25,6 @@ import {
   CheckCircle2,
   Download,
   FileText,
-  Loader2,
   Upload,
 } from "lucide-react";
 import { importPersona } from "@/lib/vfic/knowledgeService";
@@ -113,14 +112,18 @@ const PersonaForm = ({
     () => parsePersonaMarkdown(initial.body_md).extraMarkdown,
   );
   const [notes, setNotes] = useState(initial.notes ?? "");
-  const [knowledgeBaseId, setKnowledgeBaseId] = useState(initial.knowledge_base_id);
+  const [knowledgeBaseId, setKnowledgeBaseId] = useState(
+    initial.knowledge_base_id,
+  );
   const [followupRules, setFollowupRules] = useState<PersonaFollowupRules>(() =>
     normalizeFollowupRules(initial.followup_rules),
   );
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
-  const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null);
+  const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(
+    null,
+  );
   const { data: knowledgeBases = [], isPending: knowledgeBasesPending } =
     useGetList<KnowledgeBase>("knowledge_bases", {
       pagination: { page: 1, perPage: 100 },
@@ -316,14 +319,23 @@ const PersonaForm = ({
               className="h-11 text-control lg:max-w-xl"
             />
             {nameError ? (
-              <p role="alert" className="text-helper font-medium text-destructive">
+              <p
+                role="alert"
+                className="text-helper font-medium text-destructive"
+              >
                 {nameError}
               </p>
             ) : null}
           </div>
           <div className="persona-edit-name-field">
-            <Label htmlFor="persona-knowledge-base" className="text-label font-semibold">
-              Knowledge Base <span aria-hidden="true" className="text-destructive">*</span>
+            <Label
+              htmlFor="persona-knowledge-base"
+              className="text-label font-semibold"
+            >
+              Knowledge Base{" "}
+              <span aria-hidden="true" className="text-destructive">
+                *
+              </span>
             </Label>
             <Select
               value={knowledgeBaseId}
@@ -333,19 +345,28 @@ const PersonaForm = ({
               }}
               disabled={knowledgeBasesPending || knowledgeBases.length === 0}
             >
-              <SelectTrigger id="persona-knowledge-base" className="h-11 text-control lg:max-w-xl">
+              <SelectTrigger
+                id="persona-knowledge-base"
+                className="h-11 text-control lg:max-w-xl"
+              >
                 <SelectValue placeholder="Chọn Knowledge Base" />
               </SelectTrigger>
               <SelectContent>
                 {knowledgeBases.map((knowledgeBase) => (
                   <SelectItem key={knowledgeBase.id} value={knowledgeBase.id}>
-                    {knowledgeBase.name} · {knowledgeBase.mode === "RAG" ? "RAG" : "Ngữ cảnh trực tiếp"}
+                    {knowledgeBase.name} ·{" "}
+                    {knowledgeBase.mode === "RAG"
+                      ? "RAG"
+                      : "Ngữ cảnh trực tiếp"}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {knowledgeBaseError ? (
-              <p role="alert" className="text-helper font-medium text-destructive">
+              <p
+                role="alert"
+                className="text-helper font-medium text-destructive"
+              >
                 {knowledgeBaseError}
               </p>
             ) : knowledgeBases.length === 0 && !knowledgeBasesPending ? (
@@ -381,7 +402,10 @@ const PersonaForm = ({
               onClick={() => fileInputRef.current?.click()}
             >
               {importing ? (
-                <Loader2 className="size-4 animate-spin" />
+                <span
+                  className="tt-loading tt-loading-spinner tt-loading-sm"
+                  aria-hidden="true"
+                />
               ) : (
                 <Upload className="size-4" />
               )}
@@ -405,8 +429,8 @@ const PersonaForm = ({
                 <h2>Prompt làm việc</h2>
               </div>
               <p>
-                Mỗi phần là một khối hướng dẫn riêng. Giữ câu chữ ngắn, rõ,
-                kiểm soát được và dễ rà soát.
+                Mỗi phần là một khối hướng dẫn riêng. Giữ câu chữ ngắn, rõ, kiểm
+                soát được và dễ rà soát.
               </p>
             </section>
 
@@ -473,7 +497,7 @@ const PersonaForm = ({
           </div>
 
           <aside className="persona-edit-rail">
-            <section className="persona-edit-rail-card">
+            <section className="persona-edit-rail-card tt-card">
               <div className="persona-edit-rail-title">
                 <BotMessageSquare className="size-4 text-primary" />
                 Tự động follow-up
@@ -485,7 +509,7 @@ const PersonaForm = ({
                   return (
                     <div
                       key={score}
-                      className="persona-followup-editor-card"
+                      className="persona-followup-editor-card tt-card"
                     >
                       <div className="persona-followup-editor-head">
                         <div>
@@ -556,12 +580,15 @@ const PersonaForm = ({
               </div>
             </section>
 
-            <section className="persona-edit-rail-card">
+            <section className="persona-edit-rail-card tt-card">
               <div className="persona-edit-rail-title">
                 <FileText className="size-4" />
                 Ghi chú riêng tư
               </div>
-              <Label htmlFor="persona-notes" className="text-label font-semibold">
+              <Label
+                htmlFor="persona-notes"
+                className="text-label font-semibold"
+              >
                 Chỉ dùng nội bộ
               </Label>
               <Textarea
@@ -580,7 +607,10 @@ const PersonaForm = ({
           <Button type="submit" className="sm:min-w-32" disabled={submitting}>
             {submitting ? (
               <>
-                <Loader2 className="size-4 animate-spin" />
+                <span
+                  className="tt-loading tt-loading-spinner tt-loading-sm"
+                  aria-hidden="true"
+                />
                 Đang lưu...
               </>
             ) : (

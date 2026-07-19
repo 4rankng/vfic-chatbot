@@ -116,12 +116,12 @@ export const ProjectCreate = () => {
                       </legend>
                       <label className="flex cursor-pointer gap-3 rounded-lg border p-4">
                         <input
+                          className="tt-radio tt-radio-primary tt-radio-sm mt-1"
                           type="radio"
                           name="knowledge-mode"
                           value="DIRECT_CONTEXT"
                           checked={mode === "DIRECT_CONTEXT"}
                           onChange={() => setMode("DIRECT_CONTEXT")}
-                          className="mt-1"
                         />
                         <span>
                           <span className="block font-semibold">Một trang</span>
@@ -134,12 +134,12 @@ export const ProjectCreate = () => {
                       </label>
                       <label className="flex cursor-pointer gap-3 rounded-lg border p-4">
                         <input
+                          className="tt-radio tt-radio-primary tt-radio-sm mt-1"
                           type="radio"
                           name="knowledge-mode"
                           value="RAG"
                           checked={mode === "RAG"}
                           onChange={() => setMode("RAG")}
-                          className="mt-1"
                         />
                         <span>
                           <span className="block font-semibold">

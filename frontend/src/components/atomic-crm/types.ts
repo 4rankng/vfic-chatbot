@@ -438,8 +438,8 @@ export interface LabeledValue {
 // Order = recruitment funnel. Consumed by PersonaForm and useDashboardStats.
 export const LEAD_STAGES = [
   { value: "NEW", label: "Mới", color: "bg-slate-500" },
-  { value: "CONTACTING", label: "Đang liên hệ", color: "bg-blue-500" },
-  { value: "REGISTERED", label: "Đã đăng ký", color: "bg-amber-500" },
+  { value: "CONTACTING", label: "Đang liên hệ", color: "bg-info" },
+  { value: "REGISTERED", label: "Đã đăng ký", color: "bg-warning" },
   { value: "SKIPPED", label: "Bỏ qua", color: "bg-zinc-500" },
 ] as const;
 
@@ -449,8 +449,8 @@ export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];
 // Categorical (hot / warm / not_interested), NOT a 0-100 numeric despite the
 // legacy column name. Drives the LeadScoreValue type, used by PersonaForm.
 export const LEAD_SCORES = [
-  { value: "hot", label: "Ưu tiên cao", color: "bg-rose-500" },
-  { value: "warm", label: "Ưu tiên", color: "bg-amber-500" },
+  { value: "hot", label: "Ưu tiên cao", color: "bg-destructive" },
+  { value: "warm", label: "Ưu tiên", color: "bg-warning" },
   { value: "not_interested", label: "Không quan tâm", color: "bg-zinc-500" },
 ] as const;
 

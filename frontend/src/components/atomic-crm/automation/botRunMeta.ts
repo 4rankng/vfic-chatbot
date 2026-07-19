@@ -8,12 +8,12 @@ export const OUTCOME_META: Record<
   BotRun["outcome"],
   { label: string; classes: string }
 > = {
-  sent: { label: "Đã gửi", classes: "bg-emerald-500 text-white" },
+  sent: { label: "Đã gửi", classes: "bg-success text-white" },
   suppressed: {
     label: "Đã chặn",
-    classes: "bg-amber-500 text-white",
+    classes: "bg-warning text-warning-foreground",
   },
-  error: { label: "Lỗi", classes: "bg-rose-500 text-white" },
+  error: { label: "Lỗi", classes: "bg-destructive text-white" },
 };
 
 export const outcomeMeta = (

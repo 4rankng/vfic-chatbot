@@ -28,8 +28,9 @@ const ProjectStatusBadge = ({
   <Badge
     variant="outline"
     className={cn(
-      "border-border bg-muted/40 text-muted-foreground",
-      active && "border-emerald-200 bg-emerald-50 text-emerald-700",
+      active
+        ? "tt-badge-success tt-badge-soft border-transparent text-success"
+        : "border-border bg-muted/40 text-muted-foreground",
     )}
   >
     {active ? (short ? "Đang bật" : "Đang hoạt động") : "Tắt"}

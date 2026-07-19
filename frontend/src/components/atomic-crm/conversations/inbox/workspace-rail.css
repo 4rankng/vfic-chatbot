@@ -138,8 +138,7 @@
   );
   box-shadow:
     inset 0 0 0 1px var(--workspace-active),
-    0 4px 10px
-      color-mix(in srgb, var(--workspace-active) 18%, transparent);
+    0 4px 10px color-mix(in srgb, var(--workspace-active) 18%, transparent);
 }
 
 .inbox-bg-container .channel-adapter-option:hover {
@@ -159,7 +158,7 @@
   border-radius: 999px;
   background: var(--danger);
   color: var(--primary-foreground);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: var(--chat-fw-bold);
   line-height: 1;
   box-shadow: 0 0 0 2px var(--surface-solid);
@@ -255,8 +254,8 @@
 }
 
 .inbox-bg-container .conversation-filter {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border: 1px solid var(--workspace-blue-line);
@@ -264,6 +263,13 @@
   background: var(--workspace-bg);
   color: var(--workspace-muted);
   box-shadow: none;
+}
+
+@media (max-width: 767px) {
+  .inbox-bg-container .conversation-filter {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .inbox-bg-container .conversation-filter[aria-pressed="true"] {

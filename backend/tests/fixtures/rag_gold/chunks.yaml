@@ -1,0 +1,318 @@
+# Synthetic Vietnamese KB chunks for the RAG precision gold set.
+#
+# These fixtures are deliberately decoupled from production data — they exist
+# only to exercise the retrieval pipeline (fusion, MMR dedup, sha256 dedup,
+# reranker) against realistic Vietnamese recruiting content. The gold set
+# protects retrieval *code* from regressions, not the production KB itself.
+#
+# Each chunk becomes a SimpleNamespace row with `similarity` computed at load
+# time from canned embeddings (`embeddings.json`). Chunk fields mirror the
+# real RetrievalRepository row shape (id, content, source_quote, summary,
+# metadata, document_id, section_path, source_file, chunk_sha256, similarity).
+#
+# The `project_slug` groups chunks per fictional project. Chunk IDs must be
+# globally unique; the loader hashes content into `chunk_sha256` if missing.
+
+- id: lgd_salary_chunk_01
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_salary_doc
+  section_path: "luong/phuc-loi"
+  source_label: "LG Display - Lương & phụ cấp"
+  content: >
+    Lương cơ bản công nhân LG Display Hải Phòng: 7.500.000 VNĐ/tháng (chưa qua
+    thử việc). Sau 2 tháng thử việc lương chính thức là 8.200.000 VNĐ/tháng.
+    Phụ cấp đi lại 800.000 VNĐ/tháng, phụ cấp ăn trưa 650.000 VNĐ/tháng.
+    Tổng thu nhập trung bình 9.650.000 VNĐ/tháng.
+- id: lgd_salary_chunk_02
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_salary_doc
+  section_path: "luong/phuc-loi"
+  source_label: "LG Display - Lương thử việc"
+  content: >
+    Thời gian thử việc 2 tháng, hưởng 90% lương chính thức. Trong thử việc
+    lương là 7.380.000 VNĐ/tháng. Được đóng BHXH đầy đủ từ ngày đầu tiên.
+- id: lgd_shift_chunk_01
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_shift_doc
+  section_path: "ca-lam-viec"
+  source_label: "LG Display - Ca làm việc"
+  content: >
+    Ca làm việc tại LG Display Hải Phòng: ca sáng 7h30-16h30, ca chiều 16h30-1h30.
+    Làm việc theo ca xoay, nghỉ 2 ngày/tháng. Tăng ca tính hệ số 1.5 vào ngày
+    thường và 2.0 vào cuối tuần.
+- id: lgd_apply_chunk_01
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_apply_doc
+  section_path: "tuyen-dung/ung-tuyen"
+  source_label: "LG Display - Hồ sơ ứng tuyển"
+  content: >
+    Hồ sơ ứng tuyển LG Display gồm: CCCD photo, sơ yếu lý lịch, giấy khám sức
+    khỏe còn hiệu lực 6 tháng, bằng cấp liên quan. Nộp qua Zalo 0388.123.456
+    hoặc trực tiếp tại phòng nhân sự Hải Phòng.
+- id: lgd_apply_chunk_02
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_apply_doc
+  section_path: "tuyen-dung/ung-tuyen"
+  source_label: "LG Display - Yêu cầu tuổi"
+  content: >
+    Yêu cầu tuổi công nhân LG Display: từ 18 đến 35 tuổi. Nam cao trên 1m60,
+    nữ trên 1m55. Tốt nghiệp THCS trở lên. Không xăm trổ vùng cổ tay.
+- id: lgd_contact_chunk_01
+  project_slug: lg-display
+  category: general
+  document_id: lgd_contact_doc
+  section_path: "lien-he"
+  source_label: "LG Display - Liên hệ nhà máy"
+  content: >
+    Nhà máy LG Display Hải Phòng đặt tại Khu công nghiệp Tràng Duệ, huyện
+    An Dương, TP Hải Phòng. Hotline phòng nhân sự: 0388.123.456. Giờ làm việc
+    hành chính 8h00-17h00 thứ 2 đến thứ 7.
+- id: lgd_role_chunk_01
+  project_slug: lg-display
+  category: general
+  document_id: lgd_role_doc
+  section_path: "vi-tri/cong-nhan"
+  source_label: "LG Display - Vị trí công nhân"
+  content: >
+    Đang tuyển 50 công nhân sản xuất màn hình OLED. Công việc: vận hành máy
+    ép nhựa, kiểm tra chất lượng sản phẩm trên chuyền. Yêu cầu tốt nghiệp
+    THPT, chấp nhận người mới được đào tạo.
+- id: lgd_dorm_chunk_01
+  project_slug: lg-display
+  category: general
+  document_id: lgd_dorm_doc
+  section_path: "khu-tro/phuc-loi"
+  source_label: "LG Display - Ký túc xá"
+  content: >
+    Công ty có hỗ trợ chỗ ở cho công nhân ngoại tỉnh, phí ký túc xá
+    300.000 VNĐ/tháng bao gồm điện nước. Có xe đưa đón từ KTX đến nhà máy
+    miễn phí theo ca làm việc.
+
+# SAMSUNG project — distinct slug, similar but distinct facts.
+- id: ssg_salary_chunk_01
+  project_slug: samsung
+  category: faq
+  document_id: ssg_salary_doc
+  section_path: "luong/phuc-loi"
+  source_label: "Samsung - Lương cơ bản"
+  content: >
+    Lương cơ bản công nhân Samsung Bắc Ninh: 6.800.000 VNĐ/tháng. Sau thử
+    việc 7.500.000 VNĐ/tháng. Phụ cấp nhà ở 500.000 VNĐ/tháng, phụ cấp
+    chuyên cần 500.000 VNĐ/tháng.
+- id: ssg_shift_chunk_01
+  project_slug: samsung
+  category: faq
+  document_id: ssg_shift_doc
+  section_path: "ca-lam-viec"
+  source_label: "Samsung - Ca làm việc"
+  content: >
+    Samsung Bắc Ninh làm 3 ca: 6h-14h, 14h-22h, 22h-6h. Xoay ca hàng tuần.
+    Nghỉ chủ nhật. Tăng ca tối đa 4 giờ/ngày, 30 giờ/tháng theo luật lao động.
+- id: ssg_apply_chunk_01
+  project_slug: samsung
+  category: faq
+  document_id: ssg_apply_doc
+  section_path: "tuyen-dung/ung-tuyen"
+  source_label: "Samsung - Ứng tuyển"
+  content: >
+    Ứng tuyển công nhân Samsung qua Zalo 0388.987.654. Cần CCCD, sơ yếu lý
+    lịch, bằng THPT. Yêu cầu tuổi 18-32. Nam cao 1m65 trở lên, nữ 1m58.
+
+# BUS project — structured transport info.
+- id: bus_lgd_route_01
+  project_slug: transport
+  category: faq
+  document_id: bus_routes_doc
+  section_path: "xe-dua-don/lgd-hai-phong"
+  source_label: "Xe đưa đón LG Display Hải Phòng"
+  content: >
+    Tuyến xe đưa đón LG Display Hải Phòng đi Tràng Duệ: xuất phát bến xe
+    Cầu Đất 6h00, qua Niệm Nghĩa 6h20, đến nhà máy 6h50. Lượt về 17h00.
+    Miễn phí cho công nhân có thẻ nhân sự.
+- id: bus_ssg_route_01
+  project_slug: transport
+  category: faq
+  document_id: bus_routes_doc
+  section_path: "xe-dua-don/ssg-bac-ninh"
+  source_label: "Xe đưa đón Samsung Bắc Ninh"
+  content: >
+    Tuyến xe Samsung Bắc Ninh: bến xe Gia Lâm 5h30, qua Yên Phong 6h00, đến
+    nhà máy Yên Phong 6h30. Có 4 chuyến sáng và 4 chuyến chiều.
+
+# POLICY chunks — general recruiting policy knowledge.
+- id: policy_trial_period_01
+  project_slug: policy
+  category: general
+  document_id: policy_doc
+  section_path: "chinh-sach/thu-viec"
+  source_label: "Chính sách thử việc"
+  content: >
+    Theo Bộ luật Lao động, thử việc tối đa 30 ngày với công việc yêu cầu
+    trung cấp, 60 ngày với cao đẳng, 180 ngày với đại học. Lương thử việc
+    tối thiểu 85% lương chính thức. Công ty phải đóng BHXH trong thời gian thử việc.
+- id: policy_ot_01
+  project_slug: policy
+  category: general
+  document_id: policy_doc
+  section_path: "chinh-sach/tang-ca"
+  source_label: "Chính sách tăng ca"
+  content: >
+    Tăng ca hệ số 150% vào ngày thường, 200% vào chủ nhật, 300% vào lễ.
+    Tổng tăng ca không quá 200 giờ/năm đối với người lao động bình thường,
+    300 giờ/năm đối với một số ngành. Người lao động có quyền từ chối tăng ca.
+- id: policy_contract_01
+  project_slug: policy
+  category: general
+  document_id: policy_doc
+  section_path: "chinh-sach/hop-dong"
+  source_label: "Loại hợp đồng lao động"
+  content: >
+    Hợp đồng lao động có 3 loại: không thời hạn, xác định thời hạn dưới 36
+    tháng, theo mùa vụ dưới 12 tháng. Người lao động dưới 18 tuổi chỉ được
+    ký hợp đồng theo mùa vụ hoặc xác định thời hạn.
+
+# DUPLICATE-BAIT chunks — same content as a sibling chunk to exercise
+# chunk_sha256 dedup (Phase 4). These should collapse at retrieval time.
+- id: lgd_salary_chunk_dup_01
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_salary_mirror_doc
+  section_path: "luong/phuc-loi"
+  source_label: "LG Display - Lương (bản sao lỗi hệ thống)"
+  content: >
+    Lương cơ bản công nhân LG Display Hải Phòng: 7.500.000 VNĐ/tháng (chừng qua
+    thử việc). Sau 2 tháng thử việc lương chính thức là 8.200.000 VNĐ/tháng.
+    Phụ cấp đi lại 800.000 VNĐ/tháng, phụ cấp ăn trưa 650.000 VNĐ/tháng.
+    Tổng thu nhập trung bình 9.650.000 VNĐ/tháng.
+
+# NEAR-DUPLICATE chunks — same document/section, different content. Exercises
+# MMR dedup (Phase 2) — these should NOT collapse (different sha256) but
+# the cluster cap should limit them.
+- id: lgd_benefits_chunk_01
+  project_slug: lg-display
+  category: general
+  document_id: lgd_benefits_doc
+  section_path: "phuc-loi/bao-hiem"
+  source_label: "LG Display - Bảo hiểm"
+  content: >
+    Công ty LG Display Hải Phòng đóng đầy đủ BHXH, BHYT, BHTN theo luật.
+    Công nhân được khám sức khỏe định kỳ 6 tháng/lần. Bảo hiểm tai nạn lao
+    động 100% lương trong thời gian điều trị.
+- id: lgd_benefits_chunk_02
+  project_slug: lg-display
+  category: general
+  document_id: lgd_benefits_doc
+  section_path: "phuc-loi/bao-hiem"
+  source_label: "LG Display - Khám bệnh"
+  content: >
+    Công nhân LG Display được cấp thẻ BHYT, khám bệnh tại phòng khám công ty
+    miễn phí. Ốm đau 3 ngày đầu hưởng 75% lương, từ ngày thứ 4 trở đi hưởng
+    theo quy định BHXH.
+
+# OFF-DOMAIN chunks — must NOT be retrieved by recruiting queries. Used to
+# test that off-domain noise doesn't pollute top-K for recruiting questions.
+- id: offtopic_recipes_01
+  project_slug: misc
+  category: general
+  document_id: misc_doc
+  section_path: "nau-an/soup"
+  source_label: "Nấu ăn - Công thức canh"
+  content: >
+    Canh cua rau đay mồng tơi nấu mẻ: cua đồng giã nhỏ lọc lấy nước, rau rửa
+    sạch thái nhỏ. Đun sôi nước cua cho ngót, cho rau vào khuấy đều. Nêm nếm
+    mắm tôm, muối vừa ăn.
+
+# Cross-project similarity bait — contains "lương", "triệu" like real chunks
+# but is about a different context (chef salary, not factory worker).
+# Hallucination-bait queries about high factory salaries should NOT match this.
+- id: offtopic_chef_salary_01
+  project_slug: misc
+  category: general
+  document_id: misc_doc
+  section_path: "nghe-nghiep/bep"
+  source_label: "Nghề bếp - Lương đầu bếp"
+  content: >
+    Lương đầu bếp nhà hàng 5 sao tại Hà Nội: bếp trưởng 25 triệu/tháng, bếp
+    phó 15 triệu/tháng, phụ bếp 8 triệu/tháng. Yêu cầu kinh nghiệm trên 5 năm.
+
+# MORE LG-display chunks for richer MMR and lexical-arm coverage.
+- id: lgd_leave_chunk_01
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_leave_doc
+  section_path: "nghi-phep"
+  source_label: "LG Display - Nghỉ phép"
+  content: >
+    Công nhân LG Display được 12 ngày phép/năm sau 12 tháng làm việc. Nghỉ
+    phép có lương hưởng 100% lương cơ bản. Có thể gởi phép sang năm sau tối đa
+    5 ngày. Nghỉ ốm hưởng theo BHXH.
+- id: lgd_insurance_chunk_01
+  project_slug: lg-display
+  category: faq
+  document_id: lgd_insurance_doc
+  section_path: "bao-hiem"
+  source_label: "LG Display - Bảo hiểm thất nghiệp"
+  content: >
+    Khi mất việc tại LG Display, công nhân được nhận trợ cấp thất nghiệp bằng
+    60% mức bình quân tiền lương 6 tháng liên tục đóng BHTN. Thời gian nhận
+    tùy số năm đóng, tối đa 12 tháng.
+
+# Samsung additional
+- id: ssg_dorm_chunk_01
+  project_slug: samsung
+  category: general
+  document_id: ssg_dorm_doc
+  section_path: "khu-tro"
+  source_label: "Samsung - Chỗ ở"
+  content: >
+    Samsung Bắc Ninh hỗ trợ ký túc xá cho công nhân, phí 250.000 VNĐ/tháng.
+    Phòng 6 người có điều hòa, tủ lạnh chung từng tầng. Có siêu thị và căng-tin
+    trong khuôn viên nhà máy.
+- id: ssg_ot_chunk_01
+  project_slug: samsung
+  category: faq
+  document_id: ssg_ot_doc
+  section_path: "luong/tang-ca"
+  source_label: "Samsung - Tăng ca"
+  content: >
+    Tăng ca Samsung Bắc Ninh tính theo luật: 150% ngày thường, 200% chủ nhật,
+    300% lễ. Trung bình công nhân tăng ca 4 giờ/ngày tăng thu nhập thêm 2 triệu/tháng.
+- id: ssg_leave_chunk_01
+  project_slug: samsung
+  category: faq
+  document_id: ssg_leave_doc
+  section_path: "nghi-phep"
+  source_label: "Samsung - Nghỉ phép"
+  content: >
+    Samsung Bắc Ninh cho công nhân 12 ngày phép năm. Nghỉ phép kế hoạch phải
+    báo trước 7 ngày. Hưởng nguyên lương cơ bản. Có thêm 3 ngày phép nếu kết
+    hôn chính thức.
+
+# Bus additional
+- id: bus_policy_chunk_01
+  project_slug: transport
+  category: general
+  document_id: bus_policy_doc
+  section_path: "noi-quy"
+  source_label: "Nội quy xe đưa đón"
+  content: >
+    Nội quy xe đưa đón công nhân: đến trễ 5 phút bị bỏ lại. Xuất trình thẻ
+    nhân sự khi lên xe. Cấm ăn uống trong xe. Có chỗ để xe cá nhân miễn phí
+    tại các bến trung chuyển.
+
+# Policy additional
+- id: policy_resign_01
+  project_slug: policy
+  category: general
+  document_id: policy_doc
+  section_path: "chinh-sach/nghi-viec"
+  source_label: "Chính sách nghỉ việc"
+  content: >
+    Người lao động muốn nghỉ việc phải báo trước 45 ngày với hợp đồng xác định
+    thời hạn, 30 ngày với hợp đồng không thời hạn. Được nhận trợ cấp thôi việc
+    nếu đã đóng BHXH từ 12 tháng trở lên.
