@@ -21,7 +21,7 @@ release-check:
 	@cd frontend && npm run lint && npm run typecheck && npm run test:unit:app -- --run && npm run build
 
 # Build & push BOTH DockerHub images, then deploy to bot.tingting.vip.
-deploy: release-check backup
+deploy: release-check
 	@echo "=== Building & pushing frontend ==="
 	cd frontend && make push
 	@echo "=== Building & pushing backend ==="
