@@ -57,13 +57,15 @@ describe("ChannelAdapterSelector", () => {
     await expect.element(oaRadio).toBeVisible();
     const oaElement = screen.container.querySelector('[value="zalo_oa"]');
     expect(oaElement).not.toBeNull();
-    expect(getComputedStyle(oaElement as Element).width).toBe("48px");
+    // Compact conversation toolbar keeps the visual control at the 44px
+    // accessible touch-target minimum rather than the previous 48px tile.
+    expect(getComputedStyle(oaElement as Element).width).toBe("44px");
     expect(getComputedStyle(oaElement as Element).backgroundColor).not.toBe(
       "rgb(255, 255, 255)",
     );
     expect(
       getComputedStyle(oaElement?.querySelector("img") as Element).width,
-    ).toBe("40px");
+    ).toBe("38px");
     expect(
       oaElement?.querySelector('[data-slot="radio-group-indicator"]'),
     ).toBeNull();

@@ -1078,12 +1078,22 @@ const PerformancePanel = () => {
             className="performance-refresh"
             onClick={() => void refetch()}
             disabled={isPending}
+            aria-label={
+              freshness ? `Cập nhật lúc ${freshness}` : "Cập nhật dữ liệu"
+            }
           >
             <RefreshCw
               className={isPending ? "is-spinning" : undefined}
               aria-hidden="true"
             />
-            {freshness ? `Cập nhật lúc ${freshness}` : "Cập nhật dữ liệu"}
+            {freshness ? (
+              <>
+                <span className="performance-refresh-prefix">Cập nhật lúc </span>
+                {freshness}
+              </>
+            ) : (
+              "Cập nhật"
+            )}
           </button>
         </div>
       </header>

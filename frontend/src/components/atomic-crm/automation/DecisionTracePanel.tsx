@@ -1,4 +1,10 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDataProvider, useGetIdentity } from "ra-core";
 import { AlertTriangle, Brain, History, Info, RefreshCw } from "lucide-react";
@@ -243,11 +249,20 @@ const RunSummary = ({ run }: { run: BotRunTraceSummary }) => {
 export const DecisionTracePanel = ({
   conversationId,
   className,
+  open: controlledOpen,
+  onOpenChange,
+  showTrigger = true,
+  returnFocusRef,
 }: {
   conversationId: string;
   className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
   const hasOpenedRef = useRef(false);
   const dataProvider = useDataProvider<CrmDataProvider>();
@@ -279,7 +294,8 @@ export const DecisionTracePanel = ({
   useEffect(() => () => clearDecisionTraceQueries(queryClient), [queryClient]);
 
   const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
+    if (controlledOpen === undefined) setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
     if (!nextOpen) {
       setExpandedRunId(null);
     }
@@ -289,22 +305,29 @@ export const DecisionTracePanel = ({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetTrigger asChild>
-        <button
-          type="button"
-          className={cn("icon-btn ghost", className)}
-          aria-label="Agent Thinking"
-          title="Agent Thinking"
-          aria-expanded={open}
-          aria-controls="decision-trace-sheet"
-        >
-          <History className="icon" aria-hidden="true" />
-        </button>
-      </SheetTrigger>
+      {showTrigger ? (
+        <SheetTrigger asChild>
+          <button
+            type="button"
+            className={cn("icon-btn ghost", className)}
+            aria-label="Agent Thinking"
+            title="Agent Thinking"
+            aria-expanded={open}
+            aria-controls="decision-trace-sheet"
+          >
+            <History className="icon" aria-hidden="true" />
+          </button>
+        </SheetTrigger>
+      ) : null}
       <SheetContent
         id="decision-trace-sheet"
         side="right"
         className="w-full gap-0 overflow-hidden p-0 sm:max-w-lg"
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusRef?.current) return;
+          event.preventDefault();
+          returnFocusRef.current.focus();
+        }}
       >
         <SheetHeader className="border-b px-5 py-4 pr-14">
           <SheetTitle>Agent Thinking</SheetTitle>

@@ -143,8 +143,8 @@ export const RecruitingCommandCenter = ({
             }
           : {
               tone: "success",
-              title: "Hàng đợi đang hoạt động",
-              detail: "Tự làm mới mỗi 30 giây",
+              title: "",
+              detail: "",
             };
 
   return (
@@ -169,16 +169,20 @@ export const RecruitingCommandCenter = ({
             </span>
           ) : null}
         </div>
-        <div
-          className={`dashboard-live-status is-${queueHealth.tone}`}
-          role="status"
-        >
-          <span className="dashboard-live-dot" aria-hidden="true" />
-          <div>
-            <strong>{queueHealth.title}</strong>
-            <span>{queueHealth.detail}</span>
+        {queueHealth.title || queueHealth.detail ? (
+          <div
+            className={`dashboard-live-status is-${queueHealth.tone}`}
+            role="status"
+          >
+            <span className="dashboard-live-dot" aria-hidden="true" />
+            <div>
+              {queueHealth.title ? <strong>{queueHealth.title}</strong> : null}
+              {queueHealth.detail ? (
+                <span>{queueHealth.detail}</span>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
       </header>
 
       {showPartialError || (candidatesQuery.isError && candidatesQuery.data) ? (

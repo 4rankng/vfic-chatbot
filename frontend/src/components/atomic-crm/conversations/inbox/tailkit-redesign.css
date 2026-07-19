@@ -75,39 +75,70 @@
   box-shadow: var(--tailkit-shadow-xs);
 }
 
-/* Conversation directory: Tailkit list-group density, hover, and active state. */
+/* Conversation directory: compact Tailkit input-group + icon-toolbar anatomy.
+   Channel, filter, and count controls share one row; search owns the full row
+   below. This removes decorative title chrome and keeps the directory focused
+   on scanning and filtering live conversations. */
 .inbox-bg-container .workspace-rail {
-  min-height: 186px;
-  gap: 12px;
-  padding: 18px 16px 14px;
+  min-height: 0;
+  grid-template-areas:
+    "adapters filters count"
+    "search search search";
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 12px;
   border-bottom: 1px solid var(--tailkit-line-soft);
   background: var(--tailkit-surface);
 }
 
-.inbox-bg-container .workspace-rail-kicker {
-  color: var(--tailkit-brand);
-  letter-spacing: 0.1em;
+.inbox-bg-container .workspace-rail > .channel-adapter-selector {
+  grid-area: adapters;
 }
 
-.inbox-bg-container .workspace-heading,
-.inbox-bg-container .conv-name {
-  color: var(--tailkit-ink);
+.inbox-bg-container .workspace-rail > .inbox-tools,
+.inbox-bg-container .workspace-rail .inbox-toolbar {
+  display: contents;
+}
+
+.inbox-bg-container .workspace-rail .search {
+  grid-area: search;
+  width: 100%;
+  min-width: 0;
+}
+
+.inbox-bg-container .workspace-rail .conversation-filters {
+  grid-area: filters;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 .inbox-bg-container .workspace-conversation-count {
-  min-width: 28px;
-  height: 26px;
+  grid-area: count;
+  min-width: 24px;
+  height: 24px;
+  padding-inline: 5px;
   border-color: var(--tailkit-brand-line);
+  border-radius: 7px;
   background: var(--tailkit-brand-soft);
   color: var(--tailkit-brand);
+  font-size: var(--fs-caption);
   box-shadow: none;
 }
 
 .inbox-bg-container .channel-adapter-option {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
   border-color: var(--tailkit-line);
-  border-radius: 12px;
+  border-radius: 9px;
   background: var(--tailkit-surface-muted);
   box-shadow: var(--tailkit-shadow-xs);
+}
+
+.inbox-bg-container .channel-adapter-option img {
+  width: 32px;
+  height: 32px;
 }
 
 .inbox-bg-container .channel-adapter-option[data-state="checked"] {
@@ -117,12 +148,23 @@
 }
 
 .inbox-bg-container .search input {
-  min-height: 40px;
+  width: 100%;
+  min-height: 36px;
+  height: 36px;
+  padding-right: 12px;
+  padding-left: 34px;
   border-color: var(--tailkit-line);
-  border-radius: 10px;
-  background: var(--tailkit-surface);
+  border-radius: 8px;
+  background: var(--tailkit-surface-muted);
   color: var(--tailkit-ink);
+  font-size: var(--fs-body-sm);
   box-shadow: none;
+}
+
+.inbox-bg-container .search .icon {
+  left: 11px;
+  width: 16px;
+  height: 16px;
 }
 
 .inbox-bg-container .search input:focus {
@@ -131,8 +173,10 @@
 }
 
 .inbox-bg-container .conversation-filter {
+  width: 36px;
+  height: 36px;
   border-color: var(--tailkit-line);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--tailkit-surface);
   color: var(--tailkit-muted);
   box-shadow: none;
@@ -179,8 +223,8 @@
 }
 
 .inbox-bg-container .conversation.active {
-  border-color: var(--tailkit-brand-line);
-  background: var(--tailkit-brand-soft);
+  border-color: transparent;
+  background: var(--tailkit-surface-muted);
   box-shadow: none;
 }
 
@@ -484,8 +528,41 @@
   }
 
   .inbox-bg-container .workspace-rail {
-    min-height: 132px;
-    padding: 14px 14px 12px;
+    min-height: 0;
+    gap: 8px;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 10px;
+  }
+
+  .inbox-bg-container .channel-adapter-option {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    border-radius: 10px;
+  }
+
+  .inbox-bg-container .channel-adapter-option img {
+    width: 38px;
+    height: 38px;
+  }
+
+  .inbox-bg-container .conversation-filter {
+    width: 44px;
+    height: 44px;
+  }
+
+  .inbox-bg-container .search input {
+    min-height: 44px !important;
+    height: 44px;
+    padding-inline: 36px 12px;
+    border-color: var(--tailkit-line);
+    border-radius: 9px;
+    background: var(--tailkit-surface-muted);
+  }
+
+  .inbox-bg-container .search .icon {
+    left: 12px;
+    width: 16px;
+    height: 16px;
   }
 
   .inbox-bg-container .conversations {
@@ -539,38 +616,5 @@
   .inbox-bg-container .composer,
   .inbox-bg-container .composer-action {
     transition: none;
-  }
-}
-
-/* Narrow split-pane/mobile detail: the product has more header actions than
-   Tailkit's single-action example, so they receive their own toolbar row.
-   Identity never competes with the controls for horizontal space. */
-@container (max-width: 420px) {
-  .inbox-bg-container .chat-header {
-    display: grid;
-    grid-template-areas:
-      "toggle person"
-      "actions actions";
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 8px 10px;
-    min-height: auto;
-    padding: 10px 10px 12px;
-  }
-
-  .inbox-bg-container .list-toggle {
-    grid-area: toggle;
-  }
-
-  .inbox-bg-container .header-person {
-    grid-area: person;
-    width: 100%;
-  }
-
-  .inbox-bg-container .header-actions {
-    grid-area: actions;
-    width: 100%;
-    justify-content: flex-end;
-    padding-top: 8px;
-    border-top: 1px solid var(--tailkit-line-soft);
   }
 }

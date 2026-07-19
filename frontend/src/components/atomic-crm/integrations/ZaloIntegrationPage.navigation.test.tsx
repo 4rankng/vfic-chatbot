@@ -90,7 +90,7 @@ describe("ZaloIntegrationPage navigation", () => {
     );
 
     await expect
-      .element(screen.getByRole("heading", { name: "Facebook Messenger" }))
+      .element(screen.getByRole("heading", { name: "Messenger", exact: true }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("radio", { name: "Ting Ting Tuyển dụng" }))
@@ -136,7 +136,7 @@ describe("ZaloIntegrationPage navigation", () => {
     messengerButton?.click();
 
     await expect
-      .element(screen.getByRole("heading", { name: "Facebook Messenger" }))
+      .element(screen.getByRole("heading", { name: "Messenger", exact: true }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Kết nối Facebook" }))
@@ -178,7 +178,7 @@ describe("ZaloIntegrationPage navigation", () => {
     await messengerButton.click();
 
     await expect
-      .element(screen.getByRole("heading", { name: "Facebook Messenger" }))
+      .element(screen.getByRole("heading", { name: "Messenger", exact: true }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Kết nối Facebook" }))

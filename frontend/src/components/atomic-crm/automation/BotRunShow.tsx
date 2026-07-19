@@ -2,9 +2,11 @@ import { type ReactNode } from "react";
 import { useDataProvider, useGetIdentity } from "ra-core";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
-import { TopToolbar } from "../layout/TopToolbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot } from "lucide-react";
+import { ArrowLeft, Bot } from "lucide-react";
+import { Link } from "react-router";
+import { Button } from "@/components/ui/button";
+import { AlternateCard, PageHeading, PageShell } from "../kit";
 import { cn } from "@/lib/utils";
 import type { BotRunTraceDetail } from "../types";
 import { durationLabel, formatDateTime, outcomeMeta } from "./botRunMeta";
@@ -26,8 +28,8 @@ const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
   const dur = durationLabel(run);
 
   return (
-    <div className="mx-auto mt-4 max-w-3xl">
-      <Card>
+    <AlternateCard className="mt-4" bodyClassName="overflow-hidden">
+      <Card className="border-0 py-0">
         <CardHeader className="flex flex-row items-center justify-between gap-2 border-b px-4 py-3">
           <CardTitle className="flex items-center gap-2 text-section-title">
             <Bot className="size-4 text-muted-foreground" />
@@ -83,7 +85,7 @@ const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </AlternateCard>
   );
 };
 
@@ -105,23 +107,31 @@ const BotRunShowPage = () => {
   });
 
   return (
-    <>
-      <TopToolbar>
-        <h2 className="mr-auto text-content-title font-semibold">
-          Lần chạy bot
-        </h2>
-      </TopToolbar>
+    <PageShell size="narrow">
+      <PageHeading
+        eyebrow="Kiểm tra vận hành"
+        title="Chi tiết lần chạy bot"
+        subtitle="Dữ liệu chẩn đoán nội bộ cho từng lượt xử lý."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/bot_runs">
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Quay lại
+            </Link>
+          </Button>
+        }
+      />
       {detailQuery.isPending ? (
-        <div role="status" className="mx-auto mt-4 max-w-3xl p-4 text-body">
+        <div role="status" className="mt-4 p-4 text-body">
           Đang tải dấu vết…
         </div>
       ) : detailQuery.isError || !detailQuery.data ? (
-        <div role="status" className="mx-auto mt-4 max-w-3xl p-4 text-body">
+        <div role="status" className="mt-4 p-4 text-body">
           Chưa tải được lần chạy bot. Hãy quay lại và thử lại.
         </div>
       ) : (
         <BotRunShowContent run={detailQuery.data} />
       )}
-    </>
+    </PageShell>
   );
 };

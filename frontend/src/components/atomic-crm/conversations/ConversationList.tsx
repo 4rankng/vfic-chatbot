@@ -176,7 +176,7 @@ const ConversationListItem = memo(
 
     return (
       <button
-        className={`conversation tt-btn tt-btn-ghost ${isActive ? "active" : ""} ${
+        className={`conversation ${isActive ? "active" : ""} ${
           needsAttention ? "needs-attention" : ""
         }`}
         onClick={() => onSelect(conversation)}
@@ -672,19 +672,14 @@ const WorkspaceRail = ({
   conversationCount: number;
 }) => (
   <div className="workspace-rail" aria-label="Tin nhắn">
-    <div className="workspace-title-row">
-      <div className="workspace-title-copy">
-        <span className="workspace-rail-kicker">Trung tâm hội thoại</span>
-        <h1 className="workspace-heading">Tin nhắn</h1>
-      </div>
-      <span
-        className="workspace-conversation-count tt-badge tt-badge-soft"
-        aria-label={`${conversationCount} hội thoại đang hiển thị`}
-      >
-        {conversationCount}
-      </span>
-    </div>
+    <h1 className="sr-only">Tin nhắn</h1>
     {adapterSlot}
+    <span
+      className="workspace-conversation-count tt-badge tt-badge-soft"
+      aria-label={`${conversationCount} hội thoại đang hiển thị`}
+    >
+      {conversationCount}
+    </span>
     <div className="inbox-tools">{searchSlot}</div>
   </div>
 );

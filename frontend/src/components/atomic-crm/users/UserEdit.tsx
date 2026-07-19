@@ -11,13 +11,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
-import { TopToolbar } from "../layout/TopToolbar";
 import { Button } from "@/components/ui/button";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserCog } from "lucide-react";
 import { Link } from "react-router";
+import { AlternateCard, PageHeading, PageShell } from "../kit";
 
 const ROLE_CHOICES = [
   { id: "admin", name: "Quản trị" },
@@ -55,7 +55,7 @@ const UserEditContent = () => {
   };
 
   return (
-    <Card className="mt-4 w-full">
+    <Card className="w-full border-0 py-0">
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-3 text-section-title">
           <span>{user.email}</span>
@@ -89,17 +89,28 @@ const UserEditContent = () => {
 
 export const UserEdit = () => (
   <EditBase>
-    <div className="mx-auto w-full max-w-2xl">
-      <TopToolbar className="items-center">
-        <h2 className="mr-auto text-content-title font-semibold">Chỉnh sửa tài khoản</h2>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/users">
-            <ArrowLeft className="size-4" />
-            Quay lại
-          </Link>
-        </Button>
-      </TopToolbar>
-      <UserEditContent />
-    </div>
+    <PageShell size="narrow">
+      <PageHeading
+        eyebrow="Quản trị truy cập"
+        title="Chỉnh sửa tài khoản"
+        subtitle="Cập nhật thông tin, vai trò hoặc trạng thái truy cập."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/users">
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Quay lại
+            </Link>
+          </Button>
+        }
+      />
+      <AlternateCard
+        className="mt-4"
+        icon={<UserCog className="size-4" aria-hidden="true" />}
+        title="Chi tiết tài khoản"
+        bodyClassName="overflow-hidden p-5 sm:p-6"
+      >
+        <UserEditContent />
+      </AlternateCard>
+    </PageShell>
   </EditBase>
 );

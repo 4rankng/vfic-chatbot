@@ -1,10 +1,9 @@
 import { ListBase, useListContext, useRedirect } from "ra-core";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { Inbox } from "lucide-react";
 import { cn, getRelativeTimeString } from "@/lib/utils";
-import { TopToolbar } from "../layout/TopToolbar";
+import { AlternateCard, EmptyState, PageHeading, PageShell } from "../kit";
 import type { BotRun } from "../types";
 import { durationLabel, outcomeMeta } from "./botRunMeta";
 
@@ -43,13 +42,18 @@ const BotRunListContent = () => {
   const { data, isPending } = useListContext<BotRun>();
 
   return (
-    <div className="mx-auto w-full max-w-[1180px] px-4 py-5 pb-24 md:px-6 md:py-6 md:pb-6">
-      <TopToolbar className="min-h-0 px-0 py-0">
-        <h1 className="mr-auto text-content-title font-semibold tracking-tight text-foreground">
-          Lần chạy bot
-        </h1>
-      </TopToolbar>
-      <Card className="mt-3 overflow-hidden p-0 py-0">
+    <PageShell>
+      <PageHeading
+        eyebrow="Kiểm tra vận hành"
+        title="Lần chạy bot"
+        subtitle="Theo dõi kết quả, thời lượng và dấu vết quyết định của từng lượt xử lý."
+      />
+      <AlternateCard
+        className="mt-4"
+        title="Nhật ký gần đây"
+        description="Mở một dòng để xem Agent Thinking và công cụ đã sử dụng."
+        bodyClassName="overflow-hidden"
+      >
         <div className="flex min-h-[360px] flex-col overflow-hidden rounded-[inherit] md:h-[min(620px,calc(100dvh-170px))] lg:h-[calc(100vh-190px)]">
           {isPending ? (
             <div className="flex flex-col">
@@ -64,13 +68,12 @@ const BotRunListContent = () => {
               ))}
             </div>
           ) : !data || data.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
-              <Inbox className="size-10 opacity-50" />
-              <p className="text-body font-medium">Chưa có lần chạy bot nào</p>
-              <p className="text-helper">
-                Các lần thực thi chatbot tuyển dụng sẽ hiển thị tại đây.
-              </p>
-            </div>
+            <EmptyState
+              icon={<Inbox className="size-6" aria-hidden="true" />}
+              title="Chưa có lần chạy bot nào"
+              description="Các lần thực thi chatbot tuyển dụng sẽ hiển thị tại đây."
+              className="flex-1"
+            />
           ) : (
             <div className="flex-1 overflow-y-auto">
               {data.map((run) => (
@@ -79,12 +82,12 @@ const BotRunListContent = () => {
             </div>
           )}
         </div>
-      </Card>
+      </AlternateCard>
       <ListPagination
         rowsPerPageOptions={[10, 25, 50, 100]}
         className="mt-3 justify-center"
       />
-    </div>
+    </PageShell>
   );
 };
 

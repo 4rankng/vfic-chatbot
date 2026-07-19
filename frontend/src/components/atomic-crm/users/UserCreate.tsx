@@ -6,11 +6,11 @@ import {
   useNotify,
   useRedirect,
 } from "ra-core";
-import { Card, CardContent } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
-import { TopToolbar } from "../layout/TopToolbar";
 import { Button } from "@/components/ui/button";
+import { Check, UserPlus } from "lucide-react";
+import { AlternateCard, PageHeading, PageShell } from "../kit";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 
 const ROLE_CHOICES = [
@@ -44,48 +44,56 @@ export const UserCreate = () => {
 
   return (
     <CreateBase resource="users">
-      <div className="mx-auto w-full max-w-2xl">
-        <TopToolbar className="items-center">
-          <h2 className="mr-auto text-content-title font-semibold">Tạo tài khoản</h2>
-        </TopToolbar>
-        <Card className="mt-4 w-full">
-          <CardContent className="pt-6">
-            <Form onSubmit={onSubmit}>
-              <div className="flex flex-col gap-4">
-                <TextInput
-                  source="email"
-                  label="Email"
-                  type="email"
-                  isRequired
-                />
-                <TextInput source="full_name" label="Họ tên" isRequired />
-                <SelectInput
-                  source="role"
-                  label="Vai trò"
-                  choices={ROLE_CHOICES}
-                  defaultValue="recruiter"
-                  isRequired
-                />
-                <TextInput
-                  source="password"
-                  label="Mật khẩu"
-                  type="password"
-                  isRequired
-                />
-                <TextInput
-                  source="confirm_password"
-                  label="Xác nhận mật khẩu"
-                  type="password"
-                  isRequired
-                />
-                <Button type="submit" disabled={isSubmitting}>
+      <PageShell size="narrow">
+        <PageHeading
+          eyebrow="Quản trị truy cập"
+          title="Tạo tài khoản"
+          subtitle="Thêm thành viên nội bộ và chỉ định quyền phù hợp với công việc."
+        />
+        <AlternateCard
+          className="mt-4"
+          icon={<UserPlus className="size-4" aria-hidden="true" />}
+          title="Thông tin tài khoản"
+          description="Email được dùng để đăng nhập vào hệ thống."
+          bodyClassName="p-5 sm:p-6"
+        >
+          <Form onSubmit={onSubmit}>
+            <div className="flex flex-col gap-5">
+              <TextInput source="email" label="Email" type="email" isRequired />
+              <TextInput source="full_name" label="Họ tên" isRequired />
+              <SelectInput
+                source="role"
+                label="Vai trò"
+                choices={ROLE_CHOICES}
+                defaultValue="recruiter"
+                isRequired
+              />
+              <TextInput
+                source="password"
+                label="Mật khẩu"
+                type="password"
+                isRequired
+              />
+              <TextInput
+                source="confirm_password"
+                label="Xác nhận mật khẩu"
+                type="password"
+                isRequired
+              />
+              <div className="flex justify-end border-t border-[var(--tt-border)] pt-5">
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="min-h-11 sm:min-h-10"
+                >
+                  <Check className="size-4" aria-hidden="true" />
                   Tạo tài khoản
                 </Button>
               </div>
-            </Form>
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          </Form>
+        </AlternateCard>
+      </PageShell>
     </CreateBase>
   );
 };

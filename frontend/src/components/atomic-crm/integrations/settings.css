@@ -27,22 +27,40 @@
     position: sticky;
     top: 0;
     z-index: 20;
-    margin: -14px -14px 2px;
+    margin: -14px -14px 8px;
     border-bottom: 1px solid var(--settings-border);
     background: color-mix(in srgb, var(--settings-canvas) 94%, transparent);
-    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+    padding: calc(7px + env(safe-area-inset-top)) 14px 7px;
     backdrop-filter: blur(12px);
   }
 
   .settings-mobile-drawer-trigger {
     width: 100%;
-    min-height: 48px;
+    height: 44px;
+    min-height: 44px;
     justify-content: flex-start;
     border-color: var(--settings-border);
-    border-radius: 10px;
+    border-radius: 9px;
     background: var(--settings-elevated);
     color: var(--ink);
-    padding-inline: 12px;
+    padding-inline: 10px;
+    font-size: var(--fs-body-sm);
+  }
+
+  .settings-mobile-drawer-trigger > span {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .settings-mobile-drawer-trigger > svg:first-child {
+    width: 18px;
+    height: 18px;
+  }
+
+  .settings-mobile-drawer-trigger > svg:last-child {
+    width: 14px;
+    height: 14px;
   }
 
   .settings-mobile-drawer-label,
@@ -55,17 +73,23 @@
 
   .settings-mobile-drawer-label {
     color: var(--ink-muted);
-    font-size: var(--crm-fs-caption);
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    line-height: 1.15;
-    text-transform: uppercase;
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-transform: none;
+  }
+
+  .settings-mobile-drawer-label::after {
+    content: "/";
+    margin-left: 6px;
+    color: var(--settings-border);
   }
 
   .settings-mobile-drawer-current {
-    margin-top: 2px;
-    font-size: var(--crm-fs-body);
-    font-weight: 750;
+    margin-top: 0;
+    font-size: var(--fs-body-sm);
+    font-weight: 700;
     line-height: 1.2;
   }
 
@@ -130,51 +154,67 @@
   }
 
   .settings-workspace-content {
-    padding: 24px 16px calc(96px + env(safe-area-inset-bottom));
+    padding: 14px 14px calc(96px + env(safe-area-inset-bottom));
   }
 
   .settings-mobile-topbar {
-    margin: -24px -16px 16px;
-    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    margin: -14px -14px 10px;
+    padding: calc(7px + env(safe-area-inset-top)) 14px 7px;
   }
 
   .settings-mobile-drawer-trigger {
-    min-height: 52px;
-    border-radius: 16px;
+    min-height: 44px;
+    border-radius: 9px;
   }
 
   .settings-command-header {
+    min-height: 0;
     padding: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
   }
 
+  .settings-command-header .ops-command-title {
+    gap: 0;
+  }
+
+  .settings-command-header .ops-command-mark {
+    display: none;
+  }
+
+  .settings-command-header .ops-kicker {
+    font-size: var(--fs-caption);
+    letter-spacing: 0.06em;
+  }
+
   .settings-command-header h1 {
     font-size: var(--fs-page-title);
     font-weight: 700;
-    line-height: 32px;
+    line-height: 1.2;
   }
 
   .settings-command-header p:not(.ops-kicker) {
-    font-size: var(--fs-body);
-    font-weight: 500;
-    line-height: 20px;
+    max-width: 56ch;
+    margin-top: 3px;
+    font-size: var(--fs-body-sm);
+    font-weight: 400;
+    line-height: 18px;
   }
 
   .settings-main {
-    gap: 12px;
+    gap: 10px;
   }
 
   .settings-section-panel,
   .settings-grid {
-    gap: 12px;
+    gap: 8px;
   }
 
   .settings-card {
-    border-radius: 16px;
+    border-radius: 10px;
     background: var(--settings-elevated);
-    box-shadow: 0 2px 12px rgb(15 23 42 / 4%);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
   }
 
   .settings-mobile-card-summary {
@@ -190,9 +230,9 @@
   }
 
   .settings-mobile-card-summary > svg {
-    width: 20px;
-    height: 20px;
-    margin-right: 16px;
+    width: 16px;
+    height: 16px;
+    margin-right: 12px;
     color: var(--ink-muted);
     transition: transform 180ms ease;
   }
@@ -202,9 +242,29 @@
   }
 
   .settings-mobile-card .settings-card-header {
-    min-height: 68px;
-    padding: 16px;
+    min-height: 48px;
+    padding: 9px 12px;
     border-bottom: 0;
+  }
+
+  .settings-mobile-card .settings-card-title-group {
+    gap: 8px;
+  }
+
+  .settings-mobile-card .settings-card-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+  }
+
+  .settings-mobile-card .settings-card-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .settings-mobile-card .settings-card-header [data-slot="card-title"] {
+    font-size: var(--fs-body-sm);
+    line-height: 1.3;
   }
 
   .settings-mobile-card[open] .settings-card-header {
@@ -212,8 +272,8 @@
   }
 
   .settings-mobile-card .settings-card-content {
-    gap: 12px;
-    padding: 16px;
+    gap: 9px;
+    padding: 11px 12px 12px;
   }
 
   .settings-field-label-row {
@@ -225,7 +285,7 @@
 
   .settings-field-label-row > span {
     color: var(--ink-muted);
-    font-size: var(--fs-helper);
+    font-size: var(--fs-caption);
     font-weight: 600;
   }
 
@@ -235,7 +295,7 @@
 
   .settings-sensitive-input {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    grid-template-columns: minmax(0, 1fr) 36px 36px;
     gap: 4px;
   }
 
@@ -243,13 +303,30 @@
     min-width: 0;
   }
 
-  .settings-input-action,
-  .settings-copy-app-id {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-input-action,
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-copy-app-id {
+    position: relative;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px !important;
     border: 1px solid var(--settings-border);
-    border-radius: 12px;
+    border-radius: 8px;
+  }
+
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-input-action::after,
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-copy-app-id::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
   }
 
   .settings-input-action svg,
@@ -259,24 +336,34 @@
   }
 
   .settings-oa-fields > .settings-field:first-child {
-    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-columns: minmax(0, 1fr) 36px;
     align-items: end;
-    column-gap: 8px;
+    column-gap: 4px;
   }
 
   .settings-oa-fields > .settings-field:first-child > .flex {
     grid-column: 1 / -1;
   }
 
-  .settings-card .settings-test-button {
-    width: 100%;
-    min-height: 44px;
-    height: 44px;
-    border-radius: 12px;
+  .settings-workspace-content .settings-card .settings-test-button {
+    position: relative;
+    width: auto;
+    min-height: 32px !important;
+    height: 32px !important;
+    margin-block: 6px;
+    border-radius: 8px;
+    padding-inline: 10px;
+    font-size: var(--fs-body-sm);
+  }
+
+  .settings-workspace-content .settings-card .settings-test-button::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
   }
 
   .settings-oa-actions {
-    justify-content: stretch;
+    justify-content: flex-end;
     padding-top: 0;
   }
 
@@ -303,12 +390,122 @@
   }
 }
 
-/* ─── Facebook Messenger integration page (Phase 6) ────────────────────── */
+@media (min-width: 480px) and (max-width: 767px) {
+  .settings-mobile-card .settings-card-content {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+  }
+
+  .settings-mobile-card .settings-oa-fields,
+  .settings-mobile-card .settings-oa-actions,
+  .settings-mobile-card .settings-advanced {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 479px) {
+  .settings-sensitive-input {
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+  }
+
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-input-action,
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-copy-app-id {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px !important;
+  }
+
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-input-action::after,
+  .tailkit-workspace-content
+    .settings-workspace-content
+    .settings-copy-app-id::after {
+    content: none;
+  }
+
+  .settings-oa-fields > .settings-field:first-child {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .settings-workspace-content .settings-card .settings-test-button {
+    min-height: 44px !important;
+    height: 44px !important;
+    margin-block: 0;
+  }
+
+  .settings-workspace-content .settings-card .settings-test-button::after {
+    content: none;
+  }
+}
+
+/* Facebook Messenger: Tailkit a-c-form-layouts-03, a-c-form-elements-10/16,
+   a-c-card-headings-02, and a-c-form-actions-03 adapted to the console theme. */
 
 .settings-messenger-card-content {
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px;
+}
+
+.settings-messenger-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--settings-border);
+}
+
+.settings-messenger-card-heading .settings-field-hint {
+  margin: 0;
+}
+
+.settings-messenger-credentials-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.settings-messenger-credentials-grid .settings-field {
+  align-content: start;
+  gap: 5px;
+}
+
+.settings-messenger-credentials-grid .settings-input {
+  min-height: 40px;
+  height: 40px;
+}
+
+.settings-messenger .settings-sensitive-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 6px;
+}
+
+.settings-messenger .settings-sensitive-input .settings-input {
+  min-width: 0;
+}
+
+.settings-messenger .settings-input-action {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid var(--settings-border);
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--ink-muted);
+}
+
+.settings-messenger .settings-input-action:hover {
+  background: var(--workspace-surface-muted);
+  color: var(--ink);
 }
 
 .settings-messenger-card-title {
@@ -323,7 +520,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
 }
 
 .settings-messenger-empty-copy {
@@ -345,8 +542,32 @@
 .settings-messenger-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
-  padding-top: 0;
+  padding-top: 2px;
+}
+
+.settings-messenger .settings-test-button.settings-messenger-solid-action {
+  border-color: var(--settings-accent-strong);
+  background: var(--settings-accent-strong);
+  color: var(--primary-foreground);
+  opacity: 1;
+}
+
+.settings-messenger
+  .settings-test-button.settings-messenger-solid-action:hover:not(:disabled) {
+  border-color: var(--settings-accent);
+  background: var(--settings-accent);
+  color: var(--primary-foreground);
+}
+
+.settings-messenger
+  .settings-test-button.settings-messenger-solid-action:disabled {
+  cursor: not-allowed;
+  border-color: var(--settings-border);
+  background: var(--workspace-surface-muted);
+  color: var(--ink-muted);
+  opacity: 1;
 }
 
 .settings-messenger-result {
@@ -359,12 +580,12 @@
 }
 
 .settings-messenger-recovery-summary {
-  min-height: 58px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   cursor: pointer;
   color: var(--ink);
-  padding: 14px 52px 14px 20px;
+  padding: 10px 48px 10px 16px;
   font-size: var(--crm-fs-body-sm);
   font-weight: var(--chat-fw-semibold);
   line-height: var(--crm-lh-title);
@@ -376,7 +597,7 @@
 
 .settings-messenger-recovery-content {
   border-top: 1px solid var(--settings-border);
-  padding: 18px 20px 20px;
+  padding: 14px 16px 16px;
 }
 
 .settings-messenger-recovery-form {
@@ -446,6 +667,20 @@
     gap: 14px;
   }
 
+  .settings-messenger-credentials-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-messenger .settings-sensitive-input {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .settings-messenger .settings-input-action {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+
   .settings-messenger .settings-messenger-primary-action {
     width: max-content;
     max-width: 100%;
@@ -456,8 +691,8 @@
   }
 
   .settings-messenger-recovery-summary {
-    min-height: 60px;
-    padding: 14px 48px 14px 16px;
+    min-height: 52px;
+    padding: 12px 44px 12px 16px;
   }
 
   .settings-messenger-recovery-content {

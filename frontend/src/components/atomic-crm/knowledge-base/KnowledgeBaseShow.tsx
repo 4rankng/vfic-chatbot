@@ -1,10 +1,24 @@
-import { ShowBase, useGetList, useNotify, useRecordContext, useRefresh } from "ra-core";
+import {
+  ShowBase,
+  useGetList,
+  useNotify,
+  useRecordContext,
+  useRefresh,
+} from "ra-core";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+import { Link } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import type { KnowledgeBase, KnowledgeBaseProject, Persona, Project } from "../types";
+import type {
+  KnowledgeBase,
+  KnowledgeBaseProject,
+  Persona,
+  Project,
+} from "../types";
 import { apiJson } from "../providers/rest/api";
+import { PageHeading, PageShell } from "../kit";
 
 type DirectFile = {
   filename: string;
@@ -59,7 +73,9 @@ const Content = () => {
           return;
         }
         const [directFile, directCapacity] = await Promise.all([
-          apiJson<DirectFile>(`/api/v1/knowledge-bases/${kb.id}/direct-file`).catch(() => null),
+          apiJson<DirectFile>(
+            `/api/v1/knowledge-bases/${kb.id}/direct-file`,
+          ).catch(() => null),
           apiJson<Capacity>(
             `/api/v1/knowledge-bases/${kb.id}/direct-context-capacity`,
           ).catch(() => null),
@@ -80,8 +96,12 @@ const Content = () => {
 
   if (!kb) return null;
 
-  const attached = personas.filter((persona) => persona.knowledge_base_id === kb.id);
-  const attachableProjects = allProjects.filter((project) => !project.knowledge_base_id);
+  const attached = personas.filter(
+    (persona) => persona.knowledge_base_id === kb.id,
+  );
+  const attachableProjects = allProjects.filter(
+    (project) => !project.knowledge_base_id,
+  );
 
   const saveDirectFile = async () => {
     try {
@@ -114,56 +134,90 @@ const Content = () => {
   };
 
   return (
-    <div className="p-4 lg:p-6">
-        <h1 className="text-page-title font-bold tracking-tight">{kb.name}</h1>
-      <p className="mb-6 text-muted-foreground">
-        {kb.mode === "RAG"
-          ? "RAG: nhiều dự án, nhà máy, vị trí và pipeline hiện có."
-          : "Ngữ cảnh trực tiếp: một tệp gửi nguyên vẹn cho mỗi lượt."}
-      </p>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Agent được gắn</CardTitle></CardHeader>
+    <PageShell>
+      <PageHeading
+        eyebrow={kb.mode === "RAG" ? "Kho kiến thức RAG" : "Ngữ cảnh trực tiếp"}
+        title={kb.name}
+        subtitle={
+          kb.mode === "RAG"
+            ? "Nhiều dự án, nhà máy, vị trí và pipeline trong một kho dùng chung."
+            : "Một tệp văn bản được gửi nguyên vẹn cho mỗi lượt xử lý."
+        }
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/knowledge_bases">
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Quay lại
+            </Link>
+          </Button>
+        }
+      />
+      <div className="mt-4 grid gap-4 sm:mt-0 lg:grid-cols-2">
+        <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
+          <CardHeader>
+            <CardTitle>Agent được gắn</CardTitle>
+          </CardHeader>
           <CardContent>
             {attached.length ? (
               <ul className="space-y-2">
-                {attached.map((persona) => <li key={persona.id}>{persona.name}</li>)}
+                {attached.map((persona) => (
+                  <li key={persona.id}>{persona.name}</li>
+                ))}
               </ul>
-            ) : <p className="text-muted-foreground">Chưa có Agent.</p>}
+            ) : (
+              <p className="text-muted-foreground">Chưa có Agent.</p>
+            )}
           </CardContent>
         </Card>
 
         {kb.mode === "RAG" ? (
-          <Card>
-            <CardHeader><CardTitle>Dự án trong Knowledge Base</CardTitle></CardHeader>
+          <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
+            <CardHeader>
+              <CardTitle>Dự án trong Knowledge Base</CardTitle>
+            </CardHeader>
             <CardContent>
               {projects.length ? (
                 <ul className="space-y-4">
                   {projects.map((project) => (
-                    <li key={project.id} className="border-b pb-3 last:border-0 last:pb-0">
+                    <li
+                      key={project.id}
+                      className="border-b pb-3 last:border-0 last:pb-0"
+                    >
                       <p className="font-medium">{project.name}</p>
-              <p className="text-body-sm text-muted-foreground">
-                        {project.knowledge_document_count} tệp · {project.active_job_count} vị trí đang tuyển
+                      <p className="text-body-sm text-muted-foreground">
+                        {project.knowledge_document_count} tệp ·{" "}
+                        {project.active_job_count} vị trí đang tuyển
                       </p>
                       {project.factories.length > 0 && (
-              <p className="mt-1 text-body-sm text-muted-foreground">
-                          Nhà máy: {project.factories.map((factory) =>
-                            [factory.name, ...factory.aliases].join(" · "),
-                          ).join("; ")}
+                        <p className="mt-1 text-body-sm text-muted-foreground">
+                          Nhà máy:{" "}
+                          {project.factories
+                            .map((factory) =>
+                              [factory.name, ...factory.aliases].join(" · "),
+                            )
+                            .join("; ")}
                         </p>
                       )}
                     </li>
                   ))}
                 </ul>
-              ) : <p className="text-muted-foreground">Chưa có dự án được gắn.</p>}
+              ) : (
+                <p className="text-muted-foreground">Chưa có dự án được gắn.</p>
+              )}
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardHeader><CardTitle>Tệp ngữ cảnh trực tiếp</CardTitle></CardHeader>
+          <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
+            <CardHeader>
+              <CardTitle>Tệp ngữ cảnh trực tiếp</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-3">
               {capacity && (
-                <p className={capacity.fits ? "text-muted-foreground" : "text-destructive"}>
+                <p
+                  className={
+                    capacity.fits ? "text-muted-foreground" : "text-destructive"
+                  }
+                >
                   {capacity.fits
                     ? `Phù hợp ${capacity.model}: ${capacity.estimated_input_tokens}/${capacity.available_input_tokens} token`
                     : "Tệp vượt giới hạn ngữ cảnh của model đang dùng."}
@@ -183,13 +237,18 @@ const Content = () => {
         )}
 
         {kb.mode === "RAG" && (
-          <Card>
-            <CardHeader><CardTitle>Gắn dự án có sẵn</CardTitle></CardHeader>
+          <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
+            <CardHeader>
+              <CardTitle>Gắn dự án có sẵn</CardTitle>
+            </CardHeader>
             <CardContent>
               {attachableProjects.length ? (
                 <ul className="space-y-3">
                   {attachableProjects.map((project) => (
-                    <li key={project.id} className="flex items-center justify-between gap-3">
+                    <li
+                      key={project.id}
+                      className="flex items-center justify-between gap-3"
+                    >
                       <span>{project.name}</span>
                       <Button
                         size="sm"
@@ -211,7 +270,7 @@ const Content = () => {
           </Card>
         )}
       </div>
-    </div>
+    </PageShell>
   );
 };
 

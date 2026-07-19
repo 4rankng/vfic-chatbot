@@ -50,8 +50,10 @@ selection, warning, delivery, and intervention states.
   but unused CSS must not enter the bundle.
 - Avoid wrapper elements inside virtualized rows. Add presentational classes to
   stable existing nodes so scroll measurement and anchoring remain unchanged.
-- Controls are 40px on precise-pointer desktop and at least 44px on touch.
-  Mobile inputs remain 16px to prevent browser focus zoom.
+- Text action buttons follow a 28/32/36px small/normal/large desktop scale with
+  13px labels. Desktop icon controls are 32/36px, while every mobile touch
+  target remains at least 44px. Mobile inputs remain 16px to prevent browser
+  focus zoom.
 - Be Vietnam Pro is the console typeface at weights 400, 500, 600, and 700.
   Body/list text is at least 14px on mobile; metadata is at least 12px.
 

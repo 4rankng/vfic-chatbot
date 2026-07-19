@@ -34,6 +34,17 @@ const mocks = vi.hoisted(() => ({
       }
     | Error,
   apiJson: vi.fn((path: string, options?: ApiOptions): Promise<unknown> => {
+    if (path === "/api/v1/admin/integrations/facebook/credentials") {
+      return Promise.resolve({
+        facebook_app_id: { configured: false, value: null },
+        facebook_app_secret: { configured: false, preview: null },
+        facebook_login_config_id: { configured: false, value: null },
+        facebook_webhook_verify_token: {
+          configured: false,
+          preview: null,
+        },
+      });
+    }
     if (path === "/api/v1/admin/integrations/facebook") {
       if (options?.method === "DELETE") {
         return Promise.resolve({
@@ -96,7 +107,7 @@ describe("FacebookMessengerIntegrationPage", () => {
   it("keeps the empty state and recovery form inside their card content shells", async () => {
     const screen = await renderPage();
 
-    const emptyTitle = screen.getByText("Chưa kết nối Trang Facebook");
+    const emptyTitle = screen.getByText("Chưa kết nối");
     await expect.element(emptyTitle).toBeVisible();
 
     const emptyContent = emptyTitle.element().closest(".settings-card-content");
@@ -108,15 +119,31 @@ describe("FacebookMessengerIntegrationPage", () => {
         .closest(".settings-card-content"),
     ).toBe(emptyContent);
 
-    const recoverySummary = screen.getByText(
-      "Đã có mã phiên? Nhập mã để tiếp tục",
-    );
+    const recoverySummary = screen.getByText("Nhập mã phiên OAuth");
     const recoveryCard = recoverySummary.element().closest("details");
     expect(recoveryCard).not.toBeNull();
     expect(recoveryCard?.classList.contains("settings-card")).toBe(true);
     expect(
       recoveryCard?.querySelector(".settings-messenger-recovery-content"),
     ).not.toBeNull();
+  });
+
+  it("keeps enabled and disabled primary actions readable", async () => {
+    const screen = await renderPage();
+    const saveButton = screen.getByRole("button", { name: "Lưu thông tin" });
+    const connectButton = screen.getByRole("button", {
+      name: "Kết nối Facebook",
+    });
+
+    await expect.element(saveButton).toBeVisible();
+    await expect.element(connectButton).toBeDisabled();
+
+    const saveStyle = getComputedStyle(saveButton.element());
+    const disabledStyle = getComputedStyle(connectButton.element());
+    expect(saveStyle.color).not.toBe(saveStyle.backgroundColor);
+    expect(disabledStyle.color).not.toBe(disabledStyle.backgroundColor);
+    expect(disabledStyle.opacity).toBe("1");
+    expect(disabledStyle.cursor).toBe("not-allowed");
   });
 
   it("consumes the OAuth callback flow ID, cleans the URL, and completes Page selection", async () => {
@@ -156,7 +183,7 @@ describe("FacebookMessengerIntegrationPage", () => {
 
   it("keeps the manual flow ID field visible while typing and commits the trimmed full value", async () => {
     const screen = await renderPage();
-    await screen.getByText("Đã có mã phiên? Nhập mã để tiếp tục").click();
+    await screen.getByText("Nhập mã phiên OAuth").click();
     const input = screen.getByRole("textbox", { name: "Mã phiên OAuth" });
 
     await input.fill("  opaque-manual-flow-id  ");
@@ -202,9 +229,7 @@ describe("FacebookMessengerIntegrationPage", () => {
     await expect
       .element(screen.getByRole("button", { name: "Kết nối Facebook" }))
       .toBeVisible();
-    await expect
-      .element(screen.getByText("Đã có mã phiên? Nhập mã để tiếp tục"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Nhập mã phiên OAuth")).toBeVisible();
   });
 
   it("disconnects the single active Page without sending its masked suffix", async () => {
@@ -270,9 +295,7 @@ describe("FacebookMessengerIntegrationPage", () => {
       );
     await screen.getByRole("button", { name: "Quay lại kết nối" }).click();
 
-    await expect
-      .element(screen.getByText("Đã có mã phiên? Nhập mã để tiếp tục"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Nhập mã phiên OAuth")).toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Kết nối Facebook" }))
       .toBeVisible();
@@ -296,9 +319,7 @@ describe("FacebookMessengerIntegrationPage", () => {
       );
     await screen.getByRole("button", { name: "Quay lại kết nối" }).click();
 
-    await expect
-      .element(screen.getByText("Đã có mã phiên? Nhập mã để tiếp tục"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Nhập mã phiên OAuth")).toBeVisible();
     expect(screen.getByRole("alert").query()).toBeNull();
   });
 });

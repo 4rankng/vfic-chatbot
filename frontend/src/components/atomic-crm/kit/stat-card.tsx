@@ -51,9 +51,7 @@ const TONE_DELTA_UP: Record<StatCardTone, string> = {
  * into a 0..1 × 0..1 box then emits an SVG path string. Caller is responsible
  * for sizing via viewBox (we use 2000×1000 to match Tailkit's anatomy).
  */
-function buildSparklinePath(
-  series: ReadonlyArray<number>,
-): {
+function buildSparklinePath(series: ReadonlyArray<number>): {
   area: string;
   line: string;
 } | null {
@@ -72,7 +70,9 @@ function buildSparklinePath(
     return [x, y] as const;
   });
   const line = points
-    .map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`)
+    .map(
+      ([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`,
+    )
     .join(" ");
   const area = `${line} L ${W} ${H} L 0 ${H} Z`;
   return { area, line };
@@ -112,7 +112,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "tt-stat-card group flex items-center justify-between gap-3 rounded-lg border border-[var(--tt-border)] bg-[var(--tt-surface-lift)] p-5 shadow-[var(--tt-shadow-xs)]",
+        "tt-stat-card group relative flex items-center justify-between gap-3 rounded-lg border border-[var(--tt-border)] bg-[var(--tt-surface-lift)] p-5 shadow-[var(--tt-shadow-xs)]",
         className,
       )}
     >
@@ -156,7 +156,11 @@ export function StatCard({
           aria-hidden="true"
         >
           <div className="absolute inset-0 bg-linear-to-t from-[var(--tt-surface-lift)] via-transparent to-transparent" />
-          <svg viewBox="0 0 2000 1000" preserveAspectRatio="none" className="h-12 w-full">
+          <svg
+            viewBox="0 0 2000 1000"
+            preserveAspectRatio="none"
+            className="h-12 w-full"
+          >
             <path d={sparkline.area} fill="var(--tt-accent)" opacity={0.1} />
             <path
               d={sparkline.line}
@@ -170,7 +174,9 @@ export function StatCard({
         </div>
       ) : null}
       {action ? (
-        <div className="tt-stat-card-action absolute right-3 top-3">{action}</div>
+        <div className="tt-stat-card-action absolute right-3 top-3">
+          {action}
+        </div>
       ) : null}
     </div>
   );

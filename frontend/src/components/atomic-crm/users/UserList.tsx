@@ -22,6 +22,7 @@ import { UserActions } from "./UserActions";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
 import type { UserAccount } from "../types";
 import "./users.css";
+import { PageHeading, PageShell } from "../kit";
 
 type UserListProps = {
   embedded?: boolean;
@@ -73,28 +74,35 @@ const UserListContent = ({
 }: {
   title: string;
   embedded: boolean;
-}) => (
-  <div
-    className={
-      embedded
-        ? "settings-embedded-users-list"
-        : "mx-auto w-full max-w-[1440px] px-4 py-5 pb-24 md:px-6 md:py-6 md:pb-6 lg:px-8"
-    }
-  >
-    <header className="user-directory-toolbar">
-      <div className="min-w-0 flex-1">
-        <h2 className="truncate text-content-title font-semibold tracking-tight">
-          {title}
-        </h2>
-        <p className="mt-1 text-body-sm text-muted-foreground">
-          Quản lý tài khoản và quyền truy cập nội bộ.
-        </p>
+}) =>
+  embedded ? (
+    <div className="settings-embedded-users-list">
+      <header className="user-directory-toolbar">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-content-title font-semibold tracking-tight">
+            {title}
+          </h2>
+          <p className="mt-1 text-body-sm text-muted-foreground">
+            Quản lý tài khoản và quyền truy cập nội bộ.
+          </p>
+        </div>
+        <CreateUserButton />
+      </header>
+      <UserAccountList />
+    </div>
+  ) : (
+    <PageShell size="wide">
+      <PageHeading
+        eyebrow="Quản trị truy cập"
+        title={title}
+        subtitle="Quản lý tài khoản, vai trò và trạng thái truy cập nội bộ."
+        actions={<CreateUserButton />}
+      />
+      <div className="mt-4">
+        <UserAccountList />
       </div>
-      <CreateUserButton />
-    </header>
-    <UserAccountList />
-  </div>
-);
+    </PageShell>
+  );
 
 const CreateUserButton = () => {
   const createPath = useCreatePath();
@@ -113,7 +121,10 @@ const UserAccountList = () => {
 
   if (isPending) {
     return (
-      <div className="tt-card tt-card-border user-directory-card" aria-busy="true">
+      <div
+        className="tt-card tt-card-border user-directory-card"
+        aria-busy="true"
+      >
         {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="user-directory-skeleton">
             <Skeleton className="size-9 rounded-full" />

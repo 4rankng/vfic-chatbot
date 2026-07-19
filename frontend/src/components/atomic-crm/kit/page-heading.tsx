@@ -61,13 +61,15 @@ export function PageHeading({
           ) : null}
         </div>
         {hasActions ? (
-          <div className="tt-page-heading-actions flex flex-wrap items-center justify-start gap-2 sm:justify-end">
+          <div className="tt-page-heading-actions flex flex-wrap items-center justify-start gap-2 [&_button]:min-h-11 [&_a]:min-h-11 sm:justify-end md:[&_button]:min-h-8 md:[&_a]:min-h-8">
             {actions}
           </div>
         ) : null}
       </div>
       {children ? (
-        <div className={cn("tt-page-heading-body", bodyClassName)}>{children}</div>
+        <div className={cn("tt-page-heading-body", bodyClassName)}>
+          {children}
+        </div>
       ) : null}
     </div>
   );

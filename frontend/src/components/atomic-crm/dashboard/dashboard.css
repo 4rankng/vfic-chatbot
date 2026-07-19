@@ -23,6 +23,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--workspace-border, var(--border));
 }
 .dashboard-live-status {
   flex: 0 0 auto;
@@ -138,10 +140,10 @@
   box-shadow: 0 10px 28px rgb(42 58 99 / 5%);
 }
 .recruiting-panel:first-child {
-  border-top: 3px solid var(--workspace-danger, var(--destructive));
+  border-top-color: var(--workspace-border, var(--border));
 }
 .recruiting-candidate-panel {
-  border-top: 3px solid var(--workspace-action, var(--primary));
+  border-top-color: var(--workspace-border, var(--border));
 }
 .recruiting-panel-header {
   display: flex;
@@ -150,6 +152,11 @@
   gap: 12px;
   padding: 20px 20px 12px;
   border-bottom: 1px solid var(--workspace-border, var(--border));
+  background: color-mix(
+    in srgb,
+    var(--workspace-surface-muted, var(--secondary)) 58%,
+    var(--workspace-surface, var(--card))
+  );
 }
 .recruiting-panel-header h2 {
   margin: 2px 0 0;

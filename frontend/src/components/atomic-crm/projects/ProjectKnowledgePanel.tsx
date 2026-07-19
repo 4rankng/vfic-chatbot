@@ -3,11 +3,9 @@ import { useDataProvider, useNotify, useRefresh } from "ra-core";
 import { ApiError } from "@/components/atomic-crm/providers/rest/api";
 import {
   AlertCircle,
-  Clipboard,
   Database,
   Download,
   FileText,
-  Trash2,
   Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +18,10 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
 import { BusTimetableSection } from "./ProjectBusTimetable";
 import {
-  clearProjectKnowledgeCategory,
   getProjectKnowledgeCategories,
   getProjectKnowledgeCategorySource,
   getProjectKnowledgeCategoryTemplate,
   getProjectSinglePage,
-  replaceProjectKnowledgeCategory,
   replaceProjectSinglePage,
   uploadProjectKnowledgeCategory,
   type KnowledgeCategoryKey,
@@ -212,11 +208,12 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     KnowledgeCategoryStatus[] | null
   >(null);
   const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
-  const [template, setTemplate] = useState("");
+  const [editorContent, setEditorContent] = useState("");
   const [blankTemplate, setBlankTemplate] = useState("");
   const [templateFilename, setTemplateFilename] = useState("jobs.yaml");
   const [filename, setFilename] = useState("jobs.yaml");
-  const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [hasCurrentSource, setHasCurrentSource] = useState(false);
+  const [loadingCategory, setLoadingCategory] = useState(false);
   const [saving, setSaving] = useState(false);
   const [processingKey, setProcessingKey] =
     useState<KnowledgeCategoryKey | null>(null);
@@ -239,28 +236,46 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
   }, [project.id]);
 
   useEffect(() => {
-    setLoadingTemplate(true);
-    setTemplate("");
+    let active = true;
+    setLoadingCategory(true);
+    setEditorContent("");
     setBlankTemplate("");
-    getProjectKnowledgeCategoryTemplate(String(project.id), selected)
-      .then(async (emptyTemplate) => {
-        setBlankTemplate(emptyTemplate.content);
-        setTemplateFilename(emptyTemplate.filename);
-        try {
-          const current = await getProjectKnowledgeCategorySource(
-            String(project.id),
-            selected,
-          );
-          setTemplate(current.content);
-          setFilename(current.filename);
-        } catch (error: unknown) {
-          if (!(error instanceof ApiError) || error.status !== 404) throw error;
-          setTemplate(emptyTemplate.content);
-          setFilename(emptyTemplate.filename);
+    setFilename(`${selected}.yaml`);
+    setHasCurrentSource(false);
+
+    void Promise.allSettled([
+      getProjectKnowledgeCategorySource(String(project.id), selected),
+      getProjectKnowledgeCategoryTemplate(String(project.id), selected),
+    ]).then(([sourceResult, templateResult]) => {
+      if (!active) return;
+
+      if (sourceResult.status === "fulfilled") {
+        setEditorContent(sourceResult.value.content);
+        setFilename(sourceResult.value.filename);
+        setHasCurrentSource(true);
+      } else if (
+        !(sourceResult.reason instanceof ApiError) ||
+        sourceResult.reason.status !== 404
+      ) {
+        notify((sourceResult.reason as Error).message, { type: "error" });
+      }
+
+      if (templateResult.status === "fulfilled") {
+        setBlankTemplate(templateResult.value.content);
+        setTemplateFilename(templateResult.value.filename);
+        if (sourceResult.status !== "fulfilled") {
+          setFilename(templateResult.value.filename);
         }
-      })
-      .catch((error) => notify((error as Error).message, { type: "error" }))
-      .finally(() => setLoadingTemplate(false));
+      } else {
+        notify((templateResult.reason as Error).message, { type: "error" });
+      }
+
+      setLoadingCategory(false);
+    });
+
+    return () => {
+      active = false;
+    };
   }, [notify, project.id, selected]);
 
   const pollUntilActive = (revisionId: string, attempts = 0) => {
@@ -297,38 +312,9 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     }, 2000);
   };
 
-  const replace = async () => {
-    if (!template.trim()) {
-      notify("Vui lòng nhập nội dung YAML.", { type: "warning" });
-      return;
-    }
-    if (!window.confirm("Dữ liệu mới sẽ thay thế toàn bộ mục này. Tiếp tục?"))
-      return;
-    setSaving(true);
-    try {
-      const result = await replaceProjectKnowledgeCategory(
-        String(project.id),
-        selected,
-        filename,
-        template,
-      );
-      setProcessingKey(selected);
-      notify("Đã nhận dữ liệu. Hệ thống đang kiểm tra và chuẩn bị cho Agent.", {
-        type: "info",
-      });
-      pollUntilActive(result.revision.id);
-    } catch (error) {
-      notify((error as Error).message, { type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const upload = async (file?: File) => {
     if (!file) return;
     const content = await file.text();
-    setFilename(file.name);
-    setTemplate(content);
     if (
       !window.confirm(
         "File này sẽ thay thế toàn bộ dữ liệu của mục đang chọn. Tiếp tục?",
@@ -336,6 +322,8 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     ) {
       return;
     }
+    setFilename(file.name);
+    setEditorContent(content);
     setSaving(true);
     try {
       const result = await uploadProjectKnowledgeCategory(
@@ -353,34 +341,6 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     } finally {
       setSaving(false);
     }
-  };
-
-  const clear = async () => {
-    if (!window.confirm("Xóa toàn bộ dữ liệu đang dùng của mục này?")) return;
-    if (
-      !window.confirm(
-        "Agent sẽ không còn dùng thông tin trong mục này. Xác nhận xóa?",
-      )
-    ) {
-      return;
-    }
-    setSaving(true);
-    try {
-      await clearProjectKnowledgeCategory(String(project.id), selected);
-      await loadCatalog();
-      setTemplate(blankTemplate);
-      setFilename(templateFilename);
-      notify("Đã xóa dữ liệu của mục.", { type: "success" });
-    } catch (error) {
-      notify((error as Error).message, { type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const copyTemplate = async () => {
-    await navigator.clipboard.writeText(blankTemplate);
-    notify("Đã sao chép mẫu.", { type: "success" });
   };
 
   const downloadTemplate = () => {
@@ -504,28 +464,56 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
 
         <section className="project-category-editor">
           <div className="project-category-editor-header">
-            <h3 className="project-category-editor-title">
-              {selectedCategory?.label_vi ?? selected}
-            </h3>
+            <div className="project-category-editor-heading">
+              <div className="project-category-editor-title-row">
+                <h3 className="project-category-editor-title">
+                  {selectedCategory?.label_vi ?? selected}
+                </h3>
+                {!loadingCategory && (
+                  <Badge variant={hasCurrentSource ? "secondary" : "outline"}>
+                    {hasCurrentSource
+                      ? `Đang dùng v${selectedCategory?.active_revision_no ?? 1}`
+                      : "Chưa có dữ liệu"}
+                  </Badge>
+                )}
+              </div>
+              <p className="project-category-editor-description">
+                {hasCurrentSource
+                  ? `Dữ liệu hiện tại Agent đang sử dụng · ${filename}`
+                  : "Danh mục này chưa có dữ liệu đang dùng. Tải mẫu để chuẩn bị nội dung mới."}
+              </p>
+            </div>
             <div className="project-category-editor-actions">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void copyTemplate()}
+                onClick={downloadTemplate}
+                disabled={!blankTemplate || loadingCategory}
               >
-                <Clipboard className="size-4" /> Sao chép mẫu
-              </Button>
-              <Button variant="outline" size="sm" onClick={downloadTemplate}>
                 <Download className="size-4" /> Tải mẫu
               </Button>
               {editable && (
-                <Button variant="outline" size="sm" asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  disabled={saving || loadingCategory}
+                >
                   <label>
-                    <Upload className="size-4" /> Tải file YAML
+                    {saving ? (
+                      <span
+                        className="tt-loading tt-loading-spinner tt-loading-sm"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Upload className="size-4" />
+                    )}
+                    Tải file YAML
                     <input
                       type="file"
                       accept=".yaml,.yml,application/yaml,text/yaml"
                       className="sr-only"
+                      disabled={saving || loadingCategory}
                       onChange={(event) => void upload(event.target.files?.[0])}
                     />
                   </label>
@@ -533,43 +521,17 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
               )}
             </div>
           </div>
-          {loadingTemplate ? (
+          {loadingCategory ? (
             <Skeleton className="project-category-editor-skeleton" />
           ) : (
             <Textarea
-              value={template}
-              onChange={(event) => setTemplate(event.target.value)}
-              readOnly={!editable}
+              value={editorContent}
+              readOnly
               rows={20}
               className="project-category-textarea font-mono"
-              aria-label="Nội dung YAML của mục kiến thức"
+              aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
+              placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
             />
-          )}
-          {editable && (
-            <div className="project-category-editor-footer">
-              <Button
-                onClick={() => void replace()}
-                disabled={saving || loadingTemplate}
-              >
-                {saving ? (
-                  <span
-                    className="tt-loading tt-loading-spinner tt-loading-sm"
-                    aria-hidden="true"
-                  />
-                ) : null}
-                Kiểm tra và thay thế mục này
-              </Button>
-              {selectedCategory?.active_revision_id && (
-                <Button
-                  variant="outline"
-                  className="text-destructive"
-                  onClick={() => void clear()}
-                  disabled={saving}
-                >
-                  <Trash2 className="size-4" /> Xóa dữ liệu mục
-                </Button>
-              )}
-            </div>
           )}
         </section>
 

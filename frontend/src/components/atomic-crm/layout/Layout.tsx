@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { WorkspaceFrame } from "./workspace-frame";
+import "../kit/tailkit-system.css";
 
 export const Layout = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
@@ -50,6 +51,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     <>
       <WorkspaceFrame
         contentClassName={cn(
+          "tailkit-workspace-content",
           isFullHeightWorkspace
             ? "md:h-full md:min-h-0 max-w-none md:overflow-hidden p-0"
             : "max-w-none overflow-y-auto p-0",

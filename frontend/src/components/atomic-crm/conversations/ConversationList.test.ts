@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import componentSource from "./ConversationList.tsx?raw";
 import {
   getChannelProviderSearchParams,
   getConversationListKey,
@@ -8,6 +9,10 @@ import {
 } from "./conversation-list-filters";
 
 describe("getConversationListServerFilter", () => {
+  it("keeps multi-line conversation rows out of the fixed-height button system", () => {
+    expect(componentSource).not.toContain("conversation tt-btn");
+  });
+
   it("maps the Messages badge deep link to the authoritative reply queue", () => {
     expect(
       getConversationListServerFilter(

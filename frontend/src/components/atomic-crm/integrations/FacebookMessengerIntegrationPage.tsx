@@ -326,8 +326,7 @@ export const FacebookMessengerIntegrationPage = () => {
     const trimmed: CredentialsFormState = {
       facebook_app_id: credentialsForm.facebook_app_id.trim(),
       facebook_app_secret: credentialsForm.facebook_app_secret.trim(),
-      facebook_login_config_id:
-        credentialsForm.facebook_login_config_id.trim(),
+      facebook_login_config_id: credentialsForm.facebook_login_config_id.trim(),
       facebook_webhook_verify_token:
         credentialsForm.facebook_webhook_verify_token.trim(),
     };
@@ -351,7 +350,8 @@ export const FacebookMessengerIntegrationPage = () => {
     if (!credentials) return;
     setCredentialsForm((current) => ({
       ...current,
-      facebook_app_id: current.facebook_app_id || credentials.facebook_app_id.value || "",
+      facebook_app_id:
+        current.facebook_app_id || credentials.facebook_app_id.value || "",
       facebook_login_config_id:
         current.facebook_login_config_id ||
         credentials.facebook_login_config_id.value ||
@@ -464,12 +464,13 @@ export const FacebookMessengerIntegrationPage = () => {
       (pageList !== undefined && pageList.pages.length === 0));
 
   return (
-    <section className="settings-section-panel settings-messenger">
-      <h2 className="settings-card-title">Facebook Messenger</h2>
-      <p className="settings-card-description">
-        Kết nối một Trang Facebook để nhận và trả lời tin nhắn ứng viên qua
-        Messenger. V1 hỗ trợ tối đa một Trang đang hoạt động.
-      </p>
+    <section
+      className="settings-section-panel settings-messenger"
+      aria-labelledby="facebook-messenger-settings-title"
+    >
+      <h2 id="facebook-messenger-settings-title" className="sr-only">
+        Facebook Messenger
+      </h2>
 
       {error ? (
         <div
@@ -487,53 +488,52 @@ export const FacebookMessengerIntegrationPage = () => {
         onSubmit={submitCredentials}
       >
         <div className="settings-card-content settings-messenger-card-content">
-          <h3 className="settings-messenger-card-title">
-            Thông tin ứng dụng Meta
-          </h3>
-          <p className="settings-field-hint">
-            Các giá trị này được dùng để kết nối Facebook Login for Business và
-            xác thực webhook. Bạn có thể tìm thấy chúng trong Meta Developer
-            Dashboard của ứng dụng Messenger. Bỏ trống trường bí mật để giữ giá
-            trị hiện tại.
-          </p>
-          <MetaAppPlainField
-            id="facebook_app_id"
-            label="App ID"
-            hint="App ID dạng số, từ App Settings → Basic."
-            value={credentialsForm.facebook_app_id}
-            onChange={onCredentialChange}
-          />
-          <MetaAppPlainField
-            id="facebook_login_config_id"
-            label="Configuration ID"
-            hint="Login for Business → Configurations. Có thể bỏ trống nếu dùng OAuth tiêu chuẩn."
-            value={credentialsForm.facebook_login_config_id}
-            onChange={onCredentialChange}
-          />
-          <MetaAppSecretField
-            id="facebook_app_secret"
-            label="App Secret"
-            hint="App Settings → Basic → App Secret."
-            configured={credentials?.facebook_app_secret.configured ?? false}
-            preview={credentials?.facebook_app_secret.preview ?? null}
-            value={credentialsForm.facebook_app_secret}
-            onChange={onCredentialChange}
-          />
-          <MetaAppSecretField
-            id="facebook_webhook_verify_token"
-            label="Webhook Verify Token"
-            hint="Sau khi đổi verify token, bạn phải vào Meta Developer Dashboard re-subscribe webhook với token mới để tiếp tục nhận tin nhắn."
-            configured={
-              credentials?.facebook_webhook_verify_token.configured ?? false
-            }
-            preview={credentials?.facebook_webhook_verify_token.preview ?? null}
-            value={credentialsForm.facebook_webhook_verify_token}
-            onChange={onCredentialChange}
-          />
+          <div className="settings-messenger-card-heading">
+            <h3 className="settings-messenger-card-title">Ứng dụng Meta</h3>
+            <p className="settings-field-hint">
+              Để trống bí mật để giữ giá trị đã lưu.
+            </p>
+          </div>
+          <div className="settings-messenger-credentials-grid">
+            <MetaAppPlainField
+              id="facebook_app_id"
+              label="App ID"
+              value={credentialsForm.facebook_app_id}
+              onChange={onCredentialChange}
+            />
+            <MetaAppPlainField
+              id="facebook_login_config_id"
+              label="Configuration ID"
+              hint="Không bắt buộc"
+              value={credentialsForm.facebook_login_config_id}
+              onChange={onCredentialChange}
+            />
+            <MetaAppSecretField
+              id="facebook_app_secret"
+              label="App Secret"
+              configured={credentials?.facebook_app_secret.configured ?? false}
+              preview={credentials?.facebook_app_secret.preview ?? null}
+              value={credentialsForm.facebook_app_secret}
+              onChange={onCredentialChange}
+            />
+            <MetaAppSecretField
+              id="facebook_webhook_verify_token"
+              label="Verify Token"
+              hint="Đổi token? Đăng ký lại webhook trên Meta."
+              configured={
+                credentials?.facebook_webhook_verify_token.configured ?? false
+              }
+              preview={
+                credentials?.facebook_webhook_verify_token.preview ?? null
+              }
+              value={credentialsForm.facebook_webhook_verify_token}
+              onChange={onCredentialChange}
+            />
+          </div>
           <div className="settings-oa-actions settings-messenger-actions">
             <Button
               type="submit"
-              className="settings-test-button tt-btn tt-btn-primary tt-btn-sm text-primary-foreground"
+              className="settings-test-button settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
               disabled={saveCredentials.isPending}
             >
               {saveCredentials.isPending ? "Đang lưu…" : "Lưu thông tin"}
@@ -594,21 +594,16 @@ export const FacebookMessengerIntegrationPage = () => {
         <div className="settings-card settings-messenger-card tt-card tt-card-border">
           <div className="settings-card-content settings-messenger-card-content settings-messenger-empty">
             <div className="settings-messenger-empty-copy">
-              <h3 className="settings-messenger-card-title">
-                Chưa kết nối Trang Facebook
-              </h3>
+              <h3 className="settings-messenger-card-title">Chưa kết nối</h3>
               <p className="settings-field-hint">
-                Kết nối để bắt đầu nhận tin nhắn Messenger.
+                {appIdConfigured
+                  ? "Kết nối một Trang để nhận tin nhắn."
+                  : "Nhập App ID trước khi kết nối."}
               </p>
-              {!appIdConfigured ? (
-                <p className="settings-field-hint">
-                  Cần cấu hình "App ID" ở trên trước khi kết nối Trang.
-                </p>
-              ) : null}
             </div>
             <button
               type="button"
-              className="settings-test-button settings-messenger-primary-action tt-btn tt-btn-primary tt-btn-sm text-primary-foreground"
+              className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
               onClick={() => startOAuth.mutate()}
               disabled={startOAuth.isPending || !appIdConfigured}
               title={
@@ -649,7 +644,7 @@ export const FacebookMessengerIntegrationPage = () => {
             </ul>
             <button
               type="button"
-              className="settings-test-button settings-messenger-primary-action tt-btn tt-btn-primary tt-btn-sm text-primary-foreground"
+              className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
               onClick={() =>
                 selectedPageId &&
                 completeOAuth.mutate({
@@ -690,7 +685,7 @@ export const FacebookMessengerIntegrationPage = () => {
       {!activeAccount && !pendingFlowId ? (
         <details className="settings-card settings-messenger-recovery tt-collapse tt-collapse-arrow tt-card tt-card-border">
           <summary className="settings-messenger-recovery-summary tt-collapse-title">
-            Đã có mã phiên? Nhập mã để tiếp tục
+            Nhập mã phiên OAuth
           </summary>
           <div className="settings-messenger-recovery-content tt-collapse-content">
             <form
@@ -714,11 +709,11 @@ export const FacebookMessengerIntegrationPage = () => {
                 onChange={(event) => setFlowIdDraft(event.target.value)}
               />
               <span className="settings-field-hint">
-                Mã phiên chỉ dùng để tải các Trang đã được Facebook ủy quyền.
+                Dùng để tải các Trang đã ủy quyền.
               </span>
               <button
                 type="submit"
-                className="settings-test-button tt-btn tt-btn-primary tt-btn-sm text-primary-foreground"
+                className="settings-test-button settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
                 disabled={!flowIdDraft.trim()}
               >
                 Tải danh sách Trang

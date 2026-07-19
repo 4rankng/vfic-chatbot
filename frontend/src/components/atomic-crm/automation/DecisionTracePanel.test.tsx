@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "vitest-browser-react";
+import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ vi.mock("ra-core", () => ({
 
 import {
   DecisionTraceAction,
+  DecisionTracePanel,
   DecisionTraceRenderer,
 } from "./DecisionTracePanel";
 import { DECISION_TRACE_QUERY_KEY } from "./decisionTraceQueries";
@@ -34,6 +36,52 @@ afterEach(async () => {
 });
 
 describe("DecisionTraceAction", () => {
+  it("supports an external menu trigger and restores focus when closed", async () => {
+    mocks.getConversationBotRuns.mockResolvedValue({ data: [], total: 0 });
+    const queryClient = createQueryClient();
+
+    const ControlledPanel = () => {
+      const [open, setOpen] = useState(false);
+      const triggerRef = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button ref={triggerRef} type="button" onClick={() => setOpen(true)}>
+            Mở Agent Thinking
+          </button>
+          <DecisionTracePanel
+            conversationId="conversation-1"
+            open={open}
+            onOpenChange={setOpen}
+            showTrigger={false}
+            returnFocusRef={triggerRef}
+          />
+        </>
+      );
+    };
+
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ControlledPanel />
+      </QueryClientProvider>,
+    );
+    const trigger = screen.getByRole("button", { name: "Mở Agent Thinking" });
+
+    expect(mocks.getConversationBotRuns).not.toHaveBeenCalled();
+    await trigger.click();
+    await expect
+      .poll(() => mocks.getConversationBotRuns.mock.calls.length)
+      .toBe(1);
+    await expect
+      .element(screen.getByText("Chưa có lần chạy chatbot nào để hiển thị."))
+      .toBeVisible();
+
+    await screen.getByRole("button", { name: "Đóng" }).click();
+    await expect.element(trigger).toHaveFocus();
+    expect(
+      queryClient.getQueriesData({ queryKey: DECISION_TRACE_QUERY_KEY }),
+    ).toHaveLength(0);
+  });
+
   it("shows the trigger only to administrators and does not fetch before open", async () => {
     mocks.getConversationBotRuns.mockResolvedValue({ data: [], total: 0 });
     const queryClient = createQueryClient();
@@ -232,7 +280,9 @@ describe("DecisionTraceRenderer", () => {
         ),
       )
       .toBeVisible();
-    await expect.element(screen.getByText("Thinking · đã rút gọn")).toBeVisible();
+    await expect
+      .element(screen.getByText("Thinking · đã rút gọn"))
+      .toBeVisible();
   });
 
   it("does not expose raw fields from unsupported trace versions", async () => {

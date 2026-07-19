@@ -71,8 +71,9 @@ const ProjectListContent = () => {
             <div className="project-command-actions">
               {isAdmin && (
                 <Button
+                  size="sm"
                   onClick={() => redirect("create", "projects")}
-                  className="h-10 rounded-[8px]"
+                  className="project-create-button"
                 >
                   <Plus className="size-4" />
                   Tạo dự án

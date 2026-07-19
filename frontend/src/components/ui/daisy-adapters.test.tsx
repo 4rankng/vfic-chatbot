@@ -27,6 +27,12 @@ describe("daisyUI shared adapters", () => {
     const screen = await render(
       <div>
         <Button>Tiếp tục</Button>
+        <Button size="sm">Gọn</Button>
+        <Button size="lg">Tạo mới</Button>
+        <Button size="touch">Thao tác cảm ứng</Button>
+        <Button size="icon" aria-label="Mở tác vụ">
+          +
+        </Button>
         <Button variant="outline">Xem lại</Button>
         <Input aria-label="Tên" />
         <Textarea aria-label="Ghi chú" />
@@ -54,6 +60,21 @@ describe("daisyUI shared adapters", () => {
     await expect
       .element(screen.getByRole("button", { name: "Tiếp tục" }))
       .not.toHaveClass("text-primary-foreground")
+    await expect
+      .element(screen.getByRole("button", { name: "Tiếp tục" }))
+      .toHaveClass("h-8", "px-3", "max-md:h-11")
+    await expect
+      .element(screen.getByRole("button", { name: "Gọn" }))
+      .toHaveClass("h-7", "px-2.5", "max-md:h-11")
+    await expect
+      .element(screen.getByRole("button", { name: "Tạo mới" }))
+      .toHaveClass("h-9", "px-4", "max-md:h-11")
+    await expect
+      .element(screen.getByRole("button", { name: "Mở tác vụ" }))
+      .toHaveClass("size-9", "max-md:size-11")
+    await expect
+      .element(screen.getByRole("button", { name: "Thao tác cảm ứng" }))
+      .toHaveClass("tt-btn-touch", "h-11")
     await expect
       .element(screen.getByRole("button", { name: "Xem lại" }))
       .toHaveClass("tt-btn-outline")
