@@ -198,7 +198,7 @@ export const ConversationShowContent = ({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className={`mode-menu-trigger mode-menu-trigger--primary ${activeMode}`}
+                  className={`mode-menu-trigger mode-menu-trigger--primary tt-btn tt-btn-sm ${activeMode}`}
                   aria-label="Đổi chế độ trả lời"
                   title="Đổi chế độ trả lời"
                   disabled={activeMode === "closed" || needsClaim}
@@ -287,7 +287,7 @@ export const ConversationShowContent = ({
             {!isWideDesktop && context.renderPanel ? (
               <button
                 type="button"
-                className={`context-panel-trigger ${isContextOpen ? "active" : ""}`}
+                className={`context-panel-trigger tt-btn tt-btn-ghost tt-btn-square ${isContextOpen ? "active" : ""}`}
                 onClick={() => setIsContextOpen((open) => !open)}
                 aria-label={
                   isContextOpen

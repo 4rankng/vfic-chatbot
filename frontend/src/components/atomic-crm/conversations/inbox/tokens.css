@@ -19,7 +19,11 @@
      --brand follows the shared action role so the inbox cannot drift from the
      rest of the console. */
   --primary-soft: var(--workspace-teal-soft);
-  --primary-soft-border: color-mix(in srgb, var(--workspace-action) 32%, var(--workspace-border));
+  --primary-soft-border: color-mix(
+    in srgb,
+    var(--workspace-action) 32%,
+    var(--workspace-border)
+  );
   --inbox-accent: var(--workspace-action);
   --inbox-accent-light: var(--primary-soft);
   --brand: var(--workspace-action);
@@ -117,15 +121,15 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: var(--workspace-canvas);
+  --chat-bg: #f4f7fb;
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
      stays neutral white; bot + admin (outgoing) own the teal-soft on paper. */
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #dcf8c7;
+  --chat-bubble-out: #e7eef9;
   --chat-bubble-user: #ffffff;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #dcf8c7;
-  --chat-bubble-agent: #dcf8c7;
+  --chat-bubble-bot: #e7eef9;
+  --chat-bubble-agent: #e3f1ed;
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: rgba(255, 255, 255, 0.98);
   --chat-shadow: none;
@@ -161,7 +165,11 @@
   --border-strong: var(--border);
   --border-glass: rgba(199, 205, 188, 0.62);
   --primary-soft: var(--workspace-teal-soft);
-  --primary-soft-border: color-mix(in srgb, var(--workspace-action) 32%, var(--workspace-border));
+  --primary-soft-border: color-mix(
+    in srgb,
+    var(--workspace-action) 32%,
+    var(--workspace-border)
+  );
   --inbox-accent: var(--workspace-action);
   --brand: var(--workspace-action);
   --brand-hover: var(--workspace-action-strong);

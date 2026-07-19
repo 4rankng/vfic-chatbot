@@ -5,14 +5,16 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 16px;
+  padding: 0 22px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  min-height: 64px;
+  min-height: 74px;
   overflow: visible;
   border-bottom: 1px solid var(--workspace-blue-line);
-  background: var(--chat-header-bg);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .inbox-bg-container .chat-header .icon-btn {
@@ -30,8 +32,8 @@
 }
 .inbox-bg-container .header-avatar {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -658,7 +660,19 @@
      Use overflow-x clip + allow y so the child scroller owns the scroll. */
   overflow-x: hidden;
   overflow-y: visible;
-  background: var(--chat-bg);
+  background:
+    radial-gradient(
+        circle at 1px 1px,
+        rgba(73, 101, 137, 0.07) 1px,
+        transparent 0
+      )
+      0 0 / 24px 24px,
+    radial-gradient(
+      circle at 50% 8%,
+      rgba(255, 255, 255, 0.86),
+      transparent 42%
+    ),
+    var(--chat-bg);
 }
 
 .inbox-bg-container .chat-scroller {
@@ -910,7 +924,7 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   padding-inline: clamp(18px, 3vw, 48px);
   width: 100%;
   max-width: 100%;
@@ -946,16 +960,16 @@
   color: var(--ink-muted);
 }
 .inbox-bg-container .bubble {
-  max-width: min(64%, 600px);
+  max-width: min(68%, 640px);
   min-width: 0;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 12px;
+  border-radius: 18px;
   font-size: var(--chat-fs-message);
   line-height: var(--chat-lh-message);
   overflow-wrap: anywhere;
   word-break: break-word;
-  box-shadow: none;
+  box-shadow: 0 5px 18px rgba(34, 52, 76, 0.07);
   contain: layout style paint;
 }
 
@@ -989,7 +1003,7 @@
     var(--workspace-blue-line) 82%,
     var(--border)
   );
-  border-top-left-radius: 5px;
+  border-bottom-left-radius: 6px;
 }
 .inbox-bg-container .message-row.user.grouped .bubble {
   border-top-left-radius: 12px;
@@ -999,13 +1013,13 @@
   background: var(--chat-bubble-bot);
   color: var(--ink);
   border-color: color-mix(in srgb, var(--brand) 20%, var(--border));
-  border-top-right-radius: 5px;
+  border-bottom-right-radius: 6px;
 }
 .inbox-bg-container .message-row.agent .bubble {
   background: var(--chat-bubble-agent);
   color: var(--chat-bubble-agent-text);
   border-color: color-mix(in oklab, var(--inbox-accent) 18%, transparent);
-  border-top-right-radius: 5px;
+  border-bottom-right-radius: 6px;
 }
 .inbox-bg-container .message-row.bot.grouped .bubble,
 .inbox-bg-container .message-row.agent.grouped .bubble {
@@ -1075,8 +1089,8 @@
 
 /* Composer */
 .inbox-bg-container .composer-wrap {
-  padding: 10px 14px 12px;
-  background: var(--chat-header-bg);
+  padding: 14px clamp(18px, 3vw, 44px) 18px;
+  background: linear-gradient(180deg, rgba(244, 247, 251, 0.82), #ffffff 52%);
   border-top: 1px solid var(--workspace-blue-line);
   min-width: 0;
 }
@@ -1152,13 +1166,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 52px;
-  padding: 6px 8px 6px 14px;
+  min-height: 58px;
+  padding: 7px 8px 7px 16px;
   min-width: 0;
   background: var(--surface-solid);
   border: 1px solid var(--workspace-blue-line);
-  border-radius: 8px;
-  box-shadow: none;
+  border-radius: 18px;
+  box-shadow: 0 9px 26px rgba(35, 54, 80, 0.09);
   transition: var(--transition);
 }
 .inbox-bg-container .composer:focus-within {
@@ -1218,7 +1232,9 @@
   background: var(--surface-hover);
 }
 .inbox-bg-container .composer-action.send {
-  border-radius: 7px;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
   background: var(--brand);
   color: var(--primary-foreground);
   box-shadow: none;

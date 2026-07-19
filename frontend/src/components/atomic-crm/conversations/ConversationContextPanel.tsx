@@ -261,10 +261,10 @@ const CandidateContextBody = ({
     </header>
 
     <div className="profile-scroll">
-      <section className="context-overview candidate-progress-card">
+      <section className="context-overview candidate-progress-card tt-card tt-card-sm">
         <div className="candidate-progress-top">
           <span className="context-overview-kicker">Thông tin đã thu thập</span>
-          <span className="candidate-progress-score">
+          <span className="candidate-progress-score tt-badge tt-badge-soft">
             {completedInfoCount}/{candidateInfoItems.length}
           </span>
         </div>
@@ -278,7 +278,7 @@ const CandidateContextBody = ({
           Đã thu thập {completionPercent}% thông tin cần cho tư vấn tuyển dụng.
         </p>
       </section>
-      <section className="context-card">
+      <section className="context-card tt-card tt-card-sm">
         <div className="section-head">
           <h3>Thông tin ứng viên</h3>
         </div>

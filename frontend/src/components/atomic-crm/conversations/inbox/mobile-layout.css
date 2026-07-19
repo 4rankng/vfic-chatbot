@@ -206,13 +206,23 @@
 
   .inbox-bg-container .workspace-empty-state {
     width: min(100% - 40px, 360px);
+    grid-template-columns: 1fr;
     gap: 16px;
-    padding: 28px 0 44px;
+    padding: 0;
+    border-radius: 20px;
     text-align: center;
   }
 
+  .inbox-bg-container .workspace-empty-visual {
+    min-height: 190px;
+  }
+
   .inbox-bg-container .workspace-empty-illustration {
-    width: min(148px, 48vw);
+    width: min(100%, 320px);
+  }
+
+  .inbox-bg-container .workspace-empty-copy {
+    padding: 22px 22px 26px;
   }
 
   .inbox-bg-container .workspace-empty-copy h2 {

@@ -41,7 +41,7 @@ import {
   needsHumanReply,
 } from "./conversation-row-state";
 import type { ConversationRowPresentation } from "../capabilities/types";
-import conversationEmptyIllustration from "@/assets/empty-states/conversation-empty-illustration.png";
+import conversationWorkspaceIllustration from "@/assets/empty-states/conversation-workspace-illustration.webp";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
 import { AlertTriangle, Inbox, RefreshCw, Reply, SearchX } from "lucide-react";
 import "./inbox.css";
@@ -333,18 +333,43 @@ const WorkspaceEmptyState = () => {
         </span>
         <span className="chat-header-placeholder-action" />
       </header>
-      <div className="workspace-empty-state" role="status">
-        <img
-          className="workspace-empty-illustration"
-          src={conversationEmptyIllustration}
-          alt=""
-        />
-        <div className="workspace-empty-copy">
-          <h2>Chọn một cuộc trò chuyện</h2>
+      <div className="workspace-empty-state tt-card tt-card-sm" role="status">
+        <div className="workspace-empty-visual" aria-hidden="true">
+          <span className="workspace-empty-eyebrow tt-badge tt-badge-soft">
+            Không gian tư vấn
+          </span>
+          <img
+            className="workspace-empty-illustration"
+            src={conversationWorkspaceIllustration}
+            alt=""
+          />
+        </div>
+        <div className="workspace-empty-copy tt-card-body">
+          <h2 className="tt-card-title">Bắt đầu từ một cuộc trò chuyện</h2>
           <p>
-            Chọn một cuộc trò chuyện từ danh sách để xem tin nhắn và thông tin
-            liên hệ.
+            Chọn một ứng viên để xem trọn vẹn lịch sử trao đổi, tiếp quản khi
+            cần và cập nhật hồ sơ ngay trong một không gian.
           </p>
+          <div className="workspace-empty-features" aria-hidden="true">
+            <span>
+              <svg className="icon">
+                <use href="#i-bot" />
+              </svg>
+              Tin nhắn
+            </span>
+            <span>
+              <svg className="icon">
+                <use href="#i-user" />
+              </svg>
+              Hồ sơ
+            </span>
+            <span>
+              <svg className="icon">
+                <use href="#i-sparkles" />
+              </svg>
+              Chatbot
+            </span>
+          </div>
         </div>
       </div>
     </>
@@ -523,6 +548,7 @@ const ConversationListPanel = ({
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
       <WorkspaceRail
+        conversationCount={rows.length}
         adapterSlot={
           <ChannelAdapterSelector
             provider={getEffectiveConversationChannelProvider(searchParams)}
@@ -639,15 +665,24 @@ const ConversationListPanel = ({
 const WorkspaceRail = ({
   adapterSlot,
   searchSlot,
+  conversationCount,
 }: {
   adapterSlot: ReactNode;
   searchSlot: ReactNode;
+  conversationCount: number;
 }) => (
   <div className="workspace-rail" aria-label="Tin nhắn">
     <div className="workspace-title-row">
       <div className="workspace-title-copy">
+        <span className="workspace-rail-kicker">Trung tâm hội thoại</span>
         <h1 className="workspace-heading">Tin nhắn</h1>
       </div>
+      <span
+        className="workspace-conversation-count tt-badge tt-badge-soft"
+        aria-label={`${conversationCount} hội thoại đang hiển thị`}
+      >
+        {conversationCount}
+      </span>
     </div>
     {adapterSlot}
     <div className="inbox-tools">{searchSlot}</div>
