@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from typing import Iterable
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -267,7 +268,18 @@ class IntegrationSettingsService:
             return {}
         values: dict[str, str] = {}
         for row in rows:
-            values[row.key] = self.cipher.decrypt(row.encrypted_value)
+            try:
+                values[row.key] = self.cipher.decrypt(row.encrypted_value)
+            except InvalidTag:
+                # Wrong key (rotation) or corrupt ciphertext. Skip the row so
+                # callers fall back to Settings env vars instead of 500ing the
+                # admin view; mirrors `_stored_value_with_context`'s handling.
+                # Log the key name only — never the ciphertext or plaintext.
+                logger.warning(
+                    "integration setting decrypt failed key=%s "
+                    "(wrong key / corrupt row); falling back to env",
+                    row.key,
+                )
         return values
 
     async def resolve_zalo(self) -> ZaloRuntimeConfig:

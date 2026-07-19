@@ -75,5 +75,10 @@ def test_deploy_health_check_preserves_remote_retry_loop(tmp_path: Path) -> None
 def test_deploy_container_check_preserves_remote_substitutions(tmp_path: Path) -> None:
     remote_script = _capture_remote_script(_deploy_command("docker inspect"), tmp_path)
 
-    assert 'container=$(docker compose ps -q "$service")' in remote_script
+    # Each service may have multiple replicas (worker-chatbot runs replicas: 2),
+    # so the loop must iterate over every container ID returned by `ps -q`,
+    # not treat the (possibly multi-line) blob as a single container name.
+    assert 'containers=$(docker compose ps -q "$service")' in remote_script
+    assert '[ -n "$containers" ] || exit 1' in remote_script
+    assert 'for container in $containers; do' in remote_script
     assert '$(docker inspect --format "{{.State.Status}}" "$container")' in remote_script

@@ -7,6 +7,7 @@ from app.services.integration_settings import (
     FB_APP_SECRET,
     FB_LOGIN_CONFIG_ID,
     FB_WEBHOOK_VERIFY_TOKEN,
+    IntegrationSettingsCipher,
     IntegrationSettingsService,
     MINIMAX_API_KEY,
     OPENROUTER_API_KEY,
@@ -100,6 +101,44 @@ async def test_zalo_admin_view_masks_stored_refresh_token():
         "configured": True,
         "preview": "refr...o-oa",
     }
+
+
+@pytest.mark.asyncio
+async def test_admin_view_skips_undecryptable_rows_and_falls_back_to_env(caplog):
+    """A row sealed under a different key (or corrupt) must not 500 the admin view.
+
+    Regression for `cryptography.exceptions.InvalidTag` raised from
+    `_stored_values`: the row is skipped, a warning is logged with the key name
+    (never the value), and the resolver falls back to Settings env vars exactly
+    as if the row did not exist.
+    """
+
+    class _OtherSettings(_Settings):
+        integration_settings_encryption_key = "different-key-than-runtime"
+
+    sealed_under_other_key = IntegrationSettingsCipher(_OtherSettings()).encrypt(
+        "refresh-token-for-zalo-oa"
+    )
+
+    env_settings = _Settings()
+    env_settings.zalo_oa_app_id = "env-oa-app-id"  # env fallback is populated
+    service = IntegrationSettingsService(
+        _ReadDb([_Row(ZALO_OA_REFRESH_TOKEN, sealed_under_other_key)]),
+        settings=env_settings,
+    )
+
+    with caplog.at_level("WARNING", logger="app.services.integration_settings"):
+        view = await service.admin_view()
+
+    # No exception; the corrupt row shows unconfigured (env refresh_token is "")
+    # while a sibling env-backed key resolves normally.
+    assert view["zalo_oa_refresh_token"] == {"configured": False, "preview": None}
+    assert view["zalo_oa_app_id"] == {"configured": True, "value": "env-oa-app-id"}
+    # The key name appears in the warning; the plaintext/ciphertext must not.
+    assert any(
+        ZALO_OA_REFRESH_TOKEN in rec.message and "refresh-token-for-zalo-oa" not in rec.message
+        for rec in caplog.records
+    )
 
 
 @pytest.mark.asyncio
