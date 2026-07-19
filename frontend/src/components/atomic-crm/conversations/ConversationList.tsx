@@ -548,7 +548,6 @@ const ConversationListPanel = ({
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
       <WorkspaceRail
-        conversationCount={rows.length}
         adapterSlot={
           <ChannelAdapterSelector
             provider={getEffectiveConversationChannelProvider(searchParams)}
@@ -665,21 +664,13 @@ const ConversationListPanel = ({
 const WorkspaceRail = ({
   adapterSlot,
   searchSlot,
-  conversationCount,
 }: {
   adapterSlot: ReactNode;
   searchSlot: ReactNode;
-  conversationCount: number;
 }) => (
   <div className="workspace-rail" aria-label="Tin nhắn">
     <h1 className="sr-only">Tin nhắn</h1>
     {adapterSlot}
-    <span
-      className="workspace-conversation-count tt-badge tt-badge-soft"
-      aria-label={`${conversationCount} hội thoại đang hiển thị`}
-    >
-      {conversationCount}
-    </span>
     <div className="inbox-tools">{searchSlot}</div>
   </div>
 );
@@ -823,6 +814,7 @@ const ConversationListContent = () => {
           <RecordContextProvider value={selected}>
             <ConversationShowContent
               onOpenList={backToList}
+              onDeleted={backToList}
               showWorkspacePanel
             />
           </RecordContextProvider>

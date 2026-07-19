@@ -99,6 +99,11 @@ Files requiring approval include:
 Do not deploy, commit, push, merge, or open a PR unless the user asks for that
 external state change.
 
+## Git workflow
+
+- Work directly on `main`. Do not create feature branches — commit all changes
+  to `main`.
+
 ## Essential verification
 
 Backend, from `backend/`:

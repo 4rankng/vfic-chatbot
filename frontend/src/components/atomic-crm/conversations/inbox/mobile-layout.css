@@ -437,7 +437,7 @@
     display: none;
   }
   .inbox-bg-container .person-name {
-    font-size: var(--chat-fs-section-title);
+    font-size: var(--chat-fs-body);
   }
   .inbox-bg-container .candidate-signal-strip {
     margin-top: 3px;

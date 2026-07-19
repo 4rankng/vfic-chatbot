@@ -60,7 +60,7 @@ export const ChannelAdapterSelectorView = ({
 }: {
   provider: ConversationChannelProvider | undefined;
   counts: Readonly<Record<ChannelAdapterProvider, number>>;
-  onProviderChange: (provider: ConversationChannelProvider) => void;
+  onProviderChange: (provider: ConversationChannelProvider | undefined) => void;
 }) => {
   return (
     <div className="channel-adapter-selector">
@@ -87,6 +87,11 @@ export const ChannelAdapterSelectorView = ({
                   value={adapter.provider}
                   className="channel-adapter-option"
                   aria-label={accessibleLabel}
+                  onClick={() => {
+                    if (provider === adapter.provider) {
+                      onProviderChange(undefined);
+                    }
+                  }}
                 >
                   <img src={adapter.icon} alt="" aria-hidden="true" />
                   {count > 0 ? (
@@ -113,7 +118,7 @@ export const ChannelAdapterSelector = ({
   searchParams,
   onSearchParamsChange,
 }: {
-  provider: ConversationChannelProvider;
+  provider: ConversationChannelProvider | undefined;
   searchParams: URLSearchParams;
   onSearchParamsChange: (next: URLSearchParams) => void;
 }) => {
@@ -129,11 +134,18 @@ export const ChannelAdapterSelector = ({
         zalo_bot: zaloBotCount,
         zalo_oa: zaloOaCount,
       }}
-      onProviderChange={(nextProvider) =>
-        onSearchParamsChange(
-          getChannelProviderSearchParams(searchParams, nextProvider),
-        )
-      }
+      onProviderChange={(nextProvider) => {
+        if (nextProvider) {
+          onSearchParamsChange(
+            getChannelProviderSearchParams(searchParams, nextProvider),
+          );
+          return;
+        }
+        const next = new URLSearchParams(searchParams);
+        next.delete("channel_provider");
+        next.delete("id");
+        onSearchParamsChange(next);
+      }}
     />
   );
 };

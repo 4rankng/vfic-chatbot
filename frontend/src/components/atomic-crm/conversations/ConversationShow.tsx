@@ -84,9 +84,15 @@ const MODE_OPTIONS: Array<{
  */
 export const ConversationShowContent = ({
   onOpenList,
+  onDeleted,
   showWorkspacePanel = false,
 }: {
   onOpenList?: () => void;
+  /** Called after a successful hard-delete so the parent can drop the now-stale
+   * selection and URL param — otherwise react-admin's `refresh()` re-fetches
+   * the list but `selectedId` still points at the deleted row, leaving the
+   * detail pane pinned to a conversation that no longer exists. */
+  onDeleted?: () => void;
   showWorkspacePanel?: boolean;
 }) => {
   const record = useRecordContext<Conversation>();
@@ -137,6 +143,12 @@ export const ConversationShowContent = ({
       });
       notify("Đã xóa vĩnh viễn hội thoại.", { type: "success" });
       setDeleteOpen(false);
+      // Hand control back to the parent BEFORE refreshing. The parent clears
+      // `selectedId` and the `?id=` URL param, which unmounts this panel;
+      // react-admin's list cache is then refreshed so the deleted row is gone
+      // when the list pane re-renders. Calling `refresh()` first leaves the
+      // detail pane pinned to the deleted record until the next list click.
+      onDeleted?.();
       refresh();
     } catch (error) {
       notify((error as Error).message, { type: "error" });

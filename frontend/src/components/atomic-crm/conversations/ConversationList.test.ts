@@ -13,12 +13,16 @@ describe("getConversationListServerFilter", () => {
     expect(componentSource).not.toContain("conversation tt-btn");
   });
 
+  it("does not render a conversation-count badge in the inbox toolbar", () => {
+    expect(componentSource).not.toContain("workspace-conversation-count");
+  });
+
   it("maps the Messages badge deep link to the authoritative reply queue", () => {
     expect(
       getConversationListServerFilter(
         new URLSearchParams("needs_attention=true"),
       ),
-    ).toEqual({ channel_provider: "zalo_bot", needs_attention: true });
+    ).toEqual({ needs_attention: true });
   });
 
   it("keeps an explicit attention reason ahead of the broad reply queue", () => {
@@ -26,10 +30,7 @@ describe("getConversationListServerFilter", () => {
       getConversationListServerFilter(
         new URLSearchParams("reason=REPLY_OVERDUE&needs_attention=true"),
       ),
-    ).toEqual({
-      channel_provider: "zalo_bot",
-      reason: "REPLY_OVERDUE",
-    });
+    ).toEqual({ reason: "REPLY_OVERDUE" });
   });
 
   it("keeps an unscoped inbox query cross-channel", () => {
@@ -40,6 +41,14 @@ describe("getConversationListServerFilter", () => {
         new URLSearchParams("channel_provider=messenger"),
       ),
     ).toBeUndefined();
+  });
+
+  it("treats API-unsupported channel scopes as unscoped", () => {
+    expect(
+      getConversationListServerFilter(
+        new URLSearchParams("channel_provider=facebook_messenger"),
+      ),
+    ).toEqual({});
   });
 
   it("always composes a valid provider into normal and reason filters", () => {

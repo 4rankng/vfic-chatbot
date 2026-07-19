@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { mockApiJson } = vi.hoisted(() => ({
@@ -19,10 +20,17 @@ import "./inbox.css";
 afterEach(async () => {
   await cleanup();
   vi.clearAllMocks();
+  // Restore the desktop viewport in case a test shrank the window.
+  await page.viewport(1280, 720);
 });
 
 describe("ChannelAdapterSelector", () => {
   it("renders an exclusive Vietnamese radio selector and switches scope", async () => {
+    // Compact conversation toolbar keeps the visual control at the 44px
+    // accessible touch-target minimum rather than the previous 48px tile.
+    // Pin a mobile viewport so the @media (max-width: 767px) rules in
+    // tailkit-redesign.css are the ones under test.
+    await page.viewport(414, 896);
     const onProviderChange = vi.fn();
     const screen = await render(
       <div className="inbox-bg-container">
@@ -42,6 +50,9 @@ describe("ChannelAdapterSelector", () => {
       .element(screen.getByRole("radio", { name: "Zalo Chatbot" }))
       .toBeChecked();
     expect(screen.getByRole("radio").all()).toHaveLength(2);
+    await expect
+      .element(screen.getByRole("radio", { name: "Zalo Chatbot" }))
+      .toBeVisible();
     expect(
       screen.container.querySelector('[aria-label^="Messenger"]'),
     ).toBeNull();
@@ -57,15 +68,13 @@ describe("ChannelAdapterSelector", () => {
     await expect.element(oaRadio).toBeVisible();
     const oaElement = screen.container.querySelector('[value="zalo_oa"]');
     expect(oaElement).not.toBeNull();
-    // Compact conversation toolbar keeps the visual control at the 44px
-    // accessible touch-target minimum rather than the previous 48px tile.
     expect(getComputedStyle(oaElement as Element).width).toBe("44px");
     expect(getComputedStyle(oaElement as Element).backgroundColor).not.toBe(
       "rgb(255, 255, 255)",
     );
     expect(
       getComputedStyle(oaElement?.querySelector("img") as Element).width,
-    ).toBe("38px");
+    ).toBe("44px");
     expect(
       oaElement?.querySelector('[data-slot="radio-group-indicator"]'),
     ).toBeNull();
@@ -77,6 +86,9 @@ describe("ChannelAdapterSelector", () => {
 
     await oaRadio.click();
     expect(onProviderChange).toHaveBeenCalledWith("zalo_oa");
+
+    await screen.getByRole("radio", { name: "Zalo Chatbot" }).click();
+    expect(onProviderChange).toHaveBeenLastCalledWith(undefined);
   });
 
   it("mounts distinct scoped count queries and clears only the conversation id", async () => {
@@ -123,5 +135,11 @@ describe("ChannelAdapterSelector", () => {
     expect(next.get("channel_provider")).toBe("zalo_oa");
     expect(next.get("reason")).toBe("UNREAD");
     expect(next.has("id")).toBe(false);
+
+    await screen.getByRole("radio", { name: "Zalo Chatbot — 2 hội thoại cần phản hồi" }).click();
+    const aggregate = onSearchParamsChange.mock.calls[1]?.[0] as URLSearchParams;
+    expect(aggregate.has("channel_provider")).toBe(false);
+    expect(aggregate.get("reason")).toBe("UNREAD");
+    expect(aggregate.has("id")).toBe(false);
   });
 });

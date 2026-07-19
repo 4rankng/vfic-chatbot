@@ -13,14 +13,10 @@ const ATTENTION_REASON_KEYS = new Set([
 export const CONVERSATION_CHANNEL_PROVIDERS = [
   "zalo_bot",
   "zalo_oa",
-  "facebook_messenger",
 ] as const;
 
 export type ConversationChannelProvider =
   (typeof CONVERSATION_CHANNEL_PROVIDERS)[number];
-
-export const DEFAULT_CONVERSATION_CHANNEL_PROVIDER: ConversationChannelProvider =
-  "zalo_bot";
 
 export const isConversationChannelProvider = (
   value: string | null,
@@ -63,17 +59,14 @@ export const getConversationListServerFilter = (
 ): ConversationListServerFilter => {
   const channel_provider =
     getEffectiveConversationChannelProvider(searchParams);
+  const providerFilter = channel_provider ? { channel_provider } : {};
   const reasonParam = searchParams.get("reason");
   if (isAttentionReason(reasonParam)) {
-    return channel_provider ? { channel_provider, reason: reasonParam } : { reason: reasonParam };
+    return { ...providerFilter, reason: reasonParam };
   }
   return searchParams.get("needs_attention") === "true"
-    ? channel_provider
-      ? { channel_provider, needs_attention: true }
-      : { needs_attention: true }
-    : channel_provider
-      ? { channel_provider }
-      : {};
+    ? { ...providerFilter, needs_attention: true }
+    : providerFilter;
 };
 
 export const getConversationListKey = (
