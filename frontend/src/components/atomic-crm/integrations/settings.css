@@ -214,7 +214,7 @@
   .settings-card {
     border-radius: 10px;
     background: var(--settings-elevated);
-    box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+    box-shadow: 0 1px 2px rgb(10 37 64 / 4%);
   }
 
   .settings-mobile-card-summary {

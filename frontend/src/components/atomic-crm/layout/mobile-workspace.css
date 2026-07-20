@@ -17,7 +17,7 @@
       );
     border-radius: 24px;
     background: var(--workspace-surface, white);
-    box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+    box-shadow: 0 8px 24px rgb(10 37 64 / 8%);
   }
 
   .workspace-navigation-mobile .workspace-navigation-link {

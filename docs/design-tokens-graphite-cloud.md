@@ -1,5 +1,10 @@
 # Design Tokens — Ting Ting Recruiting Control Room
 
+> **Slug note.** The filename `design-tokens-graphite-cloud.md` is retained as a
+> historical slug. The current palette is **Stripe Heritage indigo**, which
+> supersedes the earlier graphite-cloud direction (see *Palette migration*
+> below).
+
 The authenticated recruiter console uses a custom daisyUI v5 theme as its
 visual foundation. `frontend/src/index.css` owns the light-only `tingting`
 theme and maps it onto the stable `--workspace-*` roles used by feature styles.
@@ -11,12 +16,31 @@ sets `data-theme="tingting"`. Stored preferences and OS color-scheme settings do
 not alter the recruiter console. Feature components must not introduce
 independent theme state or a theme toggle.
 
+## Palette migration
+
+- **Date.** 2026-07-20.
+- **What changed.** Brand palette migrated from denim + steel-blue + cool cloud
+  to **Stripe Heritage indigo**: action/focus/links `#635bff`, shell/nav/ink
+  `#0a2540` deep navy, canvas `#f6f9fc` cool-white, surface `#ffffff` (unchanged),
+  border `#e3e8ee` hairline, muted text `#687385` slate, selection/active/accent-soft
+  `#eef0fe` indigo-soft. Chart palette harmonized to indigo / violet / emerald /
+  amber / slate. The `.kb-scope` (knowledge page) was harmonized to indigo while
+  preserving its Fraunces + IBM Plex typeface.
+- **What stayed.** The `"tingting"` daisyUI theme name, the `tt-` class prefix,
+  and every `--workspace-*` / `--color-*` / `--tt-*` / `--crm-*` / `--chat-*` token
+  name are byte-identical — only values changed. The `flat-surfaces.css` contract
+  (no shadows, no hover lift, no gradients) is unchanged. Semantic status colors
+  remain distinct from brand: success `#00a36f`, warning `#c2750a`,
+  danger `#df1b41`, info `#1f6feb`.
+- **Rationale.** A Stripe/Linear-style refined aesthetic — visually striking
+  while still honoring the strict-flat surface constraint.
+
 ## Theme roles
 
 | Product role | daisyUI role | Compatibility token |
 |---|---|---|
 | Main content surface | `base-100` | `--workspace-surface` |
-| Cloud canvas | `base-200` | `--workspace-canvas` |
+| Cool-white canvas | `base-200` | `--workspace-canvas` |
 | Muted/selected surface | `base-300`, `accent` | `--workspace-surface-muted`, `--workspace-teal-soft` |
 | Primary text | `base-content` | `--workspace-ink` |
 | Navigation shell | `secondary` | `--workspace-shell` |
@@ -25,8 +49,8 @@ independent theme state or a theme toggle.
 | Warning | `warning` | `--workspace-warning` |
 | Error | `error` | `--workspace-danger` |
 
-The console uses cool cloud surfaces, deep denim navigation, and one restrained
-steel-blue action accent. Color is never the only status cue: labels or icons accompany
+The console uses a cool-white canvas, deep navy navigation, and one confident
+indigo action accent. Color is never the only status cue: labels or icons accompany
 selection, warning, delivery, and intervention states.
 
 ## Component contract

@@ -12,7 +12,7 @@
   --paper-green: #dcf8c7;
   --paper-blue: var(--workspace-teal-soft);
   --paper-yellow: #fff3cf;
-  --paper-line: #d0d5dd;
+  --paper-line: #cbd5e1;
   --paper-line-soft: #e4e7ec;
   --paper-teal-border: color-mix(in srgb, var(--workspace-action) 32%, var(--workspace-border));
   --priority: #b54708;
@@ -22,7 +22,7 @@
   --surface-hover: var(--paper-soft);
   --ink: #17212b;
   --ink-muted: #475467;
-  --ink-faint: #667085;
+  --ink-faint: #687385;
   --background: var(--surface);
   --foreground: var(--ink);
   --card: var(--surface-solid);
@@ -90,7 +90,7 @@
   --surface-hover: var(--paper-soft);
   --ink: #17212b;
   --ink-muted: #475467;
-  --ink-faint: #667085;
+  --ink-faint: #687385;
   --border-strong: var(--paper-line);
   --brand: var(--workspace-action);
   --brand-light: var(--workspace-teal-soft);
@@ -98,9 +98,9 @@
 }
 
 .inbox-bg-container .kb-scope {
-  /* Knowledge is a console workspace, not a legacy warm-paper island. Keep
-     its semantic utilities aligned with the shared blue shell on every
-     breakpoint, including the mobile wrapper. */
+  /* Knowledge is a console workspace — keep its semantic utilities aligned
+     with the shared indigo shell on every breakpoint, including the mobile
+     wrapper. */
   --background: var(--workspace-canvas);
   --foreground: var(--workspace-ink);
   --card: var(--workspace-surface);
@@ -749,15 +749,15 @@
 }
 
 .inbox-bg-container .mode-menu-trigger.human {
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
 }
 
 .inbox-bg-container .mode-menu-trigger.semi_auto {
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
 }
 
 .inbox-bg-container .mode-menu-trigger.bot {
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
 }
 
 @media (max-width: 767px) {

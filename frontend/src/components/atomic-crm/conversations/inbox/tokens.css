@@ -30,8 +30,8 @@
   --brand-hover: var(--workspace-action-strong);
   --brand-light: var(--primary-soft);
 
-  --success: #16835d;
-  --success-light: #dff3ec;
+  --success: #00a36f;
+  --success-light: #dff7ec;
 
   --rad-sm: 8px;
   --rad-md: 10px;
@@ -121,15 +121,15 @@
   --crm-fs-eyebrow: var(--crm-fs-caption);
   --crm-fs-hint: var(--crm-fs-meta);
 
-  --chat-bg: #f4f7fb;
+  --chat-bg: var(--workspace-canvas);
   /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
-     stays neutral white; bot + admin (outgoing) own the teal-soft on paper. */
+     stays neutral white; bot + admin (outgoing) own the indigo-soft surface. */
   --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #e7eef9;
+  --chat-bubble-out: #eef0fe;
   --chat-bubble-user: #ffffff;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #e7eef9;
-  --chat-bubble-agent: #e3f1ed;
+  --chat-bubble-bot: #eef0fe;
+  --chat-bubble-agent: #e8ecfe;
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: rgba(255, 255, 255, 0.98);
   --chat-shadow: none;
@@ -137,12 +137,12 @@
   /* Workspace sidebar/rail — paper surface + ink + teal active.
      Dark variants re-declared in .dark below. */
   --workspace-bg: #ffffff;
-  --workspace-bg-deep: #f5f6f8;
+  --workspace-bg-deep: var(--workspace-canvas);
   --workspace-border: var(--border);
-  --workspace-ink: #344054;
-  --workspace-muted: #667085;
-  --workspace-faint: #98a2b3;
-  --workspace-hover: #f2f4f7;
+  --workspace-ink: var(--foreground);
+  --workspace-muted: var(--muted-foreground);
+  --workspace-faint: #8a94a6;
+  --workspace-hover: var(--secondary);
   --workspace-active: var(--workspace-action);
   --workspace-active-border: var(--primary-soft-border);
   --workspace-switcher-bg: var(--workspace-shell);
@@ -150,8 +150,8 @@
   --workspace-switcher-active: var(--workspace-shell-rail-active);
   --workspace-switcher-hover: #f8fafc;
 
-  --workspace-blue-wash: #eef4ff;
-  --workspace-blue-line: #d8dde6;
+  --workspace-blue-wash: #eef0fe;
+  --workspace-blue-line: var(--border);
 
   /* ───────────────────────────────────────────────────────────────────────
      Tailkit-inspired token bridge (--tt-*)
@@ -300,12 +300,12 @@
   --workspace-faint: rgba(148, 163, 184, 0.62);
   --workspace-hover: rgba(148, 163, 184, 0.14);
   --workspace-active: var(--primary);
-  --workspace-active-border: rgba(45, 212, 191, 0.45);
+  --workspace-active-border: rgba(99, 91, 255, 0.45);
   --workspace-switcher-bg: #0f172a;
   --workspace-switcher-bg-deep: #0b1220;
   --workspace-switcher-active: var(--primary);
   --workspace-switcher-hover: rgba(148, 163, 184, 0.16);
-  --workspace-blue-wash: rgba(15, 138, 104, 0.1);
+  --workspace-blue-wash: rgba(99, 91, 255, 0.1);
   --workspace-blue-line: rgba(148, 163, 184, 0.2);
   --workspace-canvas-grid: rgba(148, 163, 184, 0.07);
 

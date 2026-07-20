@@ -336,19 +336,19 @@
   align-items: center;
   gap: 6px;
   padding: 3px 8px 3px 4px;
-  border: 1px solid #d8dde6;
+  border: 1px solid var(--workspace-border, var(--border));
   border-radius: 10px;
   background: var(--surface-solid);
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
   font-size: var(--chat-fs-meta);
   font-weight: var(--chat-fw-medium);
   white-space: nowrap;
   transition: var(--transition);
 }
 .inbox-bg-container .mode-menu-trigger--primary {
-  border-color: #d8dde6;
+  border-color: var(--workspace-border, var(--border));
   background: #ffffff;
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
 }
 .inbox-bg-container .mode-menu-trigger:hover:not(:disabled) {
@@ -364,13 +364,13 @@
   transform: none;
 }
 .inbox-bg-container .mode-menu-trigger.human {
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
 }
 .inbox-bg-container .mode-menu-trigger.semi_auto {
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
 }
 .inbox-bg-container .mode-menu-trigger.bot {
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
 }
 .inbox-bg-container .mode-menu-trigger.closed {
   color: var(--ink-muted);
@@ -385,7 +385,7 @@
   display: grid;
   flex: 0 0 26px;
   place-items: center;
-  border: 1px solid #d8dde6;
+  border: 1px solid var(--workspace-border, var(--border));
   border-radius: 8px;
   background: #f2f4f7;
   color: #475467;
@@ -405,7 +405,7 @@
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
-  color: #667085;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
   transition: transform 160ms ease;
 }
 .inbox-bg-container .mode-menu-trigger[data-state="open"] {
@@ -439,7 +439,7 @@
 .mode-menu-content {
   width: min(272px, calc(100vw - 32px));
   padding: 8px;
-  border: 1px solid #d8dde6;
+  border: 1px solid var(--workspace-border, var(--border));
   border-radius: 14px;
   background: #ffffff;
   color: #1d2939;
@@ -477,7 +477,7 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid #d8dde6;
+  border: 1px solid var(--workspace-border, var(--border));
   border-radius: 8px;
   background: #ffffff;
   color: #475569;
@@ -512,7 +512,7 @@
 }
 .mode-menu-description {
   overflow: hidden;
-  color: #667085;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-meta);
   font-weight: 450;
   line-height: 1.25;
@@ -524,7 +524,7 @@
   width: 20px;
   height: 20px;
   place-items: center;
-  color: #344054;
+  color: var(--workspace-ink, var(--foreground));
 }
 .inbox-bg-container .profile-info-btn {
   min-width: 32px;
