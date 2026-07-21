@@ -27,4 +27,22 @@ describe("project list visual hierarchy", () => {
     );
     expect(stylesheet).toContain("-webkit-line-clamp: 2");
   });
+
+  it("keeps the desktop knowledge hierarchy inside narrow accordion tracks", () => {
+    expect(stylesheet).toMatch(
+      /\.project-accordion-content[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*\.project-category-grid[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+    );
+    expect(stylesheet).toMatch(
+      /\.project-category-editor-actions > :last-child[\s\S]*grid-column:\s*1 \/ -1/,
+    );
+    expect(stylesheet).toMatch(
+      /\.project-category-textarea[\s\S]*field-sizing:\s*fixed[\s\S]*height:\s*min\(52dvh, 420px\)/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(max-width: 359px\)[\s\S]*\.project-category-editor-actions[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/,
+    );
+  });
 });

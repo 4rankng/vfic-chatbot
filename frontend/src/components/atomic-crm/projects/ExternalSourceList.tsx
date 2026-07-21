@@ -58,7 +58,12 @@ const truncate = (url: string, max = 48): string =>
  * is shown but not editable inline (delete + re-create to change it). Each row
  * has a "Process now" button (5-minute cooldown) and a "Remove" button.
  */
-export const ExternalSourceList = ({ projectId, refreshSignal, onChange, disabled }: Props) => {
+export const ExternalSourceList = ({
+  projectId,
+  refreshSignal,
+  onChange,
+  disabled,
+}: Props) => {
   const notify = useNotify();
   const [rows, setRows] = useState<ExternalSourceSyncState[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,21 +85,28 @@ export const ExternalSourceList = ({ projectId, refreshSignal, onChange, disable
     setLoading(true);
     void load();
     return () => {
-      if (cooldownTimer.current !== null) window.clearTimeout(cooldownTimer.current);
+      if (cooldownTimer.current !== null)
+        window.clearTimeout(cooldownTimer.current);
     };
   }, [load, refreshSignal]);
 
   const startCooldown = (id: string) => {
     setCooldownId(id);
-    if (cooldownTimer.current !== null) window.clearTimeout(cooldownTimer.current);
-    cooldownTimer.current = window.setTimeout(() => setCooldownId(null), RUN_NOW_COOLDOWN_MS);
+    if (cooldownTimer.current !== null)
+      window.clearTimeout(cooldownTimer.current);
+    cooldownTimer.current = window.setTimeout(
+      () => setCooldownId(null),
+      RUN_NOW_COOLDOWN_MS,
+    );
   };
 
   const runNow = async (row: ExternalSourceSyncState) => {
     setProcessingId(row.id);
     try {
       await runExternalSourceNow(projectId, row.id);
-      notify("Đang xử lý nội dung mới. Vui lòng đợi vài giây.", { type: "info" });
+      notify("Đang xử lý nội dung mới. Vui lòng đợi vài giây.", {
+        type: "info",
+      });
       startCooldown(row.id);
       // Give the worker a moment, then refresh to show the new status.
       window.setTimeout(() => void load(), 4000);
@@ -142,11 +154,12 @@ export const ExternalSourceList = ({ projectId, refreshSignal, onChange, disable
       {rows.map((row) => {
         const isProcessing = processingId === row.id;
         const isCoolingDown = cooldownId === row.id;
-        const autoDisabled = row.last_status === "FAILED" && !row.auto_sync_enabled;
+        const autoDisabled =
+          row.last_status === "FAILED" && !row.auto_sync_enabled;
         return (
           <div
             key={row.id}
-            className="flex flex-wrap items-center gap-2 rounded-md border border-border p-3"
+            className="project-external-source-row flex flex-col items-stretch gap-3 rounded-md border border-border p-3 sm:flex-row sm:items-center sm:gap-2"
           >
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -161,28 +174,38 @@ export const ExternalSourceList = ({ projectId, refreshSignal, onChange, disable
                 {autoDisabled && (
                   <Badge variant="destructive">Đã tự động tắt</Badge>
                 )}
-                <span className={cn("text-body-sm font-medium", statusTone(row))}>
+                <span
+                  className={cn("text-body-sm font-medium", statusTone(row))}
+                >
                   {STATUS_LABEL[row.last_status] ?? row.last_status}
                 </span>
               </div>
-              <p className="mt-1 truncate text-body-sm text-muted-foreground" title={row.sheet_url}>
+              <p
+                className="mt-1 truncate text-body-sm text-muted-foreground"
+                title={row.sheet_url}
+              >
                 {truncate(row.sheet_url)}
               </p>
-              <p className="text-body-sm text-muted-foreground">
+              <p className="break-words text-body-sm text-muted-foreground [overflow-wrap:anywhere]">
                 Đồng bộ gần nhất: {formatTimestamp(row.last_synced_at)}
                 {row.last_status === "FAILED" && row.last_error
                   ? ` · ${row.last_error}`
                   : ""}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => void runNow(row)}
                 disabled={disabled || isProcessing || isCoolingDown}
-                title={isCoolingDown ? "Vui lòng đợi 5 phút giữa các lần xử lý" : undefined}
+                title={
+                  isCoolingDown
+                    ? "Vui lòng đợi 5 phút giữa các lần xử lý"
+                    : undefined
+                }
+                className="min-w-0 flex-1 sm:flex-none"
               >
                 {isProcessing ? (
                   <Loader2 className="size-4 animate-spin" />

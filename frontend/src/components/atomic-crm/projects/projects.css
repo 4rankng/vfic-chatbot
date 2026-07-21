@@ -61,6 +61,7 @@
 
 .project-knowledge-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   padding: 0;
 }
@@ -181,6 +182,7 @@
 
 .project-category-editor-actions {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -346,6 +348,7 @@
 
 .project-accordion-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 14px 16px 16px;
   border-top: 1px solid var(--border);
@@ -354,6 +357,7 @@
 
 .project-accordion-actions {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
@@ -651,20 +655,11 @@
   }
 
   .project-category-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .project-category-card {
     min-height: 88px;
-    border-right: 0;
-  }
-
-  .project-category-card:nth-last-child(-n + 2) {
-    border-bottom: 1px solid var(--border);
-  }
-
-  .project-category-card:last-child {
-    border-bottom: 0;
   }
 
   .project-category-editor-header {
@@ -673,12 +668,31 @@
   }
 
   .project-category-editor-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
 
+  .project-category-editor-actions > * {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .project-category-editor-actions > :last-child {
+    grid-column: 1 / -1;
+  }
+
   .project-category-editor-actions [data-slot="button"] {
-    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
     min-height: 44px;
+  }
+
+  .project-category-textarea {
+    field-sizing: fixed;
+    height: min(52dvh, 420px);
+    min-height: 280px;
+    resize: none;
   }
 
   .project-accordion-trigger {
@@ -792,5 +806,32 @@
   .project-accordion-badges {
     max-width: none;
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 359px) {
+  .project-category-card {
+    padding-inline: 8px;
+  }
+
+  .project-category-card > div:first-child {
+    gap: 4px;
+  }
+
+  .project-category-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .project-category-date {
+    overflow-wrap: anywhere;
+  }
+
+  .project-category-editor-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-category-editor-actions > :last-child {
+    grid-column: auto;
   }
 }

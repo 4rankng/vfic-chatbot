@@ -38,7 +38,15 @@ class RetrievalRepository:
     # Chosen so that even moderately relevant chunks (>= 0.30) pass while
     # near-orthogonal embeddings (random topic drift) are excluded.
     SIMILARITY_FLOOR = 0.30
-    FAQ_SIMILARITY_FLOOR = 0.70
+    # FAQ pre-pass floor. Sheet-sourced FAQ chunks embed their full rendered
+    # record (label + id + question + answer + terms + tags), so a verbatim
+    # user query — which embeds as the bare question — scores below the 0.70
+    # this was originally set to, and the FAQ pre-pass returned nothing. Measured
+    # on prod (lg-display, post category-authority cutover): verbatim FAQ queries
+    # score 0.62-0.79 (weakest 0.621) while non-FAQ queries top out at ~0.47, so
+    # 0.55 sits in the clean gap with ~0.07 margin on both sides. Do not raise
+    # above ~0.60 or every sheet-FAQ verbatim match is filtered out again.
+    FAQ_SIMILARITY_FLOOR = 0.55
 
     _LEXICAL_STOPWORDS = {
         "anh",

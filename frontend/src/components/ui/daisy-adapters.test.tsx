@@ -211,6 +211,16 @@ describe("daisyUI shared adapters", () => {
     expect(screen.container.querySelector(".tt-tab")).not.toBeNull()
 
     await screen.getByRole("button", { name: "Mở hộp thoại" }).click()
-    await expect.element(screen.getByRole("dialog")).toHaveClass("tt-modal-box")
+    const dialog = screen.getByRole("dialog")
+    await expect.element(dialog).toHaveClass("tt-modal-box")
+    // Regression: daisyUI's tt-modal-box ships a closed-state opacity:0/scale:.95
+    // that Radix never clears (Radix opens via data-state="open", not daisyUI's
+    // own open mechanism), so the dialog box renders invisible — the overlay
+    // darkens but no box appears (the "Xoá hội thoại does nothing" bug). The
+    // override classes below MUST stay on DialogContent; removing them silently
+    // re-breaks every Radix dialog. jsdom can't catch the rendered opacity (no
+    // daisyUI CSS), so this structural guard is the regression net.
+    await expect.element(dialog).toHaveClass("data-[state=open]:opacity-100")
+    await expect.element(dialog).toHaveClass("data-[state=open]:scale-100")
   })
 })

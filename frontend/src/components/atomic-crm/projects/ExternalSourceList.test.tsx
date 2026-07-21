@@ -1,5 +1,8 @@
 import { render } from "vitest-browser-react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import "@/index.css";
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
@@ -34,6 +37,10 @@ const faqRow = {
 };
 
 describe("ExternalSourceList", () => {
+  afterEach(async () => {
+    await page.viewport(1280, 720);
+  });
+
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.listExternalSources.mockResolvedValue([faqRow]);
@@ -49,9 +56,7 @@ describe("ExternalSourceList", () => {
     await expect
       .element(screen.getByRole("button", { name: "Xử lý ngay" }))
       .toBeVisible();
-    await expect
-      .element(screen.getByText("Tự động mỗi ngày"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Tự động mỗi ngày")).toBeVisible();
   });
 
   it("triggers run-now on Process now", async () => {
@@ -68,5 +73,28 @@ describe("ExternalSourceList", () => {
       expect.stringContaining("Đang xử lý"),
       { type: "info" },
     );
+  });
+
+  it("keeps source details and actions inside a phone-width card", async () => {
+    await page.viewport(320, 844);
+
+    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    await vi.waitFor(() =>
+      expect(mocks.listExternalSources).toHaveBeenCalledWith("project-1"),
+    );
+
+    const runButton = screen.getByRole("button", { name: "Xử lý ngay" });
+    await expect.element(runButton).toBeVisible();
+
+    const card = runButton
+      .element()
+      .closest<HTMLElement>(".project-external-source-row")!;
+    const actions = runButton.element().parentElement!;
+    const cardRect = card.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+
+    expect(actionsRect.left).toBeGreaterThanOrEqual(cardRect.left - 0.5);
+    expect(actionsRect.right).toBeLessThanOrEqual(cardRect.right + 0.5);
+    expect(actions.clientWidth).toBeLessThanOrEqual(card.clientWidth);
   });
 });
