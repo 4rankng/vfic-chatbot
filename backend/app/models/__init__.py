@@ -43,6 +43,7 @@ from app.models.case import (
     CaseTagAssignment,
     FollowupStatus as CaseFollowupStatus,
 )
+from app.models.external_source_sync_state import ExternalSourceSyncState
 from app.models.password_reset import PasswordResetOtp
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.models.conversation import (
@@ -132,6 +133,7 @@ __all__ = [
     "CaseFollowup",
     "CaseFollowupStatus",
     "PasswordResetOtp",
+    "ExternalSourceSyncState",
     "WorkerFeatureCatalog",
     "JobFeatureValue",
     "Conversation",

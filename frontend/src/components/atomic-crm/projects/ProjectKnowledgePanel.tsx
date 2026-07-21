@@ -22,12 +22,15 @@ import {
   getProjectKnowledgeCategorySource,
   getProjectKnowledgeCategoryTemplate,
   getProjectSinglePage,
+  listExternalSources,
   replaceProjectSinglePage,
   uploadProjectKnowledgeCategory,
   type KnowledgeCategoryKey,
   type KnowledgeCategoryStatus,
 } from "@/lib/vfic/knowledgeService";
 import { cn } from "@/lib/utils";
+import { ExternalSourceLinkForm } from "./ExternalSourceLinkForm";
+import { ExternalSourceList } from "./ExternalSourceList";
 
 type Props = {
   project: Project;
@@ -218,6 +221,27 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
   const [processingKey, setProcessingKey] =
     useState<KnowledgeCategoryKey | null>(null);
   const pollRef = useRef<number | null>(null);
+  const [faqAutoSyncOn, setFaqAutoSyncOn] = useState(false);
+  const [extSrcRefreshKey, setExtSrcRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    listExternalSources(String(project.id))
+      .then((rows) => {
+        if (!active) return;
+        setFaqAutoSyncOn(
+          rows.some(
+            (row) => row.category_key === "faq" && row.auto_sync_enabled,
+          ),
+        );
+      })
+      .catch(() => {
+        /* external-source list is optional; never block the panel */
+      });
+    return () => {
+      active = false;
+    };
+  }, [project.id, extSrcRefreshKey]);
 
   const loadCatalog = async () => {
     const catalog = await getProjectKnowledgeCategories(String(project.id));
@@ -519,6 +543,13 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                   </label>
                 </Button>
               )}
+              {editable && (
+                <ExternalSourceLinkForm
+                  projectId={String(project.id)}
+                  defaultCategory={selected}
+                  onCreated={() => setExtSrcRefreshKey((value) => value + 1)}
+                />
+              )}
             </div>
           </div>
           {loadingCategory ? (
@@ -534,6 +565,27 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
             />
           )}
         </section>
+
+        {selected === "faq" && faqAutoSyncOn && (
+          <p
+            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-body-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+            role="status"
+          >
+            FAQ đang được đồng bộ tự động từ Google Sheet. Các thay đổi thủ công
+            sẽ bị ghi đè ở lần đồng bộ tiếp theo.
+          </p>
+        )}
+
+        {editable && (
+          <section className="space-y-2">
+            <h3 className="text-body font-semibold">Nguồn đồng bộ từ link công khai</h3>
+            <ExternalSourceList
+              projectId={String(project.id)}
+              refreshSignal={extSrcRefreshKey}
+              onChange={() => setExtSrcRefreshKey((value) => value + 1)}
+            />
+          </section>
+        )}
 
         {selected === "transportation" && (
           <section className="project-transport-panel">

@@ -11,6 +11,39 @@ from pydantic import BaseModel, ConfigDict
 from app.models.knowledge import KBVersionStatus, KnowledgeStatus
 
 
+class ExternalSourceCreate(BaseModel):
+    """Payload for POST /knowledge/projects/{pid}/external-sources."""
+
+    source_kind: str = "google_sheet"
+    # Lowercase KnowledgeCategoryKey value; normalised + validated in the endpoint.
+    category_key: str
+    sheet_url: str
+    sheet_gid: int = 0
+    auto_sync_enabled: bool = False
+
+
+class ExternalSourceSyncStateOut(BaseModel):
+    """One configured external knowledge-source sync row."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    project_id: uuid.UUID
+    category_key: str
+    source_kind: str
+    sheet_url: str
+    sheet_gid: int
+    auto_sync_enabled: bool
+    consecutive_failures: int
+    last_content_hash: str | None = None
+    last_synced_at: datetime | None = None
+    last_status: str
+    last_error: str | None = None
+    last_row_count: int | None = None
+    last_revision_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class KnowledgeDocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID

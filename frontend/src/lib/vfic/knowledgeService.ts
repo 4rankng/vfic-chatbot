@@ -474,3 +474,90 @@ export const updateProjectFeature = (
     `${proj(projectId)}/features/${encodeURIComponent(featureId)}`,
     { method: "PATCH", body: patch },
   );
+
+// --- External knowledge-source sync (public Google Sheet → category revision) ---
+//
+// Public link is a sibling of file upload. The admin pastes a Google Sheet URL,
+// picks a target category, and either imports once or enables daily auto-sync.
+
+const GOOGLE_SHEET_HOSTS = new Set([
+  "docs.google.com",
+  "sheets.googleapis.com",
+  "googleusercontent.com",
+]);
+
+/** Client-side mirror of the backend SSRF allow-list (defense-in-depth). */
+export const isValidGoogleSheetUrl = (url: string): boolean => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  if (!host) return false;
+  // Reject IP literals.
+  if (/^\d+(\.\d+){3}$/.test(host) || host.includes(":")) return false;
+  return (
+    GOOGLE_SHEET_HOSTS.has(host) ||
+    [...GOOGLE_SHEET_HOSTS].some((allowed) => host.endsWith(`.${allowed}`))
+  );
+};
+
+export type ExternalSourceSyncState = {
+  id: string;
+  project_id: string;
+  category_key: KnowledgeCategoryKey;
+  source_kind: string;
+  sheet_url: string;
+  sheet_gid: number;
+  auto_sync_enabled: boolean;
+  consecutive_failures: number;
+  last_content_hash?: string | null;
+  last_synced_at?: string | null;
+  last_status: string;
+  last_error?: string | null;
+  last_row_count?: number | null;
+  last_revision_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ExternalSourceCreatePayload = {
+  source_kind?: string;
+  category_key: KnowledgeCategoryKey;
+  sheet_url: string;
+  sheet_gid?: number;
+  auto_sync_enabled?: boolean;
+};
+
+export const listExternalSources = (projectId: string) =>
+  apiJson<ExternalSourceSyncState[]>(
+    `${proj(projectId)}/external-sources`,
+  );
+
+export const createExternalSource = (
+  projectId: string,
+  payload: ExternalSourceCreatePayload,
+) =>
+  apiJson<ExternalSourceSyncState>(
+    `${proj(projectId)}/external-sources`,
+    { method: "POST", body: payload },
+  );
+
+export const runExternalSourceNow = (projectId: string, id: string) =>
+  apiJson<{ job_id: string }>(
+    `${proj(projectId)}/external-sources/${encodeURIComponent(id)}/run-now`,
+    { method: "POST" },
+  );
+
+export const deleteExternalSource = (projectId: string, id: string) =>
+  apiRequest(
+    `${proj(projectId)}/external-sources/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  ).then((response) => {
+    if (!response.ok) {
+      throw new ApiError(response.status, "Không xóa được nguồn đồng bộ.");
+    }
+  });

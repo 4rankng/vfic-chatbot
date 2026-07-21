@@ -17,11 +17,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import exists, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_embedder, require_admin
 from app.core.cache import bump_cache_version
 from app.core.db import get_db
+from app.core.redis import get_redis
 from app.models.knowledge import (
     KBTextFile,
     KBVersion,
@@ -30,8 +32,11 @@ from app.models.knowledge import (
     KnowledgeStatus,
 )
 from app.models.company import Project
+from app.models.external_source_sync_state import ExternalSourceSyncState
 from app.models.user import User
 from app.schemas.knowledge import (
+    ExternalSourceCreate,
+    ExternalSourceSyncStateOut,
     KBIngestResponse,
     KBTextFileListResponse,
     KBTextFileOut,
@@ -46,6 +51,7 @@ from app.schemas.knowledge import (
     SearchTestResult,
     UploadRequest,
 )
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.audit_service import record_audit
 from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import (
@@ -53,6 +59,11 @@ from app.services.knowledge.canonical import (
     load_faq_template,
     load_template,
 )
+from app.services.knowledge.external_source_sync import (
+    ExternalSourceSyncError,
+    validate_sheet_url,
+)
+from app.workers.external_source_sync_worker import enqueue_one_shot
 from app.workers.ingest_worker import enqueue_ingest, enqueue_ingest_version
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -479,5 +490,168 @@ async def record_audit_safe(
 
     await record_audit(
         db, action=action, actor_id=actor_id, target_type="knowledge_document", target_id=target_id
+    )
+    await db.commit()
+
+
+# --- External knowledge-source sync (public Google Sheet → category revision) ---
+#
+# Public link is a sibling of file upload: admins paste a Google Sheet URL, pick
+# a target category, and either import once (POST enqueues an immediate one-shot
+# sync) or enable daily auto-sync (the rq-scheduler tick polls each row). The
+# worker does the SSRF-hardened fetch + parse + hash-skip + stage; these
+# endpoints only manage the row + enqueue.
+
+RUN_NOW_COOLDOWN_SECONDS = 300
+
+
+async def _load_external_source(
+    project_id: uuid.UUID, source_id: uuid.UUID, db: AsyncSession
+) -> ExternalSourceSyncState:
+    row = await db.get(ExternalSourceSyncState, source_id)
+    if row is None or row.project_id != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "external_source_not_found")
+    return row
+
+
+@router.get(
+    "/projects/{project_id}/external-sources",
+    response_model=list[ExternalSourceSyncStateOut],
+)
+async def list_external_sources(
+    project_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[ExternalSourceSyncStateOut]:
+    rows = (
+        (
+            await db.execute(
+                select(ExternalSourceSyncState)
+                .where(ExternalSourceSyncState.project_id == project_id)
+                .order_by(ExternalSourceSyncState.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [ExternalSourceSyncStateOut.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/projects/{project_id}/external-sources",
+    response_model=ExternalSourceSyncStateOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_external_source(
+    project_id: uuid.UUID,
+    body: ExternalSourceCreate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ExternalSourceSyncStateOut:
+    # Defense-in-depth SSRF gate at the API layer (the worker re-validates on
+    # fetch). Rejects non-HTTPS, IP literals, and non-Google hosts before the
+    # row is created. Category key is normalised lowercase (Finding 17).
+    try:
+        validate_sheet_url(body.sheet_url)
+        category_key = KnowledgeCategoryKey(body.category_key.strip().lower()).value
+    except ExternalSourceSyncError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, exc.code) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid_category_key") from exc
+    # Only one source_kind ships in v1; reject others so the unique-constraint
+    # row never silently persists an unsupported value (the fetch URL is fixed).
+    if body.source_kind != "google_sheet":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unsupported_source_kind")
+
+    row = ExternalSourceSyncState(
+        project_id=project_id,
+        category_key=category_key,
+        source_kind=body.source_kind,
+        sheet_url=body.sheet_url.strip(),
+        sheet_gid=body.sheet_gid,
+        auto_sync_enabled=body.auto_sync_enabled,
+        created_by=admin.id,
+    )
+    db.add(row)
+    try:
+        await db.flush()
+    except IntegrityError as exc:  # unique (project_id, category_key, source_kind)
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "external_source_already_exists") from exc
+    await record_audit(
+        db,
+        action="external_source_created",
+        actor_id=admin.id,
+        target_type="external_source_sync_state",
+        target_id=str(row.id),
+        payload={
+            "project_id": str(project_id),
+            "category_key": category_key,
+            "sheet_url": body.sheet_url,
+        },
+    )
+    await db.commit()
+    await db.refresh(row)
+    # Enqueue an immediate one-shot import so the admin sees content right away.
+    # Fire-and-forget: the row's last_status transitions NEW → OK/FAILED as the
+    # worker runs; the UI refreshes the source list + category catalog.
+    enqueue_one_shot(row.id)
+    return ExternalSourceSyncStateOut.model_validate(row)
+
+
+@router.post(
+    "/projects/{project_id}/external-sources/{source_id}/run-now",
+)
+async def run_external_source_now(
+    project_id: uuid.UUID,
+    source_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Trigger an immediate sync (admin edited the sheet, wants the bot updated now).
+
+    Redis 5-minute cooldown per source (Finding 14); unique-per-click job_id so a
+    retry after a fix within the same day actually runs (Finding 9).
+    """
+    row = await _load_external_source(project_id, source_id, db)
+    redis = get_redis()
+    cooldown_key = f"ext-src-run-now:{source_id}"
+    acquired = await redis.set(cooldown_key, "1", nx=True, ex=RUN_NOW_COOLDOWN_SECONDS)
+    if not acquired:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "run_now_cooldown")
+    job_id = enqueue_one_shot(row.id, job_id=f"ext-src-sync-{source_id}-{uuid.uuid4().hex}")
+    await record_audit(
+        db,
+        action="external_source_run_now",
+        actor_id=admin.id,
+        target_type="external_source_sync_state",
+        target_id=str(source_id),
+        payload={"project_id": str(project_id), "category_key": row.category_key, "job_id": job_id},
+    )
+    await db.commit()
+    return {"job_id": job_id}
+
+
+@router.delete(
+    "/projects/{project_id}/external-sources/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_external_source(
+    project_id: uuid.UUID,
+    source_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove a sync config. Published FAQ chunks survive (no FK on last_revision_id)."""
+    row = await _load_external_source(project_id, source_id, db)
+    category_key = row.category_key
+    await db.delete(row)
+    await record_audit(
+        db,
+        action="external_source_deleted",
+        actor_id=admin.id,
+        target_type="external_source_sync_state",
+        target_id=str(source_id),
+        payload={"project_id": str(project_id), "category_key": category_key},
     )
     await db.commit()

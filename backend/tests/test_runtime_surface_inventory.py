@@ -48,7 +48,7 @@ EXPECTED_ROUTE_COUNTS = {
     # Meta App credentials UI: +2 (GET/PUT /facebook/credentials)
     "installation": 8,
     "jobs": 7,
-    "knowledge": 21,  # parallel knowledge work +1 endpoint
+    "knowledge": 25,  # +4 external-source-sync endpoints (list / create / run-now / delete)
     "knowledge_bases": 11,
     "leads": 15,
     "main": 3,
@@ -58,13 +58,13 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "d1e5b80a0c17603b324ab90c1b097ee53df512fb890ba458f03821fd02ebd92f"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "43236e174f2db539c3dcc7f57d0351a0307abec36406a078e6d73b9a7f05fd0c"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 74,  # +2 Meta App credentials UI (GET/PUT /facebook/credentials)
-    "queue_producer": 25,  # Project category activation adds one reviewed queue boundary
+    "provider_boundary": 79,  # +5 broad-scan get/delete hits in the SSRF-hardened sheet fetcher
+    "queue_producer": 29,  # external-source sync: enqueue_one_shot (create/run-now/tick) + enqueue_job
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "cff1a386ebe094a791b24121fce0d087a8553eae22796ba327d816c597d8b072"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "be7c724ddc91d1189076ad8ed9265eb5f4552c0b6a471713716237692c8708a0"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

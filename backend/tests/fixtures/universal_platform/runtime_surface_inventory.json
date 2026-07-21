@@ -210,6 +210,13 @@
     "scope": "enqueue_chat_run"
   },
   {
+    "call": "enqueue_job",
+    "category": "queue_producer",
+    "count": 1,
+    "file": "app/workers/external_source_sync_worker.py",
+    "scope": "enqueue_one_shot"
+  },
+  {
     "call": "enqueue_followup",
     "category": "queue_producer",
     "count": 1,

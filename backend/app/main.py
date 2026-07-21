@@ -93,6 +93,20 @@ async def lifespan(app: FastAPI):
             )
         except Exception:  # noqa: BLE001
             logger.exception("decision trace retention scheduler registration failed (non-fatal)")
+        try:
+            from app.workers.external_source_sync_worker import (
+                DEFAULT_INTERVAL_SECONDS as EXT_SYNC_INTERVAL,
+                run_external_source_sync_tick,
+            )
+
+            register_unique_tick(sched, run_external_source_sync_tick, EXT_SYNC_INTERVAL)
+            logger.info(
+                "external source sync tick registered: interval=%ds enabled=%s",
+                EXT_SYNC_INTERVAL,
+                settings.external_source_sync_enabled,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("external source sync scheduler registration failed (non-fatal)")
     except Exception:  # noqa: BLE001
         logger.exception("rq-scheduler setup failed (non-fatal)")
 

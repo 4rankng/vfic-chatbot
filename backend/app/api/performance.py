@@ -195,6 +195,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         slow_turns,
         trend,
         reliability,
+        external_source_sync,
     ) = await asyncio.gather(
         asyncio.to_thread(collect_queue_health),
         _with_session(_percentiles, interval),
@@ -204,6 +205,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         _with_session(_slow_turns, interval),
         _with_session(_trend, interval),
         _with_session(_reliability, interval),
+        _with_session(_external_source_sync, interval),
     )
     percentiles.update(llm_call_pct)
     return {
@@ -216,6 +218,49 @@ async def _compute(interval: timedelta, window: str) -> dict:
         "slow_turns": slow_turns,
         "trend": trend,
         "reliability": reliability,
+        "external_source_sync": external_source_sync,
+    }
+
+
+async def _external_source_sync(db: AsyncSession, _interval: timedelta) -> dict:
+    """External knowledge-source sync tile: configured rows + last sync + counters.
+
+    Surfaced as a JSON field (no chart in v1). Counters are bumped by the worker
+    via the sync Redis client and read here via the async client — same Redis DB.
+    """
+    from app.core.config import get_settings
+    from app.core.redis import get_redis
+
+    # Guard the table read the same way the Redis reads below are guarded: a
+    # missing/partial migration (this project has a history of alembic deploy
+    # blockers) must never take down the whole performance dashboard, and the
+    # feature ships disabled by default so the table may legitimately be absent.
+    try:
+        row = (
+            await db.execute(
+                text(
+                    "SELECT COUNT(*) AS n, MAX(last_synced_at) AS last "
+                    "FROM external_source_sync_state WHERE auto_sync_enabled = true"
+                )
+            )
+        ).one_or_none()
+        auto_sync_count = int(row.n or 0) if row else 0
+        last_synced_at_max = row.last.isoformat() if row and row.last else None
+    except Exception:  # noqa: BLE001 — table/query must never break the dashboard
+        auto_sync_count = 0
+        last_synced_at_max = None
+    redis = get_redis()
+    try:
+        success = await redis.get("external_source_sync_success_total")
+        failure = await redis.get("external_source_sync_failure_total")
+    except Exception:  # noqa: BLE001 — Redis must never break the dashboard
+        success = failure = None
+    return {
+        "enabled": get_settings().external_source_sync_enabled,
+        "auto_sync_count": auto_sync_count,
+        "last_synced_at_max": last_synced_at_max,
+        "success_total": int(success) if success else 0,
+        "failure_total": int(failure) if failure else 0,
     }
 
 
