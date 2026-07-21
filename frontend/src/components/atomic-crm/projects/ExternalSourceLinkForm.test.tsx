@@ -29,7 +29,7 @@ describe("ExternalSourceLinkForm", () => {
       <ExternalSourceLinkForm projectId="project-1" />,
     );
     await screen
-      .getByRole("button", { name: "Nhập từ link công khai" })
+      .getByRole("button", { name: "Google Docs Link" })
       .click();
     const urlInput = screen.getByLabelText("Link Google Sheet");
     await urlInput.fill("https://evil.example/sheet.csv");
@@ -48,7 +48,7 @@ describe("ExternalSourceLinkForm", () => {
       <ExternalSourceLinkForm projectId="project-1" defaultCategory="faq" />,
     );
     await screen
-      .getByRole("button", { name: "Nhập từ link công khai" })
+      .getByRole("button", { name: "Google Docs Link" })
       .click();
     await screen.getByLabelText("Link Google Sheet").fill(
       "https://docs.google.com/spreadsheets/d/1rRk4wfKb90IxJAbywimgGDOV3Y7g8RbW1EpBabZmFw8/edit",

@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { useNotify } from "ra-core";
-import { Link2, Loader2 } from "lucide-react";
+import { FileText, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   createExternalSource,
   isValidGoogleSheetUrl,
@@ -48,7 +55,6 @@ export const ExternalSourceLinkForm = ({
   const notify = useNotify();
   const [open, setOpen] = useState(false);
   const [sheetUrl, setSheetUrl] = useState("");
-  const [sheetGid, setSheetGid] = useState("0");
   const [categoryKey, setCategoryKey] =
     useState<KnowledgeCategoryKey>(defaultCategory);
   const [autoSync, setAutoSync] = useState(false);
@@ -58,7 +64,6 @@ export const ExternalSourceLinkForm = ({
 
   const reset = () => {
     setSheetUrl("");
-    setSheetGid("0");
     setCategoryKey(defaultCategory);
     setAutoSync(false);
   };
@@ -79,7 +84,7 @@ export const ExternalSourceLinkForm = ({
       await createExternalSource(projectId, {
         category_key: categoryKey,
         sheet_url: sheetUrl.trim(),
-        sheet_gid: Number(sheetGid) || 0,
+        sheet_gid: 0,
         auto_sync_enabled: autoSync,
       });
       notify(
@@ -108,27 +113,22 @@ export const ExternalSourceLinkForm = ({
         disabled={disabled}
       >
         <Link2 className="size-4" />
-        Nhập từ link công khai
+        Google Docs Link
       </Button>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h4 className="text-body font-semibold">Nhập từ link Google Sheet công khai</h4>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setOpen(false)}
-          disabled={submitting}
-        >
-          Hủy
-        </Button>
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+      {/* Header */}
+      <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
+        <FileText className="size-4 text-primary" aria-hidden="true" />
+        <h4 className="text-body font-semibold">Google Doc Link</h4>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5 sm:col-span-2">
+
+      {/* Body */}
+      <div className="space-y-4 p-4">
+        <div className="space-y-1.5">
           <Label htmlFor="ext-src-url">Link Google Sheet</Label>
           <Input
             id="ext-src-url"
@@ -147,52 +147,68 @@ export const ExternalSourceLinkForm = ({
             </p>
           )}
         </div>
+
         <div className="space-y-1.5">
-          <Label htmlFor="ext-src-category">Danh mục đích</Label>
-          <select
-            id="ext-src-category"
+          <Label htmlFor="ext-src-category">Danh mục</Label>
+          <Select
             value={categoryKey}
-            onChange={(event) =>
-              setCategoryKey(event.target.value as KnowledgeCategoryKey)
+            onValueChange={(value) =>
+              setCategoryKey(value as KnowledgeCategoryKey)
             }
             disabled={submitting}
-            className={cn(
-              "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1",
-              "text-body shadow-sm transition-colors focus-visible:outline-none",
-              "focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed",
-              "disabled:opacity-50",
-            )}
           >
-            {CATEGORY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="ext-src-category" className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORY_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="ext-src-gid">ID trang (gid, nâng cao)</Label>
-          <Input
-            id="ext-src-gid"
-            value={sheetGid}
-            onChange={(event) => setSheetGid(event.target.value)}
-            inputMode="numeric"
+
+        <label
+          htmlFor="ext-src-autosync"
+          className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/40"
+        >
+          <span className="space-y-0.5">
+            <span className="block text-body font-medium">
+              Đồng bộ tự động hàng ngày
+            </span>
+            <span className="block text-body-sm text-muted-foreground">
+              Ghi đè nội dung hiện tại khi Sheet thay đổi.
+            </span>
+          </span>
+          <Switch
+            id="ext-src-autosync"
+            checked={autoSync}
+            onCheckedChange={setAutoSync}
             disabled={submitting}
+            aria-label="Bật đồng bộ tự động hàng ngày"
           />
-        </div>
+        </label>
       </div>
-      <label className="flex items-center gap-2 text-body">
-        <input
-          type="checkbox"
-          checked={autoSync}
-          onChange={(event) => setAutoSync(event.target.checked)}
+
+      {/* Footer */}
+      <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-4 py-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(false)}
           disabled={submitting}
-          className="size-4"
-        />
-        Bật đồng bộ tự động hàng ngày (ghi đè nội dung hiện tại khi Sheet thay đổi)
-      </label>
-      <div className="flex justify-end">
-        <Button type="button" onClick={() => void submit()} disabled={submitting}>
+        >
+          Hủy
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void submit()}
+          disabled={submitting}
+        >
           {submitting ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
