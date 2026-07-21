@@ -1172,10 +1172,20 @@ def _render_units(document: CategoryDocument) -> list[dict]:
     for record in getattr(document, definition.list_field):
         payload = record.model_dump(mode="json", exclude_none=True)
         stable_id = str(payload.get("id"))
+        # FaqItem carries per-item tags (section / sub-category from the source
+        # sheet). Pop them out of the generic field dump so they do not appear
+        # as a mid-payload JSON array in arbitrary field order, then re-attach
+        # as a deterministic trailing "Tags:" line in the embedder input. The
+        # parser already emits tags in a stable order (broad section → specific
+        # sub-category); that order is preserved as-is, not re-sorted. Other
+        # categories have no ``tags`` field, so the pop is a harmless no-op.
+        tags = payload.pop("tags", [])
         content = f"{definition.label_vi}\n" + "\n".join(
             f"{field}: {json.dumps(value, ensure_ascii=False)}"
             for field, value in payload.items()
         )
+        if tags:
+            content += f"\nTags: {', '.join(tags)}"
         unit = {
             "content": content,
             "source_quote": content,
@@ -1193,5 +1203,9 @@ def _render_units(document: CategoryDocument) -> list[dict]:
             unit["questions"] = [payload["question"], *payload.get("question_variants", [])]
             unit["required_terms"] = payload.get("required_terms", [])
             unit["forbidden_terms"] = payload.get("forbidden_terms", [])
+            # Mirror tags into chunk metadata — same chunk_metadata.tags shape
+            # canonical.to_unit uses — so a future pgvector metadata-filter
+            # consumer can target them. No consumer reads this today.
+            unit["metadata"]["chunk_metadata"] = {"tags": tags}
         units.append(unit)
     return units

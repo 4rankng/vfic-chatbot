@@ -101,9 +101,8 @@ async def lifespan(app: FastAPI):
 
             register_unique_tick(sched, run_external_source_sync_tick, EXT_SYNC_INTERVAL)
             logger.info(
-                "external source sync tick registered: interval=%ds enabled=%s",
+                "external source sync tick registered: interval=%ds",
                 EXT_SYNC_INTERVAL,
-                settings.external_source_sync_enabled,
             )
         except Exception:  # noqa: BLE001
             logger.exception("external source sync scheduler registration failed (non-fatal)")

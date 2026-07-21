@@ -35,26 +35,23 @@ def _db_returning_state_ids(state_ids):
 
 
 @pytest.mark.asyncio
-async def test_tick_noop_when_globally_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.core.config.get_settings",
-        lambda: SimpleNamespace(external_source_sync_enabled=False),
-    )
+async def test_tick_noop_when_no_auto_sync_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tick is a no-op when no rows have auto_sync_enabled=true.
+
+    Replaces the old test_tick_noop_when_globally_disabled — the global kill
+    switch was removed; per-row auto_sync_enabled is now the sole control.
+    """
     enqueued = []
     monkeypatch.setattr(w, "enqueue_one_shot", lambda *a, **k: enqueued.append(a) or "job")
-    db = _db_returning_state_ids([uuid.uuid4()])
+    db = _db_returning_state_ids([])
     monkeypatch.setattr("app.workers._db.worker_session", lambda: _FakeSessionCM(db))
 
     await w._tick_async()
-    assert enqueued == []  # never queried/enqueued when disabled
+    assert enqueued == []
 
 
 @pytest.mark.asyncio
 async def test_tick_enqueues_one_job_per_auto_sync_row(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.core.config.get_settings",
-        lambda: SimpleNamespace(external_source_sync_enabled=True),
-    )
     ids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
     enqueued = []
     monkeypatch.setattr(w, "enqueue_one_shot", lambda state_id, job_id=None: enqueued.append((str(state_id), job_id)) or f"job-{state_id}")

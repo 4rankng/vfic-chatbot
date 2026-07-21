@@ -149,25 +149,58 @@ def _reject_private_host(host: str) -> None:
             raise ExternalSourceSyncError("private_or_loopback_ip")
 
 
+async def _assert_allowed_host(url: str) -> None:
+    """SSRF gate applied to every request hop (initial + redirects).
+
+    Google's CSV export returns a 307 to ``googleusercontent.com``; we must
+    follow it to reach the real CSV, but every hop must clear the same SSRF
+    allow-list + DNS-pin as the initial URL. Used as an httpx async event hook.
+    """
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https":
+        raise ExternalSourceSyncError("scheme_not_https")
+    if not host:
+        raise ExternalSourceSyncError("invalid_url")
+    try:
+        ipaddress.ip_address(host)
+        raise ExternalSourceSyncError("ip_literal_forbidden")
+    except ValueError:
+        pass  # not an IP literal — good
+    if not (host in ALLOWED_HOSTS or any(host.endswith("." + s) for s in ALLOWED_HOST_SUFFIXES)):
+        raise ExternalSourceSyncError("host_not_allowed")
+    # getaddrinfo is blocking — offload so a slow/NXDOMAIN lookup does not
+    # stall the worker event loop (AGENTS.md: keep I/O async).
+    await asyncio.to_thread(_reject_private_host, host)
+
+
 class SheetClient:
     """One-shot httpx client per fetch (never the process singleton — Finding 2)."""
 
     async def fetch_csv(self, url: str, gid: int = 0) -> str:
         validate_sheet_url(url)
         sheet_id = extract_sheet_id(url)
-        host = urllib.parse.urlparse(url).hostname or ""
-        # getaddrinfo is blocking — offload so a slow/NXDOMAIN lookup does not
-        # stall the worker event loop (AGENTS.md: keep I/O async).
-        await asyncio.to_thread(_reject_private_host, host.lower())
         export_url = (
             f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
         )
+
+        async def _ssrf_gate(request: httpx.Request) -> None:
+            """Per-hop SSRF gate — runs for the initial request and every redirect."""
+            await _assert_allowed_host(str(request.url))
+
         async with httpx.AsyncClient(
-            follow_redirects=False,
+            follow_redirects=True,
+            max_redirects=3,
+            event_hooks={"request": [_ssrf_gate]},
             timeout=httpx.Timeout(DEFAULT_HTTP_TIMEOUT),
         ) as client:
             try:
                 resp = await client.get(export_url)
+            except ExternalSourceSyncError:
+                # SSRF rejection from _ssrf_gate — propagate the precise code
+                # (host_not_allowed / scheme_not_https / private_or_loopback_ip)
+                # instead of relabelling it as fetch_failed.
+                raise
             except httpx.HTTPError as exc:
                 raise ExternalSourceSyncError("fetch_failed", str(exc)) from exc
         if resp.status_code in (401, 403, 404, 410):

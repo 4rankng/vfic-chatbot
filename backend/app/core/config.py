@@ -363,11 +363,10 @@ class Settings(BaseSettings):
     decision_trace_retention_days: int = 30
     decision_trace_retention_batch_size: int = 200
     decision_trace_retention_interval_seconds: int = 86400  # daily
-    # External knowledge-source sync (public Google Sheet → category revision).
-    # Global kill switch only; per-link config lives in external_source_sync_state
-    # and interval/job-timeout are module constants in
-    # external_source_sync_worker.py (Validation Session 1 Q1).
-    external_source_sync_enabled: bool = False
+    # External knowledge-source sync (public Google Sheet → category revision)
+    # has no global kill switch: per-link auto_sync_enabled on each
+    # external_source_sync_state row is the sole control. Interval/job-timeout
+    # are module constants in external_source_sync_worker.py.
 
     @property
     def cors_origins_list(self) -> list[str]:

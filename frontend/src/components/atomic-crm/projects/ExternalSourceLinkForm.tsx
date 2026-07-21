@@ -113,7 +113,7 @@ export const ExternalSourceLinkForm = ({
         disabled={disabled}
       >
         <Link2 className="size-4" />
-        Google Docs Link
+        Gsheet Link
       </Button>
     );
   }
@@ -123,7 +123,7 @@ export const ExternalSourceLinkForm = ({
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
         <FileText className="size-4 text-primary" aria-hidden="true" />
-        <h4 className="text-body font-semibold">Google Doc Link</h4>
+        <h4 className="text-body font-semibold">Gsheet Link</h4>
       </div>
 
       {/* Body */}

@@ -228,13 +228,11 @@ async def _external_source_sync(db: AsyncSession, _interval: timedelta) -> dict:
     Surfaced as a JSON field (no chart in v1). Counters are bumped by the worker
     via the sync Redis client and read here via the async client — same Redis DB.
     """
-    from app.core.config import get_settings
     from app.core.redis import get_redis
 
     # Guard the table read the same way the Redis reads below are guarded: a
     # missing/partial migration (this project has a history of alembic deploy
-    # blockers) must never take down the whole performance dashboard, and the
-    # feature ships disabled by default so the table may legitimately be absent.
+    # blockers) must never take down the whole performance dashboard.
     try:
         row = (
             await db.execute(
@@ -256,7 +254,6 @@ async def _external_source_sync(db: AsyncSession, _interval: timedelta) -> dict:
     except Exception:  # noqa: BLE001 — Redis must never break the dashboard
         success = failure = None
     return {
-        "enabled": get_settings().external_source_sync_enabled,
         "auto_sync_count": auto_sync_count,
         "last_synced_at_max": last_synced_at_max,
         "success_total": int(success) if success else 0,

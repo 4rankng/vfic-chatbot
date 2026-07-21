@@ -40,14 +40,8 @@ def run_external_source_sync_tick() -> None:
 
 
 async def _tick_async() -> None:
-    from app.core.config import get_settings
     from app.models.external_source_sync_state import ExternalSourceSyncState
     from app.workers._db import worker_session
-
-    settings = get_settings()
-    if not settings.external_source_sync_enabled:
-        logger.info("external_source_sync disabled globally; tick is a no-op")
-        return
 
     today = date.today().isoformat()
     async with worker_session() as db:

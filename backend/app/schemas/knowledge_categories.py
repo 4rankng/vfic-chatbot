@@ -352,6 +352,7 @@ class FaqItem(StrictModel):
     id: StableId
     question: NonEmptyText
     answer: NonEmptyText
+    tags: list[str] = Field(default_factory=list, max_length=50)
     question_variants: list[str] = Field(default_factory=list, max_length=50)
     required_terms: list[str] = Field(default_factory=list, max_length=50)
     forbidden_terms: list[str] = Field(default_factory=list, max_length=50)

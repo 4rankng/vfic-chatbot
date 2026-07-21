@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import httpx
+
 from app.schemas.knowledge_categories import FaqDocument, KnowledgeCategoryKey
 from app.services.knowledge import external_source_sync as ess
 from app.services.knowledge.category_contracts import category_checksum, parse_category_yaml
@@ -106,6 +108,111 @@ def test_parse_raises_on_unexpected_header() -> None:
     csv_text = "Title,,\nSec,Q1?,A1\n"
     with pytest.raises(ValueError, match="unexpected_header"):
         parse_faq_csv(csv_text)
+
+
+def test_parse_auto_detects_four_column_layout() -> None:
+    """Regression: real LG Display sheet uses a 4-column layout (STT, Thông tin,
+    Câu hỏi, Trả lời), not the original 3-column (Section, Q, A) the parser was
+    hardcoded against. The header auto-detector must find the question column by
+    its sentinel value, not by position, so the parser survives future column
+    insertions/removals.
+    """
+    payload = parse_faq_csv(_read("faq_sheet_four_column.csv"))
+    document = FaqDocument(**payload)
+    questions = {item.question for item in document.faq}
+    assert "LG Display tuyển đến bao nhiêu tuổi?" in questions
+    assert "Công ty có yêu cầu bằng cấp không?" in questions
+    # Sample answer body survived the round-trip.
+    answers = {item.answer for item in document.faq}
+    assert any("18 tuổi" in a for a in answers)
+    # Tags: section (inherited across blank cells, ordinal stripped) +
+    # sub-category. The first data row carries the section value; the second
+    # has a blank section cell and must inherit it.
+    by_question = {item.question: item for item in document.faq}
+    assert by_question["LG Display tuyển đến bao nhiêu tuổi?"].tags == [
+        "Thông tin trước khi phỏng vấn",
+        "Độ tuổi",
+    ]
+    assert by_question["Công ty có yêu cầu bằng cấp không?"].tags == [
+        "Thông tin trước khi phỏng vấn",
+        "Yêu cầu khi đi xin việc",
+    ]
+
+
+def test_parse_extracts_tags_from_category_columns() -> None:
+    """Section + sub-category columns become per-item tags.
+
+    Section (``STT theo quy trình``) is a grouping label: blank cells inherit
+    the most recent non-empty value above, and its leading ordinal is stripped.
+    Sub-category (``Thông tin``) is per-row: a blank cell contributes no tag
+    (it is NOT inherited). The original 3-column sheet has a sub-category column
+    but no section column, so its tags are sub-category-only.
+    """
+    # 4-column: section present. Empty sub-category row → section tag only.
+    four = parse_faq_csv(_read("faq_sheet_four_column.csv"))
+    by_q = {item["question"]: item for item in four["faq"]}
+    # Ordinal stripped: "1. Thông tin trước khi phỏng vấn" → no "1. ".
+    assert by_q["Đi làm tại LG Display có cần phỏng vấn không?"]["tags"] == [
+        "Thông tin trước khi phỏng vấn",
+        "Quy trình",
+    ]
+
+    # 3-column: sub-category only (no section column). Blank sub-category cell
+    # → no tag (sub-category is per-row, not inherited).
+    three = parse_faq_csv(_read("faq_sheet_synthetic.csv"))
+    by_q3 = {item["question"]: item for item in three["faq"]}
+    assert by_q3["Câu hỏi: lương một tháng bao nhiêu?"]["tags"] == ["Yêu cầu"]
+    assert by_q3["Câu hỏi: công ty có chỗ ở không?"]["tags"] == []
+    assert by_q3["Câu hỏi: công ty có bữa ăn không?"]["tags"] == ["Phúc lợi"]
+
+
+def test_parse_ignores_ordinal_only_section_cell() -> None:
+    """A malformed section cell holding only an ordinal (e.g. ``2.``) must not
+    clobber the inherited section — it is treated as blank, so subsequent rows
+    keep inheriting the last real section label.
+    """
+    csv_text = (
+        "Title,,,\n"
+        "STT theo quy trình,Thông tin,Câu hỏi thường gặp,Thông tin trả lời\n"
+        "1. Thông tin trước khi phỏng vấn,Độ tuổi,Q1?,A1\n"
+        "2. ,Yêu cầu,Q2?,A2\n"  # ordinal only — must NOT clear the section
+        "3. Khi đi phỏng vấn,Trang phục,Q3?,A3\n"
+    )
+    payload = parse_faq_csv(csv_text)
+    by_q = {item["question"]: item for item in payload["faq"]}
+    # Q2 follows an ordinal-only cell; it must still inherit section 1's label.
+    assert by_q["Q2?"]["tags"] == ["Thông tin trước khi phỏng vấn", "Yêu cầu"]
+    # A genuine new section still takes effect afterwards.
+    assert by_q["Q3?"]["tags"] == ["Khi đi phỏng vấn", "Trang phục"]
+
+
+def test_parse_tags_round_trip_through_category_yaml() -> None:
+    """Tags survive parser → canonical YAML → parse_category_yaml → FaqDocument,
+    the path the orchestrator uses to stage an active revision.
+    """
+    payload = parse_faq_csv(_read("faq_sheet_four_column.csv"))
+    source_yaml = ess.build_source_yaml(payload)
+    document = parse_category_yaml(KnowledgeCategoryKey.FAQ, source_yaml)
+    by_question = {item.question: item for item in document.faq}
+    assert by_question["LG Display tuyển đến bao nhiêu tuổi?"].tags == [
+        "Thông tin trước khi phỏng vấn",
+        "Độ tuổi",
+    ]
+
+
+def test_parse_survives_extra_prefix_column_insertion() -> None:
+    """If the sheet owner inserts a new column before the question column, the
+    parser should still locate Q&A by their header sentinels.
+    """
+    csv_text = (
+        "Title,,,\n"
+        "NewCol,Section,Câu hỏi thường gặp,Thông tin trả lời\n"
+        "X,Y,Q1?,A1\n"
+    )
+    payload = parse_faq_csv(csv_text)
+    assert payload["faq"] == [
+        {"id": "q1", "question": "Q1?", "answer": "A1", "tags": []},
+    ]
 
 
 def test_parse_output_passes_faqdocument_schema() -> None:
@@ -293,6 +400,73 @@ async def test_fetch_returns_csv_body(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_httpx(monkeypatch, _FakeResponse(200, _read("faq_sheet_synthetic.csv")))
     body = await SheetClient().fetch_csv(SHEET_URL)
     assert "Câu hỏi thường gặp" in body
+
+
+@pytest.mark.asyncio
+async def test_fetch_follows_google_307_to_googleusercontent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: Google's CSV export returns a 307 to googleusercontent.com.
+
+    Pre-fix the client had ``follow_redirects=False`` and the fetch died with
+    ``unexpected_content_type`` on the HTML redirect body. The fix enables
+    redirect following with a per-hop SSRF allow-list gate.
+    """
+    # Use httpx.MockTransport so the REAL AsyncClient (follow_redirects=True +
+    # event_hooks SSRF gate) is exercised — this is the only way to test that
+    # _ssrf_gate fires on the redirect hop and clears googleusercontent.com.
+    csv_body = _read("faq_sheet_synthetic.csv")
+    googleusercontent_url = (
+        "https://doc-0o-50-sheets.googleusercontent.com/export/"
+        "abc/def/1784636820000/116540585675426311373/*/"
+        "1rRk4wfKb90IxJAbywimgGDOV3Y7g8RbW1EpBabZmFw8?format=csv&gid=0"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "docs.google.com" in request.url.host:
+            return httpx.Response(307, headers={"location": googleusercontent_url})
+        if "googleusercontent.com" in request.url.host:
+            return httpx.Response(200, text=csv_body, headers={"content-type": "text/csv"})
+        raise AssertionError(f"unexpected host: {request.url.host}")
+
+    # Capture the real AsyncClient before patching so the lambda does not
+    # recurse into the patched attribute.
+    real_async_client = ess.httpx.AsyncClient
+    monkeypatch.setattr(
+        ess.httpx,
+        "AsyncClient",
+        lambda *a, **k: real_async_client(transport=httpx.MockTransport(handler), *a, **k),
+    )
+    # Bypass real DNS for the allow-listed hosts (MockTransport never connects).
+    monkeypatch.setattr(ess, "_reject_private_host", lambda _host: None)
+
+    body = await SheetClient().fetch_csv(SHEET_URL)
+    assert "Câu hỏi thường gặp" in body
+
+
+@pytest.mark.asyncio
+async def test_fetch_rejects_redirect_to_disallowed_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SSRF defense: a redirect to a host outside the Google allow-list is rejected.
+
+    The per-hop ``_ssrf_gate`` event hook fires on every redirect, so an
+    attacker-controlled Location (e.g. to an internal IP via DNS rebinding)
+    cannot escape the allow-list by hiding behind a docs.google.com 307.
+    """
+    evil_url = "https://evil.example.com/exfil"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "docs.google.com" in request.url.host:
+            return httpx.Response(307, headers={"location": evil_url})
+        raise AssertionError("request should never reach evil.example.com")
+
+    real_async_client = ess.httpx.AsyncClient
+    monkeypatch.setattr(
+        ess.httpx,
+        "AsyncClient",
+        lambda *a, **k: real_async_client(transport=httpx.MockTransport(handler), *a, **k),
+    )
+    monkeypatch.setattr(ess, "_reject_private_host", lambda _host: None)
+
+    with pytest.raises(ExternalSourceSyncError, match="host_not_allowed"):
+        await SheetClient().fetch_csv(SHEET_URL)
 
 
 # --------------------------------------------------------------------------- #
