@@ -55,7 +55,15 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "tt-modal-box bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          // tt-modal-box (daisyUI modal-box, via the "tt-" prefix) ships a
+          // closed-state opacity:0 / scale:.95 that is only cleared by daisyUI's
+          // OWN open mechanism (.modal-open / [open] / :target). Radix opens via
+          // data-state="open", which daisyUI never sees, so without these
+          // overrides the dialog content renders permanently invisible
+          // (overlay darkens but no box appears). Force visible when Radix
+          // opens; the animate-in/fade-in/zoom-in utilities still play the
+          // enter transition on top.
+          "tt-modal-box data-[state=open]:opacity-100 data-[state=open]:scale-100 bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
           className
         )}
         {...props}

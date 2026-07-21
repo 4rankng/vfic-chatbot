@@ -104,17 +104,9 @@ restore:
 	echo "Running Alembic stamp (mark DB as at head)..." && \
 	.venv/bin/python -m alembic stamp head 2>/dev/null || true && \
 	echo "Resetting all user passwords to admin123..." && \
-	.venv/bin/python -c " \
-import sys; sys.path.insert(0,'.'); \
-from app.core.security import hash_password_sync; \
-from sqlalchemy import create_engine, text; \
-from app.core.config import get_settings; \
-s=get_settings(); e=create_engine(s.database_url_sync); \
-h=hash_password_sync('admin123'); \
-r=e.execute(text('UPDATE users SET password_hash=:h, token_version=token_version+1'), {'h':h}); \
-e.commit(); print(f'reset {r.rowcount} user(s)')" && \
+	.venv/bin/python -m scripts.reset_passwords --password admin123 && \
 	echo "Creating admin user if missing..." && \
-	.venv/bin/python -m scripts.create_admin --only-if-no-admins --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true && \
+	( .venv/bin/python -m scripts.create_admin --only-if-no-admins --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true ) && \
 	echo "Restore complete!" && \
 	echo "  All users reset to password: admin123"
 
