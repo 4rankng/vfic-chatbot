@@ -33,6 +33,10 @@ class KnowledgeBaseService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    @staticmethod
+    def canonical_direct_file_stats(text: str):
+        return canonical_kb_text_stats(text)
+
     async def list(self) -> list[KnowledgeBase]:
         return list((await self.db.scalars(select(KnowledgeBase).order_by(KnowledgeBase.name))).all())
 
@@ -121,11 +125,13 @@ class KnowledgeBaseService:
         knowledge_base_id: uuid.UUID,
         body: DirectContextFileUpsert,
         actor: User,
+        *,
+        commit: bool = True,
     ) -> KnowledgeBaseDirectFile:
         knowledge_base = await self.get(knowledge_base_id)
         if knowledge_base.mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
             raise ConflictError("Only direct-context knowledge bases accept a direct text file")
-        stats = canonical_kb_text_stats(body.text)
+        stats = self.canonical_direct_file_stats(body.text)
         if not stats.normalized_text:
             raise ConflictError("Direct-context knowledge text cannot be empty")
         direct_file = await self.db.scalar(
@@ -165,8 +171,9 @@ class KnowledgeBaseService:
             target_type="knowledge_base",
             target_id=str(knowledge_base.id),
         )
-        await self.db.commit()
-        await self.db.refresh(direct_file)
+        if commit:
+            await self.db.commit()
+            await self.db.refresh(direct_file)
         return direct_file
 
     async def bootstrap_legacy(

@@ -42,6 +42,7 @@ const ProjectListContent = () => {
     () =>
       projects.reduce(
         (acc, project) => {
+          if (project.knowledge_mode === "DIRECT_CONTEXT") return acc;
           const totalFeatures = project.feature_readiness?.total ?? 0;
           const readyFeatures = project.feature_readiness?.ready ?? 0;
           return {
@@ -102,9 +103,7 @@ const ProjectListContent = () => {
               projects={projects}
               isAdmin={isAdmin}
               canEdit={canEdit}
-              onEdit={(project) =>
-                redirect("edit", "projects", project.id)
-              }
+              onEdit={(project) => redirect("edit", "projects", project.id)}
               onDeleted={() => refresh()}
             />
           ) : (
@@ -145,10 +144,14 @@ export const ProjectAccordionList = ({
     <Accordion type="single" collapsible className="project-accordion-list">
       {projects.map((project) => {
         const projectId = String(project.id);
+        const isSinglePage = project.knowledge_mode === "DIRECT_CONTEXT";
         const readinessReady = project.feature_readiness?.ready;
         const readinessTotal = project.feature_readiness?.total ?? 16;
-        const readinessText =
-          typeof readinessReady === "number"
+        const readinessText = isSinglePage
+          ? (project.knowledge_document_count ?? 0) > 0
+            ? "Đã sẵn sàng"
+            : "Chưa có trang"
+          : typeof readinessReady === "number"
             ? `${readinessReady}/${readinessTotal}`
             : "Chưa đo";
 
@@ -201,7 +204,7 @@ export const ProjectAccordionList = ({
                   <div>
                     <dt>
                       <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                      Thông tin đủ
+                      {isSinglePage ? "Trang kiến thức" : "Thông tin đủ"}
                     </dt>
                     <dd>{readinessText}</dd>
                   </div>

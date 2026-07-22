@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   createExternalSource: vi.fn(),
+  createSinglePageExternalSource: vi.fn(),
 }));
 
 vi.mock("ra-core", () => ({
@@ -11,8 +12,9 @@ vi.mock("ra-core", () => ({
 }));
 
 vi.mock("@/lib/vfic/knowledgeService", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/vfic/knowledgeService")>()),
+  ...(await importOriginal()),
   createExternalSource: mocks.createExternalSource,
+  createSinglePageExternalSource: mocks.createSinglePageExternalSource,
   // isValidGoogleSheetUrl stays real — it is the contract under test.
 }));
 
@@ -22,6 +24,7 @@ describe("ExternalSourceLinkForm", () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.createExternalSource.mockResolvedValue({ id: "src-1" });
+    mocks.createSinglePageExternalSource.mockResolvedValue({ id: "src-sp-1" });
   });
 
   it("rejects a non-Google URL before submit", async () => {
@@ -66,5 +69,73 @@ describe("ExternalSourceLinkForm", () => {
       expect.stringContaining("Đã thêm nguồn"),
       { type: "success" },
     );
+  });
+
+  it("blocks single-page submission when the Google Sheet link has no explicit gid", async () => {
+    const screen = await render(
+      <ExternalSourceLinkForm
+        projectId="project-1"
+        variant="single-page"
+      />,
+    );
+    await screen
+      .getByRole("button", { name: "Liên kết Google Sheet" })
+      .click();
+    await screen.getByLabelText("Link Google Sheet").fill(
+      "https://docs.google.com/spreadsheets/d/demo/edit",
+    );
+
+    await expect
+      .element(
+        screen.getByText(/Link phải có gid rõ ràng trong `\?gid=` hoặc `#gid=`/),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Nhập một lần" }))
+      .toBeDisabled();
+  });
+
+  it("submits the original single-page URL and lets the backend own gid persistence", async () => {
+    const screen = await render(
+      <ExternalSourceLinkForm
+        projectId="project-1"
+        variant="single-page"
+      />,
+    );
+    await screen
+      .getByRole("button", { name: "Liên kết Google Sheet" })
+      .click();
+    const originalUrl =
+      "https://docs.google.com/spreadsheets/d/demo/edit?usp=sharing#gid=987654321";
+    await screen.getByLabelText("Link Google Sheet").fill(originalUrl);
+    await screen.getByRole("button", { name: "Nhập một lần" }).click();
+
+    await vi.waitFor(() =>
+      expect(mocks.createSinglePageExternalSource).toHaveBeenCalledTimes(1),
+    );
+    const [, payload] = mocks.createSinglePageExternalSource.mock.calls[0];
+    expect(payload).toEqual({
+      sheet_url: originalUrl,
+      auto_sync_enabled: false,
+    });
+  });
+
+  it("shows the overwrite warning when single-page auto-sync is enabled", async () => {
+    const screen = await render(
+      <ExternalSourceLinkForm
+        projectId="project-1"
+        variant="single-page"
+      />,
+    );
+    await screen
+      .getByRole("button", { name: "Liên kết Google Sheet" })
+      .click();
+    await screen.getByLabelText("Bật đồng bộ tự động hàng ngày").click();
+
+    await expect
+      .element(
+        screen.getByText("Đồng bộ tự động có thể ghi đè chỉnh sửa tay"),
+      )
+      .toBeVisible();
   });
 });

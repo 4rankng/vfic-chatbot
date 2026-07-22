@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useNotify } from "ra-core";
-import { FileText, Link2, Loader2 } from "lucide-react";
+import { AlertCircle, FileText, Link2, Loader2 } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,8 +18,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
+  createSinglePageExternalSource,
   createExternalSource,
   isValidGoogleSheetUrl,
+  resolveGoogleSheetGid,
   type KnowledgeCategoryKey,
 } from "@/lib/vfic/knowledgeService";
 
@@ -38,6 +45,7 @@ type Props = {
   defaultCategory?: KnowledgeCategoryKey;
   onCreated?: () => void;
   disabled?: boolean;
+  variant?: "category" | "single-page";
 };
 
 /**
@@ -51,6 +59,7 @@ export const ExternalSourceLinkForm = ({
   defaultCategory = "faq",
   onCreated,
   disabled = false,
+  variant = "category",
 }: Props) => {
   const notify = useNotify();
   const [open, setOpen] = useState(false);
@@ -59,8 +68,20 @@ export const ExternalSourceLinkForm = ({
     useState<KnowledgeCategoryKey>(defaultCategory);
   const [autoSync, setAutoSync] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const isSinglePage = variant === "single-page";
 
   const urlValid = sheetUrl.trim() === "" || isValidGoogleSheetUrl(sheetUrl);
+  const gidResolution = sheetUrl.trim()
+    ? resolveGoogleSheetGid(sheetUrl)
+    : null;
+  const gidValid = !isSinglePage || !sheetUrl.trim() || gidResolution?.ok;
+  const gidHint = isSinglePage
+    ? gidResolution?.ok
+      ? `Sẽ đồng bộ đúng tab gid=${gidResolution.gid} từ ${
+          gidResolution.source === "fragment" ? "phần #gid" : "tham số ?gid"
+        } của link.`
+      : gidResolution?.message ?? null
+    : null;
 
   const reset = () => {
     setSheetUrl("");
@@ -79,14 +100,29 @@ export const ExternalSourceLinkForm = ({
       });
       return;
     }
+    if (isSinglePage && !gidResolution?.ok) {
+      notify(
+        gidResolution?.message ??
+          "Link cần có gid rõ ràng để chọn đúng trang tính.",
+        { type: "warning" },
+      );
+      return;
+    }
     setSubmitting(true);
     try {
-      await createExternalSource(projectId, {
-        category_key: categoryKey,
-        sheet_url: sheetUrl.trim(),
-        sheet_gid: 0,
-        auto_sync_enabled: autoSync,
-      });
+      if (isSinglePage) {
+        await createSinglePageExternalSource(projectId, {
+          sheet_url: sheetUrl.trim(),
+          auto_sync_enabled: autoSync,
+        });
+      } else {
+        await createExternalSource(projectId, {
+          category_key: categoryKey,
+          sheet_url: sheetUrl.trim(),
+          sheet_gid: 0,
+          auto_sync_enabled: autoSync,
+        });
+      }
       notify(
         autoSync
           ? "Đã thêm nguồn và bật đồng bộ tự động. Đang nhập nội dung lần đầu."
@@ -113,7 +149,7 @@ export const ExternalSourceLinkForm = ({
         disabled={disabled}
       >
         <Link2 className="size-4" />
-        Gsheet Link
+        {isSinglePage ? "Liên kết Google Sheet" : "Gsheet Link"}
       </Button>
     );
   }
@@ -123,21 +159,35 @@ export const ExternalSourceLinkForm = ({
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
         <FileText className="size-4 text-primary" aria-hidden="true" />
-        <h4 className="text-body font-semibold">Gsheet Link</h4>
+        <h4 className="text-body font-semibold">
+          {isSinglePage ? "Google Sheet 1 trang" : "Gsheet Link"}
+        </h4>
       </div>
 
       {/* Body */}
       <div className="space-y-4 p-4">
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label htmlFor="ext-src-url">Link Google Sheet</Label>
           <Input
             id="ext-src-url"
             value={sheetUrl}
             onChange={(event) => setSheetUrl(event.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
+            placeholder={
+              isSinglePage
+                ? "https://docs.google.com/spreadsheets/d/.../edit#gid=123456789"
+                : "https://docs.google.com/spreadsheets/d/..."
+            }
             inputMode="url"
-            aria-invalid={!urlValid}
-            aria-describedby={!urlValid ? "ext-src-url-error" : undefined}
+            aria-invalid={!urlValid || !gidValid}
+            aria-describedby={
+              !urlValid
+                ? "ext-src-url-error"
+                : !gidValid
+                  ? "ext-src-gid-error"
+                  : isSinglePage && gidResolution?.ok
+                    ? "ext-src-gid-preview"
+                    : undefined
+            }
             disabled={submitting}
           />
           {!urlValid && (
@@ -146,50 +196,76 @@ export const ExternalSourceLinkForm = ({
               link can view").
             </p>
           )}
+          {isSinglePage && urlValid && gidHint && (
+            <p
+              id={gidResolution?.ok ? "ext-src-gid-preview" : "ext-src-gid-error"}
+              className={
+                gidResolution?.ok
+                  ? "text-body-sm text-muted-foreground"
+                  : "text-body-sm text-destructive"
+              }
+            >
+              {gidHint}
+            </p>
+          )}
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="ext-src-category">Danh mục</Label>
-          <Select
-            value={categoryKey}
-            onValueChange={(value) =>
-              setCategoryKey(value as KnowledgeCategoryKey)
-            }
-            disabled={submitting}
-          >
-            <SelectTrigger id="ext-src-category" className="h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORY_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {!isSinglePage && (
+          <div className="space-y-1.5">
+            <Label htmlFor="ext-src-category">Danh mục</Label>
+            <Select
+              value={categoryKey}
+              onValueChange={(value) =>
+                setCategoryKey(value as KnowledgeCategoryKey)
+              }
+              disabled={submitting}
+            >
+              <SelectTrigger id="ext-src-category" className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <label
           htmlFor="ext-src-autosync"
           className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/40"
         >
-          <span className="space-y-0.5">
-            <span className="block text-body font-medium">
-              Đồng bộ tự động hàng ngày
+            <span className="space-y-0.5">
+              <span className="block text-body font-medium">
+                Đồng bộ tự động hàng ngày
+              </span>
+              <span className="block text-body-sm text-muted-foreground">
+                {isSinglePage
+                  ? "Tự làm mới trang kiến thức khi Google Sheet thay đổi."
+                  : "Ghi đè nội dung hiện tại khi Sheet thay đổi."}
+              </span>
             </span>
-            <span className="block text-body-sm text-muted-foreground">
-              Ghi đè nội dung hiện tại khi Sheet thay đổi.
-            </span>
-          </span>
-          <Switch
+            <Switch
             id="ext-src-autosync"
             checked={autoSync}
             onCheckedChange={setAutoSync}
             disabled={submitting}
             aria-label="Bật đồng bộ tự động hàng ngày"
-          />
-        </label>
+            />
+          </label>
+        {isSinglePage && autoSync && (
+          <Alert variant="warning">
+            <AlertCircle aria-hidden="true" />
+            <AlertTitle>Đồng bộ tự động có thể ghi đè chỉnh sửa tay</AlertTitle>
+            <AlertDescription>
+              Khi bật lịch hàng ngày, nội dung trong Google Sheet sẽ thay thế
+              nội dung trang kiến thức ở lần đồng bộ tiếp theo.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       {/* Footer */}
@@ -207,7 +283,7 @@ export const ExternalSourceLinkForm = ({
           type="button"
           size="sm"
           onClick={() => void submit()}
-          disabled={submitting}
+          disabled={submitting || !urlValid || !gidValid}
         >
           {submitting ? (
             <Loader2 className="size-4 animate-spin" />

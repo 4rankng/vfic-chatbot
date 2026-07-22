@@ -99,10 +99,14 @@ const SelectedProjectSummary = ({
     );
   }
 
+  const isSinglePage = project.knowledge_mode === "DIRECT_CONTEXT";
   const readinessReady = project.feature_readiness?.ready;
   const readinessTotal = project.feature_readiness?.total ?? 16;
-  const readinessText =
-    typeof readinessReady === "number"
+  const readinessText = isSinglePage
+    ? (project.knowledge_document_count ?? 0) > 0
+      ? "Đã sẵn sàng"
+      : "Chưa có trang"
+    : typeof readinessReady === "number"
       ? `${readinessReady}/${readinessTotal}`
       : "Chưa đo";
 
@@ -148,7 +152,7 @@ const SelectedProjectSummary = ({
         <div>
           <dt>
             <CheckCircle2 className="size-3.5" />
-            Thông tin đủ
+            {isSinglePage ? "Trang kiến thức" : "Thông tin đủ"}
           </dt>
           <dd>{readinessText}</dd>
         </div>
@@ -246,9 +250,13 @@ export const ProjectOperationsPanel = ({
                       </span>
                       <span>
                         <CheckCircle2 className="size-3.5" />
-                        {typeof project.feature_readiness?.ready === "number"
-                          ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16}`
-                          : "Chưa đo"}
+                        {project.knowledge_mode === "DIRECT_CONTEXT"
+                          ? (project.knowledge_document_count ?? 0) > 0
+                            ? "Đã sẵn sàng"
+                            : "Chưa có trang"
+                          : typeof project.feature_readiness?.ready === "number"
+                            ? `${project.feature_readiness.ready}/${project.feature_readiness?.total ?? 16}`
+                            : "Chưa đo"}
                       </span>
                     </div>
                   </div>

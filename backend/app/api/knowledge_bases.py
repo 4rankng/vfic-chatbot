@@ -31,6 +31,7 @@ from app.schemas.knowledge_bases import (
 )
 from app.services.knowledge_base_capacity import direct_context_capacity
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.project.service import ProjectService
 
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
@@ -270,7 +271,15 @@ async def upsert_direct_context_file(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DirectContextFileOut:
-    direct_file = await KnowledgeBaseService(db).upsert_direct_file(knowledge_base_id, body, admin)
+    project_id = await db.scalar(
+        select(Project.id).where(Project.knowledge_base_id == knowledge_base_id)
+    )
+    if project_id is not None:
+        direct_file = await ProjectService(db).replace_single_page(project_id, body, admin)
+    else:
+        direct_file = await KnowledgeBaseService(db).upsert_direct_file(
+            knowledge_base_id, body, admin
+        )
     return DirectContextFileOut.model_validate(direct_file)
 
 

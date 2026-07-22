@@ -37,9 +37,12 @@ class ProjectRepository:
         rows = (
             await self.db.execute(
                 text(
-                    "SELECT p.id AS project_id, count(ktf.id) AS file_count "
+                    "SELECT p.id AS project_id, "
+                    "count(DISTINCT ktf.id) + count(DISTINCT kbdf.id) AS file_count "
                     "FROM projects p "
                     "LEFT JOIN kb_text_files ktf ON ktf.kb_version_id = p.active_kb_version_id "
+                    "LEFT JOIN knowledge_base_direct_files kbdf "
+                    "ON kbdf.knowledge_base_id = p.knowledge_base_id "
                     "WHERE p.id = ANY(CAST(:ids AS uuid[])) "
                     "GROUP BY p.id"
                 ),

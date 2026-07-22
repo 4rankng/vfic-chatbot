@@ -106,6 +106,25 @@ async def lifespan(app: FastAPI):
             )
         except Exception:  # noqa: BLE001
             logger.exception("external source sync scheduler registration failed (non-fatal)")
+        try:
+            from app.workers.single_page_external_source_sync_worker import (
+                DEFAULT_INTERVAL_SECONDS as SINGLE_PAGE_EXT_SYNC_INTERVAL,
+                run_single_page_external_source_sync_tick,
+            )
+
+            register_unique_tick(
+                sched,
+                run_single_page_external_source_sync_tick,
+                SINGLE_PAGE_EXT_SYNC_INTERVAL,
+            )
+            logger.info(
+                "single-page external source sync tick registered: interval=%ds",
+                SINGLE_PAGE_EXT_SYNC_INTERVAL,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "single-page external source sync scheduler registration failed (non-fatal)"
+            )
     except Exception:  # noqa: BLE001
         logger.exception("rq-scheduler setup failed (non-fatal)")
 

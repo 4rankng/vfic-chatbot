@@ -44,6 +44,7 @@ from app.models.case import (
     FollowupStatus as CaseFollowupStatus,
 )
 from app.models.external_source_sync_state import ExternalSourceSyncState
+from app.models.single_page_external_source_sync_state import SinglePageExternalSourceSyncState
 from app.models.password_reset import PasswordResetOtp
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.models.conversation import (
@@ -134,6 +135,7 @@ __all__ = [
     "CaseFollowupStatus",
     "PasswordResetOtp",
     "ExternalSourceSyncState",
+    "SinglePageExternalSourceSyncState",
     "WorkerFeatureCatalog",
     "JobFeatureValue",
     "Conversation",

@@ -17,7 +17,7 @@ import type {
   Persona,
   Project,
 } from "../types";
-import { apiJson } from "../providers/rest/api";
+import { ApiError, apiJson } from "../providers/rest/api";
 import { PageHeading, PageShell } from "../kit";
 
 type DirectFile = {
@@ -53,6 +53,8 @@ const Content = () => {
   const [capacity, setCapacity] = useState<Capacity | null>(null);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [knowledgeLoading, setKnowledgeLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -62,6 +64,8 @@ const Content = () => {
     setFile(null);
     setCapacity(null);
     setText("");
+    setKnowledgeLoading(true);
+    setLoadFailed(false);
 
     const load = async () => {
       try {
@@ -72,20 +76,32 @@ const Content = () => {
           if (active) setProjects(value);
           return;
         }
-        const [directFile, directCapacity] = await Promise.all([
+        const [ownedProjects, directFile, directCapacity] = await Promise.all([
+          apiJson<KnowledgeBaseProject[]>(
+            `/api/v1/knowledge-bases/${kb.id}/projects`,
+          ),
           apiJson<DirectFile>(
             `/api/v1/knowledge-bases/${kb.id}/direct-file`,
-          ).catch(() => null),
+          ).catch((error: unknown) => {
+            if (error instanceof ApiError && error.status === 409) return null;
+            throw error;
+          }),
           apiJson<Capacity>(
             `/api/v1/knowledge-bases/${kb.id}/direct-context-capacity`,
           ).catch(() => null),
         ]);
         if (!active) return;
+        setProjects(ownedProjects);
         setFile(directFile);
         setText(directFile?.text ?? "");
         setCapacity(directCapacity);
       } catch (error) {
-        if (active) notify((error as Error).message, { type: "error" });
+        if (active) {
+          setLoadFailed(true);
+          notify((error as Error).message, { type: "error" });
+        }
+      } finally {
+        if (active) setKnowledgeLoading(false);
       }
     };
     void load();
@@ -104,12 +120,35 @@ const Content = () => {
   );
 
   const saveDirectFile = async () => {
+    if (loadFailed) {
+      notify(
+        "Chưa tải được trạng thái Knowledge Base. Vui lòng tải lại trước khi lưu.",
+        {
+          type: "warning",
+        },
+      );
+      return;
+    }
+    const owningProject = projects[0];
+    if (
+      file &&
+      owningProject &&
+      !owningProject.is_active &&
+      !window.confirm("Lưu tệp mới sẽ bật dự án để Agent sử dụng. Tiếp tục?")
+    ) {
+      return;
+    }
     try {
       await apiJson(`/api/v1/knowledge-bases/${kb.id}/direct-file`, {
         method: "PUT",
         body: { filename: file?.filename ?? "knowledge.md", text },
       });
-      notify("Đã lưu tệp ngữ cảnh trực tiếp.", { type: "success" });
+      notify(
+        owningProject && !owningProject.is_active
+          ? "Đã lưu tệp ngữ cảnh và bật dự án."
+          : "Đã lưu tệp ngữ cảnh trực tiếp.",
+        { type: "success" },
+      );
       setReloadKey((value) => value + 1);
       refresh();
     } catch (error) {
@@ -223,13 +262,22 @@ const Content = () => {
                     : "Tệp vượt giới hạn ngữ cảnh của model đang dùng."}
                 </p>
               )}
+              {loadFailed && (
+                <p className="text-destructive">
+                  Chưa tải được trạng thái Knowledge Base. Vui lòng tải lại
+                  trang.
+                </p>
+              )}
               <Textarea
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 rows={14}
                 placeholder="Nhập nội dung .txt hoặc .md"
               />
-              <Button onClick={saveDirectFile} disabled={!text.trim()}>
+              <Button
+                onClick={saveDirectFile}
+                disabled={knowledgeLoading || loadFailed || !text.trim()}
+              >
                 Lưu tệp duy nhất
               </Button>
             </CardContent>

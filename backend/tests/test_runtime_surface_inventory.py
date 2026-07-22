@@ -54,17 +54,17 @@ EXPECTED_ROUTE_COUNTS = {
     "main": 3,
     "performance": 2,
     "personas": 11,  # adapter assignment GET/PUT replace project bulk assignment
-    "projects": 24,
+    "projects": 28,  # +4 single-page external-source-sync endpoints
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "43236e174f2db539c3dcc7f57d0351a0307abec36406a078e6d73b9a7f05fd0c"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "3fecf58e9c1f3e94b0b692db4564e8e1cef6d94f57c7a5143adf09ae39737fec"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 79,  # +5 broad-scan get/delete hits in the SSRF-hardened sheet fetcher
-    "queue_producer": 29,  # external-source sync: enqueue_one_shot (create/run-now/tick) + enqueue_job
+    "queue_producer": 33,  # + single-page external-source sync worker enqueue path
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "92d294ff8b5d8c9d716127928d8f512a84761cb8c66812dd7c66b2617d363ed7"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "dd43bcdd1f61ab750e28d37e7f9f6297a55de5df902ae34be59e726112fc4fa2"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

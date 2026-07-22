@@ -486,6 +486,9 @@ const GOOGLE_SHEET_HOSTS = new Set([
   "googleusercontent.com",
 ]);
 
+const SINGLE_PAGE_EXTERNAL_SOURCES_PATH = (projectId: string) =>
+  `${proj(projectId)}/single-page/external-sources`;
+
 /** Client-side mirror of the backend SSRF allow-list (defense-in-depth). */
 export const isValidGoogleSheetUrl = (url: string): boolean => {
   let parsed: URL;
@@ -503,6 +506,130 @@ export const isValidGoogleSheetUrl = (url: string): boolean => {
     GOOGLE_SHEET_HOSTS.has(host) ||
     [...GOOGLE_SHEET_HOSTS].some((allowed) => host.endsWith(`.${allowed}`))
   );
+};
+
+export type GoogleSheetGidSource = "query" | "fragment";
+
+export type GoogleSheetGidResolution =
+  | {
+      ok: true;
+      gid: number;
+      source: GoogleSheetGidSource;
+    }
+  | {
+      ok: false;
+      reason: "missing" | "invalid" | "conflict";
+      message: string;
+    };
+
+const extractSheetGidValues = (
+  raw: string,
+  source: GoogleSheetGidSource,
+): string[] => {
+  const value =
+    source === "fragment" ? raw.trim().replace(/^#/, "") : raw.trim();
+  if (!value) return [];
+  return new URLSearchParams(value).getAll("gid").map((entry) => entry.trim());
+};
+
+const normalizeSingleGidValue = (
+  values: string[],
+): { ok: true; value: string | null } | { ok: false } => {
+  if (values.length === 0) {
+    return { ok: true, value: null };
+  }
+  const uniqueValues = [...new Set(values)];
+  if (uniqueValues.length !== 1) {
+    return { ok: false };
+  }
+  return { ok: true, value: uniqueValues[0] ?? null };
+};
+
+const parseGoogleSheetGidValue = (value: string): number | null => {
+  if (!/^\d+$/.test(value)) return null;
+  try {
+    const asBigInt = BigInt(value);
+    if (asBigInt > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    return Number(value);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Validate that the URL contains exactly one explicit gid in either the query
+ * string or fragment. `#gid=` takes precedence, but conflicting values are
+ * rejected so the preview matches what the backend will persist.
+ */
+export const resolveGoogleSheetGid = (
+  url: string,
+): GoogleSheetGidResolution => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return {
+      ok: false,
+      reason: "invalid",
+      message: "Link không hợp lệ.",
+    };
+  }
+
+  const queryResult = normalizeSingleGidValue(
+    extractSheetGidValues(parsed.search, "query"),
+  );
+  const fragmentResult = normalizeSingleGidValue(
+    extractSheetGidValues(parsed.hash, "fragment"),
+  );
+
+  if (!queryResult.ok || !fragmentResult.ok) {
+    return {
+      ok: false,
+      reason: "conflict",
+      message:
+        "Link có nhiều giá trị gid khác nhau. Hãy giữ lại đúng một gid.",
+    };
+  }
+
+  const queryValue = queryResult.value;
+  const fragmentValue = fragmentResult.value;
+
+  if (queryValue && fragmentValue && queryValue !== fragmentValue) {
+    return {
+      ok: false,
+      reason: "conflict",
+      message:
+        "gid ở query và fragment đang khác nhau. Hãy giữ lại một giá trị duy nhất.",
+    };
+  }
+
+  const chosenValue = fragmentValue ?? queryValue;
+  const source: GoogleSheetGidSource = fragmentValue ? "fragment" : "query";
+
+  if (!chosenValue) {
+    return {
+      ok: false,
+      reason: "missing",
+      message:
+        "Link phải có gid rõ ràng trong `?gid=` hoặc `#gid=` để chọn đúng trang tính.",
+    };
+  }
+
+  const gid = parseGoogleSheetGidValue(chosenValue);
+  if (gid === null) {
+    return {
+      ok: false,
+      reason: "invalid",
+      message:
+        "gid phải là số nguyên không âm và nằm trong phạm vi an toàn của JavaScript.",
+    };
+  }
+
+  return {
+    ok: true,
+    gid,
+    source,
+  };
 };
 
 export type ExternalSourceSyncState = {
@@ -524,11 +651,34 @@ export type ExternalSourceSyncState = {
   updated_at: string;
 };
 
+export type SinglePageExternalSourceSyncState = {
+  id: string;
+  project_id: string;
+  source_kind: string;
+  sheet_url: string;
+  sheet_gid: number;
+  auto_sync_enabled: boolean;
+  consecutive_failures: number;
+  last_content_hash?: string | null;
+  last_synced_at?: string | null;
+  last_status: string;
+  last_error?: string | null;
+  last_row_count?: number | null;
+  last_revision_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExternalSourceCreatePayload = {
   source_kind?: string;
   category_key: KnowledgeCategoryKey;
   sheet_url: string;
   sheet_gid?: number;
+  auto_sync_enabled?: boolean;
+};
+
+export type SinglePageExternalSourceCreatePayload = {
+  sheet_url: string;
   auto_sync_enabled?: boolean;
 };
 
@@ -555,6 +705,39 @@ export const runExternalSourceNow = (projectId: string, id: string) =>
 export const deleteExternalSource = (projectId: string, id: string) =>
   apiRequest(
     `${proj(projectId)}/external-sources/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  ).then((response) => {
+    if (!response.ok) {
+      throw new ApiError(response.status, "Không xóa được nguồn đồng bộ.");
+    }
+  });
+
+export const listSinglePageExternalSources = (projectId: string) =>
+  apiJson<SinglePageExternalSourceSyncState[]>(
+    SINGLE_PAGE_EXTERNAL_SOURCES_PATH(projectId),
+  );
+
+export const createSinglePageExternalSource = (
+  projectId: string,
+  payload: SinglePageExternalSourceCreatePayload,
+) =>
+  apiJson<SinglePageExternalSourceSyncState>(
+    SINGLE_PAGE_EXTERNAL_SOURCES_PATH(projectId),
+    { method: "POST", body: payload },
+  );
+
+export const runSinglePageExternalSourceNow = (
+  projectId: string,
+  id: string,
+) =>
+  apiJson<{ job_id: string }>(
+    `${SINGLE_PAGE_EXTERNAL_SOURCES_PATH(projectId)}/${encodeURIComponent(id)}/run-now`,
+    { method: "POST" },
+  );
+
+export const deleteSinglePageExternalSource = (projectId: string, id: string) =>
+  apiRequest(
+    `${SINGLE_PAGE_EXTERNAL_SOURCES_PATH(projectId)}/${encodeURIComponent(id)}`,
     { method: "DELETE" },
   ).then((response) => {
     if (!response.ok) {

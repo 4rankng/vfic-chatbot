@@ -7,8 +7,11 @@ import "@/index.css";
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   listExternalSources: vi.fn(),
+  listSinglePageExternalSources: vi.fn(),
   runExternalSourceNow: vi.fn(),
+  runSinglePageExternalSourceNow: vi.fn(),
   deleteExternalSource: vi.fn(),
+  deleteSinglePageExternalSource: vi.fn(),
 }));
 
 vi.mock("ra-core", () => ({
@@ -17,8 +20,11 @@ vi.mock("ra-core", () => ({
 
 vi.mock("@/lib/vfic/knowledgeService", () => ({
   listExternalSources: mocks.listExternalSources,
+  listSinglePageExternalSources: mocks.listSinglePageExternalSources,
   runExternalSourceNow: mocks.runExternalSourceNow,
+  runSinglePageExternalSourceNow: mocks.runSinglePageExternalSourceNow,
   deleteExternalSource: mocks.deleteExternalSource,
+  deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
 }));
 
 import { ExternalSourceList } from "./ExternalSourceList";
@@ -34,6 +40,21 @@ const faqRow = {
   consecutive_failures: 0,
   last_status: "OK",
   last_synced_at: "2026-07-21T10:00:00Z",
+  updated_at: "2026-07-21T10:00:00Z",
+};
+
+const singlePageRow = {
+  id: "src-sp-1",
+  project_id: "project-1",
+  source_kind: "google_sheet",
+  sheet_url: "https://docs.google.com/spreadsheets/d/abc/edit#gid=987654321",
+  sheet_gid: 987654321,
+  auto_sync_enabled: false,
+  consecutive_failures: 0,
+  last_status: "NO_OP",
+  last_row_count: 18,
+  last_synced_at: "2026-07-21T10:05:00Z",
+  updated_at: "2026-07-21T10:05:00Z",
 };
 
 describe("ExternalSourceList", () => {
@@ -44,8 +65,11 @@ describe("ExternalSourceList", () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.listExternalSources.mockResolvedValue([faqRow]);
+    mocks.listSinglePageExternalSources.mockResolvedValue([singlePageRow]);
     mocks.runExternalSourceNow.mockResolvedValue({ job_id: "job-1" });
+    mocks.runSinglePageExternalSourceNow.mockResolvedValue({ job_id: "job-sp-1" });
     mocks.deleteExternalSource.mockResolvedValue(undefined);
+    mocks.deleteSinglePageExternalSource.mockResolvedValue(undefined);
   });
 
   it("renders the configured source row with its status", async () => {
@@ -96,5 +120,67 @@ describe("ExternalSourceList", () => {
     expect(actionsRect.left).toBeGreaterThanOrEqual(cardRect.left - 0.5);
     expect(actionsRect.right).toBeLessThanOrEqual(cardRect.right + 0.5);
     expect(actions.clientWidth).toBeLessThanOrEqual(card.clientWidth);
+  });
+
+  it("renders single-page sync details and refreshes from the single-page endpoint", async () => {
+    const screen = await render(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+      />,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledWith(
+        "project-1",
+      ),
+    );
+
+    await expect.element(screen.getByText("gid=987654321")).toBeVisible();
+    await expect.element(screen.getByText(/18 hàng/)).toBeVisible();
+
+    await screen.getByRole("button", { name: "Làm mới" }).click();
+
+    await vi.waitFor(() =>
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  it("confirms and deletes a single-page source with the dedicated endpoint", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const screen = await render(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+      />,
+    );
+
+    await screen.getByRole("button", { name: "Xóa nguồn đồng bộ" }).click();
+
+    await vi.waitFor(() =>
+      expect(mocks.deleteSinglePageExternalSource).toHaveBeenCalledWith(
+        "project-1",
+        "src-sp-1",
+      ),
+    );
+    expect(confirmSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("hides mutation controls in single-page read-only mode", async () => {
+    const screen = await render(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+        mutable={false}
+      />,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledWith(
+        "project-1",
+      ),
+    );
+
+    expect(screen.container.textContent).not.toContain("Xử lý ngay");
+    expect(screen.container.textContent).not.toContain("Xóa nguồn đồng bộ");
   });
 });

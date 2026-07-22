@@ -33,12 +33,28 @@ const projects: Project[] = [
     is_active: false,
     knowledge_mode: "DIRECT_CONTEXT",
     knowledge_document_count: 1,
+    feature_readiness: { ready: 0, total: 12 },
     created_at: "2026-07-18T00:00:00Z",
     updated_at: "2026-07-18T00:00:00Z",
   },
 ];
 
 describe("ProjectAccordionList", () => {
+  it("shows one-page readiness without applying the RAG feature score", async () => {
+    const screen = await render(
+      <ProjectAccordionList
+        projects={[projects[1]]}
+        isAdmin={false}
+        canEdit={false}
+        onEdit={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
+    );
+
+    await expect.element(screen.getByText("Đã sẵn sàng")).toBeVisible();
+    expect(screen.container.textContent).not.toContain("0/12");
+  });
+
   it("expands one project KB at a time and lets the open project collapse", async () => {
     const screen = await render(
       <ProjectAccordionList
@@ -58,7 +74,9 @@ describe("ProjectAccordionList", () => {
     });
 
     await expect.element(ragTrigger).toHaveAttribute("aria-expanded", "false");
-    expect(screen.container.querySelector('[data-testid="knowledge-rag-project"]')).toBeNull();
+    expect(
+      screen.container.querySelector('[data-testid="knowledge-rag-project"]'),
+    ).toBeNull();
     expect(screen.container.textContent).not.toContain("Agent");
 
     await ragTrigger.click();
@@ -69,13 +87,21 @@ describe("ProjectAccordionList", () => {
 
     await singleTrigger.click();
     await expect.element(ragTrigger).toHaveAttribute("aria-expanded", "false");
-    await expect.element(singleTrigger).toHaveAttribute("aria-expanded", "true");
+    await expect
+      .element(singleTrigger)
+      .toHaveAttribute("aria-expanded", "true");
     await expect
       .element(screen.getByTestId("knowledge-single-project"))
       .toBeVisible();
 
     await singleTrigger.click();
-    await expect.element(singleTrigger).toHaveAttribute("aria-expanded", "false");
-    expect(screen.container.querySelector('[data-testid="knowledge-single-project"]')).toBeNull();
+    await expect
+      .element(singleTrigger)
+      .toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.container.querySelector(
+        '[data-testid="knowledge-single-project"]',
+      ),
+    ).toBeNull();
   });
 });

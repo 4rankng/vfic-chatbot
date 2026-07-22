@@ -24,11 +24,15 @@ The lifecycle vocabulary is shared across lanes:
 
 - The Project has one `.txt` or `.md` page.
 - Saving replaces the whole page atomically.
+- Saving the first valid page, or a later replacement page, activates an inactive single-page
+  Project once the required discovery card exists.
 - `knowledge_base_direct_files.raw_text` preserves the original text; `normalized_text` and
   `content_sha256` store the deterministic canonical form.
 - The complete page and bounded recent Zalo conversation history are supplied to the LLM for
   every focused Project turn, including proactive turns.
 - The page never enters chunking, embedding, category ingestion, or RAG retrieval.
+- Project list and sidebar readiness for single-page Projects is page-based: one saved page means
+  "ready". RAG Projects keep using category readiness.
 - The Project still needs a compact discovery card so candidates can find it while exploring.
 
 ## Category mode

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDataProvider, useNotify, useRefresh } from "ra-core";
 import { ApiError } from "@/components/atomic-crm/providers/rest/api";
 import {
@@ -6,8 +6,11 @@ import {
   Database,
   Download,
   FileText,
+  Link2,
+  RefreshCw,
   Upload,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +25,7 @@ import {
   getProjectKnowledgeCategorySource,
   getProjectKnowledgeCategoryTemplate,
   getProjectSinglePage,
+  listSinglePageExternalSources,
   listExternalSources,
   replaceProjectSinglePage,
   uploadProjectKnowledgeCategory,
@@ -46,39 +50,73 @@ export const ProjectKnowledgePanel = ({ project, editable = false }: Props) => {
 
 const SinglePagePanel = ({ project, editable }: Props) => {
   const notify = useNotify();
+  const refresh = useRefresh();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [filename, setFilename] = useState("single-page.md");
   const [text, setText] = useState("");
   const [hasCurrentPage, setHasCurrentPage] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [refreshingPage, setRefreshingPage] = useState(false);
+  const [singlePageSyncRefreshKey, setSinglePageSyncRefreshKey] = useState(0);
+  const [singlePageAutoSyncOn, setSinglePageAutoSyncOn] = useState(false);
+  const loadRequestRef = useRef(0);
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    getProjectSinglePage(String(project.id))
-      .then((page) => {
-        if (!active) return;
+  const loadPage = useCallback(
+    async ({ background = false }: { background?: boolean } = {}) => {
+      const requestId = ++loadRequestRef.current;
+      if (background) {
+        setRefreshingPage(true);
+      } else {
+        setLoading(true);
+      }
+      try {
+        const page = await getProjectSinglePage(String(project.id));
+        if (requestId !== loadRequestRef.current) return;
         setFilename(page.filename);
         setText(page.text);
         setHasCurrentPage(true);
         setLoadFailed(false);
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
+      } catch (error: unknown) {
+        if (requestId !== loadRequestRef.current) return;
         if (error instanceof ApiError && error.status === 404) {
+          setFilename("single-page.md");
+          setText("");
           setHasCurrentPage(false);
           setLoadFailed(false);
           return;
         }
         setLoadFailed(true);
         notify((error as Error).message, { type: "error" });
-      })
-      .finally(() => active && setLoading(false));
+      } finally {
+        if (requestId === loadRequestRef.current) {
+          if (background) {
+            setRefreshingPage(false);
+          } else {
+            setLoading(false);
+          }
+        }
+      }
+    },
+    [notify, project.id],
+  );
+
+  const loadSinglePageSyncState = useCallback(async () => {
+    try {
+      const rows = await listSinglePageExternalSources(String(project.id));
+      setSinglePageAutoSyncOn(rows.some((row) => row.auto_sync_enabled));
+    } catch {
+      setSinglePageAutoSyncOn(false);
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    void loadPage();
+    void loadSinglePageSyncState();
     return () => {
-      active = false;
+      loadRequestRef.current += 1;
     };
-  }, [notify, project.id]);
+  }, [loadPage, loadSinglePageSyncState]);
 
   const save = async () => {
     if (loadFailed) {
@@ -97,7 +135,9 @@ const SinglePagePanel = ({ project, editable }: Props) => {
     if (
       hasCurrentPage &&
       !window.confirm(
-        "Nội dung mới sẽ thay thế toàn bộ trang hiện tại. Tiếp tục?",
+        project.is_active
+          ? "Nội dung mới sẽ thay thế toàn bộ trang hiện tại. Tiếp tục?"
+          : "Nội dung mới sẽ thay thế toàn bộ trang hiện tại và bật dự án để Agent sử dụng. Tiếp tục?",
       )
     ) {
       return;
@@ -106,7 +146,14 @@ const SinglePagePanel = ({ project, editable }: Props) => {
     try {
       await replaceProjectSinglePage(String(project.id), filename, text);
       setHasCurrentPage(true);
-      notify("Đã thay thế trang kiến thức của dự án.", { type: "success" });
+      notify(
+        project.is_active
+          ? "Đã thay thế trang kiến thức của dự án."
+          : "Đã lưu trang kiến thức và bật dự án.",
+        { type: "success" },
+      );
+      refresh();
+      void loadSinglePageSyncState();
     } catch (error) {
       notify((error as Error).message, { type: "error" });
     } finally {
@@ -196,6 +243,90 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                     : "Lưu trang kiến thức"}
                 </Button>
               )}
+              <div className="space-y-3 pt-2">
+                <Card className="border-border/80 shadow-none">
+                  <CardHeader className="space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <CardTitle className="flex items-center gap-2 text-section-title">
+                          <Link2 className="size-5" />
+                          Đồng bộ Google Sheet 1 trang
+                        </CardTitle>
+                        <p className="text-body text-muted-foreground">
+                          Dán link Google Sheet công khai có `gid` rõ ràng để
+                          làm mới toàn bộ trang kiến thức từ đúng tab cần dùng.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void loadPage({ background: true });
+                          void loadSinglePageSyncState();
+                          setSinglePageSyncRefreshKey((value) => value + 1);
+                        }}
+                        disabled={loading || refreshingPage}
+                      >
+                        <RefreshCw
+                          className={cn(
+                            "size-4",
+                            refreshingPage && "animate-spin",
+                          )}
+                        />
+                        Làm mới nội dung
+                      </Button>
+                    </div>
+                    <div
+                      className="text-body-sm text-muted-foreground"
+                      aria-live="polite"
+                    >
+                      {refreshingPage
+                        ? "Đang làm mới nội dung trang kiến thức từ dữ liệu mới nhất."
+                        : "Nội dung trong ô phía trên sẽ tự nạp lại sau mỗi lần đồng bộ thành công."}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {singlePageAutoSyncOn && (
+                      <Alert variant="warning">
+                        <AlertCircle aria-hidden="true" />
+                        <AlertTitle>
+                          Đồng bộ tự động có thể ghi đè chỉnh sửa tay
+                        </AlertTitle>
+                        <AlertDescription>
+                          Khi lịch hàng ngày đang bật, dữ liệu mới từ Google
+                          Sheet sẽ thay thế nội dung bạn vừa sửa thủ công ở lần
+                          đồng bộ tiếp theo.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {editable && (
+                      <ExternalSourceLinkForm
+                        projectId={String(project.id)}
+                        variant="single-page"
+                        onCreated={() => {
+                          void loadSinglePageSyncState();
+                          setSinglePageSyncRefreshKey((value) => value + 1);
+                        }}
+                      />
+                    )}
+                    <ExternalSourceList
+                      projectId={String(project.id)}
+                      variant="single-page"
+                      mutable={editable}
+                      refreshSignal={singlePageSyncRefreshKey}
+                      onChange={() => {
+                        void loadSinglePageSyncState();
+                        setSinglePageSyncRefreshKey((value) => value + 1);
+                      }}
+                      onSynchronized={() => {
+                        void loadPage({ background: true });
+                        void loadSinglePageSyncState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
             </>
           )}
         </CardContent>
@@ -578,7 +709,9 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
 
         {editable && (
           <section className="space-y-2">
-            <h3 className="text-body font-semibold">Nguồn đồng bộ từ link công khai</h3>
+            <h3 className="text-body font-semibold">
+              Nguồn đồng bộ từ link công khai
+            </h3>
             <ExternalSourceList
               projectId={String(project.id)}
               refreshSignal={extSrcRefreshKey}

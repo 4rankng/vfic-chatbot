@@ -52,6 +52,7 @@ from app.services.knowledge.repository import JobFeatureValueRepo
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.project.faq import ProjectFaqService
 from app.services.project.features import ProjectFeatureService
+from app.services.project.single_page_external_sources import SinglePageExternalSourceService
 from app.services.project.repository import ProjectRepository, require_project
 from app.services.knowledge_base_service import KnowledgeBaseService
 
@@ -64,6 +65,7 @@ class ProjectService:
         self.repo = ProjectRepository(self.db)
         self.faqs = ProjectFaqService(self.db)
         self.features = ProjectFeatureService(self.db)
+        self.single_page_external_sources = SinglePageExternalSourceService(self.db)
 
     async def list(
         self,
@@ -281,11 +283,45 @@ class ProjectService:
             project,
             KnowledgeBaseMode.DIRECT_CONTEXT,
         )
-        return await KnowledgeBaseService(self.db).upsert_direct_file(
+        activating = not project.is_active
+        if activating:
+            if not project.index_card:
+                raise ConflictError("Single-page Project needs a discovery card before activation")
+            project.is_active = True
+            await record_audit(
+                self.db,
+                action="update_project",
+                actor_id=actor.id,
+                target_type="project",
+                target_id=str(project.id),
+                payload={"is_active": True, "reason": "single_page_ready"},
+            )
+        direct_file = await KnowledgeBaseService(self.db).upsert_direct_file(
             knowledge_base.id,
             body,
             actor,
         )
+        if activating:
+            await bump_cache_version(NS_PREAMBLE)
+        return direct_file
+
+    async def list_single_page_external_sources(
+        self, project_id: uuid.UUID
+    ):
+        return await self.single_page_external_sources.list_sources(project_id)
+
+    async def create_single_page_external_source(self, project_id: uuid.UUID, body, actor: User):
+        return await self.single_page_external_sources.create_source(project_id, body, actor)
+
+    async def run_single_page_external_source_now(
+        self, project_id: uuid.UUID, source_id: uuid.UUID, actor: User
+    ) -> str:
+        return await self.single_page_external_sources.run_now(project_id, source_id, actor)
+
+    async def delete_single_page_external_source(
+        self, project_id: uuid.UUID, source_id: uuid.UUID, actor: User
+    ) -> None:
+        await self.single_page_external_sources.delete_source(project_id, source_id, actor)
 
     async def reindex(self, project_id: uuid.UUID) -> Project:
         """Rebuild this project's catalog card (the master-index entry) from usable units."""
