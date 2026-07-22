@@ -14,11 +14,11 @@ outages:
   * ``ConversationEventBus.schedule_realtime``        -> ``MissingGreenlet`` in
     the fire-and-forget realtime task
 
-Why the stubs are safe: ``build_deps`` wires the REAL ``ConversationService(db)``
-which delegates to ``ConversationState`` -- where all three failure modes live.
-We only replace the two pure-transport seams (``deps.agent`` = canned reply;
-Zalo HTTP via ``outbox_service.dispatch_message_outbox``), so the persistence +
-realtime path runs unmodified.
+Why the stubs are safe: the smoke dependencies wire the REAL
+``ConversationService(db)`` and ``RetrievalRepository(db)``. The former delegates
+to ``ConversationState`` -- where all three failure modes live. Only the pure
+LLM/transport seams are stubbed, so persistence + realtime run unmodified without
+constructing provider clients or resolving integration secrets.
 
 Exit code is 0 ONLY when the turn completes with no raised exception, no
 unhandled background-task error, and the session is not left in a needs-rollback
@@ -48,8 +48,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
-from app.graph.factories import build_deps
+from app.graph.safety import DeterministicReplyPolicy
 from app.graph.runner import BotRunState, run_turn
+from app.graph.types import GraphDeps
 from app.models.contact import Contact, ContactChannelIdentity
 from app.models.conversation import Conversation, ConversationMode, Message
 from app.models.outbox import OutboundOutbox
@@ -105,6 +106,22 @@ async def _stub_embedder(_text: str) -> list[float]:
     # Never actually called (the stub agent ignores it and FAQ bypass is
     # hard-disabled), but keeps the turn free of any Gemini dependency.
     return [0.0] * 3072
+
+
+def _build_smoke_deps(db) -> GraphDeps:
+    """Wire the real turn services without constructing unused provider clients."""
+    from app.services.conversation import ConversationService
+    from app.services.retrieval import RetrievalRepository
+
+    return GraphDeps(
+        db=db,
+        agent=_StubAgent(),
+        embedder=_stub_embedder,
+        zalo=_StubZalo(),
+        conversation=ConversationService(db),
+        retrieval=RetrievalRepository(db),
+        reply_policy=DeterministicReplyPolicy(),
+    )
 
 
 async def _seed_smoke_conversation(
@@ -224,10 +241,7 @@ async def _run_smoke(*, inject_failure: bool) -> int:
             version_at_start = int(conv.version or 0)
 
         async with session_factory() as db:
-            deps = await build_deps(db)
-            deps.agent = _StubAgent()
-            deps.zalo = _StubZalo()
-            deps.embedder = _stub_embedder
+            deps = _build_smoke_deps(db)
 
             state = BotRunState(
                 conversation_id=str(conv_id),
