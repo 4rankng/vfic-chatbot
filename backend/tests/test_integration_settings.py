@@ -310,6 +310,7 @@ async def test_refresh_oa_access_token_persists_before_audit_and_evicts_local_ca
 
     http_client = _HttpClient()
     redis = _FakeRedis()
+
     async def fake_get_http_client(*_args, **_kwargs):
         return http_client
 
@@ -352,8 +353,13 @@ async def test_refresh_oa_access_token_persists_before_audit_and_evicts_local_ca
     assert refreshed == "new-access-token"
     assert after.oa_access_token == "new-access-token"
     assert after.oa_refresh_token == "new-refresh-token"
-    assert service.cipher.decrypt(db.rows[ZALO_OA_ACCESS_TOKEN].encrypted_value) == "new-access-token"
-    assert service.cipher.decrypt(db.rows[ZALO_OA_REFRESH_TOKEN].encrypted_value) == "new-refresh-token"
+    assert (
+        service.cipher.decrypt(db.rows[ZALO_OA_ACCESS_TOKEN].encrypted_value) == "new-access-token"
+    )
+    assert (
+        service.cipher.decrypt(db.rows[ZALO_OA_REFRESH_TOKEN].encrypted_value)
+        == "new-refresh-token"
+    )
     assert db.commit_count == 1
     assert db.scalars_calls == 2
     assert http_client.calls == [
@@ -614,9 +620,7 @@ async def test_update_facebook_oauth_encrypts_secrets_keeps_plaintext_ids(monkey
     async def fake_record_audit(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(
-        "app.services.integration_settings.record_audit", fake_record_audit
-    )
+    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
 
     db = _WriteDb()
     service = IntegrationSettingsService(db, settings=_Settings())
@@ -660,12 +664,11 @@ async def test_update_facebook_oauth_skips_blank_fields_leaving_them_unchanged(
 ):
     """A PUT with only some fields populated must leave the others untouched
     ("leave blank to keep current value" semantics)."""
+
     async def fake_record_audit(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(
-        "app.services.integration_settings.record_audit", fake_record_audit
-    )
+    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
 
     db = _WriteDb()
     service = IntegrationSettingsService(db, settings=_Settings())

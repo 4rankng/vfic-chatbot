@@ -1,8 +1,5 @@
-"""FastAPI provider dependencies."""
+"""Focused import surface for provider dependencies."""
 
+from app.api.dependencies import get_embedder
 
-def get_embedder():
-    """Return the configured embedder without widening the web-process import path."""
-    from app.graph.clients import build_embedder
-
-    return build_embedder()
+__all__ = ["get_embedder"]

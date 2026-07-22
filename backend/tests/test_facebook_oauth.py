@@ -629,7 +629,21 @@ async def test_oauth_pages_rejects_other_admin_or_changed_session(monkeypatch, a
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("capsule", [None, "not-valid-ciphertext"])
+@pytest.mark.parametrize(
+    "capsule",
+    [
+        None,
+        "not-valid-ciphertext",
+        json.dumps(
+            {
+                "admin_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "token_version": 3,
+                "user_token": "plaintext-must-not-be-accepted",
+                "pages": [{"id": "page-1", "name": "Trang Một"}],
+            }
+        ),
+    ],
+)
 async def test_oauth_pages_missing_or_invalid_flow_returns_410(monkeypatch, capsule):
     import app.api.integrations as api
 

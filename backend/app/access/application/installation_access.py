@@ -21,9 +21,7 @@ class InstallationAccessPolicy(Generic[ActiveInstallationT]):
             raise ResourceNotFoundError("not found")
         return active
 
-    async def require_capability_or_legacy(
-        self, capability_id: str
-    ) -> ActiveInstallationT | None:
+    async def require_capability_or_legacy(self, capability_id: str) -> ActiveInstallationT | None:
         active = await self._authority.resolve_active()
         if active is None:
             if not await self._authority.has_installation_state():

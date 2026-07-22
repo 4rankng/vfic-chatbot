@@ -324,4 +324,3 @@ async def test_cached_system_prompt_is_isolated_by_provider_suffix(monkeypatch):
     assert (second, second_hit) == ("PROMPT-2", False)
     assert (again, again_hit) == ("PROMPT-1", True)
     assert calls["n"] == 2
-

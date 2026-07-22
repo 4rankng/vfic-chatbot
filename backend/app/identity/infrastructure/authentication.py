@@ -7,9 +7,12 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import get_db
 from app.core.security import decode_token
 from app.identity.application.authentication import AccessTokenAuthenticator
 from app.models.user import User
+
+get_identity_db = get_db
 
 
 class JwtAccessTokenDecoder:

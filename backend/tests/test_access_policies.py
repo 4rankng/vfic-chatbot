@@ -21,7 +21,9 @@ class FakeInstallationAuthority:
     ) -> None:
         self._active = active
         self._has_state = has_state
-        self._require_active_result = require_active_result if require_active_result is not None else active
+        self._require_active_result = (
+            require_active_result if require_active_result is not None else active
+        )
 
     async def require_active(self) -> object:
         if self._require_active_result is None:

@@ -64,6 +64,10 @@ surrounding code.
 - Runtime code resolves them via
   `IntegrationSettingsService(db).resolve_zalo()` etc., falling back to env
   bootstrap values only in dev.
+- Decrypted runtime credential bundles may be cached only in the bounded,
+  process-local cache. Redis stores their namespace-version counters, never the
+  plaintext bundle. A Redis version-read failure must bypass the local cache so
+  stale credentials are not served.
 - **Never print secret values.** Documentation may name the env var only.
 
 ### Boot-time safety (do not weaken)

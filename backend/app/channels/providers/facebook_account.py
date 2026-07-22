@@ -54,17 +54,11 @@ class FacebookAccountResolver(ChannelAccountResolver):
     async def resolve_active(
         self, *, provider: str, account_key: str
     ) -> ct.ChannelAccountRef | None:
-        row = await self._fetch(
-            provider=provider, account_key=account_key, only_active=True
-        )
+        row = await self._fetch(provider=provider, account_key=account_key, only_active=True)
         return _to_ref(row)
 
-    async def resolve_any(
-        self, *, provider: str, account_key: str
-    ) -> ct.ChannelAccountRef | None:
-        row = await self._fetch(
-            provider=provider, account_key=account_key, only_active=False
-        )
+    async def resolve_any(self, *, provider: str, account_key: str) -> ct.ChannelAccountRef | None:
+        row = await self._fetch(provider=provider, account_key=account_key, only_active=False)
         return _to_ref(row)
 
     async def active_facebook_page(self) -> ct.ChannelAccountRef | None:
@@ -134,8 +128,9 @@ class FacebookPageLifecycle:
 
         Concurrency: two admins activating different Pages race on the partial
         unique index ``uq_channel_accounts_one_active_facebook_messenger``. The
-        loser's commit raises IntegrityError; we catch it, roll back, archive
-        the now-active winner, and retry once. The index is the final authority.
+        loser's commit raises IntegrityError; we roll back and retry once. The
+        retry stages any now-active winner's deactivation in the same atomic
+        account/token/audit transaction. The index is the final authority.
         """
         from sqlalchemy.exc import IntegrityError
 
@@ -151,19 +146,8 @@ class FacebookPageLifecycle:
                 if attempt == 2:
                     raise  # second collision → surface; the index is genuinely contested
                 await self.db.rollback()
-                # The winner is now committed ACTIVE; archive it before retry.
-                winner = await self.db.scalar(
-                    select(ChannelAccount).where(
-                        ChannelAccount.provider == ct.PROVIDER_FACEBOOK_MESSENGER,
-                        ChannelAccount.status == ChannelAccountStatus.ACTIVE,
-                        ChannelAccount.account_key != page_id,
-                    )
-                )
-                if winner is not None:
-                    winner.status = ChannelAccountStatus.INACTIVE
-                    winner.updated_at = datetime.now(timezone.utc)
-                    await self.db.commit()
-                # loop retries _activate_once
+                # The retry observes the committed winner and changes it only
+                # inside _activate_once's account+token+audit transaction.
 
     async def _activate_once(
         self,

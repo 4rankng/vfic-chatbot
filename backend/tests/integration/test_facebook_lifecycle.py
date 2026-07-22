@@ -29,12 +29,14 @@ async def test_resolver_returns_none_for_unknown_page(integration_database):
 
     async with async_session() as db:
         resolver = FacebookAccountResolver(db)
-        assert await resolver.resolve_active(
-            provider="facebook_messenger", account_key="page-unknown"
-        ) is None
-        assert await resolver.resolve_any(
-            provider="facebook_messenger", account_key="page-unknown"
-        ) is None
+        assert (
+            await resolver.resolve_active(provider="facebook_messenger", account_key="page-unknown")
+            is None
+        )
+        assert (
+            await resolver.resolve_any(provider="facebook_messenger", account_key="page-unknown")
+            is None
+        )
         assert await resolver.active_facebook_page() is None
 
 
@@ -178,12 +180,11 @@ async def test_lifecycle_disconnect_marks_inactive_keeps_history(integration_dat
     async with async_session() as db:
         resolver = FacebookAccountResolver(db)
         # resolve_active returns None (disconnected); resolve_any returns it.
-        assert await resolver.resolve_active(
-            provider="facebook_messenger", account_key="page-D"
-        ) is None
-        archived = await resolver.resolve_any(
-            provider="facebook_messenger", account_key="page-D"
+        assert (
+            await resolver.resolve_active(provider="facebook_messenger", account_key="page-D")
+            is None
         )
+        archived = await resolver.resolve_any(provider="facebook_messenger", account_key="page-D")
         assert archived is not None
         assert not archived.is_active
 
@@ -286,23 +287,17 @@ async def test_page_token_wrong_context_does_not_decrypt(integration_database):
     from app.models.user import User
 
     async with async_session() as db:
-        admin = User(
-            email="fb-ctx@vfic.test", password_hash="x", full_name="Ctx", role="admin"
-        )
+        admin = User(email="fb-ctx@vfic.test", password_hash="x", full_name="Ctx", role="admin")
         db.add(admin)
         await db.flush()
         service = IntegrationSettingsService(db)
-        await service.set_facebook_page_token(
-            "page-A", "EAAB-token-A", updated_by=admin.id
-        )
+        await service.set_facebook_page_token("page-A", "EAAB-token-A", updated_by=admin.id)
         # Copy the page-A ciphertext into a page-B key (simulating a row move).
         from app.models.integration import IntegrationSetting
         from sqlalchemy import select
 
         row = await db.scalar(
-            select(IntegrationSetting).where(
-                IntegrationSetting.key == "facebook_page_token:page-A"
-            )
+            select(IntegrationSetting).where(IntegrationSetting.key == "facebook_page_token:page-A")
         )
         assert row is not None
         db.add(
@@ -392,12 +387,12 @@ async def test_receipt_is_scoped_by_page_account_no_cross_contamination(
 
     async with async_session() as db:
         rows = (
-            await db.scalars(
-                select(Message).where(Message.provider_message_id == "mid-colliding")
-            )
+            await db.scalars(select(Message).where(Message.provider_message_id == "mid-colliding"))
         ).all()
         # Exactly one row advanced to DELIVERED (page-A); the other stays SENT.
         delivered = [r for r in rows if r.delivery_status == DeliveryStatus.DELIVERED]
         sent = [r for r in rows if r.delivery_status == DeliveryStatus.SENT]
-        assert len(delivered) == 1, f"expected 1 delivered, got {[(r.delivery_status) for r in rows]}"
+        assert len(delivered) == 1, (
+            f"expected 1 delivered, got {[(r.delivery_status) for r in rows]}"
+        )
         assert len(sent) == 1, f"expected 1 still-sent, got {[(r.delivery_status) for r in rows]}"

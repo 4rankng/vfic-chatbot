@@ -89,10 +89,7 @@ class RedisFacebookOAuthFlowStore:
                     "admin_id": str(flow.admin.admin_id),
                     "token_version": int(flow.admin.token_version),
                     "user_token": flow.user_token,
-                    "pages": [
-                        {"id": page.id, "name": page.name}
-                        for page in flow.pages
-                    ],
+                    "pages": [{"id": page.id, "name": page.name} for page in flow.pages],
                 }
             )
         )
@@ -130,13 +127,12 @@ class RedisFacebookOAuthFlowStore:
         admin: FacebookOAuthAdminBinding,
     ) -> FacebookOAuthFlow | None:
         ciphertext = _decode_text(payload)
-        if ciphertext is None:
+        if ciphertext is None or not ciphertext.startswith("v1:"):
             return None
         try:
             data = json.loads(self._cipher.decrypt(ciphertext))
-            if (
-                str(data["admin_id"]) != str(admin.admin_id)
-                or int(data["token_version"]) != int(admin.token_version)
+            if str(data["admin_id"]) != str(admin.admin_id) or int(data["token_version"]) != int(
+                admin.token_version
             ):
                 return None
             user_token = data["user_token"]

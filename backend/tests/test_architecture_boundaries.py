@@ -32,8 +32,6 @@ api_outward|backend/app/api/auth.py|app.core.security:decode_token
 api_outward|backend/app/api/auth.py|app.core.security:hash_password
 api_outward|backend/app/api/auth.py|app.core.security:verify_password
 api_outward|backend/app/api/auth.py|app.models.user:User
-api_outward|backend/app/api/auth_dependencies.py|app.core.db:get_db
-api_outward|backend/app/api/auth_dependencies.py|app.models.user:User
 api_outward|backend/app/api/bot_runs.py|app.core.db:get_db
 api_outward|backend/app/api/bot_runs.py|app.models.conversation:BotRunOutcome
 api_outward|backend/app/api/bot_runs.py|app.models.user:User
@@ -51,14 +49,9 @@ api_outward|backend/app/api/conversations.py|app.workers.chatbot_worker:enqueue_
 api_outward|backend/app/api/dashboard.py|app.core.db:get_db
 api_outward|backend/app/api/dashboard.py|app.models.user:User
 api_outward|backend/app/api/dependencies.py|app.core.db:get_db
-api_outward|backend/app/api/dependencies.py|app.core.security:decode_token
 api_outward|backend/app/api/dependencies.py|app.graph.clients:build_embedder
-api_outward|backend/app/api/dependencies.py|app.models.user:Role
-api_outward|backend/app/api/dependencies.py|app.models.user:User
 api_outward|backend/app/api/installation.py|app.core.db:get_db
 api_outward|backend/app/api/installation.py|app.models.user:User
-api_outward|backend/app/api/installation_dependencies.py|app.core.db:get_db
-api_outward|backend/app/api/installation_dependencies.py|app.models.user:User
 api_outward|backend/app/api/integrations.py|app.core.config:ZALO_BOT_WEBHOOK_URL
 api_outward|backend/app/api/integrations.py|app.core.config:get_settings
 api_outward|backend/app/api/integrations.py|app.core.db:get_db
@@ -104,7 +97,6 @@ api_outward|backend/app/api/performance.py|app.core.redis:get_redis
 api_outward|backend/app/api/performance.py|app.models.user:User
 api_outward|backend/app/api/personas.py|app.core.db:get_db
 api_outward|backend/app/api/personas.py|app.models.user:User
-api_outward|backend/app/api/provider_dependencies.py|app.graph.clients:build_embedder
 api_outward|backend/app/api/projects.py|app.core.db:get_db
 api_outward|backend/app/api/projects.py|app.models.user:User
 api_outward|backend/app/api/users.py|app.core.db:get_db
@@ -205,15 +197,11 @@ def _python_import_targets(path: Path, source: str) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             importlib_aliases.update(
-                alias.asname or alias.name
-                for alias in node.names
-                if alias.name == "importlib"
+                alias.asname or alias.name for alias in node.names if alias.name == "importlib"
             )
         elif isinstance(node, ast.ImportFrom) and node.module == "importlib":
             import_module_aliases.update(
-                alias.asname or alias.name
-                for alias in node.names
-                if alias.name == "import_module"
+                alias.asname or alias.name for alias in node.names if alias.name == "import_module"
             )
 
     for node in ast.walk(tree):
@@ -334,7 +322,10 @@ def _backend_rule(rel: str, target: str) -> str | None:
         "backend/app/installation/domain/",
         "backend/app/installation/application/",
     )
-    if rel.startswith(pure_backend_prefixes) and module.startswith(
+    pure_backend_file = rel.startswith("backend/app/integrations/") and rel.endswith(
+        ("/domain.py", "/application.py")
+    )
+    if (rel.startswith(pure_backend_prefixes) or pure_backend_file) and module.startswith(
         (
             "fastapi",
             "httpx",
@@ -361,9 +352,7 @@ def _backend_rule(rel: str, target: str) -> str | None:
         ("app.models", "app.core", "app.graph", "app.workers")
     ):
         return "api_outward"
-    if rel.startswith("backend/app/schemas/") and module.startswith(
-        ("app.models", "app.core")
-    ):
+    if rel.startswith("backend/app/schemas/") and module.startswith(("app.models", "app.core")):
         return "schema_infra"
     return None
 
@@ -408,9 +397,7 @@ def test_no_new_layer_boundary_violations() -> None:
 
 def test_boundary_allowlist_only_names_existing_files() -> None:
     missing = sorted(
-        edge
-        for edge in ALLOWED_EDGES
-        if not (REPO_ROOT / edge.split("|", 2)[1]).is_file()
+        edge for edge in ALLOWED_EDGES if not (REPO_ROOT / edge.split("|", 2)[1]).is_file()
     )
     assert not missing, f"Remove stale architecture allowlist entries: {missing}"
 
@@ -470,6 +457,8 @@ def test_identity_and_access_domain_modules_reject_framework_and_infrastructure_
         "backend/app/identity/application/example.py",
         "backend/app/access/domain/example.py",
         "backend/app/installation/domain/example.py",
+        "backend/app/integrations/facebook_oauth/domain.py",
+        "backend/app/integrations/facebook_oauth/application.py",
     ):
         for target in (
             "fastapi:Depends",
@@ -528,8 +517,7 @@ def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:
         "frontend/src/lib/vfic/relative",
     }
     assert all(
-        _frontend_rule("frontend/src/components/atomic-crm/example.ts", target)
-        == "product_lib"
+        _frontend_rule("frontend/src/components/atomic-crm/example.ts", target) == "product_lib"
         for target in targets
     )
 

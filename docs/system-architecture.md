@@ -162,13 +162,29 @@ the first possible `runtime_ready=true` decision.
 
 The current rearchitecture is a single-tenant modular-monolith migration. It
 does not add tenant identifiers, tenant-scoped repositories, or tenant-aware
-runtime abstractions; multi-tenancy is deferred for three months and must later
-consume these boundaries rather than reshape them prematurely.
+runtime abstractions. Multi-tenancy is deferred until 2026-10-22 and requires a
+new explicit decision before implementation; it must later consume these
+boundaries rather than reshape them prematurely.
 
 Phase 2 keeps the shared kernel intentionally narrow: the only new cross-context
 contracts are framework-free domain errors and provider-neutral outbound
 telemetry. Everything else stays with its owning context or composition root so
 the next slice can replace one layer without forcing unrelated layer changes.
+
+Phase 3 moves access-token validation, role policy, and single-installation
+capability/legacy decisions into framework-free domain and application modules.
+FastAPI and Socket.IO adapters retain the existing user object, denial order,
+status codes, details, and bearer header; `api/dependencies.py` remains a
+compatibility export only. Installation runtime projection is a pure allowlist
+policy that also drops nested credential-shaped legacy values.
+
+Resolved Zalo, MiniMax, OpenRouter, and Facebook OAuth credentials are cached
+only in a bounded process-local, namespace-versioned cache. Redis holds the
+version counter but never a decrypted credential bundle; an unavailable version
+read bypasses the local cache. Facebook OAuth state remains single-use and flow
+capsules remain encrypted in Redis behind dedicated state/flow ports. Page
+activation and disconnect stage account, encrypted Page token, and audit writes
+in one database transaction, then invalidate caches after commit.
 
 The normative context/package map, inward dependency rules, exact legacy-edge
 baseline, runtime contract inventory, and layer-removal ownership are recorded
@@ -932,14 +948,18 @@ be shared by another Project.
   provider redirect cannot carry the app JWT. It validates one-time state
   against the initiating admin id and `token_version`, stores an encrypted
   opaque flow capsule in Redis, and redirects back to `/#/settings` with only
-  safe status/error flags.
+  safe status/error flags. The API delegates state and encrypted-capsule storage
+  to the Facebook OAuth application boundary; Redis/encryption stay in its
+  infrastructure adapter.
 - **Session binding:** the page list and completion steps are bound to the same
   admin session and Redis flow key. The completion endpoint atomically consumes
   the flow before any provider side effects, so replays fail with a stale-flow
   error instead of double-activating a Page.
 - **Disconnect behavior:** the UI no longer passes a `page_id` query string.
   The server resolves the active Page and disconnects it directly, preserving
-  history and keeping the masked Page ID suffix server-owned.
+  history and keeping the masked Page ID suffix server-owned. Local account
+  state, Page-token deletion, and audit are committed atomically before
+  best-effort cache invalidation.
 - **Scope:** this subsection documents the admin Settings OAuth lifecycle and
   page-management flow. Best-effort remote unsubscribe happens before the
   local disconnect, and the live channel runtime is documented elsewhere in

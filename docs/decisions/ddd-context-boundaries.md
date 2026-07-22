@@ -33,6 +33,9 @@ risk, so current inversions are frozen and removed slice by slice.
 | Production surface | Owning layer/context |
 |---|---|
 | `app/api`, `app/realtime` | inbound HTTP/WebSocket adapters |
+| `app/identity`, `app/access` | identity/access domain, application ports/use cases, and infrastructure adapters |
+| `app/installation/domain` | framework-free single-installation projection policy |
+| `app/integrations/facebook_oauth` | Facebook OAuth domain/application boundary and Redis/encryption adapter |
 | `app/schemas` | transport DTOs; migrated with their owning API slice |
 | `app/graph` | agent-runtime application/domain policy; `factories.py` is its composition root |
 | `app/services/installation` | runtime authority and installation |
@@ -139,5 +142,6 @@ and provider-I/O boundaries must be characterized before movement.
   current implementation, switch named callers, verify, remove the old seam.
 - Stable RQ callable paths and N/N-1 decoders remain durable contracts until an
   operational drain proves serialized callers are gone.
-- Multi-tenancy is deliberately absent. The deferred design must consume these
+- Multi-tenancy is deliberately absent and deferred until 2026-10-22. It
+  requires a new explicit decision, and the deferred design must consume these
   boundaries later rather than introducing tenant abstractions now.

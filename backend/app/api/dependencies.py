@@ -12,8 +12,14 @@ from app.api.installation_dependencies import (
     require_capability,
     require_capability_or_legacy,
 )
-from app.api.provider_dependencies import get_embedder
 from app.core.db import get_db
+
+
+def get_embedder():
+    """DI provider for the configured embedder."""
+    from app.graph.clients import build_embedder
+
+    return build_embedder()
 
 __all__ = [
     "get_active_installation",

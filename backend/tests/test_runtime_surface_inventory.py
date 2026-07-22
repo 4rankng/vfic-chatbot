@@ -61,10 +61,10 @@ EXPECTED_ROUTE_COUNTS = {
 EXPECTED_ROUTE_INVENTORY_SHA256 = "3fecf58e9c1f3e94b0b692db4564e8e1cef6d94f57c7a5143adf09ae39737fec"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
-    "provider_boundary": 79,  # +5 broad-scan get/delete hits in the SSRF-hardened sheet fetcher
+    "provider_boundary": 75,  # identity lookup moved behind an infrastructure gateway
     "queue_producer": 33,  # + single-page external-source sync worker enqueue path
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "d01cecfa80b4a3cb2b4cd6d3ce6126351cedb51679eee4b39013b7391eac5dff"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "513b4eb8dc6a70ecc3676321fa625e88f7b981d5c2d48df6f7e942eb9eadbde7"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

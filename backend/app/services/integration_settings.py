@@ -669,9 +669,7 @@ class IntegrationSettingsService:
         try:
             await bump_cache_version(NS_INTEGRATION_FACEBOOK)
         except Exception:  # noqa: BLE001
-            logger.warning(
-                "facebook integration cache invalidation failed", exc_info=True
-            )
+            logger.warning("facebook integration cache invalidation failed", exc_info=True)
 
     async def resolve_facebook(self, page_id: str) -> FacebookRuntimeConfig | None:
         """Resolve the credentials for one active Page, or None if not configured.
@@ -684,9 +682,7 @@ class IntegrationSettingsService:
         if not page_id:
             return None
         oauth = await self.resolve_facebook_oauth()
-        token = await self._stored_value_with_context(
-            self._fb_page_token_key(page_id), page_id
-        )
+        token = await self._stored_value_with_context(self._fb_page_token_key(page_id), page_id)
         if not token:
             return None
         return FacebookRuntimeConfig(
@@ -714,9 +710,7 @@ class IntegrationSettingsService:
                 app_id=stored.get(FB_APP_ID) or s.meta_app_id,
                 app_secret=stored.get(FB_APP_SECRET) or s.meta_app_secret,
                 login_config_id=stored.get(FB_LOGIN_CONFIG_ID) or s.meta_login_config_id,
-                verify_token=(
-                    stored.get(FB_WEBHOOK_VERIFY_TOKEN) or s.meta_webhook_verify_token
-                ),
+                verify_token=(stored.get(FB_WEBHOOK_VERIFY_TOKEN) or s.meta_webhook_verify_token),
                 graph_api_version=s.meta_graph_api_version,
                 graph_api_base=s.meta_graph_api_base,
             ).__dict__
@@ -751,9 +745,7 @@ class IntegrationSettingsService:
             },
         }
 
-    async def update_facebook_oauth(
-        self, values: dict[str, str | None], *, actor_id
-    ) -> list[str]:
+    async def update_facebook_oauth(self, values: dict[str, str | None], *, actor_id) -> list[str]:
         """Persist app-level Facebook credentials. Returns the changed keys.
 
         ``app_id`` and ``login_config_id`` are stored as plaintext
@@ -796,9 +788,7 @@ class IntegrationSettingsService:
         """
         if not hasattr(self.db, "scalars"):
             return ""
-        row = await self.db.scalar(
-            select(IntegrationSetting).where(IntegrationSetting.key == key)
-        )
+        row = await self.db.scalar(select(IntegrationSetting).where(IntegrationSetting.key == key))
         if row is None:
             return ""
         stored = row.encrypted_value or ""
@@ -806,9 +796,7 @@ class IntegrationSettingsService:
             # A v1 row for a Page token is either a corrupt write or a legacy
             # import. Fail closed (reconnect required) rather than decrypting
             # without the context binding.
-            logger.warning(
-                "facebook page token rejected (not context-bound) key=%s", key
-            )
+            logger.warning("facebook page token rejected (not context-bound) key=%s", key)
             return ""
         try:
             return self.cipher.decrypt_with_context(stored, context)
@@ -859,13 +847,9 @@ class IntegrationSettingsService:
         )
         await self.db.execute(stmt)
 
-    async def set_facebook_page_token(
-        self, page_id: str, token: str, *, updated_by
-    ) -> None:
+    async def set_facebook_page_token(self, page_id: str, token: str, *, updated_by) -> None:
         """Persist one Page access token with page_id-bound ciphertext."""
-        await self.stage_facebook_page_token_upsert(
-            page_id, token, updated_by=updated_by
-        )
+        await self.stage_facebook_page_token_upsert(page_id, token, updated_by=updated_by)
         await self.db.commit()
         await self.invalidate_facebook_cache()
 

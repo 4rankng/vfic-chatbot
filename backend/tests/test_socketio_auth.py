@@ -76,7 +76,9 @@ async def test_socket_connect_saves_session_and_joins_user_room(monkeypatch) -> 
     async def fake_enter_room(sid: str, room: str) -> None:
         entered_rooms.append((sid, room))
 
-    monkeypatch.setattr(socketio_module, "authenticate_socket_token", fake_authenticate_socket_token)
+    monkeypatch.setattr(
+        socketio_module, "authenticate_socket_token", fake_authenticate_socket_token
+    )
     monkeypatch.setattr(socketio_module.sio, "save_session", fake_save_session)
     monkeypatch.setattr(socketio_module.sio, "enter_room", fake_enter_room)
 

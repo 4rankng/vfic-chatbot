@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,9 +11,7 @@ from app.access.domain.errors import ResourceNotFoundError
 from app.access.infrastructure.installation import build_installation_access_policy
 from app.api.auth_dependencies import get_current_user
 from app.capabilities.registry import get_capability_registry
-from app.core.db import get_db
-from app.models.user import User
-from app.services.installation.service import ActiveInstallation
+from app.identity.infrastructure.authentication import get_identity_db
 
 
 def _validate_capability_id(capability_id: str) -> str:
@@ -23,9 +23,9 @@ def _validate_capability_id(capability_id: str) -> str:
 
 
 async def get_active_installation(
-    _user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ActiveInstallation:
+    _user: Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_identity_db),
+) -> Any:
     return await build_installation_access_policy(db).require_active()
 
 
@@ -33,9 +33,9 @@ def require_capability(capability_id: str):
     capability_id = _validate_capability_id(capability_id)
 
     async def dependency(
-        _user: User = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
-    ) -> ActiveInstallation:
+        _user: Any = Depends(get_current_user),
+        db: AsyncSession = Depends(get_identity_db),
+    ) -> Any:
         try:
             return await build_installation_access_policy(db).require_capability(capability_id)
         except ResourceNotFoundError as exc:
@@ -49,9 +49,9 @@ def require_capability_or_legacy(capability_id: str):
     capability_id = _validate_capability_id(capability_id)
 
     async def dependency(
-        _user: User = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
-    ) -> ActiveInstallation | None:
+        _user: Any = Depends(get_current_user),
+        db: AsyncSession = Depends(get_identity_db),
+    ) -> Any | None:
         try:
             return await build_installation_access_policy(db).require_capability_or_legacy(
                 capability_id

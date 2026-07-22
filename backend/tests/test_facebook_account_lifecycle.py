@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.channels.providers import facebook_account as facebook_account_mod
 from app.models.channel_account import ChannelAccount
@@ -30,6 +31,31 @@ class _LifecycleDb:
 
     async def _commit(self) -> None:
         self.events.append("commit")
+
+
+@pytest.mark.asyncio
+async def test_activation_collision_retries_without_standalone_winner_commit(
+    monkeypatch,
+) -> None:
+    db = _LifecycleDb()
+    lifecycle = facebook_account_mod.FacebookPageLifecycle(db)
+    winner = object()
+    activate_once = AsyncMock(
+        side_effect=[IntegrityError("insert", {}, RuntimeError("collision")), winner]
+    )
+    monkeypatch.setattr(lifecycle, "_activate_once", activate_once)
+
+    result = await lifecycle.activate_or_reactivate(
+        page_id="page-123",
+        page_name="Page 123",
+        page_access_token="token-123",
+        admin_id="admin-1",
+    )
+
+    assert result is winner
+    assert activate_once.await_count == 2
+    db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

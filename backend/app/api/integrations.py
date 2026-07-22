@@ -460,9 +460,7 @@ def _fb_callback_origin() -> str:
     from app.core.config import get_settings
 
     settings = get_settings()
-    return next(
-        iter(settings.facebook_callback_allowlist or ["http://localhost:5173"])
-    ).rstrip("/")
+    return next(iter(settings.facebook_callback_allowlist or ["http://localhost:5173"])).rstrip("/")
 
 
 def _fb_callback_url() -> str:
@@ -516,9 +514,7 @@ async def _facebook_oauth_coordinator():
     )
 
 
-async def _load_facebook_oauth_flow(
-    *, flow_id: str, admin: User, consume: bool = False
-):
+async def _load_facebook_oauth_flow(*, flow_id: str, admin: User, consume: bool = False):
     """Load a valid OAuth flow owned by this exact authenticated session."""
     from app.integrations.facebook_oauth import FacebookOAuthFlowUnavailable
 
@@ -757,15 +753,21 @@ async def test_facebook_connection(
     resolver = FacebookAccountResolver(db)
     active = await resolver.active_facebook_page()
     if active is None or not active.is_active:
-        return FacebookChannelTestOut(healthy=False, error="Chưa có Trang Facebook nào được kết nối.")
+        return FacebookChannelTestOut(
+            healthy=False, error="Chưa có Trang Facebook nào được kết nối."
+        )
     settings_service = IntegrationSettingsService(db)
     cfg = await settings_service.resolve_facebook(active.account_key)
     if cfg is None:
-        return FacebookChannelTestOut(healthy=False, error="Không giải mã được token Trang. Vui lòng kết nối lại.")
+        return FacebookChannelTestOut(
+            healthy=False, error="Không giải mã được token Trang. Vui lòng kết nối lại."
+        )
     try:
         await probe_page_identity(cfg.page_access_token)
     except (FacebookOAuthError, httpx.HTTPError, ValueError):
-        return FacebookChannelTestOut(healthy=False, error="Token Trang không hợp lệ hoặc đã bị thu hồi.")
+        return FacebookChannelTestOut(
+            healthy=False, error="Token Trang không hợp lệ hoặc đã bị thu hồi."
+        )
     return FacebookChannelTestOut(healthy=True)
 
 
@@ -798,9 +800,7 @@ async def update_facebook_credentials(
         body.model_dump(exclude_unset=True),
         actor_id=admin.id,
     )
-    return FacebookCredentialsOut.model_validate(
-        await settings_service.admin_facebook_oauth_view()
-    )
+    return FacebookCredentialsOut.model_validate(await settings_service.admin_facebook_oauth_view())
 
 
 @router.delete("/facebook", response_model=FacebookAccountStatusOut)
@@ -828,9 +828,7 @@ async def disconnect_facebook(
     cfg = await settings_service.resolve_facebook(active.account_key)
     if cfg is not None:
         try:
-            await unsubscribe_app_from_page(
-                active.account_key, cfg.page_access_token
-            )
+            await unsubscribe_app_from_page(active.account_key, cfg.page_access_token)
         except (FacebookOAuthError, httpx.HTTPError, ValueError):
             pass
 
