@@ -1,4 +1,4 @@
-"""Typed ACTIVE-job availability lookup used for candidate-facing vacancy claims."""
+"""Typed active-opportunity lookup used for candidate-facing vacancy claims."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ _MAX_RESULTS = 10
 
 @dataclass(frozen=True)
 class ActiveJob:
-    """The candidate-visible facts for one currently open posting."""
+    """Candidate-visible facts for one open job or ready single-page project."""
 
     id: str
     title: str

@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import time
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -290,9 +291,12 @@ async def test_vacancy_turn_uses_direct_context_llm():
 
 
 @pytest.mark.asyncio
-async def test_generic_vacancy_listing_reaches_single_page_llm():
+async def test_generic_vacancy_listing_bypasses_focused_single_page(monkeypatch):
     class _DirectReader:
+        calls = 0
+
         async def active_context(self):
+            self.calls += 1
             return DirectContext(
                 knowledge_base_id="kb-1",
                 persona_body="Bạn là tư vấn viên.",
@@ -302,14 +306,13 @@ async def test_generic_vacancy_listing_reaches_single_page_llm():
                 ),
             )
 
-    class _DirectAgent:
-        async def direct(self, *args, **kwargs):  # noqa: ARG002
-            return "LG Display tuyển công nhân thời vụ."
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
     deps = _deps(_FakeZalo(), conversation=svc)
-    deps.agent = _DirectAgent()
-    deps.direct_context = _DirectReader()
+    direct_reader = _DirectReader()
+    deps.direct_context = direct_reader
+    agent_turn = AsyncMock(return_value="LG Display và Rorze đang tuyển.")
+    monkeypatch.setattr(runner, "_agent_turn", agent_turn)
 
     result = await run_turn(
         BotRunState(
@@ -320,10 +323,9 @@ async def test_generic_vacancy_listing_reaches_single_page_llm():
         deps,
     )
 
-    assert result == {
-        "outcome": "direct_context",
-        "reply": "LG Display tuyển công nhân thời vụ.",
-    }
+    assert result == {"outcome": "sent", "reply": "LG Display và Rorze đang tuyển."}
+    agent_turn.assert_awaited_once()
+    assert direct_reader.calls == 0
 
 
 @pytest.mark.asyncio
@@ -1652,6 +1654,12 @@ async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
         chat_id="z1",
         recent_messages=[],
         timings={"lane": "agent"},
+        project_context=SimpleNamespace(
+            state="EXPLORE",
+            knowledge_mode=None,
+            project_slug=None,
+            project_name=None,
+        ),
     )
 
     assert reply == "Danh sách việc đang tuyển."

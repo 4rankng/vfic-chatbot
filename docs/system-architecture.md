@@ -540,19 +540,25 @@ load_conversation_state -> typing -> direct_context?
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
 - **Vacancy authority:** generic requests such as “đang tuyển gì?” bypass FAQ
-  and direct-context shortcuts and use required `list_active_jobs(top_k=10)`
-  with no filters, returning the complete structured ACTIVE Job catalog.
-  Specific company, location, or role questions use the published recruitment
-  KB as the answer source. In direct-context mode, the system first tries to
-  return a verbatim `Question:` / `Answer:` block from the assigned KB; a
-  canonical answer is only selected when any explicit requested role is
-  supported by that block. Otherwise it falls through to the direct-context
-  LLM call over that full KB. For vacancy-thread factual follow-ups, the runner
-  combines the prior vacancy query with the current question until a newer named
-  topic appears, so salary, benefits, and other details stay scoped to the same
-  company evidence. `search_knowledge` remains the path for document facts. An
-  empty catalog does not block a real answer from published KB evidence for a
-  specific vacancy question.
+  and focused direct-context resolution, so vacancy turns go straight to
+  required `list_active_jobs(top_k=10)` with no filters. That tool returns a
+  bounded catalog built from structured ACTIVE `Job` rows plus active
+  DIRECT_CONTEXT project discovery cards, but only when `roles` or `key_roles`
+  are explicit on the card. Structured projects are de-duplicated against the
+  job rows, the two sources are interleaved in the output, and the discovery
+  card projection intentionally leaves salary, shifts, benefits, and follow-up
+  details to the full project page. Specific company, location, or role
+  questions use the published recruitment KB as the answer source. In
+  direct-context mode, the system first tries to return a verbatim `Question:`
+  / `Answer:` block from the assigned KB; a canonical answer is only selected
+  when any explicit requested role is supported by that block. Otherwise it
+  falls through to the direct-context LLM call over that full KB. For
+  vacancy-thread factual follow-ups, the runner combines the prior vacancy query
+  with the current question until a newer named topic appears, so salary,
+  benefits, and other details stay scoped to the same company evidence.
+  `search_knowledge` remains the path for document facts. An empty catalog does
+  not block a real answer from published KB evidence for a specific vacancy
+  question.
 - **Manifest-scoped runtime handoff:** when a manifest policy is active, the
   runner preserves the same scoped `allowed_tools`, `lookup_query`, and
   vacancy-only `required_tool_args` (`{"top_k": 10}` for `list_active_jobs`)

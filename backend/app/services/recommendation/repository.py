@@ -1,4 +1,4 @@
-"""Structured Job↔Lead recommendation repository (DB layer).
+"""Job recommendation and active recruitment catalog repository (DB layer).
 
 Two-stage ranker over the existing ``jobs`` table — no new tables, no migrations:
 
@@ -6,7 +6,9 @@ Two-stage ranker over the existing ``jobs`` table — no new tables, no migratio
   vacancy > 0, optional province / age / gender gates.
 * Stage 2 (Python, :mod:`.scoring`): weighted scoring + matched reasons.
 
-All data columns already exist on ``jobs`` (``job.py``); this module only reads them.
+Profile matching uses structured ``jobs`` rows. The generic active catalog also
+projects recruiter-authored discovery cards from ready single-page Projects so
+both supported knowledge modes can advertise their current opportunities.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.company import Company, Project
 from app.models.job import Job
 from app.models.job import JobStatus
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
 from app.services.recommendation.availability import (
     ActiveJob,
     ActiveJobLookup,
@@ -61,6 +64,62 @@ _MATCH_SQL = text(
     LIMIT :limit
     """
 )
+
+
+def _card_items(value: object) -> list[str]:
+    """Normalize recruiter-authored discovery-card values into clean text items."""
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, list | tuple):
+        values = [item for item in value if isinstance(item, str)]
+    else:
+        return []
+    return [text for item in values if (text := " ".join(item.split()))]
+
+
+def _direct_project_active_job(project: Project) -> ActiveJob | None:
+    """Expose one ready single-page Project through the vacancy catalog.
+
+    The discovery card is the compact, recruiter-authored catalog authority. The
+    full page remains the authority for salary, shifts, benefits, and follow-up
+    details, so this projection intentionally leaves unknown structured fields
+    empty instead of parsing or inventing them.
+    """
+    card = project.index_card or {}
+    roles = _card_items(card.get("roles") or card.get("key_roles"))
+    if not roles:
+        return None
+    location = " / ".join(_card_items(card.get("location")))
+    highlights = _card_items(card.get("highlights"))
+    eligibility = _card_items(card.get("eligibility"))
+    title = " / ".join(roles)
+    return ActiveJob(
+        id=str(project.id),
+        title=title,
+        company_name=project.name,
+        factory_name=project.name,
+        province=location,
+        company_aliases=tuple(project.aliases or ()),
+        project_name=project.name,
+        project_slug=project.slug,
+        address=location,
+        description=str(project.summary or ""),
+        requirements="\n".join(eligibility),
+        benefits="\n".join(highlights),
+    )
+
+
+def _interleave_catalog_sources(
+    direct_jobs: list[ActiveJob], structured_jobs: list[ActiveJob]
+) -> list[ActiveJob]:
+    """Keep both knowledge modes represented in a bounded generic response."""
+    combined: list[ActiveJob] = []
+    for index in range(max(len(direct_jobs), len(structured_jobs))):
+        if index < len(direct_jobs):
+            combined.append(direct_jobs[index])
+        if index < len(structured_jobs):
+            combined.append(structured_jobs[index])
+    return combined
 
 
 class RecommendationRepository:
@@ -105,11 +164,13 @@ class RecommendationRepository:
         top_k: int = 3,
         project_ids: Sequence[str] | None = None,
     ) -> ActiveJobLookup:
-        """List scoped open jobs satisfying explicit semantic filters.
+        """List scoped open opportunities satisfying explicit semantic filters.
 
         This is intentionally separate from profile-based recommendations: no lead
-        data is required. An empty/unconfigured catalog, a genuine no-match, and a
-        database failure remain distinct so the graph can choose the right authority.
+        data is required. Structured Job rows and active, ready single-page Project
+        cards share this catalog. An empty/unconfigured catalog, a genuine no-match,
+        and a database failure remain distinct so the graph can choose the right
+        authority.
         """
         if project_ids == []:
             return ActiveJobLookup("catalog_empty")
@@ -133,7 +194,14 @@ class RecommendationRepository:
                 predicates.append(Company.project_id.in_(project_ids))
             rows = (
                 await self.db.execute(
-                    select(Job, Company.name, Company.aliases, Project.name, Project.slug)
+                    select(
+                        Job,
+                        Company.name,
+                        Company.aliases,
+                        Project.name,
+                        Project.slug,
+                        Project.id,
+                    )
                     .join(Company, Job.company_id == Company.id)
                     .join(Project, Company.project_id == Project.id)
                     .where(*predicates)
@@ -141,7 +209,37 @@ class RecommendationRepository:
                     .limit(self.CANDIDATE_LIMIT)
                 )
             ).all()
-            if not rows:
+            direct_predicates = [
+                Project.is_active.is_(True),
+                KnowledgeBase.mode == KnowledgeBaseMode.DIRECT_CONTEXT,
+            ]
+            if project_ids is not None:
+                direct_predicates.append(Project.id.in_(project_ids))
+            direct_projects = list(
+                (
+                    await self.db.execute(
+                        select(Project)
+                        .join(KnowledgeBase, KnowledgeBase.id == Project.knowledge_base_id)
+                        .join(
+                            KnowledgeBaseDirectFile,
+                            KnowledgeBaseDirectFile.knowledge_base_id == KnowledgeBase.id,
+                        )
+                        .where(*direct_predicates)
+                        .order_by(Project.updated_at.desc(), Project.id.asc())
+                        .limit(self.CANDIDATE_LIMIT)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            structured_project_ids = {str(row[5]) for row in rows}
+            direct_jobs = [
+                job
+                for project in direct_projects
+                if str(project.id) not in structured_project_ids
+                and (job := _direct_project_active_job(project)) is not None
+            ]
+            if not rows and not direct_jobs:
                 catalog_query = (
                     select(Job.id)
                     .join(Company, Job.company_id == Company.id)
@@ -203,8 +301,12 @@ class RecommendationRepository:
                 requirements=str(getattr(job, "requirements", "") or ""),
                 benefits=str(getattr(job, "benefits", "") or ""),
             )
-            for job, company_name, company_aliases, project_name, project_slug in rows
+            for job, company_name, company_aliases, project_name, project_slug, _project_id in rows
         ]
+        # Interleave sources so a bounded generic response represents both
+        # knowledge modes. A Project that already supplied a structured Job was
+        # removed above.
+        jobs = _interleave_catalog_sources(direct_jobs, jobs)
         return select_matching_active_jobs(
             jobs,
             role=role,

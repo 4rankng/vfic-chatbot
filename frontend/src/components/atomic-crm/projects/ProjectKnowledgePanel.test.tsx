@@ -169,7 +169,7 @@ describe("ProjectKnowledgePanel", () => {
     confirm.mockRestore();
   });
 
-  it("shows the overwrite warning when a single-page auto-sync source is active", async () => {
+  it("shows the sync flow and progressively discloses the overwrite warning", async () => {
     mocks.getProjectSinglePage.mockResolvedValue({
       id: "single-page-1",
       knowledge_base_id: "kb-1",
@@ -200,10 +200,25 @@ describe("ProjectKnowledgePanel", () => {
     );
 
     await expect
-      .element(
-        screen.getByText("Đồng bộ tự động có thể ghi đè chỉnh sửa tay"),
-      )
+      .element(screen.getByText("Google Sheet", { exact: true }))
       .toBeVisible();
+    await expect
+      .element(screen.getByText("Mỗi ngày", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Trang kiến thức", { exact: true }))
+      .toBeVisible();
+
+    const warning = screen.getByText("Sheet sẽ ghi đè nội dung sửa tay");
+    const warningDetail = screen.getByText(
+      "Khi lịch hàng ngày đang bật, dữ liệu mới từ Google Sheet sẽ thay thế nội dung sửa thủ công ở lần đồng bộ tiếp theo.",
+    );
+    await expect.element(warning).toBeVisible();
+    await expect.element(warningDetail).not.toBeVisible();
+
+    await warning.click();
+
+    await expect.element(warningDetail).toBeVisible();
   });
 
   it("ignores an older single-page refresh response after a newer one wins", async () => {
@@ -287,9 +302,9 @@ describe("ProjectKnowledgePanel", () => {
       updated_at: "2026-07-22T00:03:00Z",
     });
     await vi.waitFor(() =>
-      expect(screen.getByLabelText("Nội dung trang kiến thức").element()).toHaveValue(
-        "Bản mới nhất",
-      ),
+      expect(
+        screen.getByLabelText("Nội dung trang kiến thức").element(),
+      ).toHaveValue("Bản mới nhất"),
     );
 
     firstRefresh.resolve({
@@ -304,9 +319,9 @@ describe("ProjectKnowledgePanel", () => {
     });
 
     await vi.waitFor(() =>
-      expect(screen.getByLabelText("Nội dung trang kiến thức").element()).toHaveValue(
-        "Bản mới nhất",
-      ),
+      expect(
+        screen.getByLabelText("Nội dung trang kiến thức").element(),
+      ).toHaveValue("Bản mới nhất"),
     );
   });
 
@@ -342,11 +357,13 @@ describe("ProjectKnowledgePanel", () => {
 
     expect(mocks.listSinglePageExternalSources).not.toHaveBeenCalled();
     expect(screen.container.textContent).not.toContain(
-      "Đồng bộ Google Sheet 1 trang",
+      "Google Sheet → trang kiến thức",
     );
     expect(screen.container.textContent).not.toContain("Liên kết Google Sheet");
     expect(screen.container.textContent).not.toContain("Xử lý ngay");
-    expect(screen.container.textContent).not.toContain("Thay thế trang hiện tại");
+    expect(screen.container.textContent).not.toContain(
+      "Thay thế trang hiện tại",
+    );
   });
 
   it("does not refetch sync state while an admin edits page text", async () => {

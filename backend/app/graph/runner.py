@@ -388,17 +388,11 @@ async def _agent_turn(
         "metrics": timings,
         "retry_empty_generation": True,
     }
-    if focused_rag:
+    if focused_rag and route.reason != "vacancy_listing":
         agent_kwargs["forced_project_slug"] = project_context.project_slug
     if route.reason == "vacancy_listing":
-        if project_context is not None and project_context.state == "EXPLORE":
-            agent_kwargs["required_tool"] = "recommend_jobs"
-            required_args = {"chat_id": chat_id, "top_k": 5}
-        else:
-            agent_kwargs["required_tool"] = "list_active_jobs"
-            required_args = {"top_k": 10}
-        if project_context is not None and project_context.state == "FOCUSED":
-            required_args["project_slug"] = project_context.project_slug
+        agent_kwargs["required_tool"] = "list_active_jobs"
+        required_args = {"top_k": 10}
         agent_kwargs["required_tool_args"] = required_args
     elif focused_rag:
         agent_kwargs["required_tool"] = "search_knowledge"
@@ -860,7 +854,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
     t0 = time.monotonic()
     trace_sink = DecisionTraceBuilder()
-    trace_sink.record_decision("route_selected", route_turn(state.user_text).reason)
+    turn_route = route_turn(state.user_text)
+    trace_sink.record_decision("route_selected", turn_route.reason)
 
     try:
         candidate = ""
@@ -871,7 +866,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         provider = provider_from_conversation(conv)
 
         project_context = None
-        if deps.direct_context is not None:
+        if deps.direct_context is not None and turn_route.reason != "vacancy_listing":
             if hasattr(deps.direct_context, "resolve"):
                 project_context = await deps.direct_context.resolve(conv, state.user_text)
             elif hasattr(deps.direct_context, "active_context"):
@@ -987,7 +982,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             candidate = project_context.clarification
             timings["lane"] = "project_clarification"
             outcome_label = "project_clarification"
-        elif direct_context is not None:
+        elif direct_context is not None and turn_route.reason != "vacancy_listing":
             trace_sink.record_decision("context_selected", "direct_context")
             trace_sink.record_decision("lane_selected", "direct_context")
             candidate = await _direct_context_turn(
