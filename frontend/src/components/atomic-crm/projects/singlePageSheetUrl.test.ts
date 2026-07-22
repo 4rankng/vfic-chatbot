@@ -37,15 +37,32 @@ describe("resolveGoogleSheetGid", () => {
     });
   });
 
-  it("rejects conflicting gids between query and fragment", () => {
+  it("uses the fragment gid when query and fragment differ", () => {
     expect(
       resolveGoogleSheetGid(
-        "https://docs.google.com/spreadsheets/d/demo/edit?gid=7#gid=9",
+        "https://docs.google.com/spreadsheets/d/demo/edit?gid=7#gid=42",
       ),
-    ).toMatchObject({
-      ok: false,
-      reason: "conflict",
+    ).toEqual({
+      ok: true,
+      gid: 42,
+      source: "fragment",
     });
+  });
+
+  it("rejects conflicting gids within the selected fragment source", () => {
+    expect(
+      resolveGoogleSheetGid(
+        "https://docs.google.com/spreadsheets/d/demo/edit?gid=7#gid=42&gid=43",
+      ),
+    ).toMatchObject({ ok: false, reason: "conflict" });
+  });
+
+  it("ignores a malformed query gid when the fragment has a valid gid", () => {
+    expect(
+      resolveGoogleSheetGid(
+        "https://docs.google.com/spreadsheets/d/demo/edit?gid=bad#gid=42",
+      ),
+    ).toEqual({ ok: true, gid: 42, source: "fragment" });
   });
 
   it("rejects gids outside the JavaScript safe integer range", () => {

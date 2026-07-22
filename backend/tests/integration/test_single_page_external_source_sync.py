@@ -14,7 +14,10 @@ from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.services.errors import ConflictError
 from app.services.knowledge.external_source_sync import ExternalSourceSyncError
 from app.services.knowledge_base_service import KnowledgeBaseService
-from app.services.project.single_page_external_sources import sync_single_page_external_source
+from app.services.project.single_page_external_sources import (
+    SinglePageExternalSourceService,
+    sync_single_page_external_source,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -310,3 +313,27 @@ async def test_activation_failure_rolls_back_replacement_and_stores_fixed_code(
     assert (current.content_sha256, current.raw_text) == (prior_hash, prior_text)
     await integration_session.refresh(state)
     assert state.last_error == "direct_file_update_failed"
+
+
+@pytest.mark.asyncio
+async def test_deleting_source_keeps_current_single_page(integration_session) -> None:
+    admin, _project, knowledge_base, state = await _seed_project(integration_session)
+    await KnowledgeBaseService(integration_session).upsert_direct_file(
+        knowledge_base.id,
+        DirectContextFileUpsert(filename="current.md", text="Trang hiện tại vẫn được giữ."),
+        admin,
+    )
+    state_id = state.id
+
+    await SinglePageExternalSourceService(integration_session).delete_source(
+        state.project_id, state_id, admin
+    )
+
+    assert await integration_session.get(SinglePageExternalSourceSyncState, state_id) is None
+    current = await integration_session.scalar(
+        select(KnowledgeBaseDirectFile).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    )
+    assert current is not None
+    assert current.raw_text == "Trang hiện tại vẫn được giữ."

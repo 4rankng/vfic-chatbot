@@ -22,6 +22,7 @@ import {
   createExternalSource,
   isValidGoogleSheetUrl,
   resolveGoogleSheetGid,
+  singlePageSyncErrorMessage,
   type KnowledgeCategoryKey,
 } from "@/lib/vfic/knowledgeService";
 
@@ -133,7 +134,12 @@ export const ExternalSourceLinkForm = ({
       setOpen(false);
       onCreated?.();
     } catch (error) {
-      notify((error as Error).message, { type: "error" });
+      notify(
+        isSinglePage
+          ? singlePageSyncErrorMessage(error)
+          : (error as Error).message,
+        { type: "error" },
+      );
     } finally {
       setSubmitting(false);
     }

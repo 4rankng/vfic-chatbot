@@ -5,14 +5,17 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from pydantic import ValidationError
 import pytest
 from sqlalchemy import BigInteger
-from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
+from app.models.knowledge import KnowledgeBaseMode
 from app.models.single_page_external_source_sync_state import SinglePageExternalSourceSyncState
-from app.services.knowledge.external_source_sync import ExternalSourceSyncError
-from app.services.errors import UpstreamError
 from app.schemas.project_single_page_sync import SinglePageExternalSourceCreate
+from app.services.errors import ConflictError, NotFoundError, UpstreamError
+from app.services.knowledge.external_source_sync import ExternalSourceSyncError
+from app.services.project import single_page_external_sources as single_page_sync
 from app.services.project.single_page_external_sources import (
     SinglePageExternalSourceService,
     SinglePageExternalSourceSyncOutcome,
@@ -20,7 +23,6 @@ from app.services.project.single_page_external_sources import (
     render_sheet_markdown,
     sync_single_page_external_source,
 )
-from app.services.project import single_page_external_sources as single_page_sync
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "external_source_sync"
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1rRk4wfKb90IxJAbywimgGDOV3Y7g8RbW1EpBabZmFw8/edit"
@@ -286,3 +288,54 @@ async def test_expired_lock_can_be_reacquired_without_old_owner_deleting_new_loc
     await sync_single_page_external_source(db, state_id=state_id, actor=SimpleNamespace())
     assert calls == 2
     assert lock_key not in redis.store
+
+
+@pytest.mark.asyncio
+async def test_load_source_rejects_cross_project_ownership() -> None:
+    project_id = uuid.uuid4()
+    source_id = uuid.uuid4()
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=SimpleNamespace(id=source_id, project_id=uuid.uuid4()))
+    service = SinglePageExternalSourceService(db)
+    service._require_direct_context_project = AsyncMock()
+
+    with pytest.raises(NotFoundError, match="single_page_external_source_not_found"):
+        await service._load_source(project_id, source_id)
+
+
+@pytest.mark.asyncio
+async def test_list_sources_rejects_rag_project(monkeypatch: pytest.MonkeyPatch) -> None:
+    knowledge_base_id = uuid.uuid4()
+    db = AsyncMock()
+    db.get = AsyncMock(
+        return_value=SimpleNamespace(id=knowledge_base_id, mode=KnowledgeBaseMode.RAG)
+    )
+    monkeypatch.setattr(
+        single_page_sync,
+        "require_project",
+        AsyncMock(return_value=SimpleNamespace(knowledge_base_id=knowledge_base_id)),
+    )
+
+    with pytest.raises(ConflictError, match="single-page Project"):
+        await SinglePageExternalSourceService(db).list_sources(uuid.uuid4())
+
+
+@pytest.mark.asyncio
+async def test_create_source_maps_unique_constraint_to_duplicate_conflict() -> None:
+    db = _Db()
+    db.flush = AsyncMock(
+        side_effect=IntegrityError("insert", {}, RuntimeError("duplicate key value"))
+    )
+    service = SinglePageExternalSourceService(db)
+    service._require_direct_context_project = AsyncMock()
+
+    with pytest.raises(
+        ConflictError, match="single_page_external_source_already_exists"
+    ):
+        await service.create_source(
+            uuid.uuid4(),
+            SimpleNamespace(sheet_url=f"{SHEET_URL}#gid=0", auto_sync_enabled=False),
+            SimpleNamespace(id=uuid.uuid4()),
+        )
+
+    assert db.rollbacks == 1
