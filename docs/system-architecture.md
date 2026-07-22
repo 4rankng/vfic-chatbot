@@ -780,6 +780,12 @@ be shared by another Project.
 - `conversations.project_context_state` and `focused_project_id` select
   `EXPLORE` or one `FOCUSED` Project. Focused tool arguments are server-forced to
   that Project slug; model-supplied cross-Project arguments are ignored.
+- The cached agent preamble always carries a compact index of every active Project
+  (name, slug, aliases, discovery summary, roles, and location). Current-hiring
+  questions never rely on that index or semantic search as vacancy authority:
+  generic lists/counts, named factories, named roles, and terse follow-ups in an
+  active vacancy thread all require the complete `list_active_jobs(top_k=10)`
+  catalog for that turn. Full Project knowledge is loaded only for follow-up details.
 - Legacy and category-derived Jobs/routes coexist physically and every candidate/recruiter
   consumer gates them with `category_authority_started`. Category-derived Jobs use presence as availability. Manual status is not an
   authority. A Jobs replacement replays active sibling projections; Transportation

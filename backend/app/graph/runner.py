@@ -181,13 +181,18 @@ async def _agent_turn(
         recent_messages,
         focused_project=focused_project,
     )
+    vacancy_catalog_required = route.reason == "vacancy_listing" or (
+        route.intent == "general" and _recent_vacancy_query(recent_messages) is not None
+    )
     vacancy_authority_tool = (
-        "list_active_jobs" if route.reason == "vacancy_listing" else None
+        "list_active_jobs" if vacancy_catalog_required else None
     )
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
         allowed_tools = (
             route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
         )
+        if vacancy_catalog_required:
+            allowed_tools = ("list_active_jobs",)
         if allowed_tools is not None:
             allowed_tools = tuple(
                 name for name in allowed_tools if name in manifest_policy.tool_registry.names
@@ -216,8 +221,8 @@ async def _agent_turn(
             policy=manifest_policy,
             allowed_tools=allowed_tools,
             lookup_query=evidence_query or user_text,
-            required_tool="list_active_jobs" if route.reason == "vacancy_listing" else None,
-            required_tool_args={"top_k": 10} if route.reason == "vacancy_listing" else None,
+            required_tool="list_active_jobs" if vacancy_catalog_required else None,
+            required_tool_args={"top_k": 10} if vacancy_catalog_required else None,
             metrics=timings,
             retry_empty_generation=True,
             trace_sink=trace_sink,
@@ -271,6 +276,8 @@ async def _agent_turn(
     # Low-confidence routes fall through to the full toolset (filter_tool_schemas
     # returns the whole registry when allowed is empty/None).
     allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
+    if vacancy_catalog_required:
+        allowed_tools = ("list_active_jobs",)
     resolved_tool_registry = None
     if manifest_policy is not None:
         # Recruitment retains its proven prompt/routing path, but its bound
@@ -308,7 +315,7 @@ async def _agent_turn(
     )
     if focused_rag:
         authority_tool = (
-            "list_active_jobs" if route.reason == "vacancy_listing" else "search_knowledge"
+            "list_active_jobs" if vacancy_catalog_required else "search_knowledge"
         )
         if resolved_tool_registry is not None and authority_tool not in resolved_tool_registry:
             return await deps.agent.direct(
@@ -360,7 +367,11 @@ async def _agent_turn(
             round((time.monotonic() - lead_t0) * 1000)
         )
 
-    route_hint = routing_instruction(route)
+    route_hint = (
+        routing_instruction(route_turn(_recent_vacancy_query(recent_messages) or ""))
+        if vacancy_catalog_required and route.reason != "vacancy_listing"
+        else routing_instruction(route)
+    )
 
     contextual_user_text = build_agent_user_text(
         chat_id=chat_id,
@@ -385,9 +396,9 @@ async def _agent_turn(
         "metrics": timings,
         "retry_empty_generation": True,
     }
-    if focused_rag and route.reason != "vacancy_listing":
+    if focused_rag and not vacancy_catalog_required:
         agent_kwargs["forced_project_slug"] = project_context.project_slug
-    if route.reason == "vacancy_listing":
+    if vacancy_catalog_required:
         agent_kwargs["required_tool"] = "list_active_jobs"
         required_args = {"top_k": 10}
         agent_kwargs["required_tool_args"] = required_args

@@ -56,10 +56,18 @@ def test_faq_bypass_refuses_volatile_operational_questions():
     )
 
 
-def test_vacancy_evidence_query_uses_current_detail_and_not_free_text_history():
+def test_vacancy_evidence_query_prefers_durable_project_focus_over_free_text_history():
     history = [SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?")]
 
-    assert runner._vacancy_evidence_query("lương bao nhiêu?", history) == "lương bao nhiêu?"
+    assert runner._vacancy_evidence_query("lương bao nhiêu?", history).startswith(
+        "LG Tràng Duệ đang tuyển không?"
+    )
+    assert (
+        runner._vacancy_evidence_query(
+            "lương bao nhiêu?", history, focused_project=True
+        )
+        == "lương bao nhiêu?"
+    )
     assert runner._vacancy_evidence_query("bên mình còn tuyển không?", history) is None
 
 
@@ -1786,10 +1794,10 @@ async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_terse_vacancy_followup_uses_unconstrained_llm_route(monkeypatch):
+async def test_terse_vacancy_followup_keeps_active_job_catalog_authority(monkeypatch):
     from app.graph.runner import _agent_turn
 
-    query = "ó viedjc gì"
+    query = "lg thì sao"
     captured: dict[str, object] = {}
 
     async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
@@ -1822,13 +1830,16 @@ async def test_terse_vacancy_followup_uses_unconstrained_llm_route(monkeypatch):
         query,
         provider="zalo_bot",
         chat_id="z1",
-        recent_messages=[],
+        recent_messages=[
+            SimpleNamespace(sender="WORKER", body="có bao nhiêu nhà máy đang tuyển")
+        ],
         timings={"lane": "agent"},
     )
 
     assert reply == "LG Display đang tuyển công nhân thời vụ."
-    assert captured["allowed_tools"] is None
-    assert "required_tool" not in captured
+    assert captured["allowed_tools"] == ("list_active_jobs",)
+    assert captured["required_tool"] == "list_active_jobs"
+    assert captured["required_tool_args"] == {"top_k": 10}
 
 
 @pytest.mark.asyncio

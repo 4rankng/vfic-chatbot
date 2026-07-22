@@ -154,6 +154,7 @@ async def test_active_projects_index_excludes_project_persona_overrides():
                 SimpleNamespace(
                     slug="lg-display",
                     name="LG Display",
+                    aliases=["LG", "LGD"],
                     summary="Tuyển công nhân sản xuất",
                     index_card={"key_roles": ["Operator"], "location": "Hai Phong"},
                     persona_name="Persona LGD",
@@ -165,6 +166,7 @@ async def test_active_projects_index_excludes_project_persona_overrides():
 
     assert "=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ===" in prompt
     assert "lg-display (LG Display)" in prompt
+    assert "bí danh: LG, LGD" in prompt
     assert "=== PERSONA RIÊNG THEO DỰ ÁN ===" not in prompt
     assert "Tư vấn riêng cho LG Display." not in prompt
 

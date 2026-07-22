@@ -611,7 +611,7 @@ class RetrievalRepository:
         return (
             await self.db.execute(
                 text(
-                    "SELECT p.name, p.slug, p.summary, p.index_card "
+                    "SELECT p.name, p.slug, p.summary, p.index_card, p.aliases "
                     "FROM projects p "
                     "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
                     "ORDER BY p.name"

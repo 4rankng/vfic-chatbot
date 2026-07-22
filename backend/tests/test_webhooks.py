@@ -38,6 +38,40 @@ class FakeRequest:
 
 
 @pytest.mark.asyncio
+async def test_webhook_logs_never_include_candidate_body_or_signature(monkeypatch, caplog):
+    from app.api import webhooks
+
+    candidate_text = "Tôi tên Nguyễn Văn Bí Mật"
+    signature = "sha256=super-secret-signature"
+    raw = json.dumps(
+        {
+            "event_name": "user_send_text",
+            "app_id": "app-1",
+            "timestamp": "1700000000",
+            "message": {"text": candidate_text},
+        }
+    ).encode()
+    cfg = SimpleNamespace(oa_secret_key="oa-secret", oa_app_id="app-1")
+    settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
+    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", AsyncMock(return_value={"status": "ignored"}))
+    monkeypatch.setattr(webhooks, "record_oa_signature", AsyncMock())
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
+
+    with caplog.at_level("INFO", logger="app.api.webhooks"):
+        response = await webhooks.zalo_oa_webhook(
+            FakeRequest(raw, headers={"x-zevent-signature": signature}),
+            db=AsyncMock(),
+        )
+
+    assert response.status_code == 200
+    assert candidate_text not in caplog.text
+    assert signature not in caplog.text
+    assert "1700000000" not in caplog.text
+    assert "bytes=" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
     from app.api import webhooks
 

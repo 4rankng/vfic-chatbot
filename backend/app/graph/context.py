@@ -82,11 +82,14 @@ async def active_projects_index(retrieval: RetrievalPort) -> str:
     lines: list[str] = []
     for r in rows:
         card = r.index_card or {}
+        aliases = ", ".join(str(alias) for alias in (getattr(r, "aliases", None) or []) if alias)
         roles = ", ".join(card.get("roles") or card.get("key_roles") or [])
         loc = card.get("location") or ""
         seg = f"- {r.slug} ({r.name})"
         if r.summary:
             seg += f": {r.summary}"
+        if aliases:
+            seg += f"; bí danh: {aliases}"
         if roles:
             seg += f"; vị trí: {roles}"
         if loc:

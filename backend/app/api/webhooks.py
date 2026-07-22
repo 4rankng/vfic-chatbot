@@ -8,8 +8,8 @@ than accepted blind — an unauthenticated inbound endpoint would let anyone inj
 messages that trigger bot turns + lead extraction. Dev/test keeps the
 accept-unsigned behavior for ergonomics.
 
-The raw body is logged at INFO so the Bot Platform payload shape is observable
-during bring-up.
+Only request size and safe event metadata are logged. Candidate content, provider
+signatures, timestamps, and identifiers never enter application logs.
 """
 
 import asyncio
@@ -59,16 +59,9 @@ async def _runtime_authority_or_inactive(db: AsyncSession, *, channel: str):
 @router.post("/zalo/chatbot")
 async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     t0 = time.time()  # webhook_ack SLO (Directive §1) — sampled on success
-    # Read the RAW body so logging shows the exact bytes Zalo sent.
+    # Read the raw body once for JSON parsing and signature verification.
     raw = await request.body()
-    if _settings.app_env == "development":
-        logger.info(
-            "zalo webhook inbound bytes=%d body=%s",
-            len(raw),
-            raw.decode("utf-8", "replace")[:1000],
-        )
-    else:
-        logger.info("zalo webhook inbound bytes=%d", len(raw))
+    logger.info("zalo webhook inbound bytes=%d", len(raw))
 
     try:
         payload = json.loads(raw)
@@ -109,14 +102,7 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
 async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     t0 = time.time()  # webhook_ack SLO (Directive §1) — sampled on success
     raw = await request.body()
-    if _settings.app_env == "development":
-        logger.info(
-            "zalo oa webhook inbound bytes=%d body=%s",
-            len(raw),
-            raw.decode("utf-8", "replace")[:1000],
-        )
-    else:
-        logger.info("zalo oa webhook inbound bytes=%d", len(raw))
+    logger.info("zalo oa webhook inbound bytes=%d", len(raw))
 
     try:
         payload = json.loads(raw)
@@ -137,9 +123,6 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
         signature = request.headers.get("x-zevent-signature") or ""
         ts_header = request.headers.get("x-zevent-timestamp") or ""
         signed_app_id = str(payload.get("app_id") or cfg.oa_app_id or "")
-        body_ts = str(
-            payload.get("timestamp") or payload.get("timeStamp") or payload.get("time_stamp") or ""
-        )
         oa_result = verify_signature(
             signature=signature,
             raw=raw,
@@ -161,14 +144,9 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             # webhook" and silently drops the event. Re-enable the hard reject once
             # the OA secret is confirmed correct (health badge stays "verified").
             logger.warning(
-                "zalo oa signature mismatch (non-blocking) app_id=%r event_name=%r "
-                "payload_keys=%r ts_header=%r body_ts=%r sig=%r",
-                signed_app_id,
+                "zalo oa signature mismatch (non-blocking) event_name=%r "
+                "reason=verification_failed",
                 str(payload.get("event_name") or ""),
-                sorted(str(key) for key in payload),
-                ts_header,
-                body_ts,
-                signature,
             )
             asyncio.create_task(record_oa_signature(ok=False))
     elif _settings.app_env != "development":
