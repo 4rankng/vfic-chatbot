@@ -28,10 +28,7 @@ vi.mock("@/lib/vfic/knowledgeService", async (importOriginal) => ({
   deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
 }));
 
-import {
-  ExternalSourceList,
-  SINGLE_PAGE_SYNC_MAX_POLL_MS,
-} from "./ExternalSourceList";
+import { ExternalSourceList } from "./ExternalSourceList";
 
 const faqRow = {
   id: "src-1",
@@ -62,12 +59,6 @@ const singlePageRow = {
 };
 
 describe("ExternalSourceList", () => {
-  it("keeps polling through the full worker timeout and retry budget", () => {
-    expect(SINGLE_PAGE_SYNC_MAX_POLL_MS).toBe(
-      (4 * 1800 + 3 * 2000) * 1000,
-    );
-  });
-
   afterEach(async () => {
     vi.useRealTimers();
     await page.viewport(1280, 720);

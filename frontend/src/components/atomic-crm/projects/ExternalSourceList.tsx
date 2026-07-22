@@ -18,23 +18,8 @@ import {
 } from "@/lib/vfic/knowledgeService";
 
 const RUN_NOW_COOLDOWN_MS = 5 * 60 * 1000;
-const FAST_FOLLOW_UP_REFRESH_MS = 4000;
-const SLOW_FOLLOW_UP_REFRESH_MS = 30_000;
-const FAST_FOLLOW_UP_POLLS = 30;
-const WORKER_ATTEMPTS = 4;
-const WORKER_JOB_TIMEOUT_MS = 30 * 60 * 1000;
-const WORKER_RETRY_INTERVAL_MS = 2000 * 1000;
-export const SINGLE_PAGE_SYNC_MAX_POLL_MS =
-  WORKER_ATTEMPTS * WORKER_JOB_TIMEOUT_MS +
-  (WORKER_ATTEMPTS - 1) * WORKER_RETRY_INTERVAL_MS;
-const FAST_FOLLOW_UP_WINDOW_MS =
-  FAST_FOLLOW_UP_POLLS * FAST_FOLLOW_UP_REFRESH_MS;
-const MAX_FOLLOW_UP_POLLS =
-  FAST_FOLLOW_UP_POLLS +
-  Math.ceil(
-    (SINGLE_PAGE_SYNC_MAX_POLL_MS - FAST_FOLLOW_UP_WINDOW_MS) /
-      SLOW_FOLLOW_UP_REFRESH_MS,
-  );
+const FOLLOW_UP_REFRESH_MS = 4000;
+const MAX_FOLLOW_UP_POLLS = 30;
 
 type Props = {
   projectId: string;
@@ -195,13 +180,9 @@ export const ExternalSourceList = ({
       return;
     }
     session.attempts += 1;
-    const delay =
-      session.attempts <= FAST_FOLLOW_UP_POLLS
-        ? FAST_FOLLOW_UP_REFRESH_MS
-        : SLOW_FOLLOW_UP_REFRESH_MS;
     followUpTimer.current = window.setTimeout(
       () => void loadRef.current(),
-      delay,
+      FOLLOW_UP_REFRESH_MS,
     );
   }, [clearFollowUpTimer]);
 
