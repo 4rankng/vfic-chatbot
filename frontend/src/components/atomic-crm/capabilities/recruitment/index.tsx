@@ -10,7 +10,7 @@ import {
   getLeadStatusColor,
   getZaloUserId,
 } from "../../conversations/conversationDisplay";
-import type { Lead } from "../../types";
+import type { Conversation, Lead } from "../../types";
 import type {
   ConversationActionsSlot,
   ConversationContextAdapterProps,
@@ -21,6 +21,33 @@ import type {
 } from "../types";
 
 type ListEnvelope = { data: Record<string, unknown>[]; total: number };
+
+type RecruitmentProfileSource = Pick<
+  Conversation,
+  "zalo_channel" | "zalo_chat_id" | "contact"
+>;
+
+export const resolveRecruitmentProfile = (
+  conversation: RecruitmentProfileSource,
+  lead: Pick<Lead, "name" | "avatar_url"> | undefined,
+) => {
+  const oaProfileName =
+    conversation.zalo_channel === "oa"
+      ? conversation.contact?.display_name?.trim()
+      : undefined;
+  const oaProfileAvatar =
+    conversation.zalo_channel === "oa"
+      ? conversation.contact?.avatar_url
+      : undefined;
+  return {
+    displayName:
+      lead?.name ||
+      oaProfileName ||
+      `Ứng viên · ${(conversation.zalo_chat_id || "").slice(-4)}`,
+    avatarUrl: lead?.avatar_url || oaProfileAvatar,
+    oaProfileName,
+  };
+};
 
 const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   conversations,
@@ -48,22 +75,16 @@ const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   for (const conversation of conversations) {
     const chatKey = conversation.zalo_chat_id ?? conversation.id;
     const lead = leadByZalo.get(chatKey);
-    const oaProfileName =
-      conversation.zalo_channel === "oa"
-        ? conversation.contact?.display_name?.trim()
-        : undefined;
-    const oaProfileAvatar =
-      conversation.zalo_channel === "oa"
-        ? conversation.contact?.avatar_url
-        : undefined;
-    const displayName =
-      lead?.name || oaProfileName || `Ứng viên · ${(chatKey || "").slice(-4)}`;
+    const { displayName, avatarUrl, oaProfileName } = resolveRecruitmentProfile(
+      conversation,
+      lead,
+    );
     const colors = getLeadStatusColor(lead);
     const priority = getLeadPriorityChip(lead);
     presentations.set(conversation.id, {
       displayName,
       subtitle: lead?.phone || "",
-      avatarUrl: lead?.avatar_url || oaProfileAvatar,
+      avatarUrl,
       avatarBackground: colors.bg,
       avatarForeground: colors.ink,
       searchText: [
@@ -135,18 +156,10 @@ const RecruitmentConversationContext = ({
     };
   }, [conversation?.zalo_chat_id, lead?.id, refetch]);
 
-  const oaProfileName =
-    conversation?.zalo_channel === "oa"
-      ? conversation.contact?.display_name?.trim()
-      : undefined;
-  const oaProfileAvatar =
-    conversation?.zalo_channel === "oa"
-      ? conversation.contact?.avatar_url
-      : undefined;
-  const displayName =
-    lead?.name ||
-    oaProfileName ||
-    `Ứng viên · ${(conversation?.zalo_chat_id || "").slice(-4)}`;
+  const { displayName, avatarUrl } = resolveRecruitmentProfile(
+    conversation ?? { zalo_channel: "bot", zalo_chat_id: null, contact: null },
+    lead,
+  );
   const colors = getLeadStatusColor(lead);
   const externalId = conversation
     ? getZaloUserId(conversation.zalo_chat_id, conversation.zalo_channel)
@@ -155,7 +168,7 @@ const RecruitmentConversationContext = ({
     <>
       {children({
         displayName,
-        avatarUrl: lead?.avatar_url || oaProfileAvatar,
+        avatarUrl,
         avatarBackground: colors.bg,
         avatarForeground: colors.ink,
         externalIdentityLabel: externalId ? `Zalo ID: ${externalId}` : undefined,

@@ -291,6 +291,7 @@ class CandidateExtractionService:
             chat_id.startswith("oa:")
             and conversation is not None
             and conversation.contact is not None
+            and not str((existing_lead or {}).get("name") or "").strip()
         ):
             oa_profile_display_name = conversation.contact.display_name
         result = await CandidateExtractionService.extract(

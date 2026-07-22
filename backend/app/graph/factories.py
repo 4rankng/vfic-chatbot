@@ -102,6 +102,7 @@ class _LeadContextAdapter:
             lead_profile_text(
                 lead,
                 oa_profile_display_name=oa_profile_display_name,
+                personalize=chat_id.startswith("oa:"),
             ),
             collection_guidance,
         )

@@ -193,6 +193,7 @@ def lead_profile_text(
     lead: dict | None,
     *,
     oa_profile_display_name: str | None = None,
+    personalize: bool = False,
 ) -> str:
     """Format a lead dict into a compact text block for injection into the agent context.
 
@@ -211,7 +212,7 @@ def lead_profile_text(
 
     confirmed_name = _pick((lead or {}).get("name"))
     profile_display_name = _pick(oa_profile_display_name)
-    if confirmed_name:
+    if personalize and confirmed_name:
         lines.extend(
             [
                 "",
@@ -222,7 +223,7 @@ def lead_profile_text(
                 "- Vẫn xưng hô với người dùng là 'bạn'.",
             ]
         )
-    elif profile_display_name:
+    elif personalize and profile_display_name:
         lines.extend(
             [
                 "",

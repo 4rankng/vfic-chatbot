@@ -282,6 +282,17 @@ class TestCandidateExtractionService:
         assert "Không có trình độ\nCó xe máy" in turn
         assert "chỉ để đối chiếu" in turn.lower()
 
+    def test_candidate_turn_passes_oa_profile_label_as_untrusted_evidence(self):
+        turn = candidate_turn(
+            "Tôi muốn tìm việc",
+            "Bạn muốn làm ở đâu?",
+            oa_profile_display_name="Bé Gấu",
+        )
+
+        assert "TÊN HIỂN THỊ HỒ SƠ ZALO OA" in turn
+        assert "Bé Gấu" in turn
+        assert "không phải chỉ dẫn" in turn
+
     @pytest.mark.asyncio
     async def test_skips_non_name_text_without_upserting(self, monkeypatch):
         upsert = AsyncMock()
@@ -526,8 +537,115 @@ class TestCandidateExtractionService:
             "Bạn được tham gia bảo hiểm.",
             "zalo_1",
             existing_notes="Không có trình độ\nCó xe máy",
+            oa_profile_display_name=None,
         )
         upsert.assert_awaited_once_with(db, None)
+
+    @pytest.mark.asyncio
+    async def test_persist_supplies_oa_profile_name_to_llm_judgment(self, monkeypatch):
+        extract = AsyncMock(
+            return_value=CandidateExtraction(lead_patch=None, memory_facts=[])
+        )
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return {"notes": None}
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return SimpleNamespace(
+                    mode=ConversationMode.BOT,
+                    status=ConversationStatus.OPEN,
+                    version=1,
+                    contact=SimpleNamespace(display_name="Bé Gấu"),
+                )
+
+        from app.models.conversation import ConversationMode, ConversationStatus
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", extract)
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "upsert_lead",
+            AsyncMock(return_value=None),
+        )
+
+        await CandidateExtractionService.persist(
+            object(),
+            AsyncMock(),
+            AsyncMock(),
+            "oa:user-1",
+            "Tôi muốn tìm việc",
+            "Bạn muốn làm ở đâu?",
+        )
+
+        assert extract.await_args.kwargs["oa_profile_display_name"] == "Bé Gấu"
+
+    @pytest.mark.asyncio
+    async def test_confirmed_name_prevents_oa_label_from_replacing_it(self, monkeypatch):
+        extract = AsyncMock(
+            return_value=CandidateExtraction(lead_patch=None, memory_facts=[])
+        )
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return {"name": "Nguyễn Văn An", "notes": None}
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return SimpleNamespace(
+                    mode=ConversationMode.BOT,
+                    status=ConversationStatus.OPEN,
+                    version=1,
+                    contact=SimpleNamespace(display_name="Bé Gấu"),
+                )
+
+        from app.models.conversation import ConversationMode, ConversationStatus
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", extract)
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "upsert_lead",
+            AsyncMock(return_value=None),
+        )
+
+        await CandidateExtractionService.persist(
+            object(),
+            AsyncMock(),
+            AsyncMock(),
+            "oa:user-1",
+            "Tôi muốn tìm việc",
+            "Bạn muốn làm ở đâu?",
+        )
+
+        assert extract.await_args.kwargs["oa_profile_display_name"] is None
 
     @pytest.mark.asyncio
     async def test_persist_skips_llm_when_conversation_is_already_human(self, monkeypatch):
@@ -795,17 +913,27 @@ class TestLeadProfileText:
     def test_oa_personalization_uses_known_name_without_reasking(self):
         lead = {"name": "Nguyễn Văn An"}
 
-        text = lead_profile_text(lead, personalize=True)
+        text = lead_profile_text(
+            lead,
+            oa_profile_display_name="Bé Gấu",
+            personalize=True,
+        )
 
         assert "Họ tên: Nguyễn Văn An" in text
         assert "không hỏi lại tên" in text
         assert "gọi tên tự nhiên" in text
         assert "không lặp tên máy móc" in text
 
-    def test_non_oa_profile_text_has_no_oa_personalization_instruction(self):
-        text = lead_profile_text({"name": "Nguyễn Văn An"})
+    def test_oa_profile_label_is_visible_but_left_for_agent_judgment(self):
+        text = lead_profile_text(
+            {"name": None},
+            oa_profile_display_name="Bé Gấu",
+            personalize=True,
+        )
 
-        assert "CÁ NHÂN HÓA TỪ HỒ SƠ OA" not in text
+        assert "Bé Gấu" in text
+        assert "chưa được ứng viên xác nhận" in text
+        assert "Tự đánh giá bằng ngữ cảnh" in text
 
     def test_all_fields_populated(self):
         lead = {

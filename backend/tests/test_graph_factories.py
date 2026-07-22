@@ -170,8 +170,9 @@ async def test_lead_context_personalizes_only_oa_profiles(
                 {"contact": type("_Contact", (), {"display_name": "Bé Gấu"})()},
             )()
 
-    def _profile_text(_lead, *, oa_profile_display_name=None):
+    def _profile_text(_lead, *, oa_profile_display_name=None, personalize=False):
         profile_names.append(oa_profile_display_name)
+        assert personalize is chat_id.startswith("oa:")
         return "profile"
 
     monkeypatch.setattr("app.services.lead.repository.LeadRepository", _Repo)

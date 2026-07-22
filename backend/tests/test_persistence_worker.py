@@ -106,3 +106,53 @@ async def test_stale_stamped_persist_job_never_resolves_an_extractor():
 
     resolve_openrouter.assert_not_awaited()
     persist.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_oa_profile_worker_waits_for_inline_lookup_before_retrying():
+    from app.workers.persistence_worker import _enrich_oa_profile_async
+
+    db = object()
+    enrichment = AsyncMock(return_value=True)
+
+    @asynccontextmanager
+    async def fake_worker_session():
+        yield db
+
+    class _Integration:
+        def __init__(self, received_db) -> None:
+            assert received_db is db
+
+        async def resolve_zalo(self):
+            return type("_Config", (), {"oa_access_token": "test-token"})()
+
+        async def refresh_oa_access_token(self):
+            return "refreshed-token"
+
+    class _ProfileService:
+        def __init__(self, received_db, _sender) -> None:
+            assert received_db is db
+
+        enrich_oa_user = enrichment
+
+    with (
+        patch("app.workers._db.worker_session", fake_worker_session),
+        patch(
+            "app.services.integration_settings.IntegrationSettingsService",
+            _Integration,
+        ),
+        patch("app.services.zalo_oa_service.ZaloOASender"),
+        patch(
+            "app.services.profile_enrichment.ProfileEnrichmentService",
+            _ProfileService,
+        ),
+    ):
+        await _enrich_oa_profile_async(
+            {"zalo_id": "oa:user-1", "user_id": "user-1"}
+        )
+
+    enrichment.assert_awaited_once_with(
+        "oa:user-1",
+        user_id="user-1",
+        wait_for_inflight=True,
+    )

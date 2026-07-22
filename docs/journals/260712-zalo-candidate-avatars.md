@@ -89,11 +89,16 @@ single-use refresh-token exchange and durable token update.
 Date: 2026-07-22
 
 - This behavior is OA-only; it does not change non-OA profile handling.
-- A plausible full profile name can fill a missing `lead.name`, suppress the
-  redundant "what is your name?" question, and support natural,
-  non-repetitive personalization in the conversation.
-- Obvious nicknames or generic labels do not fill the name field, though the
-  avatar may still update from the profile lookup.
-- Self names and recruiter names are never overwritten.
+- The OA display label and avatar are channel profile data. They are stored on
+  the canonical `Contact` and shown in the recruiter inbox without trying to
+  classify the label with deterministic deny lists or surname lists.
+- `Lead.name` remains the confirmed recruitment name. The chatbot and deferred
+  candidate-extraction LLM receive the OA label as untrusted supporting
+  evidence and decide from context whether to use it as a personal name. If it
+  is a nickname or uncertain label, the chatbot still asks what the candidate
+  wants to be called.
+- Candidate- or recruiter-confirmed names take priority and are never replaced
+  by an OA label. Profile values are explicitly marked as data so embedded text
+  cannot become instructions.
 - A one-off production backfill is planned for existing OA conversations so
-  the new naming rules apply to prior leads as well.
+  prior contacts receive their OA display label and avatar.
