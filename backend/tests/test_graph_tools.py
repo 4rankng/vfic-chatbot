@@ -244,15 +244,23 @@ async def test_list_active_jobs_forwards_explicit_filters_and_bounds_top_k(no_ca
         top_k=99,
     )
 
-    assert calls == [
-        {
-            "project_slug": None,
-            "role": "thợ hàn",
-            "company": "LG",
-            "location": "Hải Phòng",
-            "top_k": 10,
-        }
-    ]
+    # The original scoped lookup is always sent with explicit filters bounded to top_k.
+    assert calls[0] == {
+        "project_slug": None,
+        "role": "thợ hàn",
+        "company": "LG",
+        "location": "Hải Phòng",
+        "top_k": 10,
+    }
+    # No-match now triggers a second unscoped lookup so the LLM can pivot to
+    # concrete alternatives instead of asking a round-trip yes/no question.
+    assert calls[1] == {
+        "project_slug": None,
+        "role": None,
+        "company": None,
+        "location": None,
+        "top_k": 10,
+    }
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
     assert payload["status"] == "no_match"
 
@@ -341,6 +349,77 @@ async def test_list_active_jobs_exception_is_status_labelled_unavailable(no_cach
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
     assert payload["status"] == "unavailable"
     assert "chưa thể kiểm tra" in payload["safe_reply"]
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_no_match_surfaces_alternatives_in_safe_reply(no_cache_io):
+    """A no-match must pivot the candidate toward concrete open positions.
+
+    The structured ``jobs`` array stays empty (the validator contract that lets
+    the authority layer trust the abstention status), but ``safe_reply`` now
+    embeds the alternative titles so the LLM can steer the candidate in the
+    same turn instead of asking a round-trip yes/no question.
+    """
+    alt_job = SimpleNamespace(
+        id="33333333-3333-4333-8333-333333333333",
+        title="Công nhân sản xuất",
+        company_name="LG Display",
+        factory_name="Tràng Duệ",
+        project_name="LG Display Hải Phòng",
+        project_slug="lg-display",
+        province="Hải Phòng",
+        district="",
+        address="",
+        salary_min=10_000_000,
+        salary_max=14_000_000,
+        vacancy_count=20,
+    )
+
+    async def _list(self, **kwargs):
+        if kwargs.get("role"):
+            return SimpleNamespace(status="no_match", jobs=())
+        return SimpleNamespace(status="matched", jobs=(alt_job,))
+
+    out = await list_active_jobs(
+        retrieval=_make_repo(list_active_jobs=_list),
+        role="nhân viên lắp ráp",
+    )
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["status"] == "no_match"
+    # Validator contract: a non-matched status must keep jobs empty.
+    assert payload["jobs"] == []
+    # Candidate-facing pivot: the alternative title appears in the trusted text.
+    assert "Công nhân sản xuất" in payload["safe_reply"]
+    assert "Hiện chưa có vị trí ACTIVE phù hợp" in payload["safe_reply"]
+    # No surfaced IDs: alternatives are text only, not groundable evidence.
+    assert "SURFACED_JOB_IDS=" not in out
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_no_match_without_alternatives_stays_honest(no_cache_io):
+    """If no alternative positions exist either, the reply must not fabricate any.
+
+    Guards against the alternatives lookup accidentally surfacing stale or
+    empty rows as if they were real openings.
+    """
+
+    async def _list(self, **kwargs):
+        if kwargs.get("role"):
+            return SimpleNamespace(status="no_match", jobs=())
+        return SimpleNamespace(status="catalog_empty", jobs=())
+
+    out = await list_active_jobs(
+        retrieval=_make_repo(list_active_jobs=_list),
+        role="nhân viên lắp ráp",
+    )
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["status"] == "no_match"
+    assert payload["jobs"] == []
+    assert "Hiện chưa có vị trí ACTIVE phù hợp" in payload["safe_reply"]
+    # No fake alternative title leaks in.
+    assert "đang tuyển các vị trí" not in payload["safe_reply"]
 
 
 # ---------------------------------------------------------------------------

@@ -696,7 +696,7 @@ class MiniMaxAgent:
         if knowledge_lookup_route:
             if trace_sink is not None:
                 trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
-            prefetched, _ = await _prefetch_tool(
+            prefetched, prefetch_hit = await _prefetch_tool(
                 retrieval,
                 embedder,
                 "search_knowledge",
@@ -790,17 +790,21 @@ class MiniMaxAgent:
         # required_tool_called:`) would otherwise discard the grounded answer and
         # fall back to the "chưa thể truy xuất" reply — even though the evidence
         # was retrieved and surfaced. Record which tool each prefetch actually ran
-        # and seed the flag whenever `required_tool` matches one of them. This
-        # keeps the invariant robust if a future change wires a `required_tool`
-        # value to any sibling prefetch route (today only knowledge_lookup_route
-        # pairs with required_tool="search_knowledge" from the focused-RAG runner
-        # branch; the other routes receive required_tool=None).
+        # AND hit, and seed the flag only when `required_tool` matches one of those
+        # hits. Gating on the hit (not just the route) matters: a KB miss leaves
+        # the flag False so the guard still fires and returns the safe fallback
+        # instead of an ungrounded or empty reply. prefetch_hit is bound inside
+        # whichever route branch ran above; the leading route flag short-circuits
+        # so it is never evaluated when no route is active. (Today only
+        # knowledge_lookup_route pairs with required_tool="search_knowledge" from
+        # the focused-RAG runner branch; the other routes receive
+        # required_tool=None.)
         prefetched_tools: set[str] = set()
-        if knowledge_lookup_route:
+        if knowledge_lookup_route and prefetch_hit:
             prefetched_tools.add("search_knowledge")
-        if timetable_route:
+        if timetable_route and prefetch_hit:
             prefetched_tools.add("search_bus_timetable")
-        if faq_detail_route:
+        if faq_detail_route and prefetch_hit:
             prefetched_tools.add("search_knowledge")
         required_tool_called = bool(
             required_tool and required_tool in prefetched_tools

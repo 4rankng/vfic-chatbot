@@ -298,6 +298,61 @@ async def test_focused_rag_knowledge_lookup_does_not_discard_grounded_reply(monk
     assert dispatched[0][0] == "search_knowledge"
 
 
+async def test_focused_rag_knowledge_lookup_miss_falls_back_safely(monkeypatch):
+    """Regression (the flip side of the grounded-reply test): when the
+    knowledge_lookup prefetch MISSES (no KB evidence), ``required_tool_called``
+    must stay False so the post-generation guard fires and routes to the safe
+    ``self.direct()`` fallback — not return an ungrounded LLM answer. The fix
+    gates ``prefetched_tools`` on ``prefetch_hit``; an empty result yields
+    ``_usable_retrieval_prefetch -> False``, so the guard triggers.
+    """
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    query = "chính sách phúc lợi lương LG Display là gì?"
+    hallucinated = "LG Display trả lương 20 triệu, tuyển 500 công nhân nhé."
+
+    async def _search(retrieval, embedder, name, args, **kwargs):  # noqa: ARG001
+        # Empty result -> _usable_retrieval_prefetch -> prefetch_hit=False (a miss).
+        return ""
+
+    class _KnowledgeLLM:
+        """A normal (main-loop) call hallucinates; the fallback ``direct()`` path
+        is detected by its distinct system prompt and surfaced as a sentinel."""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+            self.calls += 1
+            for message in messages:
+                content = str(getattr(message, "content", "") or "")
+                if "bắt buộc chưa được truy xuất thành công" in content:
+                    return SimpleNamespace(content="FALLBACK_SAFE_REPLY", tool_calls=None)
+            return SimpleNamespace(content=hallucinated, tool_calls=None)
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", _search)
+    llm = _KnowledgeLLM()
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        query,
+        system="sys",
+        retrieval=object(),
+        embedder=object(),
+        allowed_tools=("search_knowledge",),
+        lookup_query=query,
+        required_tool="search_knowledge",
+    )
+
+    # The hallucinated answer must NOT reach the user...
+    assert "20 triệu" not in result
+    assert "tuyển 500" not in result
+    # ...because the safe fallback self.direct() path ran (2 LLM calls:
+    # main generation + fallback).
+    assert llm.calls == 2, "the safe fallback self.direct() path should run on a miss"
+    assert "FALLBACK_SAFE_REPLY" in result
+
+
 async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
