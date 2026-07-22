@@ -136,7 +136,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
   migrations.
 - **Prod run** (5× SSH retry on transient refusal):
   ```bash
-  ssh root@bot.tingting.vip 'cd /opt/vfic && docker compose run --rm web alembic upgrade head'
+  ssh root@bot.tingting.vip 'cd /opt/vfic && docker compose run --rm web-$(cat ACTIVE_COLOR) alembic upgrade head'
   ```
 - **Local run:**
   ```bash
@@ -155,7 +155,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ```bash
 # Prod (idempotent — runs in the deploy flow)
-docker compose run --rm web python -m scripts.create_admin \
+docker compose run --rm web-$(cat ACTIVE_COLOR) python -m scripts.create_admin \
   --only-if-no-admins --email "$VFIC_BOOTSTRAP_ADMIN_EMAIL" \
   --password "$VFIC_BOOTSTRAP_ADMIN_PASSWORD" --full-name "VFIC Admin" --role admin
 
@@ -278,8 +278,8 @@ Sourced from `backend/.env.example` (committed template) and
 Verify after deploy:
 ```bash
 curl -s https://bot.tingting.vip/health
-docker compose exec -T web python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/metrics').read().decode())"
-docker compose exec -T web python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health/queue').read().decode())"
+docker compose exec -T web-$(cat ACTIVE_COLOR) python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/metrics').read().decode())"
+docker compose exec -T web-$(cat ACTIVE_COLOR) python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health/queue').read().decode())"
 ```
 
 ---
