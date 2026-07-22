@@ -6,8 +6,9 @@ startup context small and makes safety rules more reliable.
 ## Layers
 
 1. **Constitution:** root `AGENTS.md` contains durable repository boundaries,
-   approval gates, and essential commands. Root `CLAUDE.md` imports it so Claude
-   Code and AGENTS-aware tools share the same policy.
+   approval gates, and pointers for task-scoped instruction retrieval. Root
+   `CLAUDE.md` imports it so Claude Code and AGENTS-aware tools share the same
+   policy.
 2. **Skills:** `.claude/skills/` contains task-specific workflows that load on
    demand and route to existing source-of-truth documents.
 3. **Hooks:** `.claude/settings.json` registers a `PreToolUse` guard implemented

@@ -471,8 +471,8 @@ bugs get a step-by-step repro with a video and per-step screenshots.
 ## 8. When to Escalate (Don't Auto-Fix During QA)
 
 QA's job is to **find and document**, not patch mid-run. Escalate to a code
-change (separate task) when a finding touches any of
-[`AGENTS.md` §13](../AGENTS.md):
+change (separate task) when a finding touches **Approval required** in
+[`AGENTS.md`](../AGENTS.md):
 
 - **Auth / JWT / CORS / HMAC** — don't tweak; describe and hand off.
 - **Bot pipeline / safety / grounding / prompts** — any candidate-facing

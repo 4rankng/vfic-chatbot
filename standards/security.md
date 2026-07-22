@@ -1,7 +1,8 @@
 # Security Baseline
 
 > Security rules for the ChatBot (VFIC miniCRM) platform.
-> Also see [`../AGENTS.md`](../AGENTS.md) §6 (Security Rules) and §12 (Files That Must Never Be Auto-Edited).
+> Also see **Approval required** in [`../AGENTS.md`](../AGENTS.md) for protected
+> security operations and files.
 
 ## Boot-Time Safety
 
@@ -90,4 +91,4 @@ Zalo webhooks (`backend/app/api/webhooks.py`) are authenticated via **HMAC signa
 | `backend/app/core/ratelimit.py` | Auth rate limiting |
 | `.env`, `backend/.env` | Secrets |
 
-See [`../AGENTS.md`](../AGENTS.md) §12 for the full list.
+See **Approval required** in [`../AGENTS.md`](../AGENTS.md) for the protected list.

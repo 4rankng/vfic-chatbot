@@ -1,136 +1,79 @@
 # AGENTS.md — Ting Ting Engineering Constitution
 
-This file is the small, always-loaded contract for coding agents. Load linked
-documents only when the task needs them. Start with `TECH.md` for the system map.
+This is the small, always-loaded contract for coding agents. Do not preload the
+whole documentation tree. Identify the task surface, then retrieve only the
+instructions and neighboring files needed for that task.
 
-## Product and stack
+## Sources of truth
 
-Ting Ting / VFIC miniCRM is a Vietnamese recruiting chatbot and recruiter
-console built on Zalo. Production is `bot.tingting.vip` on a 2 vCPU DigitalOcean
-droplet.
-
-- Backend: Python 3.12, FastAPI, SQLAlchemy async, PostgreSQL + pgvector, Redis/RQ.
-- Bot: manual LangGraph-style pipeline under `backend/app/graph/`.
-- Frontend: React 19, TypeScript strict, react-admin 5, Vite 7, Tailwind v4.
-- Interfaces: `/api/v1` REST and Socket.IO realtime.
-
-Authoritative references:
-
-- System overview: `TECH.md`
+- System map and stack: `TECH.md`
 - Repository map: `docs/codebase-summary.md`
 - Architecture: `docs/system-architecture.md`
 - Code conventions: `docs/code-standards.md`, `standards/coding-style.md`
-- Security/performance: `standards/security.md`, `standards/performance.md`
 - Testing: `docs/testing.md`
-- Definition of done: `standards/definition-of-done.md`
+- Completion record: `standards/agent-completion-checklist.md`
 
-## Architecture boundaries
+For backend, frontend, security, performance, deployment, or bot work, load the
+matching source above or the task-routing source below. Do not retrieve unrelated
+instructions "just in case." Project instructions override global instructions.
 
-- `backend/app/api/` owns HTTP transport; business logic belongs in services.
-- `backend/app/services/` owns business logic and depends on models/core or graph
-  Protocols, not API modules.
-- `backend/app/graph/` owns bot-turn behavior and depends on Protocol interfaces
-  from `graph/ports.py`; wire concrete dependencies in `factories.py`.
-- `backend/app/models/` mirrors the hand-written Alembic schema; it does not
-  generate migrations.
-- `backend/app/workers/` owns sync RQ entry points and async bridging.
+## Non-negotiable boundaries
+
+- API transport belongs in `backend/app/api/`; business logic belongs in
+  `backend/app/services/`.
+- Bot-turn behavior belongs in `backend/app/graph/` and depends on Protocols from
+  `graph/ports.py`; wire concrete dependencies in `factories.py`.
+- Models mirror the hand-written Alembic schema; they do not generate migrations.
 - Frontend dependency direction is `atomic-crm` → `admin` → `ui`; product code
   belongs in `frontend/src/components/atomic-crm/`.
-- Avoid circular imports and raw SQL. Keep all I/O async; offload blocking crypto.
+- Keep I/O async, avoid raw SQL and circular imports, and offload blocking crypto.
+- LLM calls go through `backend/app/graph/clients.py`.
+- Use structured logging; never log secrets, PII, or message content.
+- Preserve public contracts and unrelated user changes unless approved scope says
+  otherwise. Never add fake production behavior or weaken checks.
 
-## Implementation rules
-
-- Read relevant docs and 2–3 neighboring files before editing.
-- Prove a bug's cause before changing behavior; add a regression test.
-- Prefer YAGNI, then KISS, then DRY. Make small, focused changes.
-- Preserve public contracts unless the approved scope changes them.
-- Backend: Pydantic v2, SQLAlchemy 2.x `select()`, domain errors mapped by API.
-- Frontend: strict TypeScript, no `any`, Vietnamese user-facing text, `cn()` for
-  class composition, TanStack Query for server state, virtualized long lists.
-- LLM calls go through `backend/app/graph/clients.py`; never call providers from
-  services directly.
-- Use structured logging; never `print()` or log secrets/PII.
-- Never add fake production behavior, hide failing checks, or delete tests to
-  make a suite pass.
-- Preserve unrelated user changes in a dirty worktree.
-
-## Protected operations — explicit approval required
+## Approval required
 
 Stop and ask before:
 
 - creating or editing `backend/alembic/versions/*.py`;
-- changing Zalo webhooks, OpenRouter/OAuth integrations, auth/JWT/CORS/rate-limit
-  behavior, or other security-sensitive code;
-- changing API response contracts or database schemas incompatibly;
-- changing bot prompts, safety, grounding, or tool definitions;
+- changing webhooks, integrations, auth/JWT/CORS/rate limits, or security controls;
+- making incompatible API or database-schema changes;
+- changing bot prompts, personas, safety, grounding, or tool definitions;
 - adding, removing, or upgrading dependencies;
-- changing deployment files or executing a deployment;
-- introducing a cross-cutting architecture pattern.
+- changing deployment files, deploying, or introducing a cross-cutting pattern.
 
-Never auto-edit secrets (`.env`, private keys, credentials) or weaken privacy or
-signature-validation controls. Shared Claude hooks in `.claude/settings.json`
-enforce the mechanically detectable subset; see `docs/agent-development-kit.md`.
+Never edit secrets (`.env`, private keys, credentials). Protected paths include
+`backend/app/core/{config,security,ratelimit}.py`,
+`backend/app/api/{webhooks,dependencies}.py`, bot policy files,
+`frontend/src/index.css`, dependency manifests, deployment files, and root/backend/
+frontend `Makefile`s. See `docs/agent-development-kit.md` for hook behavior.
 
-Files requiring approval include:
+## Scoped workflow
 
-- `.env`, `backend/.env` (never agent-edited)
-- `backend/alembic/versions/*.py`
-- `backend/docker-compose.yml`, `backend/Caddyfile`
-- `backend/app/core/config.py`, `security.py`, `ratelimit.py`
-- `backend/app/api/webhooks.py`, `dependencies.py`
-- `backend/app/graph/prompts.py`, `safety.py`, `grounding.py`, `tools.py`,
-  and persona prompt files
-- `frontend/src/index.css`
-- root/backend/frontend `Makefile`
-- `backend/pyproject.toml`, frontend dependency manifests
-
-## Workflow
-
-1. Scout the repository and check `plans/` for conflicting in-flight work.
-2. Clarify only choices that cannot be discovered locally. For broad or risky
-   work, plan under `plans/<timestamp>-<slug>/`.
-3. Implement using existing patterns and tests-first where practical.
-4. Run the narrowest relevant check, then broaden for shared contracts.
-5. Review security, performance, accessibility, error handling, compatibility,
-   and documentation impact.
+1. Inspect `git status`, relevant neighboring files, and `plans/` for overlap.
+2. State artifacts, acceptance criteria, exclusions, and approval gates.
+3. Retrieve only task-relevant instructions. Use existing patterns and the
+   smallest complete change; prove bug causes and add regression tests.
+4. Run the narrowest relevant check, broadening only for shared behavior or
+   contracts. Never hide failures.
+5. Copy `standards/agent-completion-checklist.md` to
+   `plans/reports/<YYMMDD-HHmm>-<slug>-completion.md` and fill every gate with
+   `PASS`, `N/A`, or `BLOCKED` plus evidence before declaring completion.
 6. Update docs only for user-visible behavior, setup, commands, architecture,
    security posture, public contracts, or durable maintainer decisions.
 
-Do not deploy, commit, push, merge, or open a PR unless the user asks for that
-external state change.
-
-## Git workflow
-
-- Work directly on `main`. Do not create feature branches — commit all changes
-  to `main`.
-
-## Essential verification
-
-Backend, from `backend/`:
-
-```bash
-.venv/bin/ruff check .
-.venv/bin/pytest
-```
-
-Frontend, from `frontend/`:
-
-```bash
-npm run lint
-npm run typecheck
-npm run test:unit:app
-npm run build
-```
-
-Use focused files/keywords first. The full acceptance checklist lives in
-`standards/definition-of-done.md`; manual dev QA lives in `docs/qa-runbook.md`.
+Do not deploy, commit, push, merge, open a PR, or create a branch unless asked.
+When asked to commit, work directly on `main` per the repository workflow.
 
 ## Task routing
 
-- Implementation: use `.claude/skills/implement-change/SKILL.md` when available.
-- Verification: use `.claude/skills/verify-change/SKILL.md` when available.
-- Dev-environment QA: use `.claude/skills/qa-dev-environment/SKILL.md`; record
-  findings without auto-fixing them.
-- Bot diagnosis: use `docs/troubleshooting/chatbot-response-path.html` and the
-  relevant project expertise under `.omc/skills/` when locally available.
-- Deployment: read `docs/deployment-guide.md` in full and obtain approval first.
+- Implementation: `.claude/skills/implement-change/SKILL.md`
+- Verification: `.claude/skills/verify-change/SKILL.md`
+- Dev-environment QA: `.claude/skills/qa-dev-environment/SKILL.md` (record only)
+- Bot diagnosis: `docs/troubleshooting/chatbot-response-path.html` and relevant
+  `.omc/skills/` expertise
+- Deployment: read `docs/deployment-guide.md` in full, then obtain approval
+
+Use `standards/definition-of-done.md` and `standards/review-checklist.md` only
+when their detailed gates apply to the task.

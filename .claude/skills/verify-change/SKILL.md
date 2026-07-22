@@ -5,8 +5,9 @@ description: Select and run the correct Ting Ting checks for changed backend, fr
 
 # Verify a change
 
-Read `docs/testing.md` and `standards/definition-of-done.md`. Inspect the diff and
-run the narrowest relevant checks first.
+Inspect the diff and run the narrowest relevant checks first. Read
+`docs/testing.md` and `standards/definition-of-done.md` when code, test, build,
+or runtime behavior changed; do not load them for unrelated documentation work.
 
 - Backend: targeted pytest, then `.venv/bin/ruff check .`; use the broader pytest
   lane required by the touched contract.
@@ -20,4 +21,3 @@ run the narrowest relevant checks first.
 
 Never use a live development or production database for unit tests. Report every
 failure honestly; fix the cause or mark the work incomplete.
-

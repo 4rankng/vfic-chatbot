@@ -30,7 +30,7 @@ Requirements:
 3. [acceptance criteria]
 
 Constraints:
-- Follow the coding conventions in AGENTS.md §5 and docs/code-standards.md.
+- Follow `docs/code-standards.md` and the relevant boundary in `AGENTS.md`.
 - Async-first (backend) / strict TypeScript (frontend).
 - Add tests following the existing pattern in [neighboring test file].
 - Do not modify [files that must never be auto-edited].
@@ -60,7 +60,8 @@ Root cause analysis:
 
 Constraints:
 - Do not disable tests to make them pass.
-- Do not introduce side effects (see AGENTS.md §13 for approval gates).
+- Do not introduce unapproved side effects (see **Approval required** in
+  `AGENTS.md`).
 - Match existing error-handling patterns in the module.
 ```
 
@@ -87,7 +88,7 @@ Approach:
 Constraints:
 - Do not change function signatures.
 - Do not rename public exports without updating all callers.
-- See AGENTS.md §4 for architecture boundaries.
+- See **Non-negotiable boundaries** in `AGENTS.md`.
 ```
 
 ### Performance Optimization
@@ -206,19 +207,20 @@ Constraints:
 - ORM models mirror the schema but do NOT auto-generate migrations.
 - Use op.add_column with server_default for non-null columns on existing tables.
 - Never drop a column without confirming no code references it.
-- See AGENTS.md §13 — migrations require human approval.
+- See **Approval required** in `AGENTS.md` — migrations require human approval.
 ```
 
 ### Architecture Review
 
 ```
-Review the architecture of [module/feature/PR] against AGENTS.md §4.
+Review the architecture of [module/feature/PR] against **Non-negotiable
+boundaries** in `AGENTS.md`.
 
 Check:
 - Layering: API → Services → Models/Core. No shortcuts.
 - Dependency rules: Graph → Ports (Protocols), not concrete classes.
 - No circular imports.
-- Folder ownership respected (see AGENTS.md §3).
+- Folder ownership respects **Non-negotiable boundaries** in `AGENTS.md`.
 - New code matches existing patterns (read 2-3 neighbors).
 - No god files / god modules (see backend/docs/architecture-audit-2026-07-08.md).
 - Performance: no N+1, no blocking I/O, virtualized lists.

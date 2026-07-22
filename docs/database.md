@@ -41,7 +41,8 @@ Default (local dev): `postgresql+asyncpg://vfic:vfic@localhost:5432/vfic`
 - **Migrations are hand-written.** ORM models mirror the schema but do **not** auto-generate migrations.
 - **Always write migrations manually** and test locally (`alembic upgrade head` → `alembic downgrade -1` → `alembic upgrade head`).
 - **Reversibility required.** Every `upgrade()` must have a working `downgrade()`.
-- See [`../AGENTS.md`](../AGENTS.md) §13 — migrations require human approval.
+- See **Approval required** in [`../AGENTS.md`](../AGENTS.md) — migrations require
+  human approval.
 
 ### Commands (from `backend/`)
 ```bash

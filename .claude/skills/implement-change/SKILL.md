@@ -5,8 +5,10 @@ description: Implement a Ting Ting feature, fix, refactor, configuration change,
 
 # Implement a change
 
-1. Read root `AGENTS.md`, `TECH.md`, the relevant docs, and 2–3 neighboring
-   files. Check `plans/` for overlapping work and preserve unrelated edits.
+1. Read root `AGENTS.md`, identify the task surface, then load only the matching
+   source-of-truth docs and 2–3 neighboring files. Use `TECH.md` when the system
+   map or cross-module architecture is relevant. Check `plans/` for overlapping
+   work and preserve unrelated edits.
 2. State the expected artifacts, acceptance criteria, exclusions, constraints,
    touchpoints, and any approval-gated operation.
 3. For broad or risky work, create a plan under `plans/<timestamp>-<slug>/` and
@@ -19,4 +21,3 @@ description: Implement a Ting Ting feature, fix, refactor, configuration change,
    and documentation impact before reporting completion.
 
 Stop for approval whenever root `AGENTS.md` marks the operation as protected.
-
