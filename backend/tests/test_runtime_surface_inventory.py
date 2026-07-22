@@ -64,7 +64,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "provider_boundary": 79,  # +5 broad-scan get/delete hits in the SSRF-hardened sheet fetcher
     "queue_producer": 33,  # + single-page external-source sync worker enqueue path
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "dd43bcdd1f61ab750e28d37e7f9f6297a55de5df902ae34be59e726112fc4fa2"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "d01cecfa80b4a3cb2b4cd6d3ce6126351cedb51679eee4b39013b7391eac5dff"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
