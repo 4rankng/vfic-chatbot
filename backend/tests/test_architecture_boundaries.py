@@ -168,6 +168,7 @@ service_outward|backend/app/services/personas/providers.py|app.graph.provider_sc
 service_outward|backend/app/services/project/faq.py|app.graph.clients:build_embedder
 service_outward|backend/app/services/project/features.py|app.graph.clients:build_embedder
 service_outward|backend/app/services/project/features.py|app.graph.factories:make_minimax_llm_json
+service_outward|backend/app/services/project/service.py|app.workers.direct_context_worker:enqueue_direct_context_index
 service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.single_page_external_source_sync_worker:enqueue_one_shot
 service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.utils:EnqueueStatusUnknown
 service_outward|backend/app/services/webhook.py|app.workers.persistence_worker:enqueue_enrich_oa_profile

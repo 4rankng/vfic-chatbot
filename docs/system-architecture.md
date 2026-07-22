@@ -386,7 +386,7 @@ sequenceDiagram
         WK->>WK: build_agent_user_text (private history + lead + route hint)
         Note over WK,ZS: prefetch tool for high-confidence routes<br/>(search_knowledge / search_bus_timetable)
         WK->>WK: agent.agent() LLM loop (max 6 iterations)<br/>Redis concurrency semaphore,<br/>tool dispatch = WHERE RAG RETRIEVAL HAPPENS<br/>(search_knowledge, recommend_jobs, get_product_features...)
-        WK->>WK: grounding.strip — remove hallucinated job IDs
+        WK->>WK: grounding.validate_entity_grounding + id strip — remove hallucinated job IDs and unsupported entity claims
     end
     end
 
@@ -621,6 +621,20 @@ load_conversation_state -> typing -> direct_context?
   live recommendation catalog, and follow-up scope ends once a newer named topic
   appears. Generic full-list questions bypass FAQ and direct-context shortcuts
   so one KB answer cannot masquerade as the full job catalog.
+  `conversations.project_context_state` and `focused_project_id` select
+  `EXPLORE` or one `FOCUSED` Project. Focused tool arguments are server-forced
+  to that Project slug; model-supplied cross-Project arguments are ignored.
+  `EXPLORE` stays RAG-only so retrieval work remains bounded to the current
+  query instead of loading every project catalog.
+  When a turn is Project-focused and the runtime has an isolated retrieval
+  session factory, FAQ-detail prefetch runs `search_knowledge` and
+  `get_product_features` in parallel behind bounded semaphores. If that factory
+  is unavailable, the same calls run sequentially because the shared
+  request-scoped `AsyncSession` is not concurrency-safe.
+  `grounding.validate_entity_grounding` compares asserted entity names against
+  surfaced evidence using exact slug/display canonicalization, so `LG Display`
+  can validate `lg-display` but related projects cannot satisfy one another's
+  claims.
 - **Tool-loop ceiling:** `max_llm_calls_per_turn` (default 6).
 - **Typing heartbeat:** `_typing_heartbeat` sends `typing` to Zalo every 4s
   while a turn is processing (keeps the candidate's typing indicator alive).
@@ -900,6 +914,9 @@ be shared by another Project.
 - **Caching:** `rag_cache_enabled` (TTL 300s) + embedding cache (TTL 86400s).
 - **Proactive prefetch:** `_should_prefetch_knowledge` (`clients.py:78`) runs
   KB retrieval before the agent call when the turn looks knowledge-bound.
+  Focused FAQ-detail turns may also prefetch `get_product_features` alongside
+  `search_knowledge` when an isolated retrieval session factory is available;
+  EXPLORE turns remain RAG-only.
 - **Tools exposed to agent:** `list_active_jobs`, `search_knowledge`,
   `search_user_memory`, `search_bus_timetable`.
 - **Benchmarks:** `scripts/benchmark_rag.py` (golden-case scoring) and

@@ -62,6 +62,9 @@ def test_vacancy_evidence_query_prefers_durable_project_focus_over_free_text_his
     assert runner._vacancy_evidence_query("lương bao nhiêu?", history).startswith(
         "LG Tràng Duệ đang tuyển không?"
     )
+    assert runner._vacancy_evidence_query("giờ làm của LG", history) == (
+        "LG Tràng Duệ đang tuyển không?\ngiờ làm của LG"
+    )
     assert (
         runner._vacancy_evidence_query(
             "lương bao nhiêu?", history, focused_project=True
@@ -1698,7 +1701,7 @@ async def test_focused_rag_detail_forces_project_scoped_category_search(monkeypa
     class _FakeAgent:
         async def agent(self, user_text, **kwargs):  # noqa: ARG002
             captured.update(kwargs)
-            return "Xe đưa đón theo dữ liệu LG."
+            return "LG Display làm ca ngày 08:00-20:00 và ca đêm 20:00-08:00."
 
     class _FakeLead:
         async def context(self, *args, **kwargs):  # noqa: ARG002
@@ -1720,21 +1723,23 @@ async def test_focused_rag_detail_forces_project_scoped_category_search(monkeypa
     )
 
     reply = await _agent_turn(
-        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="xe đưa đón mấy giờ?"),
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="giờ làm của LG"),
         deps,
-        "xe đưa đón mấy giờ?",
+        "giờ làm của LG",
         provider="zalo_bot",
         chat_id="z1",
-        recent_messages=[],
+        recent_messages=[
+            SimpleNamespace(sender="WORKER", body="LG Display đang tuyển công nhân không?")
+        ],
         timings={"lane": "agent"},
         project_context=context,
     )
 
-    assert reply == "Xe đưa đón theo dữ liệu LG."
+    assert reply == "LG Display làm ca ngày 08:00-20:00 và ca đêm 20:00-08:00."
     assert captured["allowed_tools"] == ("search_knowledge",)
     assert captured["required_tool"] == "search_knowledge"
     assert captured["required_tool_args"] == {
-        "query": "xe đưa đón mấy giờ?",
+        "query": "giờ làm của LG",
         "project_slug": "lg-display",
     }
     assert captured["forced_project_slug"] == "lg-display"

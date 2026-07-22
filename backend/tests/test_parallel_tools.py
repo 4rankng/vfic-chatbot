@@ -416,7 +416,7 @@ async def test_timetable_prefetch_miss_keeps_tool_available(monkeypatch):
 
 
 async def test_faq_detail_unguided_prefetches_only_knowledge(monkeypatch):
-    """An unguided faq_detail hit (no project slug) prefetches only search_knowledge."""
+    """An unguided FAQ lookup stays RAG-only instead of loading every project."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
@@ -424,10 +424,10 @@ async def test_faq_detail_unguided_prefetches_only_knowledge(monkeypatch):
 
     async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
         dispatched.append((name, args))
-        return "Lương cơ bản 8 triệu. Nguồn: tin tuyển dụng LG Display."
+        return "KB: LG Display làm ca ngày 08:00-20:00 và ca đêm 20:00-08:00."
 
     monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
-    llm = _ScriptedLLM(["Thu nhập cơ bản là 8 triệu theo tin tuyển dụng."])
+    llm = _ScriptedLLM(["LG Display làm ca ngày 08:00-20:00 và ca đêm 20:00-08:00."])
     agent = MiniMaxAgent(llm, embedder=None, max_iters=3)
     metrics: dict = {}
 
@@ -437,30 +437,39 @@ async def test_faq_detail_unguided_prefetches_only_knowledge(monkeypatch):
         retrieval=object(),
         embedder=None,
         allowed_tools=("get_product_features", "search_knowledge"),
-        lookup_query="lương công nhân LG Display bao nhiêu?",
+        lookup_query="giờ làm của LG",
         metrics=metrics,
     )
 
-    assert reply == "Thu nhập cơ bản là 8 triệu theo tin tuyển dụng."
-    # No project slug → get_product_features cannot be prefetched.
-    assert dispatched == [("search_knowledge", {"query": "lương công nhân LG Display bao nhiêu?"})]
+    assert reply == "LG Display làm ca ngày 08:00-20:00 và ca đêm 20:00-08:00."
+    assert dispatched == [("search_knowledge", {"query": "giờ làm của LG"})]
     assert llm.calls == 1
     assert llm.bind_calls == 0
     assert metrics["prefetch_hit"] is True
 
 
 async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features(monkeypatch):
-    """A focused faq_detail hit prefetches search_knowledge AND get_product_features."""
+    """Focused FAQ prefetches both authorities with isolated retrieval sessions."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
     dispatched: list[tuple[str, dict]] = []
+    retrieval_ids: list[str] = []
 
     async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
         dispatched.append((name, args))
+        retrieval_ids.append(retrieval.identity)
         if name == "get_product_features":
             return "Đặc điểm sản phẩm — dự án 'lg-display':\n- housing: LG Display có ký túc xá cho người ở xa. Điều kiện: ≥50 km."
         return "Lương cơ bản 8 triệu. Nguồn: tin tuyển dụng LG Display."
+
+    next_session = 0
+
+    @asynccontextmanager
+    async def make_retrieval():
+        nonlocal next_session
+        next_session += 1
+        yield _FakeRetrieval(identity=f"fresh-{next_session}")
 
     monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
     llm = _ScriptedLLM(["LG Display có ký túc xá cho người ở xa theo đặc điểm sản phẩm."])
@@ -476,6 +485,7 @@ async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features
         lookup_query="làm chỗ bạn có nhà trọ không?",
         metrics=metrics,
         forced_project_slug="lg-display",
+        make_retrieval=make_retrieval,
     )
 
     assert reply == "LG Display có ký túc xá cho người ở xa theo đặc điểm sản phẩm."
@@ -486,6 +496,7 @@ async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features
     features_args = dict(dispatched[1][1])
     assert knowledge_args == {"query": "làm chỗ bạn có nhà trọ không?", "project_slug": "lg-display"}
     assert features_args == {"project_slug": "lg-display"}
+    assert sorted(retrieval_ids) == ["fresh-1", "fresh-2"]
     # Both authorities already prefetched → one tool-free generation, no tools bound.
     assert llm.calls == 1
     assert llm.bind_calls == 0
@@ -493,7 +504,7 @@ async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features
 
 
 async def test_faq_detail_focused_dual_prefetch_runs_concurrently(monkeypatch):
-    """Focused faq_detail must dispatch both prefetches in parallel, not sequentially."""
+    """Focused FAQ prefetch is parallel when isolated retrieval sessions exist."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
@@ -510,6 +521,10 @@ async def test_faq_detail_focused_dual_prefetch_runs_concurrently(monkeypatch):
     agent = MiniMaxAgent(llm, embedder=None, max_iters=3)
     metrics: dict = {}
 
+    @asynccontextmanager
+    async def make_retrieval():
+        yield _FakeRetrieval(identity="isolated")
+
     import time as _time
 
     t0 = _time.monotonic()
@@ -522,12 +537,47 @@ async def test_faq_detail_focused_dual_prefetch_runs_concurrently(monkeypatch):
         lookup_query="nhà trọ",
         metrics=metrics,
         forced_project_slug="lg-display",
+        make_retrieval=make_retrieval,
     )
     elapsed_ms = (_time.monotonic() - t0) * 1000
 
     # Sequential would be >= 100ms (two 50ms sleeps). Parallel is ~50ms.
     # Allow slack for scheduling/sleep granularity without masking serialization.
     assert elapsed_ms < 90, f"prefetch was sequential ({elapsed_ms:.0f}ms >= 90ms)"
+
+
+async def test_faq_detail_focused_prefetch_is_sequential_without_session_factory(monkeypatch):
+    """A request-scoped shared AsyncSession is never used by concurrent prefetches."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    active = 0
+    max_active = 0
+
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0)
+        active -= 1
+        if name == "get_product_features":
+            return "Đặc điểm sản phẩm — dự án 'lg-display': housing available."
+        return "KB evidence for the query."
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    agent = MiniMaxAgent(_ScriptedLLM(["Grounded reply."]), embedder=None, max_iters=3)
+
+    await agent.agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("get_product_features", "search_knowledge"),
+        lookup_query="nhà trọ",
+        forced_project_slug="lg-display",
+    )
+
+    assert max_active == 1
 
 
 async def test_faq_detail_retries_one_empty_final_generation_with_same_evidence(monkeypatch):

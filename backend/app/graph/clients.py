@@ -765,42 +765,66 @@ class MiniMaxAgent:
         elif faq_detail_route:
             if trace_sink is not None:
                 trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
-            # When the turn is project-focused (slug present), also prefetch the
-            # deterministic structured product features in parallel with the RAG
-            # lookup. The catalog (lương/ca/KTX/xe đưa đón from job_feature_values)
-            # is the authoritative source for faq_detail queries; RAG alone may
-            # surface vague or stale chunks. Reuses the bounded-gather pattern from
-            # the model-driven tool loop below (parallel_tool_max_concurrency).
+            # A focused turn may combine the project feature catalog with RAG evidence.
+            # EXPLORE mode deliberately stays RAG-only: loading every project's full
+            # feature catalog would violate the bounded-context invariant and grow work
+            # and prompt size with the total project count.
             focused_slug = forced_project_slug or None
+            sem_pf = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
+
+            async def _bounded_prefetch(name: str, args: dict) -> tuple[object, bool]:
+                async with sem_pf:
+                    try:
+                        async with make_retrieval() as fresh_retrieval:
+                            return await _prefetch_tool(
+                                fresh_retrieval,
+                                embedder,
+                                name,
+                                args,
+                                metrics,
+                                resolved_tool_registry,
+                            )
+                    except Exception:  # noqa: BLE001 — never reuse shared session concurrently
+                        logger.warning("isolated prefetch retrieval for %s failed", name, exc_info=True)
+                        return "", False
+
             if focused_slug:
                 if trace_sink is not None:
                     trace_sink.record_tool_selection(
                         "get_product_features", selected_by="prefetch"
                     )
-                sem_pf = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
-
-                async def _bounded_prefetch(name: str, args: dict) -> tuple[object, bool]:
-                    async with sem_pf:
-                        return await _prefetch_tool(
-                            retrieval,
-                            embedder,
-                            name,
-                            args,
-                            metrics,
-                            resolved_tool_registry,
-                        )
-
-                knowledge_task = _bounded_prefetch(
-                    "search_knowledge",
-                    scoped_args("search_knowledge", {"query": effective_query}),
+                knowledge_args = scoped_args(
+                    "search_knowledge", {"query": effective_query}
                 )
-                features_task = _bounded_prefetch(
-                    "get_product_features",
-                    scoped_args("get_product_features", {"project_slug": focused_slug}),
+                features_args = scoped_args(
+                    "get_product_features", {"project_slug": focused_slug}
                 )
-                (prefetched, prefetch_hit), (features, features_hit) = (
-                    await asyncio.gather(knowledge_task, features_task)
-                )
+                if make_retrieval is not None:
+                    outcomes = await asyncio.gather(
+                        _bounded_prefetch("search_knowledge", knowledge_args),
+                        _bounded_prefetch("get_product_features", features_args),
+                    )
+                    (prefetched, prefetch_hit), (features, features_hit) = outcomes
+                else:
+                    # Web-chat builds dependencies around one request-scoped
+                    # AsyncSession. Keep these calls sequential when no isolated
+                    # retrieval factory exists; AsyncSession is not concurrency-safe.
+                    prefetched, prefetch_hit = await _prefetch_tool(
+                        retrieval,
+                        embedder,
+                        "search_knowledge",
+                        knowledge_args,
+                        metrics,
+                        resolved_tool_registry,
+                    )
+                    features, features_hit = await _prefetch_tool(
+                        retrieval,
+                        embedder,
+                        "get_product_features",
+                        features_args,
+                        metrics,
+                        resolved_tool_registry,
+                    )
             else:
                 prefetched, prefetch_hit = await _prefetch_tool(
                     retrieval,
@@ -825,8 +849,9 @@ class MiniMaxAgent:
                                 "[TRA CỨU KB — thông tin bổ sung]\n"
                                 f"{prefetched}\n\n"
                                 "Hãy trả lời ngắn gọn, ưu tiên dữ liệu đặc điểm sản phẩm trên. "
-                                "Với mục [CHƯA RÕ], nói rõ 'tin tuyển dụng chưa ghi rõ', "
-                                "không bịa."
+                                "Với mục [CHƯA RÕ] hoặc dự án không có trong dữ liệu, nói rõ "
+                                "'chưa ghi rõ' hoặc 'chưa có thông tin đã xác minh'; KHÔNG bịa "
+                                "thông tin cho dự án không có bằng chứng."
                             )
                         )
                     )
@@ -837,12 +862,13 @@ class MiniMaxAgent:
                                 "KẾT QUẢ TRA CỨU KB ĐÃ THỰC HIỆN CHO CÂU HỎI NÀY:\n"
                                 f"{prefetched}\n\n"
                                 "Hãy trả lời ngắn gọn, chỉ dựa trên dữ liệu trên. Nếu dữ liệu "
-                                "chưa nêu thông tin cần hỏi thì nói rõ 'tin tuyển dụng chưa ghi rõ'."
+                                "chưa nêu thông tin cần hỏi thì nói rõ 'chưa có thông tin đã "
+                                "xác minh'; KHÔNG bịa thông tin cho dự án không có bằng chứng."
                             )
                         )
                     )
                 schemas = []
-            faq_detail_features_hit = features_hit if focused_slug else False
+            faq_detail_features_hit = features_hit
         if schemas and hasattr(active_llm, "bind_tools"):
             bound = (
                 active_llm.bind_tools(schemas, tool_choice=required_tool)
@@ -880,6 +906,17 @@ class MiniMaxAgent:
                 prefetched_tools.add("get_product_features")
         required_tool_called = bool(
             required_tool and required_tool in prefetched_tools
+        )
+        # True only when ``list_active_jobs`` was actually dispatched in this turn.
+        # The authority-override branches below (``_negative_job_authority`` /
+        # ``_matched_job_authority``) sanity-check the LLM's reply against the
+        # authoritative job evidence, and on a mismatch replace it with a blind
+        # ``self.direct()`` call that has no tool context. Without this gate the
+        # override can misfire on turns where the model called ``search_knowledge``
+        # (or any tool whose result happens to contain the ``ACTIVE_JOB_LOOKUP_JSON``
+        # prefix) and discard a perfectly grounded reply from another tool path.
+        authority_tool_dispatched = bool(
+            required_tool == "list_active_jobs" and required_tool_called
         )
         empty_retry_available = retry_empty_generation
         retrying_empty_generation = False
@@ -1015,8 +1052,10 @@ class MiniMaxAgent:
                         trace_sink=trace_sink,
                     )
                 negative_authority = _negative_job_authority(tool_results)
-                if negative_authority is not None and not _negative_job_reply_is_consistent(
-                    str(ai.content or "")
+                if (
+                    authority_tool_dispatched
+                    and negative_authority is not None
+                    and not _negative_job_reply_is_consistent(str(ai.content or ""))
                 ):
                     return await self.direct(
                         user_text,
@@ -1030,8 +1069,12 @@ class MiniMaxAgent:
                         trace_sink=trace_sink,
                     )
                 matched_authority = _matched_job_authority(tool_results)
-                if matched_authority is not None and not _matched_job_reply_is_consistent(
-                    str(ai.content or ""), matched_authority[0]
+                if (
+                    authority_tool_dispatched
+                    and matched_authority is not None
+                    and not _matched_job_reply_is_consistent(
+                        str(ai.content or ""), matched_authority[0]
+                    )
                 ):
                     return await self.direct(
                         user_text,
@@ -1130,8 +1173,11 @@ class MiniMaxAgent:
             # MiniMax occasionally omits tool_call.id; an empty tool_call_id
             # breaks the OpenAI tool protocol on the next turn. Synthesize one.
             for idx, (tc, out) in enumerate(zip(calls, outs)):
-                if (tc["name"] if "name" in tc else "") == required_tool:
+                tool_name = tc["name"] if "name" in tc else ""
+                if tool_name == required_tool:
                     required_tool_called = True
+                    if tool_name == "list_active_jobs":
+                        authority_tool_dispatched = True
                     if _active_job_safe_reply(out) is None:
                         logger.warning("required LLM tool returned invalid evidence: %s", required_tool)
                         return await self.direct(
@@ -1144,6 +1190,9 @@ class MiniMaxAgent:
                             metrics=metrics,
                             trace_sink=trace_sink,
                         )
+                elif tool_name == "list_active_jobs":
+                    # Model called list_active_jobs voluntarily (not as required_tool).
+                    authority_tool_dispatched = True
                 tool_results.append(str(out))
                 messages.append(
                     ToolMessage(
@@ -1168,7 +1217,11 @@ class MiniMaxAgent:
             )
         final = messages[-1].content if hasattr(messages[-1], "content") else ""
         negative_authority = _negative_job_authority(tool_results)
-        if negative_authority is not None and not _negative_job_reply_is_consistent(str(final)):
+        if (
+            authority_tool_dispatched
+            and negative_authority is not None
+            and not _negative_job_reply_is_consistent(str(final))
+        ):
             return await self.direct(
                 user_text,
                 system=(
@@ -1181,8 +1234,10 @@ class MiniMaxAgent:
                 trace_sink=trace_sink,
             )
         matched_authority = _matched_job_authority(tool_results)
-        if matched_authority is not None and not _matched_job_reply_is_consistent(
-            str(final), matched_authority[0]
+        if (
+            authority_tool_dispatched
+            and matched_authority is not None
+            and not _matched_job_reply_is_consistent(str(final), matched_authority[0])
         ):
             return await self.direct(
                 user_text,

@@ -191,25 +191,89 @@ _PROPERTY_ASSERTION_RE = re.compile(
     re.IGNORECASE,
 )
 # Generic lead-ins that are not entity names (Vietnamese pronouns / discourse).
+# ASCII-folded at module load so comparison is consistent with ``_normalize_entity``
+# (which lowercases + strips diacritics). Storing "bạn" here would never match the
+# normalized "ban" the regex produces.
+def _fold(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return ascii_text.replace("đ", "d").replace("Đ", "D").lower().strip()
+
+
 _ASSERTION_STOPWORDS = frozenset(
-    {
+    _fold(s)
+    for s in (
         "bạn",
         "tôi",
         "chúng",
         "mình",
         "công ty",
-        "nha may",  # "nhà máy" normalized for matching
-        "du an",  # "dự án"
-        "vi tri",  # "vị trí"
-    }
+        "nhà máy",
+        "dự án",
+        "vị trí",
+        "công ty chúng tôi",
+        # Discourse adverbs/connectors that precede or wrap a predicate without
+        # being an entity subject ("Hiện chưa có...", "còn Samsung thì có...",
+        # "Công ty chúng tôi có..."). These are not factory/company names, so
+        # asserting them as entities would false-positive on legitimate abstention
+        # replies or break slug/display-name token matching.
+        "hiện",
+        "hiện tại",
+        "hiện nay",
+        "nay",
+        "đây",
+        "đó",
+        "vẫn",
+        "đang",
+        "còn",
+        "thì",
+        "là",
+        "với",
+        "cả",
+        "nhưng",
+        "mà",
+        "của",
+        "riêng",
+        "như",
+    )
 )
 
 
 def _normalize_entity(text: str) -> str:
     """ASCII-fold + lowercase so "LG Display" matches "lg display"."""
-    normalized = unicodedata.normalize("NFKD", text or "")
-    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    return ascii_text.replace("đ", "d").replace("Đ", "D").lower().strip()
+    return _fold(text or "")
+
+
+def _strip_stopword_edges(tokens: list[str]) -> list[str]:
+    """Remove leading/trailing stopwords and stopword phrases.
+
+    Handles multi-word discourse phrases like "hiện tại" so an entity captured as
+    ``["hien", "tai"]`` is fully stripped (both tokens are stopwords together),
+    while a real entity like ``["lg", "display"]`` is preserved. Iterates until no
+    edge changes so ``["hien", "tai", "con", "rorze"]`` → ``["rorze"]``.
+    """
+    while tokens:
+        changed = False
+        # Try the longest leading stopword phrase first.
+        for length in range(min(len(tokens), 3), 0, -1):
+            phrase = " ".join(tokens[:length])
+            if phrase in _ASSERTION_STOPWORDS:
+                tokens = tokens[length:]
+                changed = True
+                break
+        if not changed:
+            break
+    while tokens:
+        changed = False
+        for length in range(min(len(tokens), 3), 0, -1):
+            phrase = " ".join(tokens[-length:])
+            if phrase in _ASSERTION_STOPWORDS:
+                tokens = tokens[:-length]
+                changed = True
+                break
+        if not changed:
+            break
+    return tokens
 
 
 def extract_asserted_entities(reply: str) -> set[str]:
@@ -217,19 +281,14 @@ def extract_asserted_entities(reply: str) -> set[str]:
 
     Returns the entity substrings (normalized) that appear as the subject of a
     ``có``/``có hỗ trợ``/``không có`` predicate. Used to diff against the surfaced
-    entity set. Pronouns and generic nouns are excluded so "bạn có muốn..." does
-    not fire.
+    entity set. Pronouns, generic nouns, and discourse adverbs are excluded so
+    "bạn có muốn...", "công ty có...", and "hiện tại chưa có..." do not fire.
     """
     asserted: set[str] = set()
     for match in _PROPERTY_ASSERTION_RE.finditer(reply or ""):
         entity = _normalize_entity(match.group("entity"))
-        # Drop trailing pronouns/discourse glued to a real entity, e.g.
-        # "còn Rorze" → "rorze". Keep the final token run that isn't a stopword.
         tokens = [t for t in re.split(r"\s+", entity) if t]
-        while tokens and tokens[-1] in _ASSERTION_STOPWORDS:
-            tokens.pop()
-        while tokens and tokens[0] in _ASSERTION_STOPWORDS:
-            tokens.pop(0)
+        tokens = _strip_stopword_edges(tokens)
         candidate = " ".join(tokens).strip(" ,.;:-")
         if len(candidate) < 3 or candidate in _ASSERTION_STOPWORDS:
             continue
@@ -237,8 +296,9 @@ def extract_asserted_entities(reply: str) -> set[str]:
     return asserted
 
 
-def _normalize_entity_set(entities: set[str]) -> set[str]:
-    return {_normalize_entity(e) for e in entities}
+def _canonical_entity(entity: str) -> str:
+    """Normalize display names and slugs to one exact comparison form."""
+    return " ".join(re.findall(r"[a-z0-9]+", _normalize_entity(entity)))
 
 
 def validate_entity_grounding(
@@ -255,15 +315,20 @@ def validate_entity_grounding(
     case we cannot distinguish a hallucination from a legitimate KB-chunk mention,
     so we do not false-positive — the abstain path in the agent layer handles the
     no-evidence case).
+
+    Matching is exact after separator/diacritic normalization, so a slug
+    (``lg-display``) and display name (``LG Display``) confirm each other without
+    letting related but distinct projects (``samsung-bac-ninh`` and
+    ``Samsung Bắc Giang``) validate one another.
     """
     if not surfaced_entities:
         return frozenset(), reply
     asserted = extract_asserted_entities(reply)
     if not asserted:
         return frozenset(), reply
-    surfaced_norm = _normalize_entity_set(surfaced_entities)
+    surfaced_canonical = {_canonical_entity(entity) for entity in surfaced_entities}
     unsupported = frozenset(
-        entity for entity in asserted if entity not in surfaced_norm
+        entity for entity in asserted if _canonical_entity(entity) not in surfaced_canonical
     )
     if not unsupported:
         return frozenset(), reply

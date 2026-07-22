@@ -211,6 +211,13 @@
   },
   {
     "category": "queue_producer",
+    "file": "app/workers/direct_context_worker.py",
+    "scope": "enqueue_direct_context_index",
+    "call": "enqueue_job",
+    "count": 1
+  },
+  {
+    "category": "queue_producer",
     "file": "app/workers/external_source_sync_worker.py",
     "scope": "enqueue_one_shot",
     "call": "enqueue_job",

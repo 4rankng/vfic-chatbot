@@ -100,6 +100,23 @@ def test_route_bare_shift_pay_question_stays_job_detail():
     assert route.tools == ("get_product_features", "search_knowledge")
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "giờ làm của LG",
+        "LG Display làm mấy giờ?",
+        "thời gian làm việc ở LG Display thế nào?",
+        "lịch làm việc của LG Display",
+    ],
+)
+def test_route_working_hours_question_uses_grounded_faq_detail_path(query):
+    route = route_turn(query)
+
+    assert route.intent == "faq_detail"
+    assert route.strategy == "knowledge_lookup"
+    assert route.tools == ("get_product_features", "search_knowledge")
+
+
 def test_route_housing_question_uses_grounded_faq_detail_path():
     route = route_turn("làm chỗ bạn có nhà trọ không?")
 

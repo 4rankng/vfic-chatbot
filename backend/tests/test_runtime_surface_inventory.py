@@ -62,9 +62,9 @@ EXPECTED_ROUTE_INVENTORY_SHA256 = "3fecf58e9c1f3e94b0b692db4564e8e1cef6d94f57c7a
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 75,  # identity lookup moved behind an infrastructure gateway
-    "queue_producer": 33,  # + single-page external-source sync worker enqueue path
+    "queue_producer": 35,  # + DIRECT_CONTEXT indexing enqueue + producer call
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "513b4eb8dc6a70ecc3676321fa625e88f7b981d5c2d48df6f7e942eb9eadbde7"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "9b435c6917edd8172cac695fa052a77a10eda70430e2c98a03209355d080af4e"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
