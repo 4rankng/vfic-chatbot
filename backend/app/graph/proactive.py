@@ -328,7 +328,12 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         fs = fast_safety_filter(message)
         candidate = fs["output"]
 
-        if blocklist_hit(message) or (fs["needs_llm_safety"] and not fs["too_long"]):
+        # Scan the user-visible reply (cleaned, reasoning stripped), not the raw
+        # output — see runner.py for the same gate. Scanning the raw, which still
+        # carries <think> deliberation that references "system prompt", suppressed
+        # legitimate proactive nudges whenever the model's reasoning happened to
+        # mention the system prompt.
+        if blocklist_hit(candidate) or (fs["needs_llm_safety"] and not fs["too_long"]):
             logger.info("proactive safety flagged: conversation=%s", conv.zalo_chat_id)
             await svc.state.record_proactive_outcome(
                 conv,

@@ -1056,7 +1056,18 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             fs = fast_safety_filter(raw)
             candidate = fs["output"]
 
-            blocklisted = blocklist_hit(raw)
+            # Scan the user-visible reply, not the raw model output. The raw still
+            # carries the <think> deliberation that fast_safety_filter strips above;
+            # a reasoning model routinely writes "theo system prompt …" while
+            # deciding how to answer. That text never reaches the user, so scanning
+            # the raw discarded correct, grounded answers and emitted the generic
+            # "Tôi chưa thể xác minh …" fallback whenever a turn's deliberation
+            # happened to mention the system prompt (flaky on prod: the same
+            # question was answered on one turn and deflected on the next). Real
+            # leakage — a blocklist term in the actual reply, or reasoning that
+            # survives an unclosed <think> — is still caught, since it's present in
+            # the cleaned output too.
+            blocklisted = blocklist_hit(candidate)
             if blocklisted:
                 timings["safety_trigger"] = "blocklist"
                 trace_sink.record_decision("safety_verdict", "blocklist_redirect")

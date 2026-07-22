@@ -1132,6 +1132,49 @@ async def test_blocklisted_reply_redirects_deterministically(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_reasoning_referencing_system_prompt_keeps_grounded_answer(monkeypatch):
+    """Regression: the blocklist must scan the user-visible reply, not the raw
+    output that still carries the <think> deliberation.
+
+    A reasoning model routinely writes "theo system prompt …" while deciding how
+    to answer; that text is stripped before the user sees anything. Scanning the
+    raw discarded correct, grounded answers and emitted the generic fallback
+    whenever deliberation mentioned the system prompt — flaky on prod, where the
+    same question ("CTY Việt Pháp ở tỉnh nào") was answered on one turn and
+    deflected with "Tôi chưa thể xác minh …" on the next.
+    """
+    from app.graph.safety import blocklist_hit
+
+    raw = (
+        "<think>Người dùng hỏi công ty Việt Pháp ở tỉnh nào. Theo system prompt "
+        "và KB, VFIC đặt tại KCN Tràng Duệ, An Dương, Hải Phòng. Trả lời ngắn gọn."
+        "</think>"
+        "Công ty Việt Pháp (VFIC) đặt tại Khu công nghiệp Tràng Duệ, huyện An "
+        "Dương, TP. Hải Phòng."
+    )
+    # Sanity: the raw (with reasoning) trips the blocklist — the exact false
+    # positive the cleaned-scan fix removes.
+    assert blocklist_hit(raw) is True
+
+    _stub_agent(monkeypatch, raw)
+
+    class _MustNotJudge:
+        async def safety(self, candidate):  # noqa: ARG002
+            raise AssertionError("LLM safety judge must not run")
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    zalo = _FakeZalo()
+
+    res = await run_turn(_state(), _deps(zalo, conversation=svc, safety=_MustNotJudge()))
+
+    assert res["outcome"] == "sent"
+    assert res["reply"] != FALLBACK_REPLY
+    assert "Hải Phòng" in res["reply"]
+    assert "system prompt" not in res["reply"]
+
+
+@pytest.mark.asyncio
 async def test_overlong_clean_reply_is_truncated_and_sent(monkeypatch):
     """A clean (no code/JSON) reply over 1800 chars is truncated and SENT, not
     redirected to the fallback.
