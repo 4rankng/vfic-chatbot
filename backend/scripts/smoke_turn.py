@@ -42,6 +42,7 @@ import asyncio
 import sys
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -50,7 +51,7 @@ from app.core.config import get_settings
 from app.graph.factories import build_deps
 from app.graph.runner import BotRunState, run_turn
 from app.models.contact import Contact, ContactChannelIdentity
-from app.models.conversation import Conversation, Message
+from app.models.conversation import Conversation, ConversationMode, Message
 from app.models.outbox import OutboundOutbox
 
 # A non-empty reply that passes the deterministic keyword safety filter and is
@@ -106,13 +107,20 @@ async def _stub_embedder(_text: str) -> list[float]:
     return [0.0] * 3072
 
 
-async def _seed_smoke_conversation(db) -> tuple[Conversation, ContactChannelIdentity, Contact]:
+async def _seed_smoke_conversation(
+    db,
+) -> tuple[Conversation, ContactChannelIdentity, Contact, uuid.UUID]:
     """Inline port of tests/integration/_conv_factory.make_conversation.
 
     The production image does not ship ``tests/``, so the canonical Contact +
     ContactChannelIdentity + Conversation triple (required since Alembic 0047)
-    is constructed here against a throwaway, clearly-marked identity.
+    is constructed here against a throwaway, clearly-marked identity. The
+    conversation is pre-locked (``bot_lock_owner``/``bot_locked_until`` set,
+    ``mode=BOT``) exactly as the webhook does before enqueue, so the turn takes
+    the full SENT path and exercises ``claim_send``'s outbox INSERT.
     """
+    owner = uuid.uuid4()
+    now = datetime.now(timezone.utc)
     contact = Contact()
     db.add(contact)
     await db.flush()
@@ -129,16 +137,20 @@ async def _seed_smoke_conversation(db) -> tuple[Conversation, ContactChannelIden
         zalo_channel="bot",
         contact_id=identity.contact_id,
         channel_identity_id=identity.id,
+        mode=ConversationMode.BOT,
+        bot_lock_owner=owner,
+        bot_locked_until=now + timedelta(seconds=300),
+        bot_lock_heartbeat_at=now,
     )
     db.add(conv)
     await db.flush()
     # Refresh so server defaults (notably ``version``) materialize before we read
     # them for the optimistic-lock token.
     await db.refresh(conv)
-    return conv, identity, contact
+    return conv, identity, contact, owner
 
 
-async def _cleanup(db, conv: Conversation, identity: ContactChannelIdentity, contact: Contact) -> None:
+async def _cleanup(db, *, conv_id, identity_id, contact_id) -> None:
     """Delete the throwaway rows so the smoke leaves no prod artifact.
 
     The service layer commits internally (``record_bot_pending`` etc.), so a
@@ -146,12 +158,12 @@ async def _cleanup(db, conv: Conversation, identity: ContactChannelIdentity, con
     they are removed first; deleting the conversation then CASCADEs to
     ``bot_runs`` + ``messages`` (FKs are ``ondelete=CASCADE``).
     """
-    msg_ids = (await db.scalars(select(Message.id).where(Message.conversation_id == conv.id))).all()
+    msg_ids = (await db.scalars(select(Message.id).where(Message.conversation_id == conv_id))).all()
     if msg_ids:
         await db.execute(delete(OutboundOutbox).where(OutboundOutbox.message_id.in_(msg_ids)))
-    await db.execute(delete(Conversation).where(Conversation.id == conv.id))
-    await db.execute(delete(ContactChannelIdentity).where(ContactChannelIdentity.id == identity.id))
-    await db.execute(delete(Contact).where(Contact.id == contact.id))
+    await db.execute(delete(Conversation).where(Conversation.id == conv_id))
+    await db.execute(delete(ContactChannelIdentity).where(ContactChannelIdentity.id == identity_id))
+    await db.execute(delete(Contact).where(Contact.id == contact_id))
     await db.commit()
 
 
@@ -180,7 +192,10 @@ async def _run_smoke(*, inject_failure: bool) -> int:
 
     real_dispatch_message_outbox = outbox_service.dispatch_message_outbox
 
-    async def _stub_dispatch_message_outbox(*, message_id: int) -> _SmokeSendResult:  # noqa: ARG001
+    async def _stub_dispatch_message_outbox(_db, *, message_id: int) -> _SmokeSendResult:  # noqa: ARG001
+        # ConversationService.dispatch_outbound_message calls this as
+        # ``dispatch_message_outbox(self.db, message_id=...)`` (db positional),
+        # matching the real signature ``dispatch_message_outbox(db, *, message_id)``.
         return _SmokeSendResult(msg_id=f"smoke-{message_id}")
 
     outbox_service.dispatch_message_outbox = _stub_dispatch_message_outbox  # type: ignore[assignment]
@@ -194,21 +209,31 @@ async def _run_smoke(*, inject_failure: bool) -> int:
 
         ConversationService.record_bot_outcome = _boom  # type: ignore[assignment,method-assign]
 
-    conv: Conversation | None = None
-    identity: ContactChannelIdentity | None = None
-    contact: Contact | None = None
+    conv_id = identity_id = contact_id = None
     try:
+        # Seed in its own session, then CLOSE it. The turn runs in a FRESH
+        # session so run_turn's ``svc.get`` loads the conversation the same way
+        # the RQ worker does -- via a select() that fires the ``selectin``
+        # relationships (contact, contact.channel_identities). Seeding + running
+        # in one session pollutes the identity map and returns a bare object,
+        # which then MissingGreenlets when ``ConversationOut`` walks the graph.
+        async with session_factory() as seed_db:
+            conv, identity, contact, owner = await _seed_smoke_conversation(seed_db)
+            await seed_db.commit()
+            conv_id, identity_id, contact_id = conv.id, identity.id, contact.id
+            version_at_start = int(conv.version or 0)
+
         async with session_factory() as db:
             deps = await build_deps(db)
             deps.agent = _StubAgent()
             deps.zalo = _StubZalo()
             deps.embedder = _stub_embedder
 
-            conv, identity, contact = await _seed_smoke_conversation(db)
             state = BotRunState(
-                conversation_id=str(conv.id),
-                version_at_start=int(conv.version or 0),
+                conversation_id=str(conv_id),
+                version_at_start=version_at_start,
                 user_text="smoke probe",
+                lock_owner=str(owner),
             )
             outcome = await run_turn(state, deps)
 
@@ -234,10 +259,15 @@ async def _run_smoke(*, inject_failure: bool) -> int:
         outbox_service.dispatch_message_outbox = real_dispatch_message_outbox  # type: ignore[assignment]
         # Best-effort cleanup of the throwaway rows (skipped only if seeding
         # itself failed before a conversation existed).
-        if conv is not None:
+        if conv_id is not None:
             try:
                 async with session_factory() as cleanup_db:
-                    await _cleanup(cleanup_db, conv, identity, contact)  # type: ignore[arg-type]
+                    await _cleanup(
+                        cleanup_db,
+                        conv_id=conv_id,
+                        identity_id=identity_id,
+                        contact_id=contact_id,
+                    )
             except Exception as cleanup_exc:  # noqa: BLE001 -- cleanup must not mask the real result
                 print(f"SMOKE WARN: cleanup incomplete: {cleanup_exc}", file=sys.stderr)
         await engine.dispose()

@@ -29,7 +29,16 @@ services:
       retries: 5
     restart: unless-stopped
 
-  web:
+  # --- Blue/green web tier (zero-downtime deploy) -----------------------------
+  # Two identical web replicas. Only the ACTIVE color (tracked in
+  # /opt/vfic/ACTIVE_COLOR) receives traffic via the Caddyfile, which
+  # reverse-proxies the active ``web-<color>:8000`` upstream. bg_deploy.sh brings
+  # up the inactive color at the new IMAGE_TAG, runs scripts/smoke_turn.py
+  # against it, then flip_caddy.sh renders + reloads Caddy onto it (graceful,
+  # <1s, no dropped connections) and stops the old color. ``restart: unless-
+  # stopped`` auto-restarts the active color on host reboot; the inactive color
+  # is left ``stop``ped (not removed) so ``make rollback`` can revive it instantly.
+  web-blue:
     image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
@@ -45,6 +54,22 @@ services:
       retries: 5
       # 30s absorbs the cold-boot fork window so compose's own probe does not
       # start firing before the single uvicorn worker has bound :8000.
+      start_period: 30s
+    restart: unless-stopped
+
+  web-green:
+    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes: [vfic_kb_uploads:/data/kb_uploads]
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 5
       start_period: 30s
     restart: unless-stopped
 
