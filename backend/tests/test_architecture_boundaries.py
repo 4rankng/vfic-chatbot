@@ -73,9 +73,6 @@ api_outward|backend/app/api/knowledge.py|app.models.knowledge:KBVersionStatus
 api_outward|backend/app/api/knowledge.py|app.models.knowledge:KnowledgeDocument
 api_outward|backend/app/api/knowledge.py|app.models.knowledge:KnowledgeStatus
 api_outward|backend/app/api/knowledge.py|app.models.user:User
-api_outward|backend/app/api/knowledge.py|app.workers.external_source_sync_worker:enqueue_one_shot
-api_outward|backend/app/api/knowledge.py|app.workers.ingest_worker:enqueue_ingest
-api_outward|backend/app/api/knowledge.py|app.workers.ingest_worker:enqueue_ingest_version
 api_outward|backend/app/api/knowledge_bases.py|app.core.db:get_db
 api_outward|backend/app/api/knowledge_bases.py|app.models.company:Company
 api_outward|backend/app/api/knowledge_bases.py|app.models.company:Project
@@ -162,15 +159,8 @@ schema_infra|backend/app/schemas/personas.py|app.models.lead:LeadStage
 schema_infra|backend/app/schemas/project_knowledge.py|app.models.knowledge:KnowledgeCategoryRevisionStatus
 schema_infra|backend/app/schemas/projects.py|app.models.knowledge:KnowledgeBaseMode
 schema_infra|backend/app/schemas/user.py|app.models.user:Role
-service_outward|backend/app/services/knowledge/category_service.py|app.workers.category_worker:enqueue_category_revision
-service_outward|backend/app/services/knowledge/category_service.py|app.workers.utils:EnqueueStatusUnknown
 service_outward|backend/app/services/personas/providers.py|app.graph.provider_scope:provider_from_conversation
-service_outward|backend/app/services/project/faq.py|app.graph.clients:build_embedder
-service_outward|backend/app/services/project/features.py|app.graph.clients:build_embedder
-service_outward|backend/app/services/project/features.py|app.graph.factories:make_minimax_llm_json
 service_outward|backend/app/services/project/service.py|app.workers.direct_context_worker:enqueue_direct_context_index
-service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.single_page_external_source_sync_worker:enqueue_one_shot
-service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.utils:EnqueueStatusUnknown
 service_outward|backend/app/services/webhook.py|app.workers.persistence_worker:enqueue_enrich_oa_profile
 """.splitlines()
     if line.strip()
@@ -322,6 +312,8 @@ def _backend_rule(rel: str, target: str) -> str | None:
         "backend/app/access/application/",
         "backend/app/installation/domain/",
         "backend/app/installation/application/",
+        "backend/app/project_knowledge/domain/",
+        "backend/app/project_knowledge/application/",
     )
     pure_backend_file = rel.startswith("backend/app/integrations/") and rel.endswith(
         ("/domain.py", "/application.py")
@@ -453,13 +445,15 @@ def test_shared_kernel_rejects_framework_and_infrastructure_imports() -> None:
         assert _backend_rule(importer, target) == "pure_outward"
 
 
-def test_identity_and_access_domain_modules_reject_framework_and_infrastructure_imports() -> None:
+def test_context_domain_and_application_modules_reject_outward_imports() -> None:
     for importer in (
         "backend/app/identity/application/example.py",
         "backend/app/access/domain/example.py",
         "backend/app/installation/domain/example.py",
         "backend/app/integrations/facebook_oauth/domain.py",
         "backend/app/integrations/facebook_oauth/application.py",
+        "backend/app/project_knowledge/domain/example.py",
+        "backend/app/project_knowledge/application/example.py",
     ):
         for target in (
             "fastapi:Depends",
@@ -475,6 +469,21 @@ def test_identity_and_access_domain_modules_reject_framework_and_infrastructure_
             "app.workers.chatbot_worker:enqueue_chat_run",
         ):
             assert _backend_rule(importer, target) == "pure_outward"
+
+
+def test_project_knowledge_package_has_no_graph_or_worker_backedge() -> None:
+    context_root = REPO_ROOT / "backend/app/project_knowledge"
+    forbidden: list[str] = []
+    for path in context_root.rglob("*.py"):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        targets = _python_import_targets(path, path.read_text())
+        for target in targets:
+            module = target.split(":", 1)[0]
+            if module.startswith(("app.graph", "app.workers")):
+                forbidden.append(f"{rel}|{target}")
+    assert not forbidden, "Project/knowledge context backedges:\n" + "\n".join(
+        sorted(forbidden)
+    )
 
 
 def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:

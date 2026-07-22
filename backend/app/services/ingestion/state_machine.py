@@ -18,74 +18,30 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.provenance import DocumentStatus, SourceDocument
+from app.project_knowledge.domain.ingestion import (
+    ALLOWED_STATE_TRANSITIONS,
+    TERMINAL_INGESTION_STATES,
+    IllegalIngestionTransition,
+    IngestionState,
+    ensure_ingestion_transition,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class IllegalTransition(ValueError):
-    """Raised when a state transition is not in ALLOWED_TRANSITIONS."""
+IllegalTransition = IllegalIngestionTransition
 
 
 # Directive §8 transition table.
 ALLOWED_TRANSITIONS: dict[DocumentStatus, set[DocumentStatus]] = {
-    DocumentStatus.RECEIVED: {
-        DocumentStatus.STORED,
-        DocumentStatus.FAILED_TRANSIENT,
-        DocumentStatus.FAILED_PERMANENT,
-        DocumentStatus.QUARANTINED,
-        DocumentStatus.SUPERSEDED,
-    },
-    DocumentStatus.STORED: {
-        DocumentStatus.PARSED,
-        DocumentStatus.FAILED_TRANSIENT,
-        DocumentStatus.FAILED_PERMANENT,
-        DocumentStatus.SUPERSEDED,
-    },
-    DocumentStatus.PARSED: {
-        DocumentStatus.NORMALIZED,
-        DocumentStatus.FAILED_TRANSIENT,
-        DocumentStatus.FAILED_PERMANENT,
-        DocumentStatus.SUPERSEDED,
-    },
-    DocumentStatus.NORMALIZED: {
-        DocumentStatus.CLASSIFIED,
-        DocumentStatus.FAILED_TRANSIENT,
-        DocumentStatus.FAILED_PERMANENT,
-    },
-    DocumentStatus.CLASSIFIED: {
-        DocumentStatus.EXTRACTED,
-        DocumentStatus.FAILED_TRANSIENT,
-        DocumentStatus.FAILED_PERMANENT,
-    },
-    DocumentStatus.EXTRACTED: {
-        DocumentStatus.VALIDATED,
-        DocumentStatus.REVIEW_REQUIRED,
-        DocumentStatus.FAILED_TRANSIENT,
-        DocumentStatus.FAILED_PERMANENT,
-    },
-    DocumentStatus.VALIDATED: {
-        DocumentStatus.REVIEW_REQUIRED,
-        DocumentStatus.APPROVED,
-        DocumentStatus.FAILED_PERMANENT,
-    },
-    DocumentStatus.REVIEW_REQUIRED: {
-        DocumentStatus.APPROVED,
-        DocumentStatus.FAILED_PERMANENT,
-        DocumentStatus.QUARANTINED,
-    },
-    DocumentStatus.APPROVED: {DocumentStatus.PUBLISHED},
-    DocumentStatus.PUBLISHED: {DocumentStatus.INDEXED},
-    DocumentStatus.INDEXED: set(),  # terminal
-    DocumentStatus.FAILED_TRANSIENT: {DocumentStatus.RECEIVED},  # retry from start
-    DocumentStatus.FAILED_PERMANENT: set(),  # terminal
-    DocumentStatus.QUARANTINED: set(),  # terminal (admin review)
-    DocumentStatus.SUPERSEDED: {DocumentStatus.RECEIVED},  # re-ingest as new version
+    DocumentStatus(current.value): {
+        DocumentStatus(target.value) for target in targets
+    }
+    for current, targets in ALLOWED_STATE_TRANSITIONS.items()
 }
 
 TERMINAL_STATES = {
-    DocumentStatus.INDEXED,
-    DocumentStatus.FAILED_PERMANENT,
-    DocumentStatus.QUARANTINED,
+    DocumentStatus(state.value) for state in TERMINAL_INGESTION_STATES
 }
 
 
@@ -102,14 +58,12 @@ async def transition(
     IllegalTransition on disallowed transitions.
     """
     current = DocumentStatus(doc.status)
-    if current == new_status:
+    if not ensure_ingestion_transition(
+        IngestionState(current.value),
+        IngestionState(new_status.value),
+        reason=reason,
+    ):
         return doc  # idempotent
-    allowed = ALLOWED_TRANSITIONS.get(current, set())
-    if new_status not in allowed:
-        raise IllegalTransition(
-            f"illegal transition {current.value} → {new_status.value}"
-            + (f" ({reason})" if reason else "")
-        )
     doc.status = new_status.value
     await db.commit()
     await db.refresh(doc)

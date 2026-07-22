@@ -186,6 +186,22 @@ capsules remain encrypted in Redis behind dedicated state/flow ports. Page
 activation and disconnect stage account, encrypted Page token, and audit writes
 in one database transaction, then invalidate caches after commit.
 
+Phase 4 establishes `app/project_knowledge` as the inward boundary for project,
+knowledge, ingestion, and retrieval behavior. Ingestion lifecycle transitions,
+category reference/checksum rules, canonical format identifiers, and project
+activation readiness are framework-free domain policies. Project/knowledge job
+scheduling and provider construction are application ports wired to RQ and the
+current graph clients only in `app/composition`. The five existing worker enqueue facades,
+queue names, dotted callable paths, timeouts, retries, job IDs, and distinct
+receipt semantics remain operational contracts.
+
+The graph compatibility retrieval port now extends the narrower project/knowledge
+query port; conversation-memory and recruitment/persona reads remain graph-owned
+compatibility methods until Phases 5 and 6. Retrieval SQL, visibility, ANN gating,
+RRF, reranking, FAQ thresholds, grounding, and ordering are unchanged. Category
+and single-page commits still precede best-effort cache repair; Phase 4 records
+that bounded stale-cache risk and does not introduce a schema-backed outbox.
+
 The normative context/package map, inward dependency rules, exact legacy-edge
 baseline, runtime contract inventory, and layer-removal ownership are recorded
 in [`decisions/ddd-context-boundaries.md`](./decisions/ddd-context-boundaries.md).

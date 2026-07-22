@@ -16,6 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.project_knowledge.application.retrieval import ProjectKnowledgeQueryPort
+
 
 @dataclass(frozen=True)
 class SendOutcome:
@@ -162,38 +164,14 @@ class RuntimePolicyPort(Protocol):
     ) -> bool: ...
 
 
-class RetrievalPort(Protocol):
-    """Retrieval repository surface the agent tools + prompt assembly depend on."""
+class RetrievalPort(ProjectKnowledgeQueryPort, Protocol):
+    """Compatibility aggregate while Phase 5/6 split conversation and recruitment reads."""
 
     async def active_persona_body(self, provider: str | None = None) -> str | None: ...
 
-    async def active_project_ids(self) -> list[str]: ...
-
-    async def active_projects_with_card(self) -> list[Any]: ...
-
-    async def match_memories(self, embedding: str, top_k: int, filters_json: str) -> list[Any]: ...
-
-    async def project_id_by_slug(self, slug: str, *, active_only: bool = False) -> Any: ...
-
-    async def match_faq(
-        self, embedding: str, *, top_k: int = 3, project_ids: list[str] | None = None
+    async def match_memories(
+        self, embedding: str, top_k: int, filters_json: str
     ) -> list[Any]: ...
-
-    async def match_documents(
-        self,
-        embedding: str,
-        top_k: int,
-        filters_json: str,
-        *,
-        project_ids: list[str] | None = None,
-        query_text: str = "",
-    ) -> list[Any]: ...
-
-    async def list_active_projects(self) -> list[Any]: ...
-
-    async def search_bus_timetable(self, company: str, question: str, limit: int) -> list[Any]: ...
-
-    async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
 
     async def match_jobs_for_lead(
         self, chat_id: str, *, top_k: int = 5, province: str | None = None

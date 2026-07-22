@@ -38,6 +38,10 @@ from app.services.knowledge.external_source_sync import (
 from app.services.knowledge.external_source_sync.parsers import parse_faq_csv
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services.project.repository import require_project
+from app.project_knowledge.application.jobs import (
+    EnqueueReceiptUnknown,
+    ProjectKnowledgeJobs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +120,21 @@ def render_sheet_markdown(csv_text: str) -> tuple[str, int]:
 
 
 class SinglePageExternalSourceService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        jobs: ProjectKnowledgeJobs | None = None,
+    ) -> None:
         self.db = db
+        self._jobs = jobs
+
+    def _job_scheduler(self) -> ProjectKnowledgeJobs:
+        if self._jobs is None:
+            from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
+
+            self._jobs = build_project_knowledge_jobs()
+        return self._jobs
 
     async def list_sources(
         self, project_id: uuid.UUID
@@ -177,13 +194,9 @@ class SinglePageExternalSourceService:
         await self.db.commit()
         await self.db.refresh(row)
 
-        from app.workers.single_page_external_source_sync_worker import enqueue_one_shot
-
-        from app.workers.utils import EnqueueStatusUnknown
-
         try:
-            job_id = enqueue_one_shot(row.id)
-        except EnqueueStatusUnknown:
+            job_id = self._job_scheduler().sync_single_page_source(row.id)
+        except EnqueueReceiptUnknown:
             logger.warning(
                 "single_page_external_source create enqueue receipt unknown row=%s code=%s",
                 row.id,
@@ -207,14 +220,13 @@ class SinglePageExternalSourceService:
         if not acquired:
             raise ConflictError("run_now_cooldown")
 
-        from app.workers.single_page_external_source_sync_worker import enqueue_one_shot
-
-        from app.workers.utils import EnqueueStatusUnknown
-
         requested_job_id = f"single-page-ext-src-sync-{source_id}-{uuid.uuid4().hex}"
         try:
-            job_id = enqueue_one_shot(row.id, job_id=requested_job_id)
-        except EnqueueStatusUnknown as exc:
+            job_id = self._job_scheduler().sync_single_page_source(
+                row.id,
+                job_id=requested_job_id,
+            )
+        except EnqueueReceiptUnknown as exc:
             # The job may already be accepted. Keep the cooldown so a retry
             # cannot submit a duplicate while the queue receipt is uncertain.
             logger.warning(

@@ -295,7 +295,7 @@ class KnowledgeDocument(Base):
 
     @property
     def is_canonical(self) -> bool:
-        from app.services.knowledge.canonical import CANONICAL_SCHEMA_VERSIONS
+        from app.project_knowledge.domain.canonical import CANONICAL_SCHEMA_VERSIONS
 
         return (self.metadata_ or {}).get("schema_version") in CANONICAL_SCHEMA_VERSIONS
 

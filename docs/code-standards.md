@@ -1,6 +1,6 @@
 # Code Standards
 
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-22
 
 Conventions for the Ting Ting / VFIC miniCRM codebase. Follow these unless a
 nearby module has a stronger local pattern; when in doubt, match the
@@ -9,6 +9,24 @@ surrounding code.
 ---
 
 ## Backend (Python 3.12, FastAPI, async-first)
+
+### Project/knowledge layer boundary
+
+- Framework-free policies and value contracts live in
+  `app/project_knowledge/domain/`; application ports and orchestration live in
+  `app/project_knowledge/application/`.
+- FastAPI routes, RQ workers, SQLAlchemy repositories, Redis, provider clients,
+  and caches are adapters. They may depend inward; domain/application modules
+  must not import them.
+- Wire RQ and graph-client implementations only in `app/composition`; the
+  `app/project_knowledge` package must never import `app.graph` or `app.workers`.
+- Schedule document, version, category, and external-source work through the
+  project/knowledge application job facade. Keep the established `ingest` queue,
+  worker dotted paths, timeouts, retry policies, job IDs, and operation-specific
+  receipt behavior.
+- Retrieval SQL and algorithms remain infrastructure. Agent-runtime code consumes
+  the project/knowledge query port; conversation and recruitment queries remain
+  in their owning slices until their migration phases.
 
 ### Async model
 - **Async end-to-end** in the web process (uvicorn). RQ workers are sync and

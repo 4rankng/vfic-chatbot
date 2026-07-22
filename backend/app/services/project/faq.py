@@ -32,12 +32,26 @@ from app.services.knowledge.text_ingestion import (
 )
 from app.services.project.mapping import _faq_answer_from_content
 from app.services.project.repository import ProjectRepository, require_project
+from app.project_knowledge.application.providers import KnowledgeProviderFactory
 
 
 class ProjectFaqService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        providers: KnowledgeProviderFactory | None = None,
+    ) -> None:
         self.db = db
         self.repo = ProjectRepository(self.db)
+        self._providers = providers
+
+    def _provider_factory(self) -> KnowledgeProviderFactory:
+        if self._providers is None:
+            from app.composition.project_knowledge import build_knowledge_provider_factory
+
+            self._providers = build_knowledge_provider_factory()
+        return self._providers
 
     async def list_faq(self, project_id: uuid.UUID, *, limit: int = 12) -> ProjectFaqResponse:
         """List published FAQ chunks for a project."""
@@ -244,14 +258,15 @@ class ProjectFaqService:
         answer: str,
         variants: list[str] | None = None,
     ) -> None:
-        from app.graph.clients import build_embedder
         from app.services.integration_settings import IntegrationSettingsService
 
         openrouter_config = await IntegrationSettingsService(self.db).resolve_openrouter()
         # Variants are folded into the embedded text so the vector arm of the FAQ
         # bypass matches paraphrases, not just the canonical phrasing.
         text = "\n".join([question, *(variants or []), answer])
-        vector = await build_embedder(openrouter_api_key=openrouter_config.api_key)(text)
+        vector = await self._provider_factory().embedder(
+            openrouter_api_key=openrouter_config.api_key
+        )(text)
         await self.repo.set_chunk_embedding(chunk_id, vec_literal(vector))
 
     @staticmethod

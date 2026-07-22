@@ -64,10 +64,25 @@ from app.services.knowledge.external_source_sync import (
     ExternalSourceSyncError,
     validate_sheet_url,
 )
-from app.workers.external_source_sync_worker import enqueue_one_shot
-from app.workers.ingest_worker import enqueue_ingest, enqueue_ingest_version
+from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+_project_knowledge_jobs = build_project_knowledge_jobs()
+
+
+def enqueue_ingest(document_id: object) -> None:
+    """Compatibility seam for tests and callers during the scheduling cutover."""
+    _project_knowledge_jobs.ingest_document(document_id)
+
+
+def enqueue_ingest_version(version_id: object) -> str:
+    """Compatibility seam preserving the stable version receipt contract."""
+    return _project_knowledge_jobs.ingest_version(version_id)
+
+
+def enqueue_one_shot(state_id: object, *, job_id: str | None = None) -> str | None:
+    """Compatibility seam for RAG external-source one-shot scheduling."""
+    return _project_knowledge_jobs.sync_external_source(state_id, job_id=job_id)
 
 
 @router.get("/format/template", response_class=PlainTextResponse)

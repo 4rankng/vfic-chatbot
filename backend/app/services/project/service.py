@@ -55,6 +55,10 @@ from app.services.project.features import ProjectFeatureService
 from app.services.project.single_page_external_sources import SinglePageExternalSourceService
 from app.services.project.repository import ProjectRepository, require_project
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.project_knowledge.domain.project import (
+    ProjectActivationFacts,
+    project_activation_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -411,17 +415,24 @@ class ProjectService:
         modes = await self._knowledge_modes([project.knowledge_base_id])
         mode = modes.get(project.knowledge_base_id)
         if mode is KnowledgeBaseMode.DIRECT_CONTEXT:
-            if not project.index_card:
-                raise ConflictError("Single-page Project needs a discovery card before activation")
+            preflight = ProjectActivationFacts(
+                knowledge_mode=mode.value,
+                has_discovery_card=bool(project.index_card),
+                has_direct_file=True,
+            )
+            if error := project_activation_error(preflight):
+                raise ConflictError(error)
             direct_file = await self.db.scalar(
                 select(KnowledgeBaseDirectFile.id).where(
                     KnowledgeBaseDirectFile.knowledge_base_id == project.knowledge_base_id
                 )
             )
-            if direct_file is None:
-                raise ConflictError("Single-page Project needs its page before activation")
-            return
-        if mode is KnowledgeBaseMode.RAG:
+            facts = ProjectActivationFacts(
+                knowledge_mode=mode.value,
+                has_discovery_card=bool(project.index_card),
+                has_direct_file=direct_file is not None,
+            )
+        elif mode is KnowledgeBaseMode.RAG:
             category = await self.db.scalar(
                 select(KnowledgeCategory).where(
                     KnowledgeCategory.project_id == project.id,
@@ -433,7 +444,13 @@ class ProjectService:
                 if category and category.active_revision_id
                 else None
             )
-            if revision is None or not revision.normalized_payload.get("jobs"):
-                raise ConflictError("RAG Project needs an active Jobs category before activation")
-            return
-        raise ConflictError("Project has no owned knowledge base")
+            facts = ProjectActivationFacts(
+                knowledge_mode=mode.value,
+                has_active_jobs=bool(
+                    revision is not None and revision.normalized_payload.get("jobs")
+                ),
+            )
+        else:
+            facts = ProjectActivationFacts(knowledge_mode=None)
+        if error := project_activation_error(facts):
+            raise ConflictError(error)

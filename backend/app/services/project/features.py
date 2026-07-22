@@ -29,12 +29,26 @@ from app.services.knowledge import sync_project_highlights
 from app.services.knowledge.repository import JobFeatureValueRepo
 from app.services.project.mapping import _feature_from_row
 from app.services.project.repository import ProjectRepository, require_project
+from app.project_knowledge.application.providers import KnowledgeProviderFactory
 
 
 class ProjectFeatureService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        providers: KnowledgeProviderFactory | None = None,
+    ) -> None:
         self.db = db
         self.repo = ProjectRepository(self.db)
+        self._providers = providers
+
+    def _provider_factory(self) -> KnowledgeProviderFactory:
+        if self._providers is None:
+            from app.composition.project_knowledge import build_knowledge_provider_factory
+
+            self._providers = build_knowledge_provider_factory()
+        return self._providers
 
     async def list_features(self, project_id: uuid.UUID) -> FeatureListResponse:
         """List the project's active extracted worker product features (catalog order)."""
@@ -152,8 +166,6 @@ class ProjectFeatureService:
             )
         # Imported lazily (langchain/provider deps kept out of the web-process import path).
         from app.core.config import get_settings
-        from app.graph.clients import build_embedder
-        from app.graph.factories import make_minimax_llm_json
         from app.services.integration_settings import IntegrationSettingsService
         from app.services.knowledge import KnowledgePipeline
 
@@ -166,8 +178,10 @@ class ProjectFeatureService:
             # this blocking call runs in the web process (web_concurrency=2).
             await KnowledgePipeline(
                 self.db,
-                build_embedder(openrouter_api_key=openrouter_config.api_key),
-                make_minimax_llm_json(
+                self._provider_factory().embedder(
+                    openrouter_api_key=openrouter_config.api_key
+                ),
+                self._provider_factory().json_extractor(
                     minimax_api_key=minimax_config.api_key,
                     openrouter_api_key=openrouter_config.api_key,
                 ),

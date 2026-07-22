@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +16,12 @@ from app.schemas.knowledge_categories import (
     MAX_CATEGORY_RECORDS,
     CategoryDocument,
     KnowledgeCategoryKey,
+)
+from app.project_knowledge.domain.category import (
+    category_payload_checksum,
+    category_record_limit_exceeded,
+    category_replacement_is_empty,
+    unknown_job_references,
 )
 from app.services.knowledge.text_ingestion import normalize_kb_value
 
@@ -205,13 +210,17 @@ def validate_category_payload(
     category_key = KnowledgeCategoryKey(key)
     definition = get_category_definition(category_key)
     records = payload.get(definition.list_field)
-    if isinstance(records, list) and len(records) > MAX_CATEGORY_RECORDS:
+    if isinstance(records, list) and category_record_limit_exceeded(
+        len(records), MAX_CATEGORY_RECORDS
+    ):
         raise CategoryYamlError(
             f"category exceeds the {MAX_CATEGORY_RECORDS:,} record limit"
         )
     normalized_payload = normalize_kb_value(payload)
     document = CATEGORY_DOCUMENT_MODELS[category_key].model_validate(normalized_payload)
-    if not allow_empty and not getattr(document, definition.list_field):
+    if not allow_empty and category_replacement_is_empty(
+        len(getattr(document, definition.list_field))
+    ):
         raise EmptyCategoryError(
             "category replacement must contain at least one row; use the explicit clear action"
         )
@@ -226,9 +235,10 @@ def validate_job_references(
     if definition.key is KnowledgeCategoryKey.JOBS:
         return
 
-    unknown: set[str] = set()
-    for record in getattr(document, definition.list_field):
-        unknown.update(set(getattr(record, "job_ids", [])) - known_job_ids)
+    unknown = unknown_job_references(
+        (getattr(record, "job_ids", []) for record in getattr(document, definition.list_field)),
+        known_job_ids,
+    )
     if unknown:
         raise UnknownJobReferenceError(
             f"unknown job reference(s) in this project: {', '.join(sorted(unknown))}"
@@ -241,5 +251,4 @@ def canonical_category_json(document: CategoryDocument) -> str:
 
 
 def category_checksum(document: CategoryDocument) -> str:
-    canonical = canonical_category_json(document).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+    return category_payload_checksum(document.model_dump(mode="json"))

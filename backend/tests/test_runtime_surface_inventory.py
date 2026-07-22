@@ -62,9 +62,11 @@ EXPECTED_ROUTE_INVENTORY_SHA256 = "3fecf58e9c1f3e94b0b692db4564e8e1cef6d94f57c7a
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "outbox_boundary": 10,
     "provider_boundary": 75,  # identity lookup moved behind an infrastructure gateway
-    "queue_producer": 35,  # + DIRECT_CONTEXT indexing enqueue + producer call
+    # Three service-owned worker calls moved behind the project/knowledge
+    # application scheduler port; queue names and durable worker paths are unchanged.
+    "queue_producer": 32,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "9b435c6917edd8172cac695fa052a77a10eda70430e2c98a03209355d080af4e"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "fb10c374fd9a05fa0b8171672ab3e53b8c5196445bc4d005417539c7278b9c7a"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

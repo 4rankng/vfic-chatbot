@@ -54,9 +54,11 @@ async def _run_category_revision_async(
     _embedder=None,
     _claim_token: uuid.UUID | None = None,
 ) -> None:
-    from app.graph.clients import build_embedder
+    from app.composition.project_knowledge import (
+        build_category_use_cases,
+        build_knowledge_provider_factory,
+    )
     from app.services.integration_settings import IntegrationSettingsService
-    from app.services.knowledge.category_service import KnowledgeCategoryService
     from app.workers._db import worker_session
 
     async with worker_session() as db:
@@ -64,8 +66,10 @@ async def _run_category_revision_async(
         if embedder is None:
             integration = IntegrationSettingsService(db)
             openrouter = await integration.resolve_openrouter()
-            embedder = build_embedder(openrouter_api_key=openrouter.api_key)
-        await KnowledgeCategoryService(db).activate_revision(
+            embedder = build_knowledge_provider_factory().embedder(
+                openrouter_api_key=openrouter.api_key
+            )
+        await build_category_use_cases(db).activate_revision(
             uuid.UUID(revision_id),
             embedder,
             claim_token=_claim_token,

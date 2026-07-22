@@ -36,6 +36,8 @@ risk, so current inversions are frozen and removed slice by slice.
 | `app/identity`, `app/access` | identity/access domain, application ports/use cases, and infrastructure adapters |
 | `app/installation/domain` | framework-free single-installation projection policy |
 | `app/integrations/facebook_oauth` | Facebook OAuth domain/application boundary and Redis/encryption adapter |
+| `app/project_knowledge` | project/knowledge domain policies, application job/provider/query ports, and SQL/cache adapters |
+| `app/composition` | cross-context construction for RQ and current graph-client adapters |
 | `app/schemas` | transport DTOs; migrated with their owning API slice |
 | `app/graph` | agent-runtime application/domain policy; `factories.py` is its composition root |
 | `app/services/installation` | runtime authority and installation |
@@ -103,7 +105,7 @@ remain subject to code review.
 
 The executable inventory in `backend/tests/test_runtime_surface_inventory.py`
 is the detailed source of truth: 172 HTTP endpoints and 41 named queue/outbox/
-provider call records (122 under the broad detector) are classified and hashed.
+provider call records (117 under the broad detector) are classified and hashed.
 Any route or dispatch change requires an explicit snapshot review.
 
 - Queues: `webhook_high`, `persistence_low`, `ingest`, and `followup`; RQ module
@@ -135,6 +137,21 @@ Composition does not imply one lifetime. Process/event-loop clients and locks,
 request/job sessions, per-turn adapters, transaction-scoped repositories, and
 single-operation sessions remain distinct. Durable commit, event, audit, enqueue,
 and provider-I/O boundaries must be characterized before movement.
+
+Project/knowledge scheduling preserves five operation-specific contracts behind
+one application facade: document ingest is fire-and-forget; version and category
+work require stable receipts; RAG and single-page source sync may return no
+receipt and retain their existing ambiguity handling. The RQ adapter continues
+to call the established worker facades from the composition root, so serialized callable paths and queue
+payloads are unchanged. Three direct service-owned enqueue calls disappeared
+from the broad static inventory; this is a boundary deletion, not a runtime
+surface removal.
+
+Category activation, project authority cutover/rollback, and single-page publish
+continue to commit their database authority before cache repair. Cache repair is
+best-effort and has no durable outbox in this phase. That bounded convergence gap
+is retained deliberately so a structural extraction does not change failure
+semantics or require a schema migration.
 
 ## Consequences
 

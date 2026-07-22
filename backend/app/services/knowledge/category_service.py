@@ -11,7 +11,6 @@ from typing import Protocol
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import bump_cache_version, bump_kb_caches
 from app.models.company import Company, Project
 from app.models.bus import BusRoute, BusStop
 from app.models.job import Job, JobStatus
@@ -39,6 +38,11 @@ from app.services.knowledge.category_contracts import (
     validate_job_references,
 )
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
+from app.project_knowledge.application.jobs import (
+    EnqueueReceiptUnknown,
+    ProjectKnowledgeJobs,
+)
+from app.project_knowledge.application.cache import ProjectKnowledgeCacheRepairPort
 
 
 class CategoryEmbedder(Protocol):
@@ -58,8 +62,32 @@ class CategoryActivationError(RuntimeError):
 
 
 class KnowledgeCategoryService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        jobs: ProjectKnowledgeJobs | None = None,
+        cache_repair: ProjectKnowledgeCacheRepairPort | None = None,
+    ) -> None:
         self.db = db
+        self._jobs = jobs
+        self._cache_repair = cache_repair
+
+    def _job_scheduler(self) -> ProjectKnowledgeJobs:
+        if self._jobs is None:
+            from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
+
+            self._jobs = build_project_knowledge_jobs()
+        return self._jobs
+
+    def _cache_repairer(self) -> ProjectKnowledgeCacheRepairPort:
+        if self._cache_repair is None:
+            from app.project_knowledge.infrastructure.cache import (
+                RedisProjectKnowledgeCacheRepair,
+            )
+
+            self._cache_repair = RedisProjectKnowledgeCacheRepair()
+        return self._cache_repair
 
     async def list_catalog(self, project_id: uuid.UUID) -> list[CategoryCatalogItemOut]:
         await self._require_rag_project(project_id)
@@ -204,9 +232,6 @@ class KnowledgeCategoryService:
             await self.db.commit()
             await self.db.refresh(revision)
 
-        from app.workers.category_worker import enqueue_category_revision
-        from app.workers.utils import EnqueueStatusUnknown
-
         if revision.status is KnowledgeCategoryRevisionStatus.ACTIVE:
             return revision, f"category-revision-{revision.id}"
         if (
@@ -227,8 +252,8 @@ class KnowledgeCategoryService:
             return revision, f"category-revision-{revision.id}"
 
         try:
-            job_id = enqueue_category_revision(revision.id)
-        except EnqueueStatusUnknown as exc:
+            job_id = self._job_scheduler().process_category_revision(revision.id)
+        except EnqueueReceiptUnknown as exc:
             raise UpstreamError(
                 "Queue receipt is temporarily unconfirmed; retrying the same content is safe"
             ) from exc
@@ -704,10 +729,8 @@ class KnowledgeCategoryService:
             raise NotFoundError("Project not found")
         return project
 
-    @staticmethod
-    async def _repair_caches() -> None:
-        await bump_kb_caches()
-        await bump_cache_version("jobs")
+    async def _repair_caches(self) -> None:
+        await self._cache_repairer().repair_knowledge_and_jobs()
 
     async def _validate_active_job_references(
         self,

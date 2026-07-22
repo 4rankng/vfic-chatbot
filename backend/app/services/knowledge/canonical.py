@@ -17,9 +17,12 @@ from typing import Any
 from app.services.knowledge._canonical_helpers import _is_empty, _parse_scalar, _subsections
 from app.services.knowledge.bus_timetable.canonical_parser import parse_bus_routes
 from app.services.knowledge.bus_timetable.models import ParsedBusTimetable
+from app.project_knowledge.domain.canonical import (
+    CANONICAL_SCHEMA_VERSIONS,
+    FAQ_SCHEMA_VERSION,
+    SCHEMA_VERSION,
+)
 
-SCHEMA_VERSION = "vfic-knowledge-v1"
-CANONICAL_SCHEMA_VERSIONS = {SCHEMA_VERSION, "vfic-faq-v1"}
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "vfic_knowledge_v1.md"
 REQUIRED_FRONTMATTER = (
     "schema_version",
@@ -35,7 +38,6 @@ REQUIRED_FRONTMATTER = (
     "source_owner",
 )
 REQUIRED_SECTIONS = ("Company Overview", "Worker Features", "Rules/Policies", "FAQ", "Contacts")
-FAQ_SCHEMA_VERSION = "vfic-faq-v1"
 FAQ_TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "vfic_faq_v1.md"
 FAQ_REQUIRED_FRONTMATTER = (
     "schema_version",

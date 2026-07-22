@@ -56,7 +56,7 @@ from app.services.knowledge.category_contracts import (
     get_category_definition,
     load_category_template,
 )
-from app.services.knowledge.category_service import KnowledgeCategoryService
+from app.composition.project_knowledge import build_category_use_cases
 from app.services.project import ProjectService
 from app.services.errors import ConflictError
 
@@ -232,7 +232,7 @@ async def list_project_categories(
     _user: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> CategoryCatalogOut:
-    data = await KnowledgeCategoryService(db).list_catalog(project_id)
+    data = await build_category_use_cases(db).list_catalog(project_id)
     return CategoryCatalogOut(data=data, total=len(data))
 
 
@@ -246,7 +246,7 @@ async def get_project_category_template(
     _user: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> CategoryTemplateOut:
-    await KnowledgeCategoryService(db).list_catalog(project_id)
+    await build_category_use_cases(db).list_catalog(project_id)
     definition = get_category_definition(category_key)
     return CategoryTemplateOut(
         key=category_key,
@@ -266,7 +266,7 @@ async def get_project_category_source(
     _user: User = Depends(require_recruiter),
     db: AsyncSession = Depends(get_db),
 ) -> CategorySourceOut:
-    return await KnowledgeCategoryService(db).get_active_source(project_id, category_key)
+    return await build_category_use_cases(db).get_active_source(project_id, category_key)
 
 
 @router.put(
@@ -281,7 +281,7 @@ async def replace_project_category(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CategoryReplaceOut:
-    revision, job_id = await KnowledgeCategoryService(db).stage_replacement(
+    revision, job_id = await build_category_use_cases(db).stage_replacement(
         project_id=project_id,
         category_key=category_key,
         filename=body.filename,
@@ -322,7 +322,7 @@ async def upload_project_category(
         from app.services.errors import ConflictError
 
         raise ConflictError("Category YAML must use UTF-8 encoding") from exc
-    revision, job_id = await KnowledgeCategoryService(db).stage_replacement(
+    revision, job_id = await build_category_use_cases(db).stage_replacement(
         project_id=project_id,
         category_key=category_key,
         filename=filename,
@@ -346,7 +346,7 @@ async def clear_project_category(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CategoryRevisionOut:
-    revision = await KnowledgeCategoryService(db).clear(
+    revision = await build_category_use_cases(db).clear(
         project_id=project_id,
         category_key=category_key,
         actor=admin,
@@ -361,7 +361,7 @@ async def cutover_project_categories(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CategoryAuthorityOut:
-    project = await KnowledgeCategoryService(db).cutover_category_authority(
+    project = await build_category_use_cases(db).cutover_category_authority(
         project_id=project_id,
         actor=admin,
     )
@@ -379,7 +379,7 @@ async def rollback_project_categories(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CategoryAuthorityOut:
-    project = await KnowledgeCategoryService(db).rollback_category_authority(
+    project = await build_category_use_cases(db).rollback_category_authority(
         project_id=project_id,
         actor=admin,
     )
