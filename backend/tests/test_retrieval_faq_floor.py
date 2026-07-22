@@ -16,14 +16,16 @@ from __future__ import annotations
 from app.services.retrieval import repository
 
 
-def test_faq_similarity_floor_admits_verbatim_matches():
+def test_faq_similarity_floor_constant_leaves_headroom_for_verbatim_matches():
+    # Pins the CLASS ATTRIBUTE value (not a live match_faq() retrieval run).
     floor = repository.RetrievalRepository.FAQ_SIMILARITY_FLOOR
     # Weakest measured verbatim FAQ match is 0.621; the floor must stay at or
     # below ~0.60 or every sheet-FAQ verbatim match is filtered out (the bug).
     assert floor <= 0.60, f"FAQ floor {floor} too high — filters verbatim matches"
 
 
-def test_faq_similarity_floor_rejects_non_faq_drift():
+def test_faq_similarity_floor_constant_stays_above_non_faq_drift():
+    # Pins the CLASS ATTRIBUTE value (not a live match_faq() retrieval run).
     floor = repository.RetrievalRepository.FAQ_SIMILARITY_FLOOR
     # Non-FAQ queries top out at ~0.471; the floor must stay above that or the
     # FAQ pre-pass leaks curated answers into unrelated queries.

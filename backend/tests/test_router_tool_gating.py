@@ -243,8 +243,14 @@ async def test_focused_rag_knowledge_lookup_does_not_discard_grounded_reply(monk
     evidence = "LG Display Tràng Duệ: lương 10-14 triệu, hỗ trợ KTX, xe đưa đón."
     grounded_answer = "LG Display trả lương 10-14 triệu, có KTX và xe đưa đón nhé."
 
+    dispatched: list[tuple[str, dict]] = []
+
     async def _search(retrieval, embedder, name, args, **kwargs):  # noqa: ARG001
-        assert name == "search_knowledge"
+        # Record the dispatch and validate after agent() returns. An `assert`
+        # raised here would be swallowed by _prefetch_tool's broad
+        # `except Exception` (clients.py), logged as a warning, and silently
+        # turned into empty evidence — so it could never fail this test.
+        dispatched.append((name, dict(args)))
         return evidence
 
     class _KnowledgeLLM:
@@ -288,6 +294,8 @@ async def test_focused_rag_knowledge_lookup_does_not_discard_grounded_reply(monk
     assert llm.calls == 1, "the fallback self.direct() path should not have run"
     assert "FALLBACK_INVOKED" not in result
     assert "chưa thể truy xuất" not in result.lower()
+    assert dispatched, "search_knowledge was never dispatched via the prefetch"
+    assert dispatched[0][0] == "search_knowledge"
 
 
 async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():

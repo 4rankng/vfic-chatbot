@@ -29,20 +29,23 @@ describe("project list visual hierarchy", () => {
   });
 
   it("keeps the desktop knowledge hierarchy inside narrow accordion tracks", () => {
+    // [^}]* (not [\s\S]*) pins each property to its owning rule block: the match
+    // can't cross a closing brace, so it can't jump to an unrelated rule and pass
+    // when the intended rule's property is missing.
     expect(stylesheet).toMatch(
-      /\.project-accordion-content[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/,
+      /\.project-accordion-content\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
     );
     expect(stylesheet).toMatch(
-      /@media \(max-width: 767px\)[\s\S]*\.project-category-grid[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+      /@media \(max-width: 767px\)[\s\S]*?\.project-category-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
     );
     expect(stylesheet).toMatch(
-      /\.project-category-editor-actions > :last-child[\s\S]*grid-column:\s*1 \/ -1/,
+      /\.project-category-editor-actions\s*>\s*:last-child\s*\{[^}]*grid-column:\s*1 \/ -1/,
     );
     expect(stylesheet).toMatch(
-      /\.project-category-textarea[\s\S]*field-sizing:\s*fixed[\s\S]*height:\s*min\(52dvh, 420px\)/,
+      /\.project-category-textarea\s*\{[^}]*field-sizing:\s*fixed[^}]*height:\s*min\(52dvh, 420px\)/,
     );
     expect(stylesheet).toMatch(
-      /@media \(max-width: 359px\)[\s\S]*\.project-category-editor-actions[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/,
+      /@media \(max-width: 359px\)[\s\S]*?\.project-category-editor-actions\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
     );
   });
 });

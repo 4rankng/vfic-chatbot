@@ -344,18 +344,19 @@ def _negative_job_authority(tool_results: list[str]) -> str | None:
 
 
 def _negative_job_reply_is_consistent(reply: str) -> bool:
-    """Fast semantic guard; uncertain negative replies go through one LLM rewrite."""
+    """Fast semantic guard; uncertain negative replies go through one LLM rewrite.
+
+    Precedence: a negation marker anywhere in the reply wins over affirmative
+    vocabulary. Real abstention replies routinely combine both — e.g.
+    "Hiện chưa có vị trí nào đang tuyển" contains ``chua co`` (negative) AND
+    ``dang tuyen`` / ``co vi tri`` (affirmative, appearing inside the negated
+    phrase and in the offer to check other openings). Checking affirmative
+    markers first discarded those grounded replies and forced a wasteful — and
+    user-visible — ``direct()`` rewrite that produced the generic
+    "chưa thể xác minh" fallback. Only when no negation is present does an
+    affirmative marker indicate the model ignored the negative authority.
+    """
     normalized = _normalize_query_hint(reply)
-    affirmative = (
-        "dang tuyen",
-        "con tuyen",
-        "co viec",
-        "co vi tri",
-        "tuyen vi tri",
-        "luong ",
-    )
-    if any(marker in normalized for marker in affirmative):
-        return False
     negative = (
         "chua co",
         "chua tim",
@@ -366,7 +367,19 @@ def _negative_job_reply_is_consistent(reply: str) -> bool:
         "khong tuyen",
         "hien chua",
     )
-    return any(marker in normalized for marker in negative)
+    if any(marker in normalized for marker in negative):
+        return True
+    affirmative = (
+        "dang tuyen",
+        "con tuyen",
+        "co viec",
+        "co vi tri",
+        "tuyen vi tri",
+        "luong ",
+    )
+    if any(marker in normalized for marker in affirmative):
+        return False
+    return False
 
 
 def _matched_job_authority(tool_results: list[str]) -> tuple[str, str] | None:
@@ -770,14 +783,28 @@ class MiniMaxAgent:
             )
         else:
             bound = active_llm
-        # The knowledge_lookup_route prefetch already executed `search_knowledge`
-        # and injected its evidence (schemas = []). A focused-RAG turn sets
-        # required_tool="search_knowledge" for the same authority purpose; if we
-        # initialize required_tool_called=False here, the post-generation guard
-        # below wrongly discards the grounded answer and falls back to the
-        # "chưa thể truy xuất" reply — even though the KB evidence was retrieved
-        # and surfaced. Seed True only when the prefetch already ran that tool.
-        required_tool_called = knowledge_lookup_route and required_tool == "search_knowledge"
+        # Each prefetch route (knowledge_lookup_route / timetable_route /
+        # faq_detail_route) may eagerly run its authority tool above and then set
+        # schemas=[] to skip the model-driven tool-dispatch loop. The
+        # post-generation guard at the bottom (`if required_tool and not
+        # required_tool_called:`) would otherwise discard the grounded answer and
+        # fall back to the "chưa thể truy xuất" reply — even though the evidence
+        # was retrieved and surfaced. Record which tool each prefetch actually ran
+        # and seed the flag whenever `required_tool` matches one of them. This
+        # keeps the invariant robust if a future change wires a `required_tool`
+        # value to any sibling prefetch route (today only knowledge_lookup_route
+        # pairs with required_tool="search_knowledge" from the focused-RAG runner
+        # branch; the other routes receive required_tool=None).
+        prefetched_tools: set[str] = set()
+        if knowledge_lookup_route:
+            prefetched_tools.add("search_knowledge")
+        if timetable_route:
+            prefetched_tools.add("search_bus_timetable")
+        if faq_detail_route:
+            prefetched_tools.add("search_knowledge")
+        required_tool_called = bool(
+            required_tool and required_tool in prefetched_tools
+        )
         empty_retry_available = retry_empty_generation
         retrying_empty_generation = False
         iterations_remaining = self.max_iters

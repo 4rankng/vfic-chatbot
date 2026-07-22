@@ -90,6 +90,47 @@ def test_negative_vacancy_authority_requires_llm_abstention_composition():
     assert _negative_job_reply_is_consistent("LG đang tuyển, lương 30 triệu.") is False
 
 
+@pytest.mark.parametrize(
+    "reply",
+    [
+        # Real no_match replies naturally embed affirmative vocabulary inside a
+        # negated phrase ("chưa có vị trí nào đang tuyển") or while offering to
+        # check other openings. The guard must read these as consistent so the
+        # grounded reply is sent instead of triggering a wasteful direct()
+        # rewrite that surfaces the generic "chưa thể xác minh" fallback.
+        "Hiện tại chưa có vị trí nhân viên lắp ráp nào đang tuyển.",
+        "Không có vị trí lắp ráp nào đang tuyển active.",
+        "Hiện chưa có vị trí ACTIVE phù hợp. Bạn muốn xem các vị trí khác đang tuyển không?",
+        "VFIC không còn tuyển vị trí nào.",
+        "Chưa có vị trí lắp ráp. Trước đó bạn hỏi về CNC cũng chưa có. Bạn có muốn xem các vị trí khác không?",
+    ],
+)
+def test_negative_job_reply_consistent_when_negation_outweighs_affirmative(reply):
+    """Negation marker anywhere wins over affirmative vocabulary (regression).
+
+    Previously the affirmative check ran first and short-circuited to False on
+    legitimate no_match replies that happened to contain 'dang tuyen' or
+    'co vi tri' inside a negated clause, discarding the grounded answer and
+    forcing a generic "chưa thể xác minh" fallback.
+    """
+    assert _negative_job_reply_is_consistent(reply) is True
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        # Pure affirmative — model ignored the negative authority and invented.
+        "LG đang tuyển thợ hàn, lương 30 triệu.",
+        "Có việc CNC lương 15 triệu.",
+        "VFIC đang tuyển vị trí lắp ráp.",
+        # No negation and no clear abstention — must not be falsely accepted.
+        "Tôi sẽ chuyển thông tin cho chuyên viên tuyển dụng.",
+    ],
+)
+def test_negative_job_reply_inconsistent_without_negation(reply):
+    assert _negative_job_reply_is_consistent(reply) is False
+
+
 def test_malformed_vacancy_tool_payload_does_not_short_circuit_llm_answer():
     assert _ground_reply(
         "LG đang tuyển thợ hàn.", ["ACTIVE_JOB_LOOKUP_JSON={not-json}"]
