@@ -18,7 +18,8 @@ class OutboxStatus(str, enum.Enum):
 
     Mirrors ``DeliveryStatus`` for messages but tracks the *dispatch* step
     specifically. The inline send path records the final state directly; only
-    crashes leave rows in SENDING (which the sweep re-dispatches).
+    crashes leave rows in SENDING, which recovery terminalizes as SEND_UNKNOWN
+    without another provider attempt.
     """
 
     PENDING = "PENDING"

@@ -486,6 +486,111 @@ async def test_record_bot_outcome_transitions_sending_row_in_place():
 
 
 @pytest.mark.asyncio
+async def test_record_bot_outcome_resolves_concurrent_send_unknown_in_place():
+    """A slow live sender must not create a duplicate after stale recovery races it."""
+
+    conv = _make_conv(version=3)
+    send_unknown = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body="Trả lời đang gửi",
+        delivery_status=DeliveryStatus.SEND_UNKNOWN,
+    )
+    send_unknown.id = 42
+
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    async def _flush():
+        for call in db.add.call_args_list:
+            obj = call.args[0]
+            if hasattr(obj, "proposed_reply"):
+                obj.id = 99
+
+    db.flush = AsyncMock(side_effect=_flush)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.get = AsyncMock(return_value=send_unknown)
+    events = AsyncMock()
+    state = ConversationState(db, MagicMock(), events)
+
+    msg = await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Trả lời đã được nhà cung cấp xác nhận",
+        started_at=utcnow(),
+        sent=True,
+        pending_message_id=42,
+    )
+
+    assert msg is send_unknown
+    assert send_unknown.delivery_status == DeliveryStatus.SENT
+    assert send_unknown.body == "Trả lời đã được nhà cung cấp xác nhận"
+    assert send_unknown.bot_run_id is not None
+    db.get.assert_awaited_once_with(Message, 42, with_for_update=True)
+    bot_messages = [
+        call.args[0]
+        for call in db.add.call_args_list
+        if isinstance(call.args[0], Message)
+    ]
+    assert bot_messages == []
+
+
+@pytest.mark.asyncio
+async def test_record_bot_outcome_preserves_read_receipt_without_duplicate():
+    """A receipt that wins the row lock remains forward-only during finalization."""
+
+    conv = _make_conv(version=3)
+    read_message = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body="Trả lời đã đọc",
+        delivery_status=DeliveryStatus.READ,
+        zalo_message_id="provider-existing",
+    )
+    read_message.id = 42
+
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    async def _flush():
+        for call in db.add.call_args_list:
+            obj = call.args[0]
+            if hasattr(obj, "proposed_reply"):
+                obj.id = 99
+
+    db.flush = AsyncMock(side_effect=_flush)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.get = AsyncMock(return_value=read_message)
+    events = AsyncMock()
+    state = ConversationState(db, MagicMock(), events)
+
+    msg = await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Trả lời đã đọc",
+        started_at=utcnow(),
+        sent=False,
+        external_error="late transport timeout",
+        delivery_status=DeliveryStatus.SEND_UNKNOWN,
+        pending_message_id=42,
+    )
+
+    assert msg is read_message
+    assert read_message.delivery_status == DeliveryStatus.READ
+    assert read_message.external_error is None
+    assert read_message.zalo_message_id == "provider-existing"
+    db.get.assert_awaited_once_with(Message, 42, with_for_update=True)
+    bot_messages = [
+        call.args[0]
+        for call in db.add.call_args_list
+        if isinstance(call.args[0], Message)
+    ]
+    assert bot_messages == []
+
+
+@pytest.mark.asyncio
 async def test_recheck_ownership_requires_matching_live_lock_owner():
     conv = _make_conv(version=3)
     owner = uuid.uuid4()

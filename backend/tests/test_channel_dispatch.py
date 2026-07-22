@@ -322,7 +322,14 @@ async def test_try_neutral_dispatch_routes_oa_with_stripped_recipient():
             {"channel_account_generation": None},
         )()
         cfg = type("Cfg", (), {"bot_token": "t", "oa_access_token": "t"})()
-        result = await _try_neutral_dispatch(None, candidate, outbox, cfg, integration_settings=None)
+        result = await _try_neutral_dispatch(
+            None,
+            candidate,
+            outbox,
+            cfg,
+            integration_settings=None,
+            oa_refresh=None,
+        )
     finally:
         dispatch_mod.build_zalo_registry_from_config = original_build  # type: ignore[assignment]
 

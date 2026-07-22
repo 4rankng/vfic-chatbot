@@ -304,12 +304,37 @@ def test_phase1_outbox_status_ordering_is_monotonic_and_terminal():
     terminal = {OutboxStatus.SENT, OutboxStatus.FAILED, OutboxStatus.SEND_UNKNOWN, OutboxStatus.SUPPRESSED}
     transient = {OutboxStatus.PENDING, OutboxStatus.SENDING}
 
-    # The two transient states are the only ones the sweep re-dispatches.
+    # PENDING may be dispatched; SENDING is transient but only terminalized.
     assert OutboxStatus.PENDING in transient
     assert OutboxStatus.SENDING in transient
     # SEND_UNKNOWN is terminal — it must never appear in a re-dispatch claim.
     assert OutboxStatus.SEND_UNKNOWN in terminal
     assert OutboxStatus.SEND_UNKNOWN not in transient
+
+
+def test_dispatch_stale_age_covers_maximum_chunked_oa_attempt_window():
+    from types import SimpleNamespace
+
+    from app.services.outbox_service import outbound_dispatch_stale_after_seconds
+
+    settings = SimpleNamespace(
+        zalo_bot_request_timeout=30,
+        chat_turn_job_timeout=60,
+    )
+
+    # Twenty worst-case chunks + refresh + retry, then one turn timeout of margin.
+    assert outbound_dispatch_stale_after_seconds(settings) == 720
+
+
+def test_dispatch_worker_uses_the_same_safe_age_for_selection_and_claim():
+    import inspect
+
+    from app.workers import outbound_dispatch_worker
+
+    source = inspect.getsource(outbound_dispatch_worker._dispatch_pending)
+
+    assert "outbound_dispatch_stale_after_seconds" in source
+    assert source.count("stale_after_seconds=stale_after_seconds") == 2
 
 
 def test_phase1_claim_stale_sending_unknown_never_reverts_to_pending():

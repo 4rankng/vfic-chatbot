@@ -6,8 +6,9 @@ transaction as the message write. The outbox row is the authoritative
 
 - Reconcile reads it to detect duplicates (the duplicate_outbound_rate SLO finally
   has a data source).
-- The dispatcher sweep re-dispatches rows stuck in SENDING older than a
-  threshold; SEND_UNKNOWN rows are NEVER re-dispatched (Zalo may have accepted).
+- The dispatcher sends PENDING rows and terminalizes stale SENDING rows as
+  SEND_UNKNOWN; neither stale SENDING nor SEND_UNKNOWN is ever resent because
+  the provider may already have accepted the command.
 - A unique constraint on message_id prevents double-enqueue.
 
 The runtime writes ``PENDING`` before every provider call, atomically claims it
@@ -30,6 +31,16 @@ from app.models.outbox import OutboxStatus, OutboundOutbox
 from app.shared.application.outbound import OutboundTelemetry
 
 logger = logging.getLogger(__name__)
+
+# Recruiter messages are capped at 4,000 characters. Because the 420-character
+# splitter preserves paragraph/sentence boundaries, an adversarial valid body can
+# produce up to twenty short chunks rather than the ideal ten full chunks. OA may
+# add one token refresh and one retry. One chat-turn timeout remains as margin.
+_MAX_PROVIDER_WINDOWS_PER_OUTBOX = 22
+
+
+class _RuntimeAuthorityChangedDuringRefresh(RuntimeError):
+    """The command lost runtime authority while OA credentials rotated."""
 
 
 @dataclass(frozen=True)
@@ -62,6 +73,35 @@ class DispatchResult:
     def msg_id(self) -> str | None:
         """Match the sender result contract consumed by the graph pipeline."""
         return self.provider_message_id or self.zalo_message_id
+
+
+def outbound_dispatch_stale_after_seconds(settings) -> int:
+    """Return a recovery age that cannot overtake a bounded live provider send."""
+
+    provider_budget = (
+        _MAX_PROVIDER_WINDOWS_PER_OUTBOX * settings.zalo_bot_request_timeout
+    )
+    return int(provider_budget + settings.chat_turn_job_timeout)
+
+
+async def _refresh_oa_access_token_for_dispatch(
+    integration_settings,
+    *,
+    revalidate=None,
+) -> str | None:
+    """Rotate OA credentials and restore any transaction-scoped send fence.
+
+    Token rotation commits its database session. Runtime-bound callers therefore
+    supply a revalidator that reacquires the shared authority lock and checks the
+    stamp before the OA adapter is allowed to retry provider I/O.
+    """
+
+    new_token = await integration_settings.refresh_oa_access_token()
+    if new_token is None:
+        return None
+    if revalidate is not None and not await revalidate():
+        raise _RuntimeAuthorityChangedDuringRefresh
+    return new_token
 
 
 def build_outbox_payload(
@@ -158,39 +198,50 @@ async def claim_pending_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchC
 async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult | None:
     """Claim, authorize, and send an immutable command.
 
-    Runtime-bound commands hold a shared PostgreSQL advisory lock after their
-    active-authority check. The caller finalizes the command in this same
-    transaction, so an activation's exclusive lock cannot interleave between
-    authorization and the provider request or its durable classification.
+    The SENDING claim is committed before provider I/O. If the process dies
+    after provider acceptance but before finalization, recovery therefore sees
+    SENDING and terminalizes it as SEND_UNKNOWN instead of resending it.
+
+    Runtime-bound commands validate authority while holding the shared advisory
+    lock both before and after that commit. The post-commit check closes the
+    activation window created when the durable claim releases its transaction
+    lock; the second shared lock remains held through provider I/O and caller
+    finalization.
     """
     outbox = await db.get(OutboundOutbox, outbox_id)
     if outbox is None or outbox.status != OutboxStatus.PENDING.value:
         return None
 
+    runtime_stamp = None
+    installation_repository = None
+    installation_service = None
     if outbox.fence_scope == "RUNTIME":
         from app.services.installation.authority import RuntimeAuthorityStamp
         from app.services.installation.repository import InstallationRepository
         from app.services.installation.service import InstallationService
 
-        await InstallationRepository(db).acquire_runtime_dispatch_lock()
+        installation_repository = InstallationRepository(db)
+        installation_service = InstallationService(db)
+        await installation_repository.acquire_runtime_dispatch_lock()
         stamp_complete = (
             outbox.runtime_revision_id is not None
             and outbox.authority_generation is not None
             and outbox.runtime_fingerprint is not None
         )
-        stamp_is_current = False
         if stamp_complete:
-            stamp_is_current = await InstallationService(db).runtime_stamp_is_current(
-                RuntimeAuthorityStamp(
-                    revision_id=outbox.runtime_revision_id,
-                    authority_generation=outbox.authority_generation,
-                    fingerprint=outbox.runtime_fingerprint,
-                )
+            runtime_stamp = RuntimeAuthorityStamp(
+                revision_id=outbox.runtime_revision_id,
+                authority_generation=outbox.authority_generation,
+                fingerprint=outbox.runtime_fingerprint,
             )
+        stamp_is_current = runtime_stamp is not None and await (
+            installation_service.runtime_stamp_is_current(runtime_stamp)
+        )
         if not stamp_is_current:
             candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
             if candidate is None:
                 return None
+            await db.commit()
             return DispatchResult(
                 outbox_id=candidate.outbox_id,
                 message_id=candidate.message_id,
@@ -203,6 +254,21 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
     candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
     if candidate is None:
         return None
+    await db.commit()
+
+    if runtime_stamp is not None:
+        assert installation_repository is not None
+        assert installation_service is not None
+        await installation_repository.acquire_runtime_dispatch_lock()
+        if not await installation_service.runtime_stamp_is_current(runtime_stamp):
+            return DispatchResult(
+                outbox_id=candidate.outbox_id,
+                message_id=candidate.message_id,
+                ok=False,
+                error="runtime authority changed before outbound dispatch",
+                error_class="policy_suppressed",
+                suppressed=True,
+            )
 
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.zalo_sender import ZaloChannelSender
@@ -210,16 +276,50 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
     integration_settings = IntegrationSettingsService(db)
     cfg = await integration_settings.resolve_zalo()
 
+    async def revalidate_runtime_after_refresh() -> bool:
+        if runtime_stamp is None:
+            return True
+        assert installation_repository is not None
+        assert installation_service is not None
+        await installation_repository.acquire_runtime_dispatch_lock()
+        return await installation_service.runtime_stamp_is_current(runtime_stamp)
+
+    async def refresh_oa_access_token() -> str | None:
+        return await _refresh_oa_access_token_for_dispatch(
+            integration_settings,
+            revalidate=revalidate_runtime_after_refresh,
+        )
+
     # Channel-neutral dispatch path (Phase 3): route through the registry when
     # the outbox channel maps to a registered provider. Falls back to the legacy
     # ZaloChannelSender for payloads that do not (e.g. a yet-unmapped channel).
-    dispatch_result = await _try_neutral_dispatch(db, candidate, outbox, cfg, integration_settings)
-    if dispatch_result is not None:
-        return dispatch_result
+    try:
+        dispatch_result = await _try_neutral_dispatch(
+            db,
+            candidate,
+            outbox,
+            cfg,
+            integration_settings,
+            refresh_oa_access_token,
+        )
+        if dispatch_result is not None:
+            return dispatch_result
 
-    # Legacy path: direct ZaloChannelSender (unchanged behavior).
-    sender = ZaloChannelSender(cfg, refresh=lambda: integration_settings.refresh_oa_access_token())
-    result = await sender.send_payload(candidate.channel, candidate.payload)
+        # Legacy path: direct ZaloChannelSender (unchanged behavior).
+        sender = ZaloChannelSender(
+            cfg,
+            refresh=refresh_oa_access_token,
+        )
+        result = await sender.send_payload(candidate.channel, candidate.payload)
+    except _RuntimeAuthorityChangedDuringRefresh:
+        return DispatchResult(
+            outbox_id=candidate.outbox_id,
+            message_id=candidate.message_id,
+            ok=False,
+            error="runtime authority changed during OA credential refresh",
+            error_class="policy_suppressed",
+            suppressed=True,
+        )
     return DispatchResult(
         outbox_id=candidate.outbox_id,
         message_id=candidate.message_id,
@@ -237,6 +337,7 @@ async def _try_neutral_dispatch(
     outbox: OutboundOutbox,
     cfg,
     integration_settings,
+    oa_refresh,
 ) -> DispatchResult | None:
     """Attempt registry-driven dispatch; return None to fall back to legacy.
 
@@ -267,7 +368,7 @@ async def _try_neutral_dispatch(
     # Zalo path: build a Zalo registry + hardcode the stable account keys.
     registry: ChannelAdapterRegistry = build_zalo_registry_from_config(
         cfg,
-        oa_refresh=lambda: integration_settings.refresh_oa_access_token(),
+        oa_refresh=oa_refresh,
     )
     if registry.get(provider) is None:
         return None  # adapter not registered → legacy path

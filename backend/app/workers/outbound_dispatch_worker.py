@@ -21,6 +21,7 @@ async def _dispatch_pending() -> None:
         DispatchResult,
         claim_stale_sending_unknown,
         dispatch_outbox,
+        outbound_dispatch_stale_after_seconds,
         pending_outbox_ids,
         stale_sending_outbox_ids,
     )
@@ -30,8 +31,9 @@ async def _dispatch_pending() -> None:
         ids = await pending_outbox_ids(db)
         from app.core.config import get_settings
 
+        stale_after_seconds = outbound_dispatch_stale_after_seconds(get_settings())
         stale_ids = await stale_sending_outbox_ids(
-            db, stale_after_seconds=get_settings().chat_turn_job_timeout
+            db, stale_after_seconds=stale_after_seconds
         )
 
     candidates = [(outbox_id, False) for outbox_id in ids]
@@ -43,7 +45,7 @@ async def _dispatch_pending() -> None:
                     candidate = await claim_stale_sending_unknown(
                         db,
                         outbox_id=outbox_id,
-                        stale_after_seconds=get_settings().chat_turn_job_timeout,
+                        stale_after_seconds=stale_after_seconds,
                     )
                     if candidate is None:
                         continue

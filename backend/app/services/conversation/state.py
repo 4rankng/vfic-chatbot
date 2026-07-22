@@ -695,13 +695,26 @@ class ConversationState:
         msg = None
         pending_msg = None
         matched_pending = False
+        resolved_delivery_status = delivery_status
         if pending_message_id is not None:
-            pending_msg = await self.db.get(Message, pending_message_id)
+            pending_msg = await self.db.get(
+                Message,
+                pending_message_id,
+                with_for_update=True,
+            )
             if (
                 pending_msg is not None
                 and pending_msg.conversation_id == conv.id
                 and pending_msg.sender == MessageSender.BOT
-                and pending_msg.delivery_status in (DeliveryStatus.PENDING, DeliveryStatus.SENDING)
+                and pending_msg.delivery_status
+                in (
+                    DeliveryStatus.PENDING,
+                    DeliveryStatus.SENDING,
+                    DeliveryStatus.SEND_UNKNOWN,
+                    DeliveryStatus.SENT,
+                    DeliveryStatus.DELIVERED,
+                    DeliveryStatus.READ,
+                )
             ):
                 matched_pending = True
                 run.runtime_revision_id = pending_msg.runtime_revision_id
@@ -710,11 +723,23 @@ class ConversationState:
         self.db.add(run)
         await self.db.flush()
         if matched_pending and pending_msg is not None:
+            resolved_delivery_status = (
+                pending_msg.delivery_status
+                if _DELIVERY_RANK.get(pending_msg.delivery_status, 0)
+                > _DELIVERY_RANK.get(delivery_status, 0)
+                else delivery_status
+            )
             pending_msg.body = reply
             pending_msg.bot_run_id = run.id
-            pending_msg.delivery_status = delivery_status
-            pending_msg.external_error = external_error
-            pending_msg.zalo_message_id = zalo_message_id
+            pending_msg.delivery_status = resolved_delivery_status
+            pending_msg.external_error = (
+                None
+                if _DELIVERY_RANK.get(resolved_delivery_status, 0)
+                >= _DELIVERY_RANK[DeliveryStatus.SENT]
+                else external_error
+            )
+            if zalo_message_id:
+                pending_msg.zalo_message_id = zalo_message_id
             msg = pending_msg
         if msg is None:
             msg = Message(
@@ -748,7 +773,9 @@ class ConversationState:
                 conv.bot_locked_until = None
                 conv.bot_lock_owner = None
                 conv.bot_lock_heartbeat_at = None
-        if delivery_status == DeliveryStatus.SENT:
+        if _DELIVERY_RANK.get(resolved_delivery_status, 0) >= _DELIVERY_RANK[
+            DeliveryStatus.SENT
+        ]:
             conv.last_outbound_at = utcnow()
         # Bump the strict monotonic seq for every bot outcome (the key delta vs
         # `version`, which intentionally skips bot outcomes). The no-owner branch
@@ -765,11 +792,12 @@ class ConversationState:
 
             outbox_status = (
                 OutboxStatus.SENT
-                if delivery_status == DeliveryStatus.SENT
+                if _DELIVERY_RANK.get(resolved_delivery_status, 0)
+                >= _DELIVERY_RANK[DeliveryStatus.SENT]
                 else OutboxStatus.SEND_UNKNOWN
-                if delivery_status == DeliveryStatus.SEND_UNKNOWN
+                if resolved_delivery_status == DeliveryStatus.SEND_UNKNOWN
                 else OutboxStatus.FAILED
-                if delivery_status == DeliveryStatus.FAILED
+                if resolved_delivery_status == DeliveryStatus.FAILED
                 else OutboxStatus.SUPPRESSED
             )
             outbox = await enqueue_outbox(
@@ -778,8 +806,8 @@ class ConversationState:
                 channel=outbox_channel,
                 payload=outbox_payload,
                 status=outbox_status,
-                zalo_message_id=zalo_message_id,
-                last_error=external_error,
+                zalo_message_id=msg.zalo_message_id,
+                last_error=msg.external_error,
                 runtime_revision_id=msg.runtime_revision_id,
                 authority_generation=msg.authority_generation,
                 runtime_fingerprint=msg.runtime_fingerprint,
