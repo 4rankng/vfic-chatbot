@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-18
+**Last updated:** 2026-07-22
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -157,6 +157,21 @@ recruitment-specific contract is a protected Phase 5 activation blocker: it must
 be replaced or deliberately capability-owned before any readiness flip. Phase 6
 owns recruitment parity extraction, and Phase 7 owns live authority guards and
 the first possible `runtime_ready=true` decision.
+
+### 1.3 Incremental DDD boundary migration
+
+The current rearchitecture is a single-tenant modular-monolith migration. It
+does not add tenant identifiers, tenant-scoped repositories, or tenant-aware
+runtime abstractions; multi-tenancy is deferred for three months and must later
+consume these boundaries rather than reshape them prematurely.
+
+The normative context/package map, inward dependency rules, exact legacy-edge
+baseline, runtime contract inventory, and layer-removal ownership are recorded
+in [`decisions/ddd-context-boundaries.md`](./decisions/ddd-context-boundaries.md).
+`backend/tests/test_architecture_boundaries.py` prevents new statically
+analyzable forbidden edges while later phases remove the accepted legacy set.
+The migration keeps public routes, schemas, queues, realtime events, and worker
+callable paths compatible until their owning phase proves a safe cutover.
 
 ---
 

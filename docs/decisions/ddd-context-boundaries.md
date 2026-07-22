@@ -91,7 +91,10 @@ The scanner freezes exact normalized importer-to-symbol edges for Python and
 importer-to-module edges for TypeScript. It resolves relative paths and covers
 static, side-effect, dynamic, and CommonJS TypeScript imports. Synthetic tests
 exercise these forms so an allowlisted file cannot swap or add a forbidden
-symbol without an explicit baseline review.
+symbol without an explicit baseline review. Dynamic imports with literal module
+names are covered, including aliases, comments, escapes, and Python relative
+package resolution; computed module names are outside this static guard and
+remain subject to code review.
 
 ## Frozen Runtime Contracts
 
