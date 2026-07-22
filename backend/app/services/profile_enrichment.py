@@ -17,9 +17,10 @@ import unicodedata
 import uuid
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.contact import Contact
 from app.services.conversation import ConversationService
 from app.services.lead.events import LeadEventBus
 from app.services.zalo_oa_service import OAUserProfile
@@ -45,8 +46,19 @@ def _profile_lookup_keys(zalo_id: str) -> tuple[str, str]:
     return f"oa-profile:done:{digest}", f"oa-profile:lock:{digest}"
 
 
+def _is_blank(value: str | None) -> bool:
+    return not str(value or "").strip()
+
+
+def _blank_column(column):
+    return func.nullif(func.trim(column), "").is_(None)
+
+
 async def _claim_profile_lookup(
-    zalo_id: str, *, wait_for_inflight: bool
+    zalo_id: str,
+    *,
+    wait_for_inflight: bool,
+    ignore_done: bool = False,
 ) -> tuple[bool, str | None]:
     """Claim one OA lookup, coalescing inline and queued requests."""
     try:
@@ -58,7 +70,7 @@ async def _claim_profile_lookup(
             _PROFILE_LOOKUP_WAIT_SECONDS if wait_for_inflight else 0.0
         )
         while True:
-            if await redis.exists(done_key):
+            if not ignore_done and await redis.exists(done_key):
                 return False, None
             owner = uuid.uuid4().hex
             if await redis.set(
@@ -113,12 +125,94 @@ class ProfileEnrichmentService:
         self.sender = sender
         self._conversations = ConversationService(db)
 
+    async def _select_contact(
+        self,
+        contact_id,
+        *,
+        populate_existing: bool = False,
+    ) -> Contact | None:
+        return await self.db.scalar(
+            select(Contact)
+            .where(Contact.id == contact_id)
+            .execution_options(populate_existing=populate_existing)
+        )
+
+    async def _select_leads(
+        self,
+        contact_id,
+        *,
+        populate_existing: bool = False,
+    ) -> list:
+        from app.models.lead import Lead
+
+        return list(
+            (
+                await self.db.scalars(
+                    select(Lead)
+                    .where(Lead.contact_id == contact_id)
+                    .order_by(Lead.id)
+                    .execution_options(populate_existing=populate_existing)
+                )
+            ).all()
+        )
+
+    async def _set_contact_display_name_if_blank(
+        self,
+        contact_id,
+        display_name: str,
+    ) -> bool:
+        result = await self.db.execute(
+            update(Contact)
+            .where(
+                Contact.id == contact_id,
+                _blank_column(Contact.display_name),
+            )
+            .values(display_name=display_name)
+            .returning(Contact.id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def _set_contact_avatar_if_blank(
+        self,
+        contact_id,
+        avatar_url: str,
+    ) -> bool:
+        result = await self.db.execute(
+            update(Contact)
+            .where(
+                Contact.id == contact_id,
+                _blank_column(Contact.avatar_url),
+            )
+            .values(avatar_url=avatar_url)
+            .returning(Contact.id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def _set_lead_avatars_if_blank(
+        self,
+        contact_id,
+        avatar_url: str,
+    ) -> list[int]:
+        from app.models.lead import Lead
+
+        result = await self.db.execute(
+            update(Lead)
+            .where(
+                Lead.contact_id == contact_id,
+                _blank_column(Lead.avatar_url),
+            )
+            .values(avatar_url=avatar_url)
+            .returning(Lead.id)
+        )
+        return list(result.scalars().all())
+
     async def enrich_oa_user(
         self,
         zalo_id: str,
         *,
         user_id: str,
         wait_for_inflight: bool = False,
+        force_lookup: bool = False,
     ) -> bool:
         """Look up one OA user and persist contact display data if available."""
         conversation = await self._conversations.get_by_zalo(zalo_id)
@@ -126,26 +220,20 @@ class ProfileEnrichmentService:
         if contact is None:
             return False
 
-        from app.models.lead import Lead
-
-        leads = list(
-            (
-                await self.db.scalars(
-                    select(Lead).where(Lead.contact_id == contact.id).order_by(Lead.id)
-                )
-            ).all()
-        )
+        leads = await self._select_leads(contact.id)
         if not leads:
             return False
 
-        missing_display_name = not str(contact.display_name or "").strip()
-        missing_contact_avatar = not str(contact.avatar_url or "").strip()
-        missing_lead_avatar = any(not str(lead.avatar_url or "").strip() for lead in leads)
+        missing_display_name = _is_blank(contact.display_name)
+        missing_contact_avatar = _is_blank(contact.avatar_url)
+        missing_lead_avatar = any(_is_blank(lead.avatar_url) for lead in leads)
         if not (missing_display_name or missing_contact_avatar or missing_lead_avatar):
             return False
 
         claimed, lookup_owner = await _claim_profile_lookup(
-            zalo_id, wait_for_inflight=wait_for_inflight
+            zalo_id,
+            wait_for_inflight=wait_for_inflight,
+            ignore_done=force_lookup,
         )
         if not claimed:
             return False
@@ -164,30 +252,51 @@ class ProfileEnrichmentService:
             if not (display_name or avatar_url):
                 return False
 
-            if display_name and missing_display_name:
-                contact.display_name = display_name
-            if avatar_url and missing_contact_avatar:
-                contact.avatar_url = avatar_url
-
+            contact_display_name_updated = False
+            contact_avatar_updated = False
+            updated_lead_ids: list[int] = []
             updated_leads = []
-            if avatar_url:
-                for lead in leads:
-                    if not str(lead.avatar_url or "").strip():
-                        lead.avatar_url = avatar_url
-                        updated_leads.append(lead)
+            updated_any = False
 
-            await self.db.commit()
+            if display_name and missing_display_name:
+                contact_display_name_updated = (
+                    await self._set_contact_display_name_if_blank(contact.id, display_name)
+                )
+                updated_any = updated_any or contact_display_name_updated
+            if avatar_url:
+                if missing_contact_avatar:
+                    contact_avatar_updated = await self._set_contact_avatar_if_blank(
+                        contact.id,
+                        avatar_url,
+                    )
+                    updated_any = updated_any or contact_avatar_updated
+                updated_lead_ids = await self._set_lead_avatars_if_blank(contact.id, avatar_url)
+                updated_any = updated_any or bool(updated_lead_ids)
+
+            if updated_any:
+                await self.db.commit()
+            fresh_contact = await self._select_contact(contact.id, populate_existing=True)
+            fresh_leads = await self._select_leads(contact.id, populate_existing=True)
+            if updated_lead_ids:
+                updated_leads_by_id = {lead.id: lead for lead in fresh_leads}
+                updated_leads = [
+                    updated_leads_by_id[lead_id]
+                    for lead_id in updated_lead_ids
+                    if lead_id in updated_leads_by_id
+                ]
             complete = (
-                bool(str(contact.display_name or "").strip())
-                and bool(str(contact.avatar_url or "").strip())
-                and all(bool(str(lead.avatar_url or "").strip()) for lead in leads)
+                fresh_contact is not None
+                and not _is_blank(fresh_contact.display_name)
+                and not _is_blank(fresh_contact.avatar_url)
+                and bool(fresh_leads)
+                and all(not _is_blank(lead.avatar_url) for lead in fresh_leads)
             )
             if complete:
                 await _mark_profile_lookup_done(zalo_id)
             logger.info(
                 "oa profile enrichment applied avatar=%s display_name=%s complete=%s",
-                bool(avatar_url and (missing_contact_avatar or updated_leads)),
-                bool(display_name and missing_display_name),
+                bool(contact_avatar_updated or updated_lead_ids),
+                contact_display_name_updated,
                 complete,
             )
             for saved_lead in updated_leads:
@@ -195,7 +304,7 @@ class ProfileEnrichmentService:
                     await LeadEventBus().lead_updated(saved_lead)
                 except Exception:  # noqa: BLE001 -- realtime is best-effort
                     logger.info("oa profile enrichment realtime emit failed")
-            return True
+            return updated_any
         finally:
             await _release_profile_lookup(zalo_id, lookup_owner)
 

@@ -111,11 +111,20 @@ fi
 echo "$NEXT" > "$ACTIVE_FILE"
 
 # Start the resumable OA-only profile sweep only after traffic is on the healthy
-# new color. It is detached so Zalo calls cannot delay or roll back a cutover.
+# new color. Its dedicated container has inspectable logs and exit status, while
+# its PostgreSQL advisory lock prevents overlapping runs.
 echo "==> [9b/10] starting missing OA profile backfill..."
-if ! IMAGE_TAG="$IMAGE_TAG" docker compose exec -T -d "web-$NEXT" \
-  python -m scripts.backfill_oa_profiles --apply --limit "${OA_PROFILE_BACKFILL_LIMIT:-0}"; then
+if old_backfill_id="$(docker compose --profile maintenance ps -aq oa-profile-backfill)" && \
+  [ -n "$old_backfill_id" ]; then
+  echo "==> previous OA profile backfill status: $(docker inspect --format '{{.State.Status}} exit={{.State.ExitCode}}' "$old_backfill_id" 2>/dev/null || echo unknown)"
+  docker compose --profile maintenance logs --tail=20 oa-profile-backfill || true
+fi
+if ! IMAGE_TAG="$IMAGE_TAG" docker compose --profile maintenance up -d --no-deps \
+  --force-recreate oa-profile-backfill; then
   echo "==> OA profile backfill start failed; deployment remains active." >&2
+else
+  echo "==> OA profile backfill started. Status: make -C backend profile-backfill-status"
+  echo "==> OA profile backfill logs  : make -C backend profile-backfill-logs"
 fi
 
 # 10. Inaugural only: remove the legacy single-`web` container (no longer in the

@@ -183,6 +183,20 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # One-shot, observable maintenance workload. The deploy starts this only
+  # after the new web color is active; DB eligibility is its resume checkpoint.
+  oa-profile-backfill:
+    profiles: ["maintenance"]
+    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    env_file: .env
+    command:
+      ["python", "-m", "scripts.backfill_oa_profiles", "--apply", "--limit", "0"]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: "no"
+
   # SPA served by the frontend nginx image; Caddy reverse-proxies to it.
   frontend:
     image: franknguyenvd/vfic-frontend:${IMAGE_TAG:-latest}

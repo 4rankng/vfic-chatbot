@@ -1,4 +1,4 @@
-.PHONY: dev db push deploy deploy-restart deploy-restart-frontend rollback deploy-status deploy-breaking adminer
+.PHONY: dev db push deploy deploy-restart deploy-restart-frontend rollback deploy-status deploy-breaking adminer profile-backfill-run profile-backfill-status profile-backfill-logs
 
 BACKEND_PORT  ?= 8000
 FRONTEND_PORT ?= 5173
@@ -117,11 +117,12 @@ deploy:
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) bash scripts/bg_deploy.sh"
 
 # ---- Blue/green fast-track: re-deploy backend only (no compose sync / bootstrap). ----
-# Used by root Makefile's deploy-backend after push. Re-syncs only the deploy
+# Used by root Makefile's deploy-backend after push. Re-syncs compose + deploy
 # scripts, then runs the same smoke-gated flip.
 deploy-restart:
-	@echo "==> Syncing deploy scripts to $(PROD_SERVER)..."
+	@echo "==> Syncing compose + deploy scripts to $(PROD_SERVER)..."
 	$(SSH) root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)/scripts"
+	$(SCP) docker-compose.yml root@$(PROD_SERVER):$(PROD_DIR)/
 	$(SCP) scripts/bg_deploy.sh scripts/bg_rollback.sh scripts/flip_caddy.sh root@$(PROD_SERVER):$(PROD_DIR)/scripts/
 	@echo "==> Running blue/green deploy (smoke-gated Caddy flip)..."
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) bash scripts/bg_deploy.sh"
@@ -137,6 +138,16 @@ rollback:
 deploy-status:
 	@echo "==> $(PROD_SERVER) blue/green status"
 	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && echo "ACTIVE_COLOR=$$(cat ACTIVE_COLOR 2>/dev/null || echo inaugural)  PREV=$$(cat PREV_COLOR 2>/dev/null || echo none)@$$(cat PREV_TAG 2>/dev/null || echo none)" && docker compose ps'
+
+# ---- Observable OA profile backfill maintenance job. ----
+profile-backfill-run:
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && ACTIVE="$$(cat ACTIVE_COLOR)" && TAG="$$(docker inspect --format "{{.Config.Image}}" "$$(docker compose ps -q web-$$ACTIVE)" | sed "s/.*://")" && IMAGE_TAG="$$TAG" docker compose --profile maintenance up -d --no-deps --force-recreate oa-profile-backfill'
+
+profile-backfill-status:
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose --profile maintenance ps -a oa-profile-backfill && CID="$$(docker compose --profile maintenance ps -aq oa-profile-backfill)" && if [ -n "$$CID" ]; then docker inspect --format "status={{.State.Status}} exit={{.State.ExitCode}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "$$CID"; fi'
+
+profile-backfill-logs:
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && docker compose --profile maintenance logs --tail=100 oa-profile-backfill'
 
 # ---- Breaking-migration path (brief downtime; NOT blue/green). ----
 # Use ONLY for a non-additive migration that old+new code cannot both run against.

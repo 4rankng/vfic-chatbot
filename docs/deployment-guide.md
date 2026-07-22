@@ -29,6 +29,7 @@ never used by `make deploy`.
 | `worker-ingest` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
 | `worker-followup` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
 | `scheduler` | `franknguyenvd/vfic-backend:latest` | 1 | `rqscheduler`. |
+| `oa-profile-backfill` | active `franknguyenvd/vfic-backend:<git-sha>` | on demand | Profile-gated maintenance job that fills only missing Zalo OA profile names and avatars. It is not started by ordinary `docker compose up`; deploy starts it after a successful cutover. |
 | `frontend` | `franknguyenvd/vfic-frontend:latest` | 1 | nginx static SPA. Expose 80. |
 | `adminer` | `adminer:4` | 1 | DB UI, bound to `127.0.0.1:8081` (loopback only — reach via `make adminer` SSH tunnel). |
 | `caddy` | `caddy:2` | 1 | Edge. `80:80`, `443:443`. Caddyfile ro. Volumes `vfic_caddy_data`, `vfic_caddy_config`. |
@@ -102,6 +103,9 @@ build + push both images → blue/green cutover.
    color (graceful live reconfig, <1s, no dropped connections).
 8. Record `PREV_COLOR`/`PREV_TAG`; write `ACTIVE_COLOR`.
 9. Stop the old color (kept stopped, not removed → instant rollback).
+10. Start the dedicated `oa-profile-backfill` maintenance container. This is
+    post-cutover and non-fatal to the serving deployment; its status and output
+    remain inspectable independently of either web color.
 
 State files in `/opt/vfic`: `ACTIVE_COLOR`, `PREV_COLOR`, `PREV_TAG`.
 Inaugural deploy (no `ACTIVE_COLOR` yet): `blue` is brought up first, Caddy
@@ -110,10 +114,34 @@ flipped to it, then the legacy single-`web` container is removed.
 ### Rollback (`make rollback`)
 Revives `PREV_COLOR` at `PREV_TAG`, recreates the workers to match, flips Caddy
 back (~1s, no rebuild), stops the demoted color. Swaps ACTIVE↔PREV so rollback
-is reversible.
+is reversible. It first stops any running OA profile maintenance container so
+code from the rejected image cannot continue writing after the rollback.
 
 ### Status (`make deploy-status`)
 Prints `ACTIVE_COLOR`, `PREV_COLOR`@`PREV_TAG`, and `docker compose ps`.
+
+### OA profile maintenance backfill
+
+Each successful backend cutover starts a dedicated, resumable sweep for Zalo OA
+contacts that still lack a display name, contact avatar, or lead avatar. The
+runner processes bounded keyset pages, retries each profile a limited number of
+times, and uses a PostgreSQL advisory lock so two sweeps cannot overlap. It
+updates only fields that remain blank at write time, preserving concurrent
+user/admin changes. Database eligibility is the resume checkpoint, so a later
+run naturally skips completed profiles. Maintenance lookups run with
+`force_lookup`, so the Redis `done` marker cannot suppress a DB-eligible rerun;
+Redis still enforces the per-profile lock while the PostgreSQL advisory lock
+keeps sweeps from overlapping.
+
+```bash
+make -C backend profile-backfill-status  # container state, exit code, timestamps
+make -C backend profile-backfill-logs    # structured batch/final progress
+make -C backend profile-backfill-run     # explicitly start/resume using active tag
+```
+
+Exit `0` means the requested sweep completed (or reached an explicit limit),
+`2` means a full run left records incomplete, and `3` means another sweep held
+the advisory lock. Candidate identifiers are not written to progress logs.
 
 ### Breaking-migration deploy (`make deploy-breaking`)
 For a **non-additive** migration that old + new code cannot both run against:
@@ -122,8 +150,8 @@ it. Accepts brief downtime — use only when the additive-migration assumption
 fails.
 
 ### Fast-track backend (`make deploy-backend`)
-Rebuild + push backend image → `deploy-restart` (now also blue/green: re-syncs
-the deploy scripts + runs `bg_deploy.sh`). No compose sync or bootstrap.
+Rebuild + push backend image → `deploy-restart` (also blue/green: re-syncs the
+compose file and deploy scripts, then runs `bg_deploy.sh`). It skips bootstrap.
 
 ### Fast-track frontend (`make deploy-frontend`)
 Rebuild + push frontend image → `deploy-restart-frontend`: pull + recreate

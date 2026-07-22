@@ -19,6 +19,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import yaml
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ROOT_DIR = BACKEND_DIR.parent
@@ -103,9 +105,34 @@ def test_bg_deploy_queues_profile_backfill_after_the_cutover() -> None:
     script = _read("bg_deploy.sh")
     flip = script.index("flip_caddy.sh")
     active = script.index('echo "$NEXT" > "$ACTIVE_FILE"')
-    backfill = script.index("scripts.backfill_oa_profiles")
+    backfill = script.index("--profile maintenance up")
     assert flip < active < backfill
     assert "backfill start failed; deployment remains active" in script
+    assert "docker compose exec -T -d" not in script
+
+
+def test_profile_backfill_has_an_observable_dedicated_service() -> None:
+    compose = yaml.safe_load((BACKEND_DIR / "docker-compose.yml").read_text())
+    service = compose["services"]["oa-profile-backfill"]
+    assert service["profiles"] == ["maintenance"]
+    assert service["restart"] == "no"
+    assert "scripts.backfill_oa_profiles" in service["command"]
+    assert service["image"].endswith("${IMAGE_TAG:-latest}")
+
+
+def test_profile_backfill_make_targets_are_observable() -> None:
+    run = _make_target_dry_run("profile-backfill-run")
+    status = _make_target_dry_run("profile-backfill-status")
+    logs = _make_target_dry_run("profile-backfill-logs")
+    assert "--profile maintenance up -d" in run
+    assert "State.ExitCode" in status
+    assert "logs --tail=100" in logs
+
+
+def test_backend_fast_deploy_syncs_compose_for_maintenance_service() -> None:
+    out = _make_target_dry_run("deploy-restart")
+    assert "docker-compose.yml" in out
+    assert "bg_deploy.sh" in out
 
 
 def test_bg_deploy_only_pulls_backend_services() -> None:
@@ -171,12 +198,23 @@ def test_bg_rollback_recreates_workers_at_prev_tag() -> None:
     assert "$WORKERS" in script
 
 
+def test_bg_rollback_stops_backfill_from_demoted_image_before_revive() -> None:
+    """Rejected maintenance code must not keep writing after rollback."""
+    script = _read("bg_rollback.sh")
+    stop = script.index("--profile maintenance stop oa-profile-backfill")
+    revive = script.index('--force-recreate "web-$PREV"')
+    assert stop < revive
+
+
 def test_bg_rollback_gates_flip_on_health() -> None:
     """The revived color must be healthy before Caddy is flipped back."""
     script = _read("bg_rollback.sh")
     health = script.index("Health.Status")
+    abort = script.index("did not become healthy. ABORTING")
     flip = script.index("flip_caddy.sh")
-    assert health < flip
+    assert health < abort < flip
+    assert 'if [ "$ok" != "1" ]' in script
+    assert "exit 1" in script
 
 
 def test_bg_rollback_records_demoted_tag_before_swapping_active() -> None:

@@ -26,16 +26,26 @@ fi
 
 echo "==> bg_rollback: active=$ACTIVE -> prev=$PREV tag=$PREV_TAG"
 
+# Stop maintenance code from the demoted image before reviving the previous
+# application version. The database eligibility checkpoint makes a later run
+# resumable; a rejected image must not keep mutating production after rollback.
+docker compose --profile maintenance stop oa-profile-backfill || true
+
 # Revive the previous color at its tag + bring workers to the same tag.
 IMAGE_TAG="$PREV_TAG" docker compose up -d --no-deps --force-recreate "web-$PREV" $WORKERS
 
 # Wait for it healthy before flipping.
 cid="$(IMAGE_TAG="$PREV_TAG" docker compose ps -q "web-$PREV")"
+ok=0
 for i in $(seq 1 60); do
   st="$(docker inspect --format '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "")"
-  if [ "$st" = "healthy" ]; then break; fi
+  if [ "$st" = "healthy" ]; then ok=1; break; fi
   sleep 2
 done
+if [ "$ok" != "1" ]; then
+  echo "==> web-$PREV did not become healthy. ABORTING — web-$ACTIVE keeps serving." >&2
+  exit 1
+fi
 
 # Flip Caddy back (graceful).
 IMAGE_TAG="$PREV_TAG" ./scripts/flip_caddy.sh "$PREV"
