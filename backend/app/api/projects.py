@@ -65,10 +65,13 @@ _SINGLE_PAGE_SOURCE_BAD_REQUESTS = {
     "conflicting_gid",
     "host_not_allowed",
     "invalid_gid",
+    "invalid_sheet_id",
+    "invalid_url",
     "ip_literal_forbidden",
     "missing_gid",
     "scheme_not_https",
     "unsafe_gid",
+    "url_credentials_forbidden",
 }
 
 

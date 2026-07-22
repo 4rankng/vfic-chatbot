@@ -39,13 +39,15 @@ def test_route_is_admin_only() -> None:
     assert response.status_code == 403
 
 
-def test_create_maps_gid_contract_errors_to_bad_request(
+@pytest.mark.parametrize("error_code", ["missing_gid", "invalid_sheet_id", "url_credentials_forbidden"])
+def test_create_maps_source_url_contract_errors_to_bad_request(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
+    , error_code: str
 ) -> None:
     monkeypatch.setattr(
         projects_api.ProjectService,
         "create_single_page_external_source",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(ConflictError("missing_gid")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ConflictError(error_code)),
     )
 
     response = client.post(
@@ -53,7 +55,7 @@ def test_create_maps_gid_contract_errors_to_bad_request(
         json={"sheet_url": "https://docs.google.com/spreadsheets/d/x/edit", "auto_sync_enabled": True},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "missing_gid"
+    assert response.json()["detail"] == error_code
 
 
 def test_run_now_maps_cooldown_to_429(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

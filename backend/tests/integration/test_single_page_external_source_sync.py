@@ -337,3 +337,103 @@ async def test_deleting_source_keeps_current_single_page(integration_session) ->
     )
     assert current is not None
     assert current.raw_text == "Trang hiện tại vẫn được giữ."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fetch_result", "error_code"),
+    [
+        (ExternalSourceSyncError("sheet_not_public"), "sheet_not_public"),
+        (
+            "STT theo quy trình,Thông tin,Câu hỏi thường gặp,Thông tin trả lời\n",
+            "empty_sheet",
+        ),
+    ],
+)
+async def test_private_or_empty_sheet_preserves_current_page(
+    integration_session,
+    monkeypatch: pytest.MonkeyPatch,
+    fetch_result,
+    error_code: str,
+) -> None:
+    admin, _project, knowledge_base, state = await _seed_project(integration_session)
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.get_redis", lambda: _FakeRedis()
+    )
+    monkeypatch.setattr(
+        "app.services.knowledge_base_service.require_direct_context_ready",
+        AsyncMock(return_value=None),
+    )
+    fetch = (
+        AsyncMock(side_effect=fetch_result)
+        if isinstance(fetch_result, Exception)
+        else AsyncMock(return_value=fetch_result)
+    )
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.SheetClient.fetch_csv", fetch
+    )
+    await KnowledgeBaseService(integration_session).upsert_direct_file(
+        knowledge_base.id,
+        DirectContextFileUpsert(filename="current.md", text="Trang đang phục vụ."),
+        admin,
+    )
+    prior_hash = await integration_session.scalar(
+        select(KnowledgeBaseDirectFile.content_sha256).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    )
+
+    outcome = await sync_single_page_external_source(
+        integration_session, state_id=state.id, actor=admin
+    )
+
+    assert outcome.status == "FAILED"
+    assert outcome.error == error_code
+    assert await integration_session.scalar(
+        select(KnowledgeBaseDirectFile.content_sha256).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    ) == prior_hash
+
+
+@pytest.mark.asyncio
+async def test_missing_discovery_card_preserves_current_page(
+    integration_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, project, knowledge_base, state = await _seed_project(integration_session)
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.get_redis", lambda: _FakeRedis()
+    )
+    monkeypatch.setattr(
+        "app.services.knowledge_base_service.require_direct_context_ready",
+        AsyncMock(return_value=None),
+    )
+    await KnowledgeBaseService(integration_session).upsert_direct_file(
+        knowledge_base.id,
+        DirectContextFileUpsert(filename="current.md", text="Trang phải được giữ nguyên."),
+        admin,
+    )
+    prior = await integration_session.scalar(
+        select(KnowledgeBaseDirectFile).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    )
+    assert prior is not None
+    prior_hash, prior_text = prior.content_sha256, prior.raw_text
+    project.index_card = None
+    await integration_session.commit()
+
+    outcome = await sync_single_page_external_source(
+        integration_session, state_id=state.id, actor=admin
+    )
+
+    assert outcome.status == "FAILED"
+    assert outcome.error == "project_invalid:single_page_needs_discovery_card"
+    current = await integration_session.scalar(
+        select(KnowledgeBaseDirectFile).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    )
+    assert current is not None
+    assert (current.content_sha256, current.raw_text) == (prior_hash, prior_text)

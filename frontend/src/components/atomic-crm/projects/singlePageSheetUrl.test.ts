@@ -17,9 +17,7 @@ describe("resolveGoogleSheetGid", () => {
 
   it("rejects links without an explicit gid", () => {
     expect(
-      resolveGoogleSheetGid(
-        "https://docs.google.com/spreadsheets/d/demo/edit",
-      ),
+      resolveGoogleSheetGid("https://docs.google.com/spreadsheets/d/demo/edit"),
     ).toMatchObject({
       ok: false,
       reason: "missing",

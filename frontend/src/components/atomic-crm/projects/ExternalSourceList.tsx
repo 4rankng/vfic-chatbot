@@ -12,13 +12,14 @@ import {
   listExternalSources,
   runSinglePageExternalSourceNow,
   runExternalSourceNow,
+  singlePageSyncErrorMessage,
   type ExternalSourceSyncState,
   type SinglePageExternalSourceSyncState,
 } from "@/lib/vfic/knowledgeService";
 
 const RUN_NOW_COOLDOWN_MS = 5 * 60 * 1000;
 const FOLLOW_UP_REFRESH_MS = 4000;
-const MAX_FOLLOW_UP_POLLS = 3;
+const MAX_FOLLOW_UP_POLLS = 30;
 
 type Props = {
   projectId: string;
@@ -34,6 +35,12 @@ type Props = {
 type ExternalSourceRow =
   | ExternalSourceSyncState
   | SinglePageExternalSourceSyncState;
+
+type PollSession = {
+  baselineById: Map<string, string>;
+  targetId?: string;
+  attempts: number;
+};
 
 const STATUS_LABEL: Record<string, string> = {
   NEW: "Mới",
@@ -66,6 +73,44 @@ const formatTimestamp = (value?: string | null): string => {
 const truncate = (url: string, max = 48): string =>
   url.length > max ? `${url.slice(0, max)}…` : url;
 
+const rowProgressSignature = (row: ExternalSourceRow): string =>
+  [
+    row.last_status,
+    row.last_synced_at ?? "",
+    row.last_content_hash ?? "",
+    row.updated_at,
+  ].join(":");
+
+const successfulSyncSignature = (nextRows: ExternalSourceRow[]): string =>
+  nextRows
+    .filter((row) => row.last_status === "OK" || row.last_status === "NO_OP")
+    .map((row) => `${row.id}:${rowProgressSignature(row)}`)
+    .join("|");
+
+const isTerminal = (row: ExternalSourceRow): boolean =>
+  row.last_status === "OK" ||
+  row.last_status === "NO_OP" ||
+  row.last_status === "FAILED";
+
+const rowsNeedFollowUp = (nextRows: ExternalSourceRow[]): boolean =>
+  nextRows.some(
+    (row) => row.last_status === "NEW" || row.last_status === "PROCESSING",
+  );
+
+const pollHasCompleted = (
+  session: PollSession,
+  nextRows: ExternalSourceRow[],
+): boolean => {
+  const candidates = session.targetId
+    ? nextRows.filter((row) => row.id === session.targetId)
+    : nextRows;
+  return candidates.some(
+    (row) =>
+      isTerminal(row) &&
+      rowProgressSignature(row) !== session.baselineById.get(row.id),
+  );
+};
+
 /**
  * Read-only list of configured external sources for a project. Auto-sync state
  * is shown but not editable inline (delete + re-create to change it). Each row
@@ -87,92 +132,165 @@ export const ExternalSourceList = ({
   const [cooldownId, setCooldownId] = useState<string | null>(null);
   const cooldownTimer = useRef<number | null>(null);
   const followUpTimer = useRef<number | null>(null);
+  const rowsRef = useRef<ExternalSourceRow[]>([]);
   const syncSignatureRef = useRef<string | null>(null);
   const initializedSyncSignature = useRef(false);
-  const awaitingRunNowRef = useRef(false);
+  const pollSessionRef = useRef<PollSession | null>(null);
+  const requestGenerationRef = useRef(0);
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const previousRefreshSignalRef = useRef({ projectId, value: refreshSignal });
+  const suppressNextRefreshPollRef = useRef(false);
+  const loadRef = useRef<() => Promise<void>>(async () => undefined);
+  const onSynchronizedRef = useRef(onSynchronized);
   const isSinglePage = variant === "single-page";
 
-  const rowsNeedFollowUp = (nextRows: ExternalSourceRow[]) =>
-    nextRows.some(
-      (row) =>
-        row.last_status === "NEW" ||
-        row.last_status === "PROCESSING" ||
-        (row.last_status === "FAILED" && row.auto_sync_enabled),
-    );
+  useEffect(() => {
+    onSynchronizedRef.current = onSynchronized;
+  }, [onSynchronized]);
 
-  const syncSignature = (nextRows: ExternalSourceRow[]) =>
-    nextRows
-      .filter((row) => row.last_status === "OK" || row.last_status === "NO_OP")
-      .map((row) =>
-        [
-          row.id,
-          row.last_status,
-          row.last_synced_at ?? "",
-          row.last_content_hash ?? "",
-          row.updated_at,
-        ].join(":"),
-      )
-      .join("|");
-
-  const clearFollowUpTimer = () => {
+  const clearFollowUpTimer = useCallback(() => {
     if (followUpTimer.current !== null) {
       window.clearTimeout(followUpTimer.current);
       followUpTimer.current = null;
     }
-  };
+  }, []);
 
-  const load = useCallback(async (attempt = 0) => {
-    try {
-      const nextRows = isSinglePage
-        ? await listSinglePageExternalSources(projectId)
-        : await listExternalSources(projectId);
-      setRows(nextRows);
+  const stopPolling = useCallback(() => {
+    pollSessionRef.current = null;
+    clearFollowUpTimer();
+  }, [clearFollowUpTimer]);
 
-      if (isSinglePage) {
-        const nextSignature = syncSignature(nextRows);
-        if (!initializedSyncSignature.current) {
-          initializedSyncSignature.current = true;
-        } else if (nextSignature && nextSignature !== syncSignatureRef.current) {
-          awaitingRunNowRef.current = false;
-          onSynchronized?.();
-        }
-        syncSignatureRef.current = nextSignature;
-
-        clearFollowUpTimer();
-        if (
-          attempt < MAX_FOLLOW_UP_POLLS &&
-          (rowsNeedFollowUp(nextRows) || awaitingRunNowRef.current)
-        ) {
-          followUpTimer.current = window.setTimeout(
-            () => void load(attempt + 1),
-            FOLLOW_UP_REFRESH_MS,
-          );
-        } else if (attempt >= MAX_FOLLOW_UP_POLLS) {
-          awaitingRunNowRef.current = false;
-        }
-      }
-    } catch (error) {
-      notify((error as Error).message, { type: "error" });
-    } finally {
-      setLoading(false);
-    }
-  }, [isSinglePage, notify, onSynchronized, projectId]);
-
-  useEffect(() => {
-    return () => {
-      if (cooldownTimer.current !== null)
-        window.clearTimeout(cooldownTimer.current);
-      clearFollowUpTimer();
+  const beginPolling = useCallback((targetId?: string) => {
+    if (pollSessionRef.current) return;
+    pollSessionRef.current = {
+      baselineById: new Map(
+        rowsRef.current.map((row) => [row.id, rowProgressSignature(row)]),
+      ),
+      targetId,
+      attempts: 0,
     };
   }, []);
 
+  const scheduleNextPoll = useCallback(() => {
+    const session = pollSessionRef.current;
+    clearFollowUpTimer();
+    if (!session) return;
+    if (session.attempts >= MAX_FOLLOW_UP_POLLS) {
+      pollSessionRef.current = null;
+      return;
+    }
+    session.attempts += 1;
+    followUpTimer.current = window.setTimeout(
+      () => void loadRef.current(),
+      FOLLOW_UP_REFRESH_MS,
+    );
+  }, [clearFollowUpTimer]);
+
+  const load = useCallback(async () => {
+    const requestGeneration = ++requestGenerationRef.current;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    try {
+      const nextRows = isSinglePage
+        ? await listSinglePageExternalSources(projectId, controller.signal)
+        : await listExternalSources(projectId, controller.signal);
+      if (
+        controller.signal.aborted ||
+        requestGeneration !== requestGenerationRef.current
+      ) {
+        return;
+      }
+      rowsRef.current = nextRows;
+      setRows(nextRows);
+
+      if (isSinglePage) {
+        const nextSignature = successfulSyncSignature(nextRows);
+        const successfulSyncChanged =
+          initializedSyncSignature.current &&
+          Boolean(nextSignature) &&
+          nextSignature !== syncSignatureRef.current;
+        if (!initializedSyncSignature.current) {
+          initializedSyncSignature.current = true;
+        }
+        syncSignatureRef.current = nextSignature;
+
+        const pollSession = pollSessionRef.current;
+        if (pollSession && pollHasCompleted(pollSession, nextRows)) {
+          stopPolling();
+        } else {
+          if (!pollSession && rowsNeedFollowUp(nextRows)) beginPolling();
+          if (pollSessionRef.current) scheduleNextPoll();
+        }
+
+        if (successfulSyncChanged) onSynchronizedRef.current?.();
+      }
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        requestGeneration !== requestGenerationRef.current
+      ) {
+        return;
+      }
+      notify(
+        isSinglePage
+          ? singlePageSyncErrorMessage(error)
+          : (error as Error).message,
+        { type: "error" },
+      );
+      if (pollSessionRef.current) scheduleNextPoll();
+    } finally {
+      if (requestGeneration === requestGenerationRef.current) setLoading(false);
+    }
+  }, [
+    beginPolling,
+    isSinglePage,
+    notify,
+    projectId,
+    scheduleNextPoll,
+    stopPolling,
+  ]);
+
+  loadRef.current = load;
+
   useEffect(() => {
     setLoading(true);
+    setRows(null);
+    rowsRef.current = [];
+    syncSignatureRef.current = null;
+    initializedSyncSignature.current = false;
+    pollSessionRef.current = null;
+    setCooldownId(null);
+    setProcessingId(null);
     void load();
     return () => {
-      clearFollowUpTimer();
+      requestGenerationRef.current += 1;
+      requestControllerRef.current?.abort();
+      if (cooldownTimer.current !== null)
+        window.clearTimeout(cooldownTimer.current);
+      stopPolling();
     };
-  }, [load, refreshSignal]);
+  }, [isSinglePage, load, projectId, stopPolling]);
+
+  useEffect(() => {
+    if (previousRefreshSignalRef.current.projectId !== projectId) {
+      previousRefreshSignalRef.current = { projectId, value: refreshSignal };
+      return;
+    }
+    if (refreshSignal === previousRefreshSignalRef.current.value) return;
+    previousRefreshSignalRef.current.value = refreshSignal;
+    const suppressPoll = suppressNextRefreshPollRef.current;
+    suppressNextRefreshPollRef.current = false;
+    if (
+      isSinglePage &&
+      !suppressPoll &&
+      rowsRef.current.length === 0 &&
+      !pollSessionRef.current
+    ) {
+      beginPolling();
+    }
+    void load();
+  }, [beginPolling, isSinglePage, load, projectId, refreshSignal]);
 
   const startCooldown = (id: string) => {
     setCooldownId(id);
@@ -196,19 +314,23 @@ export const ExternalSourceList = ({
         type: "info",
       });
       startCooldown(row.id);
-      awaitingRunNowRef.current = isSinglePage;
-      clearFollowUpTimer();
-      followUpTimer.current = window.setTimeout(
-        () => void load(),
-        FOLLOW_UP_REFRESH_MS,
-      );
+      if (isSinglePage) {
+        stopPolling();
+        beginPolling(row.id);
+        scheduleNextPoll();
+      }
     } catch (error) {
       const status = (error as { status?: number }).status;
       if (status === 429) {
         notify("Vui lòng đợi 5 phút giữa các lần xử lý.", { type: "warning" });
         startCooldown(row.id);
       } else {
-        notify((error as Error).message, { type: "error" });
+        notify(
+          isSinglePage
+            ? singlePageSyncErrorMessage(error)
+            : (error as Error).message,
+          { type: "error" },
+        );
       }
     } finally {
       setProcessingId(null);
@@ -230,10 +352,17 @@ export const ExternalSourceList = ({
         await deleteExternalSource(projectId, row.id);
       }
       notify("Đã xóa nguồn đồng bộ.", { type: "success" });
+      stopPolling();
       await load();
+      suppressNextRefreshPollRef.current = isSinglePage;
       onChange?.();
     } catch (error) {
-      notify((error as Error).message, { type: "error" });
+      notify(
+        isSinglePage
+          ? singlePageSyncErrorMessage(error)
+          : (error as Error).message,
+        { type: "error" },
+      );
     }
   };
 
@@ -304,7 +433,11 @@ export const ExternalSourceList = ({
                   ? ` · ${row.last_row_count} hàng`
                   : ""}
                 {row.last_status === "FAILED" && row.last_error
-                  ? ` · ${row.last_error}`
+                  ? ` · ${
+                      isSinglePage
+                        ? singlePageSyncErrorMessage(row.last_error)
+                        : row.last_error
+                    }`
                   : ""}
               </p>
             </div>

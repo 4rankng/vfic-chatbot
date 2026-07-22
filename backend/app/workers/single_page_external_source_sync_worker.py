@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_INTERVAL_SECONDS = 86400
 DEFAULT_JOB_TIMEOUT_SECONDS = 1800
 DEFAULT_RETRY_MAX = 3
-DEFAULT_RETRY_INTERVALS_SECONDS = [60, 300, 900]
+DEFAULT_RETRY_INTERVALS_SECONDS = [2000, 2000, 2000]
 COUNTER_SUCCESS = "single_page_external_source_sync_success_total"
 COUNTER_FAILURE = "single_page_external_source_sync_failure_total"
 COUNTER_TTL_SECONDS = 7 * 24 * 3600
@@ -103,8 +103,17 @@ async def _run_job_async(state_id: uuid.UUID) -> None:
                 state_id,
                 outcome.error,
             )
+        elif outcome.status == "LOCKED":
+            # A crashed predecessor can retain the owner lock until its TTL.
+            # Raising keeps the RQ retry chain alive; the first retry is
+            # deliberately scheduled after that TTL expires.
+            raise RuntimeError("single_page_external_source_sync_locked")
         else:
-            logger.info("single_page_external_source_sync state=%s status=LOCKED", state_id)
+            logger.warning(
+                "single_page_external_source_sync state=%s unexpected_status=%s",
+                state_id,
+                outcome.status,
+            )
 
 
 def enqueue_one_shot(state_id: uuid.UUID, *, job_id: str | None = None) -> str | None:

@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { useNotify } from "ra-core";
 import { AlertCircle, FileText, Link2, Loader2 } from "lucide-react";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,7 +77,7 @@ export const ExternalSourceLinkForm = ({
       ? `Sẽ đồng bộ đúng tab gid=${gidResolution.gid} từ ${
           gidResolution.source === "fragment" ? "phần #gid" : "tham số ?gid"
         } của link.`
-      : gidResolution?.message ?? null
+      : (gidResolution?.message ?? null)
     : null;
 
   const reset = () => {
@@ -96,9 +92,12 @@ export const ExternalSourceLinkForm = ({
       return;
     }
     if (!isValidGoogleSheetUrl(sheetUrl)) {
-      notify("Link phải là Google Sheet công khai (https://docs.google.com/...).", {
-        type: "warning",
-      });
+      notify(
+        "Link phải là Google Sheet công khai (https://docs.google.com/...).",
+        {
+          type: "warning",
+        },
+      );
       return;
     }
     if (isSinglePage && !gidResolution?.ok) {
@@ -204,7 +203,9 @@ export const ExternalSourceLinkForm = ({
           )}
           {isSinglePage && urlValid && gidHint && (
             <p
-              id={gidResolution?.ok ? "ext-src-gid-preview" : "ext-src-gid-error"}
+              id={
+                gidResolution?.ok ? "ext-src-gid-preview" : "ext-src-gid-error"
+              }
               className={
                 gidResolution?.ok
                   ? "text-body-sm text-muted-foreground"
@@ -244,24 +245,24 @@ export const ExternalSourceLinkForm = ({
           htmlFor="ext-src-autosync"
           className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/40"
         >
-            <span className="space-y-0.5">
-              <span className="block text-body font-medium">
-                Đồng bộ tự động hàng ngày
-              </span>
-              <span className="block text-body-sm text-muted-foreground">
-                {isSinglePage
-                  ? "Tự làm mới trang kiến thức khi Google Sheet thay đổi."
-                  : "Ghi đè nội dung hiện tại khi Sheet thay đổi."}
-              </span>
+          <span className="space-y-0.5">
+            <span className="block text-body font-medium">
+              Đồng bộ tự động hàng ngày
             </span>
-            <Switch
+            <span className="block text-body-sm text-muted-foreground">
+              {isSinglePage
+                ? "Tự làm mới trang kiến thức khi Google Sheet thay đổi."
+                : "Ghi đè nội dung hiện tại khi Sheet thay đổi."}
+            </span>
+          </span>
+          <Switch
             id="ext-src-autosync"
             checked={autoSync}
             onCheckedChange={setAutoSync}
             disabled={submitting}
             aria-label="Bật đồng bộ tự động hàng ngày"
-            />
-          </label>
+          />
+        </label>
         {isSinglePage && autoSync && (
           <Alert variant="warning">
             <AlertCircle aria-hidden="true" />

@@ -192,8 +192,9 @@ class SinglePageExternalSourceService:
             return row
         if job_id is None:
             logger.warning(
-                "single_page_external_source create enqueue failed; removing NEW row=%s",
+                "single_page_external_source create enqueue failed; removing NEW row=%s code=%s",
                 row.id,
+                "enqueue_failed",
             )
             await self.db.delete(row)
             await self.db.commit()

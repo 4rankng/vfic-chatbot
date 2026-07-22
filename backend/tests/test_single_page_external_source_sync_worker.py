@@ -100,7 +100,27 @@ def test_enqueue_configures_bounded_worker_crash_retry(monkeypatch: pytest.Monke
     assert w.enqueue_one_shot(uuid.uuid4()) == "job-id"
     retry = captured["retry"]
     assert retry.max == 3
-    assert retry.intervals == [60, 300, 900]
+    assert retry.intervals == [2000, 2000, 2000]
+
+
+@pytest.mark.asyncio
+async def test_run_job_async_keeps_locked_job_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = SimpleNamespace(id=uuid.uuid4(), created_by=uuid.uuid4())
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=state)
+    monkeypatch.setattr("app.workers._db.worker_session", lambda: _FakeSessionCM(db))
+    monkeypatch.setattr(
+        w, "_resolve_actor", AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4()))
+    )
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.sync_single_page_external_source",
+        AsyncMock(return_value=SinglePageExternalSourceSyncOutcome(status="LOCKED")),
+    )
+
+    with pytest.raises(RuntimeError, match="single_page_external_source_sync_locked"):
+        await w._run_job_async(state.id)
 
 
 @pytest.mark.asyncio
