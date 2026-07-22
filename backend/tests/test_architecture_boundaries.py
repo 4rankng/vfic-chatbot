@@ -8,6 +8,7 @@ forms supported by the application are normalized before comparison.
 from __future__ import annotations
 
 import ast
+import importlib.util
 from pathlib import Path, PurePosixPath
 import re
 
@@ -183,9 +184,13 @@ service_outward|backend/app/services/zalo_oa_service.py|app.graph.outbound_telem
     if line.strip()
 )
 
-_TS_STATIC_MODULE = re.compile(r"(?:\bfrom\s*|\bimport\s*)[\"']([^\"']+)[\"']")
+_TS_GAP = r"(?:(?:\s+)|(?:/\*.*?\*/)|(?://[^\n]*(?:\n|$)))*"
+_TS_STATIC_MODULE = re.compile(
+    rf"(?<![\w$'\"/-])(?:from|import){_TS_GAP}[\"']([^\"']+)[\"']",
+    re.DOTALL,
+)
 _TS_CALL_MODULE = re.compile(
-    r"\b(?:import|require)\s*\(\s*(?:/\*.*?\*/\s*)?[\"'`]([^\"'`]+)[\"'`]",
+    rf"\b(?:import|require){_TS_GAP}\({_TS_GAP}[\"'`]([^\"'`]+)[\"'`]",
     re.DOTALL,
 )
 
@@ -203,25 +208,70 @@ def _resolve_python_module(path: Path, node: ast.ImportFrom) -> str:
 
 def _python_import_targets(path: Path, source: str) -> set[str]:
     targets: set[str] = set()
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    importlib_aliases = {"importlib"}
+    import_module_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            importlib_aliases.update(
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name == "importlib"
+            )
+        elif isinstance(node, ast.ImportFrom) and node.module == "importlib":
+            import_module_aliases.update(
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name == "import_module"
+            )
+
+    for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             module = _resolve_python_module(path, node)
             if node.module:
-                targets.update(f"{module}:{alias.name}" for alias in node.names)
+                for alias in node.names:
+                    targets.add(f"{module}:{alias.name}")
+                    if module == "app" and alias.name in {
+                        "api",
+                        "core",
+                        "graph",
+                        "models",
+                        "workers",
+                    }:
+                        targets.add(f"app.{alias.name}")
             else:
                 targets.update(f"{module}.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.Import):
             targets.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
-            imported = node.args[0].value
+        elif isinstance(node, ast.Call):
+            first_arg = node.args[0] if node.args else None
+            name_keyword = next((kw.value for kw in node.keywords if kw.arg == "name"), None)
+            import_arg = first_arg or name_keyword
+            if not isinstance(import_arg, ast.Constant):
+                continue
+            imported = import_arg.value
             if not isinstance(imported, str):
                 continue
+            package_node = (
+                node.args[1]
+                if len(node.args) > 1
+                else next((kw.value for kw in node.keywords if kw.arg == "package"), None)
+            )
+            if imported.startswith(".") and isinstance(package_node, ast.Constant):
+                package = package_node.value
+                if isinstance(package, str) and package:
+                    try:
+                        imported = importlib.util.resolve_name(imported, package)
+                    except ImportError:
+                        pass
             if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+                targets.add(imported)
+            elif isinstance(node.func, ast.Name) and node.func.id in import_module_aliases:
                 targets.add(imported)
             elif (
                 isinstance(node.func, ast.Attribute)
                 and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "importlib"
+                and node.func.value.id in importlib_aliases
                 and node.func.attr == "import_module"
             ):
                 targets.add(imported)
@@ -240,6 +290,18 @@ def _normalize_posix(module: str) -> str:
 
 
 def _resolve_typescript_module(path: Path, module: str) -> str:
+    if "\\" in module:
+        try:
+            module = re.sub(
+                r"\\u\{([0-9a-fA-F]+)\}",
+                lambda match: chr(int(match.group(1), 16)),
+                module,
+            )
+            cooked = ast.literal_eval(f'"{module}"')
+            if isinstance(cooked, str):
+                module = cooked
+        except (SyntaxError, ValueError):
+            pass
     if module.startswith("@/"):
         return _normalize_posix(f"frontend/src/{module[2:]}")
     if module.startswith("."):
@@ -323,8 +385,15 @@ def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
         "from ..models import User, Role\n"
         "from .. import models\n"
         "from app.models import Lead\n"
-        "import importlib\n"
-        "dynamic = importlib.import_module('app.models.job')\n"
+        "from app import core, graph, models, workers\n"
+        "from app import api\n"
+        "import importlib as il\n"
+        "from importlib import import_module as load_module\n"
+        "dynamic = il.import_module('app.models.job')\n"
+        "aliased = load_module('app.models.company')\n"
+        "keyword = il.import_module(name='app.models.user')\n"
+        "relative = il.import_module('.models', package='app')\n"
+        "positional_relative = il.import_module('.models', 'app')\n"
         "legacy = __import__('app.models.persona')\n",
     )
     assert {
@@ -332,9 +401,18 @@ def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
         "app.models:Role",
         "app.models",
         "app.models:Lead",
+        "app.core",
+        "app.api",
+        "app.graph",
+        "app.models",
+        "app.workers",
         "app.models.job",
+        "app.models.company",
         "app.models.persona",
     } <= targets
+    for target in {"app.core", "app.graph", "app.models", "app.workers"}:
+        assert _backend_rule("backend/app/api/example.py", target) == "api_outward"
+    assert _backend_rule("backend/app/services/example.py", "app.api") == "service_outward"
 
 
 def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:
@@ -346,9 +424,18 @@ def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:
         const lazy = import('@/lib/vfic/lazy');
         const legacy = require('@/lib/vfic/legacy');
         const template = import(`@/lib/vfic/template`);
+        const codepointTemplate = import(`\\u{40}/lib/vfic/codepoint-template`);
         const chunked = import(/* chunk */ '@/lib/vfic/chunked');
         const commented = require(/* legacy */ '@/lib/vfic/commented');
+        const lineComment = import(
+          // chunk
+          '@/lib/vfic/line-comment'
+        );
+        const outerImport = import /* chunk */ ('@/lib/vfic/outer-import');
+        const outerRequire = require /* compatibility */ ('@/lib/vfic/outer-require');
         import '@/lib/../lib/vfic/normalized';
+        import '\\x40/lib/vfic/escaped';
+        import '\\u{40}/lib/vfic/codepoint-escaped';
         import thing from '../../lib/vfic/relative';
         """,
     )
@@ -357,8 +444,19 @@ def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:
         "frontend/src/lib/vfic/lazy",
         "frontend/src/lib/vfic/legacy",
         "frontend/src/lib/vfic/template",
+        "frontend/src/lib/vfic/codepoint-template",
         "frontend/src/lib/vfic/chunked",
         "frontend/src/lib/vfic/commented",
+        "frontend/src/lib/vfic/line-comment",
+        "frontend/src/lib/vfic/outer-import",
+        "frontend/src/lib/vfic/outer-require",
         "frontend/src/lib/vfic/normalized",
+        "frontend/src/lib/vfic/escaped",
+        "frontend/src/lib/vfic/codepoint-escaped",
         "frontend/src/lib/vfic/relative",
     }
+    assert all(
+        _frontend_rule("frontend/src/components/atomic-crm/example.ts", target)
+        == "product_lib"
+        for target in targets
+    )
