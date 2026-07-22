@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 
@@ -77,11 +77,15 @@ async def _run_job_async(state_id: uuid.UUID) -> None:
             actor = await _resolve_actor(db, state)
             outcome = await sync_single_page_external_source(db, state_id=state_id, actor=actor)
         except ExternalSourceSyncError as exc:
+            state.last_status = "FAILED"
+            state.last_error = exc.code
+            state.last_synced_at = datetime.now(UTC)
+            await db.commit()
             logger.warning(
                 "single_page_external_source_sync failed state=%s code=%s", state_id, exc.code
             )
             _bump_counter(COUNTER_FAILURE)
-            return
+            raise RuntimeError(exc.code) from None
 
         if outcome.status == "OK":
             _bump_counter(COUNTER_SUCCESS)

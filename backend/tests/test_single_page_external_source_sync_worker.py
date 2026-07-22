@@ -88,6 +88,38 @@ async def test_run_job_async_missing_state_is_noop(monkeypatch: pytest.MonkeyPat
     await w._run_job_async(uuid.uuid4())
 
 
+@pytest.mark.asyncio
+async def test_run_job_async_marks_missing_actor_failed_and_keeps_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = SimpleNamespace(
+        id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+        last_status="NEW",
+        last_error=None,
+        last_synced_at=None,
+    )
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=state)
+    monkeypatch.setattr("app.workers._db.worker_session", lambda: _FakeSessionCM(db))
+    monkeypatch.setattr(
+        w,
+        "_resolve_actor",
+        AsyncMock(side_effect=ExternalSourceSyncError("no_sync_actor")),
+    )
+    counters = []
+    monkeypatch.setattr(w, "_bump_counter", lambda key: counters.append(key))
+
+    with pytest.raises(RuntimeError, match="no_sync_actor"):
+        await w._run_job_async(state.id)
+
+    assert state.last_status == "FAILED"
+    assert state.last_error == "no_sync_actor"
+    assert state.last_synced_at is not None
+    db.commit.assert_awaited_once()
+    assert w.COUNTER_FAILURE in counters
+
+
 def test_enqueue_configures_bounded_worker_crash_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     captured = {}
 
