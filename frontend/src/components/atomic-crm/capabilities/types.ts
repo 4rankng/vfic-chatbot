@@ -43,10 +43,12 @@ export type ConversationContextValue = Readonly<{
   avatarUrl?: string | null;
   avatarBackground?: string;
   avatarForeground?: string;
-  /** Muted descriptor shown beneath the header name. Currently a phone number
-   * when known, so the header surfaces an actionable contact detail instead of
-   * the raw provider ID. The context panel remains the detailed source. */
-  contactSubtitle?: string;
+  /** Muted descriptor shown beneath the header name. `secondaryName` is the
+   * recruiter-confirmed real name, surfaced only when it differs from the
+   * profile display name (i.e. the profile name is a nickname). `phone` is the
+   * candidate mobile number when captured. The context panel remains the
+   * detailed source. */
+  contactSubtitle?: Readonly<{ secondaryName?: string; phone?: string }>;
   avatarAlt: string;
   panelLabel: string;
   renderPanel?: (props: {

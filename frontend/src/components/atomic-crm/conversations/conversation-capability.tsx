@@ -46,7 +46,7 @@ export const getGenericConversationContext = (
     avatarUrl: conversation?.contact?.avatar_url,
     avatarBackground: "var(--muted)",
     avatarForeground: "var(--muted-foreground)",
-    contactSubtitle: phone,
+    contactSubtitle: phone ? { phone } : undefined,
     avatarAlt: `Ảnh đại diện của ${displayName}`,
     panelLabel: "thông tin liên hệ",
   };

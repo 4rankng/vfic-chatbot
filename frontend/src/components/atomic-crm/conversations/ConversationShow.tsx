@@ -204,11 +204,29 @@ export const ConversationShowContent = ({
                   </div>
                   {context.contactSubtitle && (
                     <div className="person-subtitle">
-                      <Phone
-                        className="person-subtitle-icon"
-                        aria-hidden="true"
-                      />
-                      <span>{context.contactSubtitle}</span>
+                      {context.contactSubtitle.secondaryName && (
+                        <span className="person-subtitle-name">
+                          {context.contactSubtitle.secondaryName}
+                        </span>
+                      )}
+                      {context.contactSubtitle.secondaryName &&
+                      context.contactSubtitle.phone ? (
+                        <span
+                          className="person-subtitle-sep"
+                          aria-hidden="true"
+                        >
+                          ·
+                        </span>
+                      ) : null}
+                      {context.contactSubtitle.phone && (
+                        <span className="person-subtitle-phone">
+                          <Phone
+                            className="person-subtitle-icon"
+                            aria-hidden="true"
+                          />
+                          <span>{context.contactSubtitle.phone}</span>
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

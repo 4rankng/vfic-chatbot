@@ -155,12 +155,28 @@ const RecruitmentConversationContext = ({
     };
   }, [conversation?.zalo_chat_id, lead?.id, refetch]);
 
-  const { displayName, avatarUrl } = resolveRecruitmentProfile(
-    conversation ?? { zalo_channel: "bot", zalo_chat_id: null, contact: null },
-    lead,
-  );
-  const colors = getLeadStatusColor(lead);
+  // Header identity is profile-name-first: the channel/OA display name leads
+  // (it is what the candidate sees as their own identity), with the recruiter-
+  // confirmed real name demoted to the subtitle only when it differs — i.e. the
+  // profile name is a nickname. The conversation LIST keeps the inverse priority
+  // (lead name first) via resolveRecruitmentProfile, since recruiters scanning
+  // the directory want the confirmed name; the two views need not match.
+  const source =
+    conversation ?? { zalo_channel: "bot" as const, zalo_chat_id: null, contact: null };
+  const profileName =
+    source.zalo_channel === "oa"
+      ? source.contact?.display_name?.trim()
+      : undefined;
+  const leadName = lead?.name?.trim();
+  const fallbackName = `Ứng viên · ${(source.zalo_chat_id || "").slice(-4)}`;
+  const displayName = profileName || leadName || fallbackName;
+  const avatarUrl = profileName
+    ? (source.contact?.avatar_url ?? lead?.avatar_url ?? undefined)
+    : (lead?.avatar_url ?? source.contact?.avatar_url ?? undefined);
+  const secondaryName =
+    leadName && leadName !== displayName ? leadName : undefined;
   const phone = lead?.phone?.trim() || undefined;
+  const colors = getLeadStatusColor(lead);
   return (
     <>
       {children({
@@ -168,7 +184,8 @@ const RecruitmentConversationContext = ({
         avatarUrl,
         avatarBackground: colors.bg,
         avatarForeground: colors.ink,
-        contactSubtitle: phone,
+        contactSubtitle:
+          secondaryName || phone ? { secondaryName, phone } : undefined,
         avatarAlt: `Ảnh đại diện của ${displayName}`,
         panelLabel: "thông tin ứng viên",
         renderPanel: ({ open, persistent, onClose, onCloseAutoFocus }) => (
