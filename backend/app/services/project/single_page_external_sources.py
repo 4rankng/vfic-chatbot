@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import csv
 import urllib.parse
 import uuid
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import ValidationError
 
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import NS_PREAMBLE
@@ -30,7 +32,7 @@ from app.services.knowledge.external_source_sync import (
     REVOCABLE_FAILURE_REASONS,
     ExternalSourceSyncError,
     SheetClient,
-    sanitize_error,
+    extract_sheet_id,
     validate_sheet_url,
 )
 from app.services.knowledge.external_source_sync.parsers import parse_faq_csv
@@ -42,6 +44,8 @@ logger = logging.getLogger(__name__)
 SOURCE_KIND_GOOGLE_SHEET = "google_sheet"
 RUN_NOW_COOLDOWN_SECONDS = 300
 LOCK_KEY_PREFIX = "single_page_ext_src_sync"
+SINGLE_PAGE_LOCK_TTL_SECONDS = 1900
+SINGLE_PAGE_SHEET_MAX_BYTES = 300_000
 SYNC_FILENAME = "single-page-google-sheet-sync.md"
 _SAFE_JS_INTEGER_MAX = 9_007_199_254_740_991
 _DECIMAL_RE = re.compile(r"^\d+$")
@@ -141,6 +145,7 @@ class SinglePageExternalSourceService:
         await self._require_direct_context_project(project_id)
         try:
             validate_sheet_url(body.sheet_url)
+            extract_sheet_id(body.sheet_url)
             sheet_gid = parse_sheet_gid(body.sheet_url)
         except ExternalSourceSyncError as exc:
             raise ConflictError(exc.code) from exc
@@ -167,19 +172,32 @@ class SinglePageExternalSourceService:
             actor_id=actor.id,
             target_type="single_page_external_source_sync_state",
             target_id=str(row.id),
-            payload={"project_id": str(project_id), "sheet_url": row.sheet_url, "sheet_gid": row.sheet_gid},
+            payload={"project_id": str(project_id), "sheet_gid": row.sheet_gid},
         )
         await self.db.commit()
         await self.db.refresh(row)
 
         from app.workers.single_page_external_source_sync_worker import enqueue_one_shot
 
-        job_id = enqueue_one_shot(row.id)
+        from app.workers.utils import EnqueueStatusUnknown
+
+        try:
+            job_id = enqueue_one_shot(row.id)
+        except EnqueueStatusUnknown:
+            logger.warning(
+                "single_page_external_source create enqueue receipt unknown row=%s code=%s",
+                row.id,
+                "enqueue_status_unknown",
+            )
+            return row
         if job_id is None:
             logger.warning(
-                "single_page_external_source create persisted NEW row but enqueue failed row=%s",
+                "single_page_external_source create enqueue failed; removing NEW row=%s",
                 row.id,
             )
+            await self.db.delete(row)
+            await self.db.commit()
+            raise UpstreamError("single_page_sync_enqueue_failed")
         return row
 
     async def run_now(self, project_id: uuid.UUID, source_id: uuid.UUID, actor: User) -> str:
@@ -192,7 +210,20 @@ class SinglePageExternalSourceService:
 
         from app.workers.single_page_external_source_sync_worker import enqueue_one_shot
 
-        job_id = enqueue_one_shot(row.id, job_id=f"single-page-ext-src-sync-{source_id}-{uuid.uuid4().hex}")
+        from app.workers.utils import EnqueueStatusUnknown
+
+        requested_job_id = f"single-page-ext-src-sync-{source_id}-{uuid.uuid4().hex}"
+        try:
+            job_id = enqueue_one_shot(row.id, job_id=requested_job_id)
+        except EnqueueStatusUnknown as exc:
+            # The job may already be accepted. Keep the cooldown so a retry
+            # cannot submit a duplicate while the queue receipt is uncertain.
+            logger.warning(
+                "single_page_external_source run-now enqueue receipt unknown state=%s code=%s",
+                row.id,
+                "enqueue_status_unknown",
+            )
+            raise UpstreamError("single_page_sync_enqueue_status_unknown") from exc
         if job_id is None:
             await redis.delete(cooldown_key)
             raise UpstreamError("single_page_sync_enqueue_failed")
@@ -256,13 +287,25 @@ async def sync_single_page_external_source(
 
     redis = get_redis()
     lock_key = f"{LOCK_KEY_PREFIX}:{state_id}"
-    acquired = await redis.set(lock_key, "1", nx=True, ex=LOCK_TTL_SECONDS)
+    lock_owner = uuid.uuid4().hex
+    acquired = await redis.set(
+        lock_key,
+        lock_owner,
+        nx=True,
+        ex=min(LOCK_TTL_SECONDS, SINGLE_PAGE_LOCK_TTL_SECONDS),
+    )
     if not acquired:
         return SinglePageExternalSourceSyncOutcome(status="LOCKED")
     try:
         return await _sync_locked(db, state, actor)
     finally:
-        await redis.delete(lock_key)
+        await redis.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] "
+            "then return redis.call('del', KEYS[1]) else return 0 end",
+            1,
+            lock_key,
+            lock_owner,
+        )
 
 
 async def _sync_locked(
@@ -271,26 +314,45 @@ async def _sync_locked(
     actor: User,
 ) -> SinglePageExternalSourceSyncOutcome:
     try:
-        project, knowledge_base = await SinglePageExternalSourceService(db)._require_direct_context_project(
-            state.project_id
-        )
-    except (NotFoundError, ConflictError) as exc:
-        code = f"project_invalid:{sanitize_error(exc)}"
+        project, knowledge_base = await SinglePageExternalSourceService(
+            db
+        )._require_direct_context_project(state.project_id)
+    except (NotFoundError, ConflictError):
+        code = "project_invalid"
+        await _mark_failed(db, state, code)
+        return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
+
+    activating = not project.is_active
+    if activating and not project.index_card:
+        code = "project_invalid:single_page_needs_discovery_card"
         await _mark_failed(db, state, code)
         return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
 
     try:
-        csv_text = await SheetClient().fetch_csv(state.sheet_url, state.sheet_gid)
+        csv_text = await SheetClient().fetch_csv(
+            state.sheet_url,
+            state.sheet_gid,
+            max_bytes=SINGLE_PAGE_SHEET_MAX_BYTES,
+        )
         markdown, row_count = render_sheet_markdown(csv_text)
     except ExternalSourceSyncError as exc:
         await _mark_failed(db, state, exc.code)
         return SinglePageExternalSourceSyncOutcome(status="FAILED", error=exc.code)
-    except ValueError as exc:
-        code = f"parse_failed:{sanitize_error(exc)}"
+    except csv.Error:
+        code = "parse_failed:csv_field_too_large"
+        await _mark_failed(db, state, code)
+        return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
+    except ValueError:
+        code = "sheet_parse_failed"
         await _mark_failed(db, state, code)
         return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
 
-    body = DirectContextFileUpsert(filename=SYNC_FILENAME, text=markdown)
+    try:
+        body = DirectContextFileUpsert(filename=SYNC_FILENAME, text=markdown)
+    except ValidationError:
+        code = "direct_file_rejected:content_too_large"
+        await _mark_failed(db, state, code)
+        return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
     stats = KnowledgeBaseService.canonical_direct_file_stats(body.text)
     current_file = await db.scalar(
         select(KnowledgeBaseDirectFile).where(
@@ -298,7 +360,11 @@ async def _sync_locked(
         )
     )
     if current_file is not None and current_file.content_sha256 == stats.content_sha256:
+        if activating:
+            await _stage_project_activation(db, project, actor)
         await _mark_noop(db, state, stats.content_sha256, row_count)
+        if activating:
+            await bump_cache_version(NS_PREAMBLE)
         return SinglePageExternalSourceSyncOutcome(
             status="NO_OP", content_hash=stats.content_sha256, row_count=row_count
         )
@@ -311,30 +377,22 @@ async def _sync_locked(
                 actor,
                 commit=False,
             )
-    except ConflictError as exc:
-        code = f"direct_file_rejected:{sanitize_error(exc)}"
+            if activating:
+                await _stage_project_activation(db, project, actor)
+    except ConflictError:
+        code = "direct_file_rejected"
         await _mark_failed(db, state, code)
         return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
     except Exception as exc:  # noqa: BLE001 - preserve the prior page on any caught failure
-        code = f"direct_file_failed:{sanitize_error(exc)}"
+        code = "direct_file_update_failed"
+        logger.warning(
+            "single_page_external_source direct-file update failed state=%s code=%s error_type=%s",
+            state.id,
+            code,
+            type(exc).__name__,
+        )
         await _mark_failed(db, state, code)
         return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
-
-    activating = not project.is_active
-    if activating:
-        if not project.index_card:
-            code = "project_invalid:single_page_needs_discovery_card"
-            await _mark_failed(db, state, code)
-            return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
-        project.is_active = True
-        await record_audit(
-            db,
-            action="update_project",
-            actor_id=actor.id,
-            target_type="project",
-            target_id=str(project.id),
-            payload={"is_active": True, "reason": "single_page_ready"},
-        )
 
     await _mark_ok(db, state, stats.content_sha256, row_count)
     if activating:
@@ -343,6 +401,18 @@ async def _sync_locked(
         status="OK",
         content_hash=stats.content_sha256,
         row_count=row_count,
+    )
+
+
+async def _stage_project_activation(db: AsyncSession, project: Project, actor: User) -> None:
+    project.is_active = True
+    await record_audit(
+        db,
+        action="update_project",
+        actor_id=actor.id,
+        target_type="project",
+        target_id=str(project.id),
+        payload={"is_active": True, "reason": "single_page_ready"},
     )
 
 
@@ -399,6 +469,7 @@ async def _mark_ok(
 __all__ = [
     "RUN_NOW_COOLDOWN_SECONDS",
     "SOURCE_KIND_GOOGLE_SHEET",
+    "SINGLE_PAGE_SHEET_MAX_BYTES",
     "SinglePageExternalSourceService",
     "SinglePageExternalSourceSyncOutcome",
     "parse_sheet_gid",

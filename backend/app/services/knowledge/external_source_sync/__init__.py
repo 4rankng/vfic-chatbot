@@ -115,6 +115,8 @@ def validate_sheet_url(url: str) -> None:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https":
         raise ExternalSourceSyncError("scheme_not_https")
+    if parsed.username is not None or parsed.password is not None:
+        raise ExternalSourceSyncError("url_credentials_forbidden")
     host = (parsed.hostname or "").lower()
     if not host:
         raise ExternalSourceSyncError("invalid_url")
@@ -177,7 +179,7 @@ async def _assert_allowed_host(url: str) -> None:
 class SheetClient:
     """One-shot httpx client per fetch (never the process singleton — Finding 2)."""
 
-    async def fetch_csv(self, url: str, gid: int = 0) -> str:
+    async def fetch_csv(self, url: str, gid: int = 0, *, max_bytes: int | None = None) -> str:
         validate_sheet_url(url)
         sheet_id = extract_sheet_id(url)
         export_url = (
@@ -195,7 +197,30 @@ class SheetClient:
             timeout=httpx.Timeout(DEFAULT_HTTP_TIMEOUT),
         ) as client:
             try:
-                resp = await client.get(export_url)
+                if max_bytes is None:
+                    resp = await client.get(export_url)
+                    body = resp.text
+                else:
+                    async with client.stream("GET", export_url) as resp:
+                        content_length = resp.headers.get("content-length")
+                        if content_length is not None:
+                            try:
+                                declared_bytes = int(content_length)
+                            except ValueError:
+                                declared_bytes = 0
+                            if declared_bytes > max_bytes:
+                                raise ExternalSourceSyncError("sheet_too_large")
+
+                        chunks: list[bytes] = []
+                        received_bytes = 0
+                        async for chunk in resp.aiter_bytes():
+                            received_bytes += len(chunk)
+                            if received_bytes > max_bytes:
+                                raise ExternalSourceSyncError("sheet_too_large")
+                            chunks.append(chunk)
+                        body = b"".join(chunks).decode(
+                            resp.encoding or "utf-8", errors="replace"
+                        )
             except ExternalSourceSyncError:
                 # SSRF rejection from _ssrf_gate — propagate the precise code
                 # (host_not_allowed / scheme_not_https / private_or_loopback_ip)
@@ -210,7 +235,6 @@ class SheetClient:
         content_type = resp.headers.get("content-type", "")
         if "csv" not in content_type and "text/plain" not in content_type:
             raise ExternalSourceSyncError("unexpected_content_type")
-        body = resp.text
         head = body[:512].lower()
         if "<html" in head or "accounts.google.com" in head:
             raise ExternalSourceSyncError("sheet_not_public")

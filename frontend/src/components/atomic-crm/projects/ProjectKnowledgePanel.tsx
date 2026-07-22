@@ -102,13 +102,24 @@ const SinglePagePanel = ({ project, editable }: Props) => {
   );
 
   const loadSinglePageSyncState = useCallback(async () => {
+    if (!editable) return;
     try {
       const rows = await listSinglePageExternalSources(String(project.id));
       setSinglePageAutoSyncOn(rows.some((row) => row.auto_sync_enabled));
     } catch {
       setSinglePageAutoSyncOn(false);
     }
-  }, [project.id]);
+  }, [editable, project.id]);
+
+  const handleSinglePageSourceChange = useCallback(() => {
+    void loadSinglePageSyncState();
+    setSinglePageSyncRefreshKey((value) => value + 1);
+  }, [loadSinglePageSyncState]);
+
+  const handleSinglePageSynchronized = useCallback(() => {
+    void loadPage({ background: true });
+    void loadSinglePageSyncState();
+  }, [loadPage, loadSinglePageSyncState]);
 
   useEffect(() => {
     void loadPage();
@@ -243,7 +254,7 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                     : "Lưu trang kiến thức"}
                 </Button>
               )}
-              <div className="space-y-3 pt-2">
+              {editable && <div className="space-y-3 pt-2">
                 <Card className="border-border/80 shadow-none">
                   <CardHeader className="space-y-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -300,33 +311,21 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                         </AlertDescription>
                       </Alert>
                     )}
-                    {editable && (
-                      <ExternalSourceLinkForm
-                        projectId={String(project.id)}
-                        variant="single-page"
-                        onCreated={() => {
-                          void loadSinglePageSyncState();
-                          setSinglePageSyncRefreshKey((value) => value + 1);
-                        }}
-                      />
-                    )}
+                    <ExternalSourceLinkForm
+                      projectId={String(project.id)}
+                      variant="single-page"
+                      onCreated={handleSinglePageSourceChange}
+                    />
                     <ExternalSourceList
                       projectId={String(project.id)}
                       variant="single-page"
-                      mutable={editable}
                       refreshSignal={singlePageSyncRefreshKey}
-                      onChange={() => {
-                        void loadSinglePageSyncState();
-                        setSinglePageSyncRefreshKey((value) => value + 1);
-                      }}
-                      onSynchronized={() => {
-                        void loadPage({ background: true });
-                        void loadSinglePageSyncState();
-                      }}
+                      onChange={handleSinglePageSourceChange}
+                      onSynchronized={handleSinglePageSynchronized}
                     />
                   </CardContent>
                 </Card>
-              </div>
+              </div>}
             </>
           )}
         </CardContent>

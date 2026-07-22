@@ -310,7 +310,7 @@ describe("ProjectKnowledgePanel", () => {
     );
   });
 
-  it("keeps sync status visible but hides mutations in single-page read-only mode", async () => {
+  it("does not request admin-only sync state in single-page read-only mode", async () => {
     mocks.getProjectSinglePage.mockResolvedValue({
       id: "single-page-1",
       knowledge_base_id: "kb-1",
@@ -340,12 +340,40 @@ describe("ProjectKnowledgePanel", () => {
       <ProjectKnowledgePanel project={singlePageProject} editable={false} />,
     );
 
-    await expect
-      .element(screen.getByText("Đồng bộ Google Sheet 1 trang"))
-      .toBeVisible();
+    expect(mocks.listSinglePageExternalSources).not.toHaveBeenCalled();
+    expect(screen.container.textContent).not.toContain(
+      "Đồng bộ Google Sheet 1 trang",
+    );
     expect(screen.container.textContent).not.toContain("Liên kết Google Sheet");
     expect(screen.container.textContent).not.toContain("Xử lý ngay");
     expect(screen.container.textContent).not.toContain("Thay thế trang hiện tại");
+  });
+
+  it("does not refetch sync state while an admin edits page text", async () => {
+    mocks.getProjectSinglePage.mockResolvedValue({
+      id: "single-page-1",
+      knowledge_base_id: "kb-1",
+      filename: "single-page.md",
+      text: "Nội dung hiện tại",
+      char_count: 17,
+      line_count: 1,
+      content_sha256: "sha",
+      updated_at: "2026-07-22T00:00:00Z",
+    });
+    const screen = await render(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(2),
+    );
+
+    await screen
+      .getByLabelText("Nội dung trang kiến thức")
+      .fill("Nội dung đang chỉnh sửa");
+
+    await vi.waitFor(() =>
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(2),
+    );
   });
 
   it("shows current category data and keeps the template behind the download action", async () => {

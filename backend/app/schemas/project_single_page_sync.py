@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SinglePageExternalSourceCreate(BaseModel):
@@ -13,7 +13,7 @@ class SinglePageExternalSourceCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sheet_url: str
+    sheet_url: str = Field(max_length=512)
     auto_sync_enabled: bool = False
 
 

@@ -12,6 +12,7 @@ from app.models.single_page_external_source_sync_state import SinglePageExternal
 from app.models.user import Role, User
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.services.errors import ConflictError
+from app.services.knowledge.external_source_sync import ExternalSourceSyncError
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services.project.single_page_external_sources import sync_single_page_external_source
 
@@ -37,6 +38,12 @@ class _FakeRedis:
         return True
 
     async def delete(self, key):
+        self.store.pop(key, None)
+        return 1
+
+    async def eval(self, _script, _num_keys, key, owner):
+        if self.store.get(key) != owner:
+            return 0
         self.store.pop(key, None)
         return 1
 
@@ -119,6 +126,15 @@ async def test_sync_success_noop_and_manual_edit_overwrite(
     )
     assert second.status == "NO_OP"
 
+    project.is_active = False
+    await integration_session.commit()
+    matching_inactive = await sync_single_page_external_source(
+        integration_session, state_id=state.id, actor=admin
+    )
+    assert matching_inactive.status == "NO_OP"
+    await integration_session.refresh(project)
+    assert project.is_active is True
+
     await KnowledgeBaseService(integration_session).upsert_direct_file(
         knowledge_base.id,
         DirectContextFileUpsert(filename="manual.md", text="Nội dung chỉnh tay khác với sheet."),
@@ -145,6 +161,50 @@ async def test_sync_success_noop_and_manual_edit_overwrite(
         )
     )
     assert final_hash == first_hash
+
+
+@pytest.mark.asyncio
+async def test_oversized_sync_marks_failed_without_replacing_existing_page(
+    integration_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, project, knowledge_base, state = await _seed_project(integration_session)
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.get_redis",
+        lambda: _FakeRedis(),
+    )
+    monkeypatch.setattr(
+        "app.services.knowledge_base_service.require_direct_context_ready",
+        AsyncMock(return_value=None),
+    )
+    await KnowledgeBaseService(integration_session).upsert_direct_file(
+        knowledge_base.id,
+        DirectContextFileUpsert(filename="existing.md", text="Nội dung đang hoạt động."),
+        admin,
+    )
+    original_hash = await integration_session.scalar(
+        select(KnowledgeBaseDirectFile.content_sha256).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    )
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.SheetClient.fetch_csv",
+        AsyncMock(side_effect=ExternalSourceSyncError("sheet_too_large")),
+    )
+
+    outcome = await sync_single_page_external_source(
+        integration_session, state_id=state.id, actor=admin
+    )
+
+    assert outcome.status == "FAILED"
+    assert outcome.error == "sheet_too_large"
+    assert await integration_session.scalar(
+        select(KnowledgeBaseDirectFile.content_sha256).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    ) == original_hash
+    await integration_session.refresh(project)
+    assert project.is_active is False
 
 
 @pytest.mark.asyncio
@@ -199,3 +259,54 @@ async def test_sync_failure_preserves_prior_page(
             )
         )
     ) == "FAILED"
+
+
+@pytest.mark.asyncio
+async def test_activation_failure_rolls_back_replacement_and_stores_fixed_code(
+    integration_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, _project, knowledge_base, state = await _seed_project(integration_session)
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.get_redis", lambda: _FakeRedis()
+    )
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources.SheetClient.fetch_csv",
+        AsyncMock(return_value=FAQ_CSV),
+    )
+    monkeypatch.setattr(
+        "app.services.knowledge_base_service.require_direct_context_ready",
+        AsyncMock(return_value=None),
+    )
+    await KnowledgeBaseService(integration_session).upsert_direct_file(
+        knowledge_base.id,
+        DirectContextFileUpsert(filename="existing.md", text="Trang cũ không được thay đổi."),
+        admin,
+    )
+    prior = await integration_session.scalar(
+        select(KnowledgeBaseDirectFile).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    )
+    assert prior is not None
+    prior_hash, prior_text = prior.content_sha256, prior.raw_text
+    monkeypatch.setattr(
+        "app.services.project.single_page_external_sources._stage_project_activation",
+        AsyncMock(side_effect=RuntimeError("secret row contents must never persist")),
+    )
+
+    outcome = await sync_single_page_external_source(
+        integration_session, state_id=state.id, actor=admin
+    )
+
+    assert outcome.status == "FAILED"
+    assert outcome.error == "direct_file_update_failed"
+    current = await integration_session.scalar(
+        select(KnowledgeBaseDirectFile).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == knowledge_base.id
+        )
+    )
+    assert current is not None
+    assert (current.content_sha256, current.raw_text) == (prior_hash, prior_text)
+    await integration_session.refresh(state)
+    assert state.last_error == "direct_file_update_failed"

@@ -306,6 +306,11 @@ def test_validate_accepts_google_hosts() -> None:
     validate_sheet_url("https://sheets.googleapis.com/v4/spreadsheets/abc")
 
 
+def test_validate_rejects_url_credentials() -> None:
+    with pytest.raises(ExternalSourceSyncError, match="url_credentials_forbidden"):
+        validate_sheet_url("https://user:secret@docs.google.com/spreadsheets/d/abc/edit")
+
+
 def test_extract_sheet_id_handles_url_forms() -> None:
     sid = "1rRk4wfKb90IxJAbywimgGDOV3Y7g8RbW1EpBabZmFw8"
     assert extract_sheet_id(SHEET_URL) == sid
@@ -400,6 +405,58 @@ async def test_fetch_returns_csv_body(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_httpx(monkeypatch, _FakeResponse(200, _read("faq_sheet_synthetic.csv")))
     body = await SheetClient().fetch_csv(SHEET_URL)
     assert "Câu hỏi thường gặp" in body
+
+
+@pytest.mark.asyncio
+async def test_fetch_rejects_declared_body_over_optional_byte_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"small",
+            headers={"content-type": "text/csv", "content-length": "101"},
+        )
+
+    real_async_client = ess.httpx.AsyncClient
+    monkeypatch.setattr(
+        ess.httpx,
+        "AsyncClient",
+        lambda *a, **k: real_async_client(transport=httpx.MockTransport(handler), *a, **k),
+    )
+    monkeypatch.setattr(ess, "_reject_private_host", lambda _host: None)
+
+    with pytest.raises(ExternalSourceSyncError, match="sheet_too_large"):
+        await SheetClient().fetch_csv(SHEET_URL, max_bytes=100)
+
+
+@pytest.mark.asyncio
+async def test_fetch_stops_stream_when_accumulated_bytes_exceed_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"12345"
+            yield b"67890"
+            yield b"x"
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=_Chunks(),
+            headers={"content-type": "text/csv"},
+        )
+
+    real_async_client = ess.httpx.AsyncClient
+    monkeypatch.setattr(
+        ess.httpx,
+        "AsyncClient",
+        lambda *a, **k: real_async_client(transport=httpx.MockTransport(handler), *a, **k),
+    )
+    monkeypatch.setattr(ess, "_reject_private_host", lambda _host: None)
+
+    with pytest.raises(ExternalSourceSyncError, match="sheet_too_large"):
+        await SheetClient().fetch_csv(SHEET_URL, max_bytes=10)
 
 
 @pytest.mark.asyncio

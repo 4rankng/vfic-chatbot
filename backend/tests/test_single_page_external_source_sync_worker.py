@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.services.project.single_page_external_sources import SinglePageExternalSourceSyncOutcome
+from app.services.knowledge.external_source_sync import ExternalSourceSyncError
+from app.models.user import Role
 from app.workers import single_page_external_source_sync_worker as w
 
 
@@ -84,3 +86,55 @@ async def test_run_job_async_missing_state_is_noop(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("app.workers._db.worker_session", lambda: _FakeSessionCM(db))
 
     await w._run_job_async(uuid.uuid4())
+
+
+def test_enqueue_configures_bounded_worker_crash_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    def _enqueue(*_args, **kwargs):
+        captured.update(kwargs)
+        return "job-id"
+
+    monkeypatch.setattr("app.workers.utils.enqueue_job", _enqueue)
+
+    assert w.enqueue_one_shot(uuid.uuid4()) == "job-id"
+    retry = captured["retry"]
+    assert retry.max == 3
+    assert retry.intervals == [60, 300, 900]
+
+
+@pytest.mark.asyncio
+async def test_resolve_actor_uses_enabled_admin_creator() -> None:
+    creator = SimpleNamespace(id=uuid.uuid4(), role=Role.admin, disabled=False)
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=creator)
+
+    assert await w._resolve_actor(db, SimpleNamespace(created_by=creator.id)) is creator
+    db.scalar.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "creator",
+    [
+        SimpleNamespace(id=uuid.uuid4(), role=Role.recruiter, disabled=False),
+        SimpleNamespace(id=uuid.uuid4(), role=Role.admin, disabled=True),
+    ],
+)
+async def test_resolve_actor_rejects_demoted_or_disabled_creator(creator) -> None:
+    fallback = SimpleNamespace(id=uuid.uuid4(), role=Role.admin, disabled=False)
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=creator)
+    db.scalar = AsyncMock(return_value=fallback)
+
+    assert await w._resolve_actor(db, SimpleNamespace(id=uuid.uuid4(), created_by=creator.id)) is fallback
+
+
+@pytest.mark.asyncio
+async def test_resolve_actor_fails_without_enabled_admin() -> None:
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=None)
+    db.scalar = AsyncMock(return_value=None)
+
+    with pytest.raises(ExternalSourceSyncError, match="no_sync_actor"):
+        await w._resolve_actor(db, SimpleNamespace(id=uuid.uuid4(), created_by=uuid.uuid4()))

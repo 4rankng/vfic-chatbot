@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_INTERVAL_SECONDS = 86400
 DEFAULT_JOB_TIMEOUT_SECONDS = 1800
+DEFAULT_RETRY_MAX = 3
+DEFAULT_RETRY_INTERVALS_SECONDS = [60, 300, 900]
 COUNTER_SUCCESS = "single_page_external_source_sync_success_total"
 COUNTER_FAILURE = "single_page_external_source_sync_failure_total"
 COUNTER_TTL_SECONDS = 7 * 24 * 3600
@@ -106,6 +108,8 @@ async def _run_job_async(state_id: uuid.UUID) -> None:
 
 
 def enqueue_one_shot(state_id: uuid.UUID, *, job_id: str | None = None) -> str | None:
+    from rq import Retry
+
     from app.workers.utils import enqueue_job
 
     return enqueue_job(
@@ -113,6 +117,7 @@ def enqueue_one_shot(state_id: uuid.UUID, *, job_id: str | None = None) -> str |
         run_single_page_external_source_sync_job,
         str(state_id),
         job_timeout=DEFAULT_JOB_TIMEOUT_SECONDS,
+        retry=Retry(max=DEFAULT_RETRY_MAX, interval=DEFAULT_RETRY_INTERVALS_SECONDS),
         return_job_id=True,
         job_id=job_id,
     )
@@ -124,9 +129,13 @@ async def _resolve_actor(db, state):
 
     if state.created_by is not None:
         user = await db.get(User, state.created_by)
-        if user is not None:
+        if user is not None and user.role is Role.admin and not user.disabled:
             return user
-    admin = await db.scalar(select(User).where(User.role == Role.admin).order_by(User.created_at))
+    admin = await db.scalar(
+        select(User)
+        .where(User.role == Role.admin, User.disabled.is_(False))
+        .order_by(User.created_at)
+    )
     if admin is None:
         raise ExternalSourceSyncError("no_sync_actor")
     logger.warning(

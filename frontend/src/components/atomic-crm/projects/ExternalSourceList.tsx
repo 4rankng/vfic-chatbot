@@ -89,6 +89,7 @@ export const ExternalSourceList = ({
   const followUpTimer = useRef<number | null>(null);
   const syncSignatureRef = useRef<string | null>(null);
   const initializedSyncSignature = useRef(false);
+  const awaitingRunNowRef = useRef(false);
   const isSinglePage = variant === "single-page";
 
   const rowsNeedFollowUp = (nextRows: ExternalSourceRow[]) =>
@@ -132,16 +133,22 @@ export const ExternalSourceList = ({
         if (!initializedSyncSignature.current) {
           initializedSyncSignature.current = true;
         } else if (nextSignature && nextSignature !== syncSignatureRef.current) {
+          awaitingRunNowRef.current = false;
           onSynchronized?.();
         }
         syncSignatureRef.current = nextSignature;
 
         clearFollowUpTimer();
-        if (attempt < MAX_FOLLOW_UP_POLLS && rowsNeedFollowUp(nextRows)) {
+        if (
+          attempt < MAX_FOLLOW_UP_POLLS &&
+          (rowsNeedFollowUp(nextRows) || awaitingRunNowRef.current)
+        ) {
           followUpTimer.current = window.setTimeout(
             () => void load(attempt + 1),
             FOLLOW_UP_REFRESH_MS,
           );
+        } else if (attempt >= MAX_FOLLOW_UP_POLLS) {
+          awaitingRunNowRef.current = false;
         }
       }
     } catch (error) {
@@ -189,6 +196,7 @@ export const ExternalSourceList = ({
         type: "info",
       });
       startCooldown(row.id);
+      awaitingRunNowRef.current = isSinglePage;
       clearFollowUpTimer();
       followUpTimer.current = window.setTimeout(
         () => void load(),
@@ -204,7 +212,6 @@ export const ExternalSourceList = ({
       }
     } finally {
       setProcessingId(null);
-      onChange?.();
     }
   };
 

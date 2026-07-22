@@ -99,6 +99,42 @@ describe("ExternalSourceList", () => {
     );
   });
 
+  it("keeps polling an already-synced single-page source until its result changes", async () => {
+    const onSynchronized = vi.fn();
+    mocks.listSinglePageExternalSources
+      .mockResolvedValueOnce([singlePageRow])
+      .mockResolvedValueOnce([singlePageRow])
+      .mockResolvedValueOnce([
+        {
+          ...singlePageRow,
+          last_status: "OK",
+          last_content_hash: "new-hash",
+          last_synced_at: "2026-07-21T10:06:00Z",
+          updated_at: "2026-07-21T10:06:00Z",
+        },
+      ]);
+    const screen = await render(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+        onSynchronized={onSynchronized}
+      />,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(1),
+    );
+
+    vi.useFakeTimers();
+    try {
+      await screen.getByRole("button", { name: "Xử lý ngay" }).click();
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(3);
+      expect(onSynchronized).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps source details and actions inside a phone-width card", async () => {
     await page.viewport(320, 844);
 
