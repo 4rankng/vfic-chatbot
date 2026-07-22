@@ -16,15 +16,22 @@ Contract:
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.lead.events import LeadEventBus
 from app.services.lead.repository import LeadRepository
-from app.services.zalo_oa_service import OAUserProfile, ZaloOASender
+from app.services.zalo_oa_service import OAUserProfile
 
 logger = logging.getLogger(__name__)
+
+
+class OAProfileLookup(Protocol):
+    """Minimal user-detail capability required by profile enrichment."""
+
+    async def get_user_detail(self, user_id: str) -> OAUserProfile | None: ...
 
 # Only patch name/avatar; never touches stage, score, recruiter, notes, etc.
 _ENRICH_SQL = text(
@@ -47,7 +54,7 @@ _ENRICH_SQL = text(
 class ProfileEnrichmentService:
     """Best-effort OA profile lookup + lead avatar/name persistence."""
 
-    def __init__(self, db: AsyncSession, sender: ZaloOASender) -> None:
+    def __init__(self, db: AsyncSession, sender: OAProfileLookup) -> None:
         self.db = db
         self.sender = sender
         self._leads = LeadRepository(db)
@@ -70,7 +77,7 @@ class ProfileEnrichmentService:
         try:
             profile = await self.sender.get_user_detail(user_id)
         except Exception:  # noqa: BLE001 — enrichment is best-effort
-            logger.info("oa profile enrichment transport error zalo_id=%s", zalo_id)
+            logger.info("oa profile enrichment transport error")
             return False
         if profile is None or not (profile.avatar_url or profile.display_name):
             return False
@@ -85,8 +92,7 @@ class ProfileEnrichmentService:
         )
         await self.db.commit()
         logger.info(
-            "oa profile enrichment applied zalo_id=%s avatar=%s name=%s",
-            zalo_id,
+            "oa profile enrichment applied avatar=%s name=%s",
             bool(profile.avatar_url),
             bool(profile.display_name),
         )
@@ -101,7 +107,7 @@ class ProfileEnrichmentService:
             if saved is not None:
                 await LeadEventBus().lead_updated(saved)
         except Exception:  # noqa: BLE001 — realtime is best-effort
-            logger.info("oa profile enrichment realtime emit failed zalo_id=%s", zalo_id)
+            logger.info("oa profile enrichment realtime emit failed")
         return True
 
 

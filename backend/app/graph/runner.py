@@ -57,6 +57,7 @@ from app.models.conversation import DeliveryStatus, Message
 logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
+OA_PROFILE_LOOKUP_TIMEOUT_SECONDS = 2.0
 VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
     "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
 )
@@ -760,13 +761,56 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         _stamp_db(timings, "recheck_ownership", db_t0)
         if not ok:
             return {"outcome": "suppressed", "reason": "lock_owner_lost"}
+
+    settings = get_settings()
+
+    # Fetch the OA display name/avatar only after runtime + lock ownership are
+    # proven, but before lead context is assembled. The webhook stays fast and
+    # stale jobs never spend a provider call. A strict ceiling preserves the
+    # answer budget; persistence_low remains the eventual-consistency fallback.
+    if (
+        getattr(conv, "zalo_channel", "bot") == "oa"
+        and deps.enrich_oa_profile is not None
+        and conv.zalo_chat_id
+    ):
+        profile_t0 = time.monotonic()
+        user_id = conv.zalo_chat_id.removeprefix("oa:")
+        profile_budget = min(
+            OA_PROFILE_LOOKUP_TIMEOUT_SECONDS,
+            max(0.0, _remaining(state) - settings.soft_fallback_remaining),
+        )
+        if profile_budget <= 0:
+            timings["oa_profile_result"] = "skipped_deadline"
+        else:
+            try:
+                enriched = await asyncio.wait_for(
+                    deps.enrich_oa_profile(conv.zalo_chat_id, user_id),
+                    timeout=profile_budget,
+                )
+                timings["oa_profile_result"] = "enriched" if enriched else "unchanged"
+            except asyncio.TimeoutError:
+                timings["oa_profile_result"] = "timeout"
+                logger.info("oa profile enrichment timed out before chat turn")
+                try:
+                    await deps.db.rollback()
+                    await deps.db.refresh(conv)
+                except Exception:  # noqa: BLE001 — run_turn owns terminal error handling
+                    logger.debug("oa profile enrichment timeout recovery failed", exc_info=True)
+            except Exception:  # noqa: BLE001 — profile data is optional for a safe reply
+                timings["oa_profile_result"] = "error"
+                logger.warning("oa profile enrichment failed before chat turn", exc_info=True)
+                try:
+                    await deps.db.rollback()
+                    await deps.db.refresh(conv)
+                except Exception:  # noqa: BLE001 — run_turn owns terminal error handling
+                    logger.debug("oa profile enrichment recovery failed", exc_info=True)
+        timings["oa_profile_ms"] = int(round((time.monotonic() - profile_t0) * 1000))
     zalo = _zalo_for_conversation(deps, conv)
 
     # Active-status heartbeat: native typing pulses while the turn processes.
     # Started right after the sender is resolved (before last_messages / pending)
     # so the indicator appears as early as possible. Cancelled before every real
     # send so the indicator stops on the answer.
-    settings = get_settings()
     status_task = asyncio.create_task(_status_heartbeat(zalo, conv.zalo_chat_id, settings=settings))
     db_t0 = time.monotonic()
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)

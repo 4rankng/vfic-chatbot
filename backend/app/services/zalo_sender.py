@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable
 from app.models.conversation import Conversation
 from app.services.integration_settings import ZaloRuntimeConfig
 from app.services.zalo_bot_service import SendResult, ZaloBotSender
-from app.services.zalo_oa_service import ZaloOASender
+from app.services.zalo_oa_service import OAUserProfile, ZaloOASender
 
 
 def external_chat_id(conv: Conversation) -> str:
@@ -35,6 +35,10 @@ class ZaloChannelSender:
         if (getattr(conv, "zalo_channel", None) or "bot") == "oa":
             return _BoundSender(self._oa, external_chat_id(conv))
         return _BoundSender(self._bot, external_chat_id(conv))
+
+    async def get_user_detail(self, user_id: str) -> OAUserProfile | None:
+        """Expose OA profile lookup without leaking the concrete sender."""
+        return await self._oa.get_user_detail(user_id)
 
     async def send_payload(self, channel: str, payload: dict[str, Any]) -> SendResult:
         """Dispatch one immutable outbox payload without consulting live state."""

@@ -70,3 +70,14 @@ extraction runs.
 The connected OA application must have Zalo's user-information management
 permission. Without it, enrichment fails soft (logs, no crash) and the UI
 keeps the initials fallback.
+
+## Follow-up: first-turn identity availability
+
+The original low-priority enrichment remained eventually consistent: the
+chatbot queue could start before the profile job, so the first reply often saw
+an empty candidate name even when Zalo's user-detail API was authorized. The
+reactive turn now performs a best-effort user-detail lookup after runtime and
+lock ownership are validated but before lead context is assembled. The lookup
+is capped at two seconds, skipped when the turn deadline is already tight, and
+fails open to the existing low-priority enrichment path. Existing profiles
+short-circuit without another provider request.

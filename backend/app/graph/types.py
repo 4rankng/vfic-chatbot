@@ -132,6 +132,9 @@ class GraphDeps:
     # Fire-and-forget candidate extraction after a SENT reply.
     # None in tests -> persistence is skipped.
     persist: Callable[[dict], None] | None = None
+    # Best-effort OA display-name/avatar enrichment after ownership validation
+    # and before lead context is assembled. None for non-OA/test deployments.
+    enrich_oa_profile: Callable[[str, str], Awaitable[bool]] | None = None
     # New manifest-composed runtime authority. It is intentionally not attached
     # to the legacy delivery path until Phase 7 has the full dispatch fence.
     runtime_policy: RuntimePolicyPort | None = None

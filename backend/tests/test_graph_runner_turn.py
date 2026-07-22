@@ -86,8 +86,14 @@ def test_vacancy_evidence_query_keeps_acknowledgements_and_role_details_in_threa
 
 
 class _FakeConv:
-    def __init__(self, zalo_chat_id: str = "z1", version: int = 1) -> None:
+    def __init__(
+        self,
+        zalo_chat_id: str = "z1",
+        version: int = 1,
+        zalo_channel: str = "bot",
+    ) -> None:
         self.zalo_chat_id = zalo_chat_id
+        self.zalo_channel = zalo_channel
         self.version = version
         self.bot_lock_owner = None
         self.bot_locked_until = None
@@ -211,6 +217,7 @@ def _deps(
     safety=object(),
     persist=None,
     faq_bypass=None,
+    enrich_oa_profile=None,
     db=None,
 ) -> GraphDeps:
     return GraphDeps(
@@ -223,6 +230,7 @@ def _deps(
         retrieval=object(),
         persist=persist,
         faq_bypass=faq_bypass,
+        enrich_oa_profile=enrich_oa_profile,
     )
 
 
@@ -427,6 +435,90 @@ async def test_missing_conversation_returns_error_without_sending(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_owned_oa_turn_enriches_profile_before_agent(monkeypatch):
+    conv = _FakeConv(zalo_chat_id="oa:user-42", zalo_channel="oa")
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    events: list[str] = []
+
+    async def enrich(zalo_id: str, user_id: str) -> bool:
+        assert zalo_id == "oa:user-42"
+        assert user_id == "user-42"
+        events.append("profile")
+        return True
+
+    async def agent(
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+    ):  # noqa: ARG001
+        events.append("agent")
+        return "Chào bạn!"
+
+    monkeypatch.setattr(runner, "_agent_turn", agent)
+    state = _state()
+    state.lock_owner = "00000000-0000-0000-0000-0000000000aa"
+
+    result = await run_turn(
+        state,
+        _deps(
+            _FakeZalo(),
+            conversation=svc,
+            enrich_oa_profile=enrich,
+        ),
+    )
+
+    assert result["outcome"] == "sent"
+    assert events == ["profile", "agent"]
+
+
+@pytest.mark.asyncio
+async def test_oa_profile_timeout_fails_open(monkeypatch):
+    conv = _FakeConv(zalo_chat_id="oa:user-42", zalo_channel="oa")
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+
+    async def enrich(_zalo_id: str, _user_id: str) -> bool:
+        await asyncio.sleep(0.02)
+        return True
+
+    monkeypatch.setattr(runner, "OA_PROFILE_LOOKUP_TIMEOUT_SECONDS", 0.001)
+    result = await run_turn(
+        _state(),
+        _deps(
+            _FakeZalo(),
+            conversation=svc,
+            enrich_oa_profile=enrich,
+        ),
+    )
+
+    assert result["outcome"] == "sent"
+
+
+@pytest.mark.asyncio
+async def test_oa_profile_lookup_skips_when_turn_deadline_is_tight(monkeypatch):
+    conv = _FakeConv(zalo_chat_id="oa:user-42", zalo_channel="oa")
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    calls: list[tuple[str, str]] = []
+
+    async def enrich(zalo_id: str, user_id: str) -> bool:
+        calls.append((zalo_id, user_id))
+        return True
+
+    state = _state()
+    state.deadline_at_epoch = time.time() + 0.5
+    result = await run_turn(
+        state,
+        _deps(
+            _FakeZalo(),
+            conversation=svc,
+            enrich_oa_profile=enrich,
+        ),
+    )
+
+    assert result["outcome"] == "sent"
+    assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
@@ -625,7 +717,7 @@ async def test_lock_owner_lost_before_turn_suppresses_without_pending(monkeypatc
             self.pending_calls = 0
 
         async def get(self, _id):
-            return _FakeConv()
+            return _FakeConv(zalo_chat_id="oa:user-42", zalo_channel="oa")
 
         async def last_messages(self, c, limit):
             raise AssertionError("history should not load after owner loss")
@@ -651,12 +743,21 @@ async def test_lock_owner_lost_before_turn_suppresses_without_pending(monkeypatc
     zalo = _FakeZalo()
     state = _state()
     state.lock_owner = "00000000-0000-0000-0000-0000000000aa"
+    profile_calls: list[tuple[str, str]] = []
 
-    res = await run_turn(state, _deps(zalo, conversation=svc))
+    async def enrich(zalo_id: str, user_id: str) -> bool:
+        profile_calls.append((zalo_id, user_id))
+        return True
+
+    res = await run_turn(
+        state,
+        _deps(zalo, conversation=svc, enrich_oa_profile=enrich),
+    )
 
     assert res == {"outcome": "suppressed", "reason": "lock_owner_lost"}
     assert svc.pending_calls == 0
     assert zalo.sent == []
+    assert profile_calls == []
 
 
 @pytest.mark.asyncio

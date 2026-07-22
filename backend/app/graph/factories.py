@@ -513,6 +513,7 @@ async def build_deps(db, *, session_factory=None):
     """
     from app.services.conversation import ConversationService
     from app.services.integration_settings import IntegrationSettingsService
+    from app.services.profile_enrichment import ProfileEnrichmentService
     from app.services.retrieval import RetrievalRepository
     from app.services.zalo_sender import ZaloChannelSender
 
@@ -523,6 +524,16 @@ async def build_deps(db, *, session_factory=None):
     # so a rotated OA token takes effect on the very next turn without invalidating
     # the expensive LLM client cache.
     zalo_config = await integration_settings.resolve_zalo()
+    zalo_sender = ZaloChannelSender(
+        zalo_config,
+        refresh=lambda: integration_settings.refresh_oa_access_token(),
+    )
+
+    async def _enrich_oa_profile(zalo_id: str, user_id: str) -> bool:
+        return await ProfileEnrichmentService(db, zalo_sender).enrich_oa_user(
+            zalo_id,
+            user_id=user_id,
+        )
 
     # Parallel tool dispatch: each concurrent tool call gets its own session so
     # the shared ``db`` is never used concurrently. Lazy import keeps the graph
@@ -541,16 +552,14 @@ async def build_deps(db, *, session_factory=None):
         db=db,
         agent=MiniMaxAgent(clients.agent_llm, clients.embedder, fast_llm=clients.fast_llm),
         embedder=clients.embedder,
-        zalo=ZaloChannelSender(
-            zalo_config,
-            refresh=lambda: integration_settings.refresh_oa_access_token(),
-        ),
+        zalo=zalo_sender,
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
         make_retrieval=make_retrieval,
         lead=_LeadContextAdapter(db),
         faq_bypass=_FaqBypassAdapter(db, clients.embedder),
         followup_allowed=_make_followup_allowed(db),
+        enrich_oa_profile=_enrich_oa_profile,
         runtime_policy=_RuntimePolicyAdapter(db),
         direct_context=_DirectContextAdapter(db),
     )

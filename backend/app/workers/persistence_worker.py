@@ -120,4 +120,4 @@ async def _enrich_oa_profile_async(job: dict) -> None:
             )
             await ProfileEnrichmentService(db, sender).enrich_oa_user(zalo_id, user_id=user_id)
     except Exception:
-        logger.warning("oa profile enrichment failed zalo_id=%s", zalo_id, exc_info=True)
+        logger.warning("oa profile enrichment failed", exc_info=True)
