@@ -48,19 +48,28 @@ const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   for (const conversation of conversations) {
     const chatKey = conversation.zalo_chat_id ?? conversation.id;
     const lead = leadByZalo.get(chatKey);
+    const oaProfileName =
+      conversation.zalo_channel === "oa"
+        ? conversation.contact?.display_name?.trim()
+        : undefined;
+    const oaProfileAvatar =
+      conversation.zalo_channel === "oa"
+        ? conversation.contact?.avatar_url
+        : undefined;
     const displayName =
-      lead?.name || `Ứng viên · ${(chatKey || "").slice(-4)}`;
+      lead?.name || oaProfileName || `Ứng viên · ${(chatKey || "").slice(-4)}`;
     const colors = getLeadStatusColor(lead);
     const priority = getLeadPriorityChip(lead);
     presentations.set(conversation.id, {
       displayName,
       subtitle: lead?.phone || "",
-      avatarUrl: lead?.avatar_url,
+      avatarUrl: lead?.avatar_url || oaProfileAvatar,
       avatarBackground: colors.bg,
       avatarForeground: colors.ink,
       searchText: [
         conversation.zalo_chat_id,
         lead?.name,
+        oaProfileName,
         lead?.phone,
         lead?.desired_job,
         lead?.region,
@@ -126,8 +135,18 @@ const RecruitmentConversationContext = ({
     };
   }, [conversation?.zalo_chat_id, lead?.id, refetch]);
 
+  const oaProfileName =
+    conversation?.zalo_channel === "oa"
+      ? conversation.contact?.display_name?.trim()
+      : undefined;
+  const oaProfileAvatar =
+    conversation?.zalo_channel === "oa"
+      ? conversation.contact?.avatar_url
+      : undefined;
   const displayName =
-    lead?.name || `Ứng viên · ${(conversation?.zalo_chat_id || "").slice(-4)}`;
+    lead?.name ||
+    oaProfileName ||
+    `Ứng viên · ${(conversation?.zalo_chat_id || "").slice(-4)}`;
   const colors = getLeadStatusColor(lead);
   const externalId = conversation
     ? getZaloUserId(conversation.zalo_chat_id, conversation.zalo_channel)
@@ -136,7 +155,7 @@ const RecruitmentConversationContext = ({
     <>
       {children({
         displayName,
-        avatarUrl: lead?.avatar_url,
+        avatarUrl: lead?.avatar_url || oaProfileAvatar,
         avatarBackground: colors.bg,
         avatarForeground: colors.ink,
         externalIdentityLabel: externalId ? `Zalo ID: ${externalId}` : undefined,

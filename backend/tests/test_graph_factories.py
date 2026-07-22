@@ -144,26 +144,38 @@ async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("chat_id", "expected_personalize"),
-    [("oa:user-1", True), ("bot-user-1", False)],
+    ("chat_id", "expected_profile_name"),
+    [("oa:user-1", "Bé Gấu"), ("bot-user-1", None)],
 )
 async def test_lead_context_personalizes_only_oa_profiles(
-    monkeypatch, chat_id, expected_personalize
+    monkeypatch, chat_id, expected_profile_name
 ):
-    personalization_values = []
+    profile_names = []
 
     class _Repo:
         def __init__(self, _db):
             pass
 
         async def by_zalo_id(self, _chat_id):
-            return {"name": "Nguyễn Văn An"}
+            return {"name": "Nguyễn Văn An" if not _chat_id.startswith("oa:") else None}
 
-    def _profile_text(_lead, *, personalize=False):
-        personalization_values.append(personalize)
+    class _ConversationService:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_zalo(self, _chat_id):
+            return type(
+                "_Conversation",
+                (),
+                {"contact": type("_Contact", (), {"display_name": "Bé Gấu"})()},
+            )()
+
+    def _profile_text(_lead, *, oa_profile_display_name=None):
+        profile_names.append(oa_profile_display_name)
         return "profile"
 
     monkeypatch.setattr("app.services.lead.repository.LeadRepository", _Repo)
+    monkeypatch.setattr("app.services.conversation.ConversationService", _ConversationService)
     monkeypatch.setattr("app.services.lead.lead_profile_text", _profile_text)
     monkeypatch.setattr(
         "app.services.lead.probing.lead_collection_question",
@@ -173,8 +185,11 @@ async def test_lead_context_personalizes_only_oa_profiles(
     profile, question = await _LeadContextAdapter(object()).context(chat_id, "hello", [])
 
     assert profile == "profile"
-    assert question == "phone question"
-    assert personalization_values == [expected_personalize]
+    if chat_id.startswith("oa:"):
+        assert "Bé Gấu" in question
+    else:
+        assert question == "phone question"
+    assert profile_names == [expected_profile_name]
 
 
 def test_minimax_json_missing_key_names_minimax(monkeypatch):

@@ -65,17 +65,45 @@ class _LeadContextAdapter:
 
     async def context(self, chat_id, current_user_text, recent_messages):
         from app.services.lead import lead_profile_text
-        from app.services.lead.probing import lead_collection_question
+        from app.services.conversation import ConversationService
+        from app.services.lead.probing import (
+            lead_collection_question,
+            oa_profile_name_guidance,
+        )
         from app.services.lead.repository import LeadRepository
 
         lead = await LeadRepository(self._db).by_zalo_id(chat_id)
-        return (
-            lead_profile_text(lead, personalize=chat_id.startswith("oa:")),
-            lead_collection_question(
+        oa_profile_display_name = None
+        if chat_id.startswith("oa:"):
+            conversation = await ConversationService(self._db).get_by_zalo(chat_id)
+            if conversation is not None and conversation.contact is not None:
+                oa_profile_display_name = conversation.contact.display_name
+
+        collection_lead = lead
+        if oa_profile_display_name and not str((lead or {}).get("name") or "").strip():
+            collection_lead = dict(lead or {})
+            collection_lead["name"] = oa_profile_display_name
+            next_question = lead_collection_question(
+                lead=collection_lead,
+                current_user_text=current_user_text,
+                recent_messages=recent_messages,
+            )
+            collection_guidance = oa_profile_name_guidance(
+                oa_profile_display_name,
+                next_question=next_question,
+            )
+        else:
+            collection_guidance = lead_collection_question(
                 lead=lead,
                 current_user_text=current_user_text,
                 recent_messages=recent_messages,
+            )
+        return (
+            lead_profile_text(
+                lead,
+                oa_profile_display_name=oa_profile_display_name,
             ),
+            collection_guidance,
         )
 
     def instruction(self, question: str) -> str:
