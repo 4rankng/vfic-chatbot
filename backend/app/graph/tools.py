@@ -470,9 +470,15 @@ def _active_jobs_brief_reply(jobs: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
-def _active_job_tool_result(status: str, jobs: list[dict[str, object]], safe_reply: str) -> str:
+def _active_job_tool_result(
+    status: str,
+    jobs: list[dict[str, object]],
+    safe_reply: str,
+    *,
+    total: int = 0,
+) -> str:
     payload = json.dumps(
-        {"status": status, "jobs": jobs, "safe_reply": safe_reply},
+        {"status": status, "total": total, "jobs": jobs, "safe_reply": safe_reply},
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -529,6 +535,13 @@ async def _no_match_safe_reply(
     )
 
 
+# Whitelist of accepted ``list_active_jobs`` ``sort_by`` values. The JSON Schema enum
+# at ``schemas.py`` is advisory at the boundary (the tool signature is ``str | None``),
+# so this explicit gate prevents an arbitrary LLM-supplied string from reaching the
+# repository layer. Unknown values fall back to the default order.
+_ALLOWED_SORT_BY = frozenset({"updated_at", "salary_desc", "salary_asc", "created_at"})
+
+
 async def list_active_jobs(
     retrieval: RetrievalPort,
     *,
@@ -544,6 +557,8 @@ async def list_active_jobs(
         k = max(1, min(int(top_k), 10))
     except (TypeError, ValueError):
         k = 3
+    if sort_by is not None and sort_by not in _ALLOWED_SORT_BY:
+        sort_by = None
     try:
         lookup = await retrieval.list_active_jobs(
             project_slug=project_slug,
@@ -558,6 +573,7 @@ async def list_active_jobs(
         lookup = None
 
     status = getattr(lookup, "status", "unavailable")
+    total = int(getattr(lookup, "total", 0) or 0)
     if status == "matched":
         jobs = tuple(getattr(lookup, "jobs", ()) or ())[:k]
         if not jobs:
@@ -565,9 +581,12 @@ async def list_active_jobs(
                 "unavailable",
                 [],
                 "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé.",
+                total=total,
             )
         payload = [_active_job_payload(job) for job in jobs]
-        return _active_job_tool_result("matched", payload, _active_jobs_safe_reply(payload))
+        return _active_job_tool_result(
+            "matched", payload, _active_jobs_safe_reply(payload), total=total
+        )
     if status == "no_match":
         return _active_job_tool_result(
             "no_match",
@@ -577,17 +596,20 @@ async def list_active_jobs(
                 project_slug=project_slug,
                 k=k,
             ),
+            total=total,
         )
     if status == "catalog_empty":
         return _active_job_tool_result(
             "catalog_empty",
             [],
             "Hiện tôi chưa có danh mục việc làm để kiểm tra chính xác. Bạn vui lòng thử lại sau nhé.",
+            total=total,
         )
     return _active_job_tool_result(
         "unavailable",
         [],
         "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé.",
+        total=total,
     )
 
 

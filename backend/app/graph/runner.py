@@ -41,6 +41,7 @@ from app.graph.direct_context import (
 )
 from app.graph.prompts import ERROR_REPLY
 from app.graph.router import (
+    detect_recency_sort_intent,
     detect_salary_sort_intent,
     is_vacancy_lookup,
     route_turn,
@@ -711,10 +712,13 @@ def _vacancy_required_args(user_text: str) -> dict:
     asked to sort by salary ("sắp xếp theo lương từ cao xuống thấp"), the detected
     direction is injected here because ``required_tool_args`` replaces the model's
     own arguments for the forced first call — without this the LLM's ``sort_by``
-    would be dropped on the authoritative tool round.
+    would be dropped on the authoritative tool round. The same applies to recency
+    ("gần nhất" / "mới nhất" -> ``created_at``).
     """
     args: dict = {"top_k": 10}
     sort_by = detect_salary_sort_intent(user_text)
+    if sort_by is None:
+        sort_by = detect_recency_sort_intent(user_text)
     if sort_by is not None:
         args["sort_by"] = sort_by
     return args

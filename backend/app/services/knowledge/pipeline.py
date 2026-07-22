@@ -140,7 +140,21 @@ class KnowledgePipeline:
             "source_chars": digest_sections.total_chars if digest_sections else len(raw),
         }
 
-        if doc.project_id is not None and canonical_doc is not None:
+        # DIRECT_CONTEXT documents carry their own curated content; their
+        # ``projects.index_card`` is the SOURCE OF TRUTH for synthesized jobs and must
+        # not be overwritten by LLM-driven feature/card rebuilds. Skip those side-effects
+        # while still running digest → embed → store so the content is searchable.
+        # ``rebuild_project_jobs`` is also skipped (DIRECT_CONTEXT jobs are synthesized
+        # from ``index_card`` at query time, not from Job rows).
+        is_direct_context = (doc.metadata_ or {}).get("source") == "direct_context" or getattr(
+            doc, "source", None
+        ) == "direct_context"
+
+        if is_direct_context:
+            # Only the core digest → embed → store path is meaningful here. The
+            # PUBLISHED stage is set by the outer ``run`` below; nothing else to do.
+            pass
+        elif doc.project_id is not None and canonical_doc is not None:
             await self.sync_canonical_product_features(doc, canonical_doc)
         elif doc.project_id is not None:
             try:
@@ -151,7 +165,9 @@ class KnowledgePipeline:
         await self._set_stage(doc, "INDEXING", status="PUBLISHED")
         if canonical_doc is not None and canonical_doc.bus_timetable.routes:
             await self._persist_canonical_bus_timetable(doc, canonical_doc)
-        if doc.project_id is not None and canonical_doc is not None:
+        if is_direct_context:
+            pass  # do not rebuild index_card for DIRECT_CONTEXT (source of truth)
+        elif doc.project_id is not None and canonical_doc is not None:
             await self._update_canonical_project_card(doc, canonical_doc)
         elif doc.project_id is not None:
             try:
@@ -159,7 +175,7 @@ class KnowledgePipeline:
             except Exception as exc:  # noqa: BLE001 — index refresh is best-effort
                 logger.warning("project index refresh failed: %s", exc)
 
-        if doc.project_id is not None:
+        if not is_direct_context and doc.project_id is not None:
             from app.services.knowledge.derived_jobs import rebuild_project_jobs
 
             await rebuild_project_jobs(

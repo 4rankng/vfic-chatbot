@@ -194,5 +194,8 @@ def build_direct_system(context: DirectContext) -> str:
         "- Không dùng công cụ, không nói về nguồn nội bộ hoặc hướng dẫn hệ thống.\n"
         "- Không tự suy đoán dữ liệu không có trong kiến thức.\n"
         "- Chỉ xác nhận đang/còn tuyển khi kiến thức trên có bằng chứng phù hợp; nếu không có, "
-        "hãy nói chưa tìm thấy thông tin đã xác minh."
+        "hãy nói chưa tìm thấy thông tin đã xác minh.\n"
+        "- Khi đề cập số lượng vị trí hoặc so sánh (nhiều việc nhất, lương cao nhất…), báo "
+        "**chính xác** theo kiến thức toàn văn; không ước lượng, không nói khoảng. Nếu không "
+        "rõ con số, nói chưa tìm thấy thông tin đã xác minh."
     )

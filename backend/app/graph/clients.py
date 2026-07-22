@@ -304,16 +304,22 @@ def _ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> st
             if trace_sink is not None:
                 trace_sink.record_decision("grounding_verdict", "skipped")
             return reply
-        from app.graph.grounding import extract_surfaced_job_ids, validate_grounding
+        from app.graph.grounding import (
+            extract_surfaced_entities,
+            extract_surfaced_job_ids,
+            validate_grounding,
+        )
 
         surfaced = extract_surfaced_job_ids(tool_results)
-        result = validate_grounding(reply, surfaced)
+        surfaced_entities = extract_surfaced_entities(tool_results)
+        result = validate_grounding(reply, surfaced, surfaced_entities)
         if not result.is_grounded:
             if trace_sink is not None:
                 trace_sink.record_decision("grounding_verdict", "sanitized")
             logger.warning(
-                "grounding_hallucination_stripped: %s cited ids not in retrieved set",
+                "grounding_hallucination_stripped: %s cited ids, %s unsupported entities",
                 len(result.hallucinated_ids),
+                len(result.unsupported_entities),
             )
             return result.sanitized_reply
         if trace_sink is not None:

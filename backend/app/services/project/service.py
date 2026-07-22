@@ -301,6 +301,17 @@ class ProjectService:
             body,
             actor,
         )
+        # Index DIRECT_CONTEXT text into knowledge_chunks so it participates in
+        # cross-project retrieval (otherwise it is only reachable via FOCUSED-turn
+        # system-prompt injection). Best-effort: the enqueue swallows Redis errors so a
+        # transient queue failure never rolls back this publish.
+        from app.workers.direct_context_worker import enqueue_direct_context_index
+
+        text_blob = getattr(direct_file, "normalized_text", None) or getattr(
+            direct_file, "raw_text", None
+        )
+        if text_blob:
+            enqueue_direct_context_index(knowledge_base.id, project_id, text_blob)
         if activating:
             await bump_cache_version(NS_PREAMBLE)
         return direct_file

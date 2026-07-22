@@ -263,6 +263,33 @@ def detect_salary_sort_intent(user_text: str) -> str | None:
     return None
 
 
+# Vietnamese diacritic-insensitive markers for "newest / most-recently-posted" intent.
+# In Vietnamese recruitment, "gần nhất" / "mới nhất" means "most recently posted" (temporal
+# recency), not geographically nearest.
+_RECENCY_SORT_MARKERS = (
+    "gan nhat",
+    "moi nhat",
+    "vua moi",
+    "moi dang",
+    "moi dang tuyen",
+    "gan day",
+)
+
+
+def detect_recency_sort_intent(user_text: str) -> str | None:
+    """Return ``created_at`` when the user asks for the newest / most-recent postings.
+
+    Matches Vietnamese phrasings like "việc làm gần nhất" / "mới nhất" after diacritic
+    stripping. Returns ``None`` when no recency intent is present.
+    """
+    text = _normalize(user_text)
+    if not text:
+        return None
+    if any(marker in text for marker in _RECENCY_SORT_MARKERS):
+        return "created_at"
+    return None
+
+
 def route_turn(user_text: str) -> TurnRoute:
     """Classify a user turn into the first retrieval strategy to try.
 

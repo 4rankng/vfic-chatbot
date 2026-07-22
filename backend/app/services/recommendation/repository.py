@@ -118,6 +118,9 @@ def _direct_project_active_job(
         description=str(project.summary or ""),
         requirements="\n".join(eligibility),
         benefits="\n".join(highlights),
+        # DIRECT_CONTEXT synthesized jobs have no row-level timestamp; the project's
+        # last refresh is the closest proxy for "when was this posted".
+        created_at=project.updated_at,
     )
 
 
@@ -393,6 +396,7 @@ class RecommendationRepository:
                 description=str(getattr(job, "description", "") or ""),
                 requirements=str(getattr(job, "requirements", "") or ""),
                 benefits=str(getattr(job, "benefits", "") or ""),
+                created_at=getattr(job, "created_at", None),
             )
             for job, company_name, company_aliases, project_name, project_slug, _project_id in rows
         ]

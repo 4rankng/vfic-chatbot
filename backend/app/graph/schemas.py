@@ -73,11 +73,12 @@ TOOL_SCHEMAS = [
                     },
                     "sort_by": {
                         "type": "string",
-                        "enum": ["updated_at", "salary_desc", "salary_asc"],
+                        "enum": ["updated_at", "salary_desc", "salary_asc", "created_at"],
                         "description": (
                             "Thứ tự sắp xếp. salary_desc: lương từ cao xuống thấp (dùng khi ứng viên "
                             "hỏi việc lương cao / sắp xếp theo lương). salary_asc: từ thấp đến cao. "
-                            "Bỏ qua nếu ứng viên không yêu cầu sắp xếp theo lương."
+                            "created_at: việc làm mới đăng gần nhất (dùng khi ứng viên hỏi 'gần nhất' "
+                            "/ 'mới nhất'). Bỏ qua nếu ứng viên không yêu cầu sắp xếp."
                         ),
                     },
                 },
