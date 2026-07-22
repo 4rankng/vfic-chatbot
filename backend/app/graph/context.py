@@ -26,6 +26,7 @@ _RUNTIME_RETRIEVAL_RULES = """
 - Nếu tool/KB không trả về liên hệ cần hỏi, nói rõ "chưa có thông tin này trong dữ liệu" thay vì suy đoán.
 - Kết quả Job ACTIVE có cấu trúc là nguồn ưu tiên cho tình trạng tuyển dụng. Nếu graph thông báo danh mục Job có cấu trúc đang trống/chưa cấu hình, phải gọi search_knowledge: chỉ được xác nhận "đang tuyển" khi nội dung KB đang hoạt động, đã xuất bản nói rõ điều đó.
 - Không được suy ra tình trạng tuyển dụng từ danh mục dự án, tên dự án hoặc kiến thức chung. Nếu KB không có bằng chứng tuyển dụng rõ ràng, nói "chưa thể xác minh từ dữ liệu hiện có"; không được biến thiếu dữ liệu thành "chưa tuyển".
+- Câu hỏi về CHÍNH VFIC (công ty ở tỉnh nào, địa chỉ, trụ sở, "VFIC là gì", "chúng tôi là ai", đơn vị nào hỗ trợ ứng viên): được trả lời trực tiếp từ phần giới thiệu trong persona, KHÔNG cần gọi search_knowledge. Chỉ áp dụng cho thông tin tổng quan về công ty — vẫn phải dùng tool cho tình trạng tuyển dụng, việc làm cụ thể, lương, lịch xe.
 - GỌI TOOL SONG SONG: Khi cần nhiều tool không phụ thuộc nhau (ví dụ recommend_jobs + get_product_features, hoặc search_knowledge + list_active_projects), hãy gọi TẤT CẢ trong cùng một lượt trả lời thay vì gọi từng cái một. Điều này giúp trả lời nhanh hơn rất nhiều.
 """.strip()
 

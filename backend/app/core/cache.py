@@ -54,7 +54,12 @@ async def bump_cache_version(namespace: str) -> bool:
             await redis.incr(key)
         return True
     except Exception:  # noqa: BLE001
-        logger.debug("cache version bump failed for namespace %s", namespace, exc_info=True)
+        # A missed bump (e.g. transient Redis hiccup during a persona/project
+        # save) leaves stale prompts until the TTL expires. WARNING keeps it
+        # operator-visible instead of buried at DEBUG.
+        logger.warning(
+            "cache version bump failed for namespace %s", namespace, exc_info=True
+        )
         return False
 
 

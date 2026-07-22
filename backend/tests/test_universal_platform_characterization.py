@@ -256,6 +256,35 @@ async def test_current_system_prompt_uses_database_persona_but_appends_recruitme
     assert cache_hit is False
 
 
+@pytest.mark.asyncio
+async def test_system_prompt_allows_company_identity_from_persona_without_tool_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Meta questions about VFIC-the-company (province, address, who we are) must
+    be answerable from the persona intro. Grounding rules forbid inferring job
+    facts without KB evidence, but those rules over-fired on company-identity
+    questions, producing the generic "chưa thể xác minh" fallback. The carve-out
+    coexists with — never weakens — the recruitment-grounding rule.
+    """
+
+    async def uncached(assemble, *, key_suffix="default"):
+        return await assemble(), False
+
+    retrieval = SimpleNamespace(
+        active_persona_body=AsyncMock(return_value="Persona giới thiệu VFIC."),
+        active_projects_with_card=AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr("app.graph.context.cached_system_prompt", uncached)
+
+    prompt, _ = await build_system_prompt(retrieval)
+
+    # Carve-out present: company-identity questions may use the persona.
+    assert "CHÍNH VFIC" in prompt
+    assert "không cần gọi search_knowledge" in prompt.lower()
+    # Grounding rule preserved alongside the carve-out (regression guard).
+    assert "không được suy ra tình trạng tuyển dụng" in prompt.lower()
+
+
 def test_template_service_source_contains_no_automatic_recruitment_fallback():
     source = (
         Path(__file__).parents[1]
