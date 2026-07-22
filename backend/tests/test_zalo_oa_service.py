@@ -6,6 +6,7 @@ import pytest
 
 from app.core.config import Settings
 from app.services.zalo_oa_service import ZaloOASender
+from app.shared.application.outbound import OutboundPolicySuppressedError
 
 from tests.helpers.http_fake import register_fake_client
 
@@ -327,6 +328,34 @@ async def test_oa_sender_send_returns_original_error_when_refresh_raises(
     assert result.telemetry.retry_count == 0
     assert result.telemetry.refresh_count == 1
     assert result.telemetry.result == "provider_error"
+
+
+async def test_oa_sender_propagates_policy_suppression_from_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Authority loss is control flow, not an ordinary refresh failure."""
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": -216, "message": "Access token is invalid"}
+
+    class _FakeClient:
+        async def post(self, url: str, *, json=None, headers=None, **kw):
+            return _FakeResp()
+
+    register_fake_client("zalo_oa", _FakeClient())
+
+    async def refresh() -> str | None:
+        raise OutboundPolicySuppressedError
+
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token-old",
+        refresh=refresh,
+    )
+
+    with pytest.raises(OutboundPolicySuppressedError):
+        await sender.send_message("user-1", "hello", quote_message_id="inbound-1")
 
 
 async def test_oa_sender_without_refresh_returns_error_on_token_invalid(

@@ -22,6 +22,10 @@ AMBIGUOUS_SEND_CLASSES: frozenset[OutboundErrorClass] = frozenset(
 )
 
 
+class OutboundPolicySuppressedError(RuntimeError):
+    """Abort provider retry because an application authority fence changed."""
+
+
 def is_ambiguous_send(error_class: str | None, *, ok: bool) -> bool:
     """Return whether a failed provider request may already have been accepted."""
     return not ok and error_class in AMBIGUOUS_SEND_CLASSES
@@ -84,6 +88,7 @@ def combine_outbound_telemetry(
 __all__ = [
     "AMBIGUOUS_SEND_CLASSES",
     "OutboundErrorClass",
+    "OutboundPolicySuppressedError",
     "OutboundResult",
     "OutboundTelemetry",
     "combine_outbound_telemetry",

@@ -28,7 +28,10 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.outbox import OutboxStatus, OutboundOutbox
-from app.shared.application.outbound import OutboundTelemetry
+from app.shared.application.outbound import (
+    OutboundPolicySuppressedError,
+    OutboundTelemetry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +40,6 @@ logger = logging.getLogger(__name__)
 # produce up to twenty short chunks rather than the ideal ten full chunks. OA may
 # add one token refresh and one retry. One chat-turn timeout remains as margin.
 _MAX_PROVIDER_WINDOWS_PER_OUTBOX = 22
-
-
-class _RuntimeAuthorityChangedDuringRefresh(RuntimeError):
-    """The command lost runtime authority while OA credentials rotated."""
 
 
 @dataclass(frozen=True)
@@ -100,7 +99,7 @@ async def _refresh_oa_access_token_for_dispatch(
     if new_token is None:
         return None
     if revalidate is not None and not await revalidate():
-        raise _RuntimeAuthorityChangedDuringRefresh
+        raise OutboundPolicySuppressedError
     return new_token
 
 
@@ -311,7 +310,7 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
             refresh=refresh_oa_access_token,
         )
         result = await sender.send_payload(candidate.channel, candidate.payload)
-    except _RuntimeAuthorityChangedDuringRefresh:
+    except OutboundPolicySuppressedError:
         return DispatchResult(
             outbox_id=candidate.outbox_id,
             message_id=candidate.message_id,

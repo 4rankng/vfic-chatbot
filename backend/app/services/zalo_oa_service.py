@@ -16,7 +16,10 @@ from app.services.zalo_bot_service import (
     _classify_transport_error,
     _split_long_plain_text,
 )
-from app.shared.application.outbound import OutboundTelemetry
+from app.shared.application.outbound import (
+    OutboundPolicySuppressedError,
+    OutboundTelemetry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +184,8 @@ class ZaloOASender:
             refresh_t0 = time.monotonic()
             try:
                 new_token = await self._refresh()
+            except OutboundPolicySuppressedError:
+                raise
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA access-token refresh failed", exc_info=True)
                 refresh_ms = int(round((time.monotonic() - refresh_t0) * 1000))
@@ -224,6 +229,8 @@ class ZaloOASender:
         if self._is_token_invalid(envelope) and self._refresh is not None:
             try:
                 new_token = await self._refresh()
+            except OutboundPolicySuppressedError:
+                raise
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA access-token refresh failed", exc_info=True)
                 return envelope
