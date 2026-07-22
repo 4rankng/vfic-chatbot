@@ -1,160 +1,364 @@
-"""Freeze known dependency inversions while the DDD migration removes them.
+"""Freeze exact dependency inversions while the DDD migration removes them.
 
-The baseline is deliberately one-way: deleting an inversion passes; adding a new
-violating file or increasing imports in an allowlisted file fails. The owning
-phase for each rule is documented in ``docs/decisions/ddd-context-boundaries.md``.
+The baseline is deliberately one-way: removing a legacy edge passes, while a
+new importer-to-symbol edge fails. Relative imports and the TypeScript import
+forms supported by the application are normalized before comparison.
 """
 
 from __future__ import annotations
 
 import ast
-from collections import Counter
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-ALLOWED_COUNTS = {
-    "api_infra|backend/app/api/auth.py": 5,
-    "api_infra|backend/app/api/bot_runs.py": 3,
-    "api_infra|backend/app/api/conversations.py": 4,
-    "api_infra|backend/app/api/dashboard.py": 2,
-    "api_infra|backend/app/api/dependencies.py": 3,
-    "api_infra|backend/app/api/installation.py": 2,
-    "api_infra|backend/app/api/integrations.py": 5,
-    "api_infra|backend/app/api/jobs.py": 3,
-    "api_infra|backend/app/api/knowledge.py": 7,
-    "api_infra|backend/app/api/knowledge_bases.py": 6,
-    "api_infra|backend/app/api/leads.py": 3,
-    "api_infra|backend/app/api/performance.py": 5,
-    "api_infra|backend/app/api/personas.py": 2,
-    "api_infra|backend/app/api/projects.py": 2,
-    "api_infra|backend/app/api/users.py": 2,
-    "api_infra|backend/app/api/webhooks.py": 4,
-    "schema_infra|backend/app/schemas/bot_run.py": 1,
-    "schema_infra|backend/app/schemas/conversation.py": 1,
-    "schema_infra|backend/app/schemas/ingestion_templates.py": 1,
-    "schema_infra|backend/app/schemas/job.py": 1,
-    "schema_infra|backend/app/schemas/knowledge.py": 1,
-    "schema_infra|backend/app/schemas/knowledge_bases.py": 1,
-    "schema_infra|backend/app/schemas/lead.py": 1,
-    "schema_infra|backend/app/schemas/personas.py": 2,
-    "schema_infra|backend/app/schemas/project_knowledge.py": 1,
-    "schema_infra|backend/app/schemas/projects.py": 1,
-    "schema_infra|backend/app/schemas/user.py": 1,
-    "service_graph|backend/app/services/conversation/__init__.py": 1,
-    "service_graph|backend/app/services/conversation/state.py": 2,
-    "service_graph|backend/app/services/outbox_service.py": 1,
-    "service_graph|backend/app/services/personas/providers.py": 1,
-    "service_graph|backend/app/services/project/faq.py": 1,
-    "service_graph|backend/app/services/project/features.py": 2,
-    "service_graph|backend/app/services/zalo_bot_service.py": 2,
-    "service_graph|backend/app/services/zalo_oa_service.py": 1,
-    "service_worker|backend/app/services/knowledge/category_service.py": 2,
-    "service_worker|backend/app/services/project/single_page_external_sources.py": 2,
-    "service_worker|backend/app/services/webhook.py": 1,
-    "lib_product|frontend/src/lib/vfic/humanReplyService.ts": 1,
-    "lib_product|frontend/src/lib/vfic/knowledgeService.ts": 2,
-    "lib_product|frontend/src/lib/vfic/realtimeSocket.ts": 1,
-}
+# Generated from the accepted 2026-07-22 baseline. Entries are exact normalized
+# rule|importer|target edges; this is intentionally data, not a runtime snapshot.
+ALLOWED_EDGES: frozenset[str] = frozenset(
+    line.strip()
+    for line in """
+api_outward|backend/app/api/auth.py|app.core.config:get_settings
+api_outward|backend/app/api/auth.py|app.core.db:get_db
+api_outward|backend/app/api/auth.py|app.core.ratelimit:enforce_rate_limit
+api_outward|backend/app/api/auth.py|app.core.ratelimit:enforce_rate_limit_key
+api_outward|backend/app/api/auth.py|app.core.security:create_access_token
+api_outward|backend/app/api/auth.py|app.core.security:create_refresh_token
+api_outward|backend/app/api/auth.py|app.core.security:decode_token
+api_outward|backend/app/api/auth.py|app.core.security:hash_password
+api_outward|backend/app/api/auth.py|app.core.security:verify_password
+api_outward|backend/app/api/auth.py|app.models.user:User
+api_outward|backend/app/api/bot_runs.py|app.core.db:get_db
+api_outward|backend/app/api/bot_runs.py|app.models.conversation:BotRunOutcome
+api_outward|backend/app/api/bot_runs.py|app.models.user:User
+api_outward|backend/app/api/conversations.py|app.core.config:get_settings
+api_outward|backend/app/api/conversations.py|app.core.db:get_db
+api_outward|backend/app/api/conversations.py|app.graph.factories:build_deps
+api_outward|backend/app/api/conversations.py|app.graph.runner:run_turn
+api_outward|backend/app/api/conversations.py|app.graph.types:BotRunState
+api_outward|backend/app/api/conversations.py|app.models.conversation:Conversation
+api_outward|backend/app/api/conversations.py|app.models.conversation:ConversationMode
+api_outward|backend/app/api/conversations.py|app.models.conversation:ConversationStatus
+api_outward|backend/app/api/conversations.py|app.models.user:Role
+api_outward|backend/app/api/conversations.py|app.models.user:User
+api_outward|backend/app/api/conversations.py|app.workers.chatbot_worker:enqueue_chat_run
+api_outward|backend/app/api/dashboard.py|app.core.db:get_db
+api_outward|backend/app/api/dashboard.py|app.models.user:User
+api_outward|backend/app/api/dependencies.py|app.core.db:get_db
+api_outward|backend/app/api/dependencies.py|app.core.security:decode_token
+api_outward|backend/app/api/dependencies.py|app.graph.clients:build_embedder
+api_outward|backend/app/api/dependencies.py|app.models.user:Role
+api_outward|backend/app/api/dependencies.py|app.models.user:User
+api_outward|backend/app/api/installation.py|app.core.db:get_db
+api_outward|backend/app/api/installation.py|app.models.user:User
+api_outward|backend/app/api/integrations.py|app.core.config:ZALO_BOT_WEBHOOK_URL
+api_outward|backend/app/api/integrations.py|app.core.config:get_settings
+api_outward|backend/app/api/integrations.py|app.core.db:get_db
+api_outward|backend/app/api/integrations.py|app.core.http:get_http_client
+api_outward|backend/app/api/integrations.py|app.core.redis:get_redis
+api_outward|backend/app/api/integrations.py|app.models.user:Role
+api_outward|backend/app/api/integrations.py|app.models.user:User
+api_outward|backend/app/api/jobs.py|app.core.db:get_db
+api_outward|backend/app/api/jobs.py|app.models.job:JobStatus
+api_outward|backend/app/api/jobs.py|app.models.user:User
+api_outward|backend/app/api/knowledge.py|app.core.cache:bump_cache_version
+api_outward|backend/app/api/knowledge.py|app.core.db:get_db
+api_outward|backend/app/api/knowledge.py|app.core.redis:get_redis
+api_outward|backend/app/api/knowledge.py|app.models.company:Project
+api_outward|backend/app/api/knowledge.py|app.models.external_source_sync_state:ExternalSourceSyncState
+api_outward|backend/app/api/knowledge.py|app.models.knowledge:KBTextFile
+api_outward|backend/app/api/knowledge.py|app.models.knowledge:KBVersion
+api_outward|backend/app/api/knowledge.py|app.models.knowledge:KBVersionStatus
+api_outward|backend/app/api/knowledge.py|app.models.knowledge:KnowledgeDocument
+api_outward|backend/app/api/knowledge.py|app.models.knowledge:KnowledgeStatus
+api_outward|backend/app/api/knowledge.py|app.models.user:User
+api_outward|backend/app/api/knowledge.py|app.workers.external_source_sync_worker:enqueue_one_shot
+api_outward|backend/app/api/knowledge.py|app.workers.ingest_worker:enqueue_ingest
+api_outward|backend/app/api/knowledge.py|app.workers.ingest_worker:enqueue_ingest_version
+api_outward|backend/app/api/knowledge_bases.py|app.core.db:get_db
+api_outward|backend/app/api/knowledge_bases.py|app.models.company:Company
+api_outward|backend/app/api/knowledge_bases.py|app.models.company:Project
+api_outward|backend/app/api/knowledge_bases.py|app.models.job:Job
+api_outward|backend/app/api/knowledge_bases.py|app.models.job:JobStatus
+api_outward|backend/app/api/knowledge_bases.py|app.models.knowledge:KnowledgeBase
+api_outward|backend/app/api/knowledge_bases.py|app.models.knowledge:KnowledgeBaseDirectFile
+api_outward|backend/app/api/knowledge_bases.py|app.models.knowledge:KnowledgeDocument
+api_outward|backend/app/api/knowledge_bases.py|app.models.persona:Persona
+api_outward|backend/app/api/knowledge_bases.py|app.models.user:User
+api_outward|backend/app/api/leads.py|app.core.db:get_db
+api_outward|backend/app/api/leads.py|app.models.lead:LeadStage
+api_outward|backend/app/api/leads.py|app.models.user:User
+api_outward|backend/app/api/performance.py|app.core.cache:cache_get_json
+api_outward|backend/app/api/performance.py|app.core.cache:cache_set_json
+api_outward|backend/app/api/performance.py|app.core.db:async_session
+api_outward|backend/app/api/performance.py|app.core.ops_health:collect_queue_health
+api_outward|backend/app/api/performance.py|app.core.redis:get_redis
+api_outward|backend/app/api/performance.py|app.models.user:User
+api_outward|backend/app/api/personas.py|app.core.db:get_db
+api_outward|backend/app/api/personas.py|app.models.user:User
+api_outward|backend/app/api/projects.py|app.core.db:get_db
+api_outward|backend/app/api/projects.py|app.models.user:User
+api_outward|backend/app/api/users.py|app.core.db:get_db
+api_outward|backend/app/api/users.py|app.models.user:Role
+api_outward|backend/app/api/users.py|app.models.user:User
+api_outward|backend/app/api/webhooks.py|app.core.config:get_settings
+api_outward|backend/app/api/webhooks.py|app.core.db:get_db
+api_outward|backend/app/api/webhooks.py|app.models.contact:ContactChannelIdentity
+api_outward|backend/app/api/webhooks.py|app.models.conversation:Conversation
+api_outward|backend/app/api/webhooks.py|app.models.conversation:DeliveryStatus
+api_outward|backend/app/api/webhooks.py|app.models.conversation:Message
+api_outward|backend/app/api/webhooks.py|app.workers.chatbot_worker:enqueue_chat_run
+lib_product|frontend/src/lib/vfic/humanReplyService.ts|frontend/src/components/atomic-crm/providers/rest/api
+lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/providers/rest/api
+lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/types
+lib_product|frontend/src/lib/vfic/realtimeSocket.ts|frontend/src/components/atomic-crm/providers/rest/api
+product_lib|frontend/src/components/atomic-crm/capabilities/recruitment/index.tsx|frontend/src/lib/vfic/realtimeSocket
+product_lib|frontend/src/components/atomic-crm/conversations/ChatThread.tsx|frontend/src/lib/vfic/humanReplyService
+product_lib|frontend/src/components/atomic-crm/conversations/chatRepository.ts|frontend/src/lib/vfic/realtimeSocket
+product_lib|frontend/src/components/atomic-crm/conversations/useConversationRealtime.ts|frontend/src/lib/vfic/realtimeSocket
+product_lib|frontend/src/components/atomic-crm/knowledge/InlineKnowledgeUploader.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeDetailPanel.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeSourceList.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeSourceShow.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeUpload.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeVersionManager.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/knowledge/StoredKnowledgePanel.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/personas/PersonaAssignments.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/personas/PersonaEdit.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/personas/PersonaForm.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/personas/PersonaList.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/ExternalSourceLinkForm.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/ExternalSourceList.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/ProjectBusTimetable.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/ProjectFaqEditor.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/ProjectFeatures.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.test.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.tsx|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/projects/singlePageSheetUrl.test.ts|frontend/src/lib/vfic/knowledgeService
+product_lib|frontend/src/components/atomic-crm/providers/rest/api.ts|frontend/src/lib/vfic/config
+product_lib|frontend/src/components/atomic-crm/providers/rest/authProvider.ts|frontend/src/lib/vfic/realtimeSocket
+product_lib|frontend/src/components/atomic-crm/providers/rest/dataProvider.ts|frontend/src/lib/vfic/humanReplyService
+product_lib|frontend/src/components/atomic-crm/root/reset-runtime-state.ts|frontend/src/lib/vfic/realtimeSocket
+schema_infra|backend/app/schemas/bot_run.py|app.models.conversation:BotRunOutcome
+schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationMode
+schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationProjectState
+schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationStatus
+schema_infra|backend/app/schemas/conversation.py|app.models.conversation:DeliveryStatus
+schema_infra|backend/app/schemas/conversation.py|app.models.conversation:MessageSender
+schema_infra|backend/app/schemas/ingestion_templates.py|app.models.ingestion_template:IngestionRunStatus
+schema_infra|backend/app/schemas/ingestion_templates.py|app.models.ingestion_template:TemplateVersionStatus
+schema_infra|backend/app/schemas/job.py|app.models.job:JobStatus
+schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KBVersionStatus
+schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KnowledgeStatus
+schema_infra|backend/app/schemas/knowledge_bases.py|app.models.knowledge:KnowledgeBaseMode
+schema_infra|backend/app/schemas/lead.py|app.models.lead:FollowupStatus
+schema_infra|backend/app/schemas/lead.py|app.models.lead:LeadScore
+schema_infra|backend/app/schemas/lead.py|app.models.lead:LeadStage
+schema_infra|backend/app/schemas/personas.py|app.core.config:PROACTIVE_48H_WINDOW_SECONDS
+schema_infra|backend/app/schemas/personas.py|app.core.config:PROACTIVE_FOLLOWUP_CAP
+schema_infra|backend/app/schemas/personas.py|app.models.lead:LeadScore
+schema_infra|backend/app/schemas/personas.py|app.models.lead:LeadStage
+schema_infra|backend/app/schemas/project_knowledge.py|app.models.knowledge:KnowledgeCategoryRevisionStatus
+schema_infra|backend/app/schemas/projects.py|app.models.knowledge:KnowledgeBaseMode
+schema_infra|backend/app/schemas/user.py|app.models.user:Role
+service_outward|backend/app/services/conversation/__init__.py|app.graph.outbound_telemetry:OutboundTelemetry
+service_outward|backend/app/services/conversation/state.py|app.graph.outbound_telemetry:OutboundTelemetry
+service_outward|backend/app/services/conversation/state.py|app.graph.send_classification:delivery_status_for_send_error
+service_outward|backend/app/services/knowledge/category_service.py|app.workers.category_worker:enqueue_category_revision
+service_outward|backend/app/services/knowledge/category_service.py|app.workers.utils:EnqueueStatusUnknown
+service_outward|backend/app/services/outbox_service.py|app.graph.outbound_telemetry:OutboundTelemetry
+service_outward|backend/app/services/personas/providers.py|app.graph.provider_scope:provider_from_conversation
+service_outward|backend/app/services/project/faq.py|app.graph.clients:build_embedder
+service_outward|backend/app/services/project/features.py|app.graph.clients:build_embedder
+service_outward|backend/app/services/project/features.py|app.graph.factories:make_minimax_llm_json
+service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.single_page_external_source_sync_worker:enqueue_one_shot
+service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.utils:EnqueueStatusUnknown
+service_outward|backend/app/services/webhook.py|app.workers.persistence_worker:enqueue_enrich_oa_profile
+service_outward|backend/app/services/zalo_bot_service.py|app.graph.outbound_telemetry:OutboundTelemetry
+service_outward|backend/app/services/zalo_bot_service.py|app.graph.outbound_telemetry:combine_outbound_telemetry
+service_outward|backend/app/services/zalo_bot_service.py|app.graph.send_classification:classify_transport_error
+service_outward|backend/app/services/zalo_oa_service.py|app.graph.outbound_telemetry:OutboundTelemetry
+""".splitlines()
+    if line.strip()
+)
 
-for path in (
-    "capabilities/recruitment/index.tsx",
-    "conversations/ChatThread.tsx",
-    "conversations/chatRepository.ts",
-    "conversations/useConversationRealtime.ts",
-    "knowledge/InlineKnowledgeUploader.tsx",
-    "knowledge/KnowledgeDetailPanel.tsx",
-    "knowledge/KnowledgeSourceList.tsx",
-    "knowledge/KnowledgeSourceShow.tsx",
-    "knowledge/KnowledgeUpload.tsx",
-    "knowledge/KnowledgeVersionManager.tsx",
-    "knowledge/StoredKnowledgePanel.tsx",
-    "personas/PersonaAssignments.tsx",
-    "personas/PersonaEdit.tsx",
-    "personas/PersonaForm.tsx",
-    "personas/PersonaList.tsx",
-    "projects/ExternalSourceLinkForm.tsx",
-    "projects/ExternalSourceList.tsx",
-    "projects/ProjectBusTimetable.tsx",
-    "projects/ProjectFaqEditor.tsx",
-    "projects/ProjectFeatures.tsx",
-    "projects/ProjectKnowledgePanel.tsx",
-    "projects/singlePageSheetUrl.test.ts",
-    "providers/rest/api.ts",
-    "providers/rest/authProvider.ts",
-    "providers/rest/dataProvider.ts",
-    "root/reset-runtime-state.ts",
-):
-    ALLOWED_COUNTS[f"product_lib|frontend/src/components/atomic-crm/{path}"] = 1
-ALLOWED_COUNTS[
-    "product_lib|frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.test.tsx"
-] = 2
-
-_TS_IMPORT = re.compile(
-    r'''(?:from\s+["']([^"']+)["']|import\s+[^;]*?from\s+["']([^"']+)["'])'''
+_TS_STATIC_MODULE = re.compile(r"(?:\bfrom\s*|\bimport\s*)[\"']([^\"']+)[\"']")
+_TS_CALL_MODULE = re.compile(
+    r"\b(?:import|require)\s*\(\s*(?:/\*.*?\*/\s*)?[\"'`]([^\"'`]+)[\"'`]",
+    re.DOTALL,
 )
 
 
-def _backend_violations() -> Counter[str]:
-    found: Counter[str] = Counter()
+def _resolve_python_module(path: Path, node: ast.ImportFrom) -> str:
+    if not node.level:
+        return node.module or ""
+    package = list(path.relative_to(REPO_ROOT / "backend").with_suffix("").parts[:-1])
+    keep = max(0, len(package) - (node.level - 1))
+    parts = package[:keep]
+    if node.module:
+        parts.extend(node.module.split("."))
+    return ".".join(parts)
+
+
+def _python_import_targets(path: Path, source: str) -> set[str]:
+    targets: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            module = _resolve_python_module(path, node)
+            if node.module:
+                targets.update(f"{module}:{alias.name}" for alias in node.names)
+            else:
+                targets.update(f"{module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Import):
+            targets.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
+            imported = node.args[0].value
+            if not isinstance(imported, str):
+                continue
+            if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+                targets.add(imported)
+            elif (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "importlib"
+                and node.func.attr == "import_module"
+            ):
+                targets.add(imported)
+    return targets
+
+
+def _normalize_posix(module: str) -> str:
+    parts: list[str] = []
+    for part in PurePosixPath(module).parts:
+        if part == "..":
+            if parts:
+                parts.pop()
+        elif part != ".":
+            parts.append(part)
+    return "/".join(parts)
+
+
+def _resolve_typescript_module(path: Path, module: str) -> str:
+    if module.startswith("@/"):
+        return _normalize_posix(f"frontend/src/{module[2:]}")
+    if module.startswith("."):
+        base = PurePosixPath(path.relative_to(REPO_ROOT).parent.as_posix())
+        return _normalize_posix((base / module).as_posix())
+    return module
+
+
+def _typescript_import_targets(path: Path, source: str) -> set[str]:
+    return {
+        _resolve_typescript_module(path, module)
+        for module in _TS_STATIC_MODULE.findall(source) + _TS_CALL_MODULE.findall(source)
+    }
+
+
+def _backend_rule(rel: str, target: str) -> str | None:
+    module = target.split(":", 1)[0]
+    if rel.startswith("backend/app/services/") and module.startswith(
+        ("app.graph", "app.workers", "app.api")
+    ):
+        return "service_outward"
+    if rel.startswith("backend/app/api/") and module.startswith(
+        ("app.models", "app.core", "app.graph", "app.workers")
+    ):
+        return "api_outward"
+    if rel.startswith("backend/app/schemas/") and module.startswith(
+        ("app.models", "app.core")
+    ):
+        return "schema_infra"
+    return None
+
+
+def _frontend_rule(rel: str, target: str) -> str | None:
+    if rel.startswith("frontend/src/lib/vfic/") and target.startswith(
+        "frontend/src/components/atomic-crm"
+    ):
+        return "lib_product"
+    if rel.startswith("frontend/src/components/atomic-crm/") and target.startswith(
+        "frontend/src/lib/vfic"
+    ):
+        return "product_lib"
+    return None
+
+
+def _current_edges() -> set[str]:
+    found: set[str] = set()
     for path in (REPO_ROOT / "backend/app").rglob("*.py"):
         rel = path.relative_to(REPO_ROOT).as_posix()
-        tree = ast.parse(path.read_text())
-        modules: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                modules.add(node.module)
-            elif isinstance(node, ast.Import):
-                modules.update(alias.name for alias in node.names)
-        for module in modules:
-            rule = None
-            if rel.startswith("backend/app/services/"):
-                if module.startswith("app.graph"):
-                    rule = "service_graph"
-                elif module.startswith("app.workers"):
-                    rule = "service_worker"
-            elif rel.startswith("backend/app/api/") and module.startswith(
-                ("app.models", "app.core")
-            ):
-                rule = "api_infra"
-            elif rel.startswith("backend/app/schemas/") and module.startswith(
-                ("app.models", "app.core")
-            ):
-                rule = "schema_infra"
-            if rule:
-                found[f"{rule}|{rel}"] += 1
-    return found
+        for target in _python_import_targets(path, path.read_text()):
+            if rule := _backend_rule(rel, target):
+                found.add(f"{rule}|{rel}|{target}")
 
-
-def _frontend_violations() -> Counter[str]:
-    found: Counter[str] = Counter()
     for path in (REPO_ROOT / "frontend/src").rglob("*"):
         if not path.is_file() or path.suffix not in {".ts", ".tsx"}:
             continue
         rel = path.relative_to(REPO_ROOT).as_posix()
-        for first, second in _TS_IMPORT.findall(path.read_text(errors="ignore")):
-            module = first or second
-            if rel.startswith("frontend/src/lib/vfic/") and "components/atomic-crm" in module:
-                found[f"lib_product|{rel}"] += 1
-            elif rel.startswith("frontend/src/components/atomic-crm/") and "@/lib/vfic" in module:
-                found[f"product_lib|{rel}"] += 1
+        for target in _typescript_import_targets(path, path.read_text(errors="ignore")):
+            if rule := _frontend_rule(rel, target):
+                found.add(f"{rule}|{rel}|{target}")
     return found
 
 
 def test_no_new_layer_boundary_violations() -> None:
-    actual = _backend_violations() + _frontend_violations()
-    excess = {
-        key: {"actual": count, "allowed": ALLOWED_COUNTS.get(key, 0)}
-        for key, count in actual.items()
-        if count > ALLOWED_COUNTS.get(key, 0)
-    }
-    assert not excess, f"New architecture boundary violations: {excess}"
+    excess = sorted(_current_edges() - ALLOWED_EDGES)
+    assert not excess, "New architecture boundary edges:\n" + "\n".join(excess)
 
 
 def test_boundary_allowlist_only_names_existing_files() -> None:
-    missing = [
-        key for key in ALLOWED_COUNTS if not (REPO_ROOT / key.split("|", 1)[1]).is_file()
-    ]
+    missing = sorted(
+        edge
+        for edge in ALLOWED_EDGES
+        if not (REPO_ROOT / edge.split("|", 2)[1]).is_file()
+    )
     assert not missing, f"Remove stale architecture allowlist entries: {missing}"
+
+
+def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
+    path = REPO_ROOT / "backend/app/api/example.py"
+    targets = _python_import_targets(
+        path,
+        "from ..models import User, Role\n"
+        "from .. import models\n"
+        "from app.models import Lead\n"
+        "import importlib\n"
+        "dynamic = importlib.import_module('app.models.job')\n"
+        "legacy = __import__('app.models.persona')\n",
+    )
+    assert {
+        "app.models:User",
+        "app.models:Role",
+        "app.models",
+        "app.models:Lead",
+        "app.models.job",
+        "app.models.persona",
+    } <= targets
+
+
+def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:
+    path = REPO_ROOT / "frontend/src/components/atomic-crm/example.ts"
+    targets = _typescript_import_targets(
+        path,
+        """
+        import '@/lib/vfic/side-effect';
+        const lazy = import('@/lib/vfic/lazy');
+        const legacy = require('@/lib/vfic/legacy');
+        const template = import(`@/lib/vfic/template`);
+        const chunked = import(/* chunk */ '@/lib/vfic/chunked');
+        const commented = require(/* legacy */ '@/lib/vfic/commented');
+        import '@/lib/../lib/vfic/normalized';
+        import thing from '../../lib/vfic/relative';
+        """,
+    )
+    assert targets == {
+        "frontend/src/lib/vfic/side-effect",
+        "frontend/src/lib/vfic/lazy",
+        "frontend/src/lib/vfic/legacy",
+        "frontend/src/lib/vfic/template",
+        "frontend/src/lib/vfic/chunked",
+        "frontend/src/lib/vfic/commented",
+        "frontend/src/lib/vfic/normalized",
+        "frontend/src/lib/vfic/relative",
+    }

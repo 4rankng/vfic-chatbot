@@ -273,7 +273,7 @@ class CandidateExtractionService:
         expected_conversation_version: int | None = None,
     ) -> CandidateExtraction:
         if not greeting_gate(user_text):
-            logger.debug("candidate extraction skipped by greeting_gate: '%s'", user_text[:80])
+            logger.debug("candidate extraction skipped by greeting_gate")
             return CandidateExtraction(lead_patch=None, memory_facts=[])
 
         from app.services.conversation import ConversationService

@@ -144,9 +144,8 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
             # webhook" and silently drops the event. Re-enable the hard reject once
             # the OA secret is confirmed correct (health badge stays "verified").
             logger.warning(
-                "zalo oa signature mismatch (non-blocking) event_name=%r "
-                "reason=verification_failed",
-                str(payload.get("event_name") or ""),
+                "zalo oa signature mismatch (non-blocking) "
+                "event_class=oa_event reason=verification_failed",
             )
             asyncio.create_task(record_oa_signature(ok=False))
     elif _settings.app_env != "development":

@@ -45,7 +45,7 @@ async def test_webhook_logs_never_include_candidate_body_or_signature(monkeypatc
     signature = "sha256=super-secret-signature"
     raw = json.dumps(
         {
-            "event_name": "user_send_text",
+            "event_name": candidate_text,
             "app_id": "app-1",
             "timestamp": "1700000000",
             "message": {"text": candidate_text},
@@ -69,6 +69,7 @@ async def test_webhook_logs_never_include_candidate_body_or_signature(monkeypatc
     assert signature not in caplog.text
     assert "1700000000" not in caplog.text
     assert "bytes=" in caplog.text
+    assert "event_class=oa_event" in caplog.text
 
 
 @pytest.mark.asyncio

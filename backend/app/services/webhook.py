@@ -329,7 +329,7 @@ async def handle_oa_side_event(db: AsyncSession, event) -> dict:
         return {"status": "button_click"}
 
     # incoming_media / reaction / oa_sent / oa_sent_anonymous / unknown
-    logger.info("oa side event ignored: kind=%s sender=%s", kind, event.sender_id)
+    logger.info("oa side event ignored: kind=%s", kind)
     return {"status": "ignored"}
 
 
