@@ -188,6 +188,57 @@ async def test_lifecycle_disconnect_marks_inactive_keeps_history(integration_dat
         assert not archived.is_active
 
 
+async def test_lifecycle_activate_audit_failure_does_not_commit_account_or_token(
+    integration_database, monkeypatch
+):
+    from sqlalchemy import select
+
+    import app.channels.providers.facebook_account as facebook_account_mod
+    from app.core.db import async_session
+    from app.models.channel_account import ChannelAccount
+    from app.models.integration import IntegrationSetting
+
+    async def fail_audit(*_args, **_kwargs):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(facebook_account_mod, "record_audit", fail_audit)
+
+    async with async_session() as db:
+        admin = User(
+            email="fb-audit-fail@vfic.test",
+            password_hash="x",
+            full_name="FB Audit Fail",
+            role="admin",
+        )
+        db.add(admin)
+        await db.flush()
+
+        lifecycle = facebook_account_mod.FacebookPageLifecycle(db)
+        with pytest.raises(RuntimeError, match="audit unavailable"):
+            await lifecycle.activate_or_reactivate(
+                page_id="page-audit-fail",
+                page_name="Broken Audit",
+                page_access_token="EAAB-audit-fail-token",
+                admin_id=admin.id,
+            )
+        await db.rollback()
+
+    async with async_session() as db:
+        account = await db.scalar(
+            select(ChannelAccount).where(
+                ChannelAccount.provider == "facebook_messenger",
+                ChannelAccount.account_key == "page-audit-fail",
+            )
+        )
+        token = await db.scalar(
+            select(IntegrationSetting).where(
+                IntegrationSetting.key == "facebook_page_token:page-audit-fail"
+            )
+        )
+        assert account is None
+        assert token is None
+
+
 async def test_page_token_round_trip_set_then_resolve_decrypts_correctly(
     integration_database,
 ):

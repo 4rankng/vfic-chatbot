@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.personas import (

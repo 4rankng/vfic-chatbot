@@ -6,7 +6,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user, require_capability_or_legacy
+from app.api.auth_dependencies import get_current_user
+from app.api.installation_dependencies import require_capability_or_legacy
 from app.core.db import get_db
 from app.models.lead import LeadStage
 from app.models.user import User

@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 
+from app.core import preamble_cache
 from app.services.integration_settings import (
     FB_APP_ID,
     FB_APP_SECRET,
@@ -12,6 +13,9 @@ from app.services.integration_settings import (
     MINIMAX_API_KEY,
     OPENROUTER_API_KEY,
     ZALO_OA_REFRESH_TOKEN,
+    ZALO_OA_ACCESS_TOKEN,
+    ZALO_OA_APP_ID,
+    ZALO_OA_SECRET_KEY,
 )
 
 
@@ -24,6 +28,7 @@ class _Settings:
     zalo_oa_secret_key = ""
     zalo_oa_access_token = ""
     zalo_oa_refresh_token = ""
+    zalo_bot_request_timeout = 10
     minimax_api_key = ""
     minimax_enable = True
     minimax_base_url = "https://api.minimax.io/v1"
@@ -45,6 +50,13 @@ class _Settings:
     meta_webhook_verify_token = ""
     meta_graph_api_version = "v25.0"
     meta_graph_api_base = "https://graph.facebook.com"
+
+
+@pytest.fixture(autouse=True)
+def _reset_local_secret_cache():
+    preamble_cache._reset_local_secret_cache()
+    yield
+    preamble_cache._reset_local_secret_cache()
 
 
 class _Row:
@@ -84,6 +96,50 @@ class _WriteDb:
 
     async def commit(self) -> None:
         self.committed = True
+
+
+class _MutableDb(_WriteDb):
+    def __init__(self, rows=None) -> None:
+        super().__init__()
+        self.rows = {row.key: row for row in (rows or [])}
+        self.scalars_calls = 0
+        self.commit_count = 0
+
+    async def scalars(self, _query):
+        self.scalars_calls += 1
+        return _ScalarResult(list(self.rows.values()))
+
+    async def commit(self) -> None:
+        self.committed = True
+        self.commit_count += 1
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self._store: dict[str, str] = {}
+        self.set_calls: list[tuple[str, str, int | None, bool]] = []
+        self.deleted: list[str] = []
+
+    async def get(self, key: str) -> str | None:
+        return self._store.get(key)
+
+    async def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> str | bool:
+        self.set_calls.append((key, value, ex, nx))
+        if nx and key in self._store:
+            return False
+        self._store[key] = value
+        return "OK"
+
+    async def delete(self, key: str) -> int:
+        self.deleted.append(key)
+        return 1 if self._store.pop(key, None) is not None else 0
 
 
 @pytest.mark.asyncio
@@ -177,6 +233,141 @@ async def test_update_zalo_encrypts_refresh_token_and_audits_key_name(monkeypatc
             "payload": {"changed_keys": ["zalo_oa_refresh_token"]},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_update_zalo_evicts_local_cache_when_redis_invalidation_fails(monkeypatch):
+    async def fake_record_audit(*_args, **_kwargs):
+        return None
+
+    async def fake_bump_cache_version(_namespace: str) -> bool:
+        return False
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.record_audit",
+        fake_record_audit,
+    )
+    monkeypatch.setattr(
+        "app.services.integration_settings.bump_cache_version",
+        fake_bump_cache_version,
+    )
+
+    redis = _FakeRedis()
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
+
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    db = _MutableDb([_Row(ZALO_OA_ACCESS_TOKEN, seed.cipher.encrypt("old-access-token"))])
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    first = await service.resolve_zalo()
+    second = await service.resolve_zalo()
+
+    assert first.oa_access_token == "old-access-token"
+    assert second.oa_access_token == "old-access-token"
+    assert db.scalars_calls == 1
+
+    changed = await service.update_zalo(
+        {ZALO_OA_ACCESS_TOKEN: "new-access-token"},
+        actor_id=uuid.uuid4(),
+    )
+    refreshed = await service.resolve_zalo()
+
+    assert changed == [ZALO_OA_ACCESS_TOKEN]
+    assert refreshed.oa_access_token == "new-access-token"
+    assert db.scalars_calls == 2
+    assert redis.set_calls == []
+
+
+@pytest.mark.asyncio
+async def test_refresh_oa_access_token_persists_before_audit_and_evicts_local_cache(
+    monkeypatch,
+):
+    async def fake_record_audit(*_args, **_kwargs):
+        raise RuntimeError("audit unavailable")
+
+    async def fake_bump_cache_version(_namespace: str) -> bool:
+        return False
+
+    class _Response:
+        def __init__(self, payload: dict[str, str]) -> None:
+            self._payload = payload
+
+        def json(self) -> dict[str, str]:
+            return self._payload
+
+    class _HttpClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
+
+        async def post(self, url: str, data: dict[str, str], headers: dict[str, str]):
+            self.calls.append((url, data, headers))
+            return _Response(
+                {
+                    "access_token": "new-access-token",
+                    "refresh_token": "new-refresh-token",
+                }
+            )
+
+    http_client = _HttpClient()
+    redis = _FakeRedis()
+    async def fake_get_http_client(*_args, **_kwargs):
+        return http_client
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.record_audit",
+        fake_record_audit,
+    )
+    monkeypatch.setattr(
+        "app.services.integration_settings.bump_cache_version",
+        fake_bump_cache_version,
+    )
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
+    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
+    monkeypatch.setattr(
+        "app.core.http.get_http_client",
+        fake_get_http_client,
+    )
+
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    db = _MutableDb(
+        [
+            _Row(ZALO_OA_APP_ID, seed.cipher.encrypt("oa-app-id")),
+            _Row(ZALO_OA_SECRET_KEY, seed.cipher.encrypt("oa-secret-key")),
+            _Row(ZALO_OA_ACCESS_TOKEN, seed.cipher.encrypt("old-access-token")),
+            _Row(ZALO_OA_REFRESH_TOKEN, seed.cipher.encrypt("old-refresh-token")),
+        ]
+    )
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    first = await service.resolve_zalo()
+    second = await service.resolve_zalo()
+
+    assert first.oa_access_token == "old-access-token"
+    assert second.oa_access_token == "old-access-token"
+    assert db.scalars_calls == 1
+
+    refreshed = await service.refresh_oa_access_token()
+    after = await service.resolve_zalo()
+
+    assert refreshed == "new-access-token"
+    assert after.oa_access_token == "new-access-token"
+    assert after.oa_refresh_token == "new-refresh-token"
+    assert service.cipher.decrypt(db.rows[ZALO_OA_ACCESS_TOKEN].encrypted_value) == "new-access-token"
+    assert service.cipher.decrypt(db.rows[ZALO_OA_REFRESH_TOKEN].encrypted_value) == "new-refresh-token"
+    assert db.commit_count == 1
+    assert db.scalars_calls == 2
+    assert http_client.calls == [
+        (
+            "https://oauth.zaloapp.com/v4/oa/access_token",
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": "old-refresh-token",
+                "app_id": "oa-app-id",
+            },
+            {"secret_key": "oa-secret-key"},
+        )
+    ]
+    assert redis.deleted == ["zalo:oa:token:refresh"]
 
 
 @pytest.mark.asyncio

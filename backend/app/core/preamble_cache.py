@@ -176,7 +176,7 @@ async def cached_value(
         namespace=namespace,
         value=value,
         ttl_seconds=ttl_seconds,
-        now=now,
+        now=_MONOTONIC(),
     )
     return value
 

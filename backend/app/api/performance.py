@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.core.cache import cache_get_json, cache_set_json
 from app.core.db import async_session
 from app.core.ops_health import collect_queue_health

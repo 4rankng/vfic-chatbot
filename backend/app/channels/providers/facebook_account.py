@@ -214,9 +214,11 @@ class FacebookPageLifecycle:
             self.db.add(account)
 
         await self.db.flush()
-        # 4. Persist the encrypted Page token (context-bound to the page_id).
+        # 4. Stage the encrypted Page token (context-bound to the page_id).
         settings_service = IntegrationSettingsService(self.db)
-        await settings_service.set_facebook_page_token(page_id, page_access_token, updated_by=admin_id)
+        await settings_service.stage_facebook_page_token_upsert(
+            page_id, page_access_token, updated_by=admin_id
+        )
 
         await record_audit(
             self.db,
@@ -231,6 +233,7 @@ class FacebookPageLifecycle:
             },
         )
         await self.db.commit()
+        await settings_service.invalidate_facebook_cache(best_effort=True)
         return account
 
     async def disconnect(self, *, page_id: str, admin_id) -> ChannelAccount | None:
@@ -248,9 +251,9 @@ class FacebookPageLifecycle:
         account.status = ChannelAccountStatus.INACTIVE
         account.updated_at = datetime.now(timezone.utc)
         await self.db.flush()
-        # Best-effort: clear the Page token so a stale dispatch can't use it.
+        # Stage token removal so account state + audit commit atomically.
         settings_service = IntegrationSettingsService(self.db)
-        await settings_service.clear_facebook_page_token(page_id)
+        await settings_service.stage_facebook_page_token_delete(page_id)
         await record_audit(
             self.db,
             action="facebook_page_disconnected",
@@ -260,6 +263,7 @@ class FacebookPageLifecycle:
             payload={"page_id_suffix": page_id[-4:] if page_id else ""},
         )
         await self.db.commit()
+        await settings_service.invalidate_facebook_cache(best_effort=True)
         return account
 
 

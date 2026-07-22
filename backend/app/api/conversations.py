@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user, require_admin
+from app.api.auth_dependencies import get_current_user, require_admin
 from app.core.db import get_db
 from app.models.conversation import Conversation, ConversationMode, ConversationStatus
 from app.models.user import Role, User

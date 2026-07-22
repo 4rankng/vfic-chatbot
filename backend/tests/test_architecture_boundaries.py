@@ -32,6 +32,8 @@ api_outward|backend/app/api/auth.py|app.core.security:decode_token
 api_outward|backend/app/api/auth.py|app.core.security:hash_password
 api_outward|backend/app/api/auth.py|app.core.security:verify_password
 api_outward|backend/app/api/auth.py|app.models.user:User
+api_outward|backend/app/api/auth_dependencies.py|app.core.db:get_db
+api_outward|backend/app/api/auth_dependencies.py|app.models.user:User
 api_outward|backend/app/api/bot_runs.py|app.core.db:get_db
 api_outward|backend/app/api/bot_runs.py|app.models.conversation:BotRunOutcome
 api_outward|backend/app/api/bot_runs.py|app.models.user:User
@@ -55,6 +57,8 @@ api_outward|backend/app/api/dependencies.py|app.models.user:Role
 api_outward|backend/app/api/dependencies.py|app.models.user:User
 api_outward|backend/app/api/installation.py|app.core.db:get_db
 api_outward|backend/app/api/installation.py|app.models.user:User
+api_outward|backend/app/api/installation_dependencies.py|app.core.db:get_db
+api_outward|backend/app/api/installation_dependencies.py|app.models.user:User
 api_outward|backend/app/api/integrations.py|app.core.config:ZALO_BOT_WEBHOOK_URL
 api_outward|backend/app/api/integrations.py|app.core.config:get_settings
 api_outward|backend/app/api/integrations.py|app.core.db:get_db
@@ -100,6 +104,7 @@ api_outward|backend/app/api/performance.py|app.core.redis:get_redis
 api_outward|backend/app/api/performance.py|app.models.user:User
 api_outward|backend/app/api/personas.py|app.core.db:get_db
 api_outward|backend/app/api/personas.py|app.models.user:User
+api_outward|backend/app/api/provider_dependencies.py|app.graph.clients:build_embedder
 api_outward|backend/app/api/projects.py|app.core.db:get_db
 api_outward|backend/app/api/projects.py|app.models.user:User
 api_outward|backend/app/api/users.py|app.core.db:get_db
@@ -319,7 +324,17 @@ def _typescript_import_targets(path: Path, source: str) -> set[str]:
 
 def _backend_rule(rel: str, target: str) -> str | None:
     module = target.split(":", 1)[0]
-    if rel.startswith("backend/app/shared/") and module.startswith(
+    pure_backend_prefixes = (
+        "backend/app/shared/domain/",
+        "backend/app/shared/application/",
+        "backend/app/identity/domain/",
+        "backend/app/identity/application/",
+        "backend/app/access/domain/",
+        "backend/app/access/application/",
+        "backend/app/installation/domain/",
+        "backend/app/installation/application/",
+    )
+    if rel.startswith(pure_backend_prefixes) and module.startswith(
         (
             "fastapi",
             "httpx",
@@ -337,7 +352,7 @@ def _backend_rule(rel: str, target: str) -> str | None:
             "app.workers",
         )
     ):
-        return "shared_outward"
+        return "pure_outward"
     if rel.startswith("backend/app/services/") and module.startswith(
         ("app.graph", "app.workers", "app.api")
     ):
@@ -447,7 +462,29 @@ def test_shared_kernel_rejects_framework_and_infrastructure_imports() -> None:
         "app.channels.http_error_classification:classify_transport_error",
         "app.workers.utils:enqueue_job",
     ):
-        assert _backend_rule(importer, target) == "shared_outward"
+        assert _backend_rule(importer, target) == "pure_outward"
+
+
+def test_identity_and_access_domain_modules_reject_framework_and_infrastructure_imports() -> None:
+    for importer in (
+        "backend/app/identity/application/example.py",
+        "backend/app/access/domain/example.py",
+        "backend/app/installation/domain/example.py",
+    ):
+        for target in (
+            "fastapi:Depends",
+            "pydantic:BaseModel",
+            "sqlalchemy:select",
+            "redis.asyncio:Redis",
+            "rq:Queue",
+            "socketio:AsyncServer",
+            "app.api.dependencies:get_current_user",
+            "app.core.security:decode_token",
+            "app.models.user:User",
+            "app.services.installation.service:InstallationService",
+            "app.workers.chatbot_worker:enqueue_chat_run",
+        ):
+            assert _backend_rule(importer, target) == "pure_outward"
 
 
 def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:

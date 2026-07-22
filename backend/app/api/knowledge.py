@@ -20,7 +20,8 @@ from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_embedder, require_admin
+from app.api.auth_dependencies import require_admin
+from app.api.provider_dependencies import get_embedder
 from app.core.cache import bump_cache_version
 from app.core.db import get_db
 from app.core.redis import get_redis

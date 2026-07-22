@@ -7,12 +7,9 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import (
-    get_current_user,
-    get_embedder,
-    require_admin,
-    require_capability_or_legacy,
-)
+from app.api.auth_dependencies import get_current_user, require_admin
+from app.api.installation_dependencies import require_capability_or_legacy
+from app.api.provider_dependencies import get_embedder
 from app.core.db import get_db
 from app.models.job import JobStatus
 from app.models.user import User

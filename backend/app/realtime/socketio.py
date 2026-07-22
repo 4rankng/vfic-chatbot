@@ -20,7 +20,7 @@ import logging
 import socketio
 from socketio.exceptions import ConnectionRefusedError
 
-from app.api.dependencies import get_user_from_token
+from app.api.auth_dependencies import get_user_from_token
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)

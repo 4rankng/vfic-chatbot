@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.core.db import get_db
 from app.models.company import Company, Project
 from app.models.job import Job, JobStatus

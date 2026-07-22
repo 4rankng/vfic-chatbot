@@ -655,6 +655,24 @@ class IntegrationSettingsService:
     def _fb_page_token_key(self, page_id: str) -> str:
         return f"{FB_PAGE_TOKEN_PREFIX}{page_id}"
 
+    async def invalidate_facebook_cache(self, *, best_effort: bool = False) -> None:
+        """Evict local Facebook secrets and bump the shared version counter.
+
+        The lifecycle flow commits the DB transaction first, then treats the
+        Redis version bump as best-effort so a cache failure cannot roll back a
+        successful account/token/audit write.
+        """
+        evict_local_namespace(NS_INTEGRATION_FACEBOOK)
+        if not best_effort:
+            await bump_cache_version(NS_INTEGRATION_FACEBOOK)
+            return
+        try:
+            await bump_cache_version(NS_INTEGRATION_FACEBOOK)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "facebook integration cache invalidation failed", exc_info=True
+            )
+
     async def resolve_facebook(self, page_id: str) -> FacebookRuntimeConfig | None:
         """Resolve the credentials for one active Page, or None if not configured.
 
@@ -803,14 +821,15 @@ class IntegrationSettingsService:
             )
             return ""
 
-    async def set_facebook_page_token(
+    async def stage_facebook_page_token_upsert(
         self, page_id: str, token: str, *, updated_by
     ) -> None:
-        """Persist one Page access token with page_id-bound ciphertext.
+        """Stage one Page access token with page_id-bound ciphertext.
 
         Writes the row directly (NOT via ``_write_setting``) so the pre-sealed
         ``v2:`` ciphertext is stored verbatim — ``_write_setting`` would
-        double-encrypt it.
+        double-encrypt it. The caller owns commit/rollback so this can compose
+        with other writes inside a single transaction.
         """
         from datetime import datetime, timezone
 
@@ -839,12 +858,19 @@ class IntegrationSettingsService:
             )
         )
         await self.db.execute(stmt)
-        await self.db.commit()
-        evict_local_namespace(NS_INTEGRATION_FACEBOOK)
-        await bump_cache_version(NS_INTEGRATION_FACEBOOK)
 
-    async def clear_facebook_page_token(self, page_id: str) -> None:
-        """Remove one Page token (disconnect). History is never deleted."""
+    async def set_facebook_page_token(
+        self, page_id: str, token: str, *, updated_by
+    ) -> None:
+        """Persist one Page access token with page_id-bound ciphertext."""
+        await self.stage_facebook_page_token_upsert(
+            page_id, token, updated_by=updated_by
+        )
+        await self.db.commit()
+        await self.invalidate_facebook_cache()
+
+    async def stage_facebook_page_token_delete(self, page_id: str) -> None:
+        """Stage deletion of one Page token without committing the session."""
         from sqlalchemy import delete as sa_delete
 
         await self.db.execute(
@@ -852,6 +878,9 @@ class IntegrationSettingsService:
                 IntegrationSetting.key == self._fb_page_token_key(page_id)
             )
         )
+
+    async def clear_facebook_page_token(self, page_id: str) -> None:
+        """Remove one Page token (disconnect). History is never deleted."""
+        await self.stage_facebook_page_token_delete(page_id)
         await self.db.commit()
-        evict_local_namespace(NS_INTEGRATION_FACEBOOK)
-        await bump_cache_version(NS_INTEGRATION_FACEBOOK)
+        await self.invalidate_facebook_cache()

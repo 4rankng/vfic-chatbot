@@ -13,7 +13,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import require_admin, require_recruiter
+from app.api.auth_dependencies import require_admin, require_recruiter
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.projects import (

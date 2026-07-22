@@ -180,3 +180,48 @@ def test_runtime_terminology_projection_omits_secret_keys_and_values() -> None:
     )
 
     assert projected == {"candidate": "Candidate"}
+
+
+async def test_runtime_view_omits_nested_secret_material_from_legacy_revision() -> None:
+    revision_id = uuid.uuid4()
+    service = InstallationService(AsyncMock())
+    state = SimpleNamespace(
+        lifecycle="ACTIVE",
+        authority_generation=7,
+        active_revision_id=revision_id,
+    )
+    revision = SimpleNamespace(
+        id=revision_id,
+        pack_key="recruitment",
+        pack_version="1",
+        pack_contract_hash="a" * 64,
+        manifest_checksum="b" * 64,
+        customer_identity={
+            "display_name": {"access_token": "legacy-plaintext"},
+            "support_name": "Safe support",
+            "internal_notes": "private",
+        },
+        branding={
+            "app_name": "Configured app",
+            "primary_color": "sk-legacy-secret",
+            "internal_theme": "private",
+        },
+        locale="vi-VN",
+        timezone="Asia/Ho_Chi_Minh",
+        currency="VND",
+        terminology={
+            "candidate": "Candidate",
+            "access_token": "legacy-plaintext",
+            "job": "AIza-legacy-secret",
+        },
+        capability_ids=["conversation"],
+    )
+    service.repo = SimpleNamespace(get_state=AsyncMock(return_value=state))
+    service._revision_or_error = AsyncMock(return_value=revision)
+    service._runtime_readiness = AsyncMock(return_value=("ACTIVE", "READY"))
+
+    view = await service.runtime_view()
+
+    assert view.customer_identity == {"support_name": "Safe support"}
+    assert view.branding == {"app_name": "Configured app"}
+    assert view.terminology == {"candidate": "Candidate"}

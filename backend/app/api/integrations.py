@@ -1,15 +1,15 @@
 """Admin integration settings routes."""
 
 import json
+import secrets
 from urllib.parse import urlencode
-from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.core.config import ZALO_BOT_WEBHOOK_URL
 from app.core.db import get_db
 from app.models.user import Role, User
@@ -446,7 +446,6 @@ async def test_openrouter_integration_settings(
 
 
 _FB_OAUTH_STATE_PREFIX = "fb_oauth_state:"
-_FB_OAUTH_FLOW_PREFIX = "fb_oauth_flow:"
 _FB_OAUTH_TTL_SECONDS = 300  # 5 minutes — single-use, short-lived
 
 
@@ -497,44 +496,42 @@ def _fb_oauth_redirect_error(code: str) -> RedirectResponse:
     )
 
 
-def _fb_oauth_flow_key(*, admin_id, flow_id: str) -> str:
-    """Namespace an opaque OAuth flow by its initiating administrator."""
-    return f"{_FB_OAUTH_FLOW_PREFIX}{admin_id}:{flow_id}"
+async def _facebook_oauth_coordinator():
+    from app.integrations.facebook_oauth import (
+        FacebookOAuthCoordinator,
+        RedisFacebookOAuthFlowStore,
+        RedisFacebookOAuthStateStore,
+    )
+
+    redis = await _redis()
+    return FacebookOAuthCoordinator(
+        state_store=RedisFacebookOAuthStateStore(
+            redis=redis,
+            key_prefix=_FB_OAUTH_STATE_PREFIX,
+        ),
+        flow_store=RedisFacebookOAuthFlowStore(redis=redis),
+        ttl_seconds=_FB_OAUTH_TTL_SECONDS,
+        state_factory=lambda: secrets.token_urlsafe(32),
+        flow_id_factory=lambda: secrets.token_urlsafe(16),
+    )
 
 
 async def _load_facebook_oauth_flow(
-    *, redis, flow_id: str, admin: User, consume: bool = False
-) -> dict:
+    *, flow_id: str, admin: User, consume: bool = False
+):
     """Load a valid OAuth flow owned by this exact authenticated session."""
-    from app.services.integration_settings import IntegrationSettingsCipher
+    from app.integrations.facebook_oauth import FacebookOAuthFlowUnavailable
 
-    flow_key = _fb_oauth_flow_key(admin_id=admin.id, flow_id=flow_id)
-    capsule = await (redis.getdel(flow_key) if consume else redis.get(flow_key))
-    if capsule:
-        try:
-            flow = json.loads(IntegrationSettingsCipher().decrypt(capsule))
-            pages = flow["pages"]
-            if (
-                str(flow["admin_id"]) == str(admin.id)
-                and int(flow["token_version"]) == int(admin.token_version)
-                and isinstance(flow["user_token"], str)
-                and bool(flow["user_token"])
-                and isinstance(pages, list)
-                and bool(pages)
-                and all(
-                    isinstance(page, dict)
-                    and isinstance(page.get("id"), str)
-                    and bool(page["id"])
-                    and isinstance(page.get("name"), str)
-                    and bool(page["name"])
-                    for page in pages
-                )
-            ):
-                return flow
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-            pass
-        except Exception:  # noqa: BLE001 - invalid ciphertext is a generic expired flow
-            pass
+    coordinator = await _facebook_oauth_coordinator()
+    try:
+        return await coordinator.load_flow(
+            flow_id=flow_id,
+            admin_id=admin.id,
+            token_version=int(admin.token_version),
+            consume=consume,
+        )
+    except FacebookOAuthFlowUnavailable:
+        pass
     raise HTTPException(
         status_code=410,
         detail="Phiên chọn Trang không hợp lệ hoặc đã hết hạn. Vui lòng kết nối lại.",
@@ -547,8 +544,6 @@ async def start_facebook_oauth(
     db: AsyncSession = Depends(get_db),
 ) -> FacebookOAuthStartOut:
     """Begin Facebook Login for Business. Stores single-use state in Redis."""
-    import secrets
-
     from app.channels.providers.facebook_oauth import build_authorization_url
 
     # Resolve app credentials DB-first (env fallback). A missing app_id would
@@ -565,20 +560,10 @@ async def start_facebook_oauth(
                 "cấu hình thông tin ứng dụng Meta trước khi kết nối."
             ),
         )
-
-    state = secrets.token_urlsafe(32)
-    redis = await _redis()
-    # Bind state to the initiating admin so a stolen state cannot be replayed
-    # by a different admin session.
-    await redis.set(
-        f"{_FB_OAUTH_STATE_PREFIX}{state}",
-        json.dumps(
-            {
-                "admin_id": str(admin.id),
-                "token_version": int(admin.token_version),
-            }
-        ),
-        ex=_FB_OAUTH_TTL_SECONDS,
+    coordinator = await _facebook_oauth_coordinator()
+    state = await coordinator.issue_state(
+        admin_id=admin.id,
+        token_version=int(admin.token_version),
     )
     return FacebookOAuthStartOut(
         authorization_url=build_authorization_url(
@@ -605,28 +590,18 @@ async def facebook_oauth_callback(
         exchange_code_for_user_token,
         list_pages,
     )
-    from app.services.integration_settings import IntegrationSettingsCipher
+    from app.integrations.facebook_oauth import FacebookOAuthInvalidState, FacebookOAuthPage
 
-    redis = await _redis()
-    state_key = f"{_FB_OAUTH_STATE_PREFIX}{state}"
-    # GETDEL makes state consumption atomic: concurrent callbacks cannot both
-    # exchange the same authorization code.
-    state_capsule = await redis.getdel(state_key)
-    if not state_capsule:
-        return _fb_oauth_redirect_error("invalid_state")
+    coordinator = await _facebook_oauth_coordinator()
     try:
-        if isinstance(state_capsule, bytes):
-            state_capsule = state_capsule.decode("utf-8")
-        bound_session = json.loads(state_capsule)
-        bound_admin_id = UUID(bound_session["admin_id"])
-        bound_token_version = int(bound_session["token_version"])
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        bound_session = await coordinator.consume_state(state=state)
+    except FacebookOAuthInvalidState:
         return _fb_oauth_redirect_error("invalid_state")
 
-    admin = await db.get(User, bound_admin_id)
+    admin = await db.get(User, bound_session.admin_id)
     if admin is None or admin.disabled or admin.role != Role.admin:
         return _fb_oauth_redirect_error("invalid_admin")
-    if admin.token_version != bound_token_version:
+    if admin.token_version != bound_session.token_version:
         return _fb_oauth_redirect_error("session_changed")
     if not code:
         return _fb_oauth_redirect_error("missing_code")
@@ -646,25 +621,11 @@ async def facebook_oauth_callback(
     if not pages:
         return _fb_oauth_redirect_error("no_pages")
 
-    # Encrypt the transient user token + Page summaries before storing in Redis.
-    import secrets as _secrets
-
-    cipher = IntegrationSettingsCipher()
-    flow_id = _secrets.token_urlsafe(16)
-    capsule = cipher.encrypt(
-        json.dumps(
-            {
-                "admin_id": str(admin.id),
-                "token_version": int(admin.token_version),
-                "user_token": user_token,
-                "pages": [{"id": p.id, "name": p.name} for p in pages],
-            }
-        )
-    )
-    await redis.set(
-        _fb_oauth_flow_key(admin_id=admin.id, flow_id=flow_id),
-        capsule,
-        ex=_FB_OAUTH_TTL_SECONDS,
+    flow_id = await coordinator.store_flow(
+        admin_id=admin.id,
+        token_version=int(admin.token_version),
+        user_token=user_token,
+        pages=[FacebookOAuthPage(id=p.id, name=p.name) for p in pages],
     )
     return RedirectResponse(
         _fb_frontend_redirect_url(status="pending_selection", flow_id=flow_id),
@@ -682,13 +643,11 @@ async def list_facebook_pages(
     """Return the safe Page list stored in the flow record."""
     from app.channels.providers.facebook_account import FacebookAccountResolver
 
-    redis = await _redis()
     payload = await _load_facebook_oauth_flow(
-        redis=redis,
         flow_id=flow_id,
         admin=admin,
     )
-    pages = [FacebookPageOut(id=str(p["id"]), name=str(p["name"])) for p in payload.get("pages", [])]
+    pages = [FacebookPageOut(id=page.id, name=page.name) for page in payload.pages]
     resolver = FacebookAccountResolver(db)
     active = await resolver.active_facebook_page()
     return FacebookPageListOut(pages=pages, active_page_id=active.account_key if active else None)
@@ -709,16 +668,14 @@ async def complete_facebook_oauth(
         subscribe_app_to_page,
     )
 
-    redis = await _redis()
     flow = await _load_facebook_oauth_flow(
-        redis=redis,
         flow_id=payload.flow_id,
         admin=admin,
         consume=True,
     )
-    user_token = flow.get("user_token", "")
+    user_token = flow.user_token
     page_name = next(
-        (str(p["name"]) for p in flow.get("pages", []) if str(p.get("id")) == payload.page_id),
+        (page.name for page in flow.pages if page.id == payload.page_id),
         payload.page_id,
     )
 
