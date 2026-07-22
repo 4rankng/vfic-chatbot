@@ -3,7 +3,19 @@ import { cleanup, render } from "vitest-browser-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  notify: vi.fn(),
   apiJson: vi.fn((path: string) => {
+    if (path.endsWith("/zalo/oa/test")) {
+      return Promise.resolve({
+        configured: true,
+        connected: true,
+        missing: [],
+        errors: [],
+        oa_secret_valid: null,
+        oa_refresh_ok: null,
+        oa_token_expired: false,
+      });
+    }
     if (path.endsWith("/zalo")) {
       return Promise.resolve({
         zalo_bot_token: { configured: false },
@@ -14,7 +26,12 @@ const mocks = vi.hoisted(() => ({
         zalo_oa_refresh_token: { configured: false },
         zalo_bot_api_base: "",
         zalo_oa_api_base: "",
-        zalo_oa_webhook_signature: null,
+        zalo_oa_webhook_signature: {
+          last_status: "mismatched",
+          last_ts: 1_784_732_616,
+          last_mismatch_ts: 1_784_732_616,
+          consec_failures: 526,
+        },
       });
     }
     if (path.endsWith("/minimax")) {
@@ -53,7 +70,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("ra-core", () => ({
-  useNotify: () => vi.fn(),
+  useNotify: () => mocks.notify,
   usePermissions: () => ({ permissions: "admin", isPending: false }),
   useTranslate: () => (key: string, options?: { _: string }) =>
     options?._ ?? key,
@@ -69,10 +86,32 @@ import { ZaloIntegrationPage } from "./ZaloIntegrationPage";
 afterEach(async () => {
   await cleanup();
   mocks.apiJson.mockClear();
+  mocks.notify.mockClear();
   window.history.replaceState(null, "", "/#/settings");
 });
 
 describe("ZaloIntegrationPage navigation", () => {
+  it("reports only the OA credential test result when webhook signature health is mismatched", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    const testButton = screen
+      .getByRole("button", { name: "Lưu & kiểm tra" })
+      .nth(1);
+    await expect.element(testButton).toBeVisible();
+    await testButton.click();
+
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Kết nối Zalo OA thành công", { type: "success" }]]);
+  });
+
   it("opens Messenger and consumes a Facebook OAuth callback on first render", async () => {
     window.history.replaceState(
       null,

@@ -992,18 +992,13 @@ export const ZaloIntegrationPage = () => {
       "bot",
     );
 
-  const testOaConnection = async () => {
-    await testChannel(
+  const testOaConnection = () =>
+    testChannel(
       "/api/v1/admin/integrations/zalo/oa/test",
       "Zalo OA",
       setTestingOa,
       "oa",
     );
-    const signature = describeOaSignatureHealth(
-      settings?.zalo_oa_webhook_signature ?? null,
-    );
-    notify(signature.message, { type: signature.type });
-  };
 
   const testConfiguredIntegration = async (
     path: string,
