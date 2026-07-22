@@ -251,6 +251,7 @@ async def test_list_active_jobs_forwards_explicit_filters_and_bounds_top_k(no_ca
         "company": "LG",
         "location": "Hải Phòng",
         "top_k": 10,
+        "sort_by": None,
     }
     # No-match now triggers a second unscoped lookup so the LLM can pivot to
     # concrete alternatives instead of asking a round-trip yes/no question.

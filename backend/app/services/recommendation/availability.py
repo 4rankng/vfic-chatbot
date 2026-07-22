@@ -143,8 +143,10 @@ def select_matching_active_jobs(
             matches.append(job)
     if sort_by in {"salary_desc", "salary_asc"}:
         matches.sort(
-            key=lambda job: (_salary_sort_key(job), job.title),
-            reverse=sort_by == "salary_desc",
+            key=lambda job: _salary_sort_key(
+                job,
+                descending=sort_by == "salary_desc",
+            ),
         )
     return (
         ActiveJobLookup("matched", tuple(matches[:limit]))
@@ -153,11 +155,13 @@ def select_matching_active_jobs(
     )
 
 
-def _salary_sort_key(job: ActiveJob) -> float:
-    """Return a salary magnitude for sorting; jobs without salary sort last.
+def _salary_sort_key(job: ActiveJob, *, descending: bool) -> tuple[bool, float, str]:
+    """Return a deterministic key that always places unknown salary last.
 
-    Uses ``salary_max`` when present, falling back to ``salary_min``. ``None`` maps
-    to ``-1.0`` so unsalaried jobs sink below any real VND figure (always >= 0).
+    Uses ``salary_max`` when present, falling back to ``salary_min``. Direction
+    affects only the numeric component; missing salaries remain last for both
+    ascending and descending requests.
     """
     magnitude = job.salary_max if job.salary_max is not None else job.salary_min
-    return float(magnitude) if magnitude is not None else -1.0
+    numeric = float(magnitude or 0)
+    return magnitude is None, -numeric if descending else numeric, job.title.casefold()

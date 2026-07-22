@@ -74,7 +74,9 @@ async def test_list_active_jobs_includes_ready_single_page_project_without_job_r
     )
     direct_result = MagicMock()
     direct_result.scalars.return_value.all.return_value = [project]
-    db.execute = AsyncMock(side_effect=[structured_result, direct_result])
+    salary_result = MagicMock()
+    salary_result.all.return_value = []  # no take_home_income feature rows
+    db.execute = AsyncMock(side_effect=[structured_result, direct_result, salary_result])
 
     outcome = await RecommendationRepository(db).list_active_jobs(role="lắp ráp", top_k=10)
 
@@ -89,6 +91,127 @@ async def test_list_active_jobs_includes_ready_single_page_project_without_job_r
     direct_sql = str(direct_statement.compile(dialect=postgresql.dialect()))
     assert "knowledge_base_direct_files" in direct_sql
     assert "knowledge_bases.mode" in direct_sql
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_surfaces_direct_context_salary_from_features():
+    """DIRECT_CONTEXT projects get salary from take_home_income feature rows.
+
+    Regression for the bug where Rorze (a single-page project) appeared in the
+    vacancy catalog with no salary even though the KB held the figure in
+    job_feature_values. The salary must reach the ActiveJob so sorting and the
+    candidate-facing summary both work.
+    """
+    import uuid
+
+    db = MagicMock()
+    project_id = uuid.UUID("11111111-1111-4111-8111-111111111111")
+    structured_result = MagicMock()
+    structured_result.all.return_value = []
+    project = Project(
+        id=project_id,
+        slug="rorze",
+        name="Rorze",
+        aliases=["Công ty Rorze"],
+        is_active=True,
+        summary="Tuyển nhân viên lắp ráp và vận hành máy CNC.",
+        index_card={
+            "roles": ["Nhân viên lắp ráp", "Nhân viên vận hành máy CNC"],
+            "location": "KCN Nội Bài, Hà Nội",
+            "highlights": ["Có đào tạo"],
+        },
+    )
+    direct_result = MagicMock()
+    direct_result.scalars.return_value.all.return_value = [project]
+    salary_row = SimpleNamespace(
+        project_id=project_id,
+        value_json={"min": 10_000_000, "max": 13_000_000, "currency": "VND"},
+    )
+    salary_result = MagicMock()
+    salary_result.all.return_value = [salary_row]
+    db.execute = AsyncMock(side_effect=[structured_result, direct_result, salary_result])
+
+    outcome = await RecommendationRepository(db).list_active_jobs(top_k=10)
+
+    assert outcome.status == "matched"
+    assert len(outcome.jobs) == 1
+    assert outcome.jobs[0].salary_min == 10_000_000
+    assert outcome.jobs[0].salary_max == 13_000_000
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_falls_back_to_index_card_salary_for_direct_project():
+    """When no feature rows exist, the discovery card's VND fields are used.
+
+    Lets admins put salary directly in index_card as an escape hatch.
+    """
+    db = MagicMock()
+    structured_result = MagicMock()
+    structured_result.all.return_value = []
+    project = Project(
+        id="11111111-1111-4111-8111-111111111111",
+        slug="rorze",
+        name="Rorze",
+        aliases=[],
+        is_active=True,
+        summary="Tuyển nhân viên lắp ráp.",
+        index_card={
+            "roles": ["Nhân viên lắp ráp"],
+            "location": "Hà Nội",
+            "salary_min_vnd": 9_000_000,
+            "salary_max_vnd": 12_000_000,
+        },
+    )
+    direct_result = MagicMock()
+    direct_result.scalars.return_value.all.return_value = [project]
+    salary_result = MagicMock()
+    salary_result.all.return_value = []  # no feature rows
+    db.execute = AsyncMock(side_effect=[structured_result, direct_result, salary_result])
+
+    outcome = await RecommendationRepository(db).list_active_jobs(top_k=10)
+
+    assert outcome.status == "matched"
+    assert outcome.jobs[0].salary_min == 9_000_000
+    assert outcome.jobs[0].salary_max == 12_000_000
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_direct_context_handles_string_salary_from_llm():
+    """LLM-stored string salaries are coerced, not dropped to None.
+
+    Covers the production shape where the extraction LLM returned "10000000"
+    instead of 10000000.
+    """
+    import uuid
+
+    db = MagicMock()
+    project_id = uuid.UUID("22222222-2222-4222-8222-222222222222")
+    structured_result = MagicMock()
+    structured_result.all.return_value = []
+    project = Project(
+        id=project_id,
+        slug="string-salary",
+        name="String Salary Co",
+        aliases=[],
+        is_active=True,
+        summary="Tuyển công nhân.",
+        index_card={"roles": ["Công nhân"], "location": "Hải Phòng"},
+    )
+    direct_result = MagicMock()
+    direct_result.scalars.return_value.all.return_value = [project]
+    salary_row = SimpleNamespace(
+        project_id=project_id,
+        value_json={"min": "10000000", "max": "13000000"},
+    )
+    salary_result = MagicMock()
+    salary_result.all.return_value = [salary_row]
+    db.execute = AsyncMock(side_effect=[structured_result, direct_result, salary_result])
+
+    outcome = await RecommendationRepository(db).list_active_jobs(top_k=10)
+
+    assert outcome.status == "matched"
+    assert outcome.jobs[0].salary_min == 10_000_000
+    assert outcome.jobs[0].salary_max == 13_000_000
 
 
 @pytest.mark.asyncio
@@ -126,7 +249,9 @@ async def test_list_active_jobs_does_not_duplicate_single_page_project_with_stru
             index_card={"roles": ["Nhân viên lắp ráp"]},
         )
     ]
-    db.execute = AsyncMock(side_effect=[structured_result, direct_result])
+    salary_result = MagicMock()
+    salary_result.all.return_value = []
+    db.execute = AsyncMock(side_effect=[structured_result, direct_result, salary_result])
 
     outcome = await RecommendationRepository(db).list_active_jobs(top_k=10)
 
@@ -170,7 +295,9 @@ async def test_list_active_jobs_keeps_single_page_project_in_bounded_mixed_catal
         )
         for index in range(10)
     ]
-    db.execute = AsyncMock(side_effect=[structured_result, direct_result])
+    salary_result = MagicMock()
+    salary_result.all.return_value = []
+    db.execute = AsyncMock(side_effect=[structured_result, direct_result, salary_result])
 
     outcome = await RecommendationRepository(db).list_active_jobs(top_k=10)
 
@@ -202,7 +329,11 @@ async def test_list_active_jobs_does_not_claim_roleless_single_page_project_is_h
     ]
     catalog_result = MagicMock()
     catalog_result.scalar_one_or_none.return_value = None
-    db.execute = AsyncMock(side_effect=[structured_result, direct_result, catalog_result])
+    salary_result = MagicMock()
+    salary_result.all.return_value = []
+    db.execute = AsyncMock(
+        side_effect=[structured_result, direct_result, salary_result, catalog_result]
+    )
 
     outcome = await RecommendationRepository(db).list_active_jobs(top_k=10)
 
@@ -286,7 +417,7 @@ async def test_retrieval_active_job_lookup_scopes_to_active_agent_kb_projects(mo
     captured: dict[str, object] = {}
 
     async def list_active_jobs(
-        self, *, role, company, location, top_k, project_ids
+        self, *, role, company, location, top_k, project_ids, sort_by=None
     ):
         captured.update(
             role=role,
@@ -294,6 +425,7 @@ async def test_retrieval_active_job_lookup_scopes_to_active_agent_kb_projects(mo
             location=location,
             top_k=top_k,
             project_ids=project_ids,
+            sort_by=sort_by,
         )
         return SimpleNamespace(status="no_match", jobs=())
 
@@ -304,6 +436,7 @@ async def test_retrieval_active_job_lookup_scopes_to_active_agent_kb_projects(mo
         company="LG",
         location="Hải Phòng",
         top_k=2,
+        sort_by="salary_desc",
     )
 
     assert result.status == "no_match"
@@ -313,6 +446,7 @@ async def test_retrieval_active_job_lookup_scopes_to_active_agent_kb_projects(mo
         "location": "Hải Phòng",
         "top_k": 2,
         "project_ids": ["project-a", "project-b"],
+        "sort_by": "salary_desc",
     }
 
 

@@ -421,6 +421,7 @@ async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
         "company": None,
         "location": None,
         "top_k": 10,
+        "sort_by": None,
     }
 
 

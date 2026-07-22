@@ -661,6 +661,11 @@ class MiniMaxAgent:
             "get_product_features",
             "search_knowledge",
         )
+        # Initialized here so the post-generation prefetched_tools guard below
+        # can read it unconditionally, even when faq_detail_route did not run.
+        # Set to True only when a focused faq_detail turn prefetched
+        # get_product_features in parallel and the lookup hit.
+        faq_detail_features_hit = False
         if (
             _should_prefetch_knowledge(effective_query)
             and not knowledge_lookup_route
@@ -754,27 +759,84 @@ class MiniMaxAgent:
         elif faq_detail_route:
             if trace_sink is not None:
                 trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
-            prefetched, prefetch_hit = await _prefetch_tool(
-                retrieval,
-                embedder,
-                "search_knowledge",
-                scoped_args("search_knowledge", {"query": effective_query}),
-                metrics,
-                resolved_tool_registry,
-            )
+            # When the turn is project-focused (slug present), also prefetch the
+            # deterministic structured product features in parallel with the RAG
+            # lookup. The catalog (lương/ca/KTX/xe đưa đón from job_feature_values)
+            # is the authoritative source for faq_detail queries; RAG alone may
+            # surface vague or stale chunks. Reuses the bounded-gather pattern from
+            # the model-driven tool loop below (parallel_tool_max_concurrency).
+            focused_slug = forced_project_slug or None
+            if focused_slug:
+                if trace_sink is not None:
+                    trace_sink.record_tool_selection(
+                        "get_product_features", selected_by="prefetch"
+                    )
+                sem_pf = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
+
+                async def _bounded_prefetch(name: str, args: dict) -> tuple[object, bool]:
+                    async with sem_pf:
+                        return await _prefetch_tool(
+                            retrieval,
+                            embedder,
+                            name,
+                            args,
+                            metrics,
+                            resolved_tool_registry,
+                        )
+
+                knowledge_task = _bounded_prefetch(
+                    "search_knowledge",
+                    scoped_args("search_knowledge", {"query": effective_query}),
+                )
+                features_task = _bounded_prefetch(
+                    "get_product_features",
+                    scoped_args("get_product_features", {"project_slug": focused_slug}),
+                )
+                (prefetched, prefetch_hit), (features, features_hit) = (
+                    await asyncio.gather(knowledge_task, features_task)
+                )
+            else:
+                prefetched, prefetch_hit = await _prefetch_tool(
+                    retrieval,
+                    embedder,
+                    "search_knowledge",
+                    scoped_args("search_knowledge", {"query": effective_query}),
+                    metrics,
+                    resolved_tool_registry,
+                )
+                features = None
+                features_hit = False
             if prefetch_hit:
                 tool_results.append(str(prefetched))
-                messages.append(
-                    SystemMessage(
-                        content=(
-                            "KẾT QUẢ TRA CỨU KB ĐÃ THỰC HIỆN CHO CÂU HỎI NÀY:\n"
-                            f"{prefetched}\n\n"
-                            "Hãy trả lời ngắn gọn, chỉ dựa trên dữ liệu trên. Nếu dữ liệu "
-                            "chưa nêu thông tin cần hỏi thì nói rõ 'tin tuyển dụng chưa ghi rõ'."
+                if features_hit:
+                    tool_results.append(str(features))
+                    messages.append(
+                        SystemMessage(
+                            content=(
+                                "KẾT QUẢ TRA CỨU CHO CÂU HỎI NÀY:\n"
+                                "[ĐẶC ĐIỂM SẢN PHẨM — nguồn chính xác nhất]\n"
+                                f"{features}\n\n"
+                                "[TRA CỨU KB — thông tin bổ sung]\n"
+                                f"{prefetched}\n\n"
+                                "Hãy trả lời ngắn gọn, ưu tiên dữ liệu đặc điểm sản phẩm trên. "
+                                "Với mục [CHƯA RÕ], nói rõ 'tin tuyển dụng chưa ghi rõ', "
+                                "không bịa."
+                            )
                         )
                     )
-                )
+                else:
+                    messages.append(
+                        SystemMessage(
+                            content=(
+                                "KẾT QUẢ TRA CỨU KB ĐÃ THỰC HIỆN CHO CÂU HỎI NÀY:\n"
+                                f"{prefetched}\n\n"
+                                "Hãy trả lời ngắn gọn, chỉ dựa trên dữ liệu trên. Nếu dữ liệu "
+                                "chưa nêu thông tin cần hỏi thì nói rõ 'tin tuyển dụng chưa ghi rõ'."
+                            )
+                        )
+                    )
                 schemas = []
+            faq_detail_features_hit = features_hit if focused_slug else False
         if schemas and hasattr(active_llm, "bind_tools"):
             bound = (
                 active_llm.bind_tools(schemas, tool_choice=required_tool)
@@ -806,6 +868,10 @@ class MiniMaxAgent:
             prefetched_tools.add("search_bus_timetable")
         if faq_detail_route and prefetch_hit:
             prefetched_tools.add("search_knowledge")
+            # Focused faq_detail turns also prefetch get_product_features in
+            # parallel; record it so required_tool guards recognize it as run.
+            if faq_detail_features_hit:
+                prefetched_tools.add("get_product_features")
         required_tool_called = bool(
             required_tool and required_tool in prefetched_tools
         )

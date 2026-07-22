@@ -12,6 +12,7 @@ from app.models.knowledge import (
     KnowledgeDocument,
     KnowledgeStatus,
 )
+from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.derived_jobs import rebuild_project_jobs
 from app.services.recommendation.repository import RecommendationRepository
@@ -173,3 +174,182 @@ async def test_rebuild_project_jobs_mirrors_current_kb_and_is_idempotent(
     assert {job.title for job in lookup.jobs} == {
         "Công nhân kiểm tra",
     }
+
+
+async def _seed_take_home_income(
+    session, project_id, *, value_json, feature_id
+) -> None:
+    """Insert a take_home_income feature value for a project."""
+    session.add(
+        JobFeatureValue(
+            project_id=project_id,
+            feature_id=feature_id,
+            value_text="Thu nhập ước tính",
+            value_json=value_json,
+            strength_score=0.9,
+            display_priority=1,
+            is_highlight=True,
+            is_missing=False,
+            needs_clarification=False,
+        )
+    )
+    await session.flush()
+
+
+async def _take_home_income_catalog(session) -> WorkerFeatureCatalog:
+    """Fetch or create the seeded take_home_income catalog row."""
+    row = await session.scalar(
+        select(WorkerFeatureCatalog).where(
+            WorkerFeatureCatalog.feature_key == "take_home_income"
+        )
+    )
+    if row is not None:
+        return row
+    row = WorkerFeatureCatalog(
+        feature_key="take_home_income",
+        name_vi="Thu nhập thực nhận",
+        category="salary",
+        default_importance_score=0.95,
+        is_active=True,
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
+async def test_rebuild_project_jobs_projects_take_home_income_to_salary(
+    integration_session,
+):
+    """Salary in take_home_income.value_json reaches Job.salary_min/salary_max.
+
+    Regression for the bug where structured-project salaries vanished because the
+    old ``_optional_int`` dropped any non-int shape (strings, small-int-with-unit).
+    """
+    catalog = await _take_home_income_catalog(integration_session)
+    project = Project(
+        slug="salary-proj",
+        name="Salary Project",
+        is_active=True,
+        summary="Tuyển công nhân.",
+        index_card={"company_name": "Salary Project", "key_roles": ["Công nhân"]},
+    )
+    integration_session.add(project)
+    await integration_session.flush()
+    company = Company(project_id=project.id, name="Salary Project", aliases=[])
+    integration_session.add(company)
+    await integration_session.flush()
+    document = KnowledgeDocument(
+        file_name="salary.md",
+        status=KnowledgeStatus.PUBLISHED,
+        stage="PUBLISHED",
+        project_id=project.id,
+        raw_text="Salary Project tuyển công nhân.",
+    )
+    integration_session.add(document)
+    await integration_session.flush()
+    await KnowledgeChunkRepo(integration_session).replace_for_doc(
+        document,
+        [
+            (
+                {
+                    "content": "Salary Project tuyển công nhân.",
+                    "source_quote": "Salary Project tuyển công nhân.",
+                    "summary": "Salary Project tuyển công nhân.",
+                    "questions": ["Tuyển vị trí gì?"],
+                    "category": "job",
+                    "entities": {"job_title": "Công nhân"},
+                    "source_anchor": "§ Công việc",
+                    "confidence": "high",
+                    "is_inference": False,
+                },
+                [0.01] * 3072,
+            )
+        ],
+    )
+    # Canonical shape: full VND integers.
+    await _seed_take_home_income(
+        integration_session,
+        project.id,
+        value_json={"min": 10_000_000, "max": 13_000_000, "currency": "VND"},
+        feature_id=catalog.id,
+    )
+
+    await rebuild_project_jobs(
+        integration_session,
+        project_id=project.id,
+        source_document_id=document.id,
+    )
+
+    job = await integration_session.scalar(
+        select(Job).where(Job.company_id == company.id, Job.title == "Công nhân")
+    )
+    assert job is not None
+    assert job.salary_min == 10_000_000
+    assert job.salary_max == 13_000_000
+
+
+async def test_rebuild_project_jobs_coerces_string_and_unit_salary_shapes(
+    integration_session,
+):
+    """LLM-returned strings and seed-style small-int-with-unit both reach VND."""
+    catalog = await _take_home_income_catalog(integration_session)
+    project = Project(
+        slug="string-salary-proj",
+        name="String Salary Project",
+        is_active=True,
+        summary="Tuyển công nhân.",
+        index_card={"company_name": "String Salary Project", "key_roles": ["Công nhân"]},
+    )
+    integration_session.add(project)
+    await integration_session.flush()
+    company = Company(project_id=project.id, name="String Salary Project", aliases=[])
+    integration_session.add(company)
+    await integration_session.flush()
+    document = KnowledgeDocument(
+        file_name="string_salary.md",
+        status=KnowledgeStatus.PUBLISHED,
+        stage="PUBLISHED",
+        project_id=project.id,
+        raw_text="String Salary Project tuyển công nhân.",
+    )
+    integration_session.add(document)
+    await integration_session.flush()
+    await KnowledgeChunkRepo(integration_session).replace_for_doc(
+        document,
+        [
+            (
+                {
+                    "content": "String Salary Project tuyển công nhân.",
+                    "source_quote": "String Salary Project tuyển công nhân.",
+                    "summary": "String Salary Project tuyển công nhân.",
+                    "questions": ["Tuyển vị trí gì?"],
+                    "category": "job",
+                    "entities": {"job_title": "Công nhân"},
+                    "source_anchor": "§ Công việc",
+                    "confidence": "high",
+                    "is_inference": False,
+                },
+                [0.01] * 3072,
+            )
+        ],
+    )
+    # Seed-style shape: small ints with "triệu VNĐ" unit marker.
+    await _seed_take_home_income(
+        integration_session,
+        project.id,
+        value_json={"min": 10, "max": 13, "unit": "triệu VNĐ"},
+        feature_id=catalog.id,
+    )
+
+    await rebuild_project_jobs(
+        integration_session,
+        project_id=project.id,
+        source_document_id=document.id,
+    )
+
+    job = await integration_session.scalar(
+        select(Job).where(Job.company_id == company.id, Job.title == "Công nhân")
+    )
+    assert job is not None
+    assert job.salary_min == 10_000_000
+    assert job.salary_max == 13_000_000

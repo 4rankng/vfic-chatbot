@@ -415,8 +415,8 @@ async def test_timetable_prefetch_miss_keeps_tool_available(monkeypatch):
     assert metrics["prefetch_hit"] is False
 
 
-async def test_faq_detail_prefetches_grounded_context_without_tool_round(monkeypatch):
-    """A grounded FAQ-detail hit should go directly to one tool-free generation."""
+async def test_faq_detail_unguided_prefetches_only_knowledge(monkeypatch):
+    """An unguided faq_detail hit (no project slug) prefetches only search_knowledge."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
@@ -442,10 +442,92 @@ async def test_faq_detail_prefetches_grounded_context_without_tool_round(monkeyp
     )
 
     assert reply == "Thu nhập cơ bản là 8 triệu theo tin tuyển dụng."
+    # No project slug → get_product_features cannot be prefetched.
     assert dispatched == [("search_knowledge", {"query": "lương công nhân LG Display bao nhiêu?"})]
     assert llm.calls == 1
     assert llm.bind_calls == 0
     assert metrics["prefetch_hit"] is True
+
+
+async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features(monkeypatch):
+    """A focused faq_detail hit prefetches search_knowledge AND get_product_features."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    dispatched: list[tuple[str, dict]] = []
+
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
+        dispatched.append((name, args))
+        if name == "get_product_features":
+            return "Đặc điểm sản phẩm — dự án 'lg-display':\n- housing: LG Display có ký túc xá cho người ở xa. Điều kiện: ≥50 km."
+        return "Lương cơ bản 8 triệu. Nguồn: tin tuyển dụng LG Display."
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    llm = _ScriptedLLM(["LG Display có ký túc xá cho người ở xa theo đặc điểm sản phẩm."])
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=3)
+    metrics: dict = {}
+
+    reply = await agent.agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("get_product_features", "search_knowledge"),
+        lookup_query="làm chỗ bạn có nhà trọ không?",
+        metrics=metrics,
+        forced_project_slug="lg-display",
+    )
+
+    assert reply == "LG Display có ký túc xá cho người ở xa theo đặc điểm sản phẩm."
+    # Both tools dispatched, scoped to the focused project slug.
+    dispatched_names = [name for name, _ in dispatched]
+    assert dispatched_names == ["search_knowledge", "get_product_features"]
+    knowledge_args = dict(dispatched[0][1])
+    features_args = dict(dispatched[1][1])
+    assert knowledge_args == {"query": "làm chỗ bạn có nhà trọ không?", "project_slug": "lg-display"}
+    assert features_args == {"project_slug": "lg-display"}
+    # Both authorities already prefetched → one tool-free generation, no tools bound.
+    assert llm.calls == 1
+    assert llm.bind_calls == 0
+    assert metrics["prefetch_hit"] is True
+
+
+async def test_faq_detail_focused_dual_prefetch_runs_concurrently(monkeypatch):
+    """Focused faq_detail must dispatch both prefetches in parallel, not sequentially."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
+        # A 50ms delay per dispatch makes sequential execution ~100ms and
+        # parallel execution ~50ms. Asserting < 90ms proves gather() is used.
+        await asyncio.sleep(0.05)
+        if name == "get_product_features":
+            return "Đặc điểm sản phẩm — dự án 'lg-display': housing available."
+        return "KB evidence for the query."
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    llm = _ScriptedLLM(["Grounded reply."])
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=3)
+    metrics: dict = {}
+
+    import time as _time
+
+    t0 = _time.monotonic()
+    await agent.agent(
+        "context",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=("get_product_features", "search_knowledge"),
+        lookup_query="nhà trọ",
+        metrics=metrics,
+        forced_project_slug="lg-display",
+    )
+    elapsed_ms = (_time.monotonic() - t0) * 1000
+
+    # Sequential would be >= 100ms (two 50ms sleeps). Parallel is ~50ms.
+    # Allow slack for scheduling/sleep granularity without masking serialization.
+    assert elapsed_ms < 90, f"prefetch was sequential ({elapsed_ms:.0f}ms >= 90ms)"
 
 
 async def test_faq_detail_retries_one_empty_final_generation_with_same_evidence(monkeypatch):

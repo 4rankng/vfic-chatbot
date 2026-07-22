@@ -207,6 +207,7 @@ async def test_dispatch_list_active_jobs_forwards_optional_filters(monkeypatch):
             "company": "LG",
             "location": "Hải Phòng",
             "top_k": 7,
+            "sort_by": None,
         }
     ]
 
@@ -229,6 +230,7 @@ def test_list_active_jobs_schema_exposes_only_optional_bounded_filters():
         "company",
         "location",
         "top_k",
+        "sort_by",
     }
     assert schema["parameters"]["properties"]["top_k"] == {
         "type": "integer",
@@ -236,6 +238,11 @@ def test_list_active_jobs_schema_exposes_only_optional_bounded_filters():
         "maximum": 10,
         "description": "Số việc tối đa cần trả về, mặc định 3.",
     }
+    assert schema["parameters"]["properties"]["sort_by"]["enum"] == [
+        "updated_at",
+        "salary_desc",
+        "salary_asc",
+    ]
 
 
 @pytest.mark.parametrize(

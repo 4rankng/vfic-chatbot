@@ -126,3 +126,83 @@ def test_top_k_is_bounded_and_never_returns_zero_for_a_match():
 
     assert len(select_matching_active_jobs(jobs, top_k=100).jobs) == 10
     assert select_matching_active_jobs(jobs, top_k=0).jobs == (jobs[0],)
+
+
+# --- Salary-based sorting ----------------------------------------------------
+#
+# Candidates ask "sắp xếp theo lương từ cao xuống thấp". ``sort_by`` reorders
+# matches by salary magnitude so the LLM receives a salary-ranked list instead
+# of the default recency order. Jobs without salary always sink to the bottom
+# so they remain visible rather than being dropped by a bounded top_k.
+
+
+def test_sort_by_salary_desc_ranks_highest_ceiling_first():
+    low = _job(id="low", salary_min=7_000_000, salary_max=7_000_000, title="Công nhân A")
+    mid = _job(id="mid", salary_min=10_000_000, salary_max=12_000_000, title="Công nhân B")
+    high = _job(id="high", salary_min=12_000_000, salary_max=15_000_000, title="Công nhân C")
+
+    outcome = select_matching_active_jobs([low, high, mid], sort_by="salary_desc")
+
+    assert outcome.status == "matched"
+    assert [job.id for job in outcome.jobs] == ["high", "mid", "low"]
+
+
+def test_sort_by_salary_asc_ranks_lowest_first():
+    low = _job(id="low", salary_min=7_000_000, salary_max=7_000_000, title="Công nhân A")
+    mid = _job(id="mid", salary_min=10_000_000, salary_max=12_000_000, title="Công nhân B")
+    high = _job(id="high", salary_min=12_000_000, salary_max=15_000_000, title="Công nhân C")
+
+    outcome = select_matching_active_jobs([high, low, mid], sort_by="salary_asc")
+
+    assert [job.id for job in outcome.jobs] == ["low", "mid", "high"]
+
+
+def test_sort_by_salary_desc_falls_back_to_salary_min_when_max_missing():
+    # A job with only salary_min should still sort by that figure, not by zero.
+    floor_only = _job(
+        id="floor", salary_min=13_000_000, salary_max=None, title="Công nhân D"
+    )
+    lower = _job(id="lower", salary_min=7_000_000, salary_max=9_000_000, title="Công nhân E")
+
+    outcome = select_matching_active_jobs([lower, floor_only], sort_by="salary_desc")
+
+    assert [job.id for job in outcome.jobs] == ["floor", "lower"]
+
+
+def test_sort_by_salary_desc_puts_unsalaried_jobs_last():
+    salaried = _job(id="salaried", salary_min=7_000_000, salary_max=7_000_000, title="Công nhân A")
+    unsalaried = _job(id="unknown", salary_min=None, salary_max=None, title="Công nhân B")
+
+    outcome = select_matching_active_jobs([unsalaried, salaried], sort_by="salary_desc")
+
+    assert [job.id for job in outcome.jobs] == ["salaried", "unknown"]
+
+
+def test_sort_by_salary_asc_also_puts_unsalaried_jobs_last():
+    salaried = _job(id="salaried", salary_min=7_000_000, salary_max=7_000_000, title="A")
+    unsalaried = _job(id="unknown", salary_min=None, salary_max=None, title="B")
+
+    outcome = select_matching_active_jobs([unsalaried, salaried], sort_by="salary_asc")
+
+    assert [job.id for job in outcome.jobs] == ["salaried", "unknown"]
+
+
+def test_sort_by_salary_desc_with_top_k_keeps_highest_paid():
+    jobs = [
+        _job(id=f"job-{i}", salary_max=i * 1_000_000, title=f"Vị trí {i}")
+        for i in range(1, 6)  # salary_max 1M..5M
+    ]
+
+    outcome = select_matching_active_jobs(jobs, sort_by="salary_desc", top_k=2)
+
+    assert [job.id for job in outcome.jobs] == ["job-5", "job-4"]
+
+
+def test_sort_by_omitted_preserves_input_order():
+    # Default behavior (no sort_by) must not reorder — regression guard.
+    first = _job(id="first", salary_max=15_000_000, title="A")
+    second = _job(id="second", salary_max=7_000_000, title="B")
+
+    outcome = select_matching_active_jobs([first, second])
+
+    assert [job.id for job in outcome.jobs] == ["first", "second"]

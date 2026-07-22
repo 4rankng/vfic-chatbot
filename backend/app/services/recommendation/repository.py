@@ -31,6 +31,7 @@ from app.services.knowledge.derived_jobs import salary_from_feature
 from app.services.recommendation.availability import (
     ActiveJob,
     ActiveJobLookup,
+    SortBy,
     select_matching_active_jobs,
 )
 from app.services.recommendation.scoring import JobCandidate, LeadProfile, ScoredJob, score_job
