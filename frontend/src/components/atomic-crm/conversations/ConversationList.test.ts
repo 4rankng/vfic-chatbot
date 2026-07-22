@@ -17,6 +17,11 @@ describe("getConversationListServerFilter", () => {
     expect(componentSource).not.toContain("workspace-conversation-count");
   });
 
+  it("does not render the removed inbox queue-filter controls", () => {
+    expect(componentSource).not.toContain("conversation-filters");
+    expect(componentSource).not.toContain("conversation-filter");
+  });
+
   it("maps the Messages badge deep link to the authoritative reply queue", () => {
     expect(
       getConversationListServerFilter(

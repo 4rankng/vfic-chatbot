@@ -272,57 +272,6 @@
   align-items: center;
 }
 
-.inbox-bg-container .conversation-filters {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.inbox-bg-container .conversation-filter {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--workspace-blue-line);
-  border-radius: 7px;
-  background: var(--workspace-bg);
-  color: var(--workspace-muted);
-  box-shadow: none;
-}
-
-@media (max-width: 767px) {
-  .inbox-bg-container .conversation-filter {
-    width: 44px;
-    height: 44px;
-  }
-}
-
-.inbox-bg-container .conversation-filter[aria-pressed="true"] {
-  border-color: color-mix(
-    in srgb,
-    var(--workspace-active) 46%,
-    var(--workspace-blue-line)
-  );
-  background: var(--workspace-blue-wash);
-  color: var(--workspace-active);
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--workspace-active) 12%, transparent);
-}
-
-.inbox-bg-container .conversation-filter:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--workspace-active) 38%,
-    var(--workspace-blue-line)
-  );
-  color: var(--workspace-active);
-}
-
-.inbox-bg-container .conversation-filter .icon {
-  width: 16px;
-  height: 16px;
-}
-
 .inbox-bg-container .search .icon {
   position: absolute;
   left: 14px;

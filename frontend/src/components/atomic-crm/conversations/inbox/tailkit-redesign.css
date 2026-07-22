@@ -75,16 +75,13 @@
   box-shadow: var(--tailkit-shadow-xs);
 }
 
-/* Conversation directory: compact Tailkit input-group + icon-toolbar anatomy.
-   Channel, filter, and count controls share one row; search owns the full row
-   below. This removes decorative title chrome and keeps the directory focused
-   on scanning and filtering live conversations. */
+/* Conversation directory: channel selector above a full-width search field. */
 .inbox-bg-container .workspace-rail {
   min-height: 0;
   grid-template-areas:
-    "adapters filters count"
-    "search search search";
-  grid-template-columns: auto minmax(0, 1fr) auto;
+    "adapters"
+    "search";
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 10px 12px 12px;
@@ -105,25 +102,6 @@
   grid-area: search;
   width: 100%;
   min-width: 0;
-}
-
-.inbox-bg-container .workspace-rail .conversation-filters {
-  grid-area: filters;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.inbox-bg-container .workspace-conversation-count {
-  grid-area: count;
-  min-width: 24px;
-  height: 24px;
-  padding-inline: 5px;
-  border-color: var(--tailkit-brand-line);
-  border-radius: 7px;
-  background: var(--tailkit-brand-soft);
-  color: var(--tailkit-brand);
-  font-size: var(--fs-caption);
-  box-shadow: none;
 }
 
 .inbox-bg-container .channel-adapter-option {
@@ -170,25 +148,6 @@
 .inbox-bg-container .search input:focus {
   border-color: var(--tailkit-brand-hover);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
-}
-
-.inbox-bg-container .conversation-filter {
-  width: 36px;
-  height: 36px;
-  border-color: var(--tailkit-line);
-  border-radius: 9px;
-  background: var(--tailkit-surface);
-  color: var(--tailkit-muted);
-  box-shadow: none;
-}
-
-.inbox-bg-container .conversation-filter:hover,
-.inbox-bg-container .conversation-filter[aria-pressed="true"] {
-  border-color: var(--tailkit-brand-line);
-  background: var(--tailkit-brand-soft);
-  color: var(--tailkit-brand);
-  box-shadow: none;
-  transform: none;
 }
 
 .inbox-bg-container .conversations {
@@ -563,11 +522,6 @@
 
   .inbox-bg-container .mode-menu-trigger-icon {
     flex-basis: 20px;
-  }
-
-  .inbox-bg-container .conversation-filter {
-    width: 44px;
-    height: 44px;
   }
 
   .inbox-bg-container .search input {

@@ -8,7 +8,7 @@ describe("Tailkit conversation controls", () => {
       /\.mode-menu-trigger-icon\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;/,
     );
     expect(stylesheet).toMatch(
-      /\.mode-menu-trigger-icon \.icon\s*\{[\s\S]*width:\s*38px;[\s\S]*height:\s*38px;/,
+      /\.mode-menu-trigger-icon \.icon\s*\{[\s\S]*width:\s*18px;[\s\S]*height:\s*18px;/,
     );
     expect(stylesheet).toMatch(
       /\.mode-menu-trigger--primary,[\s\S]*border-color:\s*transparent;[\s\S]*background:\s*transparent;/,
@@ -26,7 +26,7 @@ describe("Tailkit conversation controls", () => {
       /@media \(max-width: 767px\)[\s\S]*\.channel-adapter-option img\s*\{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/,
     );
     expect(stylesheet).toMatch(
-      /@media \(max-width: 767px\)[\s\S]*\.mode-menu-trigger-icon \.icon\s*\{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/,
+      /@media \(max-width: 767px\)[\s\S]*\.mode-menu-trigger-icon \.icon\s*\{[\s\S]*width:\s*20px;[\s\S]*height:\s*20px;/,
     );
   });
 });

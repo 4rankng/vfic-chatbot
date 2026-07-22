@@ -51,15 +51,7 @@ type ConversationRow = Conversation & {
   _snippet?: string;
 };
 
-export type QueueFilter = "all" | "attention" | "priority";
-
 const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
-
-const QUEUE_FILTER_ICON: Record<QueueFilter, string> = {
-  all: "#i-filter",
-  attention: "#i-clock",
-  priority: "#i-sparkles",
-};
 
 const getConversationModePriority = (mode: Conversation["mode"]) => {
   if (mode === "human") return 0;
@@ -400,24 +392,12 @@ const ConversationListPanel = ({
   >(new Map());
   const [snippets, setSnippets] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
-  // The chip always starts on "all". A `?reason=` deep link filters
-  // server-side (via `InfiniteListBase filter`), NOT via this chip — see the
-  // note in `ConversationList`. The user may still pick a chip on top.
-  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const hasNeedsAttentionFilter =
     searchParams.get("needs_attention") === "true";
   const hasServerFilter =
     isAttentionReason(searchParams.get("reason")) || hasNeedsAttentionFilter;
-  const isQueueFilterActive = (value: QueueFilter) => {
-    if (value === "all") return queueFilter === "all" && !hasServerFilter;
-    if (value === "attention") {
-      return queueFilter === "attention" || hasNeedsAttentionFilter;
-    }
-    return queueFilter === value;
-  };
   const clearSearchAndFilters = useCallback(() => {
     setQuery("");
-    setQueueFilter("all");
     setSearchParams(
       (prev) => {
         prev.delete("reason");
@@ -479,15 +459,6 @@ const ConversationListPanel = ({
         };
       })
       .filter((c) => {
-        if (queueFilter === "attention" && !needsHumanReply(c)) {
-          return false;
-        }
-        if (
-          queueFilter === "priority" &&
-          !slots.filters?.matchesPriority(c._presentation)
-        ) {
-          return false;
-        }
         if (deferredQuery) {
           const haystack = [
             c.zalo_chat_id ?? c.id,
@@ -522,9 +493,7 @@ const ConversationListPanel = ({
     conversations,
     snippets,
     deferredQuery,
-    queueFilter,
     readIds,
-    slots.filters,
   ]);
 
   useEffect(() => {
@@ -577,37 +546,6 @@ const ConversationListPanel = ({
                 onChange={(e) => setQuery(e.target.value)}
               />
             </label>
-            <div className="conversation-filters" aria-label="Lọc hội thoại">
-              {(
-                [
-                  ["all", "Tất cả hội thoại"],
-                  ["attention", "Cần phản hồi"],
-                  ...(slots.filters
-                    ? [["priority", slots.filters.priorityLabel] as const]
-                    : []),
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`conversation-filter tt-btn tt-btn-ghost tt-btn-square is-${value}`}
-                  aria-label={label}
-                  aria-pressed={isQueueFilterActive(value)}
-                  title={label}
-                  onClick={() => {
-                    if (value === "all" && hasServerFilter) {
-                      clearSearchAndFilters();
-                      return;
-                    }
-                    setQueueFilter(value);
-                  }}
-                >
-                  <svg className="icon" aria-hidden="true">
-                    <use href={QUEUE_FILTER_ICON[value]} />
-                  </svg>
-                </button>
-              ))}
-            </div>
           </div>
         }
       />
@@ -625,14 +563,10 @@ const ConversationListPanel = ({
         ) : rows.length === 0 ? (
           <ListEmptyState
             kind={
-              query || queueFilter !== "all" || hasServerFilter
-                ? "filtered"
-                : "empty"
+              query || hasServerFilter ? "filtered" : "empty"
             }
             onAction={
-              query || queueFilter !== "all" || hasServerFilter
-                ? clearSearchAndFilters
-                : undefined
+              query || hasServerFilter ? clearSearchAndFilters : undefined
             }
           />
         ) : (
