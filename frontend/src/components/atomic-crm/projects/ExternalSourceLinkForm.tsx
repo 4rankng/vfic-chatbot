@@ -71,14 +71,12 @@ export const ExternalSourceLinkForm = ({
   const gidResolution = sheetUrl.trim()
     ? resolveGoogleSheetGid(sheetUrl)
     : null;
-  const gidValid = !isSinglePage || !sheetUrl.trim() || gidResolution?.ok;
-  const gidHint = isSinglePage
-    ? gidResolution?.ok
-      ? `Sẽ đồng bộ đúng tab gid=${gidResolution.gid} từ ${
-          gidResolution.source === "fragment" ? "phần #gid" : "tham số ?gid"
-        } của link.`
-      : (gidResolution?.message ?? null)
-    : null;
+  const gidValid = !sheetUrl.trim() || gidResolution?.ok;
+  const gidHint = gidResolution?.ok
+    ? `Sẽ đồng bộ đúng tab gid=${gidResolution.gid} từ ${
+        gidResolution.source === "fragment" ? "phần #gid" : "tham số ?gid"
+      } của link.`
+    : (gidResolution?.message ?? null);
 
   const reset = () => {
     setSheetUrl("");
@@ -100,7 +98,7 @@ export const ExternalSourceLinkForm = ({
       );
       return;
     }
-    if (isSinglePage && !gidResolution?.ok) {
+    if (!gidResolution?.ok) {
       notify(
         gidResolution?.message ??
           "Link cần có gid rõ ràng để chọn đúng trang tính.",
@@ -119,7 +117,7 @@ export const ExternalSourceLinkForm = ({
         await createExternalSource(projectId, {
           category_key: categoryKey,
           sheet_url: sheetUrl.trim(),
-          sheet_gid: 0,
+          sheet_gid: gidResolution.gid,
           auto_sync_enabled: autoSync,
         });
       }
@@ -180,7 +178,7 @@ export const ExternalSourceLinkForm = ({
             placeholder={
               isSinglePage
                 ? "https://docs.google.com/spreadsheets/d/.../edit#gid=123456789"
-                : "https://docs.google.com/spreadsheets/d/..."
+                : "https://docs.google.com/spreadsheets/d/.../edit#gid=123456789"
             }
             inputMode="url"
             aria-invalid={!urlValid || !gidValid}
@@ -201,7 +199,7 @@ export const ExternalSourceLinkForm = ({
               link can view").
             </p>
           )}
-          {isSinglePage && urlValid && gidHint && (
+          {urlValid && gidHint && (
             <p
               id={
                 gidResolution?.ok ? "ext-src-gid-preview" : "ext-src-gid-error"

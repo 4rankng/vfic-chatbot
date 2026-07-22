@@ -48,7 +48,7 @@ describe("ExternalSourceLinkForm", () => {
     await screen
       .getByLabelText("Link Google Sheet")
       .fill(
-        "https://docs.google.com/spreadsheets/d/1rRk4wfKb90IxJAbywimgGDOV3Y7g8RbW1EpBabZmFw8/edit",
+        "https://docs.google.com/spreadsheets/d/1rRk4wfKb90IxJAbywimgGDOV3Y7g8RbW1EpBabZmFw8/edit#gid=123456789",
       );
     await screen.getByRole("button", { name: /Nhập một lần/ }).click();
 
@@ -58,6 +58,7 @@ describe("ExternalSourceLinkForm", () => {
     const [, payload] = mocks.createExternalSource.mock.calls[0];
     expect(payload).toMatchObject({
       category_key: "faq",
+      sheet_gid: 123456789,
       auto_sync_enabled: false,
     });
     expect(payload.sheet_url).toContain("docs.google.com");
@@ -65,6 +66,27 @@ describe("ExternalSourceLinkForm", () => {
       expect.stringContaining("Đã thêm nguồn"),
       { type: "success" },
     );
+  });
+
+  it("blocks category submission when the Google Sheet link has no explicit gid", async () => {
+    const screen = await render(
+      <ExternalSourceLinkForm projectId="project-1" defaultCategory="faq" />,
+    );
+    await screen.getByRole("button", { name: "Gsheet Link" }).click();
+    await screen
+      .getByLabelText("Link Google Sheet")
+      .fill("https://docs.google.com/spreadsheets/d/demo/edit");
+
+    await expect
+      .element(
+        screen.getByText(
+          /Link phải có gid rõ ràng trong `\?gid=` hoặc `#gid=`/,
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Nhập một lần" }))
+      .toBeDisabled();
   });
 
   it("blocks single-page submission when the Google Sheet link has no explicit gid", async () => {
