@@ -462,7 +462,8 @@ def routing_instruction(route: TurnRoute) -> str:
         )
     if route.intent == "out_of_scope":
         return (
-            "Ý định ngoài phạm vi tuyển dụng. Từ chối nhẹ nhàng và kéo cuộc trò chuyện về tìm việc, "
-            "hồ sơ, lịch xe hoặc thông tin VFIC."
+            "Ý định ngoài phạm vi hỗ trợ của VFIC (tuyển dụng + hỗ trợ nhân viên đang làm). "
+            "Từ chối nhẹ nhàng và kéo cuộc trò chuyện về tìm việc, hồ sơ, lịch xe, hoặc vấn đề "
+            "của nhân viên tại dự án VFIC."
         )
     return "Ý định chưa rõ. Trả lời theo mạch hội thoại và dùng công cụ tra cứu khi có câu hỏi tuyển dụng."

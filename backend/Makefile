@@ -1,4 +1,4 @@
-.PHONY: dev db push deploy deploy-restart deploy-restart-frontend adminer
+.PHONY: dev db push deploy deploy-restart deploy-restart-frontend rollback deploy-status deploy-breaking adminer
 
 BACKEND_PORT  ?= 8000
 FRONTEND_PORT ?= 5173
@@ -101,40 +101,60 @@ push:
 		.
 	@echo "==> Push complete: $(IMAGE_NAME):latest ($(GIT_SHA))"
 
-# ---- Deploy to prod. Assumes `push` already ran (root Makefile runs both). ----
+# ---- Blue/green deploy to prod. Assumes `push` already ran (root Makefile runs both). ----
+# Syncs compose + Caddy template + deploy scripts, ensures .env + bootstrap admin,
+# then hands off to scripts/bg_deploy.sh (zero-downtime: smoke-gated Caddy flip).
 deploy:
-	@echo "==> Syncing compose + Caddyfile to $(PROD_SERVER):$(PROD_DIR)..."
-	$(SSH) root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)"
-	$(SCP) docker-compose.yml Caddyfile root@$(PROD_SERVER):$(PROD_DIR)/
+	@echo "==> Syncing compose + Caddy template + deploy scripts to $(PROD_SERVER):$(PROD_DIR)..."
+	$(SSH) root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)/scripts"
+	$(SCP) docker-compose.yml Caddyfile.template root@$(PROD_SERVER):$(PROD_DIR)/
+	$(SCP) scripts/bg_deploy.sh scripts/bg_rollback.sh scripts/flip_caddy.sh root@$(PROD_SERVER):$(PROD_DIR)/scripts/
 	@echo "==> Generating $(PROD_DIR)/.env if missing (infra secrets filled, API keys blank)..."
 	$(SSH) root@$(PROD_SERVER) 'bash -s' < scripts/prod-env.sh
-	@echo "==> Pulling images..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull"
-	@echo "==> Starting Postgres + Redis..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d postgres redis"
-	@echo "==> Waiting for Postgres healthy (retries transient SSH refusals)..."
-	@ok=0; for i in 1 2 3 4 5; do \
-		timeout 60 sh -c "$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose exec -T postgres pg_isready -U vfic >/dev/null 2>&1'" && { ok=1; break; }; \
-		echo "  SSH/pg_isready refused (attempt $$i/5), retrying in 4s..."; sleep 4; \
-	done; [ $$ok -eq 1 ] || echo "  Postgres slow to come up"
-	@echo "==> Applying Alembic baseline (retries transient SSH refusals)..."
-	@ok=0; for i in 1 2 3 4 5; do \
-		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
-		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
-	done; [ $$ok -eq 1 ]
 	@echo "==> Creating bootstrap admin (idempotent)..."
-	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web python -m scripts.create_admin --only-if-no-admins --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin'
-	@echo "==> Bringing up full stack..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web frontend worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
-	@echo "==> Verifying application containers..."
-	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for i in $$(seq 1 50); do docker compose exec -T web python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=3)" 2>/dev/null && exit 0; sleep 2; [ $$((i % 10)) -eq 0 ] && echo "  ...web health probe still waiting at $$i/50 (cold-boot window)"; done; echo "==> web health probe timed out after ~100s"; docker compose ps; exit 1'
-	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && export IMAGE_TAG=$(IMAGE_TAG); for service in web frontend worker-chatbot worker-persistence worker-ingest worker-followup scheduler; do containers=$$(docker compose ps -q "$$service"); [ -n "$$containers" ] || exit 1; for container in $$containers; do test "$$(docker inspect --format "{{.State.Status}}" "$$container")" = running || exit 1; done; done'
-	@echo "==============================================================="
-	@echo " Deploy done."
-	@echo "   health : https://$(PROD_SERVER)/health"
-	@echo "   adminer: make adminer"
-	@echo " Deployed image tag: $(IMAGE_TAG)"
-	@echo "==============================================================="
+	-$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web-blue python -m scripts.create_admin --only-if-no-admins --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin'
+	@echo "==> Running blue/green deploy (smoke-gated Caddy flip)..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) bash scripts/bg_deploy.sh"
+
+# ---- Blue/green fast-track: re-deploy backend only (no compose sync / bootstrap). ----
+# Used by root Makefile's deploy-backend after push. Re-syncs only the deploy
+# scripts, then runs the same smoke-gated flip.
+deploy-restart:
+	@echo "==> Syncing deploy scripts to $(PROD_SERVER)..."
+	$(SSH) root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)/scripts"
+	$(SCP) scripts/bg_deploy.sh scripts/bg_rollback.sh scripts/flip_caddy.sh root@$(PROD_SERVER):$(PROD_DIR)/scripts/
+	@echo "==> Running blue/green deploy (smoke-gated Caddy flip)..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) bash scripts/bg_deploy.sh"
+
+# ---- Flip traffic back to the previous color/tag (~1s, no rebuild, reversible). ----
+rollback:
+	@echo "==> Rolling back to previous color/tag on $(PROD_SERVER)..."
+	$(SSH) root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)/scripts"
+	$(SCP) scripts/bg_rollback.sh scripts/flip_caddy.sh root@$(PROD_SERVER):$(PROD_DIR)/scripts/
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && bash scripts/bg_rollback.sh"
+
+# ---- Show active color, previous color/tag, and container health on prod. ----
+deploy-status:
+	@echo "==> $(PROD_SERVER) blue/green status"
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && echo "ACTIVE_COLOR=$$(cat ACTIVE_COLOR 2>/dev/null || echo <inaugural>)  PREV=$$(cat PREV_COLOR 2>/dev/null || echo none)@$$(cat PREV_TAG 2>/dev/null || echo none)" && docker compose ps'
+
+# ---- Breaking-migration path (brief downtime; NOT blue/green). ----
+# Use ONLY for a non-additive migration that old+new code cannot both run against.
+# Drains both web colors, migrates, brings up web-blue on the new schema, flips.
+deploy-breaking:
+	@echo "==> WARNING: deploy-breaking accepts brief downtime (non-additive migration)."
+	$(SSH) root@$(PROD_SERVER) "mkdir -p $(PROD_DIR)/scripts"
+	$(SCP) docker-compose.yml Caddyfile.template root@$(PROD_SERVER):$(PROD_DIR)/
+	$(SCP) scripts/flip_caddy.sh root@$(PROD_SERVER):$(PROD_DIR)/scripts/
+	$(SSH) root@$(PROD_SERVER) 'bash -s' < scripts/prod-env.sh
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull web-blue worker-chatbot worker-persistence worker-ingest worker-followup scheduler frontend"
+	@echo "==> Stopping web colors (downtime starts)..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose stop web-blue web-green 2>/dev/null || true"
+	@echo "==> Applying non-additive migration..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web-blue sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'"
+	@echo "==> Bringing up web-blue + workers on the new schema (downtime ends)..."
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web-blue worker-chatbot worker-persistence worker-ingest worker-followup scheduler frontend"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) bash scripts/flip_caddy.sh blue && echo blue > ACTIVE_COLOR"
 
 # ---- Adminer over SSH tunnel (private; never public). ----
 adminer:

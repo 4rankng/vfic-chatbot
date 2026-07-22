@@ -184,16 +184,17 @@ _TECH_USER_RE = re.compile(
     re.IGNORECASE,
 )
 TECHNICAL_FALLBACK = (
-    "Tôi là trợ lý tìm việc của VFIC nên chỉ có thể hỗ trợ bạn các vấn đề liên quan đến "
-    "tuyển dụng. Bạn đang muốn tìm việc ở khu vực nào nhỉ?"
+    "Tôi là trợ lý VFIC nên chỉ hỗ trợ các vấn đề tuyển dụng và hỗ trợ nhân viên "
+    "(lương, phúc lợi, lịch xe, thủ tục…). Bạn cần tôi giúp việc tìm việc hay "
+    "thắc mắc khi đang làm tại dự án VFIC nhé?"
 )
 # Friendly redirect when the bot can't produce a good reply.
 GENERIC_FALLBACK = FALLBACK_REPLY
 
 
 def retry_exhausted_fallback(original_user_text: str) -> str:
-    # Off-topic technical questions get a redirect to recruitment topics.
-    # Everything else gets the generic fallback.
+    # Off-topic technical questions (code/debug) get a redirect to VFIC's scope
+    # (recruitment + employee support). Everything else gets the generic fallback.
     return (
         TECHNICAL_FALLBACK if _TECH_USER_RE.search(original_user_text or "") else GENERIC_FALLBACK
     )
