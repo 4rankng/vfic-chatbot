@@ -15,14 +15,6 @@ from app.services.zalo_oa_service import OAUserProfile
 pytestmark = pytest.mark.asyncio
 
 
-class _FakeRepo:
-    def __init__(self, lead_row: dict | None) -> None:
-        self._lead_row = lead_row
-
-    async def by_zalo_id(self, _zalo_id: str) -> dict | None:
-        return self._lead_row
-
-
 class _FakeConversations:
     def __init__(self, contact) -> None:
         self._conversation = SimpleNamespace(contact=contact) if contact else None
@@ -34,10 +26,11 @@ class _FakeConversations:
 class _FakeDB:
     def __init__(self, saved_lead=None) -> None:
         self.saved_lead = saved_lead
+        self.leads = [saved_lead] if saved_lead is not None else []
         self.committed = False
 
-    async def get(self, _model, _lead_id):
-        return self.saved_lead
+    async def scalars(self, _statement):
+        return SimpleNamespace(all=lambda: self.leads)
 
     async def commit(self) -> None:
         self.committed = True
@@ -78,12 +71,11 @@ def _make_service(
     lead_row: dict | None,
     contact,
 ) -> ProfileEnrichmentService:
-    if lead_row is not None:
-        lead_row = {"id": 1, **lead_row}
+    if contact is not None and not hasattr(contact, "id"):
+        contact.id = "contact-id"
     service = ProfileEnrichmentService.__new__(ProfileEnrichmentService)
     service.db = db  # type: ignore[assignment]
     service.sender = sender  # type: ignore[assignment]
-    service._leads = _FakeRepo(lead_row)  # type: ignore[assignment]
     service._conversations = _FakeConversations(contact)  # type: ignore[assignment]
     return service
 
@@ -190,18 +182,7 @@ async def test_display_name_cleanup_does_not_make_semantic_judgments(
     assert normalize_oa_profile_display_name(value) == expected
 
 
-async def test_completed_empty_profile_is_not_refetched_on_each_message(monkeypatch) -> None:
-    done = False
-
-    async def claim(_zalo_id: str, *, wait_for_inflight: bool):
-        return (False, None) if done else (True, "owner")
-
-    async def mark(_zalo_id: str):
-        nonlocal done
-        done = True
-
-    monkeypatch.setattr("app.services.profile_enrichment._claim_profile_lookup", claim)
-    monkeypatch.setattr("app.services.profile_enrichment._mark_profile_lookup_done", mark)
+async def test_empty_profile_stays_retryable(monkeypatch) -> None:
     contact = SimpleNamespace(display_name=None, avatar_url=None)
     db = _FakeDB(SimpleNamespace(avatar_url=None))
     sender = _FakeSender(OAUserProfile(avatar_url="", display_name=""))
@@ -209,7 +190,29 @@ async def test_completed_empty_profile_is_not_refetched_on_each_message(monkeypa
 
     assert await service.enrich_oa_user("oa:u1", user_id="u1") is False
     assert await service.enrich_oa_user("oa:u1", user_id="u1") is False
-    assert sender.call_count == 1
+    assert sender.call_count == 2
+
+
+async def test_partial_backfill_never_overwrites_contact_or_other_lead() -> None:
+    contact = SimpleNamespace(
+        id="contact-id", display_name="Recruiter label", avatar_url="https://kept.jpg"
+    )
+    saved_lead = SimpleNamespace(id=1, avatar_url=None, name="Confirmed")
+    complete_lead = SimpleNamespace(id=2, avatar_url="https://other.jpg", name="Other")
+    db = _FakeDB(saved_lead)
+    db.leads.append(complete_lead)
+    service = _make_service(
+        db,
+        _FakeSender(OAUserProfile(avatar_url="https://new.jpg", display_name="Zalo label")),
+        {"avatar_url": None, "name": "Confirmed"},
+        contact,
+    )
+
+    assert await service.enrich_oa_user("oa:u1", user_id="u1") is True
+    assert contact.display_name == "Recruiter label"
+    assert contact.avatar_url == "https://kept.jpg"
+    assert saved_lead.avatar_url == "https://new.jpg"
+    assert complete_lead.avatar_url == "https://other.jpg"
 
 
 async def test_worker_wait_option_is_forwarded_to_lookup_guard(monkeypatch) -> None:

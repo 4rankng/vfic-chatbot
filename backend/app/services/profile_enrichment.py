@@ -17,11 +17,11 @@ import unicodedata
 import uuid
 from typing import Protocol
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.conversation import ConversationService
 from app.services.lead.events import LeadEventBus
-from app.services.lead.repository import LeadRepository
 from app.services.zalo_oa_service import OAUserProfile
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,6 @@ class ProfileEnrichmentService:
     def __init__(self, db: AsyncSession, sender: OAProfileLookup) -> None:
         self.db = db
         self.sender = sender
-        self._leads = LeadRepository(db)
         self._conversations = ConversationService(db)
 
     async def enrich_oa_user(
@@ -122,12 +121,27 @@ class ProfileEnrichmentService:
         wait_for_inflight: bool = False,
     ) -> bool:
         """Look up one OA user and persist contact display data if available."""
-        existing = await self._leads.by_zalo_id(zalo_id)
         conversation = await self._conversations.get_by_zalo(zalo_id)
         contact = conversation.contact if conversation is not None else None
-        if existing is None or contact is None:
+        if contact is None:
             return False
-        if contact.display_name and contact.avatar_url and existing.get("avatar_url"):
+
+        from app.models.lead import Lead
+
+        leads = list(
+            (
+                await self.db.scalars(
+                    select(Lead).where(Lead.contact_id == contact.id).order_by(Lead.id)
+                )
+            ).all()
+        )
+        if not leads:
+            return False
+
+        missing_display_name = not str(contact.display_name or "").strip()
+        missing_contact_avatar = not str(contact.avatar_url or "").strip()
+        missing_lead_avatar = any(not str(lead.avatar_url or "").strip() for lead in leads)
+        if not (missing_display_name or missing_contact_avatar or missing_lead_avatar):
             return False
 
         claimed, lookup_owner = await _claim_profile_lookup(
@@ -148,28 +162,35 @@ class ProfileEnrichmentService:
             display_name = normalize_oa_profile_display_name(profile.display_name)
             avatar_url = (profile.avatar_url or "").strip()
             if not (display_name or avatar_url):
-                await _mark_profile_lookup_done(zalo_id)
                 return False
 
-            if display_name:
+            if display_name and missing_display_name:
                 contact.display_name = display_name
-            if avatar_url:
+            if avatar_url and missing_contact_avatar:
                 contact.avatar_url = avatar_url
 
-            from app.models.lead import Lead
-
-            saved_lead = await self.db.get(Lead, existing["id"])
-            if saved_lead is not None and avatar_url and not saved_lead.avatar_url:
-                saved_lead.avatar_url = avatar_url
+            updated_leads = []
+            if avatar_url:
+                for lead in leads:
+                    if not str(lead.avatar_url or "").strip():
+                        lead.avatar_url = avatar_url
+                        updated_leads.append(lead)
 
             await self.db.commit()
-            await _mark_profile_lookup_done(zalo_id)
-            logger.info(
-                "oa profile enrichment applied avatar=%s display_name=%s",
-                bool(avatar_url),
-                bool(display_name),
+            complete = (
+                bool(str(contact.display_name or "").strip())
+                and bool(str(contact.avatar_url or "").strip())
+                and all(bool(str(lead.avatar_url or "").strip()) for lead in leads)
             )
-            if saved_lead is not None:
+            if complete:
+                await _mark_profile_lookup_done(zalo_id)
+            logger.info(
+                "oa profile enrichment applied avatar=%s display_name=%s complete=%s",
+                bool(avatar_url and (missing_contact_avatar or updated_leads)),
+                bool(display_name and missing_display_name),
+                complete,
+            )
+            for saved_lead in updated_leads:
                 try:
                     await LeadEventBus().lead_updated(saved_lead)
                 except Exception:  # noqa: BLE001 -- realtime is best-effort

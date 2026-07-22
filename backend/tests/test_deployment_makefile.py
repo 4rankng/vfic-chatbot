@@ -98,6 +98,16 @@ def test_bg_deploy_smoke_failure_aborts_before_flip() -> None:
     assert "ABORTING" in script
 
 
+def test_bg_deploy_queues_profile_backfill_after_the_cutover() -> None:
+    """Backfill is optional maintenance, never a health/smoke gate."""
+    script = _read("bg_deploy.sh")
+    flip = script.index("flip_caddy.sh")
+    active = script.index('echo "$NEXT" > "$ACTIVE_FILE"')
+    backfill = script.index("scripts.backfill_oa_profiles")
+    assert flip < active < backfill
+    assert "backfill start failed; deployment remains active" in script
+
+
 def test_bg_deploy_only_pulls_backend_services() -> None:
     """A backend cutover must not request frontend:<backend-git-sha>."""
     script = _read("bg_deploy.sh")

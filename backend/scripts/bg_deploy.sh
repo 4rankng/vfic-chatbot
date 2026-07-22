@@ -110,6 +110,14 @@ fi
 
 echo "$NEXT" > "$ACTIVE_FILE"
 
+# Start the resumable OA-only profile sweep only after traffic is on the healthy
+# new color. It is detached so Zalo calls cannot delay or roll back a cutover.
+echo "==> [9b/10] starting missing OA profile backfill..."
+if ! IMAGE_TAG="$IMAGE_TAG" docker compose exec -T -d "web-$NEXT" \
+  python -m scripts.backfill_oa_profiles --apply --limit "${OA_PROFILE_BACKFILL_LIMIT:-0}"; then
+  echo "==> OA profile backfill start failed; deployment remains active." >&2
+fi
+
 # 10. Inaugural only: remove the legacy single-`web` container (no longer in the
 #     compose). Try both compose v2 naming conventions; ignore if absent.
 if [ -z "$ACTIVE" ]; then
