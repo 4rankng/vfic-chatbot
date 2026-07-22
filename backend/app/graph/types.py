@@ -14,6 +14,7 @@ from app.graph.ports import (
     DirectContextPort,
     FaqBypassPort,
     LeadContextPort,
+    ReplyPolicyPort,
     RetrievalPort,
     RuntimePolicyPort,
 )
@@ -116,6 +117,7 @@ class GraphDeps:
     zalo: Any
     conversation: ConversationPort
     retrieval: RetrievalPort
+    reply_policy: ReplyPolicyPort
     # Unused after the LLM-judge removal; kept for GraphDeps API stability (tests
     # still inject safety=...). Sits with the other defaulted fields by dataclass rule.
     safety: SafetyModel | None = None

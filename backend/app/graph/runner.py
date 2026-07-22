@@ -45,11 +45,6 @@ from app.graph.router import (
     should_use_fast_model,
 )
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
-from app.graph.safety import (
-    blocklist_hit,
-    fast_safety_filter,
-    retry_exhausted_fallback,
-)
 from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES, delivery_status_for_send_error
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.models.conversation import DeliveryStatus, Message
@@ -432,6 +427,27 @@ async def _direct_context_turn(
         ),
         **_with_optional_trace(deps.agent.direct, direct_kwargs, trace_sink),
     )
+
+
+def _finalize_user_visible_reply(
+    raw: str,
+    *,
+    deps: GraphDeps,
+    generated: bool,
+    user_text: str,
+    timings: dict,
+    trace_sink: DecisionTraceBuilder,
+) -> str:
+    """Invoke the reply-policy port once after all routing lanes converge."""
+    result = deps.reply_policy.finalize(
+        raw,
+        generated=generated,
+        user_text=user_text,
+    )
+    if result.trigger is not None:
+        timings["safety_trigger"] = result.trigger
+    trace_sink.record_decision("safety_verdict", result.verdict)
+    return result.output
 
 
 async def run_manifest_composed_agent(
@@ -859,6 +875,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
 
     try:
         candidate = ""
+        generated_reply = False
         outcome_label = "sent"
         faq_metadata: dict | None = None
         from app.graph.provider_scope import provider_from_conversation
@@ -985,7 +1002,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         elif direct_context is not None and turn_route.reason != "vacancy_listing":
             trace_sink.record_decision("context_selected", "direct_context")
             trace_sink.record_decision("lane_selected", "direct_context")
-            candidate = await _direct_context_turn(
+            raw = await _direct_context_turn(
                 direct_context,
                 deps,
                 state.user_text,
@@ -993,6 +1010,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 timings,
                 trace_sink=trace_sink,
             )
+            state.reply = raw
+            candidate = raw
+            generated_reply = True
             outcome_label = "direct_context"
         elif bypass is not None:
             trace_sink.record_decision("context_selected", "faq_bypass")
@@ -1090,6 +1110,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 )
 
             state.reply = raw
+            candidate = raw
+            generated_reply = True
 
             # --- deterministic safety gate (no LLM judge) ---
             # The fast filter strips <think>/markdown/code-fences from the raw
@@ -1101,39 +1123,18 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             #     reply is legitimate content, not a safety issue)
             # This replaces the former LLM safety judge (a ~10s second model call
             # that p50'd at 10.3s). The judge added latency without adding safety.
-            fs = fast_safety_filter(raw)
-            candidate = fs["output"]
-
-            # Scan the user-visible reply, not the raw model output. The raw still
-            # carries the <think> deliberation that fast_safety_filter strips above;
-            # a reasoning model routinely writes "theo system prompt …" while
-            # deciding how to answer. That text never reaches the user, so scanning
-            # the raw discarded correct, grounded answers and emitted the generic
-            # "Tôi chưa thể xác minh …" fallback whenever a turn's deliberation
-            # happened to mention the system prompt (flaky on prod: the same
-            # question was answered on one turn and deflected on the next). Real
-            # leakage — a blocklist term in the actual reply, or reasoning that
-            # survives an unclosed <think> — is still caught, since it's present in
-            # the cleaned output too.
-            blocklisted = blocklist_hit(candidate)
-            if blocklisted:
-                timings["safety_trigger"] = "blocklist"
-                trace_sink.record_decision("safety_verdict", "blocklist_redirect")
-            elif fs["empty_after_clean"]:
-                timings["safety_trigger"] = "empty_after_clean"
-                trace_sink.record_decision("safety_verdict", "empty_after_clean")
-            elif fs["needs_llm_safety"] and not fs["too_long"]:
-                timings["safety_trigger"] = "risk_pattern"
-                trace_sink.record_decision("safety_verdict", "risk_redirect")
-            elif fs["too_long"]:
-                timings["safety_trigger"] = "truncated"
-                trace_sink.record_decision("safety_verdict", "truncated")
-            else:
-                trace_sink.record_decision("safety_verdict", "passed")
-
-            if blocklisted or (fs["needs_llm_safety"] and not fs["too_long"]):
-                candidate = retry_exhausted_fallback(state.user_text)
-            # else: over-long was already truncated by fast_safety_filter; send it.
+        # All routing lanes converge on one content boundary before persistence
+        # and transport. Generated replies receive the full safety policy;
+        # curated replies preserve authored formatting while still enforcing the
+        # invariant that provider reasoning tags never reach an end user.
+        candidate = _finalize_user_visible_reply(
+            candidate,
+            deps=deps,
+            generated=generated_reply,
+            user_text=state.user_text,
+            timings=timings,
+            trace_sink=trace_sink,
+        )
 
         # Defense-in-depth: every lane should already produce non-empty content
         # (fast_safety_filter falls back to FALLBACK_REPLY; the safety gate above

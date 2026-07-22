@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import TypedDict
 
+from app.graph.ports import ReplyPolicyResult
+
 # --- Fast Safety Filter -------------------------------------------------------
 
 
@@ -44,15 +46,25 @@ _RISK_RE = re.compile(
 )
 
 
-def fast_safety_filter(raw: str) -> FastSafetyResult:
-    """Return whether an LLM safety check is needed plus a cleaned reply."""
-    original_raw = (raw or "").strip()
-    raw = original_raw
+def strip_think_reasoning(raw: str) -> str:
+    """Remove complete or truncated provider reasoning from user-visible text."""
+    raw = raw or ""
     # MiniMax M2 reasoning models wrap deliberation in <think>…</think>; the
     # user-facing reply is what follows the last </think>. Never send reasoning.
     if re.search(r"</think\s*>", raw, flags=re.IGNORECASE):
         raw = re.split(r"</think\s*>", raw, flags=re.IGNORECASE)[-1]
-    raw = re.sub(r"<think\b[^>]*>", "", raw, flags=re.IGNORECASE)
+    # A provider timeout can truncate output before ``</think>``. In that case
+    # everything after the unmatched opener is still deliberation, not a reply.
+    # Discard the incomplete block instead of removing only its tag and exposing
+    # the reasoning text as user-visible content.
+    raw = re.sub(r"<\s*think\b[\s\S]*$", "", raw, flags=re.IGNORECASE)
+    return raw
+
+
+def fast_safety_filter(raw: str) -> FastSafetyResult:
+    """Return whether an LLM safety check is needed plus a cleaned reply."""
+    original_raw = (raw or "").strip()
+    raw = strip_think_reasoning(original_raw)
     cleaned = re.sub(r"```[\s\S]*?```", "", raw)
     cleaned = re.sub(r"<\/?minimax:[^>]+>", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"(\*\*|__|###?|---)", "", cleaned)
@@ -94,6 +106,51 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
         "empty_after_clean": empty_after_clean,
         "retryable_empty": retryable_empty,
     }
+
+
+class DeterministicReplyPolicy:
+    """Concrete pre-send policy; replaceable behind :class:`ReplyPolicyPort`."""
+
+    def finalize(
+        self,
+        candidate: str,
+        *,
+        generated: bool,
+        user_text: str,
+    ) -> ReplyPolicyResult:
+        reasoning_free = strip_think_reasoning(candidate).strip()
+        if not generated:
+            return ReplyPolicyResult(output=reasoning_free, verdict="passed")
+
+        fs = fast_safety_filter(reasoning_free)
+        output = fs["output"]
+        blocklisted = blocklist_hit(output)
+
+        if blocklisted:
+            return ReplyPolicyResult(
+                output=retry_exhausted_fallback(user_text),
+                verdict="blocklist_redirect",
+                trigger="blocklist",
+            )
+        if fs["empty_after_clean"]:
+            return ReplyPolicyResult(
+                output=retry_exhausted_fallback(user_text),
+                verdict="empty_after_clean",
+                trigger="empty_after_clean",
+            )
+        if fs["needs_llm_safety"] and not fs["too_long"]:
+            return ReplyPolicyResult(
+                output=retry_exhausted_fallback(user_text),
+                verdict="risk_redirect",
+                trigger="risk_pattern",
+            )
+        if fs["too_long"]:
+            return ReplyPolicyResult(
+                output=output,
+                verdict="truncated",
+                trigger="truncated",
+            )
+        return ReplyPolicyResult(output=output, verdict="passed")
 
 
 def truncate_for_chat(text: str, limit: int = 1800) -> str:

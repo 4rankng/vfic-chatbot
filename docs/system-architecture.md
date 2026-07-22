@@ -354,8 +354,8 @@ sequenceDiagram
     end
     end
 
-    Note over WK: ── safety ──
-    WK->>WK: fast_safety_filter (strip think/code/markdown, truncate)<br/>blocklist_hit → deterministic fallback
+    Note over WK: ── reply policy ──
+    WK->>WK: ReplyPolicyPort.finalize<br/>(DeterministicReplyPolicy by default;<br/>strip think/code/markdown, truncate)<br/>blocklist_hit → deterministic fallback
 
     rect rgb(245, 235, 235)
     Note over WK,DB: ── mode policy guard layer 4/4 (closes TOCTOU) ──
@@ -504,11 +504,12 @@ the trace.
 
 The trace does not create separate prompt, candidate-answer, tool-argument, tool-result, or evidence
 fields. Provider reasoning is free-form and may repeat conversation context, so it is treated as
-sensitive data. If a provider returns no reasoning, the event records `not_returned`; the system
-cannot recover reasoning the provider withheld. Capture is fail-open and bounded to 64 events,
-16 KiB per reasoning block, and 128 KiB total. Trace detail and per-conversation summaries are
-admin-only, loaded on demand, and the trace JSON is cleared after 30 days while the operational
-`BotRun` row is retained.
+sensitive data. That reasoning is preserved in the admin-only trace, not in the user-visible reply.
+If a provider returns no reasoning, the event records `not_returned`; the system cannot recover
+reasoning the provider withheld. Capture is fail-open and bounded to 64 events, 16 KiB per
+reasoning block, and 128 KiB total. Trace detail and per-conversation summaries are admin-only,
+loaded on demand, and the trace JSON is cleared after 30 days while the operational `BotRun` row is
+retained.
 
 ---
 
@@ -529,7 +530,7 @@ load_conversation_state -> typing -> direct_context?
       vacancy-thread follow-up -> combined vacancy query + current question -> KB answer until a newer named topic boundary
       other agent intent -> scoped tool-calling LLM
       agent (error) -> error_reply
-      agent (ok)    -> fast_safety_filter -> combine_for_presend
+      all user-visible outputs -> ReplyPolicyPort.finalize (DeterministicReplyPolicy by default) -> combine_for_presend
   combine_for_presend -> pre_send_guard -> ownership_ok?
                             yes -> send_message -> log_sent
                             no  -> log_suppressed
@@ -538,7 +539,8 @@ load_conversation_state -> typing -> direct_context?
 - **State:** `BotRunState` dataclass (`graph/types.py:21`).
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
-  MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
+  MiniMax/OpenRouter/Zalo credentials from `integration_settings` and installs
+  `DeterministicReplyPolicy` as the graph-level `ReplyPolicyPort`.
 - **Vacancy authority:** generic requests such as “đang tuyển gì?” bypass FAQ
   and focused direct-context resolution, so vacancy turns go straight to
   required `list_active_jobs(top_k=10)` with no filters. That tool returns a
@@ -556,9 +558,15 @@ load_conversation_state -> typing -> direct_context?
   vacancy-thread factual follow-ups, the runner combines the prior vacancy query
   with the current question until a newer named topic appears, so salary,
   benefits, and other details stay scoped to the same company evidence.
-  `search_knowledge` remains the path for document facts. An empty catalog does
-  not block a real answer from published KB evidence for a specific vacancy
-  question.
+  `search_knowledge` remains the path for document facts. Any LLM-generated
+  user-visible reply from the direct-context or routed RAG/agent lanes passes
+  through the graph-level reply-policy port before persistence/delivery; the
+  default concrete policy is `DeterministicReplyPolicy`, which is replaceable at
+  the composition root without changing routing, persistence, or channel
+  adapters. Template replies, FAQ bypass answers, and evidence blocks remain
+  verbatim.
+  An empty catalog does not block a real answer from published KB evidence for a
+  specific vacancy question.
 - **Manifest-scoped runtime handoff:** when a manifest policy is active, the
   runner preserves the same scoped `allowed_tools`, `lookup_query`, and
   vacancy-only `required_tool_args` (`{"top_k": 10}` for `list_active_jobs`)

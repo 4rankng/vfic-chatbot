@@ -25,11 +25,16 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.graph import runner
-from app.graph.direct_context import DirectContext
+from app.graph.direct_context import DirectContext, ProjectTurnContext
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.ports import ReplyPolicyResult
 from app.graph.prompts import ERROR_REPLY
 from app.graph.runner import run_turn
-from app.graph.safety import FALLBACK_REPLY
+from app.graph.safety import (
+    DeterministicReplyPolicy,
+    FALLBACK_REPLY,
+    retry_exhausted_fallback,
+)
 from app.graph.types import BotRunState, GraphDeps
 
 CONV_ID = "00000000-0000-0000-0000-000000000001"
@@ -220,6 +225,7 @@ def _deps(
     faq_bypass=None,
     enrich_oa_profile=None,
     db=None,
+    reply_policy=None,
 ) -> GraphDeps:
     return GraphDeps(
         db=db if db is not None else _FakeDB(),
@@ -229,6 +235,7 @@ def _deps(
         zalo=zalo,
         conversation=conversation,
         retrieval=object(),
+        reply_policy=reply_policy or DeterministicReplyPolicy(),
         persist=persist,
         faq_bypass=faq_bypass,
         enrich_oa_profile=enrich_oa_profile,
@@ -288,6 +295,141 @@ async def test_vacancy_turn_uses_direct_context_llm():
     assert result["outcome"] == "direct_context"
     assert result["reply"] == "LG Display Hải Phòng tuyển công nhân thời vụ."
     assert direct_agent.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_direct_context_strips_minimax_reasoning_before_delivery():
+    class _DirectReader:
+        async def active_context(self):
+            return DirectContext(
+                knowledge_base_id="kb-rorze",
+                persona_body="Bạn là tư vấn viên.",
+                knowledge_text="Rorze đang tuyển nhân viên lắp ráp và vận hành máy CNC.",
+            )
+
+    class _DirectAgent:
+        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+            return (
+                '<think>\nThe user is asking "co viec o rorze ko".\n</think>\n\n'
+                "Có bạn nhé! VFIC đang tuyển 2 vị trí tại Rorze."
+            )
+
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    deps = _deps(zalo, conversation=svc)
+    deps.agent = _DirectAgent()
+    deps.direct_context = _DirectReader()
+
+    result = await run_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="co viec o rorze ko",
+        ),
+        deps,
+    )
+
+    visible_reply = "Có bạn nhé! VFIC đang tuyển 2 vị trí tại Rorze."
+    assert result == {"outcome": "direct_context", "reply": visible_reply}
+    assert zalo.sent == [("z1", visible_reply)]
+    assert recorded[-1]["reply"] == visible_reply
+
+
+@pytest.mark.asyncio
+async def test_direct_context_malformed_think_never_reaches_delivery():
+    class _DirectReader:
+        async def active_context(self):
+            return DirectContext(
+                knowledge_base_id="kb-rorze",
+                persona_body="Bạn là tư vấn viên.",
+                knowledge_text="Rorze đang tuyển nhân viên lắp ráp.",
+            )
+
+    class _DirectAgent:
+        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+            return "<think\ninternal reasoning from a truncated provider response"
+
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    deps = _deps(zalo, conversation=svc)
+    deps.agent = _DirectAgent()
+    deps.direct_context = _DirectReader()
+
+    result = await run_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="Rorze còn tuyển không?",
+        ),
+        deps,
+    )
+
+    visible_reply = retry_exhausted_fallback("Rorze còn tuyển không?")
+    assert result == {"outcome": "direct_context", "reply": visible_reply}
+    assert zalo.sent == [("z1", visible_reply)]
+    assert recorded[-1]["reply"] == visible_reply
+
+
+@pytest.mark.asyncio
+async def test_converged_content_boundary_strips_reasoning_from_curated_lane():
+    class _ProjectReader:
+        async def resolve(self, conv, user_text):  # noqa: ARG002
+            return ProjectTurnContext(
+                state="EXPLORE",
+                clarification=(
+                    "<think>internal routing note</think>"
+                    "**Bạn muốn hỏi Rorze hay LG Display?**"
+                ),
+            )
+
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv)
+    zalo = _FakeZalo()
+    deps = _deps(zalo, conversation=svc)
+    deps.direct_context = _ProjectReader()
+
+    result = await run_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="Rorze ở đâu?",
+        ),
+        deps,
+    )
+
+    visible_reply = "**Bạn muốn hỏi Rorze hay LG Display?**"
+    assert result == {"outcome": "project_clarification", "reply": visible_reply}
+    assert zalo.sent == [("z1", visible_reply)]
+    assert recorded[-1]["reply"] == visible_reply
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_injected_reply_policy_at_converged_boundary(monkeypatch):
+    class _ReplacementPolicy:
+        calls = 0
+
+        def finalize(self, candidate, *, generated, user_text):
+            self.calls += 1
+            assert candidate == "raw provider reply"
+            assert generated is True
+            assert user_text == "tôi muốn tìm việc lái xe"
+            return ReplyPolicyResult(output="replacement policy reply", verdict="passed")
+
+    policy = _ReplacementPolicy()
+    _stub_agent(monkeypatch, "raw provider reply")
+    svc, _ = _stub_svc(conv=_FakeConv())
+    zalo = _FakeZalo()
+
+    result = await run_turn(
+        _state(),
+        _deps(zalo, conversation=svc, reply_policy=policy),
+    )
+
+    assert result == {"outcome": "sent", "reply": "replacement policy reply"}
+    assert zalo.sent == [("z1", "replacement policy reply")]
+    assert policy.calls == 1
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ detection, verdict parsing, retry builder). These implement acceptance #5
 import pytest
 
 from app.graph.safety import (
+    DeterministicReplyPolicy,
     blocklist_hit,
     fast_safety_filter,
     retry_exhausted_fallback,
@@ -90,6 +91,41 @@ def test_fast_safety_exposes_reasoning_only_output_as_empty_after_clean():
     assert out["retryable_empty"] is True
     assert out["needs_llm_safety"] is True
     assert out["output"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "<think>internal reasoning ended before the closing tag",
+        "<think\ninternal reasoning after a truncated opener",
+        "<think internal reasoning after a malformed opener",
+        "< think>internal reasoning after a spaced opener",
+    ],
+)
+def test_fast_safety_discards_unclosed_minimax_think_reasoning(raw):
+    out = fast_safety_filter(raw)
+
+    assert out["empty_after_clean"] is True
+    assert out["needs_llm_safety"] is True
+    assert "internal reasoning" not in out["output"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "<think\ninternal reasoning after a truncated opener",
+        "< think>internal reasoning after a spaced opener",
+    ],
+)
+def test_reply_policy_fails_closed_on_malformed_think_openers(raw):
+    result = DeterministicReplyPolicy().finalize(
+        raw,
+        generated=True,
+        user_text="Rorze còn tuyển không?",
+    )
+
+    assert "internal reasoning" not in result.output
+    assert result.verdict == "empty_after_clean"
 
 
 @pytest.mark.parametrize(

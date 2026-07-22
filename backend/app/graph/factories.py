@@ -25,6 +25,7 @@ from app.graph.clients import (
     _openrouter_chat,
     build_embedder,
 )
+from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import GraphDeps
 
 logger = logging.getLogger(__name__)
@@ -597,6 +598,7 @@ async def build_deps(db, *, session_factory=None):
         zalo=zalo_sender,
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
+        reply_policy=DeterministicReplyPolicy(),
         make_retrieval=make_retrieval,
         lead=_LeadContextAdapter(db),
         faq_bypass=_FaqBypassAdapter(db, clients.embedder),

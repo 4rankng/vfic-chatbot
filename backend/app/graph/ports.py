@@ -55,6 +55,27 @@ class FaqBypassResult:
     runner_up_score: float | None = None
 
 
+@dataclass(frozen=True)
+class ReplyPolicyResult:
+    """Final user-visible text plus bounded observability metadata."""
+
+    output: str
+    verdict: str
+    trigger: str | None = None
+
+
+class ReplyPolicyPort(Protocol):
+    """Finalize candidate text independently of routing and transport layers."""
+
+    def finalize(
+        self,
+        candidate: str,
+        *,
+        generated: bool,
+        user_text: str,
+    ) -> ReplyPolicyResult: ...
+
+
 class ConversationStatePort(Protocol):
     async def record_proactive_outcome(
         self, conv: Any, *, message: str, result: Any, lock_owner: Any = None
@@ -211,6 +232,8 @@ class DirectContextPort(Protocol):
 __all__ = [
     "SendOutcome",
     "FaqBypassResult",
+    "ReplyPolicyResult",
+    "ReplyPolicyPort",
     "FaqBypassPort",
     "ConversationPort",
     "ConversationStatePort",
