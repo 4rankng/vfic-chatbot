@@ -1,7 +1,10 @@
 # Caddy edge — auto-TLS for bot.tingting.vip.
-# /webhooks, /api, /realtime, /socket.io -> FastAPI (web:8000); everything
-# else -> the frontend nginx image (frontend:80). apiBaseUrl defaults to
-# same-origin, so the SPA needs no deploy-time env injection.
+# This is a TEMPLATE: scripts/flip_caddy.sh renders __WEB_UPSTREAM__ to the
+# active blue/green color (web-blue or web-green) and `caddy reload`s. Do not
+# edit /opt/vfic/Caddyfile directly — regenerate it from this file.
+# /webhooks, /api, /realtime, /socket.io -> FastAPI (active web-<color>:8000);
+# everything else -> the frontend nginx image (frontend:80). apiBaseUrl defaults
+# to same-origin, so the SPA needs no deploy-time env injection.
 bot.tingting.vip {
 	encode zstd gzip
 
@@ -12,21 +15,21 @@ bot.tingting.vip {
 	}
 
 	handle /webhooks/* {
-		reverse_proxy web:8000
+		reverse_proxy __WEB_UPSTREAM__:8000
 	}
 
 	# Public liveness probe -> backend JSON health (not the SPA).
 	handle /health {
-		reverse_proxy web:8000
+		reverse_proxy __WEB_UPSTREAM__:8000
 	}
 
 	handle /api/* {
-		reverse_proxy web:8000
+		reverse_proxy __WEB_UPSTREAM__:8000
 	}
 
 	# SSE: disable buffering so events flush to the client immediately.
 	handle /realtime/* {
-		reverse_proxy web:8000 {
+		reverse_proxy __WEB_UPSTREAM__:8000 {
 			flush_interval -1
 		}
 	}
@@ -34,7 +37,7 @@ bot.tingting.vip {
 	# Socket.IO realtime (WebSocket + polling). reverse_proxy transparently
 	# upgrades the WS connection, so wss://<origin>/socket.io/ works here.
 	handle /socket.io/* {
-		reverse_proxy web:8000
+		reverse_proxy __WEB_UPSTREAM__:8000
 	}
 
 	# SPA (react-admin) served by the frontend image.

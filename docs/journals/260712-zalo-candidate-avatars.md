@@ -80,4 +80,6 @@ reactive turn now performs a best-effort user-detail lookup after runtime and
 lock ownership are validated but before lead context is assembled. The lookup
 is capped at two seconds, skipped when the turn deadline is already tight, and
 fails open to the existing low-priority enrichment path. Existing profiles
-short-circuit without another provider request.
+short-circuit without another provider request. The bounded lookup deliberately
+does not rotate tokens: only the uncapped persistence worker owns Zalo's
+single-use refresh-token exchange and durable token update.

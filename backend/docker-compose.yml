@@ -199,11 +199,11 @@ services:
   caddy:
     image: caddy:2
     depends_on:
-      # service_started (not service_healthy): a full-stack recreate boots web + 6 workers
-      # at once, and the transient CPU spike can blip web's healthcheck. Gating Caddy on
-      # service_healthy made `make deploy` abort with "web is unhealthy" even though web
-      # recovers seconds later. Caddy is a reverse proxy — it tolerates the brief gap.
-      web: { condition: service_started }
+      # Caddy proxies the ACTIVE web-<color> (tracked in /opt/vfic/ACTIVE_COLOR,
+      # rendered into ./Caddyfile by flip_caddy.sh). It must NOT depend on a fixed
+      # color: the inactive one is stopped between deploys, and gating on it would
+      # block startup. The active color auto-starts on reboot (unless-stopped); the
+      # brief cold-boot 502 window is unchanged from the single-web era.
       frontend: { condition: service_started }
     ports: ["80:80", "443:443"]
     volumes:

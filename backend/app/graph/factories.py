@@ -515,6 +515,7 @@ async def build_deps(db, *, session_factory=None):
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.profile_enrichment import ProfileEnrichmentService
     from app.services.retrieval import RetrievalRepository
+    from app.services.zalo_oa_service import ZaloOASender
     from app.services.zalo_sender import ZaloChannelSender
 
     clients = await _build_cached_clients(db)
@@ -528,9 +529,14 @@ async def build_deps(db, *, session_factory=None):
         zalo_config,
         refresh=lambda: integration_settings.refresh_oa_access_token(),
     )
+    # The inline profile lookup is hard-bounded by run_turn. Never attach the
+    # single-use refresh-token flow to a cancellable task: a cancellation after
+    # Zalo rotates but before we durably store the pair would strand the OA.
+    # persistence_low retains the uncapped refresh-aware fallback.
+    profile_sender = ZaloOASender(access_token=zalo_config.oa_access_token)
 
     async def _enrich_oa_profile(zalo_id: str, user_id: str) -> bool:
-        return await ProfileEnrichmentService(db, zalo_sender).enrich_oa_user(
+        return await ProfileEnrichmentService(db, profile_sender).enrich_oa_user(
             zalo_id,
             user_id=user_id,
         )
