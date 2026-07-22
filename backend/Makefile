@@ -136,7 +136,7 @@ rollback:
 # ---- Show active color, previous color/tag, and container health on prod. ----
 deploy-status:
 	@echo "==> $(PROD_SERVER) blue/green status"
-	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && echo "ACTIVE_COLOR=$$(cat ACTIVE_COLOR 2>/dev/null || echo <inaugural>)  PREV=$$(cat PREV_COLOR 2>/dev/null || echo none)@$$(cat PREV_TAG 2>/dev/null || echo none)" && docker compose ps'
+	$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && echo "ACTIVE_COLOR=$$(cat ACTIVE_COLOR 2>/dev/null || echo inaugural)  PREV=$$(cat PREV_COLOR 2>/dev/null || echo none)@$$(cat PREV_TAG 2>/dev/null || echo none)" && docker compose ps'
 
 # ---- Breaking-migration path (brief downtime; NOT blue/green). ----
 # Use ONLY for a non-additive migration that old+new code cannot both run against.

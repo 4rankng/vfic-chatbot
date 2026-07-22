@@ -40,7 +40,7 @@ echo "==> bg_deploy: active=${ACTIVE:-<inaugural>} next=$NEXT tag=$IMAGE_TAG"
 
 # 1. Pull the new image (web + workers share franknguyenvd/vfic-backend:$TAG).
 echo "==> [1/10] pulling images..."
-IMAGE_TAG="$IMAGE_TAG" docker compose pull "web-$NEXT" $WORKERS frontend
+IMAGE_TAG="$IMAGE_TAG" docker compose pull "web-$NEXT" $WORKERS
 
 # 2. Postgres + Redis (idempotent; never --force-recreate the data stores).
 echo "==> [2/10] ensuring postgres + redis..."

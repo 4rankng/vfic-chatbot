@@ -24,16 +24,20 @@ if [ ! -f Caddyfile.template ]; then
   exit 2
 fi
 
-# Render atomically: write to a temp file, then move into place so Caddy never
-# reads a half-written Caddyfile.
+# Render to a temporary file, then replace the Caddyfile *contents* in place.
+# The Caddyfile is bind-mounted into an already-running container: renaming a
+# replacement over it changes the host inode, leaving the container mounted to
+# the old inode. Keeping the inode stable lets `caddy reload` read the new
+# upstream without restarting the edge proxy.
 tmp="$(mktemp)"
 sed "s/__WEB_UPSTREAM__/web-${COLOR}/g" Caddyfile.template > "$tmp"
-mv "$tmp" Caddyfile
+cat "$tmp" > Caddyfile
+rm -f "$tmp"
 
-# Ensure Caddy is running (no-op if already up; compose does NOT recreate on a
-# mounted-file content change, so this never causes a blip). On the very first
-# deploy this is what starts Caddy against the just-rendered config.
-docker compose up -d caddy >/dev/null
+# Ensure Caddy is running without starting its dependencies. On the first
+# deploy this starts Caddy against the rendered configuration; later cutovers
+# leave the running edge proxy in place for its graceful reload.
+docker compose up -d --no-deps caddy >/dev/null
 
 # Validate the rendered config before applying. If validation is unavailable
 # (older Caddy) we still reload — the template is validated by construction.

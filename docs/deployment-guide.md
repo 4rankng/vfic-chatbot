@@ -24,7 +24,7 @@ never used by `make deploy`.
 | `postgres` | `pgvector/pgvector:pg16` | 1 | Source of truth. `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
 | `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
 | `web-blue` / `web-green` | `franknguyenvd/vfic-backend:latest` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
-| `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queue `webhook_high` only. Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit. |
+| `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **2** | RQ queue `webhook_high` only. Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
 | `worker-persistence` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
 | `worker-ingest` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
 | `worker-followup` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
@@ -44,6 +44,9 @@ never used by `make deploy`.
 every upstream is `__WEB_UPSTREAM__:8000`. `scripts/flip_caddy.sh` renders it to
 `/opt/vfic/Caddyfile` substituting the active color (`web-blue` or `web-green`)
 and runs `caddy reload` (a live reconfiguration — <1s, no dropped connections).
+The renderer replaces the file contents in place rather than renaming a new
+file over the bind mount, so the running Caddy container reads the new upstream
+on reload.
 `encode zstd gzip`; security headers (HSTS 1y, `nosniff`, `Referrer-Policy`);
 auto-TLS Let's Encrypt (certs in `vfic_caddy_data`). Do not edit
 `/opt/vfic/Caddyfile` directly — regenerate it from the template.
@@ -79,7 +82,8 @@ build + push both images → blue/green cutover.
    - Hand off to `scripts/bg_deploy.sh` (below).
 
 ### Blue/green cutover (`scripts/bg_deploy.sh`) — zero downtime at the edge
-1. Pull the new image.
+1. Pull the new backend image for the inactive web color and backend workers;
+   the frontend is not part of a backend blue/green cutover.
 2. Ensure postgres + redis (never force-recreate the data stores).
 3. Alembic widen + `upgrade head` (additive migrations are safe for blue/green;
    see `deploy-breaking` for non-additive ones).
