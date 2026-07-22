@@ -686,8 +686,8 @@ These shapes must not be flattened behind one generic job port.
 boundary. It eagerly serializes immutable JSON-safe payload snapshots before
 creating the background publish task, never passes ORM objects across the
 session boundary, does not delay the committed response, and is cancelled and
-drained before its event loop closes. Durable audit and outbound-outbox evidence remain in
-the same explicit transactions as their protected mutations; realtime publish
+drained before its event loop closes. Durable audit and outbound-outbox evidence
+remain in the same explicit transactions as their protected mutations; realtime publish
 failure cannot roll those transactions back.
 
 ---

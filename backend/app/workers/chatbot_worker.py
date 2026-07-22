@@ -17,6 +17,7 @@ from app.models.conversation import DeliveryStatus
 
 logger = logging.getLogger(__name__)
 _direct_turn_tasks: set[asyncio.Task[None]] = set()
+_DIRECT_TURN_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 
 # Static Vietnamese degradation message — sent when LLM is throttled (no LLM call).
 DEGRADATION_REPLY = (
@@ -53,12 +54,17 @@ def start_direct_chat_turn(job: dict) -> bool:
     return True
 
 
-async def drain_direct_chat_turns(*, timeout_seconds: float = 5.0) -> None:
+async def drain_direct_chat_turns(*, timeout_seconds: float | None = None) -> None:
     """Finish direct turns when possible, then cancel and drain stragglers."""
+    timeout = (
+        _DIRECT_TURN_SHUTDOWN_TIMEOUT_SECONDS
+        if timeout_seconds is None
+        else timeout_seconds
+    )
     pending = {task for task in _direct_turn_tasks if not task.done()}
     if not pending:
         return
-    _done, pending = await asyncio.wait(pending, timeout=timeout_seconds)
+    _done, pending = await asyncio.wait(pending, timeout=timeout)
     for task in pending:
         task.cancel()
     if pending:

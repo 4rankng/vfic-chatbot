@@ -49,11 +49,22 @@ async def _shutdown_web_resources() -> None:
         ("LLM clients", aclose_client_cache),
         ("HTTP clients", aclose_all),
     ):
+        cleanup_task = asyncio.create_task(cleanup())
         try:
-            await cleanup()
+            await asyncio.shield(cleanup_task)
         except asyncio.CancelledError as exc:
             cancellation = cancellation or exc
             logger.warning("web shutdown cleanup cancelled resource=%s", resource_name)
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001 - still close remaining resources
+                logger.warning(
+                    "web shutdown cleanup failed resource=%s",
+                    resource_name,
+                    exc_info=True,
+                )
         except Exception:  # noqa: BLE001 - close remaining independent resources
             logger.warning(
                 "web shutdown cleanup failed resource=%s",

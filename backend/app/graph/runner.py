@@ -704,6 +704,22 @@ def _recent_vacancy_query(recent_messages: list[Message]) -> str | None:
     return None
 
 
+def _vacancy_required_args(user_text: str) -> dict:
+    """Build forced ``list_active_jobs`` args for a vacancy-listing turn.
+
+    Always widens ``top_k`` to 10 so the full catalog is visible. When the user
+    asked to sort by salary ("sắp xếp theo lương từ cao xuống thấp"), the detected
+    direction is injected here because ``required_tool_args`` replaces the model's
+    own arguments for the forced first call — without this the LLM's ``sort_by``
+    would be dropped on the authoritative tool round.
+    """
+    args: dict = {"top_k": 10}
+    sort_by = detect_salary_sort_intent(user_text)
+    if sort_by is not None:
+        args["sort_by"] = sort_by
+    return args
+
+
 def _vacancy_evidence_query(
     user_text: str,
     recent_messages: list[Message],
