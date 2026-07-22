@@ -175,21 +175,6 @@ adminer:
 		(open http://localhost:18081 || xdg-open http://localhost:18081 || true); \
 		wait $$pid
 
-# ---- Fast-track: pull, apply migrations, rolling-restart backend containers. ----
-# Used by root Makefile's deploy-backend after push. No compose sync, no
-# bootstrap — just pull the latest image, migrate, and recreate.
-deploy-restart:
-	@echo "==> Pulling backend image on $(PROD_SERVER)..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull web worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
-	@echo "==> Applying Alembic migrations (idempotent)..."
-	@ok=0; for i in 1 2 3 4 5; do \
-		$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'" && { ok=1; break; }; \
-		echo "  alembic failed (attempt $$i/5), retrying in 4s..."; sleep 4; \
-	done; [ $$ok -eq 1 ]
-	@echo "==> Recreating backend containers..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
-	@echo "==> Backend deploy done."
-
 # ---- Fast-track: pull + rolling restart frontend container only. ----
 deploy-restart-frontend:
 	@echo "==> Pulling frontend image on $(PROD_SERVER)..."

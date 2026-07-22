@@ -433,9 +433,6 @@
   .inbox-bg-container .mode-segment-copy {
     display: none;
   }
-  .inbox-bg-container .header-avatar {
-    display: none;
-  }
   .inbox-bg-container .person-name {
     font-size: var(--chat-fs-body);
   }

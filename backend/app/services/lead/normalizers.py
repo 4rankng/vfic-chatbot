@@ -189,7 +189,7 @@ _PROFILE_FIELDS: list[tuple[str, str]] = [
 ]
 
 
-def lead_profile_text(lead: dict | None) -> str:
+def lead_profile_text(lead: dict | None, *, personalize: bool = False) -> str:
     """Format a lead dict into a compact text block for injection into the agent context.
 
     Returns a 'THÔNG TIN ỨNG VIÊN' section showing known values and 'chưa có'
@@ -203,4 +203,15 @@ def lead_profile_text(lead: dict | None) -> str:
     for key, label in _PROFILE_FIELDS:
         val = _pick(lead.get(key))
         lines.append(f"- {label}: {val or 'chưa có'}")
+    if personalize and _pick(lead.get("name")):
+        lines.extend(
+            [
+                "",
+                "CÁ NHÂN HÓA TỪ HỒ SƠ OA:",
+                "- Đã biết tên ứng viên: không hỏi lại tên.",
+                "- Có thể gọi tên tự nhiên khi phù hợp để cuộc trò chuyện thân thiện hơn, "
+                "nhưng không lặp tên máy móc trong mọi câu.",
+                "- Vẫn xưng hô với người dùng là 'bạn'.",
+            ]
+        )
     return "THÔNG TIN ỨNG VIÊN:\n" + "\n".join(lines)

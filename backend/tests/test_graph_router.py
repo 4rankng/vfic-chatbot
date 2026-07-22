@@ -130,6 +130,26 @@ def test_route_out_of_scope_beats_fast_lane_help_keyword():
     assert route.strategy == "safe_redirect"
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "tôi muốn nghỉ việc ở lg",
+        "tôi muốn nghỉ việc",
+        "muon nghi viec o lg",
+        "cho hỏi thủ tục nghỉ việc",
+    ],
+)
+def test_route_resignation_is_not_out_of_scope(message):
+    # Existing employees of VFIC-managed projects are an in-scope audience.
+    # Resignation / HR queries must reach the agent, not be bounced as lạc đề.
+    route = route_turn(message)
+
+    assert route.intent != "out_of_scope", (
+        f"resignation/HR query must not be out_of_scope: {message!r} -> {route.intent}"
+    )
+    assert route.strategy != "safe_redirect"
+
+
 def test_route_internal_safety_retry_prompt_is_not_out_of_scope():
     # A safety retry prompt (built by the agent loop when re-generating a flagged
     # reply) contains the user's original text + instructions. The router must

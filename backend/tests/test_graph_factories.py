@@ -8,6 +8,7 @@ import pytest
 
 from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
 from app.graph.factories import (
+    _LeadContextAdapter,
     _asks_to_explore,
     _build_fast_llm,
     build_deps,
@@ -139,6 +140,41 @@ async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session
     assert profile_sessions == [profile_db]
     assert enrichment_calls[0][0] is profile_db
     assert enrichment_calls[0][2:] == ("oa:user-1", "user-1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("chat_id", "expected_personalize"),
+    [("oa:user-1", True), ("bot-user-1", False)],
+)
+async def test_lead_context_personalizes_only_oa_profiles(
+    monkeypatch, chat_id, expected_personalize
+):
+    personalization_values = []
+
+    class _Repo:
+        def __init__(self, _db):
+            pass
+
+        async def by_zalo_id(self, _chat_id):
+            return {"name": "Nguyễn Văn An"}
+
+    def _profile_text(_lead, *, personalize=False):
+        personalization_values.append(personalize)
+        return "profile"
+
+    monkeypatch.setattr("app.services.lead.repository.LeadRepository", _Repo)
+    monkeypatch.setattr("app.services.lead.lead_profile_text", _profile_text)
+    monkeypatch.setattr(
+        "app.services.lead.probing.lead_collection_question",
+        lambda **_kwargs: "phone question",
+    )
+
+    profile, question = await _LeadContextAdapter(object()).context(chat_id, "hello", [])
+
+    assert profile == "profile"
+    assert question == "phone question"
+    assert personalization_values == [expected_personalize]
 
 
 def test_minimax_json_missing_key_names_minimax(monkeypatch):

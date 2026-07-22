@@ -584,10 +584,6 @@
   .inbox-bg-container .chat-header {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-
-  .inbox-bg-container .header-avatar {
-    display: none;
-  }
 }
 
 .inbox-bg-container .mode-menu-chevron {

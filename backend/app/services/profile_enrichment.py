@@ -16,16 +16,80 @@ Contract:
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from typing import Protocol
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.text import normalize_vietnamese_text
 from app.services.lead.events import LeadEventBus
 from app.services.lead.repository import LeadRepository
 from app.services.zalo_oa_service import OAUserProfile
 
 logger = logging.getLogger(__name__)
+
+
+_OA_PROFILE_NAME_BLOCKED_PHRASES = {
+    "admin",
+    "anonymous",
+    "cong ty",
+    "customer",
+    "khach hang",
+    "nguoi dung",
+    "no name",
+    "official account",
+    "test user",
+    "unknown",
+    "user",
+    "zalo user",
+}
+_OA_PROFILE_NICKNAME_TOKENS = {
+    "baby",
+    "be",
+    "bin",
+    "bo",
+    "bon",
+    "boy",
+    "cu",
+    "gau",
+    "girl",
+    "jerry",
+    "ken",
+    "kitty",
+    "meo",
+    "ti",
+    "teo",
+    "tom",
+}
+
+
+def normalize_oa_profile_name(value: str | None) -> str:
+    """Return a plausible full OA profile name, or ``""`` for nickname-like labels.
+
+    Zalo display names are user-controlled. Treat only conservative, person-like
+    two-to-six-word labels as known candidate names. Rejected labels still allow
+    avatar enrichment, while the normal lead probe asks for the candidate's
+    preferred/real name.
+    """
+    name = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value or "")).strip()
+    if not 3 <= len(name) <= 80:
+        return ""
+    words = name.split()
+    if not 2 <= len(words) <= 6:
+        return ""
+    if any(
+        not (char.isalpha() or char.isspace() or char in {"-", "'", "’"})
+        for char in name
+    ):
+        return ""
+    normalized = normalize_vietnamese_text(name)
+    if normalized in _OA_PROFILE_NAME_BLOCKED_PHRASES:
+        return ""
+    if set(normalized.split()) & _OA_PROFILE_NICKNAME_TOKENS:
+        return ""
+    return name
 
 
 class OAProfileLookup(Protocol):
@@ -82,19 +146,23 @@ class ProfileEnrichmentService:
         if profile is None or not (profile.avatar_url or profile.display_name):
             return False
 
+        display_name = normalize_oa_profile_name(profile.display_name)
+        if not (profile.avatar_url or display_name):
+            return False
+
         await self.db.execute(
             _ENRICH_SQL,
             {
                 "zalo_id": zalo_id,
                 "avatar_url": profile.avatar_url,
-                "display_name": profile.display_name,
+                "display_name": display_name,
             },
         )
         await self.db.commit()
         logger.info(
             "oa profile enrichment applied avatar=%s name=%s",
             bool(profile.avatar_url),
-            bool(profile.display_name),
+            bool(display_name),
         )
         # Emit lead.updated so an open conversation header/chat-thread refreshes
         # the avatar in realtime. Mirrors candidate_extraction.upsert_lead. The
@@ -111,4 +179,4 @@ class ProfileEnrichmentService:
         return True
 
 
-__all__ = ["ProfileEnrichmentService", "OAUserProfile"]
+__all__ = ["ProfileEnrichmentService", "OAUserProfile", "normalize_oa_profile_name"]

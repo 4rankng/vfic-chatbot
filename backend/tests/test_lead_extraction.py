@@ -792,6 +792,21 @@ class TestLeadProfileText:
         assert "Công việc mong muốn: chưa có" in text
         assert "Ghi chú: có xe máy" in text
 
+    def test_oa_personalization_uses_known_name_without_reasking(self):
+        lead = {"name": "Nguyễn Văn An"}
+
+        text = lead_profile_text(lead, personalize=True)
+
+        assert "Họ tên: Nguyễn Văn An" in text
+        assert "không hỏi lại tên" in text
+        assert "gọi tên tự nhiên" in text
+        assert "không lặp tên máy móc" in text
+
+    def test_non_oa_profile_text_has_no_oa_personalization_instruction(self):
+        text = lead_profile_text({"name": "Nguyễn Văn An"})
+
+        assert "CÁ NHÂN HÓA TỪ HỒ SƠ OA" not in text
+
     def test_all_fields_populated(self):
         lead = {
             "name": "Lan",

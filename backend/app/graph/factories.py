@@ -70,7 +70,7 @@ class _LeadContextAdapter:
 
         lead = await LeadRepository(self._db).by_zalo_id(chat_id)
         return (
-            lead_profile_text(lead),
+            lead_profile_text(lead, personalize=chat_id.startswith("oa:")),
             lead_collection_question(
                 lead=lead,
                 current_user_text=current_user_text,

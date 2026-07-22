@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.profile_enrichment import ProfileEnrichmentService
+from app.services.profile_enrichment import (
+    ProfileEnrichmentService,
+    normalize_oa_profile_name,
+)
 from app.services.zalo_oa_service import OAUserProfile
 
 pytestmark = pytest.mark.asyncio
@@ -163,3 +166,68 @@ async def test_applies_avatar_only_when_display_name_empty() -> None:
     sql_text, params = db.executed[0]
     assert params["avatar_url"] == "https://zalo.me/a.jpg"
     assert params["display_name"] == ""
+
+
+async def test_profile_name_never_overwrites_an_existing_candidate_name() -> None:
+    db = _FakeDB()
+    profile = OAUserProfile(
+        avatar_url="https://zalo.me/a.jpg", display_name="Tên Trên Zalo"
+    )
+    sender = _FakeSender(profile)
+    svc = _make_service(
+        db,
+        sender,
+        lead_row={"avatar_url": None, "name": "Tên ứng viên đã xác nhận"},
+    )
+
+    result = await svc.enrich_oa_user("oa:u1", user_id="u1")
+
+    assert result is True
+    sql_text, params = db.executed[0]
+    assert "name = COALESCE(NULLIF(leads.name, '')" in sql_text
+    assert params["display_name"] == "Tên Trên Zalo"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("Nguyễn Văn An", "Nguyễn Văn An"),
+        ("  Trần   Thị Lan  ", "Trần Thị Lan"),
+        ("Frank", ""),
+        ("Frank Ng.", ""),
+        ("Bé Gấu", ""),
+        ("Zalo User", ""),
+        ("user123", ""),
+        ("🌸 Lan Anh 🌸", ""),
+    ],
+)
+async def test_normalizes_only_plausible_full_oa_profile_names(
+    value: str, expected: str
+) -> None:
+    assert normalize_oa_profile_name(value) == expected
+
+
+async def test_nickname_like_profile_keeps_avatar_but_not_name() -> None:
+    db = _FakeDB()
+    profile = OAUserProfile(avatar_url="https://zalo.me/a.jpg", display_name="Bé Gấu")
+    sender = _FakeSender(profile)
+    svc = _make_service(db, sender, lead_row={"avatar_url": None, "name": ""})
+
+    result = await svc.enrich_oa_user("oa:u1", user_id="u1")
+
+    assert result is True
+    _sql_text, params = db.executed[0]
+    assert params["avatar_url"] == "https://zalo.me/a.jpg"
+    assert params["display_name"] == ""
+
+
+async def test_nickname_without_avatar_is_not_persisted() -> None:
+    db = _FakeDB()
+    sender = _FakeSender(OAUserProfile(avatar_url="", display_name="Frank"))
+    svc = _make_service(db, sender, lead_row={"avatar_url": None, "name": ""})
+
+    result = await svc.enrich_oa_user("oa:u1", user_id="u1")
+
+    assert result is False
+    assert db.executed == []
+    assert db.committed is False

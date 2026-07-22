@@ -1,16 +1,18 @@
 # Deployment Guide
 
-**Last updated:** 2026-07-18
+**Last updated:** 2026-07-22
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
 **Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/ChatBotN8N.git` (`main`)
 
 Deployment is **manual**, driven from a developer mac over SSH. There is **no
-CI deploy to production** — the `make deploy` flow orchestrates buildx push +
-remote recreate over ~9 sequential SSH calls (ControlMaster multiplexed).
+CI deploy to production** — `make deploy` builds + pushes both images and runs a
+**blue/green** cutover over SSH (ControlMaster multiplexed). The cutover is
+zero-downtime: the new color is health- + smoke-checked before Caddy is flipped
+onto it, and a failed smoke gate aborts with the old color still serving.
 
 ---
 
-## 1. Production stack — 10-service Docker Compose
+## 1. Production stack — Docker Compose with a blue/green web tier
 
 `backend/docker-compose.yml` is shipped to `/opt/vfic` and auto-loads
 `/opt/vfic/.env`. Images are pulled from DockerHub:
@@ -21,7 +23,7 @@ never used by `make deploy`.
 |---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | 1 | Source of truth. `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
 | `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
-| `web` | `franknguyenvd/vfic-backend:latest` | 1 | FastAPI (uvicorn, 1 worker, `web_concurrency`=2 default). Expose 8000. Volume `vfic_kb_uploads:/data/kb_uploads`. Healthcheck `python urllib /health`. |
+| `web-blue` / `web-green` | `franknguyenvd/vfic-backend:latest` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
 | `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queue `webhook_high` only. Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit. |
 | `worker-persistence` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
 | `worker-ingest` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
@@ -38,56 +40,87 @@ never used by `make deploy`.
 
 ## 2. Caddy edge routing
 
-`backend/Caddyfile` — site `bot.tingting.vip`. `encode zstd gzip`; security
-headers (HSTS 1y, `nosniff`, `Referrer-Policy`); auto-TLS Let's Encrypt
-(certs in `vfic_caddy_data`).
+`backend/Caddyfile.template` — site `bot.tingting.vip`. This is a **template**:
+every upstream is `__WEB_UPSTREAM__:8000`. `scripts/flip_caddy.sh` renders it to
+`/opt/vfic/Caddyfile` substituting the active color (`web-blue` or `web-green`)
+and runs `caddy reload` (a live reconfiguration — <1s, no dropped connections).
+`encode zstd gzip`; security headers (HSTS 1y, `nosniff`, `Referrer-Policy`);
+auto-TLS Let's Encrypt (certs in `vfic_caddy_data`). Do not edit
+`/opt/vfic/Caddyfile` directly — regenerate it from the template.
 
 | Path | Upstream | Notes |
 |---|---|---|
-| `/webhooks/*` | `web:8000` | Zalo inbound. `/webhooks/zalo/chatbot` + `/webhooks/zalo/oa`. |
+| `/webhooks/*` | active `web-<color>:8000` | Zalo inbound. `/webhooks/zalo/chatbot` + `/webhooks/zalo/oa`. |
 | `/health` | backend JSON | Health endpoint passthrough. |
-| `/api/*` | `web:8000` | REST API (`/api/v1`). |
-| `/realtime/*` | `web:8000` | `flush_interval -1` (SSE unbuffered) for `/realtime/events`. |
-| `/socket.io/*` | `web:8000` | WebSocket upgrade. |
+| `/api/*` | active `web-<color>:8000` | REST API (`/api/v1`). |
+| `/realtime/*` | active `web-<color>:8000` | `flush_interval -1` (SSE unbuffered) for `/realtime/events`. |
+| `/socket.io/*` | active `web-<color>:8000` | WebSocket upgrade. |
 | catch-all | `frontend:80` | SPA static. |
 
 ---
 
-## 3. Deploy flow
+## 3. Deploy flow (blue/green)
 
 All targets live in the root `Makefile` (delegates to `backend/Makefile`).
+`make deploy` is the one command that handles the whole thing: release-check →
+build + push both images → blue/green cutover.
 
 ### Full deploy (`make deploy`)
-1. `release-check` — requires a clean committed worktree, exactly one Alembic
-   head, then runs backend lint/tests and frontend lint/typecheck/unit tests/build.
-   It stops before any image is pushed if a check fails.
-2. `backup` — creates and verifies a fresh compressed production PostgreSQL
-   backup before any image is pushed or migration can run.
-3. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
-4. `cd backend && make push` — same for backend image.
-5. `cd backend && make deploy`:
-   - SSH `mkdir -p /opt/vfic`.
-   - SCP `docker-compose.yml` + `Caddyfile` to `/opt/vfic/`.
-   - Run `scripts/prod-env.sh` over SSH → generates `/opt/vfic/.env` (mode
-     0600) on first deploy: random `POSTGRES_PASSWORD`, `REDIS_PASSWORD`,
-     `JWT_SECRET` (openssl rand), random bootstrap admin password. Third-party
-     API keys left **blank** for the operator to fill. Idempotent.
-   - Pull the exact image tag for the committed release.
-   - `docker compose up -d postgres redis`; wait healthy (5× SSH retry).
-   - `docker compose run --rm web alembic upgrade head` (5× SSH retry).
-   - `docker compose run --rm web python -m scripts.create_admin --only-if-no-admins ...`
-     (idempotent bootstrap admin).
-   - Force-recreate `web`, `frontend`, and every worker/scheduler with that
-     exact tag; then require the application health check to pass.
+1. `release-check` — clean committed worktree, exactly one Alembic head, then
+   backend lint/tests and frontend lint/typecheck/unit tests/build. Stops before
+   any image is pushed if a check fails.
+2. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
+3. `cd backend && make push` — same for the backend image (now including
+   `scripts/smoke_turn.py`, which ships in the image).
+4. `cd backend && make deploy`:
+   - SCP `docker-compose.yml` + `Caddyfile.template` + `scripts/{bg_deploy,bg_rollback,flip_caddy}.sh` to `/opt/vfic`.
+   - `scripts/prod-env.sh` → generates `/opt/vfic/.env` (idempotent).
+   - `create_admin --only-if-no-admins` (idempotent bootstrap admin).
+   - Hand off to `scripts/bg_deploy.sh` (below).
+
+### Blue/green cutover (`scripts/bg_deploy.sh`) — zero downtime at the edge
+1. Pull the new image.
+2. Ensure postgres + redis (never force-recreate the data stores).
+3. Alembic widen + `upgrade head` (additive migrations are safe for blue/green;
+   see `deploy-breaking` for non-additive ones).
+4. Bring up the **inactive** web color + all workers at the new tag.
+5. Wait for the new color's `/health` to go healthy.
+6. **Smoke gate**: run one real bot turn on the new color
+   (`scripts/smoke_turn.py`) — exercises `claim_send` (outbox INSERT),
+   `record_bot_outcome`, and the realtime emit against the live service layer
+   with the LLM + Zalo stubbed (free, no external calls). This catches a bad
+   image that boots and passes `/health` but crashes mid-turn — the 2026-07
+   outage class. **Failure aborts before the flip; the old color keeps serving.**
+7. `flip_caddy.sh <new>` renders the Caddyfile + `caddy reload` onto the new
+   color (graceful live reconfig, <1s, no dropped connections).
+8. Record `PREV_COLOR`/`PREV_TAG`; write `ACTIVE_COLOR`.
+9. Stop the old color (kept stopped, not removed → instant rollback).
+
+State files in `/opt/vfic`: `ACTIVE_COLOR`, `PREV_COLOR`, `PREV_TAG`.
+Inaugural deploy (no `ACTIVE_COLOR` yet): `blue` is brought up first, Caddy
+flipped to it, then the legacy single-`web` container is removed.
+
+### Rollback (`make rollback`)
+Revives `PREV_COLOR` at `PREV_TAG`, recreates the workers to match, flips Caddy
+back (~1s, no rebuild), stops the demoted color. Swaps ACTIVE↔PREV so rollback
+is reversible.
+
+### Status (`make deploy-status`)
+Prints `ACTIVE_COLOR`, `PREV_COLOR`@`PREV_TAG`, and `docker compose ps`.
+
+### Breaking-migration deploy (`make deploy-breaking`)
+For a **non-additive** migration that old + new code cannot both run against:
+drains both colors, migrates, brings up `web-blue` on the new schema, flips to
+it. Accepts brief downtime — use only when the additive-migration assumption
+fails.
 
 ### Fast-track backend (`make deploy-backend`)
-Rebuild + push backend image → `deploy-restart`: pull `web`, apply Alembic,
-recreate `web worker-chatbot worker-persistence worker-ingest worker-followup
-scheduler` with the exact committed tag. No compose sync or bootstrap.
+Rebuild + push backend image → `deploy-restart` (now also blue/green: re-syncs
+the deploy scripts + runs `bg_deploy.sh`). No compose sync or bootstrap.
 
 ### Fast-track frontend (`make deploy-frontend`)
-Rebuild + push frontend image → `deploy-restart-frontend`: pull `frontend`,
-recreate `frontend` only.
+Rebuild + push frontend image → `deploy-restart-frontend`: pull + recreate
+`frontend` only (single-replica SPA, unaffected by the blue/green web tier).
 
 ### Adminer (`make adminer`)
 Starts `adminer` on the droplet, opens `http://localhost:18081` via an SSH

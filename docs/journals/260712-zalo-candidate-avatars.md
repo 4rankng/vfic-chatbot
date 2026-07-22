@@ -83,3 +83,17 @@ fails open to the existing low-priority enrichment path. Existing profiles
 short-circuit without another provider request. The bounded lookup deliberately
 does not rotate tokens: only the uncapped persistence worker owns Zalo's
 single-use refresh-token exchange and durable token update.
+
+## Follow-up: OA profile-name handling
+
+Date: 2026-07-22
+
+- This behavior is OA-only; it does not change non-OA profile handling.
+- A plausible full profile name can fill a missing `lead.name`, suppress the
+  redundant "what is your name?" question, and support natural,
+  non-repetitive personalization in the conversation.
+- Obvious nicknames or generic labels do not fill the name field, though the
+  avatar may still update from the profile lookup.
+- Self names and recruiter names are never overwritten.
+- A one-off production backfill is planned for existing OA conversations so
+  the new naming rules apply to prior leads as well.
