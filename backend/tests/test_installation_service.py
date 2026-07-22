@@ -141,3 +141,42 @@ def test_public_mapping_is_allowlisted_even_for_legacy_rows() -> None:
     )
 
     assert projected == {"display_name": "Safe customer"}
+
+
+@pytest.mark.parametrize(
+    "unsafe_value",
+    [
+        "sk-legacy-secret",
+        "AIza-legacy-secret",
+        "-----BEGIN PRIVATE KEY-----legacy",
+        {"access_token": "plaintext"},
+        ["safe", {"password": "plaintext"}],
+    ],
+)
+def test_public_mapping_omits_allowed_fields_containing_secret_material(
+    unsafe_value: object,
+) -> None:
+    projected = InstallationService._public_mapping(
+        {
+            "display_name": unsafe_value,
+            "support_name": "Safe support team",
+        },
+        {"display_name", "support_name"},
+    )
+
+    assert projected == {"support_name": "Safe support team"}
+
+
+def test_runtime_terminology_projection_omits_secret_keys_and_values() -> None:
+    from app.installation.domain.projection import project_public_terminology
+
+    projected = project_public_terminology(
+        {
+            "candidate": "Candidate",
+            "access_token": "plaintext",
+            "job": "sk-legacy-secret",
+            "nested": {"password": "plaintext"},
+        }
+    )
+
+    assert projected == {"candidate": "Candidate"}

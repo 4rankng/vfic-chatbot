@@ -32,6 +32,7 @@ from app.core.preamble_cache import (
     cached_minimax_config,
     cached_openrouter_config,
     cached_zalo_config,
+    evict_local_namespace,
 )
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
@@ -486,6 +487,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
+            evict_local_namespace(NS_INTEGRATION_ZALO)
             await bump_cache_version(NS_INTEGRATION_ZALO)
         return changed
 
@@ -560,6 +562,7 @@ class IntegrationSettingsService:
             # work. Zalo refresh tokens are single-use; losing the new token due
             # to an audit failure would require manual re-authorization.
             await self.db.commit()
+            evict_local_namespace(NS_INTEGRATION_ZALO)
             try:
                 await record_audit(
                     self.db,
@@ -611,6 +614,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
+            evict_local_namespace(NS_INTEGRATION_MINIMAX)
             await bump_cache_version(NS_INTEGRATION_MINIMAX)
         return changed
 
@@ -642,6 +646,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
+            evict_local_namespace(NS_INTEGRATION_OPENROUTER)
             await bump_cache_version(NS_INTEGRATION_OPENROUTER)
         return changed
 
@@ -760,6 +765,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
+            evict_local_namespace(NS_INTEGRATION_FACEBOOK)
             await bump_cache_version(NS_INTEGRATION_FACEBOOK)
         return changed
 
@@ -834,6 +840,7 @@ class IntegrationSettingsService:
         )
         await self.db.execute(stmt)
         await self.db.commit()
+        evict_local_namespace(NS_INTEGRATION_FACEBOOK)
         await bump_cache_version(NS_INTEGRATION_FACEBOOK)
 
     async def clear_facebook_page_token(self, page_id: str) -> None:
@@ -846,4 +853,5 @@ class IntegrationSettingsService:
             )
         )
         await self.db.commit()
+        evict_local_namespace(NS_INTEGRATION_FACEBOOK)
         await bump_cache_version(NS_INTEGRATION_FACEBOOK)

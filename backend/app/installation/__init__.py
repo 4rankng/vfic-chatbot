@@ -1,0 +1,1 @@
+"""Single-installation bounded context."""

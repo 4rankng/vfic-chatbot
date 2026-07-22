@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,6 +11,13 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.capabilities.registry import CapabilityRegistry, get_capability_registry
+from app.installation.domain.projection import (
+    contains_secret_key,
+    contains_secret_value,
+    project_public_mapping,
+    project_public_terminology,
+    secret_like_key,
+)
 from app.models.installation import (
     InstallationLifecycle,
     InstallationManifestRevision,
@@ -45,24 +51,24 @@ from app.services.installation.runtime import (
 
 VALIDATOR_VERSION = "1"
 logger = logging.getLogger(__name__)
-_SECRET_VALUE_PATTERN = re.compile(
-    r"^(?:sk-|xox[a-z]*-|ghp_|github_pat_|AIza)|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----",
-    re.IGNORECASE,
+PUBLIC_CUSTOMER_IDENTITY_KEYS = frozenset(
+    {
+        "display_name",
+        "legal_name",
+        "support_name",
+        "support_email",
+        "support_phone",
+        "website_url",
+        "address",
+    }
 )
-PUBLIC_CUSTOMER_IDENTITY_KEYS = {
-    "display_name",
-    "legal_name",
-    "support_name",
-    "support_email",
-    "support_phone",
-    "website_url",
-    "address",
-}
-PUBLIC_BRANDING_KEYS = {
-    "app_name",
-    "primary_color",
-    "secondary_color",
-}
+PUBLIC_BRANDING_KEYS = frozenset(
+    {
+        "app_name",
+        "primary_color",
+        "secondary_color",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -669,11 +675,7 @@ class InstallationService:
             locale=revision.locale,
             timezone=revision.timezone,
             currency=revision.currency,
-            terminology={
-                str(key): value
-                for key, value in revision.terminology.items()
-                if isinstance(value, str) and not self._secret_like_key(str(key))
-            },
+            terminology=project_public_terminology(revision.terminology),
             capability_ids=revision.capability_ids,
             readiness_code=readiness,
             legacy_workspace=False,
@@ -1021,40 +1023,19 @@ class InstallationService:
 
     @classmethod
     def _contains_secret_key(cls, value: object) -> bool:
-        if isinstance(value, dict):
-            return any(
-                cls._secret_like_key(str(key)) or cls._contains_secret_key(item)
-                for key, item in value.items()
-            )
-        if isinstance(value, list):
-            return any(cls._contains_secret_key(item) for item in value)
-        return False
+        return contains_secret_key(value)
 
     @classmethod
     def _contains_secret_value(cls, value: object) -> bool:
-        if isinstance(value, dict):
-            return any(cls._contains_secret_value(item) for item in value.values())
-        if isinstance(value, list):
-            return any(cls._contains_secret_value(item) for item in value)
-        if hasattr(value, "model_dump"):
-            return cls._contains_secret_value(value.model_dump(mode="json"))
-        return isinstance(value, str) and bool(_SECRET_VALUE_PATTERN.search(value.strip()))
+        return contains_secret_value(value)
 
     @staticmethod
     def _secret_like_key(key: str) -> bool:
-        normalized = "".join(character for character in key.lower() if character.isalnum())
-        return (
-            "secret" in normalized
-            or normalized.endswith("token")
-            or normalized.endswith("apikey")
-            or normalized.endswith("password")
-            or normalized.endswith("credential")
-            or normalized.endswith("privatekey")
-        )
+        return secret_like_key(key)
 
     @staticmethod
-    def _public_mapping(value: dict, allowed_keys: set[str]) -> dict:
-        return {key: item for key, item in value.items() if key in allowed_keys}
+    def _public_mapping(value: dict, allowed_keys: set[str] | frozenset[str]) -> dict:
+        return project_public_mapping(value, allowed_keys)
 
     @staticmethod
     def _error(

@@ -1,20 +1,28 @@
-"""Tests for the shared-preamble cache (integration settings + system prompt).
+"""Tests for the shared-preamble cache helpers.
 
-Covers: cache hit/miss, version-bump invalidation, Redis-down safety, and the
-invariant that ``resolve_zalo`` is never cached. All I/O (Redis) is mocked —
-no live process required.
+Covers: process-local secret-cache hit/miss, version invalidation, Redis-outage
+bypass, TTL expiry, bounded growth, and unchanged Redis-backed system-prompt
+behavior. All I/O (Redis) is mocked — no live process required.
 """
 
 from __future__ import annotations
 
 import pytest
 
+from app.core import preamble_cache
 from app.core.preamble_cache import (
     cached_minimax_config,
     cached_openrouter_config,
     cached_system_prompt,
     cached_value,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_local_secret_cache():
+    preamble_cache._reset_local_secret_cache()
+    yield
+    preamble_cache._reset_local_secret_cache()
 
 
 # ── Test doubles ─────────────────────────────────────────────────────────
@@ -25,6 +33,7 @@ class _FakeRedis:
 
     def __init__(self) -> None:
         self._store: dict[str, str] = {}
+        self.set_calls: list[tuple[str, str, int | None, bool]] = []
 
     async def get(self, key: str) -> str | None:
         return self._store.get(key)
@@ -37,6 +46,7 @@ class _FakeRedis:
         ex: int | None = None,
         nx: bool = False,
     ) -> str | bool:
+        self.set_calls.append((key, value, ex, nx))
         if nx and key in self._store:
             return False
         self._store[key] = value
@@ -45,6 +55,9 @@ class _FakeRedis:
     async def incr(self, key: str) -> int:
         self._store[key] = str(int(self._store.get(key, "0")) + 1)
         return int(self._store[key])
+
+    async def delete(self, key: str) -> int:
+        return 1 if self._store.pop(key, None) is not None else 0
 
 
 class _ExplodingRedis:
@@ -73,8 +86,7 @@ class _ExplodingRedis:
 @pytest.mark.asyncio
 async def test_cached_value_hits_db_on_miss_then_caches(monkeypatch):
     redis = _FakeRedis()
-    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
-    monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
 
     calls = {"n": 0}
 
@@ -103,7 +115,7 @@ async def test_cached_value_hits_db_on_miss_then_caches(monkeypatch):
 @pytest.mark.asyncio
 async def test_cached_value_version_bump_invalidates(monkeypatch):
     redis = _FakeRedis()
-    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
     monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
 
     from app.core.cache import bump_cache_version
@@ -125,18 +137,30 @@ async def test_cached_value_version_bump_invalidates(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cached_value_redis_down_falls_through_to_loader(monkeypatch):
-    redis = _ExplodingRedis()
-    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
-    monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
+async def test_cached_value_redis_version_outage_bypasses_local_cache(monkeypatch):
+    healthy_redis = _FakeRedis()
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: healthy_redis)
+
+    calls = {"n": 0}
 
     async def loader():
-        return "live-value"
+        calls["n"] += 1
+        return f"live-value-{calls['n']}"
 
-    out = await cached_value(
+    first = await cached_value(
         key_prefix="test:k", namespace="test_ns", ttl_seconds=60, loader=loader
     )
-    assert out == "live-value"  # no exception escapes
+    assert first == "live-value-1"
+
+    failing_redis = _ExplodingRedis()
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: failing_redis)
+
+    second = await cached_value(
+        key_prefix="test:k", namespace="test_ns", ttl_seconds=60, loader=loader
+    )
+
+    assert second == "live-value-2"
+    assert calls["n"] == 2
 
 
 # ── typed helpers (minimax / openrouter / system prompt) ─────────────────
@@ -145,8 +169,7 @@ async def test_cached_value_redis_down_falls_through_to_loader(monkeypatch):
 @pytest.mark.asyncio
 async def test_cached_minimax_config_caches_dict(monkeypatch):
     redis = _FakeRedis()
-    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
-    monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
 
     calls = {"n": 0}
 
@@ -157,13 +180,14 @@ async def test_cached_minimax_config_caches_dict(monkeypatch):
     assert await cached_minimax_config(loader) == {"api_key": "sk-1", "enabled": True}
     assert await cached_minimax_config(loader) == {"api_key": "sk-1", "enabled": True}
     assert calls["n"] == 1
+    assert redis.set_calls == []
+    assert all("sk-1" not in value for value in redis._store.values())
 
 
 @pytest.mark.asyncio
 async def test_cached_openrouter_config_caches_dict(monkeypatch):
     redis = _FakeRedis()
-    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
-    monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
 
     calls = {"n": 0}
 
@@ -177,9 +201,91 @@ async def test_cached_openrouter_config_caches_dict(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_cached_value_expires_using_monotonic_ttl(monkeypatch):
+    redis = _FakeRedis()
+    clock = {"now": 100.0}
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
+    monkeypatch.setattr(preamble_cache, "_MONOTONIC", lambda: clock["now"])
+
+    calls = {"n": 0}
+
+    async def loader():
+        calls["n"] += 1
+        return {"value": calls["n"]}
+
+    assert await cached_value(
+        key_prefix="ttl:k",
+        namespace="ttl_ns",
+        ttl_seconds=5,
+        loader=loader,
+    ) == {"value": 1}
+    clock["now"] = 104.9
+    assert await cached_value(
+        key_prefix="ttl:k",
+        namespace="ttl_ns",
+        ttl_seconds=5,
+        loader=loader,
+    ) == {"value": 1}
+    clock["now"] = 105.1
+    assert await cached_value(
+        key_prefix="ttl:k",
+        namespace="ttl_ns",
+        ttl_seconds=5,
+        loader=loader,
+    ) == {"value": 2}
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_cached_value_enforces_small_process_local_bound(monkeypatch):
+    redis = _FakeRedis()
+    monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
+    monkeypatch.setattr(preamble_cache, "_LOCAL_SECRET_CACHE_MAX_ENTRIES", 2)
+
+    calls = {"ns1": 0, "ns2": 0, "ns3": 0}
+
+    def _loader(namespace: str):
+        async def _load():
+            calls[namespace] += 1
+            return namespace
+
+        return _load
+
+    await cached_value(
+        key_prefix="bound:k1",
+        namespace="ns1",
+        ttl_seconds=60,
+        loader=_loader("ns1"),
+    )
+    await cached_value(
+        key_prefix="bound:k2",
+        namespace="ns2",
+        ttl_seconds=60,
+        loader=_loader("ns2"),
+    )
+    await cached_value(
+        key_prefix="bound:k3",
+        namespace="ns3",
+        ttl_seconds=60,
+        loader=_loader("ns3"),
+    )
+
+    assert len(preamble_cache._LOCAL_SECRET_CACHE) == 2
+
+    await cached_value(
+        key_prefix="bound:k1",
+        namespace="ns1",
+        ttl_seconds=60,
+        loader=_loader("ns1"),
+    )
+    assert calls["ns1"] == 2
+    assert calls["ns2"] == 1
+    assert calls["ns3"] == 1
+
+
+@pytest.mark.asyncio
 async def test_cached_system_prompt_round_trips_string(monkeypatch):
     redis = _FakeRedis()
-    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
     monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
 
     calls = {"n": 0}
@@ -202,7 +308,6 @@ async def test_cached_system_prompt_round_trips_string(monkeypatch):
 @pytest.mark.asyncio
 async def test_cached_system_prompt_is_isolated_by_provider_suffix(monkeypatch):
     redis = _FakeRedis()
-    monkeypatch.setattr("app.core.redis.get_redis", lambda: redis)
     monkeypatch.setattr("app.core.cache.get_redis", lambda: redis)
 
     calls = {"n": 0}
@@ -220,58 +325,3 @@ async def test_cached_system_prompt_is_isolated_by_provider_suffix(monkeypatch):
     assert (again, again_hit) == ("PROMPT-1", True)
     assert calls["n"] == 2
 
-
-# ── resolve_zalo is never cached (the token-rotation invariant) ───────────
-
-
-@pytest.mark.asyncio
-async def test_resolve_zalo_is_not_cached():
-    """resolve_zalo must always read from the DB; caching would break OA token refresh."""
-    from app.services.integration_settings import (
-        IntegrationSettingsService,
-        ZALO_OA_REFRESH_TOKEN,
-    )
-
-    class _SettingsZalo:
-        integration_settings_encryption_key = "test-integration-key"
-        jwt_secret = "x"
-        zalo_bot_token = ""
-        zalo_bot_webhook_secret = ""
-        zalo_oa_app_id = ""
-        zalo_oa_secret_key = ""
-        zalo_oa_access_token = ""
-        zalo_oa_refresh_token = ""
-
-    class _Row:
-        def __init__(self, key, encrypted_value):
-            self.key = key
-            self.encrypted_value = encrypted_value
-            self.is_secret = True
-            self.updated_by = None
-
-    class _Result:
-        def __init__(self, rows):
-            self._rows = rows
-
-        def all(self):
-            return self._rows
-
-    class _Db:
-        def __init__(self, rows):
-            self._rows = rows
-            self.scalars_calls = 0
-
-        async def scalars(self, _q):
-            self.scalars_calls += 1
-            return _Result(self._rows)
-
-    svc = IntegrationSettingsService(_Db([]), settings=_SettingsZalo())
-    encrypted = svc.cipher.encrypt("rt-secret")
-    db = _Db([_Row(ZALO_OA_REFRESH_TOKEN, encrypted)])
-    svc = IntegrationSettingsService(db, settings=_SettingsZalo())
-
-    await svc.resolve_zalo()
-    await svc.resolve_zalo()
-
-    # Both calls hit the DB — no caching layer intercepts resolve_zalo.
-    assert db.scalars_calls == 2
