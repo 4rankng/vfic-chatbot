@@ -8,7 +8,6 @@ import { ConversationContextPanel } from "../../conversations/ConversationContex
 import {
   getLeadPriorityChip,
   getLeadStatusColor,
-  getZaloUserId,
 } from "../../conversations/conversationDisplay";
 import type { Conversation, Lead } from "../../types";
 import type {
@@ -161,9 +160,7 @@ const RecruitmentConversationContext = ({
     lead,
   );
   const colors = getLeadStatusColor(lead);
-  const externalId = conversation
-    ? getZaloUserId(conversation.zalo_chat_id, conversation.zalo_channel)
-    : null;
+  const phone = lead?.phone?.trim() || undefined;
   return (
     <>
       {children({
@@ -171,7 +168,7 @@ const RecruitmentConversationContext = ({
         avatarUrl,
         avatarBackground: colors.bg,
         avatarForeground: colors.ink,
-        externalIdentityLabel: externalId ? `Zalo ID: ${externalId}` : undefined,
+        contactSubtitle: phone,
         avatarAlt: `Ảnh đại diện của ${displayName}`,
         panelLabel: "thông tin ứng viên",
         renderPanel: ({ open, persistent, onClose, onCloseAutoFocus }) => (

@@ -71,12 +71,21 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
-.inbox-bg-container .zalo-user-id {
+.inbox-bg-container .person-subtitle {
   margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--workspace-ink-muted);
   font-size: var(--chat-fs-caption);
   line-height: var(--chat-lh-tight);
   overflow-wrap: anywhere;
+}
+.inbox-bg-container .person-subtitle-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  opacity: 0.8;
 }
 .inbox-bg-container .person-name-button {
   appearance: none;

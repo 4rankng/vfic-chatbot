@@ -8,7 +8,6 @@ import type {
   ConversationSlots,
 } from "../capabilities/types";
 import type { Conversation } from "../types";
-import { getZaloUserId } from "./conversationDisplay";
 
 const genericName = (conversation: Conversation): string =>
   conversation.contact?.display_name?.trim() ||
@@ -41,16 +40,13 @@ export const getGenericConversationContext = (
   conversation: Conversation | undefined,
 ): ConversationContextValue => {
   const displayName = conversation ? genericName(conversation) : "Liên hệ";
-  const externalId = conversation
-    ? conversation.channel_identity?.external_id ||
-      getZaloUserId(conversation.zalo_chat_id, conversation.zalo_channel)
-    : null;
+  const phone = conversation?.contact?.primary_phone?.trim() || undefined;
   return {
     displayName,
     avatarUrl: conversation?.contact?.avatar_url,
     avatarBackground: "var(--muted)",
     avatarForeground: "var(--muted-foreground)",
-    externalIdentityLabel: externalId ? `ID: ${externalId}` : undefined,
+    contactSubtitle: phone,
     avatarAlt: `Ảnh đại diện của ${displayName}`,
     panelLabel: "thông tin liên hệ",
   };

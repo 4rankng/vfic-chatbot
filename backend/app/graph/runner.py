@@ -37,8 +37,6 @@ from app.graph.direct_context import (
 )
 from app.graph.prompts import ERROR_REPLY
 from app.graph.router import (
-    has_specific_vacancy_target,
-    is_generic_vacancy_listing,
     is_vacancy_lookup,
     route_turn,
     routing_instruction,
@@ -175,12 +173,16 @@ async def _agent_turn(
     project_context=None,
 ) -> str:
     route = route_turn(user_text)
+    focused_project = bool(
+        project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
+    )
+    evidence_query = _vacancy_evidence_query(
+        user_text,
+        recent_messages,
+        focused_project=focused_project,
+    )
     vacancy_authority_tool = (
-        "list_active_jobs"
-        if route.reason == "vacancy_listing"
-        else "search_knowledge"
-        if route.reason == "vacancy_terms"
-        else None
+        "list_active_jobs" if route.reason == "vacancy_listing" else None
     )
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
         allowed_tools = (
@@ -213,7 +215,7 @@ async def _agent_turn(
             deps,
             policy=manifest_policy,
             allowed_tools=allowed_tools,
-            lookup_query=_vacancy_evidence_query(user_text, recent_messages) or user_text,
+            lookup_query=evidence_query or user_text,
             required_tool="list_active_jobs" if route.reason == "vacancy_listing" else None,
             required_tool_args={"top_k": 10} if route.reason == "vacancy_listing" else None,
             metrics=timings,
@@ -379,7 +381,7 @@ async def _agent_turn(
         "allowed_tools": allowed_tools,
         "use_fast": use_fast,
         "make_retrieval": deps.make_retrieval,
-        "lookup_query": _vacancy_evidence_query(user_text, recent_messages) or user_text,
+        "lookup_query": evidence_query or user_text,
         "metrics": timings,
         "retry_empty_generation": True,
     }
@@ -392,7 +394,7 @@ async def _agent_turn(
     elif focused_rag:
         agent_kwargs["required_tool"] = "search_knowledge"
         agent_kwargs["required_tool_args"] = {
-            "query": _vacancy_evidence_query(user_text, recent_messages) or user_text,
+            "query": evidence_query or user_text,
             "project_slug": project_context.project_slug,
         }
     if resolved_tool_registry is not None:
@@ -671,40 +673,36 @@ _FAQ_BYPASS_VOLATILE_MARKERS = (
     "liên hệ",
 )
 
-def _changes_vacancy_topic(body: str) -> bool:
-    """Whether an intervening detail question positively names a new subject."""
-    return route_turn(body).intent == "faq_detail" and has_specific_vacancy_target(body)
-
-
 def _recent_vacancy_query(recent_messages: list[Message]) -> str | None:
     for message in reversed(recent_messages):
         sender = getattr(message, "sender", "")
         sender_value = getattr(sender, "value", sender)
         body = str(getattr(message, "body", "") or "")
-        if sender_value != "WORKER":
-            continue
-        if is_vacancy_lookup(body):
+        if sender_value == "WORKER" and is_vacancy_lookup(body):
             return body
-        if _changes_vacancy_topic(body):
-            return None
     return None
 
 
-def _vacancy_evidence_query(user_text: str, recent_messages: list[Message]) -> str | None:
-    """Scope vacancy facts and follow-ups to the same published recruitment evidence."""
-    if is_generic_vacancy_listing(user_text):
-        return None
+def _vacancy_evidence_query(
+    user_text: str,
+    recent_messages: list[Message],
+    *,
+    focused_project: bool = False,
+) -> str | None:
+    """Build detail evidence text while preferring durable Project focus over chat prose."""
     if is_vacancy_lookup(user_text):
-        return user_text
+        return None
     if route_turn(user_text).intent != "faq_detail":
         return None
+    if focused_project:
+        return user_text
     vacancy_query = _recent_vacancy_query(recent_messages)
     return f"{vacancy_query}\n{user_text}" if vacancy_query else None
 
 
 def _faq_bypass_allowed(user_text: str, recent_messages: list[Message]) -> bool:
     """Prefer canonical vacancy FAQs; keep other volatile claims on live paths."""
-    if is_generic_vacancy_listing(user_text):
+    if is_vacancy_lookup(user_text):
         return False
     normalized = user_text.casefold()
     if _vacancy_evidence_query(user_text, recent_messages) is not None:

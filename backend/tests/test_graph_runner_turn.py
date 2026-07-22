@@ -44,7 +44,7 @@ def test_faq_bypass_refuses_volatile_operational_questions():
     assert runner._faq_bypass_allowed("Hồ sơ cần những gì?", []) is True
     assert runner._faq_bypass_allowed("Lương vị trí này bao nhiêu?", []) is False
     assert runner._faq_bypass_allowed("Bên mình còn tuyển không?", []) is False
-    assert runner._faq_bypass_allowed("bên bạn có nhận thợ hàn không?", []) is True
+    assert runner._faq_bypass_allowed("bên bạn có nhận thợ hàn không?", []) is False
     assert runner._faq_bypass_allowed("bên mình đang tuyển gì?", []) is False
     assert runner._faq_bypass_allowed("bên bạn còn việc không?", []) is False
     assert (
@@ -56,34 +56,11 @@ def test_faq_bypass_refuses_volatile_operational_questions():
     )
 
 
-def test_vacancy_evidence_query_stops_at_a_new_named_topic():
-    history = [
-        SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?"),
-        SimpleNamespace(sender="WORKER", body="Samsung có ca đêm không?"),
-    ]
+def test_vacancy_evidence_query_uses_current_detail_and_not_free_text_history():
+    history = [SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?")]
 
-    assert runner._vacancy_evidence_query("lương bao nhiêu?", history) is None
-
-
-def test_vacancy_evidence_query_keeps_acknowledgements_and_role_details_in_thread():
-    for body in (
-        "dạ vâng ạ",
-        "ok bạn",
-        "tôi hiểu rồi",
-        "công nhân ạ",
-        "ca làm thế nào",
-        "em ở An Dương",
-        "mình vẫn quan tâm",
-        "cảm ơn bạn",
-    ):
-        history = [
-            SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?"),
-            SimpleNamespace(sender="WORKER", body=body),
-        ]
-
-        scoped = runner._vacancy_evidence_query("lương bao nhiêu?", history)
-        assert scoped is not None
-        assert scoped.startswith("LG Tràng Duệ đang tuyển không?")
+    assert runner._vacancy_evidence_query("lương bao nhiêu?", history) == "lương bao nhiêu?"
+    assert runner._vacancy_evidence_query("bên mình còn tuyển không?", history) is None
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +228,7 @@ def _state() -> BotRunState:
 
 
 @pytest.mark.asyncio
-async def test_vacancy_turn_uses_direct_context_llm():
+async def test_project_detail_turn_uses_direct_context_llm():
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
@@ -284,10 +261,7 @@ async def test_vacancy_turn_uses_direct_context_llm():
         BotRunState(
             conversation_id=CONV_ID,
             version_at_start=1,
-            user_text=(
-                "mình nhà ở quán toan _hp gần IG tràng duệ."
-                "bên IG tràng duệ mình đang tuyển ạ"
-            ),
+            user_text="Công việc ở LG Display làm gì?",
         ),
         deps,
     )
@@ -361,12 +335,12 @@ async def test_direct_context_malformed_think_never_reaches_delivery():
         BotRunState(
             conversation_id=CONV_ID,
             version_at_start=1,
-            user_text="Rorze còn tuyển không?",
+            user_text="Công việc ở Rorze làm gì?",
         ),
         deps,
     )
 
-    visible_reply = retry_exhausted_fallback("Rorze còn tuyển không?")
+    visible_reply = retry_exhausted_fallback("Công việc ở Rorze làm gì?")
     assert result == {"outcome": "direct_context", "reply": visible_reply}
     assert zalo.sent == [("z1", visible_reply)]
     assert recorded[-1]["reply"] == visible_reply
@@ -1653,7 +1627,7 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rag_vacancy_turn_uses_assigned_knowledge_for_exact_reported_message(monkeypatch):
+async def test_rag_vacancy_turn_requires_active_job_catalog_for_exact_reported_message(monkeypatch):
     from app.graph.runner import _agent_turn
 
     query = (
@@ -1697,9 +1671,10 @@ async def test_rag_vacancy_turn_uses_assigned_knowledge_for_exact_reported_messa
     )
 
     assert reply == "LG Display Tràng Duệ đang tuyển."
-    assert captured["allowed_tools"] == ("search_knowledge",)
+    assert captured["allowed_tools"] == ("list_active_jobs",)
     assert captured["lookup_query"] == query
-    assert "required_tool" not in captured
+    assert captured["required_tool"] == "list_active_jobs"
+    assert captured["required_tool_args"] == {"top_k": 10}
 
 
 @pytest.mark.asyncio

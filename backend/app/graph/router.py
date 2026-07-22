@@ -154,62 +154,6 @@ _VACANCY_PHRASES = (
     "tuyen dung cong viec",
 )
 
-_GENERIC_VACANCY_LISTING_PATTERNS = tuple(
-    re.compile(pattern)
-    for pattern in (
-        r"^(?:gioi thieu|cho (?:minh|toi|em) xem) (?:tat ca )?(?:cac |nhung )?"
-        r"(?:vi tri|cong viec|viec lam) (?:hien )?dang tuyen$",
-        r"^(?:hien tai |hien gio |bay gio )?(?:co |con )?(?:nhung |cac )?"
-        r"(?:cong viec|viec lam|vi tri)(?: gi| nao)? (?:dang|con) tuyen$",
-        r"^(?:ben (?:minh|ban) )?(?:dang|con|co|can) tuyen(?: dung)?"
-        r"(?: (?:nhung|cac))?(?: (?:cong viec|viec lam|vi tri))?(?: gi| nao)?$",
-        r"^(?:ben (?:minh|ban) )?(?:hien )?(?:co|con) "
-        r"(?:viec|viec lam|cong viec|vi tri)(?: gi| nao)?(?: khong| ko)?$",
-    )
-)
-
-_LISTING_CUE_TERMS = frozenset({"cac", "gi", "job", "nao", "nhung", "viec"})
-_ROLE_TAIL_GENERIC_TERMS = frozenset(
-    {
-        "a",
-        "ah",
-        "cac",
-        "duoc",
-        "dung",
-        "gi",
-        "khong",
-        "ko",
-        "nao",
-        "nhi",
-        "nhung",
-        "the",
-        "tri",
-        "vay",
-        "vi",
-        "viec",
-    }
-)
-_PROPER_SUBJECT_STOPWORDS = frozenset(
-    {
-        "anh",
-        "ban",
-        "ben",
-        "cho",
-        "co",
-        "cong",
-        "da",
-        "dang",
-        "don",
-        "em",
-        "hien",
-        "hoi",
-        "minh",
-        "toi",
-        "xin",
-    }
-)
-_ROLE_TAIL = re.compile(r"\b(?:tuyen|nhan)\s+(?P<role>.+)$")
-
 _NON_ROLE_ACCEPTANCE_PREFIXES = (
     "vien",  # normalized "nhân viên": avoids treating "có nhân viên" as "có nhận"
     "ho so",
@@ -276,55 +220,6 @@ def is_vacancy_lookup(user_text: str) -> bool:
     return not candidate_object.startswith(_NON_ROLE_ACCEPTANCE_PREFIXES)
 
 
-def _explicit_role_terms(text: str) -> set[str]:
-    match = _ROLE_TAIL.search(text)
-    if match is None:
-        return set()
-    return {
-        term
-        for term in re.findall(r"[a-z0-9]+", match.group("role"))
-        if term not in _ROLE_TAIL_GENERIC_TERMS
-    }
-
-
-def has_specific_vacancy_target(user_text: str) -> bool:
-    """Whether a turn positively names a company/location or a role target."""
-    normalized = _normalize(user_text)
-    if _explicit_role_terms(normalized):
-        return True
-    if "lg" in re.findall(r"[a-z0-9]+", normalized):
-        return True
-    for token in re.findall(r"[^\W\d_]+", user_text or "", flags=re.UNICODE):
-        normalized_token = normalize_vietnamese_text(token)
-        if (
-            token[:1].isupper()
-            and normalized_token not in _PROPER_SUBJECT_STOPWORDS
-            and len(normalized_token) >= 2
-        ):
-            return True
-    return False
-
-
-def is_generic_vacancy_listing(user_text: str) -> bool:
-    """Whether the user asks for the full current catalog without a named target."""
-    text = re.sub(r"[?.!,;:]+$", "", _normalize(user_text)).strip()
-    if not is_vacancy_lookup(text):
-        return False
-    if any(pattern.fullmatch(text) for pattern in _GENERIC_VACANCY_LISTING_PATTERNS):
-        return True
-    if has_specific_vacancy_target(user_text):
-        return False
-    if _LISTING_CUE_TERMS & set(re.findall(r"[a-z0-9]+", text)):
-        return True
-    return bool(
-        re.fullmatch(
-            r"(?:ben (?:minh|ban) )?(?:dang|con|co|can) tuyen(?: dung)?"
-            r"(?: khong| ko)?",
-            text,
-        )
-    )
-
-
 def route_turn(user_text: str) -> TurnRoute:
     """Classify a user turn into the first retrieval strategy to try.
 
@@ -371,20 +266,12 @@ def route_turn(user_text: str) -> TurnRoute:
         )
 
     if vacancy_lookup:
-        if is_generic_vacancy_listing(raw):
-            return TurnRoute(
-                "recommend",
-                "structured_lookup",
-                tools=("list_active_jobs",),
-                reason="vacancy_listing",
-                confidence=0.94,
-            )
         return TurnRoute(
             "recommend",
-            "knowledge_lookup",
-            tools=("search_knowledge",),
-            reason="vacancy_terms",
-            confidence=0.92,
+            "structured_lookup",
+            tools=("list_active_jobs",),
+            reason="vacancy_listing",
+            confidence=0.94,
         )
 
     if has_recommendation:
@@ -427,12 +314,6 @@ def routing_instruction(route: TurnRoute) -> str:
                 "Ý định: xem toàn bộ việc đang tuyển. Bắt buộc gọi list_active_jobs không "
                 "truyền bộ lọc, rồi trả nguyên danh sách việc ACTIVE từ kết quả công cụ; "
                 "không bổ sung vị trí ngoài danh mục."
-            )
-        if route.reason == "vacancy_terms":
-            return (
-                "Ý định: kiểm tra thông tin việc làm đang tuyển. Dùng search_knowledge để tra "
-                "cứu KB tuyển dụng được gán cho agent, rồi trả lời tự nhiên chỉ từ bằng chứng "
-                "tìm thấy; không suy đoán vị trí hoặc quyền lợi không có trong KB."
             )
         return (
             "Ý định: gợi ý việc phù hợp. Nếu đã có hồ sơ ứng viên (lương/khu vực/vị trí), "

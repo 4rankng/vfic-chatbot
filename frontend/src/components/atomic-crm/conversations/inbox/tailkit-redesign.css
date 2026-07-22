@@ -238,7 +238,7 @@
   font-weight: 700;
 }
 
-.inbox-bg-container .zalo-user-id {
+.inbox-bg-container .person-subtitle {
   margin-top: 1px;
   color: var(--tailkit-muted);
   font-weight: 500;
@@ -444,7 +444,7 @@
     white-space: nowrap;
   }
 
-  .inbox-bg-container .zalo-user-id,
+  .inbox-bg-container .person-subtitle,
   .inbox-bg-container .mode-menu-trigger-label,
   .inbox-bg-container .mode-menu-trigger-chevron {
     display: none;
@@ -561,9 +561,10 @@
     white-space: nowrap;
   }
 
-  /* The provider ID is useful in the desktop workspace but crowds the compact
-     mobile identity bar. The context sheet remains the detailed source. */
-  .inbox-bg-container .zalo-user-id {
+  /* The contact subtitle is useful in the desktop workspace but crowds the
+     compact mobile identity bar. The context sheet remains the detailed
+     source. */
+  .inbox-bg-container .person-subtitle {
     display: none;
   }
 

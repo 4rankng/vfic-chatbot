@@ -31,6 +31,7 @@ import {
   History,
   MoreHorizontal,
   PanelRight,
+  Phone,
   Trash2,
   UserRound,
   type LucideIcon,
@@ -201,9 +202,13 @@ export const ConversationShowContent = ({
                       <span className="person-name">{context.displayName}</span>
                     )}
                   </div>
-                  {context.externalIdentityLabel && (
-                    <div className="zalo-user-id">
-                      {context.externalIdentityLabel}
+                  {context.contactSubtitle && (
+                    <div className="person-subtitle">
+                      <Phone
+                        className="person-subtitle-icon"
+                        aria-hidden="true"
+                      />
+                      <span>{context.contactSubtitle}</span>
                     </div>
                   )}
                 </div>

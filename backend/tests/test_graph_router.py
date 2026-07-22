@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.router import is_generic_vacancy_listing, route_turn, routing_instruction
+from app.graph.router import route_turn, routing_instruction
 from app.models.conversation import MessageSender
 
 
@@ -46,6 +46,12 @@ def test_route_generic_vacancy_listing_uses_active_job_catalog():
         "Dạ bên mình hiện đang tuyển gì vậy ạ?",
         "Xin hỏi bên mình đang tuyển những vị trí nào?",
         "Cho em hỏi bên mình đang tuyển vị trí nào nhỉ?",
+        "có bao nhiêu nhà máy đang tuyển",
+        "hiện có mấy nhà máy đang tuyển?",
+        "Bao nhiêu dự án đang tuyển?",
+        "Mấy công ty đang tuyển?",
+        "Có bao nhiêu dự án tuyển dụng?",
+        "Đang có bao nhiêu nhà máy tuyển dụng?",
     ):
         route = route_turn(query)
 
@@ -54,24 +60,24 @@ def test_route_generic_vacancy_listing_uses_active_job_catalog():
         assert route.tools == ("list_active_jobs",)
 
 
-def test_route_specific_vacancy_question_uses_assigned_knowledge():
+def test_route_specific_vacancy_question_uses_active_job_catalog():
     for query in (
         "LG tuyển thợ hàn không?",
         "LG đang tuyển gì?",
+        "LG có bao nhiêu nhà máy đang tuyển?",
         "mình nhà ở quán toan _hp gần IG tràng duệ.bên IG tràng duệ mình đang tuyển ạ",
     ):
         route = route_turn(query)
 
         assert route.intent == "recommend"
-        assert route.strategy == "knowledge_lookup"
-        assert route.tools == ("search_knowledge",)
+        assert route.strategy == "structured_lookup"
+        assert route.tools == ("list_active_jobs",)
 
 
 @pytest.mark.parametrize("query", ["có việc gì", "ó viedjc gì"])
 def test_route_terse_vacancy_followup_to_contextual_llm(query):
     route = route_turn(query)
 
-    assert is_generic_vacancy_listing(query) is False
     assert route.intent == "general"
     assert route.strategy == "agent"
     assert route.reason == "fallback"
@@ -186,12 +192,11 @@ def test_routing_instruction_is_injected_into_prompt_context():
     assert "TIN NHẮN HIỆN TẠI CỦA ỨNG VIÊN:" in prompt
 
 
-def test_vacancy_routing_instruction_requires_grounded_knowledge_lookup():
+def test_specific_vacancy_routing_instruction_requires_active_job_catalog():
     route = route_turn("LG đang tuyển gì?")
 
-    assert route.reason == "vacancy_terms"
-    assert "search_knowledge" in routing_instruction(route)
-    assert "list_active_jobs" not in routing_instruction(route)
+    assert route.reason == "vacancy_listing"
+    assert "list_active_jobs" in routing_instruction(route)
 
 
 def test_generic_vacancy_routing_instruction_requires_active_job_listing():
@@ -213,11 +218,11 @@ def test_generic_vacancy_routing_instruction_requires_active_job_listing():
         "bên mình có tuyển công nhân ca đêm không?",
     ],
 )
-def test_specific_vacancy_paraphrase_uses_assigned_knowledge(query):
+def test_specific_vacancy_paraphrase_uses_active_job_catalog(query):
     route = route_turn(query)
 
-    assert route.reason == "vacancy_terms"
-    assert route.tools == ("search_knowledge",)
+    assert route.reason == "vacancy_listing"
+    assert route.tools == ("list_active_jobs",)
 
 
 @pytest.mark.parametrize(
@@ -233,7 +238,7 @@ def test_specific_vacancy_paraphrase_uses_assigned_knowledge(query):
 def test_non_job_acceptance_questions_are_not_vacancy_listings(query):
     route = route_turn(query)
 
-    assert route.reason != "vacancy_terms"
+    assert route.reason != "vacancy_listing"
 
 
 @pytest.mark.parametrize(
@@ -250,7 +255,7 @@ def test_non_job_acceptance_questions_are_not_vacancy_listings(query):
 def test_recruitment_detail_questions_are_not_vacancy_listings(query):
     route = route_turn(query)
 
-    assert route.reason != "vacancy_terms"
+    assert route.reason != "vacancy_listing"
     assert route.tools != ("list_active_jobs",)
 
 

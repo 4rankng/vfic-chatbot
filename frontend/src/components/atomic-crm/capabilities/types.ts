@@ -43,7 +43,10 @@ export type ConversationContextValue = Readonly<{
   avatarUrl?: string | null;
   avatarBackground?: string;
   avatarForeground?: string;
-  externalIdentityLabel?: string;
+  /** Muted descriptor shown beneath the header name. Currently a phone number
+   * when known, so the header surfaces an actionable contact detail instead of
+   * the raw provider ID. The context panel remains the detailed source. */
+  contactSubtitle?: string;
   avatarAlt: string;
   panelLabel: string;
   renderPanel?: (props: {
